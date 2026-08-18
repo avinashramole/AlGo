@@ -14,9 +14,6 @@ export function Settings() {
   const [mailNote, setMailNote] = useState("");
   const [mailBusy, setMailBusy] = useState(false);
   const rows = [
-    ["Name", user?.name || "Avinash"],
-    ["Gmail", user?.email || "—"],
-    ["Mobile", user?.mobile || "—"],
     ["Desk", user?.desk || "Index Options"],
     ["Gmail mail", mailConnected ? `Sending · ${mailFrom}` : "Not connected — codes and login mail stay off"],
     ["Default product", data.settings.product || "MIS"],
@@ -57,6 +54,10 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-3">
       <h1 className="text-xl font-bold">Settings</h1>
+      <Link to="/profile" className="card flex items-center justify-between px-4 py-3">
+        <span className="text-sm font-semibold">User profile</span>
+        <span className="text-sm font-semibold text-brand-500">Name, email, mobile →</span>
+      </Link>
       <section className="card divide-y divide-[var(--border)]">
         {rows.map(([label, value]) => (
           <div key={label} className="flex items-center justify-between gap-3 px-4 py-3">

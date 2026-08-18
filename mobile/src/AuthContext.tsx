@@ -3,10 +3,12 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   enableThumb as enableThumbApi,
+  getMe,
   login as loginRequest,
   loginThumb as loginThumbApi,
   requestOtp as requestOtpApi,
   signup as signupApi,
+  updateProfile as updateProfileApi,
   verifyOtp as verifyOtpApi,
   type AuthUser,
   type OtpRequestResult,
@@ -22,6 +24,7 @@ type AuthContextValue = {
   signup: (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }) => Promise<void>;
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
+  updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -40,10 +43,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasThumb, setHasThumb] = useState(false);
 
   useEffect(() => {
-    Promise.all([AsyncStorage.getItem("t2s-user"), AsyncStorage.getItem("t2s-thumb-token")])
-      .then(([raw, thumb]) => {
+    Promise.all([AsyncStorage.getItem("t2s-user"), AsyncStorage.getItem("t2s-thumb-token"), AsyncStorage.getItem("t2s-token")])
+      .then(async ([raw, thumb, token]) => {
         if (raw) setUser(JSON.parse(raw) as AuthUser);
         setHasThumb(Boolean(thumb));
+        if (token && token !== "t2s-offline-token") {
+          try {
+            const row = await getMe(token);
+            await AsyncStorage.setItem("t2s-user", JSON.stringify(row.user));
+            setUser(row.user);
+          } catch {
+            /* keep cached user */
+          }
+        }
       })
       .finally(() => setReady(true));
   }, []);
@@ -106,6 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!bio.success) throw new Error("Thumb cancelled. Use password or OTP.");
         const result = await loginThumbApi(thumbToken);
         await persist(result.user, result.token);
+        setUser(result.user);
+      },
+      updateProfile: async (payload: { name: string; email?: string; mobile?: string }) => {
+        const token = (await AsyncStorage.getItem("t2s-token")) || "";
+        const result = await updateProfileApi(token, payload);
+        await AsyncStorage.setItem("t2s-user", JSON.stringify(result.user));
         setUser(result.user);
       },
       logout: async () => {

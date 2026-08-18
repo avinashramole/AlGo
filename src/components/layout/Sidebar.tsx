@@ -14,6 +14,7 @@ import {
   PieChart,
   Settings,
   Sun,
+  User,
   Zap,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -32,6 +33,7 @@ const items: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/brokers", label: "Brokers", icon: Building2 },
   { to: "/analytics", label: "Analytics", icon: PieChart },
+  { to: "/profile", label: "Profile", icon: User },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

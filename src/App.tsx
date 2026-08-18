@@ -15,6 +15,7 @@ import { Orders } from "./pages/Orders";
 import { Portfolio } from "./pages/Portfolio";
 import { PositionsDesk } from "./pages/PositionsDesk";
 import { Reports } from "./pages/Reports";
+import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
 import { Signals } from "./pages/Signals";
 
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="portfolio" element={<Portfolio />} />
         <Route path="brokers" element={<Brokers />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="profile" element={<Profile />} />
         <Route path="settings" element={<Settings />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="chat" element={<Chat />} />

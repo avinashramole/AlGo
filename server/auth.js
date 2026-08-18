@@ -452,3 +452,29 @@ export function sessionUser(token) {
   const user = userFromToken(token);
   return user ? publicUser(user) : null;
 }
+
+export function updateProfile(sessionToken, { name, email, mobile } = {}) {
+  const user = userFromToken(sessionToken);
+  if (!user) throw fail("Sign in first.", 401);
+  const nextName = String(name ?? user.name ?? "").trim();
+  if (nextName.length < 2) throw fail("Enter your name.");
+  const nextEmail = normalizeEmail(email ?? user.email);
+  const nextMobile = normalizeMobile(mobile ?? user.mobile);
+  if (nextEmail && !isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
+    throw fail("Use a Gmail address, or leave email blank.");
+  }
+  if (nextMobile && !isMobile(nextMobile)) throw fail("Enter a 10-digit Indian mobile number, or leave it blank.");
+  if (nextEmail) {
+    const taken = store.byEmail.get(nextEmail);
+    if (taken && taken.id !== user.id) throw fail("That Gmail is already on another account.");
+  }
+  if (nextMobile) {
+    const taken = store.byMobile.get(nextMobile);
+    if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+  }
+  user.name = nextName;
+  user.email = nextEmail;
+  user.mobile = nextMobile;
+  persist();
+  return { ok: true, user: publicUser(user) };
+}

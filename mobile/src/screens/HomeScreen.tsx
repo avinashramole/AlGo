@@ -1,11 +1,13 @@
 import { useNavigation } from "@react-navigation/native";
 import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
+import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatInr, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
+  const { user } = useAuth();
   const { data, live, order } = useMarket();
   const signal = data.featuredSignal;
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
@@ -31,7 +33,10 @@ export function HomeScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <View style={styles.top}>
-        <Text style={styles.brand}>T2S</Text>
+        <Pressable onPress={() => navigation.navigate("Profile")}>
+          <Text style={styles.brand}>Trade 2 Smart</Text>
+          <Text style={styles.user}>{user?.name || "Trader"} · {user?.email || user?.mobile || "Profile"}</Text>
+        </Pressable>
         <Text style={[styles.live, !isNseSessionOpen() && { color: colors.muted }]}>
           {isNseSessionOpen() ? "Market Open" : "Market Closed"}
           {data.dhanFeed?.live ? " · DHAN LIVE" : live ? " · LIVE" : " · DEMO"}
@@ -121,6 +126,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   brand: { fontSize: 22, fontWeight: "800" },
+  user: { color: colors.muted, fontSize: 12, fontWeight: "600", marginTop: 2 },
   live: { color: colors.up, fontWeight: "700", fontSize: 12 },
   muted: { color: colors.muted, fontSize: 12, marginTop: 4, marginBottom: 6 },
   price: { fontSize: 18, fontWeight: "800" },

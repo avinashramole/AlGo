@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, verifyOtp } from "./auth.js";
+import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -189,6 +189,27 @@ app.post("/api/auth/thumb", async (req, res) => {
     res.json({ ...result, mail });
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
+  }
+});
+
+function readToken(req) {
+  return String(req.body?.token || req.query?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+}
+
+app.get("/api/me", (req, res) => {
+  const user = sessionUser(readToken(req));
+  if (!user) {
+    res.status(401).json({ error: "Sign in first." });
+    return;
+  }
+  res.json({ user });
+});
+
+app.post("/api/me", (req, res) => {
+  try {
+    res.json(updateProfile(readToken(req), req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not update profile" });
   }
 });
 

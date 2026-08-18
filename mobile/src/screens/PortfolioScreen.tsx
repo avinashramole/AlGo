@@ -43,6 +43,9 @@ export function PortfolioScreen() {
       <Pressable onPress={() => navigation.navigate("Options")}>
         <Text style={styles.link}>Open option chain →</Text>
       </Pressable>
+      <Pressable onPress={() => navigation.navigate("Profile")}>
+        <Text style={styles.link}>Profile →</Text>
+      </Pressable>
       <Pressable onPress={() => navigation.navigate("Settings")}>
         <Text style={styles.link}>Settings →</Text>
       </Pressable>

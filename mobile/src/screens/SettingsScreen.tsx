@@ -4,7 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
-import { colors } from "../theme";
+import { colors, formatMobile } from "../theme";
 
 export function SettingsScreen() {
   const navigation = useNavigation<any>();
@@ -29,10 +29,14 @@ export function SettingsScreen() {
   return (
     <View style={styles.page}>
       <Text style={styles.title}>Settings</Text>
+      <Pressable onPress={() => navigation.navigate("Profile")}>
+        <Card>
+          <Row label="Name" value={user?.name || "—"} />
+          <Row label="Email" value={user?.email || "Not added"} />
+          <Row label="Mobile no" value={formatMobile(user?.mobile)} />
+        </Card>
+      </Pressable>
       <Card>
-        <Row label="Name" value={user?.name || "Avinash"} />
-        <Row label="Gmail" value={user?.email || "—"} />
-        <Row label="Mobile" value={user?.mobile || "—"} />
         <Row label="Desk" value={user?.desk || "Index Options"} />
         <Row label="Thumb" value={hasThumb ? "On this phone" : "Off"} />
         <Row label="Active broker" value={active} />

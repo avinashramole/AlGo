@@ -16,6 +16,7 @@ import { OptionsScreen } from "./src/screens/OptionsScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { PortfolioScreen } from "./src/screens/PortfolioScreen";
 import { PositionsScreen } from "./src/screens/PositionsScreen";
+import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { ReportScreen } from "./src/screens/ReportScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { SignalsScreen } from "./src/screens/SignalsScreen";
@@ -67,6 +68,7 @@ function Root() {
           <Stack.Screen name="Report" component={ReportScreen} />
           <Stack.Screen name="Brokers" component={BrokersScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="Trade" component={TradeScreen} options={{ title: "Review Trade" }} />
         </>
       ) : (

@@ -1,21 +1,31 @@
 import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
-import { cn, formatIstClock, isNseSessionOpen } from "../../lib/format";
+import { cn, formatIstClock, formatMobile, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
   const { live, data } = useMarket();
   const [now, setNow] = useState(() => new Date());
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
   const marketOpen = isNseSessionOpen(now);
@@ -69,14 +79,32 @@ export function Header() {
         <button type="button" onClick={toggleTheme} className="icon-btn" title="Theme">
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
-        <div className="hidden items-center gap-2 sm:flex" title={user?.email || user?.mobile || ""}>
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
-            {(user?.name || "T").slice(0, 1).toUpperCase()}
-          </div>
-          <div className="hidden lg:block">
-            <div className="text-xs font-bold leading-tight">{user?.name || "T2S"}</div>
-            <div className="text-[10px] font-semibold text-slate-400">{user?.email || user?.mobile || ""}</div>
-          </div>
+        <div className="relative" ref={menuRef}>
+          <button type="button" onClick={() => setOpen((value) => !value)} className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-slate-100 dark:hover:bg-slate-800" title="Profile">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+              {(user?.name || "T").slice(0, 1).toUpperCase()}
+            </div>
+            <div className="hidden text-left lg:block">
+              <div className="text-xs font-bold leading-tight">{user?.name || "Trader"}</div>
+              <div className="text-[10px] font-semibold text-slate-400">{user?.email || formatMobile(user?.mobile)}</div>
+            </div>
+          </button>
+          {open ? (
+            <div className="absolute right-0 top-12 z-30 w-72 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-lg">
+              <div className="mb-3 text-sm font-extrabold">Profile</div>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-slate-400">Name</span><br /><span className="font-semibold">{user?.name || "—"}</span></p>
+                <p><span className="text-slate-400">Email</span><br /><span className="font-semibold">{user?.email || "Not added"}</span></p>
+                <p><span className="text-slate-400">Mobile no</span><br /><span className="font-semibold">{formatMobile(user?.mobile)}</span></p>
+              </div>
+              <Link to="/profile" onClick={() => setOpen(false)} className="mt-4 flex h-10 items-center justify-center rounded-xl bg-brand-50 text-sm font-semibold text-brand-500">
+                Open profile
+              </Link>
+              <button type="button" onClick={logout} className="mt-2 flex h-10 w-full items-center justify-center rounded-xl bg-rose-50 text-sm font-semibold text-down">
+                Log out
+              </button>
+            </div>
+          ) : null}
         </div>
         <button type="button" onClick={logout} className="icon-btn" title="Log out">
           <LogOut size={17} />

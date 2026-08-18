@@ -15,6 +15,14 @@ export function formatChange(value: number, digits = 2) {
   return `${sign}${formatNumber(value, digits)}`;
 }
 
+export function formatMobile(value?: string) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
+  if (digits.length === 10) return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  return String(value || "").trim() || "Not added";
+}
+
 export function formatInr(value: number) {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;

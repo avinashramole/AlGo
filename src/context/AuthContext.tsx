@@ -1,10 +1,12 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   enableThumb as enableThumbApi,
+  getMe,
   login as loginRequest,
   loginThumb as loginThumbApi,
   requestOtp as requestOtpApi,
   signup as signupApi,
+  updateProfile as updateProfileApi,
   verifyOtp as verifyOtpApi,
   type AuthUser,
   type OtpRequestResult,
@@ -18,6 +20,7 @@ type AuthContextValue = {
   signup: (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }) => Promise<void>;
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
+  updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
   hasThumb: boolean;
   logout: () => void;
 };
@@ -99,6 +102,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
 
+  useEffect(() => {
+    const token = localStorage.getItem("t2s-token") || "";
+    if (!token || token === "t2s-offline-token") return;
+    void getMe(token)
+      .then((row) => {
+        localStorage.setItem("t2s-user", JSON.stringify(row.user));
+        setUser(row.user);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -147,6 +161,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const thumbToken = localStorage.getItem("t2s-thumb-token") || "";
         const result = await loginThumbApi(thumbToken);
         persist(result.user, result.token);
+        setUser(result.user);
+      },
+      updateProfile: async (payload: { name: string; email?: string; mobile?: string }) => {
+        const token = localStorage.getItem("t2s-token") || "";
+        const result = await updateProfileApi(token, payload);
+        localStorage.setItem("t2s-user", JSON.stringify(result.user));
         setUser(result.user);
       },
       logout: () => {

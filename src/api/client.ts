@@ -435,6 +435,18 @@ export function loginThumb(thumbToken: string) {
   });
 }
 
+export function getMe(token: string) {
+  return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
+}
+
+export function updateProfile(token: string, payload: { name: string; email?: string; mobile?: string }) {
+  return request<{ ok: boolean; user: AuthUser }>("/me", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ token, ...payload }),
+  });
+}
+
 export function getGmailStatus() {
   return request<{ connected: boolean; user?: string }>("/auth/gmail");
 }
