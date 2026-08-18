@@ -1,19 +1,18 @@
 import { useMarket } from "../context/MarketContext";
+import { brokerName } from "../lib/brokers";
 import { cn, formatInr } from "../lib/format";
 
 export function Algo() {
-  const { data, toggle } = useMarket();
+  const { data, toggle, routeAlgo } = useMarket();
+  const connected = (data.brokers || []).filter((item) => item.connected);
 
   return (
     <div className="space-y-3">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-bold">Algo Desk</h1>
-          <p className="text-sm text-slate-400">Deploy, pause, and monitor automated strategies</p>
+          <p className="text-sm text-slate-400">Each strategy can route to a different connected broker</p>
         </div>
-        <button type="button" className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
-          New Strategy
-        </button>
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
         {data.algos.map((algo) => (
@@ -42,12 +41,26 @@ export function Algo() {
                 <div className="text-lg font-bold">{algo.winRate}%</div>
               </div>
             </div>
+            <label className="mt-3 block text-[10px] font-semibold uppercase text-slate-400">
+              Route to broker
+              <select
+                className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-semibold"
+                value={algo.brokerId || "paper"}
+                onChange={(event) => void routeAlgo(algo.id, event.target.value)}
+              >
+                {connected.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               onClick={() => void toggle(algo.id)}
-              className="mt-4 h-10 w-full rounded-xl border border-[var(--border)] text-sm font-semibold"
+              className="mt-3 h-10 w-full rounded-xl border border-[var(--border)] text-sm font-semibold"
             >
-              {algo.enabled ? "Pause" : "Start"}
+              {algo.enabled ? "Pause" : "Start"} · {brokerName(data.brokers, algo.brokerId)}
             </button>
           </section>
         ))}

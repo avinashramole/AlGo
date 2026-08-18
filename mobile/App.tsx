@@ -8,6 +8,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./src/AuthContext";
 import { MarketProvider } from "./src/MarketContext";
 import { AlgoScreen } from "./src/screens/AlgoScreen";
+import { BrokersScreen } from "./src/screens/BrokersScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MarketsScreen } from "./src/screens/MarketsScreen";
@@ -57,6 +58,7 @@ function Root() {
         <>
           <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
           <Stack.Screen name="Options" component={OptionsScreen} />
+          <Stack.Screen name="Brokers" component={BrokersScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Trade" component={TradeScreen} options={{ title: "Review Trade" }} />
         </>

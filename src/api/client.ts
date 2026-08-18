@@ -39,6 +39,7 @@ export type Snapshot = {
     pnl: number;
     winRate: number;
     enabled: boolean;
+    brokerId?: string;
   }>;
   positions: Array<{
     id: string;
@@ -48,6 +49,7 @@ export type Snapshot = {
     avg: number;
     ltp: number;
     pnl: number;
+    brokerId?: string;
   }>;
   signals: Array<{
     id: string;
@@ -78,8 +80,28 @@ export type Snapshot = {
   chat: Array<{ from: string; text: string; mine?: boolean }>;
   settings: Record<string, string>;
   totalPnl: number;
+  pnlByBroker: Record<string, number>;
+  brokers: BrokerAccount[];
+  activeBrokerId: string;
   marketStatus: string;
   serverTime: string;
+};
+
+export type BrokerAccount = {
+  id: string;
+  name: string;
+  vendor: string;
+  color: string;
+  auth: string;
+  segments: string[];
+  connected: boolean;
+  active: boolean;
+  mode: string;
+  clientId: string;
+  funds: number;
+  marginUsed: number;
+  status: "CONNECTED" | "DISCONNECTED" | "REAUTH";
+  keyHint: string;
 };
 
 export function login(email: string, password: string) {
@@ -109,4 +131,23 @@ export function placeOrder(payload: Record<string, unknown>) {
 
 export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export function connectBroker(id: string, payload: { clientId: string; apiKey: string }) {
+  return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function disconnectBroker(id: string) {
+  return request<{ snapshot: Snapshot }>(`/brokers/${id}/disconnect`, { method: "POST" });
+}
+
+export function activateBroker(id: string) {
+  return request<{ snapshot: Snapshot }>(`/brokers/${id}/activate`, { method: "POST" });
+}
+
+export function assignAlgoBroker(id: string, brokerId: string) {
+  return request(`/algos/${id}/broker`, { method: "POST", body: JSON.stringify({ brokerId }) });
 }

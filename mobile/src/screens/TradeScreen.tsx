@@ -8,7 +8,13 @@ export function TradeScreen() {
   const signal = data.featuredSignal;
 
   const submit = async () => {
-    await order({ symbol: signal.symbol, side: signal.action, qty: 75, price: 142.75 });
+    await order({
+      symbol: signal.symbol,
+      side: signal.action,
+      qty: 75,
+      price: 142.75,
+      brokerId: data.activeBrokerId,
+    });
     Alert.alert("Order filled", `${signal.action} ${signal.symbol} 75 qty`);
   };
 
@@ -19,7 +25,9 @@ export function TradeScreen() {
         <Text style={styles.title}>
           {signal.action} {signal.symbol}
         </Text>
-        <Text style={styles.muted}>MIS · MARKET · 75 qty · Confidence {signal.confidence}%</Text>
+        <Text style={styles.muted}>
+          {data.brokers?.find((item) => item.active)?.name || "Paper"} · MIS · MARKET · 75 qty · Confidence {signal.confidence}%
+        </Text>
       </Card>
       <Pressable style={styles.cta} onPress={() => void submit()}>
         <Text style={styles.ctaText}>Place Order</Text>

@@ -21,11 +21,16 @@ export function PortfolioScreen() {
             <Pill text={row.type} up={row.type === "BUY"} />
           </View>
           <View style={styles.row}>
-            <Text style={styles.muted}>Qty {row.qty} · Avg {formatNumber(row.avg)}</Text>
+            <Text style={styles.muted}>
+              {row.brokerId || "paper"} · Qty {row.qty} · Avg {formatNumber(row.avg)}
+            </Text>
             <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
           </View>
         </Card>
       ))}
+      <Pressable onPress={() => navigation.navigate("Brokers")}>
+        <Text style={styles.link}>Brokers →</Text>
+      </Pressable>
       <Pressable onPress={() => navigation.navigate("Options")}>
         <Text style={styles.link}>Open option chain →</Text>
       </Pressable>

@@ -1,6 +1,17 @@
 import cors from "cors";
 import express from "express";
-import { addChat, getCandles, placeOrder, snapshot, tickMarket, toggleAlgo } from "./market.js";
+import { activateBroker, connectBroker, disconnectBroker, publicBrokers } from "./brokers.js";
+import {
+  addChat,
+  applyBrokerPositions,
+  assignAlgoBroker,
+  dropBrokerPositions,
+  getCandles,
+  placeOrder,
+  snapshot,
+  tickMarket,
+  toggleAlgo,
+} from "./market.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 4000;
@@ -35,6 +46,39 @@ app.get("/api/snapshot", (_req, res) => {
   res.json(snapshot());
 });
 
+app.get("/api/brokers", (_req, res) => {
+  res.json(publicBrokers());
+});
+
+app.post("/api/brokers/:id/connect", (req, res) => {
+  const result = connectBroker(req.params.id, req.body || {});
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  applyBrokerPositions(result.positions || [], req.params.id);
+  res.json({ ...result, snapshot: snapshot() });
+});
+
+app.post("/api/brokers/:id/disconnect", (req, res) => {
+  const result = disconnectBroker(req.params.id);
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  dropBrokerPositions(req.params.id);
+  res.json({ ...result, snapshot: snapshot() });
+});
+
+app.post("/api/brokers/:id/activate", (req, res) => {
+  const result = activateBroker(req.params.id);
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ...result, snapshot: snapshot() });
+});
+
 app.get("/api/candles", (req, res) => {
   res.json(getCandles(String(req.query.tf || "5m")));
 });
@@ -48,8 +92,22 @@ app.post("/api/algos/:id/toggle", (req, res) => {
   res.json(algo);
 });
 
+app.post("/api/algos/:id/broker", (req, res) => {
+  const result = assignAlgoBroker(req.params.id, String(req.body?.brokerId || ""));
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json(result);
+});
+
 app.post("/api/orders", (req, res) => {
-  res.status(201).json(placeOrder(req.body || {}));
+  const order = placeOrder(req.body || {});
+  if (order.error) {
+    res.status(400).json({ error: order.error });
+    return;
+  }
+  res.status(201).json(order);
 });
 
 app.post("/api/chat", (req, res) => {

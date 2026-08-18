@@ -1,3 +1,5 @@
+import { getActiveBroker, publicBrokers } from "./brokers.js";
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -53,17 +55,17 @@ const state = {
     { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
   ],
   algos: [
-    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true },
-    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true },
-    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412.0, winRate: 54, enabled: false },
+    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "paper" },
+    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "paper" },
+    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412.0, winRate: 54, enabled: false, brokerId: "paper" },
   ],
   positions: [
-    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25 },
-    { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0 },
-    { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0 },
-    { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 65, avg: 96.8, ltp: 118.4, pnl: 1404.0 },
-    { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0 },
-    { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5 },
+    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "paper" },
+    { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "paper" },
+    { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "paper" },
+    { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 65, avg: 96.8, ltp: 118.4, pnl: 1404.0, brokerId: "paper" },
+    { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0, brokerId: "paper" },
+    { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5, brokerId: "paper" },
   ],
   signals: [
     { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
@@ -129,7 +131,7 @@ const state = {
     product: "MIS",
     confirmation: "Enabled",
     riskGuard: "Max 2% per trade",
-    broker: "Paper trading",
+    broker: "Paper Trading",
     notifications: "Signals + fills",
   },
 };
@@ -173,10 +175,21 @@ export function tickMarket() {
 }
 
 export function snapshot() {
+  const brokers = publicBrokers();
+  const active = getActiveBroker();
   const totalPnl = state.positions.reduce((sum, row) => sum + row.pnl, 0);
+  const byBroker = {};
+  for (const row of state.positions) {
+    const key = row.brokerId || "paper";
+    byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
+  }
   return {
     ...clone(state),
     totalPnl: Number(totalPnl.toFixed(2)),
+    pnlByBroker: byBroker,
+    brokers: brokers.brokers,
+    activeBrokerId: brokers.activeBrokerId,
+    settings: { ...state.settings, broker: active.name },
     marketStatus: "OPEN",
     serverTime: new Date().toISOString(),
   };
@@ -191,6 +204,13 @@ export function toggleAlgo(id) {
 }
 
 export function placeOrder(payload) {
+  const brokers = publicBrokers();
+  const requested = String(payload.brokerId || brokers.activeBrokerId || "paper");
+  const account = brokers.brokers.find((item) => item.id === requested);
+  if (!account?.connected) {
+    return { error: "Connect this broker before placing an order" };
+  }
+  const brokerId = account.id;
   const order = {
     id: `o${Date.now()}`,
     symbol: payload.symbol || "NIFTY 24500 CE",
@@ -200,11 +220,45 @@ export function placeOrder(payload) {
     type: payload.type || "MARKET",
     status: "FILLED",
     price: Number(payload.price) || 142.75,
+    brokerId,
+    brokerName: account.name,
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
-  state.notifications.unshift(`Order ${order.status}: ${order.side} ${order.symbol}`);
+  state.positions.unshift({
+    id: `p${Date.now()}`,
+    symbol: order.symbol,
+    type: order.side,
+    qty: order.qty,
+    avg: order.price,
+    ltp: order.price,
+    pnl: 0,
+    brokerId,
+  });
+  state.notifications.unshift(`${account.name} ${order.status}: ${order.side} ${order.symbol}`);
   return order;
+}
+
+export function assignAlgoBroker(id, brokerId) {
+  const account = publicBrokers().brokers.find((item) => item.id === brokerId);
+  if (!account?.connected) return { error: "Connect this broker first" };
+  const algo = state.algos.find((item) => item.id === id);
+  if (!algo) return { error: "Algo not found" };
+  algo.brokerId = brokerId;
+  return clone(algo);
+}
+
+export function applyBrokerPositions(positions, brokerId) {
+  const existing = new Set(state.positions.map((row) => row.id));
+  for (const row of positions) {
+    if (!existing.has(row.id)) state.positions.push(row);
+  }
+  state.notifications.unshift(`Broker connected: ${brokerId}`);
+}
+
+export function dropBrokerPositions(brokerId) {
+  state.positions = state.positions.filter((row) => row.brokerId !== brokerId);
+  state.algos = state.algos.map((algo) => (algo.brokerId === brokerId ? { ...algo, brokerId: "paper", enabled: false, status: "PAUSED" } : algo));
 }
 
 export function addChat(text) {

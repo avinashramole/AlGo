@@ -1,5 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getSnapshot, placeOrder, toggleAlgo, type Snapshot } from "../api/client";
+import {
+  activateBroker,
+  assignAlgoBroker,
+  connectBroker,
+  disconnectBroker,
+  getSnapshot,
+  placeOrder,
+  toggleAlgo,
+  type Snapshot,
+} from "../api/client";
 import {
   dnaScores,
   fiiDii,
@@ -12,6 +21,7 @@ import {
   watchlist,
   marketWatch,
 } from "../data/mock";
+import { defaultBrokers } from "../lib/brokers";
 
 const fallback: Snapshot = {
   indices,
@@ -44,6 +54,9 @@ const fallback: Snapshot = {
   chat: [],
   settings: {},
   totalPnl: positions.reduce((sum, row) => sum + row.pnl, 0),
+  pnlByBroker: { paper: positions.reduce((sum, row) => sum + row.pnl, 0) },
+  brokers: defaultBrokers,
+  activeBrokerId: "paper",
   marketStatus: "OPEN",
   serverTime: new Date().toISOString(),
 };
@@ -54,6 +67,10 @@ type MarketContextValue = {
   refresh: () => Promise<void>;
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<void>;
+  connect: (id: string, payload: { clientId: string; apiKey: string }) => Promise<void>;
+  disconnect: (id: string) => Promise<void>;
+  activate: (id: string) => Promise<void>;
+  routeAlgo: (id: string, brokerId: string) => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -102,6 +119,25 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       order: async (payload: Record<string, unknown>) => {
         await placeOrder(payload);
+        await refresh();
+      },
+      connect: async (id: string, payload: { clientId: string; apiKey: string }) => {
+        const result = await connectBroker(id, payload);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      disconnect: async (id: string) => {
+        const result = await disconnectBroker(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      activate: async (id: string) => {
+        const result = await activateBroker(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      routeAlgo: async (id: string, brokerId: string) => {
+        await assignAlgoBroker(id, brokerId);
         await refresh();
       },
     }),

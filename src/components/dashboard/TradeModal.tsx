@@ -21,6 +21,7 @@ export function TradeModal({ open, onClose }: Props) {
         side: data.featuredSignal.action,
         qty: 75,
         price: 142.75,
+        brokerId: data.activeBrokerId,
       });
       onClose();
     } finally {
@@ -43,11 +44,11 @@ export function TradeModal({ open, onClose }: Props) {
           </button>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
+          <Field label="Broker" value={(data.brokers || []).find((item) => item.id === data.activeBrokerId)?.name || "Paper"} />
           <Field label="Product" value="MIS" />
           <Field label="Order type" value="MARKET" />
           <Field label="Quantity" value="75 (1 lot)" />
           <Field label="Est. premium" value={`₹${formatNumber(142.75)}`} />
-          <Field label="Stop loss" value="118.40" />
           <Field label="Target" value="176.00" />
         </div>
         <div className="mt-4 rounded-lg bg-[var(--bg)] p-3 text-xs text-slate-500">

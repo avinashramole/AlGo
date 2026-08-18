@@ -34,8 +34,18 @@ export type Snapshot = {
     pnl: number;
     winRate: number;
     enabled: boolean;
+    brokerId?: string;
   }>;
-  positions: Array<{ id: string; symbol: string; type: "BUY" | "SELL"; qty: number; avg: number; ltp: number; pnl: number }>;
+  positions: Array<{
+    id: string;
+    symbol: string;
+    type: "BUY" | "SELL";
+    qty: number;
+    avg: number;
+    ltp: number;
+    pnl: number;
+    brokerId?: string;
+  }>;
   signals: Array<{ id: string; action: "BUY" | "SELL"; symbol: string; strategy: string; time: string; confidence: number }>;
   marketWatch: Array<{ symbol: string; ltp: number; chg: number; volume: string }>;
   featuredSignal: {
@@ -51,7 +61,25 @@ export type Snapshot = {
   sentiment: number;
   notifications: string[];
   totalPnl: number;
+  pnlByBroker?: Record<string, number>;
+  brokers?: BrokerAccount[];
+  activeBrokerId?: string;
   marketStatus: string;
+};
+
+export type BrokerAccount = {
+  id: string;
+  name: string;
+  vendor: string;
+  color: string;
+  connected: boolean;
+  active: boolean;
+  mode: string;
+  clientId: string;
+  funds: number;
+  marginUsed: number;
+  status: string;
+  segments: string[];
 };
 
 export function login(email: string, password: string) {
@@ -71,4 +99,19 @@ export function toggleAlgo(id: string) {
 
 export function placeOrder(payload: Record<string, unknown>) {
   return request("/orders", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function connectBroker(id: string, payload: { clientId: string; apiKey: string }) {
+  return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function disconnectBroker(id: string) {
+  return request<{ snapshot: Snapshot }>(`/brokers/${id}/disconnect`, { method: "POST" });
+}
+
+export function activateBroker(id: string) {
+  return request<{ snapshot: Snapshot }>(`/brokers/${id}/activate`, { method: "POST" });
 }

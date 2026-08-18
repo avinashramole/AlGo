@@ -93,6 +93,21 @@ Windows firewall: allow Node.js on private networks if the phone cannot connect.
 
 ---
 
+## Multi-broker
+
+Open **Brokers** in the left menu (or on the phone: Portfolio → Brokers).
+
+Supported accounts:
+
+- Paper Trading (always on)
+- Zerodha Kite, Upstox, Angel One, Dhan, Fyers, Groww, 5Paisa, ICICI Direct, Kotak Neo
+
+Sandbox connect: client ID `demo` and API key `demo123`.
+
+The header broker dropdown sets which account new orders use. Each algo can be routed to a different connected broker.
+
+---
+
 ## Project folders
 
 ```

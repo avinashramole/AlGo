@@ -1,6 +1,7 @@
 import { Bell, LogOut, MessageSquare, Moon, Search, Sun, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -36,6 +37,7 @@ export function Header() {
         />
       </div>
       <div className="ml-auto flex items-center gap-3">
+        <BrokerSwitch />
         <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
           <span className="pulse-dot h-2 w-2 rounded-full bg-up" />
           {data.marketStatus === "OPEN" ? "Market Open" : "Market Closed"}

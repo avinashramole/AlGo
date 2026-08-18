@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getSnapshot, placeOrder, toggleAlgo, type Snapshot } from "./api";
+import { activateBroker, connectBroker, disconnectBroker, getSnapshot, placeOrder, toggleAlgo, type Snapshot } from "./api";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -8,6 +8,9 @@ type MarketContextValue = {
   refresh: () => Promise<void>;
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<void>;
+  connect: (id: string, payload: { clientId: string; apiKey: string }) => Promise<void>;
+  disconnect: (id: string) => Promise<void>;
+  activate: (id: string) => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -61,6 +64,21 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         } catch {
           /* offline */
         }
+      },
+      connect: async (id: string, payload: { clientId: string; apiKey: string }) => {
+        const result = await connectBroker(id, payload);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      disconnect: async (id: string) => {
+        const result = await disconnectBroker(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      activate: async (id: string) => {
+        const result = await activateBroker(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
       },
     }),
     [data, live, refresh],

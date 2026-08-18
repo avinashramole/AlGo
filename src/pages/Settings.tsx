@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
@@ -10,7 +11,8 @@ export function Settings() {
     ["Default product", data.settings.product || "MIS"],
     ["Order confirmation", data.settings.confirmation || "Enabled"],
     ["Risk guard", data.settings.riskGuard || "Max 2% per trade"],
-    ["Broker", data.settings.broker || "Paper trading"],
+    ["Active broker", data.brokers?.find((item) => item.active)?.name || "Paper Trading"],
+    ["Connected brokers", String((data.brokers || []).filter((item) => item.connected).length)],
     ["Notifications", data.settings.notifications || "Signals + fills"],
   ];
 
@@ -25,7 +27,10 @@ export function Settings() {
           </div>
         ))}
       </section>
-      <button type="button" onClick={logout} className="h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
+      <Link to="/brokers" className="inline-flex h-10 items-center rounded-xl bg-brand-50 px-4 text-sm font-semibold text-brand-500">
+        Open broker hub
+      </Link>
+      <button type="button" onClick={logout} className="ml-2 h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
         Log out
       </button>
     </div>

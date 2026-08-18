@@ -1,23 +1,43 @@
+import { Link } from "react-router-dom";
 import { useMarket } from "../context/MarketContext";
+import { brokerName } from "../lib/brokers";
 import { cn, formatInr, formatNumber } from "../lib/format";
 
 export function Portfolio() {
   const { data } = useMarket();
   const invested = data.positions.reduce((sum, row) => sum + row.avg * row.qty, 0);
+  const connected = (data.brokers || []).filter((item) => item.connected);
 
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold">Portfolio</h1>
+      <div className="flex items-end justify-between">
+        <h1 className="text-xl font-bold">Portfolio</h1>
+        <Link to="/brokers" className="text-sm font-semibold text-brand-500">
+          Manage brokers
+        </Link>
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         <Card label="Invested" value={`₹${formatNumber(invested)}`} />
         <Card label="Day P&L" value={formatInr(data.totalPnl)} positive={data.totalPnl >= 0} />
-        <Card label="Open positions" value={String(data.positions.length)} />
+        <Card label="Brokers" value={String(connected.length)} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        {connected.map((broker) => (
+          <div key={broker.id} className="card p-4">
+            <div className="text-[11px] font-semibold uppercase text-slate-400">{broker.name}</div>
+            <div className={cn("mt-1 text-lg font-bold", (data.pnlByBroker?.[broker.id] || 0) >= 0 ? "text-up" : "text-down")}>
+              {formatInr(data.pnlByBroker?.[broker.id] || 0)}
+            </div>
+            <div className="text-xs text-slate-400">Funds ₹{formatNumber(broker.funds, 0)}</div>
+          </div>
+        ))}
       </div>
       <section className="card overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full min-w-[700px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3 font-semibold">Symbol</th>
+              <th className="px-4 py-3 font-semibold">Broker</th>
               <th className="px-4 py-3 font-semibold">Side</th>
               <th className="px-4 py-3 text-right font-semibold">Qty</th>
               <th className="px-4 py-3 text-right font-semibold">Avg</th>
@@ -29,6 +49,7 @@ export function Portfolio() {
             {data.positions.map((row) => (
               <tr key={row.id} className="soft-row">
                 <td className="px-4 py-3 font-semibold">{row.symbol}</td>
+                <td className="px-4 py-3">{brokerName(data.brokers, row.brokerId)}</td>
                 <td className="px-4 py-3">{row.type}</td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.avg)}</td>

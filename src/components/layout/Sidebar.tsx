@@ -3,6 +3,7 @@ import {
   Activity,
   BarChart3,
   Briefcase,
+  Building2,
   Cpu,
   Home,
   Layers,
@@ -23,6 +24,7 @@ const items: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: "/signals", label: "Signals", icon: Zap },
   { to: "/algo", label: "Algo", icon: Cpu },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { to: "/brokers", label: "Brokers", icon: Building2 },
   { to: "/analytics", label: "Analytics", icon: PieChart },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
