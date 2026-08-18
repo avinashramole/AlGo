@@ -20,6 +20,9 @@ export type Snapshot = {
     change: number;
     changePct: number;
     spark: number[];
+    future?: number;
+    vwap?: number;
+    prevClose?: number;
   }>;
   ohlc: { open: number; high: number; low: number; close: number };
   dnaScores: Array<{ label: string; value: number }>;

@@ -22,7 +22,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type Snapshot = {
-  indices: Array<{ symbol: string; price: number; change: number; changePct: number; spark: number[] }>;
+  indices: Array<{ symbol: string; price: number; change: number; changePct: number; spark: number[]; future?: number; vwap?: number; prevClose?: number }>;
   ohlc: { open: number; high: number; low: number; close: number };
   dnaScores: Array<{ label: string; value: number }>;
   optionChain: Array<{

@@ -44,11 +44,11 @@ export function generateCandles(count, startPrice, seed = 42) {
 
 const state = {
   indices: [
-    { symbol: "NIFTY 50", name: "NIFTY", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24455, 24410, 24480, 24510, 24490, 24540, 24580] },
-    { symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 51940, 51910, 52020, 52080, 52040, 52110, 52141] },
-    { symbol: "FINNIFTY", name: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24780, 24755, 24810, 24840, 24820, 24870, 24891] },
-    { symbol: "SENSEX", name: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642] },
-    { symbol: "INDIA VIX", name: "VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.72, 13.8, 13.55, 13.48, 13.4, 13.3, 13.24] },
+    withDeskQuotes({ symbol: "NIFTY 50", name: "NIFTY", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24455, 24410, 24480, 24510, 24490, 24540, 24580] }),
+    withDeskQuotes({ symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 51940, 51910, 52020, 52080, 52040, 52110, 52141] }),
+    withDeskQuotes({ symbol: "FINNIFTY", name: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24780, 24755, 24810, 24840, 24820, 24870, 24891] }),
+    withDeskQuotes({ symbol: "SENSEX", name: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642] }),
+    withDeskQuotes({ symbol: "INDIA VIX", name: "VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.72, 13.8, 13.55, 13.48, 13.4, 13.3, 13.24] }),
   ],
   ohlc: { open: 24462.1, high: 24612.8, low: 24418.35, close: 24580.25 },
   dnaScores: [
@@ -180,6 +180,23 @@ function round2(value) {
   return Number(Number(value).toFixed(2));
 }
 
+function withDeskQuotes(item) {
+  const price = Number(item.price) || 0;
+  const change = Number(item.change) || 0;
+  const isVix = item.symbol === "INDIA VIX";
+  const future = Number(item.future) > 0 ? Number(item.future) : round2(isVix ? price : price + Math.max(6, price * 0.00085));
+  const vwap = Number(item.vwap) > 0 ? Number(item.vwap) : round2(isVix ? price : price - Math.max(2, price * 0.00032));
+  const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : round2(price - change);
+  return { ...item, future, vwap, prevClose };
+}
+
+function sanePrevClose(ltp, prev) {
+  const close = Number(prev);
+  if (!(close > 0) || !(ltp > 0)) return null;
+  if (Math.abs(ltp - close) / close > 0.08) return null;
+  return round2(close);
+}
+
 export function setDhanFeed(patch) {
   state.dhanFeed = { ...state.dhanFeed, ...patch };
 }
@@ -206,8 +223,11 @@ export function tickMarket() {
     const next = jitter(item.price, item.symbol === "INDIA VIX" ? 0.04 : item.price * 0.00012);
     const spark = item.spark.slice(1).concat(next);
     const change = Number((item.change + (next - item.price)).toFixed(2));
-    const changePct = Number(((change / (next - change)) * 100).toFixed(2));
-    return { ...item, price: next, change, changePct, spark };
+    const prevClose = item.prevClose > 0 ? item.prevClose : round2(next - change);
+    const changePct = Number(((change / (prevClose || next - change || 1)) * 100).toFixed(2));
+    const future = item.symbol === "INDIA VIX" ? next : jitter((item.future || next) + (next - item.price), 0.35);
+    const vwap = item.symbol === "INDIA VIX" ? next : jitter(item.vwap || next, item.price * 0.00004);
+    return withDeskQuotes({ ...item, price: next, change, changePct, spark, future, vwap, prevClose });
   });
 
   const nifty = state.indices[0];
@@ -467,21 +487,70 @@ function updateLiveCandle(price) {
   last.low = Math.min(last.low, price);
 }
 
+function dayChange(index, quote, ltp) {
+  const net = Number(quote.netChange);
+  const close = Number(quote.close);
+  const open = Number(quote.open);
+  const high = Number(quote.high);
+  const quotedPrev = sanePrevClose(ltp, quote.prevClose);
+  const storedPrev = sanePrevClose(ltp, index.prevClose);
+  const ohlcPrev = close > 0 && Math.abs(close - ltp) > 0.05 ? sanePrevClose(ltp, close) : null;
+  const hasSession = open > 0 || high > 0 || Number(quote.low) > 0;
+
+  const last = Number(index.price);
+  const jumped = last > 0 && Math.abs(ltp - last) / last > 0.004;
+  let prevClose = quotedPrev || ohlcPrev || (jumped ? null : storedPrev);
+  let change = index.change;
+  if (Number.isFinite(net) && quote.netChange != null && (Math.abs(net) > 0.0001 || hasSession)) {
+    change = round2(net);
+    prevClose = round2(ltp - net);
+  } else if (prevClose) {
+    change = round2(ltp - prevClose);
+  } else {
+    change = 0;
+    prevClose = round2(ltp);
+  }
+  const changePct = round2(prevClose ? (change / prevClose) * 100 : 0);
+  return { prevClose, change, changePct };
+}
+
 export function applyLiveQuotes(quotes) {
   const indexPrev = Object.fromEntries(state.indices.map((item) => [item.symbol, item.price]));
 
   for (const quote of quotes) {
-    const ltp = Number(quote.ltp);
-    if (!Number.isFinite(ltp) || ltp <= 0) continue;
-    const indexSymbol = INDEX_ALIASES[quote.symbol] || quote.symbol;
+    const indexSymbol = INDEX_ALIASES[quote.parent || quote.symbol] || quote.symbol;
     const index = state.indices.find((item) => item.symbol === indexSymbol);
+    const ltp = Number(quote.ltp);
+    if (index && quote.kind === "future" && Number.isFinite(ltp) && ltp > 0) {
+      index.future = round2(ltp);
+      const futVwap = Number(quote.vwap);
+      if (futVwap > 0) index.vwap = round2(futVwap);
+      continue;
+    }
+    if (index && Number(quote.prevClose) > 0 && !(Number.isFinite(ltp) && ltp > 0)) {
+      const prev = sanePrevClose(index.price, quote.prevClose);
+      if (prev) {
+        index.prevClose = prev;
+        index.change = round2(index.price - prev);
+        index.changePct = round2(prev ? (index.change / prev) * 100 : 0);
+      }
+      continue;
+    }
+    if (!Number.isFinite(ltp) || ltp <= 0) continue;
     if (index) {
-      const prevClose = Number(quote.close) > 0 ? Number(quote.close) : index.price;
-      const change = round2(ltp - prevClose);
-      const changePct = round2(prevClose ? (change / prevClose) * 100 : 0);
+      const day = dayChange(index, quote, ltp);
+      const vwap = Number(quote.vwap);
       index.price = round2(ltp);
-      index.change = change;
-      index.changePct = changePct;
+      index.change = day.change;
+      index.changePct = day.changePct;
+      index.prevClose = day.prevClose;
+      if (vwap > 0) index.vwap = round2(vwap);
+      else if (!(index.vwap > 0) || Math.abs(index.vwap - ltp) / ltp > 0.012) {
+        index.vwap = round2(ltp - Math.max(2, ltp * 0.00032));
+      }
+      if (!(index.future > 0) || Math.abs(index.future - ltp) / ltp > 0.012) {
+        index.future = round2(ltp + Math.max(6, ltp * 0.00085));
+      }
       index.spark = pushSpark(index.spark, ltp);
       if (index.symbol === "NIFTY 50") {
         const open = Number(quote.open) > 0 ? Number(quote.open) : state.ohlc.open;

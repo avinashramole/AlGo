@@ -11,6 +11,7 @@ import {
   setLiveCandles,
   setOptionDesk,
 } from "./market.js";
+import { resolveFrontFutures } from "./frontFutures.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, trimAroundAtm, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
@@ -42,6 +43,11 @@ let chainTimer = null;
 let socket = null;
 let reconnectTimer = null;
 let usedFallback = false;
+let futureInstruments = [];
+
+function liveInstruments() {
+  return INSTRUMENTS.concat(futureInstruments);
+}
 
 function tokenHint(token) {
   const clean = String(token || "").trim();
@@ -115,9 +121,9 @@ async function dhanPost(path, token, id, body) {
   return json;
 }
 
-function quoteBody(useFallback) {
+function quoteBody(useFallback, instruments = liveInstruments()) {
   const body = {};
-  for (const row of INSTRUMENTS) {
+  for (const row of instruments) {
     const segment = useFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
     if (!body[segment]) body[segment] = [];
     if (!body[segment].includes(row.securityId)) body[segment].push(row.securityId);
@@ -128,28 +134,32 @@ function quoteBody(useFallback) {
 function flattenQuotes(payload) {
   const quotes = [];
   const data = payload?.data || payload || {};
+  const instruments = liveInstruments();
   for (const [segment, securities] of Object.entries(data)) {
     if (!securities || typeof securities !== "object") continue;
     for (const [id, quote] of Object.entries(securities)) {
       if (!quote || typeof quote !== "object") continue;
       const securityId = Number(id);
       const instrument =
-        INSTRUMENTS.find(
+        instruments.find(
           (row) =>
             row.securityId === securityId &&
             (row.segment === segment || row.fallbackSegment === segment),
-        ) || INSTRUMENTS.find((row) => row.securityId === securityId);
+        ) || instruments.find((row) => row.securityId === securityId);
       if (!instrument) continue;
       const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
       quotes.push({
         symbol: instrument.symbol,
+        parent: instrument.parent || instrument.symbol,
         kind: instrument.kind,
         ltp,
         open: Number(quote.ohlc?.open ?? quote.open),
         high: Number(quote.ohlc?.high ?? quote.high),
         low: Number(quote.ohlc?.low ?? quote.low),
         close: Number(quote.ohlc?.close ?? quote.close),
+        vwap: Number(quote.average_price ?? quote.averagePrice ?? quote.vwap),
+        netChange: quote.net_change ?? quote.netChange,
         volume: Number(quote.volume ?? quote.vol),
       });
     }
@@ -293,12 +303,20 @@ async function pullNiftyCandles() {
 async function pullQuotes() {
   if (!accessToken || !clientId) return;
   try {
-    let payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(usedFallback));
-    let quotes = flattenQuotes(payload);
+    let payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(usedFallback)).catch(() => null);
+    let quotes = payload ? flattenQuotes(payload) : [];
+    if (!quotes.length) {
+      payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(usedFallback));
+      quotes = flattenQuotes(payload);
+    }
     if (!quotes.length && !usedFallback) {
       usedFallback = true;
-      payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(true));
-      quotes = flattenQuotes(payload);
+      payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(true)).catch(() => null);
+      quotes = payload ? flattenQuotes(payload) : [];
+      if (!quotes.length) {
+        payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(true));
+        quotes = flattenQuotes(payload);
+      }
     }
     if (!quotes.length) {
       payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, quoteBody(usedFallback));
@@ -348,19 +366,49 @@ function stopSocket() {
 
 function parseFeedPackets(buffer) {
   const quotes = [];
+  const instruments = liveInstruments();
   let offset = 0;
   while (offset + 16 <= buffer.length) {
     const code = buffer.readUInt8(offset);
     const length = buffer.readUInt16LE(offset + 1);
     const securityId = buffer.readInt32LE(offset + 4);
-    if (code === 2 || code === 4 || code === 8) {
+    const instrument = instruments.find((row) => row.securityId === securityId);
+    const packetLen = Math.max(length >= 16 ? length : length + 8, 16);
+    if (instrument && (code === 2 || code === 4 || code === 8)) {
       const ltp = buffer.readFloatLE(offset + 8);
-      const instrument = INSTRUMENTS.find((row) => row.securityId === securityId);
-      if (instrument && Number.isFinite(ltp) && ltp > 0) {
-        quotes.push({ symbol: instrument.symbol, kind: instrument.kind, ltp });
+      if (Number.isFinite(ltp) && ltp > 0) {
+        const quote = {
+          symbol: instrument.symbol,
+          parent: instrument.parent || instrument.symbol,
+          kind: instrument.kind,
+          ltp,
+        };
+        if (code === 4 && offset + 50 <= buffer.length) {
+          const avg = buffer.readFloatLE(offset + 18);
+          const open = buffer.readFloatLE(offset + 34);
+          const close = buffer.readFloatLE(offset + 38);
+          const high = buffer.readFloatLE(offset + 42);
+          const low = buffer.readFloatLE(offset + 46);
+          if (avg > 0) quote.vwap = avg;
+          if (open > 0) quote.open = open;
+          if (close > 0) quote.close = close;
+          if (high > 0) quote.high = high;
+          if (low > 0) quote.low = low;
+        }
+        quotes.push(quote);
+      }
+    } else if (instrument && code === 6) {
+      const prevClose = buffer.readFloatLE(offset + 8);
+      if (Number.isFinite(prevClose) && prevClose > 0) {
+        quotes.push({
+          symbol: instrument.symbol,
+          parent: instrument.parent || instrument.symbol,
+          kind: instrument.kind,
+          prevClose,
+        });
       }
     }
-    offset += Math.max(length >= 16 ? length : length + 8, 16);
+    offset += packetLen;
   }
   return quotes;
 }
@@ -377,13 +425,13 @@ function startSocket() {
   }
 
   socket.on("open", () => {
-    const list = INSTRUMENTS.map((row) => ({
+    const list = liveInstruments().map((row) => ({
       ExchangeSegment: usedFallback && row.fallbackSegment ? row.fallbackSegment : row.segment,
       SecurityId: String(row.securityId),
     }));
     socket.send(
       JSON.stringify({
-        RequestCode: 15,
+        RequestCode: 17,
         InstrumentCount: list.length,
         InstrumentList: list,
       }),
@@ -492,7 +540,15 @@ export async function selectOptionDesk({ symbol, expiry }) {
 
 function startLiveLoop() {
   stopLiveLoop(false);
-  void pullQuotes();
+  void (async () => {
+    try {
+      futureInstruments = await resolveFrontFutures();
+    } catch {
+      futureInstruments = [];
+    }
+    void pullQuotes();
+    startSocket();
+  })();
   void pullAccount();
   void pullNiftyCandles();
   void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
@@ -507,7 +563,6 @@ function startLiveLoop() {
       setDhanFeed({ error: error.message || "Dhan option chain failed" });
     });
   }, 4000);
-  startSocket();
 }
 
 function stopLiveLoop(clearCreds) {

@@ -2,11 +2,11 @@ import type { Snapshot } from "./api";
 
 export const fallbackSnapshot: Snapshot = {
   indices: [
-    { symbol: "NIFTY 50", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24580] },
-    { symbol: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 52141] },
-    { symbol: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24891] },
-    { symbol: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80642] },
-    { symbol: "INDIA VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.24] },
+    { symbol: "NIFTY 50", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24580], future: 24602.4, vwap: 24571.15, prevClose: 24454.85 },
+    { symbol: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 52141], future: 52186.4, vwap: 52118.7, prevClose: 51930.65 },
+    { symbol: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24891], future: 24912.8, vwap: 24881.4, prevClose: 24792.3 },
+    { symbol: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80642], future: 80718.6, vwap: 80610.2, prevClose: 80329.5 },
+    { symbol: "INDIA VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.24], future: 13.24, vwap: 13.3, prevClose: 13.66 },
   ],
   ohlc: { open: 24462.1, high: 24612.8, low: 24418.35, close: 24580.25 },
   dnaScores: [

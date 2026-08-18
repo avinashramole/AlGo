@@ -18,14 +18,27 @@ export function HomeScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         {data.indices.map((item) => {
           const up = item.change >= 0;
+          const showDeriv = item.symbol !== "INDIA VIX";
           return (
             <Card key={item.symbol}>
-              <View style={{ width: 150 }}>
+              <View style={{ width: 168 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
                 <Text style={styles.price}>{formatNumber(item.price)}</Text>
                 <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
-                  {formatPct(item.changePct)}
+                  {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
                 </Text>
+                {showDeriv ? (
+                  <View style={styles.deskRow}>
+                    <View>
+                      <Text style={styles.tiny}>FUT</Text>
+                      <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                    </View>
+                    <View>
+                      <Text style={styles.tiny}>VWAP</Text>
+                      <Text style={styles.deskVal}>{formatNumber(item.vwap || item.price)}</Text>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             </Card>
           );
@@ -77,6 +90,9 @@ const styles = StyleSheet.create({
   live: { color: colors.up, fontWeight: "700", fontSize: 12 },
   muted: { color: colors.muted, fontSize: 12, marginTop: 4, marginBottom: 6 },
   price: { fontSize: 18, fontWeight: "800" },
+  deskRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, gap: 12 },
+  tiny: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+  deskVal: { fontWeight: "800", fontSize: 13, marginTop: 2 },
   heading: { fontSize: 16, fontWeight: "800", marginVertical: 6 },
   metrics: { flexDirection: "row", gap: 8, marginTop: 10 },
   metric: { flex: 1, backgroundColor: colors.bg, borderRadius: 10, padding: 8 },

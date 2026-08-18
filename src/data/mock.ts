@@ -5,6 +5,9 @@ export type IndexQuote = {
   change: number;
   changePct: number;
   spark: number[];
+  future?: number;
+  vwap?: number;
+  prevClose?: number;
 };
 
 export type Position = {
@@ -54,6 +57,9 @@ export const indices: IndexQuote[] = [
     price: 24580.25,
     change: 125.4,
     changePct: 0.51,
+    future: 24602.4,
+    vwap: 24571.15,
+    prevClose: 24454.85,
     spark: [24420, 24455, 24410, 24480, 24510, 24490, 24540, 24580],
   },
   {
@@ -62,6 +68,9 @@ export const indices: IndexQuote[] = [
     price: 52140.8,
     change: 210.15,
     changePct: 0.4,
+    future: 52186.4,
+    vwap: 52118.7,
+    prevClose: 51930.65,
     spark: [51880, 51940, 51910, 52020, 52080, 52040, 52110, 52141],
   },
   {
@@ -70,6 +79,9 @@ export const indices: IndexQuote[] = [
     price: 24890.5,
     change: 98.2,
     changePct: 0.4,
+    future: 24912.8,
+    vwap: 24881.4,
+    prevClose: 24792.3,
     spark: [24740, 24780, 24755, 24810, 24840, 24820, 24870, 24891],
   },
   {
@@ -78,6 +90,9 @@ export const indices: IndexQuote[] = [
     price: 80642.3,
     change: 312.8,
     changePct: 0.39,
+    future: 80718.6,
+    vwap: 80610.2,
+    prevClose: 80329.5,
     spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642],
   },
   {
