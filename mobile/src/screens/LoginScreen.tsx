@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { connectGmail, getGmailStatus } from "../api";
 import { useAuth } from "../AuthContext";
-import { colors } from "../theme";
 
 function looksLikeMobile(value: string) {
   let digits = String(value || "").replace(/\D/g, "");
@@ -137,10 +136,7 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>T2</Text>
-        </View>
-        <Text style={styles.title}>Trade 2 Smart</Text>
+        <Image source={require("../../assets/t2s-logo.png")} style={styles.logoImg} resizeMode="contain" />
 
         {showGmail ? (
           mailConnected ? (
@@ -148,8 +144,8 @@ export function LoginScreen() {
           ) : (
             <>
               <Text style={styles.hint}>Connect Gmail (App Password) so login codes and the after-login mail are emailed.</Text>
-              <TextInput style={styles.input} autoCapitalize="none" value={senderEmail} onChangeText={setSenderEmail} placeholder="Desk Gmail (sends mail)" />
-              <TextInput style={styles.input} secureTextEntry value={appPassword} onChangeText={setAppPassword} placeholder="App Password" />
+              <TextInput style={styles.input} autoCapitalize="none" value={senderEmail} onChangeText={setSenderEmail} placeholder="Desk Gmail (sends mail)" placeholderTextColor="#6b7385" />
+              <TextInput style={styles.input} secureTextEntry value={appPassword} onChangeText={setAppPassword} placeholder="App Password" placeholderTextColor="#6b7385" />
               <Pressable
                 style={styles.ghostBtn}
                 disabled={busy}
@@ -171,7 +167,7 @@ export function LoginScreen() {
           )
         ) : null}
 
-        {page === "signup" ? <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" /> : null}
+        {page === "signup" ? <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" placeholderTextColor="#6b7385" /> : null}
         <TextInput
           style={styles.input}
           autoCapitalize="none"
@@ -182,6 +178,7 @@ export function LoginScreen() {
             setOtp("");
           }}
           placeholder="Gmail or mobile"
+          placeholderTextColor="#6b7385"
         />
         {sentTo ? (
           <TextInput
@@ -190,6 +187,7 @@ export function LoginScreen() {
             value={otp}
             onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
             placeholder="6-digit code"
+            placeholderTextColor="#6b7385"
           />
         ) : null}
         <TextInput
@@ -198,9 +196,10 @@ export function LoginScreen() {
           value={password}
           onChangeText={setPassword}
           placeholder={page === "signup" ? "Set password (min 6)" : "Password"}
+          placeholderTextColor="#6b7385"
         />
         {page === "signup" ? (
-          <TextInput style={styles.input} secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
+          <TextInput style={styles.input} secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" placeholderTextColor="#6b7385" />
         ) : null}
 
         <Pressable style={styles.button} onPress={() => void submit()} disabled={busy}>
@@ -235,22 +234,13 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg },
+  wrap: { flex: 1, backgroundColor: "#05070c" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  logo: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.brand,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  logoText: { color: "#fff", fontWeight: "800", fontSize: 18 },
-  title: { fontSize: 28, fontWeight: "800", color: colors.text, marginBottom: 24 },
+  logoImg: { width: 220, height: 220, alignSelf: "center", marginBottom: 16 },
   input: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
+    backgroundColor: "#080b12",
+    borderColor: "#243044",
+    color: "#f4f7fb",
     borderWidth: 1,
     borderRadius: 12,
     height: 48,
@@ -258,18 +248,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   button: {
-    backgroundColor: colors.brand,
+    backgroundColor: "#b6ff3c",
     height: 48,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  buttonText: { color: "#fff", fontWeight: "700" },
+  buttonText: { color: "#061006", fontWeight: "800" },
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
-  ghostBtn: { height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  ghostText: { color: colors.brand, fontWeight: "700" },
+  ghostBtn: { height: 40, borderRadius: 12, borderWidth: 1, borderColor: "#2f7bff", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  ghostText: { color: "#6db3ff", fontWeight: "700" },
   switch: { marginTop: 8, height: 40, alignItems: "center", justifyContent: "center" },
-  switchText: { color: colors.muted, fontWeight: "700", fontSize: 13 },
-  hint: { textAlign: "center", color: colors.muted, marginTop: 12, marginBottom: 8, fontSize: 12 },
-  dev: { textAlign: "center", color: "#b45309", marginTop: 8, fontSize: 13, fontWeight: "700" },
+  switchText: { color: "#8b93a7", fontWeight: "700", fontSize: 13 },
+  hint: { textAlign: "center", color: "#8b93a7", marginTop: 12, marginBottom: 8, fontSize: 12 },
+  dev: { textAlign: "center", color: "#b6ff3c", marginTop: 8, fontSize: 13, fontWeight: "700" },
 });

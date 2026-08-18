@@ -4,7 +4,7 @@ import { connectGmail, getGmailStatus } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/format";
 
-const fieldClass = "mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal outline-none focus:border-brand-500";
+const fieldClass = "login-input";
 
 function looksLikeMobile(value: string) {
   let digits = String(value || "").replace(/\D/g, "");
@@ -157,12 +157,9 @@ export function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] p-4">
-      <div className="card w-full max-w-md p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500 text-sm font-extrabold text-white">T2</div>
-          <div className="text-xl font-extrabold">Trade 2 Smart</div>
-        </div>
+    <div className="login-shell">
+      <div className="login-card">
+        <img src="/t2s-logo.png" alt="Trade 2 Smart" className="mx-auto mb-6 h-40 w-40 object-contain sm:h-48 sm:w-48" />
 
         {showGmail ? (
           <GmailBox
@@ -198,7 +195,7 @@ export function Login() {
           <Submit loading={loading} label={page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"} />
           <button
             type="button"
-            className="mt-2 h-10 w-full text-sm font-semibold text-brand-500"
+            className="login-link mt-2 h-10 w-full text-sm font-semibold"
             disabled={loading}
             onClick={() => void onSendCode()}
           >
@@ -208,7 +205,7 @@ export function Login() {
 
         <button
           type="button"
-          className="mt-4 w-full text-center text-sm font-semibold text-slate-500"
+          className="mt-4 w-full text-center text-sm font-semibold text-slate-400"
           onClick={() => {
             setPage(page === "signup" ? "signin" : "signup");
             resetNotice();
@@ -216,7 +213,7 @@ export function Login() {
         >
           {page === "signup" ? "Have an account? Sign in" : "New here? Create account"}
         </button>
-        {page === "signin" ? <p className="mt-3 text-center text-xs text-slate-400">Demo: demo@t2s.app / demo123</p> : null}
+        {page === "signin" ? <p className="mt-3 text-center text-xs text-slate-500">Demo: demo@t2s.app / demo123</p> : null}
       </div>
     </div>
   );
@@ -236,7 +233,7 @@ function Field({
   secret?: boolean;
 }) {
   return (
-    <label className="mb-3 block text-sm font-semibold">
+    <label className="mb-3 block text-sm font-semibold text-slate-200">
       {label}
       <input className={fieldClass} type={secret ? "password" : "text"} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </label>
@@ -245,7 +242,7 @@ function Field({
 
 function Submit({ loading, label }: { loading: boolean; label: string }) {
   return (
-    <button type="submit" disabled={loading} className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60">
+    <button type="submit" disabled={loading} className="login-btn">
       {loading ? "Please wait..." : label}
     </button>
   );
@@ -254,9 +251,9 @@ function Submit({ loading, label }: { loading: boolean; label: string }) {
 function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: string }) {
   return (
     <>
-      {hint ? <p className="mb-3 text-xs font-medium text-slate-500">{hint}</p> : null}
-      {devOtp ? <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:bg-amber-950/40">Temporary code: {devOtp}</div> : null}
-      {error ? <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-down dark:bg-rose-950/40">{error}</div> : null}
+      {hint ? <p className="mb-3 text-xs font-medium text-slate-400">{hint}</p> : null}
+      {devOtp ? <div className="mb-3 rounded-lg border border-[#b6ff3c]/30 bg-[#b6ff3c]/10 px-3 py-2 text-sm font-semibold text-[#b6ff3c]">Temporary code: {devOtp}</div> : null}
+      {error ? <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</div> : null}
     </>
   );
 }
@@ -281,15 +278,15 @@ function GmailBox({
   onSubmit: (event: FormEvent) => void;
 }) {
   return (
-    <div className={cn("mb-4 rounded-xl border p-3", connected ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30")}>
+    <div className={cn("mb-4 rounded-xl border p-3", connected ? "border-[#b6ff3c]/40 bg-[#b6ff3c]/10" : "border-[#2f7bff]/40 bg-[#2f7bff]/10")}>
       {connected ? (
-        <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">Gmail sending from {from}.</p>
+        <p className="text-xs font-semibold text-[#b6ff3c]">Gmail sending from {from}.</p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-2">
-          <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Connect Gmail (App Password) to email login codes and notices.</p>
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={senderEmail} onChange={(event) => onSender(event.target.value)} placeholder="Desk Gmail" />
-          <input type="password" className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={appPassword} onChange={(event) => onPass(event.target.value)} placeholder="App Password" />
-          <button type="submit" disabled={loading} className="h-9 w-full rounded-lg bg-slate-900 text-xs font-semibold text-white dark:bg-white dark:text-slate-900">
+          <p className="text-xs font-semibold text-slate-200">Connect Gmail (App Password) to email login codes and notices.</p>
+          <input className="login-input" value={senderEmail} onChange={(event) => onSender(event.target.value)} placeholder="Desk Gmail" />
+          <input type="password" className="login-input" value={appPassword} onChange={(event) => onPass(event.target.value)} placeholder="App Password" />
+          <button type="submit" disabled={loading} className="h-9 w-full rounded-lg bg-[#2f7bff] text-xs font-semibold text-white">
             Connect Gmail
           </button>
         </form>
