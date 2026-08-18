@@ -2,7 +2,7 @@ export function LoginHeroArt() {
   return (
     <svg className="t2s-hero-art" viewBox="0 0 420 280" fill="none" aria-hidden="true">
       <ellipse cx="210" cy="248" rx="150" ry="18" fill="#e8eef7" />
-      <rect x="118" y="132" width="184" height="108" rx="22" fill="#111827" />
+      <rect x="118" y="132" width="184" height="108" rx="22" fill="#d7dee8" />
       <rect x="126" y="140" width="168" height="92" rx="16" fill="#f8fafc" />
       <rect x="198" y="146" width="24" height="4" rx="2" fill="#d1d5db" />
       <rect x="148" y="168" width="40" height="8" rx="4" fill="#dbeafe" />

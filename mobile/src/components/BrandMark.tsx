@@ -33,8 +33,8 @@ export function BrandMark({
 }
 
 const styles = StyleSheet.create({
-  lockup: { width: "100%", maxWidth: 320, height: 320, borderRadius: 28, marginBottom: 16 },
-  emblem: { width: 40, height: 40, borderRadius: 10 },
+  lockup: { width: "100%", maxWidth: 320, height: 320, marginBottom: 16, backgroundColor: "transparent" },
+  emblem: { width: 40, height: 40 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   two: { color: "#2F7BFF" },
   s: { color: "#22C55E" },

@@ -23,14 +23,14 @@ export function BrandMark({
       <img
         src={lockup}
         alt="Trade 2 Smart"
-        className={`block h-auto rounded-[28px] shadow-[0_18px_40px_rgba(0,0,0,0.35)] ${lockupSize[size]} ${className}`}
+        className={`block h-auto ${lockupSize[size]} ${className}`}
       />
     );
   }
 
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <img src={emblem} alt="" className={`shrink-0 rounded-xl object-cover ${emblemSize[size]}`} />
+      <img src={emblem} alt="" className={`shrink-0 object-contain ${emblemSize[size]}`} />
       {variant === "horizontal" ? (
         <span className={`min-w-0 leading-tight ${showWordmark === "always" ? "block" : "hidden sm:block"}`}>
           <span className={`block font-extrabold uppercase tracking-[0.16em] ${size === "lg" ? "text-[16px]" : "text-[13px]"}`}>
