@@ -229,6 +229,19 @@ export function getSnapshot() {
   return request<Snapshot>("/snapshot");
 }
 
+export function getContracts(symbol?: string, expiry?: string) {
+  const query = new URLSearchParams();
+  if (symbol) query.set("symbol", symbol);
+  if (expiry) query.set("expiry", expiry);
+  const suffix = query.toString() ? `?${query}` : "";
+  return request<{
+    indices: Array<{ symbol: string; securityId: string; segment: string; lot: number; tradable?: boolean }>;
+    futures: Array<{ symbol: string; name?: string; expiry: string; securityId: string; segment: string; lot: number; qty?: number; front?: boolean }>;
+    options: Array<{ symbol: string; option: "CE" | "PE"; strike: number; expiry: string; securityId: string; segment: string; lot: number }>;
+    counts: { indices: number; futures: number; options: number; strikes: number };
+  }>(`/contracts${suffix}`);
+}
+
 export function toggleAlgo(id: string) {
   return request(`/algos/${id}/toggle`, { method: "POST" });
 }

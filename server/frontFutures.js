@@ -210,6 +210,103 @@ export function listIndexContracts() {
   }));
 }
 
+export function listOptionStrikes({ symbol, expiry } = {}) {
+  const rootFilter = symbol ? optionRoot(symbol) : "";
+  const expFilter = expiry ? normalizeExpiry(expiry) : "";
+  const out = [];
+  for (const und of UNDERLYINGS) {
+    if (rootFilter && und.root !== rootFilter) continue;
+    const prefix = `${und.root}|`;
+    const keys = [...cache.byExpiry.keys()].filter((key) => key.startsWith(prefix)).sort();
+    for (const key of keys) {
+      const exp = key.slice(prefix.length);
+      if (expFilter && exp !== expFilter) continue;
+      if (exp && !dropExpired([exp]).includes(exp)) continue;
+      const strikes = cache.byExpiry.get(key);
+      if (!strikes) continue;
+      for (const [strike, ids] of [...strikes.entries()].sort((a, b) => Number(a[0]) - Number(b[0]))) {
+        if (!ids?.callId && !ids?.putId) continue;
+        out.push({
+          root: und.root,
+          parent: und.parent,
+          strike: Number(strike),
+          expiry: exp,
+          callId: ids.callId ? String(ids.callId) : "",
+          putId: ids.putId ? String(ids.putId) : "",
+          segment: und.segment,
+          lot: und.lot,
+          qty: und.lot,
+          tradable: true,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+export function listOptions(filters = {}) {
+  return listOptionStrikes(filters).flatMap((row) => {
+    const legs = [];
+    if (row.callId) {
+      legs.push({
+        root: row.root,
+        parent: row.parent,
+        symbol: `${row.root} ${row.strike} CE`,
+        kind: "option",
+        option: "CE",
+        strike: row.strike,
+        expiry: row.expiry,
+        securityId: row.callId,
+        segment: row.segment,
+        lot: row.lot,
+        qty: row.qty,
+        tradable: true,
+      });
+    }
+    if (row.putId) {
+      legs.push({
+        root: row.root,
+        parent: row.parent,
+        symbol: `${row.root} ${row.strike} PE`,
+        kind: "option",
+        option: "PE",
+        strike: row.strike,
+        expiry: row.expiry,
+        securityId: row.putId,
+        segment: row.segment,
+        lot: row.lot,
+        qty: row.qty,
+        tradable: true,
+      });
+    }
+    return legs;
+  });
+}
+
+export function contractCatalog({ symbol, expiry } = {}) {
+  const root = symbol ? optionRoot(symbol) : "";
+  const indices = listIndexContracts().filter((row) => !root || row.root === root);
+  const futures = listFutures().filter((row) => !root || row.root === root);
+  const optionStrikes = listOptionStrikes({ symbol, expiry });
+  const options = listOptions({ symbol, expiry });
+  return {
+    indices,
+    futures,
+    options,
+    optionStrikes,
+    counts: {
+      indices: indices.length,
+      futures: futures.length,
+      options: options.length,
+      strikes: optionStrikes.length,
+    },
+  };
+}
+
+export function optionCount() {
+  return cache.options instanceof Map ? cache.options.size : 0;
+}
+
 export function attachContractIds(indices) {
   const futs = listFutures();
   return (indices || []).map((item) => {
@@ -249,7 +346,7 @@ export function scripExpiries(symbol) {
   return dropExpired([...new Set(dates)].sort());
 }
 
-export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 12 } = {}) {
+export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = null } = {}) {
   const root = optionRoot(symbol);
   const exp = normalizeExpiry(expiry);
   const bucket = cache.byExpiry.get(expiryKey(root, exp));
@@ -296,7 +393,9 @@ export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = []
         atm: Boolean(live.atm),
       };
     });
-  return trimAroundAtm(markAtmRows(rows, spot, step), wings);
+  const marked = markAtmRows(rows, spot, step);
+  if (wings == null || wings === false) return marked;
+  return trimAroundAtm(marked, wings);
 }
 
 export function enrichOptionRows(rows, { symbol, expiry } = {}) {

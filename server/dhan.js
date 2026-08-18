@@ -565,7 +565,6 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
     spot: nextSpot,
     step: und.step,
     liveRows: rows || currentOptionRows(),
-    wings: 12,
   });
   setOptionDesk({ symbol: und.id, expiry: chosen, expiries, rows: next, spot: nextSpot, source });
   return next;

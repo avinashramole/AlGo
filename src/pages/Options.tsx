@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FuturesTape } from "../components/dashboard/FuturesTape";
+import { IndexIds } from "../components/dashboard/IndexIds";
+import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct } from "../lib/format";
 
@@ -14,10 +16,17 @@ export function Options() {
     { id: "SENSEX", label: "SENSEX", lot: 20 },
   ];
   const rows = data.optionChain || [];
-  const maxOi = Math.max(1, ...rows.map((row) => Math.max(row.callOi || 0, row.putOi || 0)));
   const [busy, setBusy] = useState("");
   const [lots, setLots] = useState(1);
   const [note, setNote] = useState("");
+  const [range, setRange] = useState<"all" | "atm">("all");
+  const visibleRows = useMemo(() => {
+    if (range !== "atm") return rows;
+    const atmIndex = rows.findIndex((row) => row.atm);
+    if (atmIndex < 0) return rows;
+    return rows.slice(Math.max(0, atmIndex - 12), atmIndex + 13);
+  }, [rows, range]);
+  const maxOi = Math.max(1, ...visibleRows.map((row) => Math.max(row.callOi || 0, row.putOi || 0)));
 
   const atm = rows.find((row) => row.atm);
   const spot = meta?.spot || data.indices[0]?.price || 0;
@@ -114,6 +123,13 @@ export function Options() {
               1 lot = {lotSize} · qty {qty}
             </span>
           </label>
+          <button
+            type="button"
+            onClick={() => setRange((value) => (value === "all" ? "atm" : "all"))}
+            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold"
+          >
+            {range === "all" ? `All ${rows.length} strikes` : "ATM ±12"}
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -155,7 +171,9 @@ export function Options() {
         )}
       </div>
       {note ? <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold">{note}</div> : null}
+      <IndexIds />
       <FuturesTape />
+      <OptionIdsTape />
       <section className="card overflow-x-auto">
         <table className="w-full min-w-[1280px] text-left text-xs">
           <thead className="bg-[var(--bg)] text-[10px] uppercase tracking-wide text-slate-400">
@@ -187,7 +205,7 @@ export function Options() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <tr key={row.strike} className={cn("soft-row", row.atm && "bg-brand-50/80 dark:bg-brand-500/10")}>
                 <td className="px-3 py-2">
                   <OiBar value={row.callOi || 0} max={maxOi} side="call" />
@@ -237,8 +255,9 @@ export function Options() {
         </table>
       </section>
       <p className="text-xs text-slate-400">
-        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). Every strike shows its Dhan security ID. It reaches
-        Dhan only while the live Access Token is connected. Otherwise the fill stays on this desk.
+        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). The chain lists every live OPTIDX strike for this
+        expiry with its Dhan security ID. The tables above list every index quote ID, FUTIDX ID, and option ID across
+        expiries. Orders reach Dhan only while the live Access Token is connected.
       </p>
     </div>
   );

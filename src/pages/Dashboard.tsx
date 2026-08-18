@@ -9,6 +9,7 @@ import { PriceChart } from "../components/dashboard/PriceChart";
 import { RecentSignals } from "../components/dashboard/RecentSignals";
 import { SentimentGauge } from "../components/dashboard/SentimentGauge";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
+import { IndexIds } from "../components/dashboard/IndexIds";
 import { FuturesTape } from "../components/dashboard/FuturesTape";
 import { TradeModal } from "../components/dashboard/TradeModal";
 
@@ -18,6 +19,7 @@ export function Dashboard() {
   return (
     <div className="space-y-3">
       <TickerStrip />
+      <IndexIds />
       <FuturesTape />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <div className="xl:col-span-2">

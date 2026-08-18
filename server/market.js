@@ -9,7 +9,7 @@ import {
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
-import { attachContractIds, listFutures, listIndexContracts } from "./frontFutures.js";
+import { attachContractIds, listFutures, listIndexContracts, optionCount } from "./frontFutures.js";
 import { buildReport, enrichPositions, seedClosedTrades, seedOrders } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
 
@@ -298,6 +298,7 @@ export function snapshot() {
     contracts: {
       indices: listIndexContracts(),
       futures: listFutures(),
+      optionCount: optionCount(),
     },
     indices: attachContractIds(publicState.indices),
     settings: { ...state.settings, broker: active.name },

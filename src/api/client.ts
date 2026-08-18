@@ -247,7 +247,47 @@ export type Snapshot = {
       note?: string;
     }>;
     futures: Snapshot["futures"];
+    optionCount?: number;
   };
+};
+
+export type LiveContract = {
+  root: string;
+  parent?: string;
+  symbol: string;
+  kind: "index" | "future" | "option";
+  securityId: string;
+  segment: string;
+  lot: number;
+  qty?: number;
+  expiry?: string;
+  strike?: number;
+  option?: "CE" | "PE";
+  tradable?: boolean;
+  front?: boolean;
+  note?: string;
+  name?: string;
+};
+
+export type OptionStrikeContract = {
+  root: string;
+  parent: string;
+  strike: number;
+  expiry: string;
+  callId: string;
+  putId: string;
+  segment: string;
+  lot: number;
+  qty: number;
+  tradable: boolean;
+};
+
+export type ContractCatalog = {
+  indices: LiveContract[];
+  futures: LiveContract[];
+  options: LiveContract[];
+  optionStrikes: OptionStrikeContract[];
+  counts: { indices: number; futures: number; options: number; strikes: number };
 };
 
 export type BrokerAccount = {
@@ -278,6 +318,14 @@ export function login(email: string, password: string) {
 
 export function getSnapshot() {
   return request<Snapshot>("/snapshot");
+}
+
+export function getContracts(symbol?: string, expiry?: string) {
+  const query = new URLSearchParams();
+  if (symbol) query.set("symbol", symbol);
+  if (expiry) query.set("expiry", expiry);
+  const suffix = query.toString() ? `?${query}` : "";
+  return request<ContractCatalog>(`/contracts${suffix}`);
 }
 
 export function getCandles(tf: string) {

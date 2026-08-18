@@ -1,4 +1,5 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatNumber, formatPct } from "../theme";
@@ -13,6 +14,15 @@ export function OptionsScreen() {
     { id: "SENSEX", label: "SENSEX", lot: 20 },
   ];
   const lot = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
+  const [range, setRange] = useState<"all" | "atm">("atm");
+  const futures = (data.futures || []).filter((row) => !meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol));
+  const visibleRows = useMemo(() => {
+    const rows = data.optionChain || [];
+    if (range !== "atm") return rows;
+    const atm = rows.findIndex((row) => row.atm);
+    if (atm < 0) return rows.slice(0, 9);
+    return rows.slice(Math.max(0, atm - 4), atm + 5);
+  }, [data.optionChain, range]);
 
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
@@ -34,10 +44,31 @@ export function OptionsScreen() {
         exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
       if (result.live) {
-        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty`);
+        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty · ID ${securityId || "—"}`);
       } else {
         Alert.alert("Desk fill only", result.warning || `${action} ${symbol} · ${lot} qty. Connect live Access Token on Brokers to send this to Dhan.`);
       }
+    } catch (err) {
+      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+    }
+  };
+
+  const tradeFuture = async (row: NonNullable<typeof data.futures>[number], side: "BUY" | "SELL") => {
+    try {
+      const result = await order({
+        symbol: row.symbol,
+        name: row.name,
+        kind: "future",
+        side,
+        qty: row.qty || row.lot || lot,
+        product: "MIS",
+        type: "MARKET",
+        brokerId: data.activeBrokerId,
+        securityId: row.securityId,
+        expiry: row.expiry,
+        exchangeSegment: row.segment,
+      });
+      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${row.name || row.symbol} · ID ${row.securityId}`);
     } catch (err) {
       Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
     }
@@ -50,7 +81,7 @@ export function OptionsScreen() {
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
         {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · 1 lot = {lot}
         {"\n"}
-        {data.dhanFeed?.live ? "Orders go to Dhan" : "Desk fill only until Access Token on Brokers"}
+        {data.dhanFeed?.live ? "Orders go to Dhan with the contract security ID" : "Desk fill only until Access Token on Brokers"}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
@@ -76,7 +107,29 @@ export function OptionsScreen() {
           </Pressable>
         ))}
       </ScrollView>
-      {data.optionChain.map((row) => (
+      <View style={styles.chips}>
+        <Pressable onPress={() => setRange("atm")} style={[styles.chip, range === "atm" && styles.chipOn]}>
+          <Text style={[styles.chipText, range === "atm" && styles.chipTextOn]}>ATM</Text>
+        </Pressable>
+        <Pressable onPress={() => setRange("all")} style={[styles.chip, range === "all" && styles.chipOn]}>
+          <Text style={[styles.chipText, range === "all" && styles.chipTextOn]}>All IDs ({(data.optionChain || []).length})</Text>
+        </Pressable>
+      </View>
+      {futures.map((row) => (
+        <Card key={`${row.root}-${row.expiry}-${row.securityId}`}>
+          <Text style={styles.strike}>{row.name || row.symbol}</Text>
+          <Text style={styles.muted}>FUT ID {row.securityId} · {row.segment} · lot {row.lot}</Text>
+          <View style={styles.actions}>
+            <Pressable style={styles.buy} onPress={() => void tradeFuture(row, "BUY")}>
+              <Text style={styles.actionText}>BUY</Text>
+            </Pressable>
+            <Pressable style={styles.sell} onPress={() => void tradeFuture(row, "SELL")}>
+              <Text style={styles.actionText}>SELL</Text>
+            </Pressable>
+          </View>
+        </Card>
+      ))}
+      {visibleRows.map((row) => (
         <Card key={row.strike}>
           <Text style={styles.strike}>
             {row.strike} {row.atm ? "ATM" : ""}
