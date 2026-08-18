@@ -5,6 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
+    "dev:api": "npm --prefix server run dev",
+    "dev:mobile": "npm --prefix mobile start",
+    "setup": "npm install && npm --prefix server install && npm --prefix mobile install",
+    "start": "concurrently -n api,web -c cyan,green \"npm run dev:api\" \"npm run dev:web\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
@@ -15,6 +20,7 @@
     "react-router-dom": "^7.8.2"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",

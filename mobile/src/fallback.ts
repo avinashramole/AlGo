@@ -1,0 +1,63 @@
+import type { Snapshot } from "./api";
+
+export const fallbackSnapshot: Snapshot = {
+  indices: [
+    { symbol: "NIFTY 50", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24580] },
+    { symbol: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 52141] },
+    { symbol: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24891] },
+    { symbol: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80642] },
+    { symbol: "INDIA VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.24] },
+  ],
+  ohlc: { open: 24462.1, high: 24612.8, low: 24418.35, close: 24580.25 },
+  dnaScores: [
+    { label: "Trend", value: 86 },
+    { label: "Momentum", value: 78 },
+    { label: "Buy Pressure", value: 91 },
+    { label: "Volatility", value: 34 },
+  ],
+  optionChain: [
+    { strike: 24400, callLtp: 212.4, callChg: 8.2, putLtp: 38.15, putChg: -11.4 },
+    { strike: 24500, callLtp: 142.75, callChg: 6.8, putLtp: 62.4, putChg: -8.1, atm: true },
+    { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
+  ],
+  algos: [
+    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true },
+    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true },
+    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412, winRate: 54, enabled: false },
+  ],
+  positions: [
+    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25 },
+    { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651 },
+    { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705 },
+  ],
+  signals: [
+    { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
+    { id: "s2", action: "SELL", symbol: "BANKNIFTY 52200 CE", strategy: "Mean Revert", time: "09:21:02", confidence: 77 },
+    { id: "s3", action: "BUY", symbol: "FINNIFTY 24900 CE", strategy: "Momentum Rider", time: "09:16:41", confidence: 84 },
+  ],
+  marketWatch: [
+    { symbol: "NIFTY 50", ltp: 24580.25, chg: 0.51, volume: "182.4 Cr" },
+    { symbol: "BANKNIFTY", ltp: 52140.8, chg: 0.4, volume: "96.1 Cr" },
+    { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12, volume: "48.2 L" },
+    { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64, volume: "62.8 L" },
+  ],
+  featuredSignal: {
+    action: "BUY",
+    symbol: "NIFTY 24,500 CE",
+    strategy: "VWAP Depth",
+    expiry: "28 Aug",
+    confidence: 91,
+    risk: "LOW",
+    metrics: [
+      { label: "VWAP", value: 92 },
+      { label: "DEPTH", value: 99 },
+      { label: "OI", value: 84 },
+      { label: "VOLUME", value: 78 },
+    ],
+  },
+  fiiDii: { fii: { buy: 12480, sell: 10840, net: 1640 }, dii: { buy: 9860, sell: 8420, net: 1440 } },
+  sentiment: 91,
+  notifications: ["VWAP Depth generated BUY on NIFTY 24500 CE"],
+  totalPnl: 2432.25,
+  marketStatus: "OPEN",
+};

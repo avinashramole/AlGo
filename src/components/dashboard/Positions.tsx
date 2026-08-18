@@ -1,14 +1,14 @@
-import { positions } from "../../data/mock";
+import { useMarket } from "../../context/MarketContext";
 import { cn, formatInr, formatNumber } from "../../lib/format";
 
 export function Positions() {
-  const total = positions.reduce((sum, row) => sum + row.pnl, 0);
+  const { data } = useMarket();
 
   return (
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-bold">Positions</div>
-        <div className="text-[11px] font-semibold text-slate-400">{positions.length} open</div>
+        <div className="text-[11px] font-semibold text-slate-400">{data.positions.length} open</div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-xs">
@@ -23,7 +23,7 @@ export function Positions() {
             </tr>
           </thead>
           <tbody>
-            {positions.map((row) => (
+            {data.positions.map((row) => (
               <tr key={row.id} className="soft-row">
                 <td className="py-2.5 font-semibold">{row.symbol}</td>
                 <td className="py-2.5">
@@ -49,7 +49,7 @@ export function Positions() {
       </div>
       <div className="mt-3 flex items-center justify-between rounded-lg bg-[var(--bg)] px-3 py-2 text-sm">
         <span className="text-xs font-semibold text-slate-400">Total P&L</span>
-        <span className="font-extrabold text-up">{formatInr(total)}</span>
+        <span className={`font-extrabold ${data.totalPnl >= 0 ? "text-up" : "text-down"}`}>{formatInr(data.totalPnl)}</span>
       </div>
     </section>
   );

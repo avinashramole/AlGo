@@ -1,7 +1,8 @@
-import { recentSignals } from "../data/mock";
+import { useMarket } from "../context/MarketContext";
 import { cn } from "../lib/format";
 
 export function Signals() {
+  const { data } = useMarket();
   return (
     <div className="space-y-3">
       <div>
@@ -9,8 +10,8 @@ export function Signals() {
         <p className="text-sm text-slate-400">AI and strategy alerts across indices and options</p>
       </div>
       <div className="grid gap-3">
-        {recentSignals.concat(recentSignals).map((signal, i) => (
-          <article key={`${signal.id}-${i}`} className="card flex items-center gap-4 p-4">
+        {data.signals.map((signal) => (
+          <article key={signal.id} className="card flex items-center gap-4 p-4">
             <span
               className={cn(
                 "w-14 rounded-lg py-2 text-center text-xs font-extrabold",

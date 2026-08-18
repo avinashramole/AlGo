@@ -1,11 +1,13 @@
-import { indices } from "../../data/mock";
 import { cn, formatChange, formatNumber, formatPct } from "../../lib/format";
+import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
 
 export function TickerStrip() {
+  const { data } = useMarket();
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      {indices.map((item) => {
+      {data.indices.map((item) => {
         const up = item.change >= 0;
         return (
           <div key={item.symbol} className="card flex items-center justify-between px-4 py-3">

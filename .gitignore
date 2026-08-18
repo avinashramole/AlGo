@@ -3,5 +3,7 @@ dist
 .DS_Store
 *.local
 .vite
+.expo
+*.tsbuildinfo
 tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo

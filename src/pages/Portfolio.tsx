@@ -1,17 +1,17 @@
-import { positions } from "../data/mock";
+import { useMarket } from "../context/MarketContext";
 import { cn, formatInr, formatNumber } from "../lib/format";
 
 export function Portfolio() {
-  const total = positions.reduce((sum, row) => sum + row.pnl, 0);
-  const invested = positions.reduce((sum, row) => sum + row.avg * row.qty, 0);
+  const { data } = useMarket();
+  const invested = data.positions.reduce((sum, row) => sum + row.avg * row.qty, 0);
 
   return (
     <div className="space-y-3">
       <h1 className="text-xl font-bold">Portfolio</h1>
       <div className="grid gap-3 md:grid-cols-3">
         <Card label="Invested" value={`₹${formatNumber(invested)}`} />
-        <Card label="Day P&L" value={formatInr(total)} positive />
-        <Card label="Open positions" value={String(positions.length)} />
+        <Card label="Day P&L" value={formatInr(data.totalPnl)} positive={data.totalPnl >= 0} />
+        <Card label="Open positions" value={String(data.positions.length)} />
       </div>
       <section className="card overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
@@ -26,7 +26,7 @@ export function Portfolio() {
             </tr>
           </thead>
           <tbody>
-            {positions.map((row) => (
+            {data.positions.map((row) => (
               <tr key={row.id} className="soft-row">
                 <td className="px-4 py-3 font-semibold">{row.symbol}</td>
                 <td className="px-4 py-3">{row.type}</td>

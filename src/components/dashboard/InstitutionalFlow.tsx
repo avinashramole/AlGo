@@ -1,4 +1,4 @@
-import { fiiDii } from "../../data/mock";
+import { useMarket } from "../../context/MarketContext";
 import { formatNumber } from "../../lib/format";
 
 function FlowBar({ label, buy, sell, net }: { label: string; buy: number; sell: number; net: number }) {
@@ -23,15 +23,17 @@ function FlowBar({ label, buy, sell, net }: { label: string; buy: number; sell: 
 }
 
 export function InstitutionalFlow() {
+  const { data } = useMarket();
+  const combined = data.fiiDii.fii.net + data.fiiDii.dii.net;
   return (
     <section className="card p-4">
       <div className="mb-3 text-sm font-bold">FII / DII Activity</div>
       <div className="space-y-4">
-        <FlowBar label="FII" {...fiiDii.fii} />
-        <FlowBar label="DII" {...fiiDii.dii} />
+        <FlowBar label="FII" {...data.fiiDii.fii} />
+        <FlowBar label="DII" {...data.fiiDii.dii} />
       </div>
       <div className="mt-4 rounded-lg bg-[var(--bg)] px-3 py-2 text-xs text-slate-500">
-        Combined net inflow <span className="font-bold text-up">+3,080 Cr</span> today
+        Combined net inflow <span className="font-bold text-up">+{formatNumber(combined, 0)} Cr</span> today
       </div>
     </section>
   );

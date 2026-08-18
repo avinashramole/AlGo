@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { initialAlgos, type Algo } from "../data/mock";
+import { useMarket } from "../context/MarketContext";
 import { cn, formatInr } from "../lib/format";
 
 export function Algo() {
-  const [algos, setAlgos] = useState<Algo[]>(initialAlgos);
+  const { data, toggle } = useMarket();
 
   return (
     <div className="space-y-3">
@@ -17,7 +16,7 @@ export function Algo() {
         </button>
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
-        {algos.map((algo) => (
+        {data.algos.map((algo) => (
           <section key={algo.id} className="card p-4">
             <div className="flex items-start justify-between">
               <div>
@@ -45,15 +44,7 @@ export function Algo() {
             </div>
             <button
               type="button"
-              onClick={() =>
-                setAlgos((current) =>
-                  current.map((item) =>
-                    item.id === algo.id
-                      ? { ...item, enabled: !item.enabled, status: item.enabled ? "PAUSED" : "LIVE" }
-                      : item,
-                  ),
-                )
-              }
+              onClick={() => void toggle(algo.id)}
               className="mt-4 h-10 w-full rounded-xl border border-[var(--border)] text-sm font-semibold"
             >
               {algo.enabled ? "Pause" : "Start"}

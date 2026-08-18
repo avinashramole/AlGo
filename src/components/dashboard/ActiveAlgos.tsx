@@ -1,32 +1,17 @@
-import { useState } from "react";
-import { initialAlgos, type Algo } from "../../data/mock";
+import { useMarket } from "../../context/MarketContext";
 import { cn, formatInr } from "../../lib/format";
 
 export function ActiveAlgos() {
-  const [algos, setAlgos] = useState<Algo[]>(initialAlgos);
-
-  const toggle = (id: string) => {
-    setAlgos((current) =>
-      current.map((algo) =>
-        algo.id === id
-          ? {
-              ...algo,
-              enabled: !algo.enabled,
-              status: algo.enabled ? "PAUSED" : "LIVE",
-            }
-          : algo,
-      ),
-    );
-  };
+  const { data, toggle } = useMarket();
 
   return (
     <section className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-bold">Active Algorithms</div>
-        <div className="text-[11px] font-semibold text-slate-400">{algos.filter((a) => a.enabled).length} live</div>
+        <div className="text-[11px] font-semibold text-slate-400">{data.algos.filter((a) => a.enabled).length} live</div>
       </div>
       <div className="space-y-2">
-        {algos.map((algo) => (
+        {data.algos.map((algo) => (
           <div key={algo.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5">
             <div className="flex-1">
               <div className="flex items-center gap-2">
@@ -50,7 +35,7 @@ export function ActiveAlgos() {
             </div>
             <button
               type="button"
-              onClick={() => toggle(algo.id)}
+              onClick={() => void toggle(algo.id)}
               className={cn(
                 "relative h-6 w-11 rounded-full transition-colors",
                 algo.enabled ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600",

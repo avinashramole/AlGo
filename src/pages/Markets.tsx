@@ -1,7 +1,8 @@
-import { marketWatch } from "../data/mock";
+import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, formatPct } from "../lib/format";
 
 export function Markets() {
+  const { data } = useMarket();
   return (
     <div className="space-y-3">
       <div className="flex items-end justify-between">
@@ -36,7 +37,7 @@ export function Markets() {
             </tr>
           </thead>
           <tbody>
-            {marketWatch.map((row) => (
+            {data.marketWatch.map((row) => (
               <tr key={row.symbol} className="soft-row">
                 <td className="px-4 py-3 font-semibold">{row.symbol}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.ltp)}</td>

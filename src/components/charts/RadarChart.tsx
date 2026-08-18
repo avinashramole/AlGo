@@ -1,11 +1,11 @@
-import { dnaScores } from "../../data/mock";
+type Score = { label: string; value: number };
 
-export function RadarChart() {
+export function RadarChart({ scores }: { scores: Score[] }) {
   const size = 210;
   const cx = size / 2;
   const cy = size / 2 + 4;
   const radius = 72;
-  const n = dnaScores.length;
+  const n = scores.length;
 
   const point = (index: number, value: number) => {
     const angle = -Math.PI / 2 + (index * 2 * Math.PI) / n;
@@ -16,7 +16,7 @@ export function RadarChart() {
   };
 
   const rings = [0.35, 0.65, 1];
-  const polygon = dnaScores
+  const polygon = scores
     .map((item, i) => {
       const p = point(i, item.value / 100);
       return `${p.x},${p.y}`;
@@ -28,7 +28,7 @@ export function RadarChart() {
       {rings.map((r) => (
         <polygon
           key={r}
-          points={dnaScores
+          points={scores
             .map((_, i) => {
               const p = point(i, r);
               return `${p.x},${p.y}`;
@@ -40,7 +40,7 @@ export function RadarChart() {
           strokeWidth="1"
         />
       ))}
-      {dnaScores.map((_, i) => {
+      {scores.map((_, i) => {
         const p = point(i, 1);
         return (
           <line
@@ -55,11 +55,11 @@ export function RadarChart() {
         );
       })}
       <polygon points={polygon} fill="rgba(47,84,235,0.18)" stroke="#2f54eb" strokeWidth="2" />
-      {dnaScores.map((item, i) => {
+      {scores.map((item, i) => {
         const p = point(i, item.value / 100);
         return <circle key={item.label} cx={p.x} cy={p.y} r="3" fill="#2f54eb" />;
       })}
-      {dnaScores.map((item, i) => {
+      {scores.map((item, i) => {
         const p = point(i, 1.28);
         return (
           <text

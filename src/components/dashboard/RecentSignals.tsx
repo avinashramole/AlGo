@@ -1,12 +1,13 @@
-import { recentSignals } from "../../data/mock";
+import { useMarket } from "../../context/MarketContext";
 import { cn } from "../../lib/format";
 
 export function RecentSignals() {
+  const { data } = useMarket();
   return (
     <section className="card p-4">
       <div className="mb-3 text-sm font-bold">Recent Signals</div>
       <div className="space-y-2">
-        {recentSignals.map((signal) => (
+        {data.signals.map((signal) => (
           <div key={signal.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2">
             <span
               className={cn(
