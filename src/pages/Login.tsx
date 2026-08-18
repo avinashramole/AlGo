@@ -106,8 +106,8 @@ export function Login() {
             T2
           </div>
           <div>
-            <div className="text-xl font-extrabold">T2S Algo Terminal</div>
-            <div className="text-sm text-slate-400">Web + iOS + Android desk</div>
+            <div className="text-xl font-extrabold">Sign in</div>
+            <div className="text-sm text-slate-400">T2S Algo Terminal · web + iOS + Android</div>
           </div>
         </div>
 
@@ -138,7 +138,7 @@ export function Login() {
               mode === "password" ? "bg-brand-500 text-white" : "border border-[var(--border)]",
             )}
           >
-            Password
+            Sign in
           </button>
         </div>
 
@@ -226,7 +226,7 @@ export function Login() {
               disabled={loading}
               className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
             >
-              {loading ? "Please wait..." : sentTo ? "Verify and enter desk" : "Send Gmail code"}
+              {loading ? "Please wait..." : sentTo ? "Sign in" : "Send Gmail code"}
             </button>
             {sentTo ? (
               <button
@@ -268,7 +268,7 @@ export function Login() {
               disabled={loading}
               className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
             >
-              {loading ? "Signing in..." : "Enter desk"}
+              {loading ? "Signing in..." : "Sign in"}
             </button>
             <p className="mt-4 text-center text-xs text-slate-400">Avinash demo: demo@t2s.app / demo123</p>
           </form>

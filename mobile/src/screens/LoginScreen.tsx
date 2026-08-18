@@ -63,8 +63,8 @@ export function LoginScreen() {
       <View style={styles.logo}>
         <Text style={styles.logoText}>T2</Text>
       </View>
-      <Text style={styles.title}>T2S Algo</Text>
-      <Text style={styles.sub}>iOS + Android trading desk</Text>
+      <Text style={styles.title}>Sign in</Text>
+      <Text style={styles.sub}>T2S Algo Terminal · iOS + Android</Text>
       <View style={styles.tabs}>
         <Pressable style={[styles.tab, mode === "otp" && styles.tabOn]} onPress={() => setMode("otp")}>
           <Text style={[styles.tabText, mode === "otp" && styles.tabTextOn]}>Gmail OTP</Text>
@@ -77,7 +77,7 @@ export function LoginScreen() {
             setPassword("demo123");
           }}
         >
-          <Text style={[styles.tabText, mode === "password" && styles.tabTextOn]}>Password</Text>
+          <Text style={[styles.tabText, mode === "password" && styles.tabTextOn]}>Sign in</Text>
         </Pressable>
       </View>
       {mode === "otp" ? (
@@ -139,7 +139,7 @@ export function LoginScreen() {
       )}
       <Pressable style={styles.button} onPress={() => void submit()} disabled={busy}>
         <Text style={styles.buttonText}>
-          {busy ? "Please wait..." : mode === "password" ? "Enter desk" : sentTo ? "Verify and enter desk" : "Send Gmail code"}
+          {busy ? "Please wait..." : mode === "password" ? "Sign in" : sentTo ? "Sign in" : "Send Gmail code"}
         </Text>
       </Pressable>
       {sentTo && mode === "otp" ? (
