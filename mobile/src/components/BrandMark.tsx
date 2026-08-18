@@ -26,7 +26,9 @@ export function BrandMark({
             <Text style={styles.two}>2 </Text>
             <Text style={styles.s}>SMART</Text>
           </Text>
-          <Text style={[styles.tagSm, { color: tag }]}>Intelligence Behind Every Trade.</Text>
+          <Text style={[styles.tagSm, { color: tag }]}>
+            INTELLIGENCE <Text style={styles.s}>BEHIND</Text> EVERY TRADE.
+          </Text>
         </View>
       </View>
     );
@@ -40,7 +42,9 @@ export function BrandMark({
         <Text style={styles.two}>2 </Text>
         <Text style={styles.s}>SMART</Text>
       </Text>
-      <Text style={[styles.tag, { color: tag }]}>Intelligence Behind Every Trade.</Text>
+      <Text style={[styles.tag, { color: tag }]}>
+        INTELLIGENCE <Text style={styles.s}>BEHIND</Text> EVERY TRADE.
+      </Text>
     </View>
   );
 }
@@ -50,8 +54,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   two: { color: "#2f7bff" },
   s: { color: "#22c55e" },
-  word: { marginTop: 12, fontSize: 20, fontWeight: "800", letterSpacing: 3 },
-  wordSm: { fontSize: 13, fontWeight: "800", letterSpacing: 1.6 },
-  tag: { marginTop: 6, fontSize: 12, fontStyle: "italic" },
-  tagSm: { fontSize: 9, marginTop: 2, fontStyle: "italic" },
+  word: { marginTop: 12, fontSize: 20, fontWeight: "800", fontStyle: "italic", letterSpacing: 3 },
+  wordSm: { fontSize: 13, fontWeight: "800", fontStyle: "italic", letterSpacing: 1.6 },
+  tag: { marginTop: 6, fontSize: 11, fontWeight: "600", letterSpacing: 1.2 },
+  tagSm: { fontSize: 8, marginTop: 2, fontWeight: "600", letterSpacing: 0.8 },
 });

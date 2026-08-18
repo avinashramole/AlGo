@@ -3,23 +3,23 @@
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 ITALIC = "/usr/share/fonts/truetype/macos/Inter-BoldItalic.ttf"
-BOLD = "/usr/share/fonts/truetype/macos/Inter-Bold.ttf"
-BLUE = (47, 123, 255, 255)
-GREEN = (34, 197, 94, 255)
-GREEN_DK = (22, 163, 74, 255)
-INK = (17, 24, 39, 255)
+BLUE = (0, 123, 255, 255)
+CYAN = (0, 180, 255, 255)
+GREEN = (50, 205, 50, 255)
+LIME = (173, 255, 47, 255)
+SILVER = (232, 238, 245, 255)
 DARK = (5, 7, 12, 255)
 WHITE = (255, 255, 255, 255)
 
 
 def lerp(a, b, t):
+    t = max(0, min(1, t))
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
 
 
@@ -38,13 +38,13 @@ def paint_gradient(size: int) -> Image.Image:
     return img
 
 
-def draw_emblem(canvas: Image.Image, box: tuple[int, int, int, int], two_color=INK) -> None:
+def draw_emblem(canvas: Image.Image, box: tuple[int, int, int, int]) -> None:
     x0, y0, x1, y1 = box
     w = max(1, x1 - x0)
     h = max(1, y1 - y0)
-    scale = min(w / 280, h / 260)
+    scale = min(w / 280, h / 250)
     ox = x0 + (w - 280 * scale) / 2
-    oy = y0 + (h - 260 * scale) / 2
+    oy = y0 + (h - 250 * scale) / 2
     draw = ImageDraw.Draw(canvas)
 
     def P(x, y):
@@ -53,56 +53,35 @@ def draw_emblem(canvas: Image.Image, box: tuple[int, int, int, int], two_color=I
     def S(v):
         return max(1, int(v * scale))
 
-    cx, cy, r = P(128, 142)[0], P(128, 142)[1], 96 * scale
-    ring_w = max(3, S(7))
-    steps = 72
-    dash, gap = 520, 83
-    circ = 2 * math.pi * r
-    dash_frac = dash / (dash + gap)
-    start = math.radians(-28 - (36 / (dash + gap)) * 360)
-    for i in range(int(steps * dash_frac)):
-        a0 = start + (i / steps) * 2 * math.pi
-        a1 = start + ((i + 1) / steps) * 2 * math.pi
-        t = i / max(1, steps * dash_frac)
-        color = (*lerp(BLUE[:3], GREEN[:3], t), 255)
-        draw.line(
-            [(cx + r * math.cos(a0), cy + r * math.sin(a0)), (cx + r * math.cos(a1), cy + r * math.sin(a1))],
-            fill=color,
-            width=ring_w,
-        )
+    cx, cy = P(130, 130)
+    r = 100 * scale
+    ring_w = max(4, S(14))
+    bbox = [cx - r, cy - r, cx + r, cy + r]
+    draw.arc(bbox, start=110, end=300, fill=BLUE, width=ring_w)
+    draw.arc(bbox, start=200, end=300, fill=GREEN, width=ring_w)
+
+    draw.line([P(176, 48), P(232, 10)], fill=LIME, width=ring_w)
+    draw.polygon([P(214, 2), P(252, 6), P(228, 38)], fill=LIME)
+    draw.polygon([P(218, 8), P(244, 12), P(228, 30)], fill=GREEN)
 
     candles = [
-        (86, 54, 12, 18, 46, 78),
-        (99, 46, 14, 26, 38, 78),
-        (121, 38, 14, 34, 32, 78),
-        (143, 32, 14, 40, 28, 78),
+        (83, 54, 14, 20, 44, 80),
+        (104, 46, 16, 28, 36, 80),
+        (128, 36, 16, 38, 28, 80),
+        (152, 30, 16, 44, 22, 80),
     ]
     for bx, by, bw, bh, wy0, wy1 in candles:
-        x, y = P(bx + bw / 2, wy0)
-        x2, y2 = P(bx + bw / 2, wy1)
-        draw.line([(x, y), (x2, y2)], fill=GREEN, width=max(2, S(2)))
-        rx0, ry0 = P(bx, by)
-        rx1, ry1 = P(bx + bw, by + bh)
-        draw.rounded_rectangle([rx0, ry0, rx1, ry1], radius=max(1, S(1)), fill=GREEN, outline=GREEN_DK)
+        draw.line([P(bx + bw / 2, wy0), P(bx + bw / 2, wy1)], fill=GREEN, width=max(2, S(2)))
+        draw.rounded_rectangle([*P(bx, by), *P(bx + bw, by + bh)], radius=max(1, S(1)), fill=GREEN)
 
-    for y, x1, x2, color in (
-        (118, 22, 58, BLUE),
-        (134, 16, 56, BLUE),
-        (150, 26, 60, BLUE),
-        (118, 198, 236, GREEN),
-        (134, 196, 242, GREEN),
-        (150, 200, 232, GREEN),
-    ):
-        draw.line([P(x1, y), P(x2, y)], fill=color, width=max(2, S(4)))
-
-    t_font = load_italic(max(18, S(86)))
-    two_font = load_italic(max(12, S(52)))
-    draw.text(P(78, 168 - 86), "T", font=t_font, fill=BLUE)
-    draw.text(P(128, 162 - 52), "2", font=two_font, fill=two_color)
-    draw.text(P(158, 168 - 86), "S", font=t_font, fill=GREEN)
-
-    draw.line([P(176, 108), P(226, 52)], fill=GREEN, width=max(4, S(12)))
-    draw.polygon([P(214, 38), P(248, 34), P(230, 70)], fill=GREEN)
+    t_font = load_italic(max(20, S(98)))
+    two_font = load_italic(max(14, S(66)))
+    draw.text(P(42, 172 - 98), "T", font=t_font, fill=(0, 58, 153, 80))
+    draw.text(P(40, 168 - 98), "T", font=t_font, fill=CYAN)
+    draw.text(P(124, 168 - 66), "2", font=two_font, fill=(100, 116, 139, 90))
+    draw.text(P(122, 164 - 66), "2", font=two_font, fill=SILVER)
+    draw.text(P(166, 172 - 98), "S", font=t_font, fill=(22, 101, 52, 80))
+    draw.text(P(164, 168 - 98), "S", font=t_font, fill=LIME)
 
 
 def square_icon(size: int, kind: str) -> Image.Image:
@@ -113,22 +92,20 @@ def square_icon(size: int, kind: str) -> Image.Image:
     else:
         img = Image.new("RGBA", (size, size), DARK)
     pad = int(size * 0.06)
-    two = INK if kind == "light" else (232, 238, 245, 255)
-    draw_emblem(img, (pad, pad, size - pad, size - pad), two_color=two)
+    draw_emblem(img, (pad, pad, size - pad, size - pad))
     return img
 
 
-def foreground(size: int, two_color=INK) -> Image.Image:
+def foreground(size: int) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     pad = int(size * 0.08)
-    draw_emblem(img, (pad, pad, size - pad, size - pad), two_color=two_color)
+    draw_emblem(img, (pad, pad, size - pad, size - pad))
     return img
 
 
 def monochrome(size: int) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    pad = int(size * 0.12)
     cx = cy = size / 2
     r = size * 0.34
     draw.arc([cx - r, cy - r, cx + r, cy + r], start=40, end=390, fill=WHITE, width=max(4, size // 28))
@@ -156,7 +133,7 @@ def main() -> None:
     save(gradient, ROOT / "mobile/assets/icon-gradient.png")
     save(dark, ROOT / "mobile/assets/splash-icon.png")
     save(emblem, ROOT / "mobile/assets/t2s-emblem.png")
-    save(foreground(1024, two_color=(232, 238, 245, 255)), ROOT / "mobile/assets/android-icon-foreground.png")
+    save(emblem, ROOT / "mobile/assets/android-icon-foreground.png")
     save(Image.new("RGBA", (1024, 1024), DARK), ROOT / "mobile/assets/android-icon-background.png")
     save(monochrome(1024), ROOT / "mobile/assets/android-icon-monochrome.png")
     save(dark.resize((48, 48), Image.Resampling.LANCZOS), ROOT / "mobile/assets/favicon.png")
