@@ -104,8 +104,8 @@ export function resolveBacktestWindow(options = {}) {
     return { error: "From date must be before to date" };
   }
   const days = Math.round((toMs - fromMs) / 86_400_000) + 1;
-  if (days > 400) {
-    return { error: "Date range cannot be longer than 400 days" };
+  if (days > 800) {
+    return { error: "Date range cannot be longer than 800 days" };
   }
   if (days < 2) {
     return { error: "Pick at least two calendar days" };

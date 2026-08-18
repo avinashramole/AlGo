@@ -229,41 +229,46 @@ app.post("/api/algos/:id/broker", (req, res) => {
 });
 
 app.post("/api/algos/:id/backtest", async (req, res) => {
-  const algo = getAlgo(req.params.id);
-  if (!algo) {
-    res.status(404).json({ error: "Strategy not found" });
-    return;
-  }
-  const window = resolveBacktestWindow(req.body || {});
-  if (window.error) {
-    res.status(400).json({ error: window.error });
-    return;
-  }
-  const timeframe = pickBacktestTimeframe(algo.timeframe, window.days);
-  let candles = [];
-  if (isDhanLive()) {
-    try {
-      candles = await fetchDhanHistory({
-        symbol: algo.symbol,
-        from: window.from,
-        to: window.to,
-        timeframe,
-      });
-    } catch {
-      candles = [];
+  try {
+    const id = String(req.params.id || "");
+    const algo = getAlgo(id);
+    if (!algo) {
+      res.status(404).json({ error: "Strategy not found" });
+      return;
     }
+    const window = resolveBacktestWindow(req.body || {});
+    if (window.error) {
+      res.status(400).json({ error: window.error });
+      return;
+    }
+    const timeframe = pickBacktestTimeframe(algo.timeframe, window.days);
+    let candles = [];
+    if (isDhanLive()) {
+      try {
+        candles = await fetchDhanHistory({
+          symbol: algo.symbol,
+          from: window.from,
+          to: window.to,
+          timeframe,
+        });
+      } catch {
+        candles = [];
+      }
+    }
+    const result = backtestAlgo(id, {
+      range: window.range,
+      from: window.from,
+      to: window.to,
+      candles,
+    });
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ...result, snapshot: snapshot() });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Backtest failed" });
   }
-  const result = backtestAlgo(req.params.id, {
-    range: window.range,
-    from: window.from,
-    to: window.to,
-    candles,
-  });
-  if (result.error) {
-    res.status(result.error.includes("not found") ? 404 : 400).json({ error: result.error });
-    return;
-  }
-  res.json({ ...result, snapshot: snapshot() });
 });
 
 app.post("/api/orders", async (req, res) => {
