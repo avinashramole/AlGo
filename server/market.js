@@ -329,6 +329,16 @@ export function deleteAlgo(id) {
   return { ok: true, id };
 }
 
+function mapLiveStatus(status) {
+  const raw = String(status || "").toUpperCase();
+  if (raw === "TRADED") return "FILLED";
+  if (raw === "REJECTED" || raw === "CANCELLED") return raw;
+  if (raw === "EXPIRED") return "CANCELLED";
+  if (raw === "PART_TRADED") return "PARTIAL";
+  if (raw === "PENDING" || raw === "TRANSIT") return "PENDING";
+  return raw || "PENDING";
+}
+
 export function placeOrder(payload) {
   const brokers = publicBrokers();
   const requested = String(payload.brokerId || brokers.activeBrokerId || "dhan");
@@ -336,27 +346,42 @@ export function placeOrder(payload) {
   if (!account?.connected) {
     return { error: "Connect this broker before placing an order" };
   }
+  const live = payload.live;
+  if (live?.orderId) {
+    const existing = state.orders.find((row) => String(row.id) === String(live.orderId));
+    if (existing) return existing;
+  }
   const brokerId = account.id;
   const type = String(payload.type || "MARKET").toUpperCase();
   const qty = Number(payload.qty) || 65;
-  const status = type === "LIMIT" ? "PENDING" : "FILLED";
+  const demoDhan = brokerId === "dhan" && !live;
+  const status = live ? mapLiveStatus(live.status) : type === "LIMIT" ? "PENDING" : "FILLED";
   const order = {
-    id: `o${Date.now()}`,
+    id: live?.orderId ? String(live.orderId) : `o${Date.now()}`,
     symbol: payload.symbol || "NIFTY 24500 CE",
     side: payload.side === "SELL" ? "SELL" : "BUY",
     qty,
-    filledQty: status === "FILLED" ? qty : 0,
+    filledQty: status === "FILLED" ? qty : Number(live?.filledQty || 0),
     product: payload.product || "MIS",
     type,
     status,
     price: Number(payload.price) || 142.75,
     strategy: String(payload.strategy || ""),
     brokerId,
-    brokerName: account.name,
+    brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
+    live: Boolean(live),
+    securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
+    reason: live
+      ? `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`
+      : demoDhan
+        ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
+        : brokerId === "paper"
+          ? "Paper fill at LTP"
+          : "Desk fill at LTP",
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
-  if (status === "FILLED") {
+  if (status === "FILLED" && !live) {
     state.positions.unshift({
       id: `p${Date.now()}`,
       symbol: order.symbol,
@@ -371,7 +396,13 @@ export function placeOrder(payload) {
       openedAt: order.createdAt,
     });
   }
-  state.notifications.unshift(`${account.name} ${order.status}: ${order.side} ${order.symbol}`);
+  state.notifications.unshift(
+    live
+      ? `Dhan ${order.status}: ${order.side} ${order.symbol}`
+      : demoDhan
+        ? `Desk demo ${order.status}: ${order.side} ${order.symbol} (not sent to Dhan)`
+        : `${account.name} ${order.status}: ${order.side} ${order.symbol}`,
+  );
   return order;
 }
 

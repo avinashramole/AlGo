@@ -30,9 +30,11 @@ export type Snapshot = {
     callLtp: number;
     callChg: number;
     callOi?: number;
+    callId?: number;
     putLtp: number;
     putChg: number;
     putOi?: number;
+    putId?: number;
     atm?: boolean;
   }>;
   optionMeta?: {
@@ -98,6 +100,7 @@ export type Snapshot = {
     strategy?: string;
     openedAt?: string;
     brokerId?: string;
+    securityId?: string;
   }>;
   orders?: Array<{
     id: string;
@@ -217,7 +220,10 @@ export function deleteAlgo(id: string) {
 }
 
 export function placeOrder(payload: Record<string, unknown>) {
-  return request("/orders", { method: "POST", body: JSON.stringify(payload) });
+  return request<{ ok: boolean; live?: boolean; warning?: string; snapshot?: Snapshot }>("/orders", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function cancelOrder(id: string) {

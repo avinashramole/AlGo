@@ -55,7 +55,8 @@ export function Brokers() {
       <div>
         <h1 className="text-xl font-bold">Brokers</h1>
         <p className="text-sm text-slate-400">
-          Main broker is <b>Dhan</b>. Paste your DhanHQ Access Token to start the live market feed.
+          Main broker is <b>Dhan</b>. BUY/SELL hits Dhan only while the Access Token is LIVE. Dhan order APIs also need
+          a static IP whitelist on web.dhan.co.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -76,7 +77,8 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          The token stays on this computer and is never saved in git.
+          Quotes start as soon as the token is live. Orders go to Dhan only in that LIVE state — until then BUY/SELL is a
+          desk fill. The token stays on this computer and is never saved in git.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
@@ -193,8 +195,9 @@ export function Brokers() {
         ))}
       </div>
       <p className="text-xs text-slate-400">
-        Dhan uses the official Access Token. Zerodha / Kotak / Fyers stay sandbox (demo / demo123) until those apps are
-        approved.
+        Dhan uses the official Access Token. BUY/SELL is sent to DhanHQ <code>POST /v2/orders</code> only while LIVE.
+        If Dhan rejects the order (IP not whitelisted, invalid token, or missing security ID), the desk shows that error
+        and does not invent a fill. Zerodha / Kotak / Fyers stay sandbox (demo / demo123) until those apps are approved.
       </p>
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">

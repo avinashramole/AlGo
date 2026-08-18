@@ -8,14 +8,22 @@ export function TradeScreen() {
   const signal = data.featuredSignal;
 
   const submit = async () => {
-    await order({
-      symbol: signal.symbol,
-      side: signal.action,
-      qty: 65,
-      price: 142.75,
-      brokerId: data.activeBrokerId,
-    });
-    Alert.alert("Order filled", `${signal.action} ${signal.symbol} 65 qty`);
+    try {
+      const result = await order({
+        symbol: signal.symbol,
+        side: signal.action,
+        qty: 65,
+        price: 142.75,
+        brokerId: data.activeBrokerId,
+      });
+      if (result.live) {
+        Alert.alert("Sent to Dhan", `${signal.action} ${signal.symbol} 65 qty`);
+      } else {
+        Alert.alert("Desk fill only", result.warning || `${signal.action} ${signal.symbol} 65 qty`);
+      }
+    } catch (err) {
+      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+    }
   };
 
   return (

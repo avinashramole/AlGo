@@ -18,6 +18,7 @@ export function OptionChain() {
     const key = `${row.strike}-${option}-${action}`;
     setBusy(key);
     try {
+      const securityId = option === "CE" ? row.callId : row.putId;
       await order({
         symbol: `${data.optionMeta?.symbol || "NIFTY"} ${row.strike} ${option}`,
         side: action,
@@ -26,7 +27,11 @@ export function OptionChain() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        securityId: securityId ? String(securityId) : undefined,
+        exchangeSegment: String(data.optionMeta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Order failed");
     } finally {
       setBusy("");
     }

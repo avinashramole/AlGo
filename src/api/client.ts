@@ -88,6 +88,7 @@ export type Snapshot = {
     callVol?: number;
     callIv?: number;
     callDelta?: number;
+    callId?: number;
     putLtp: number;
     putChg: number;
     putOi?: number;
@@ -95,6 +96,7 @@ export type Snapshot = {
     putVol?: number;
     putIv?: number;
     putDelta?: number;
+    putId?: number;
     atm?: boolean;
   }>;
   optionMeta?: {
@@ -161,6 +163,7 @@ export type Snapshot = {
     strategy?: string;
     openedAt?: string;
     brokerId?: string;
+    securityId?: string;
   }>;
   orders: DeskOrder[];
   report?: DeskReport;
@@ -252,8 +255,17 @@ export function toggleAlgo(id: string) {
   return request(`/algos/${id}/toggle`, { method: "POST" });
 }
 
+export type PlaceOrderResult = {
+  ok: boolean;
+  live?: boolean;
+  warning?: string;
+  error?: string;
+  order?: DeskOrder;
+  snapshot?: Snapshot;
+};
+
 export function placeOrder(payload: Record<string, unknown>) {
-  return request<{ snapshot?: Snapshot }>("/orders", { method: "POST", body: JSON.stringify(payload) });
+  return request<PlaceOrderResult>("/orders", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function cancelOrder(id: string) {

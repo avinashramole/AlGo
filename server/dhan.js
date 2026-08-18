@@ -122,6 +122,33 @@ async function dhanPost(path, token, id, body) {
   return json;
 }
 
+async function dhanDelete(path, token, id) {
+  const res = await fetch(`${DHAN_API}${path}`, {
+    method: "DELETE",
+    headers: authHeaders(token, id),
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+  if (!res.ok) {
+    const message =
+      json?.errorMessage ||
+      json?.error?.errorMessage ||
+      json?.message ||
+      json?.remarks ||
+      `Dhan API ${res.status}`;
+    const error = new Error(message);
+    error.status = res.status;
+    error.body = json;
+    throw error;
+  }
+  return json || { ok: true };
+}
+
 function quoteBody(useFallback, instruments = liveInstruments()) {
   const body = {};
   for (const row of instruments) {
@@ -245,6 +272,8 @@ function mapDhanOrders(raw) {
     strategy: "",
     brokerId: "dhan",
     brokerName: "Dhan",
+    securityId: String(row.securityId || ""),
+    live: true,
     reason: row.omsErrorDescription || row.rejectedReason || "",
     createdAt: row.createTime || row.updateTime || new Date().toISOString(),
   }));
@@ -271,6 +300,7 @@ function mapDhanPositions(raw) {
         pnl: Number(pnl.toFixed(2)),
         product: row.productType || "MIS",
         strategy: "",
+        securityId: String(row.securityId || ""),
         brokerId: "dhan",
       };
     });
@@ -625,6 +655,81 @@ export function isDhanLive() {
 
 export function getDhanCredentials() {
   return { clientId, tokenHint: tokenHint(accessToken) };
+}
+
+function fnoSegment(symbol) {
+  return String(symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO";
+}
+
+function productType(product) {
+  const raw = String(product || "MIS").toUpperCase();
+  if (raw === "NRML" || raw === "MARGIN") return "MARGIN";
+  if (raw === "CNC") return "CNC";
+  return "INTRADAY";
+}
+
+export async function placeDhanOrder(payload = {}) {
+  if (!accessToken || !clientId) {
+    const error = new Error("Dhan live is off. Open Brokers and paste Client ID + Access Token.");
+    error.status = 400;
+    throw error;
+  }
+  const securityId = String(payload.securityId || "").trim();
+  if (!securityId || securityId === "0") {
+    const error = new Error("This contract has no Dhan security ID. Wait for the live option chain, then BUY/SELL again.");
+    error.status = 400;
+    throw error;
+  }
+  const qty = Math.max(0, Math.round(Number(payload.qty) || 0));
+  if (!qty) {
+    const error = new Error("Quantity must be at least 1 lot.");
+    error.status = 400;
+    throw error;
+  }
+  const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
+  const result = await dhanPost("/orders", accessToken, clientId, {
+    dhanClientId: clientId,
+    correlationId: `t2s${Date.now()}`.slice(0, 30),
+    transactionType: payload.side === "SELL" ? "SELL" : "BUY",
+    exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
+    productType: productType(payload.product),
+    orderType,
+    validity: "DAY",
+    securityId,
+    quantity: qty,
+    disclosedQuantity: 0,
+    price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
+    triggerPrice: 0,
+    afterMarketOrder: false,
+  });
+  try {
+    await pullAccount();
+  } catch {
+    /* order is still at Dhan */
+  }
+  const data = result?.data || result || {};
+  return {
+    orderId: String(data.orderId || data.order_id || result?.orderId || ""),
+    status: data.orderStatus || data.order_status || result?.orderStatus || "TRANSIT",
+    securityId,
+    filledQty: Number(data.filledQty || result?.filledQty || 0),
+    raw: result,
+  };
+}
+
+export async function cancelDhanOrder(orderId) {
+  if (!accessToken) {
+    const error = new Error("Dhan live is off");
+    error.status = 400;
+    throw error;
+  }
+  const result = await dhanDelete(`/orders/${orderId}`, accessToken, clientId);
+  try {
+    await pullAccount();
+  } catch {
+    /* ignore */
+  }
+  return result;
 }
 
 export async function validateDhan(token, id) {

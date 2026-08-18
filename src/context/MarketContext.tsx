@@ -13,6 +13,7 @@ import {
   squareOff,
   toggleAlgo,
   updateAlgo,
+  type PlaceOrderResult,
   type Snapshot,
 } from "../api/client";
 import {
@@ -100,7 +101,7 @@ type MarketContextValue = {
   live: boolean;
   refresh: () => Promise<void>;
   toggle: (id: string) => Promise<void>;
-  order: (payload: Record<string, unknown>) => Promise<void>;
+  order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
@@ -157,8 +158,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
       },
       order: async (payload: Record<string, unknown>) => {
-        await placeOrder(payload);
-        await refresh();
+        const result = await placeOrder(payload);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+        return result;
       },
       connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
         const result = await connectBroker(id, payload);

@@ -225,6 +225,7 @@ export function parseDhanChain(payload, spot, step = 50) {
         callDelta: round2(Number(ce.greeks?.delta || 0)),
         callBid: Number(ce.top_bid_price || 0),
         callAsk: Number(ce.top_ask_price || 0),
+        callId: Number(ce.security_id || ce.securityId || 0) || undefined,
         putLtp: Number(pe.last_price || 0),
         putChg: pctChange(pe.last_price, pe.previous_close_price),
         putOi: Number(pe.oi || 0),
@@ -234,6 +235,7 @@ export function parseDhanChain(payload, spot, step = 50) {
         putDelta: round2(Number(pe.greeks?.delta || 0)),
         putBid: Number(pe.top_bid_price || 0),
         putAsk: Number(pe.top_ask_price || 0),
+        putId: Number(pe.security_id || pe.securityId || 0) || undefined,
         atm: false,
       };
     })

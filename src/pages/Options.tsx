@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct } from "../lib/format";
 
@@ -31,7 +32,8 @@ export function Options() {
     try {
       const ltp = option === "CE" ? row.callLtp : row.putLtp;
       const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
-      await order({
+      const securityId = option === "CE" ? row.callId : row.putId;
+      const result = await order({
         symbol,
         side: action,
         qty,
@@ -39,8 +41,17 @@ export function Options() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        securityId: securityId ? String(securityId) : undefined,
+        exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
-      setNote(`${action} ${symbol} · ${lots} lot × ${lotSize} = ${qty} qty @ ${formatNumber(ltp)}`);
+      if (result.live) {
+        setNote(`Sent to Dhan · ${action} ${symbol} · ${lots} lot × ${lotSize} = ${qty} qty · see Order book`);
+      } else {
+        setNote(
+          result.warning ||
+            `Desk fill only · ${action} ${symbol} · ${lots} lot × ${lotSize} = ${qty} qty @ ${formatNumber(ltp)}`,
+        );
+      }
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Order failed");
     } finally {
@@ -106,6 +117,30 @@ export function Options() {
         <Stat label="PCR" value={pcrText} />
         <Stat label="Max pain" value={meta?.maxPain ? formatNumber(meta.maxPain, 0) : "—"} />
         <Stat label="ATM IV" value={atmIvText} />
+      </div>
+      <div
+        className={cn(
+          "rounded-xl px-4 py-2 text-sm font-semibold",
+          data.dhanFeed?.live ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+        )}
+      >
+        {data.dhanFeed?.live ? (
+          <>
+            BUY/SELL goes to Dhan. Open the{" "}
+            <Link to="/orders" className="underline">
+              order book
+            </Link>{" "}
+            or Dhan app to confirm. Order APIs need a static IP whitelist at Dhan.
+          </>
+        ) : (
+          <>
+            Desk fill only until Dhan is LIVE. Paste Access Token on{" "}
+            <Link to="/brokers" className="underline">
+              Brokers
+            </Link>
+            , then BUY/SELL again.
+          </>
+        )}
       </div>
       {note ? <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold">{note}</div> : null}
       <section className="card overflow-x-auto">
@@ -185,7 +220,8 @@ export function Options() {
         </table>
       </section>
       <p className="text-xs text-slate-400">
-        Buy / Sell sends a MIS market order for {lots} lot ({qty} qty) on the active broker. Connect Dhan with an Access Token for the live chain.
+        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). It reaches Dhan only while the live Access Token is
+        connected. Otherwise the fill stays on this desk.
       </p>
     </div>
   );

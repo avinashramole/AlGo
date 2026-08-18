@@ -42,7 +42,8 @@ export function BrokersScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Brokers</Text>
       <Text style={styles.muted}>
-        Main broker is Dhan. Paste your Access Token from web.dhan.co → My Profile → Access DhanHQ APIs.
+        Main broker is Dhan. BUY/SELL hits Dhan only while the Access Token is LIVE. Dhan order APIs also need a static
+        IP whitelist on web.dhan.co.
       </Text>
       <Card>
         <View style={styles.row}>

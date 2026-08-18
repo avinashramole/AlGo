@@ -29,7 +29,7 @@ export function PositionsDesk() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Positions</h1>
-          <p className="text-sm text-slate-400">Open F&O book · square off sends a market order on the same broker</p>
+          <p className="text-sm text-slate-400">Open F&O book · square off is a market order on the same broker (Dhan when LIVE)</p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
           <Link to="/orders" className="text-brand-500">

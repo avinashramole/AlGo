@@ -37,7 +37,7 @@ export function Orders() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Order Book</h1>
-          <p className="text-sm text-slate-400">Today’s orders on the connected brokers · pending, filled, rejected</p>
+          <p className="text-sm text-slate-400">Today’s orders · Dhan LIVE fills come from the broker, demo fills stay on this desk</p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
           <Link to="/positions" className="text-brand-500">
@@ -105,7 +105,11 @@ export function Orders() {
                   <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={row.status} />
-                    {row.reason ? <div className="mt-1 text-[10px] text-down">{row.reason}</div> : null}
+                    {row.reason ? (
+                      <div className={cn("mt-1 text-[10px]", row.status === "REJECTED" ? "text-down" : "text-slate-400")}>
+                        {row.reason}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{row.strategy || "—"}</td>
                   <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>

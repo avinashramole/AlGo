@@ -16,14 +16,19 @@ export function TradeModal({ open, onClose }: Props) {
   const submit = async () => {
     setBusy(true);
     try {
-      await order({
+      const result = await order({
         symbol: data.featuredSignal.symbol,
         side: data.featuredSignal.action,
         qty: 65,
         price: 142.75,
         brokerId: data.activeBrokerId,
       });
+      if (!result.live && result.warning) {
+        window.alert(result.warning);
+      }
       onClose();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Order failed");
     } finally {
       setBusy(false);
     }

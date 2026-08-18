@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import {
   addChat,
   applyBrokerPositions,
@@ -205,31 +205,92 @@ app.post("/api/algos/:id/broker", (req, res) => {
   res.json(result);
 });
 
-app.post("/api/orders", (req, res) => {
-  const order = placeOrder(req.body || {});
-  if (order.error) {
-    res.status(400).json({ error: order.error });
-    return;
+app.post("/api/orders", async (req, res) => {
+  const body = req.body || {};
+  const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
+  try {
+    if (brokerId === "dhan" && isDhanLive()) {
+      const live = await placeDhanOrder(body);
+      let order = snapshot().orders.find((row) => String(row.id) === String(live.orderId));
+      if (!order) {
+        order = placeOrder({ ...body, brokerId, live });
+        if (order.error) {
+          res.status(400).json({ error: order.error });
+          return;
+        }
+      }
+      res.status(201).json({ ok: true, live: true, order, snapshot: snapshot() });
+      return;
+    }
+    const order = placeOrder({ ...body, brokerId, live: null });
+    if (order.error) {
+      res.status(400).json({ error: order.error });
+      return;
+    }
+    res.status(201).json({
+      ok: true,
+      live: false,
+      warning:
+        brokerId === "dhan"
+          ? "Order stayed on the T2S desk. Dhan is selected but not LIVE — paste Access Token on Brokers."
+          : undefined,
+      order,
+      snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ ok: false, live: false, error: error.message || "Order failed" });
   }
-  res.status(201).json({ ok: true, order, snapshot: snapshot() });
 });
 
-app.post("/api/orders/:id/cancel", (req, res) => {
-  const result = cancelOrder(req.params.id);
-  if (result.error) {
-    res.status(400).json({ error: result.error });
-    return;
+app.post("/api/orders/:id/cancel", async (req, res) => {
+  try {
+    const id = String(req.params.id || "");
+    if (isDhanLive() && id && !id.startsWith("o") && !id.startsWith("p")) {
+      await cancelDhanOrder(id);
+      res.json({ ok: true, live: true, snapshot: snapshot() });
+      return;
+    }
+    const result = cancelOrder(id);
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, order: result, snapshot: snapshot() });
+  } catch (error) {
+    res.status(error.status || 400).json({ ok: false, error: error.message || "Cancel failed" });
   }
-  res.json({ ok: true, order: result, snapshot: snapshot() });
 });
 
-app.post("/api/positions/:id/squareoff", (req, res) => {
-  const result = squareOff(req.params.id);
-  if (result.error) {
-    res.status(400).json({ error: result.error });
-    return;
+app.post("/api/positions/:id/squareoff", async (req, res) => {
+  try {
+    const pos = snapshot().positions.find((row) => row.id === req.params.id);
+    if (!pos) {
+      res.status(404).json({ error: "Position not found" });
+      return;
+    }
+    if (isDhanLive() && pos.brokerId === "dhan" && pos.securityId && String(pos.id).startsWith("dhan-pos-")) {
+      await placeDhanOrder({
+        symbol: pos.symbol,
+        name: pos.symbol,
+        side: pos.type === "BUY" ? "SELL" : "BUY",
+        qty: Math.abs(Number(pos.qty) || 0),
+        product: pos.product || "MIS",
+        type: "MARKET",
+        securityId: pos.securityId,
+        exchangeSegment: String(pos.symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+      });
+      res.json({ ok: true, live: true, snapshot: snapshot() });
+      return;
+    }
+    const result = squareOff(req.params.id);
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ...result, snapshot: snapshot() });
+  } catch (error) {
+    res.status(error.status || 400).json({ ok: false, error: error.message || "Square off failed" });
   }
-  res.json({ ...result, snapshot: snapshot() });
 });
 
 app.get("/api/report", (_req, res) => {
