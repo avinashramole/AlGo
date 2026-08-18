@@ -10,7 +10,7 @@ const INSTRUMENTS = [
   { symbol: "NIFTY 50", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 13, kind: "index" },
   { symbol: "BANK NIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 25, kind: "index" },
   { symbol: "FINNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 27, kind: "index" },
-  { symbol: "SENSEX", segment: "BSE_IDX", fallbackSegment: "IDX_I", securityId: 51, kind: "index" },
+  { symbol: "SENSEX", segment: "IDX_I", fallbackSegment: "BSE_EQ", securityId: 51, kind: "index" },
   { symbol: "INDIA VIX", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 21, kind: "index" },
   { symbol: "RELIANCE", segment: "NSE_EQ", securityId: 2885, kind: "equity" },
   { symbol: "HDFCBANK", segment: "NSE_EQ", securityId: 1333, kind: "equity" },
@@ -60,6 +60,7 @@ async function dhanGet(path, token, id) {
   if (!res.ok) {
     const message =
       json?.errorMessage ||
+      json?.error?.errorMessage ||
       json?.message ||
       json?.remarks ||
       `Dhan API ${res.status}`;
@@ -90,6 +91,7 @@ async function dhanPost(path, token, id, body) {
   if (!res.ok) {
     const message =
       json?.errorMessage ||
+      json?.error?.errorMessage ||
       json?.message ||
       json?.remarks ||
       `Dhan API ${res.status}`;
@@ -119,11 +121,12 @@ function flattenQuotes(payload) {
     for (const [id, quote] of Object.entries(securities)) {
       if (!quote || typeof quote !== "object") continue;
       const securityId = Number(id);
-      const instrument = INSTRUMENTS.find(
-        (row) =>
-          row.securityId === securityId &&
-          (row.segment === segment || row.fallbackSegment === segment),
-      );
+      const instrument =
+        INSTRUMENTS.find(
+          (row) =>
+            row.securityId === securityId &&
+            (row.segment === segment || row.fallbackSegment === segment),
+        ) || INSTRUMENTS.find((row) => row.securityId === securityId);
       if (!instrument) continue;
       const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
@@ -155,6 +158,9 @@ async function pullQuotes() {
     if (!quotes.length) {
       payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, quoteBody(usedFallback));
       quotes = flattenQuotes(payload);
+    }
+    if (payload?.status && payload.status !== "success" && !quotes.length) {
+      throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");
     }
     if (quotes.length) {
       applyLiveQuotes(quotes);
@@ -209,7 +215,7 @@ function parseFeedPackets(buffer) {
         quotes.push({ symbol: instrument.symbol, kind: instrument.kind, ltp });
       }
     }
-    offset += Math.max(length || 16, 16);
+    offset += Math.max(length >= 16 ? length : length + 8, 16);
   }
   return quotes;
 }
@@ -327,6 +333,11 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
   }
 
   const { profile, funds } = await validateDhan(cleanToken, cleanId);
+  if (profile?.dataPlan && String(profile.dataPlan).toLowerCase() === "deactive") {
+    const error = new Error("Dhan Data API plan is inactive. Enable Live Market Data on web.dhan.co, then paste a new Access Token.");
+    error.status = 400;
+    throw error;
+  }
   accessToken = cleanToken;
   clientId = profile.dhanClientId || cleanId;
   usedFallback = false;
