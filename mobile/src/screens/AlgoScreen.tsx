@@ -4,9 +4,27 @@ import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatInr } from "../theme";
 
-const SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"];
+const SYMBOLS: Array<{ id: string; lot: number }> = [
+  { id: "NIFTY", lot: 65 },
+  { id: "BANKNIFTY", lot: 30 },
+  { id: "FINNIFTY", lot: 60 },
+  { id: "SENSEX", lot: 20 },
+];
 const INDICATORS = ["VWAP", "RSI", "EMA", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
+const OPERATORS = [
+  { id: "crosses_above", label: "Crosses above" },
+  { id: "crosses_below", label: "Crosses below" },
+  { id: "above", label: "Above" },
+  { id: "below", label: "Below" },
+  { id: "gt", label: ">" },
+  { id: "lt", label: "<" },
+  { id: "gte", label: ">=" },
+  { id: "lte", label: "<=" },
+  { id: "eq", label: "=" },
+];
+const LEFTS = ["price", "vwap", "ema_fast", "ema_slow", "rsi", "macd", "supertrend", "or_high", "or_low"];
+const RIGHTS = ["vwap", "ema_slow", "supertrend", "or_high", "or_low", "lookback_high", "lookback_low", "value"];
 
 type Draft = {
   id?: string;
@@ -14,13 +32,50 @@ type Draft = {
   kind: "indicator" | "price-action";
   symbol: string;
   side: string;
-  qty: string;
+  lots: string;
   timeframe: string;
   indicator: string;
   pattern: string;
   slPct: string;
   targetPct: string;
+  buyLeft: string;
+  buyOp: string;
+  buyRight: string;
+  buyValue: string;
+  sellLeft: string;
+  sellOp: string;
+  sellRight: string;
+  sellValue: string;
 };
+
+function lotFor(symbol: string) {
+  return SYMBOLS.find((row) => row.id === symbol)?.lot || 65;
+}
+
+function defaultConditions(kind: Draft["kind"], indicator: string, pattern: string) {
+  if (kind === "price-action") {
+    if (pattern === "BREAKOUT") {
+      return { buyLeft: "price", buyOp: "crosses_above", buyRight: "lookback_high", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "lookback_low", sellValue: "0" };
+    }
+    if (pattern === "SR_BOUNCE") {
+      return { buyLeft: "price", buyOp: "above", buyRight: "lookback_low", buyValue: "0", sellLeft: "price", sellOp: "below", sellRight: "lookback_high", sellValue: "0" };
+    }
+    return { buyLeft: "price", buyOp: "crosses_above", buyRight: "or_high", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "or_low", sellValue: "0" };
+  }
+  if (indicator === "RSI") {
+    return { buyLeft: "rsi", buyOp: "lt", buyRight: "value", buyValue: "30", sellLeft: "rsi", sellOp: "gt", sellRight: "value", sellValue: "70" };
+  }
+  if (indicator === "EMA") {
+    return { buyLeft: "ema_fast", buyOp: "crosses_above", buyRight: "ema_slow", buyValue: "0", sellLeft: "ema_fast", sellOp: "crosses_below", sellRight: "ema_slow", sellValue: "0" };
+  }
+  if (indicator === "MACD") {
+    return { buyLeft: "macd", buyOp: "crosses_above", buyRight: "value", buyValue: "0", sellLeft: "macd", sellOp: "crosses_below", sellRight: "value", sellValue: "0" };
+  }
+  if (indicator === "SUPERTREND") {
+    return { buyLeft: "price", buyOp: "crosses_above", buyRight: "supertrend", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "supertrend", sellValue: "0" };
+  }
+  return { buyLeft: "price", buyOp: "crosses_above", buyRight: "vwap", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "vwap", sellValue: "0" };
+}
 
 function blankDraft(): Draft {
   return {
@@ -28,12 +83,20 @@ function blankDraft(): Draft {
     kind: "indicator",
     symbol: "NIFTY",
     side: "BUY",
-    qty: "75",
+    lots: "1",
     timeframe: "5m",
     indicator: "VWAP",
     pattern: "ORB",
     slPct: "0.4",
     targetPct: "0.8",
+    buyLeft: "price",
+    buyOp: "crosses_above",
+    buyRight: "vwap",
+    buyValue: "0",
+    sellLeft: "price",
+    sellOp: "crosses_below",
+    sellRight: "vwap",
+    sellValue: "0",
   };
 }
 
@@ -53,11 +116,17 @@ export function AlgoScreen() {
       Alert.alert("Name needed", "Give the strategy a name.");
       return;
     }
+    const lots = Math.max(1, Number(draft.lots) || 1);
+    const lotSize = lotFor(draft.symbol);
     await saveAlgo({
       ...draft,
-      qty: Number(draft.qty),
+      lots,
+      lotSize,
+      qty: lots * lotSize,
       slPct: Number(draft.slPct),
       targetPct: Number(draft.targetPct),
+      buyValue: Number(draft.buyValue),
+      sellValue: Number(draft.sellValue),
     });
     setDraft(null);
   };
@@ -70,18 +139,25 @@ export function AlgoScreen() {
   };
 
   if (draft) {
+    const lot = lotFor(draft.symbol);
+    const lots = Math.max(1, Number(draft.lots) || 1);
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{draft.id ? "Edit strategy" : "Add strategy"}</Text>
         <View style={styles.chips}>
-          <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator" })} />
-          <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action" })} />
+          <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator", ...defaultConditions("indicator", draft.indicator, draft.pattern) })} />
+          <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action", ...defaultConditions("price-action", draft.indicator, draft.pattern) })} />
         </View>
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
-        <Text style={styles.muted}>Underlying</Text>
+        <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>
           {SYMBOLS.map((symbol) => (
-            <Chip key={symbol} label={symbol} on={draft.symbol === symbol} onPress={() => setDraft({ ...draft, symbol })} />
+            <Chip
+              key={symbol.id}
+              label={`${symbol.id} ${symbol.lot}`}
+              on={draft.symbol === symbol.id}
+              onPress={() => setDraft({ ...draft, symbol: symbol.id })}
+            />
           ))}
         </View>
         {draft.kind === "indicator" ? (
@@ -89,7 +165,7 @@ export function AlgoScreen() {
             <Text style={styles.muted}>Indicator</Text>
             <View style={styles.chips}>
               {INDICATORS.map((indicator) => (
-                <Chip key={indicator} label={indicator} on={draft.indicator === indicator} onPress={() => setDraft({ ...draft, indicator })} />
+                <Chip key={indicator} label={indicator} on={draft.indicator === indicator} onPress={() => setDraft({ ...draft, indicator, ...defaultConditions("indicator", indicator, draft.pattern) })} />
               ))}
             </View>
           </>
@@ -98,12 +174,46 @@ export function AlgoScreen() {
             <Text style={styles.muted}>Price action</Text>
             <View style={styles.chips}>
               {PATTERNS.map((pattern) => (
-                <Chip key={pattern} label={pattern} on={draft.pattern === pattern} onPress={() => setDraft({ ...draft, pattern })} />
+                <Chip key={pattern} label={pattern} on={draft.pattern === pattern} onPress={() => setDraft({ ...draft, pattern, ...defaultConditions("price-action", draft.indicator, pattern) })} />
               ))}
             </View>
           </>
         )}
-        <Field label="Quantity" value={draft.qty} keyboard="numeric" onChange={(qty) => setDraft({ ...draft, qty })} />
+        <Text style={styles.muted}>BUY when</Text>
+        <View style={styles.chips}>
+          {LEFTS.map((item) => (
+            <Chip key={item} label={item} on={draft.buyLeft === item} onPress={() => setDraft({ ...draft, buyLeft: item })} />
+          ))}
+        </View>
+        <View style={styles.chips}>
+          {OPERATORS.map((item) => (
+            <Chip key={item.id} label={item.label} on={draft.buyOp === item.id} onPress={() => setDraft({ ...draft, buyOp: item.id })} />
+          ))}
+        </View>
+        <View style={styles.chips}>
+          {RIGHTS.map((item) => (
+            <Chip key={item} label={item} on={draft.buyRight === item} onPress={() => setDraft({ ...draft, buyRight: item })} />
+          ))}
+        </View>
+        {draft.buyRight === "value" ? <Field label="Buy number" value={draft.buyValue} keyboard="numeric" onChange={(buyValue) => setDraft({ ...draft, buyValue })} /> : null}
+        <Text style={styles.muted}>SELL when</Text>
+        <View style={styles.chips}>
+          {LEFTS.map((item) => (
+            <Chip key={`sl-${item}`} label={item} on={draft.sellLeft === item} onPress={() => setDraft({ ...draft, sellLeft: item })} />
+          ))}
+        </View>
+        <View style={styles.chips}>
+          {OPERATORS.map((item) => (
+            <Chip key={`s-${item.id}`} label={item.label} on={draft.sellOp === item.id} onPress={() => setDraft({ ...draft, sellOp: item.id })} />
+          ))}
+        </View>
+        <View style={styles.chips}>
+          {RIGHTS.map((item) => (
+            <Chip key={`sr-${item}`} label={item} on={draft.sellRight === item} onPress={() => setDraft({ ...draft, sellRight: item })} />
+          ))}
+        </View>
+        {draft.sellRight === "value" ? <Field label="Sell number" value={draft.sellValue} keyboard="numeric" onChange={(sellValue) => setDraft({ ...draft, sellValue })} /> : null}
+        <Field label={`Lots (1 lot = ${lot} qty, order ${lots * lot})`} value={draft.lots} keyboard="numeric" onChange={(next) => setDraft({ ...draft, lots: next })} />
         <Field label="Stop loss %" value={draft.slPct} keyboard="numeric" onChange={(slPct) => setDraft({ ...draft, slPct })} />
         <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
         <Pressable style={styles.cta} onPress={() => void save()}>
@@ -135,7 +245,9 @@ export function AlgoScreen() {
           </View>
           <View style={styles.stats}>
             <Text style={{ color: algo.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(algo.pnl)}</Text>
-            <Text style={styles.muted}>WR {algo.winRate}%</Text>
+            <Text style={styles.muted}>
+              {algo.lots || 1} lot × {algo.lotSize || lotFor(algo.symbol || "NIFTY")}
+            </Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.muted}>{algo.enabled ? "Running" : "Paused"}</Text>
@@ -151,12 +263,20 @@ export function AlgoScreen() {
                   kind: algo.kind === "price-action" ? "price-action" : "indicator",
                   symbol: algo.symbol || "NIFTY",
                   side: algo.side || "BUY",
-                  qty: String(algo.qty || 75),
+                  lots: String(algo.lots || 1),
                   timeframe: algo.timeframe || "5m",
                   indicator: algo.indicator || "VWAP",
                   pattern: algo.pattern || "ORB",
                   slPct: String(algo.slPct || 0.4),
                   targetPct: String(algo.targetPct || 0.8),
+                  buyLeft: algo.buyLeft || "price",
+                  buyOp: algo.buyOp || "crosses_above",
+                  buyRight: algo.buyRight || "vwap",
+                  buyValue: String(algo.buyValue || 0),
+                  sellLeft: algo.sellLeft || "price",
+                  sellOp: algo.sellOp || "crosses_below",
+                  sellRight: algo.sellRight || "vwap",
+                  sellValue: String(algo.sellValue || 0),
                 })
               }
             >

@@ -21,12 +21,12 @@ export const fallbackSnapshot: Snapshot = {
     { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
   ],
   algos: [
-    { id: "a1", name: "VWAP Depth", tag: "Indicator", kind: "indicator", symbol: "NIFTY", indicator: "VWAP", summary: "Indicator · NIFTY trade with VWAP on 5m", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
-    { id: "a2", name: "Momentum Rider", tag: "Indicator", kind: "indicator", symbol: "FINNIFTY", indicator: "RSI", summary: "Indicator · Buy FINNIFTY RSI(14) < 32; sell > 68", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
-    { id: "a3", name: "ORB Breakout", tag: "Price action", kind: "price-action", symbol: "NIFTY", pattern: "ORB", summary: "Price action · NIFTY 15m opening-range breakout on 5m", status: "PAUSED", pnl: -412, winRate: 54, enabled: false, brokerId: "dhan" },
+    { id: "a1", name: "VWAP Depth", tag: "Indicator", kind: "indicator", symbol: "NIFTY", indicator: "VWAP", lots: 1, lotSize: 65, qty: 65, buyOp: "crosses_above", buyLeft: "price", buyRight: "vwap", summary: "Indicator · NIFTY · Price crosses above VWAP · 1 lot × 65", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
+    { id: "a2", name: "Momentum Rider", tag: "Indicator", kind: "indicator", symbol: "FINNIFTY", indicator: "RSI", lots: 1, lotSize: 60, qty: 60, buyOp: "lt", buyLeft: "rsi", buyRight: "value", buyValue: 32, sellOp: "gt", sellValue: 68, summary: "Indicator · FINNIFTY RSI < 32 / > 68 · 1 lot × 60", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
+    { id: "a3", name: "ORB Breakout", tag: "Price action", kind: "price-action", symbol: "NIFTY", pattern: "ORB", lots: 1, lotSize: 65, qty: 65, buyOp: "crosses_above", buyRight: "or_high", summary: "Price action · NIFTY Price crosses above OR high · 1 lot × 65", status: "PAUSED", pnl: -412, winRate: 54, enabled: false, brokerId: "dhan" },
   ],
   positions: [
-    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
+    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
     { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651, brokerId: "dhan" },
     { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705, brokerId: "dhan" },
   ],
@@ -143,10 +143,10 @@ export const fallbackSnapshot: Snapshot = {
     source: "demo",
     expiryLabel: "Tue, 25 Aug 2026",
     underlyings: [
-      { id: "NIFTY", label: "NIFTY", lot: 75 },
-      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 15 },
-      { id: "FINNIFTY", label: "FINNIFTY", lot: 25 },
-      { id: "SENSEX", label: "SENSEX", lot: 10 },
+      { id: "NIFTY", label: "NIFTY", lot: 65 },
+      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
+      { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
+      { id: "SENSEX", label: "SENSEX", lot: 20 },
     ],
   },
 };

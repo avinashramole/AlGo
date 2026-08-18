@@ -6,10 +6,10 @@ export function Options() {
   const { data, selectChain, order } = useMarket();
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings || [
-    { id: "NIFTY", label: "NIFTY", lot: 75 },
-    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 15 },
-    { id: "FINNIFTY", label: "FINNIFTY", lot: 25 },
-    { id: "SENSEX", label: "SENSEX", lot: 10 },
+    { id: "NIFTY", label: "NIFTY", lot: 65 },
+    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
+    { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
+    { id: "SENSEX", label: "SENSEX", lot: 20 },
   ];
   const rows = data.optionChain || [];
   const maxOi = Math.max(1, ...rows.map((row) => Math.max(row.callOi || 0, row.putOi || 0)));
@@ -28,7 +28,7 @@ export function Options() {
       await order({
         symbol: `${meta?.symbol || "NIFTY"} ${row.strike} ${side}`,
         side: "BUY",
-        qty: underlyings.find((item) => item.id === meta?.symbol)?.lot || 75,
+        qty: underlyings.find((item) => item.id === meta?.symbol)?.lot || 65,
         price: ltp,
         brokerId: data.activeBrokerId,
       });
@@ -61,7 +61,7 @@ export function Options() {
                 meta?.symbol === item.id ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)]",
               )}
             >
-              {item.label}
+              {item.label} · {item.lot}
             </button>
           ))}
           <select

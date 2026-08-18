@@ -11,11 +11,11 @@ export function TradeScreen() {
     await order({
       symbol: signal.symbol,
       side: signal.action,
-      qty: 75,
+      qty: 65,
       price: 142.75,
       brokerId: data.activeBrokerId,
     });
-    Alert.alert("Order filled", `${signal.action} ${signal.symbol} 75 qty`);
+    Alert.alert("Order filled", `${signal.action} ${signal.symbol} 65 qty`);
   };
 
   return (
@@ -26,7 +26,7 @@ export function TradeScreen() {
           {signal.action} {signal.symbol}
         </Text>
         <Text style={styles.muted}>
-          {data.brokers?.find((item) => item.active)?.name || "Paper"} · MIS · MARKET · 75 qty · Confidence {signal.confidence}%
+          {data.brokers?.find((item) => item.active)?.name || "Paper"} · MIS · MARKET · 65 qty · Confidence {signal.confidence}%
         </Text>
       </Card>
       <Pressable style={styles.cta} onPress={() => void submit()}>

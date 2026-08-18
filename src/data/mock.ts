@@ -29,6 +29,8 @@ export type Algo = {
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
+  lots?: number;
+  lotSize?: number;
   timeframe?: string;
   slPct?: number;
   targetPct?: number;
@@ -42,6 +44,14 @@ export type Algo = {
   pattern?: string;
   rangeMinutes?: number;
   lookback?: number;
+  buyLeft?: string;
+  buyOp?: string;
+  buyRight?: string;
+  buyValue?: number;
+  sellLeft?: string;
+  sellOp?: string;
+  sellRight?: string;
+  sellValue?: number;
   summary?: string;
   status: "LIVE" | "PAUSED";
   pnl: number;
@@ -154,7 +164,17 @@ export const initialAlgos: Algo[] = [
     symbol: "NIFTY",
     indicator: "VWAP",
     timeframe: "5m",
-    summary: "Indicator · NIFTY trade with VWAP on 5m",
+    side: "BUY",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    buyLeft: "price",
+    buyOp: "crosses_above",
+    buyRight: "vwap",
+    sellLeft: "price",
+    sellOp: "crosses_below",
+    sellRight: "vwap",
+    summary: "Indicator · NIFTY · Buy when Price crosses above VWAP · 1 lot × 65 = 65 qty",
     status: "LIVE",
     pnl: 2840.5,
     winRate: 68,
@@ -169,7 +189,19 @@ export const initialAlgos: Algo[] = [
     symbol: "FINNIFTY",
     indicator: "RSI",
     timeframe: "5m",
-    summary: "Indicator · Buy FINNIFTY RSI(14) < 32; sell > 68",
+    side: "BOTH",
+    lots: 1,
+    lotSize: 60,
+    qty: 60,
+    buyLeft: "rsi",
+    buyOp: "lt",
+    buyRight: "value",
+    buyValue: 32,
+    sellLeft: "rsi",
+    sellOp: "gt",
+    sellRight: "value",
+    sellValue: 68,
+    summary: "Indicator · FINNIFTY · Buy when RSI < 32 · Sell when RSI > 68 · 1 lot × 60 = 60 qty",
     status: "LIVE",
     pnl: 1960.25,
     winRate: 61,
@@ -184,7 +216,17 @@ export const initialAlgos: Algo[] = [
     symbol: "NIFTY",
     pattern: "ORB",
     timeframe: "5m",
-    summary: "Price action · NIFTY 15m opening-range breakout on 5m",
+    side: "BOTH",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    buyLeft: "price",
+    buyOp: "crosses_above",
+    buyRight: "or_high",
+    sellLeft: "price",
+    sellOp: "crosses_below",
+    sellRight: "or_low",
+    summary: "Price action · NIFTY · Buy when Price crosses above OR high · 1 lot × 65 = 65 qty",
     status: "PAUSED",
     pnl: -412.0,
     winRate: 54,
@@ -194,10 +236,10 @@ export const initialAlgos: Algo[] = [
 ];
 
 export const positions: Position[] = [
-  { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
+  { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
   { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "dhan" },
   { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "dhan" },
-  { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 65, avg: 96.8, ltp: 118.4, pnl: 1404.0, brokerId: "dhan" },
+  { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 60, avg: 96.8, ltp: 118.4, pnl: 1296.0, brokerId: "dhan" },
   { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0, brokerId: "dhan" },
   { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5, brokerId: "dhan" },
 ];

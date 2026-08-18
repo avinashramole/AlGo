@@ -15,14 +15,14 @@ export const catalog = [
 const sampleBooks = {
   dhan: [
     { id: "d1", symbol: "SBIN", type: "BUY", qty: 40, avg: 798.5, ltp: 812.35, pnl: 554.0, brokerId: "dhan" },
-    { id: "d2", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
+    { id: "d2", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
   ],
   zerodha: [
     { id: "z1", symbol: "RELIANCE", type: "BUY", qty: 20, avg: 2940.1, ltp: 2984.2, pnl: 882.0, brokerId: "zerodha" },
-    { id: "z2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 15, avg: 178.2, ltp: 164.5, pnl: 205.5, brokerId: "zerodha" },
+    { id: "z2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 178.2, ltp: 164.5, pnl: 411.0, brokerId: "zerodha" },
   ],
   kotak: [{ id: "k1", symbol: "HDFCBANK", type: "BUY", qty: 15, avg: 1658.0, ltp: 1672.4, pnl: 216.0, brokerId: "kotak" }],
-  fyers: [{ id: "f1", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "fyers" }],
+  fyers: [{ id: "f1", symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, avg: 74.1, ltp: 88.2, pnl: 916.5, brokerId: "fyers" }],
 };
 
 const connections = {

@@ -75,7 +75,7 @@ const state = {
   }),
   algos: seedAlgos(),
   positions: [
-    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
+    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
     { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "dhan" },
     { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "dhan" },
     { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 65, avg: 96.8, ltp: 118.4, pnl: 1404.0, brokerId: "dhan" },
@@ -338,7 +338,7 @@ export function placeOrder(payload) {
     id: `o${Date.now()}`,
     symbol: payload.symbol || "NIFTY 24500 CE",
     side: payload.side || "BUY",
-    qty: Number(payload.qty) || 75,
+    qty: Number(payload.qty) || 65,
     product: payload.product || "MIS",
     type: payload.type || "MARKET",
     status: "FILLED",

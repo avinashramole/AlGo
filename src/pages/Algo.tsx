@@ -1,10 +1,10 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatInr } from "../lib/format";
-import type { AlgoStrategy } from "../lib/strategies";
+import { formatCondition, lotForSymbol, type AlgoStrategy } from "../lib/strategies";
 
 export function Algo() {
   const { data, toggle, routeAlgo, removeAlgo } = useMarket();
@@ -89,8 +89,15 @@ export function Algo() {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge>{kind === "indicator" ? "Indicator" : "Price action"}</Badge>
                   <Badge>{algo.symbol || "NIFTY"}</Badge>
+                  <Badge>
+                    {algo.lots || 1} lot × {algo.lotSize || lotForSymbol(algo.symbol)} = {algo.qty || (algo.lots || 1) * lotForSymbol(algo.symbol)} qty
+                  </Badge>
                   <Badge>{algo.timeframe || "5m"}</Badge>
                   <Badge>{algo.side || "BUY"}</Badge>
+                </div>
+                <div className="mt-2 space-y-1 text-[11px] font-semibold text-slate-500">
+                  <div>BUY when {formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)}</div>
+                  <div>SELL when {formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)}</div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-lg bg-[var(--bg)] p-3">
@@ -117,14 +124,14 @@ export function Algo() {
                   </select>
                 </label>
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  <button type="button" onClick={() => openEdit(algo)} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-[var(--border)] text-xs font-semibold">
+                  <button type="button" onClick={() => openEdit(algo as AlgoStrategy)} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-[var(--border)] text-xs font-semibold">
                     <Pencil size={13} />
                     Edit
                   </button>
                   <button type="button" onClick={() => void toggle(algo.id)} className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold">
                     {algo.enabled ? "Pause" : "Start"}
                   </button>
-                  <button type="button" onClick={() => void remove(algo)} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-rose-200 text-xs font-semibold text-down dark:border-rose-900">
+                  <button type="button" onClick={() => void remove(algo as AlgoStrategy)} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-rose-200 text-xs font-semibold text-down dark:border-rose-900">
                     <Trash2 size={13} />
                     Delete
                   </button>
@@ -155,6 +162,6 @@ export function Algo() {
   );
 }
 
-function Badge({ children }: { children: string }) {
+function Badge({ children }: { children: ReactNode }) {
   return <span className="rounded-md bg-[var(--bg)] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{children}</span>;
 }

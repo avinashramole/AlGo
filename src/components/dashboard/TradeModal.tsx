@@ -19,7 +19,7 @@ export function TradeModal({ open, onClose }: Props) {
       await order({
         symbol: data.featuredSignal.symbol,
         side: data.featuredSignal.action,
-        qty: 75,
+        qty: 65,
         price: 142.75,
         brokerId: data.activeBrokerId,
       });
@@ -47,7 +47,7 @@ export function TradeModal({ open, onClose }: Props) {
           <Field label="Broker" value={(data.brokers || []).find((item) => item.id === data.activeBrokerId)?.name || "Dhan"} />
           <Field label="Product" value="MIS" />
           <Field label="Order type" value="MARKET" />
-          <Field label="Quantity" value="75 (1 lot)" />
+          <Field label="Quantity" value="65 (1 lot)" />
           <Field label="Est. premium" value={`₹${formatNumber(142.75)}`} />
           <Field label="Target" value="176.00" />
         </div>

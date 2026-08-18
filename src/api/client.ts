@@ -66,6 +66,8 @@ export type Snapshot = {
     symbol?: string;
     side?: "BUY" | "SELL" | "BOTH";
     qty?: number;
+    lots?: number;
+    lotSize?: number;
     timeframe?: string;
     slPct?: number;
     targetPct?: number;
@@ -79,6 +81,14 @@ export type Snapshot = {
     pattern?: string;
     rangeMinutes?: number;
     lookback?: number;
+    buyLeft?: string;
+    buyOp?: string;
+    buyRight?: string;
+    buyValue?: number;
+    sellLeft?: string;
+    sellOp?: string;
+    sellRight?: string;
+    sellValue?: number;
     summary?: string;
     status: "LIVE" | "PAUSED";
     pnl: number;

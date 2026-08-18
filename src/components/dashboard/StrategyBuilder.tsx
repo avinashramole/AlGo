@@ -4,12 +4,18 @@ import { useMarket } from "../../context/MarketContext";
 import { cn } from "../../lib/format";
 import {
   INDICATORS,
+  OPERATORS,
   PATTERNS,
+  SOURCES,
   STRATEGY_SYMBOLS,
   TIMEFRAMES,
+  defaultConditions,
   emptyStrategy,
+  formatCondition,
   lotForSymbol,
   type AlgoStrategy,
+  type ConditionOp,
+  type ConditionSource,
   type StrategyKind,
 } from "../../lib/strategies";
 
@@ -41,14 +47,13 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const kind = (form.kind || "indicator") as StrategyKind;
   const title = algo ? `Edit ${algo.name}` : "Add strategy";
 
+  const lotSize = lotForSymbol(form.symbol);
+  const lots = form.lots || 1;
   const preview = useMemo(() => {
-    if (kind === "price-action") {
-      const pattern = PATTERNS.find((row) => row.id === form.pattern)?.label || "Price action";
-      return `${pattern} on ${form.symbol} · ${form.timeframe}`;
-    }
-    const indicator = INDICATORS.find((row) => row.id === form.indicator)?.label || "Indicator";
-    return `${indicator} on ${form.symbol} · ${form.timeframe}`;
-  }, [form.indicator, form.pattern, form.symbol, form.timeframe, kind]);
+    const buy = formatCondition(form.buyLeft, form.buyOp, form.buyRight, form.buyValue);
+    const sell = formatCondition(form.sellLeft, form.sellOp, form.sellRight, form.sellValue);
+    return `${form.symbol} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
+  }, [form.buyLeft, form.buyOp, form.buyRight, form.buyValue, form.sellLeft, form.sellOp, form.sellRight, form.sellValue, form.symbol, lotSize, lots]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -88,14 +93,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "indicator"}
             title="Indicator based"
-            text="RSI, EMA, VWAP, MACD, Supertrend"
-            onClick={() => set({ kind: "indicator", tag: "Indicator" })}
+            text="RSI, EMA, VWAP with crossover, above, below, <, >"
+            onClick={() => set({ kind: "indicator", tag: "Indicator", ...defaultConditions("indicator", form.indicator, form.pattern) })}
           />
           <TypeCard
             active={kind === "price-action"}
             title="Price action based"
             text="ORB, breakout, pin bar, engulfing"
-            onClick={() => set({ kind: "price-action", tag: "Price action" })}
+            onClick={() => set({ kind: "price-action", tag: "Price action", ...defaultConditions("price-action", form.indicator, form.pattern) })}
           />
         </div>
 
@@ -111,12 +116,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               value={form.symbol || "NIFTY"}
               onChange={(event) => {
                 const symbol = event.target.value;
-                set({ symbol, qty: lotForSymbol(symbol) });
+                const nextLot = lotForSymbol(symbol);
+                const nextLots = form.lots || 1;
+                set({ symbol, lots: nextLots, lotSize: nextLot, qty: nextLots * nextLot });
               }}
             >
               {STRATEGY_SYMBOLS.map((row) => (
                 <option key={row.id} value={row.id}>
-                  {row.id} · lot {row.lot}
+                  {row.id} · 1 lot = {row.lot} qty
                 </option>
               ))}
             </select>
@@ -130,8 +137,20 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             </select>
           </label>
           <label className="text-xs font-semibold text-slate-500">
-            Quantity (lot)
-            <input className={fieldClass} type="number" min={1} value={form.qty || 75} onChange={(event) => set({ qty: Number(event.target.value) })} />
+            Lots
+            <input
+              className={fieldClass}
+              type="number"
+              min={1}
+              value={lots}
+              onChange={(event) => {
+                const nextLots = Math.max(1, Number(event.target.value) || 1);
+                set({ lots: nextLots, lotSize, qty: nextLots * lotSize });
+              }}
+            />
+            <span className="mt-1 block font-medium text-slate-400">
+              1 lot = {lotSize} qty · order qty {lots * lotSize}
+            </span>
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
@@ -159,7 +178,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Indicator
-              <select className={fieldClass} value={form.indicator || "VWAP"} onChange={(event) => set({ indicator: event.target.value })}>
+              <select
+                className={fieldClass}
+                value={form.indicator || "VWAP"}
+                onChange={(event) => {
+                  const indicator = event.target.value;
+                  set({ indicator, ...defaultConditions("indicator", indicator, form.pattern) });
+                }}
+              >
                 {INDICATORS.map((row) => (
                   <option key={row.id} value={row.id}>
                     {row.label}
@@ -167,13 +193,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 ))}
               </select>
             </label>
-            {form.indicator === "RSI" ? (
-              <>
-                <NumberField label="RSI period" value={form.period || 14} onChange={(period) => set({ period })} />
-                <NumberField label="Buy below" value={form.rsiBuy || 30} onChange={(rsiBuy) => set({ rsiBuy })} />
-                <NumberField label="Sell above" value={form.rsiSell || 70} onChange={(rsiSell) => set({ rsiSell })} />
-              </>
-            ) : null}
+            {form.indicator === "RSI" ? <NumberField label="RSI period" value={form.period || 14} onChange={(period) => set({ period })} /> : null}
             {form.indicator === "EMA" ? (
               <>
                 <NumberField label="Fast EMA" value={form.fast || 9} onChange={(fast) => set({ fast })} />
@@ -186,18 +206,19 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 <NumberField label="Multiplier" value={form.multiplier || 3} onChange={(multiplier) => set({ multiplier })} />
               </>
             ) : null}
-            {form.indicator === "VWAP" ? (
-              <p className="md:col-span-2 text-xs text-slate-400">Buys when price holds above VWAP, sells when it loses VWAP.</p>
-            ) : null}
-            {form.indicator === "MACD" ? (
-              <p className="md:col-span-2 text-xs text-slate-400">Buys on MACD histogram cross up, sells on cross down.</p>
-            ) : null}
           </div>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Price action
-              <select className={fieldClass} value={form.pattern || "ORB"} onChange={(event) => set({ pattern: event.target.value })}>
+              <select
+                className={fieldClass}
+                value={form.pattern || "ORB"}
+                onChange={(event) => {
+                  const pattern = event.target.value;
+                  set({ pattern, ...defaultConditions("price-action", form.indicator, pattern) });
+                }}
+              >
                 {PATTERNS.map((row) => (
                   <option key={row.id} value={row.id}>
                     {row.label}
@@ -221,6 +242,39 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         )}
 
+        <div className="mt-4 space-y-3">
+          <ConditionRow
+            label="BUY when"
+            left={form.buyLeft || "price"}
+            op={form.buyOp || "crosses_above"}
+            right={form.buyRight || "vwap"}
+            value={form.buyValue || 0}
+            onChange={(patch) =>
+              set({
+                buyLeft: patch.left,
+                buyOp: patch.op,
+                buyRight: patch.right,
+                buyValue: patch.value,
+              })
+            }
+          />
+          <ConditionRow
+            label="SELL when"
+            left={form.sellLeft || "price"}
+            op={form.sellOp || "crosses_below"}
+            right={form.sellRight || "vwap"}
+            value={form.sellValue || 0}
+            onChange={(patch) =>
+              set({
+                sellLeft: patch.left,
+                sellOp: patch.op,
+                sellRight: patch.right,
+                sellValue: patch.value,
+              })
+            }
+          />
+        </div>
+
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
           <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
@@ -241,6 +295,69 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             {busy ? "Saving..." : algo ? "Save changes" : "Add strategy"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ConditionRow({
+  label,
+  left,
+  op,
+  right,
+  value,
+  onChange,
+}: {
+  label: string;
+  left: ConditionSource;
+  op: ConditionOp;
+  right: ConditionSource;
+  value: number;
+  onChange: (next: { left: ConditionSource; op: ConditionOp; right: ConditionSource; value: number }) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="grid gap-2 md:grid-cols-4">
+        <select
+          className={fieldClass}
+          value={left}
+          onChange={(event) => onChange({ left: event.target.value as ConditionSource, op, right, value })}
+        >
+          {SOURCES.filter((row) => row.id !== "value").map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+        <select className={fieldClass} value={op} onChange={(event) => onChange({ left, op: event.target.value as ConditionOp, right, value })}>
+          {OPERATORS.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className={fieldClass}
+          value={right}
+          onChange={(event) => onChange({ left, op, right: event.target.value as ConditionSource, value })}
+        >
+          {SOURCES.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+        {right === "value" ? (
+          <input
+            className={fieldClass}
+            type="number"
+            value={value}
+            onChange={(event) => onChange({ left, op, right, value: Number(event.target.value) })}
+          />
+        ) : (
+          <div className="flex h-10 items-center text-xs font-semibold text-slate-400">vs {SOURCES.find((row) => row.id === right)?.label}</div>
+        )}
       </div>
     </div>
   );

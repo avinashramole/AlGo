@@ -85,10 +85,10 @@ const fallback: Snapshot = {
     lastAt: null,
     expiryLabel: "Tue, 25 Aug 2026",
             underlyings: [
-      { id: "NIFTY", label: "NIFTY", lot: 75 },
-      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 15 },
-      { id: "FINNIFTY", label: "FINNIFTY", lot: 25 },
-      { id: "SENSEX", label: "SENSEX", lot: 10 },
+      { id: "NIFTY", label: "NIFTY", lot: 65 },
+      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
+      { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
+      { id: "SENSEX", label: "SENSEX", lot: 20 },
     ],
   },
 };

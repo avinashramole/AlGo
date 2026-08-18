@@ -1,8 +1,8 @@
 export const UNDERLYINGS = [
-  { id: "NIFTY", label: "NIFTY", indexSymbol: "NIFTY 50", step: 50, scrip: 13, segment: "IDX_I", lot: 75, expiryWeekday: "Tue", weekly: true },
-  { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 15, expiryWeekday: "Tue", weekly: false },
-  { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 25, expiryWeekday: "Tue", weekly: false },
-  { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 10, expiryWeekday: "Thu", weekly: true },
+  { id: "NIFTY", label: "NIFTY", indexSymbol: "NIFTY 50", step: 50, scrip: 13, segment: "IDX_I", lot: 65, expiryWeekday: "Tue", weekly: true },
+  { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 30, expiryWeekday: "Tue", weekly: false },
+  { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 60, expiryWeekday: "Tue", weekly: false },
+  { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 20, expiryWeekday: "Thu", weekly: true },
 ];
 
 export function getUnderlying(id) {
