@@ -21,9 +21,9 @@ export const fallbackSnapshot: Snapshot = {
     { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
   ],
   algos: [
-    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
-    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
-    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412, winRate: 54, enabled: false, brokerId: "dhan" },
+    { id: "a1", name: "VWAP Depth", tag: "Indicator", kind: "indicator", symbol: "NIFTY", indicator: "VWAP", summary: "Indicator · NIFTY trade with VWAP on 5m", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
+    { id: "a2", name: "Momentum Rider", tag: "Indicator", kind: "indicator", symbol: "FINNIFTY", indicator: "RSI", summary: "Indicator · Buy FINNIFTY RSI(14) < 32; sell > 68", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
+    { id: "a3", name: "ORB Breakout", tag: "Price action", kind: "price-action", symbol: "NIFTY", pattern: "ORB", summary: "Price action · NIFTY 15m opening-range breakout on 5m", status: "PAUSED", pnl: -412, winRate: 54, enabled: false, brokerId: "dhan" },
   ],
   positions: [
     { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },

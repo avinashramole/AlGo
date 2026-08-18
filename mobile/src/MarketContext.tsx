@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { activateBroker, connectBroker, disconnectBroker, getSnapshot, placeOrder, selectOptionChain, toggleAlgo, type Snapshot } from "./api";
+import { activateBroker, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, selectOptionChain, toggleAlgo, updateAlgo, type Snapshot } from "./api";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -12,6 +12,8 @@ type MarketContextValue = {
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
   selectChain: (symbol: string, expiry?: string) => Promise<void>;
+  saveAlgo: (payload: Record<string, unknown>) => Promise<void>;
+  removeAlgo: (id: string) => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -83,6 +85,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       selectChain: async (symbol: string, expiry?: string) => {
         const result = await selectOptionChain(symbol, expiry);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      saveAlgo: async (payload: Record<string, unknown>) => {
+        const id = String(payload.id || "");
+        const result = id ? await updateAlgo(id, payload) : await createAlgo(payload);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      removeAlgo: async (id: string) => {
+        const result = await deleteAlgo(id);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

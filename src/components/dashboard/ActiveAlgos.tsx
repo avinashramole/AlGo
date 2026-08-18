@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatInr } from "../../lib/format";
 
@@ -8,7 +9,12 @@ export function ActiveAlgos() {
     <section className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-bold">Active Algorithms</div>
-        <div className="text-[11px] font-semibold text-slate-400">{data.algos.filter((a) => a.enabled).length} live</div>
+        <div className="flex items-center gap-2">
+          <div className="text-[11px] font-semibold text-slate-400">{data.algos.filter((a) => a.enabled).length} live</div>
+          <Link to="/algo" className="text-[11px] font-semibold text-brand-500">
+            Builder →
+          </Link>
+        </div>
       </div>
       <div className="space-y-2">
         {data.algos.map((algo) => (
@@ -30,7 +36,7 @@ export function ActiveAlgos() {
               <div className="mt-1 flex gap-3 text-[11px] text-slate-400">
                 <span className={algo.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(algo.pnl)}</span>
                 <span>WR {algo.winRate}%</span>
-                <span>{algo.tag}</span>
+                <span>{algo.kind === "price-action" ? "Price action" : algo.tag}</span>
                 <span>{data.brokers?.find((item) => item.id === algo.brokerId)?.name || "Dhan"}</span>
               </div>
             </div>

@@ -62,6 +62,24 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
+    kind?: "indicator" | "price-action";
+    symbol?: string;
+    side?: "BUY" | "SELL" | "BOTH";
+    qty?: number;
+    timeframe?: string;
+    slPct?: number;
+    targetPct?: number;
+    indicator?: string;
+    period?: number;
+    fast?: number;
+    slow?: number;
+    rsiBuy?: number;
+    rsiSell?: number;
+    multiplier?: number;
+    pattern?: string;
+    rangeMinutes?: number;
+    lookback?: number;
+    summary?: string;
     status: "LIVE" | "PAUSED";
     pnl: number;
     winRate: number;
@@ -192,6 +210,18 @@ export function activateBroker(id: string) {
 
 export function assignAlgoBroker(id: string, brokerId: string) {
   return request(`/algos/${id}/broker`, { method: "POST", body: JSON.stringify({ brokerId }) });
+}
+
+export function createAlgo(payload: Record<string, unknown>) {
+  return request<{ snapshot: Snapshot }>(`/algos`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateAlgo(id: string, payload: Record<string, unknown>) {
+  return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export function deleteAlgo(id: string) {
+  return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
 }
 
 export function selectOptionChain(symbol: string, expiry?: string) {

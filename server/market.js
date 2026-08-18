@@ -9,6 +9,7 @@ import {
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
+import { normalizeAlgo, seedAlgos } from "./strategies.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -72,11 +73,7 @@ const state = {
     lastAt: null,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
-  algos: [
-    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
-    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
-    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412.0, winRate: 54, enabled: false, brokerId: "dhan" },
-  ],
+  algos: seedAlgos(),
   positions: [
     { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
     { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "dhan" },
@@ -298,6 +295,35 @@ export function toggleAlgo(id) {
   algo.enabled = !algo.enabled;
   algo.status = algo.enabled ? "LIVE" : "PAUSED";
   return clone(algo);
+}
+
+export function createAlgo(payload) {
+  const algo = normalizeAlgo(payload || {});
+  algo.enabled = false;
+  algo.status = "PAUSED";
+  algo.pnl = 0;
+  algo.winRate = 50;
+  state.algos.unshift(algo);
+  state.notifications.unshift(`Strategy added: ${algo.name}`);
+  return clone(algo);
+}
+
+export function updateAlgo(id, payload) {
+  const index = state.algos.findIndex((item) => item.id === id);
+  if (index < 0) return { error: "Strategy not found" };
+  const next = normalizeAlgo(payload || {}, state.algos[index]);
+  next.id = id;
+  state.algos[index] = next;
+  state.notifications.unshift(`Strategy updated: ${next.name}`);
+  return clone(next);
+}
+
+export function deleteAlgo(id) {
+  const algo = state.algos.find((item) => item.id === id);
+  if (!algo) return { error: "Strategy not found" };
+  state.algos = state.algos.filter((item) => item.id !== id);
+  state.notifications.unshift(`Strategy deleted: ${algo.name}`);
+  return { ok: true, id };
 }
 
 export function placeOrder(payload) {

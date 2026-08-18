@@ -25,6 +25,24 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
+  kind?: "indicator" | "price-action";
+  symbol?: string;
+  side?: "BUY" | "SELL" | "BOTH";
+  qty?: number;
+  timeframe?: string;
+  slPct?: number;
+  targetPct?: number;
+  indicator?: string;
+  period?: number;
+  fast?: number;
+  slow?: number;
+  rsiBuy?: number;
+  rsiSell?: number;
+  multiplier?: number;
+  pattern?: string;
+  rangeMinutes?: number;
+  lookback?: number;
+  summary?: string;
   status: "LIVE" | "PAUSED";
   pnl: number;
   winRate: number;
@@ -128,9 +146,51 @@ export const optionChain: OptionRow[] = [
 ];
 
 export const initialAlgos: Algo[] = [
-  { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
-  { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
-  { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412.0, winRate: 54, enabled: false, brokerId: "dhan" },
+  {
+    id: "a1",
+    name: "VWAP Depth",
+    tag: "Indicator",
+    kind: "indicator",
+    symbol: "NIFTY",
+    indicator: "VWAP",
+    timeframe: "5m",
+    summary: "Indicator · NIFTY trade with VWAP on 5m",
+    status: "LIVE",
+    pnl: 2840.5,
+    winRate: 68,
+    enabled: true,
+    brokerId: "dhan",
+  },
+  {
+    id: "a2",
+    name: "Momentum Rider",
+    tag: "Indicator",
+    kind: "indicator",
+    symbol: "FINNIFTY",
+    indicator: "RSI",
+    timeframe: "5m",
+    summary: "Indicator · Buy FINNIFTY RSI(14) < 32; sell > 68",
+    status: "LIVE",
+    pnl: 1960.25,
+    winRate: 61,
+    enabled: true,
+    brokerId: "dhan",
+  },
+  {
+    id: "a3",
+    name: "ORB Breakout",
+    tag: "Price action",
+    kind: "price-action",
+    symbol: "NIFTY",
+    pattern: "ORB",
+    timeframe: "5m",
+    summary: "Price action · NIFTY 15m opening-range breakout on 5m",
+    status: "PAUSED",
+    pnl: -412.0,
+    winRate: 54,
+    enabled: false,
+    brokerId: "dhan",
+  },
 ];
 
 export const positions: Position[] = [

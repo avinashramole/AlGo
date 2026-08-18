@@ -10,6 +10,8 @@ import {
   applyBrokerPositions,
   applySyntheticOptionChain,
   assignAlgoBroker,
+  createAlgo,
+  deleteAlgo,
   dropBrokerPositions,
   getCandles,
   getOptionMeta,
@@ -17,6 +19,7 @@ import {
   snapshot,
   tickMarket,
   toggleAlgo,
+  updateAlgo,
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -165,7 +168,30 @@ app.post("/api/algos/:id/toggle", (req, res) => {
     res.status(404).json({ error: "Algo not found" });
     return;
   }
-  res.json(algo);
+  res.json({ ...algo, snapshot: snapshot() });
+});
+
+app.post("/api/algos", (req, res) => {
+  const algo = createAlgo(req.body || {});
+  res.status(201).json({ ok: true, algo, snapshot: snapshot() });
+});
+
+app.put("/api/algos/:id", (req, res) => {
+  const result = updateAlgo(req.params.id, req.body || {});
+  if (result.error) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, algo: result, snapshot: snapshot() });
+});
+
+app.delete("/api/algos/:id", (req, res) => {
+  const result = deleteAlgo(req.params.id);
+  if (result.error) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, ...result, snapshot: snapshot() });
 });
 
 app.post("/api/algos/:id/broker", (req, res) => {
