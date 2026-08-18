@@ -122,6 +122,10 @@ export function LoginScreen() {
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <BrandMark />
+        <Text style={styles.heading}>{page === "signup" ? "Create your account" : "Welcome back"}</Text>
+        <Text style={styles.subhead}>
+          {page === "signup" ? "Use Gmail or a 10-digit mobile number." : "Sign in with Gmail or mobile, then your password."}
+        </Text>
         <View style={styles.card}>
           {page === "signup" ? (
             <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
@@ -214,7 +218,7 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#6b7385"
+        placeholderTextColor="#5d677a"
         secureTextEntry={secret}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
@@ -226,23 +230,39 @@ function Field({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#05070c" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  heading: { color: "#f4f7fb", fontSize: 26, fontWeight: "800", textAlign: "center" },
+  subhead: { color: "#8b95a8", fontSize: 14, textAlign: "center", marginTop: 8, marginBottom: 20, lineHeight: 20 },
   card: {
     borderWidth: 1,
-    borderColor: "#2f7bff",
-    borderRadius: 20,
+    borderColor: "rgba(47,123,255,0.35)",
+    borderRadius: 24,
     padding: 20,
     backgroundColor: "#0c1018",
   },
-  field: { marginBottom: 14 },
-  label: { color: "#c5cddb", fontSize: 13, fontWeight: "600", marginBottom: 8 },
-  input: {
-    backgroundColor: "#080b12",
-    borderColor: "#2a3a55",
-    color: "#f4f7fb",
-    borderWidth: 1,
-    borderRadius: 12,
-    height: 48,
+  field: {
+    marginBottom: 14,
     paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 14,
+    backgroundColor: "#080b12",
+  },
+  label: {
+    color: "#8b95a8",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: "transparent",
+    color: "#f4f7fb",
+    height: 28,
+    padding: 0,
+    fontSize: 16,
   },
   button: {
     backgroundColor: "#b6ff3c",

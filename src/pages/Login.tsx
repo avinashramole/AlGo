@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
 import { useAuth } from "../context/AuthContext";
+import "../login.css";
 
 function looksLikeMobile(value: string) {
   let digits = String(value || "").replace(/\D/g, "");
@@ -115,54 +116,166 @@ export function Login() {
   };
 
   return (
-    <div className="login-shell">
-      <div className="login-card">
-        <BrandMark />
+    <div className="t2s-login">
+      <aside className="t2s-login-brand">
+        <div className="t2s-login-copy">
+          <BrandMark size="md" />
+          <h1>Trade from a live options desk.</h1>
+          <p>One login for Gmail or mobile. Your name, email, and number stay on your profile after you sign in.</p>
+          <ul className="t2s-login-points">
+            <li>
+              <span className="t2s-login-dot" />
+              ATM option chain with live LTP and VWAP
+            </li>
+            <li>
+              <span className="t2s-login-dot" />
+              Paper, backtest, then live on Dhan
+            </li>
+            <li>
+              <span className="t2s-login-dot" />
+              Orders, positions, and reports in one place
+            </li>
+          </ul>
+        </div>
+      </aside>
 
-        <form onSubmit={onSubmit} className="mt-2">
-          {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" /> : null}
-          <Field
-            label="Gmail or mobile"
-            value={identifier}
-            onChange={(value) => {
-              setIdentifier(value);
-              setSentTo("");
-              setOtp("");
-            }}
-            placeholder="you@gmail.com or 98xxxxxxxx"
-          />
-          {sentTo ? (
-            <Field label="6-digit code" value={otp} onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" />
-          ) : null}
-          <Field label={page === "signup" ? "Set password (min 6)" : "Password"} value={password} onChange={setPassword} secret />
-          {page === "signup" ? <Field label="Confirm password" value={confirm} onChange={setConfirm} secret /> : null}
-          <Notice error={error} hint={hint} devOtp={devOtp} />
-          <Submit loading={loading} label={page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"} />
+      <section className="t2s-login-panel">
+        <div className="t2s-login-card">
+          <div className="t2s-login-mobile-brand">
+            <BrandMark size="sm" />
+          </div>
+          <h2 style={headingStyle}>{page === "signup" ? "Create your account" : "Welcome back"}</h2>
+          <p style={subheadStyle}>{page === "signup" ? "Use Gmail or a 10-digit mobile number." : "Sign in with Gmail or mobile, then your password."}</p>
+
+          <form onSubmit={onSubmit} style={{ marginTop: 22 }} autoComplete="on">
+            {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" /> : null}
+            <Field
+              label="Gmail or mobile"
+              value={identifier}
+              onChange={(value) => {
+                setIdentifier(value);
+                setSentTo("");
+                setOtp("");
+              }}
+              placeholder="you@gmail.com or 98xxxxxxxx"
+              autoComplete="username"
+            />
+            {sentTo ? (
+              <Field
+                label="6-digit code"
+                value={otp}
+                onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                autoComplete="one-time-code"
+              />
+            ) : null}
+            <Field
+              label={page === "signup" ? "Set password" : "Password"}
+              value={password}
+              onChange={setPassword}
+              placeholder={page === "signup" ? "At least 6 characters" : "Enter password"}
+              secret
+              autoComplete={page === "signup" ? "new-password" : "current-password"}
+            />
+            {page === "signup" ? (
+              <Field label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
+            ) : null}
+            <Notice error={error} hint={hint} devOtp={devOtp} />
+            <button type="submit" disabled={loading} className="t2s-submit">
+              {loading ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
+            </button>
+            <button type="button" className="t2s-ghost" disabled={loading} onClick={() => void onSendCode()}>
+              {sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}
+            </button>
+          </form>
+
           <button
             type="button"
-            className="login-link mt-2 h-10 w-full text-sm font-semibold"
-            disabled={loading}
-            onClick={() => void onSendCode()}
+            className="t2s-switch"
+            onClick={() => {
+              setPage(page === "signup" ? "signin" : "signup");
+              resetNotice();
+            }}
           >
-            {sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}
+            {page === "signup" ? (
+              <>
+                Have an account? <b>Sign in</b>
+              </>
+            ) : (
+              <>
+                New here? <b>Create account</b>
+              </>
+            )}
           </button>
-        </form>
-
-        <button
-          type="button"
-          className="mt-4 w-full text-center text-sm font-semibold text-slate-400"
-          onClick={() => {
-            setPage(page === "signup" ? "signin" : "signup");
-            resetNotice();
-          }}
-        >
-          {page === "signup" ? "Have an account? Sign in" : "New here? Create account"}
-        </button>
-        {page === "signin" ? <p className="mt-3 text-center text-xs text-slate-500">Demo: demo@t2s.app / demo123</p> : null}
-      </div>
+          {page === "signin" ? <p className="t2s-demo">Demo: demo@t2s.app / demo123</p> : null}
+        </div>
+      </section>
     </div>
   );
 }
+
+const headingStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 26,
+  fontWeight: 800,
+  letterSpacing: "-0.03em",
+  color: "#f4f7fb",
+};
+
+const subheadStyle: CSSProperties = {
+  margin: "8px 0 0",
+  fontSize: 14,
+  lineHeight: 1.45,
+  color: "#8b95a8",
+};
+
+const fieldBoxStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  width: "100%",
+  marginBottom: 14,
+  padding: "10px 14px 12px",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 14,
+  background: "#080b12",
+  boxSizing: "border-box",
+};
+
+const fieldLabelStyle: CSSProperties = {
+  display: "block",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: "#8b95a8",
+  lineHeight: 1.2,
+};
+
+const fieldRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+};
+
+const inputStyle: CSSProperties = {
+  display: "block",
+  flex: 1,
+  width: "100%",
+  height: 28,
+  margin: 0,
+  padding: 0,
+  border: 0,
+  outline: "none",
+  background: "transparent",
+  color: "#f4f7fb",
+  fontSize: 16,
+  lineHeight: "28px",
+  appearance: "none",
+  WebkitAppearance: "none",
+  boxShadow: "none",
+};
 
 function Field({
   label,
@@ -170,42 +283,47 @@ function Field({
   onChange,
   placeholder,
   secret,
+  autoComplete,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   secret?: boolean;
+  autoComplete?: string;
 }) {
+  const [show, setShow] = useState(false);
   return (
-    <label className="login-field">
-      <span>{label}</span>
-      <input
-        className="login-input"
-        type={secret ? "password" : "text"}
-        value={value}
-        placeholder={placeholder}
-        autoComplete={secret ? "current-password" : "username"}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
-}
-
-function Submit({ loading, label }: { loading: boolean; label: string }) {
-  return (
-    <button type="submit" disabled={loading} className="login-btn">
-      {loading ? "Please wait..." : label}
-    </button>
+    <div className="t2s-field" style={fieldBoxStyle}>
+      <span className="t2s-field-label" style={fieldLabelStyle}>
+        {label}
+      </span>
+      <div className="t2s-field-row" style={fieldRowStyle}>
+        <input
+          className="t2s-input"
+          style={inputStyle}
+          type={secret && !show ? "password" : "text"}
+          value={value}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        {secret ? (
+          <button type="button" className="t2s-field-toggle" onClick={() => setShow((current) => !current)}>
+            {show ? "Hide" : "Show"}
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
 function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: string }) {
   return (
     <>
-      {hint ? <p className="mb-3 text-xs font-medium text-slate-400">{hint}</p> : null}
-      {devOtp ? <div className="mb-3 rounded-lg border border-[#b6ff3c]/30 bg-[#b6ff3c]/10 px-3 py-2 text-sm font-semibold text-[#b6ff3c]">Temporary code: {devOtp}</div> : null}
-      {error ? <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</div> : null}
+      {hint ? <p className="t2s-hint">{hint}</p> : null}
+      {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
+      {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
     </>
   );
 }

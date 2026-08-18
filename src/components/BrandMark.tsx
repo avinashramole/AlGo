@@ -1,7 +1,13 @@
-export function BrandMark({ className = "" }: { className?: string }) {
+const svgSize = {
+  sm: "mx-auto h-[108px] w-full max-w-[160px]",
+  md: "mx-auto h-[168px] w-full max-w-[220px]",
+  lg: "mx-auto mb-2 h-48 w-full max-w-[280px] sm:h-56",
+};
+
+export function BrandMark({ className = "", size = "lg" }: { className?: string; size?: "sm" | "md" | "lg" }) {
   return (
     <div className={className}>
-      <svg viewBox="0 0 520 500" className="mx-auto mb-2 h-48 w-full max-w-[280px] sm:h-56" role="img" aria-label="Trade 2 Smart">
+      <svg viewBox="0 0 520 500" className={svgSize[size]} role="img" aria-label="Trade 2 Smart">
         <defs>
           <linearGradient id="t2s-blue" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#8fd0ff" />

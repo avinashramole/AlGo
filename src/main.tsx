@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { MarketProvider } from "./context/MarketContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
+import "./login.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
