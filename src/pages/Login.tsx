@@ -7,10 +7,10 @@ import { cn } from "../lib/format";
 const fieldClass = "mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal outline-none focus:border-brand-500";
 
 export function Login() {
-  const { login, requestOtp, verifyOtp, signup, loginThumb, hasThumb } = useAuth();
+  const { login, requestOtp, verifyOtp, signup } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState<"signin" | "signup">("signin");
-  const [method, setMethod] = useState<"password" | "otp" | "thumb">("password");
+  const [method, setMethod] = useState<"password" | "gmail" | "mobile">("password");
   const [channel, setChannel] = useState<"gmail" | "mobile">("gmail");
   const [name, setName] = useState("Segin");
   const [identifier, setIdentifier] = useState("");
@@ -71,7 +71,7 @@ export function Login() {
       const result = await requestOtp({
         identifier,
         name,
-        channel,
+        channel: page === "signin" && method !== "password" ? method : channel,
         purpose: page === "signup" ? "signup" : "login",
       });
       setSentTo(result.to || identifier);
@@ -120,19 +120,6 @@ export function Login() {
     }
   };
 
-  const onThumb = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      await loginThumb();
-      navigate("/");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Thumb sign in failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const onSignup = async (event: FormEvent) => {
     event.preventDefault();
     if (!sentTo) {
@@ -162,29 +149,29 @@ export function Login() {
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500 text-sm font-extrabold text-white">T2</div>
           <div>
             <div className="text-xl font-extrabold">{page === "signup" ? "Sign up" : "Sign in"}</div>
-            <div className="text-sm text-slate-400">T2S Algo Terminal</div>
+            <div className="text-sm text-slate-400">Trade 2 Smart</div>
           </div>
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-2">
           <Tab active={page === "signin"} onClick={() => { setPage("signin"); resetNotice(); }}>Sign in</Tab>
-          <Tab active={page === "signup"} onClick={() => { setPage("signup"); setMethod("otp"); setChannel("gmail"); resetNotice(); }}>Sign up</Tab>
+          <Tab active={page === "signup"} onClick={() => { setPage("signup"); setMethod("gmail"); setChannel("gmail"); resetNotice(); }}>Sign up</Tab>
         </div>
 
         {page === "signin" ? (
           <div className="mb-4 grid grid-cols-3 gap-2">
             <Tab active={method === "password"} onClick={() => { setMethod("password"); resetNotice(); }}>Password</Tab>
-            <Tab active={method === "otp"} onClick={() => { setMethod("otp"); resetNotice(); }}>OTP</Tab>
-            <Tab active={method === "thumb"} onClick={() => { setMethod("thumb"); resetNotice(); }}>Thumb</Tab>
+            <Tab active={method === "gmail"} onClick={() => { setMethod("gmail"); setChannel("gmail"); resetNotice(); }}>Gmail</Tab>
+            <Tab active={method === "mobile"} onClick={() => { setMethod("mobile"); setChannel("mobile"); resetNotice(); }}>Mobile</Tab>
           </div>
         ) : (
           <div className="mb-4 grid grid-cols-2 gap-2">
-            <Tab active={channel === "gmail"} onClick={() => { setChannel("gmail"); resetNotice(); }}>Gmail OTP</Tab>
-            <Tab active={channel === "mobile"} onClick={() => { setChannel("mobile"); resetNotice(); }}>Mobile OTP</Tab>
+            <Tab active={channel === "gmail"} onClick={() => { setChannel("gmail"); resetNotice(); }}>Gmail</Tab>
+            <Tab active={channel === "mobile"} onClick={() => { setChannel("mobile"); resetNotice(); }}>Mobile</Tab>
           </div>
         )}
 
-        {(channel === "gmail" && (page === "signup" || method === "otp")) ? (
+        {(channel === "gmail" && (page === "signup" || method === "gmail")) ? (
           <GmailBox
             connected={mailConnected}
             from={mailFrom}
@@ -207,41 +194,23 @@ export function Login() {
           </form>
         ) : null}
 
-        {page === "signin" && method === "otp" ? (
+        {page === "signin" && method !== "password" ? (
           <form onSubmit={onOtpSignIn}>
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <Tab active={channel === "gmail"} onClick={() => { setChannel("gmail"); resetNotice(); }}>Gmail</Tab>
-              <Tab active={channel === "mobile"} onClick={() => { setChannel("mobile"); resetNotice(); }}>Mobile</Tab>
-            </div>
             <Field
-              label={channel === "mobile" ? "Mobile" : "Gmail"}
+              label={method === "mobile" ? "Mobile" : "Gmail"}
               value={identifier}
               onChange={(value) => { setIdentifier(value); setSentTo(""); }}
-              placeholder={channel === "mobile" ? "98xxxxxxxx" : "you@gmail.com"}
+              placeholder={method === "mobile" ? "98xxxxxxxx" : "you@gmail.com"}
             />
             {sentTo ? <Field label="6-digit code" value={otp} onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /> : null}
             <Notice error={error} hint={hint} devOtp={devOtp} />
-            <Submit loading={loading} label={sentTo ? "Sign in" : "Send OTP"} />
+            <Submit loading={loading} label={sentTo ? "Sign in" : "Send code"} />
             {sentTo ? (
               <button type="button" className="mt-2 h-10 w-full text-sm font-semibold text-brand-500" onClick={() => void onSendCode()}>
                 Resend code
               </button>
             ) : null}
           </form>
-        ) : null}
-
-        {page === "signin" && method === "thumb" ? (
-          <div>
-            <p className="mb-4 text-sm text-slate-500">
-              {hasThumb
-                ? "Use fingerprint, Face ID, or Windows Hello on this device."
-                : "Sign in with password or OTP first, then enable Thumb in Settings."}
-            </p>
-            <Notice error={error} hint={hint} devOtp="" />
-            <button type="button" disabled={loading || !hasThumb} onClick={() => void onThumb()} className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
-              {loading ? "Please wait..." : "Sign in with thumb"}
-            </button>
-          </div>
         ) : null}
 
         {page === "signup" ? (
@@ -261,13 +230,13 @@ export function Login() {
               </>
             ) : null}
             <Notice error={error} hint={hint} devOtp={devOtp} />
-            <Submit loading={loading} label={sentTo ? "Create account" : "Send OTP"} />
+            <Submit loading={loading} label={sentTo ? "Create account" : "Send code"} />
             {sentTo ? (
               <button type="button" className="mt-2 h-10 w-full text-sm font-semibold text-brand-500" onClick={() => void onSendCode()}>
                 Resend code
               </button>
             ) : null}
-            <p className="mt-4 text-center text-xs text-slate-400">Verify Gmail or mobile, set a password, then sign in next time with password, mobile, thumb, or OTP.</p>
+            <p className="mt-4 text-center text-xs text-slate-400">Verify Gmail or mobile, set a password, then sign in with password, Gmail, or mobile.</p>
           </form>
         ) : null}
       </div>
@@ -351,7 +320,7 @@ function GmailBox({
         <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">Gmail sending from {from}.</p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-2">
-          <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Connect Gmail (App Password) to email OTP and login notices.</p>
+          <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Connect Gmail (App Password) to email login codes and notices.</p>
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={senderEmail} onChange={(event) => onSender(event.target.value)} placeholder="Desk Gmail" />
           <input type="password" className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={appPassword} onChange={(event) => onPass(event.target.value)} placeholder="App Password" />
           <button type="submit" disabled={loading} className="h-9 w-full rounded-lg bg-slate-900 text-xs font-semibold text-white dark:bg-white dark:text-slate-900">

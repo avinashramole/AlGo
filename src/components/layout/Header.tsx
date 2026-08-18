@@ -32,7 +32,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-[var(--border)] bg-[var(--card)] px-5">
       <div className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-        T2S
+        Trade 2 Smart
       </div>
       <div className="relative mx-auto w-full max-w-xl">
         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />

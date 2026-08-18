@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
 export function Settings() {
-  const { user, logout, enableThumb, hasThumb } = useAuth();
+  const { user, logout } = useAuth();
   const { data } = useMarket();
   const [mailConnected, setMailConnected] = useState(false);
   const [mailFrom, setMailFrom] = useState("");
@@ -13,15 +13,12 @@ export function Settings() {
   const [appPassword, setAppPassword] = useState("");
   const [mailNote, setMailNote] = useState("");
   const [mailBusy, setMailBusy] = useState(false);
-  const [thumbNote, setThumbNote] = useState("");
-  const [thumbBusy, setThumbBusy] = useState(false);
   const rows = [
     ["Name", user?.name || "Avinash"],
     ["Gmail", user?.email || "—"],
     ["Mobile", user?.mobile || "—"],
     ["Desk", user?.desk || "Index Options"],
-    ["Thumb on this device", hasThumb ? "Enabled — fingerprint / Face ID / Windows Hello" : "Off"],
-    ["Gmail mail", mailConnected ? `Sending · ${mailFrom}` : "Not connected — OTP and login mail stay off"],
+    ["Gmail mail", mailConnected ? `Sending · ${mailFrom}` : "Not connected — codes and login mail stay off"],
     ["Default product", data.settings.product || "MIS"],
     ["Order confirmation", data.settings.confirmation || "Enabled"],
     ["Risk guard", data.settings.riskGuard || "Max 2% per trade"],
@@ -49,24 +46,11 @@ export function Settings() {
       setMailConnected(Boolean(result.connected));
       setMailFrom(result.user || senderEmail);
       setAppPassword("");
-      setMailNote("Gmail connected. OTP codes and login notices will be emailed.");
+      setMailNote("Gmail connected. Login codes and notices will be emailed.");
     } catch (err) {
       setMailNote(err instanceof Error ? err.message : "Gmail connect failed");
     } finally {
       setMailBusy(false);
-    }
-  };
-
-  const onEnableThumb = async () => {
-    setThumbBusy(true);
-    setThumbNote("");
-    try {
-      await enableThumb();
-      setThumbNote("Thumb enabled. Next time use Sign in → Thumb, then fingerprint / Face ID / Windows Hello.");
-    } catch (err) {
-      setThumbNote(err instanceof Error ? err.message : "Could not enable thumb");
-    } finally {
-      setThumbBusy(false);
     }
   };
 
@@ -82,24 +66,9 @@ export function Settings() {
         ))}
       </section>
       <section className="card p-4">
-        <div className="text-sm font-bold">Thumb login</div>
-        <p className="mt-1 text-xs text-slate-400">
-          Enable once after you sign in. Then this computer can unlock T2S with fingerprint, Face ID, or Windows Hello. You still need password or OTP on a new device.
-        </p>
-        <button
-          type="button"
-          disabled={thumbBusy}
-          onClick={() => void onEnableThumb()}
-          className="mt-3 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {thumbBusy ? "Please wait..." : hasThumb ? "Reset thumb on this device" : "Enable thumb on this device"}
-        </button>
-        {thumbNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{thumbNote}</p> : null}
-      </section>
-      <section className="card p-4">
         <div className="text-sm font-bold">Gmail mail</div>
         <p className="mt-1 text-xs text-slate-400">
-          After login, T2S emails the user Gmail a sign-in notice. OTP codes use the same mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
+          After login, T2S emails the user Gmail a sign-in notice. Login codes use the same mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
         </p>
         <form onSubmit={onConnect} className="mt-3 grid gap-2 sm:grid-cols-2">
           <input
