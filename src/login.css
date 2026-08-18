@@ -12,10 +12,14 @@
   justify-content: center;
   padding: 28px 16px 36px;
   overflow: hidden;
-  color-scheme: dark;
-  color: #f4f7fb;
+  color-scheme: light;
+  color: var(--text);
   font-family: Inter, system-ui, sans-serif;
-  background: #05070c;
+  background: var(--bg);
+}
+
+.dark .t2s-login {
+  color-scheme: dark;
 }
 
 .t2s-login-bg {
@@ -24,21 +28,49 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 70% 50% at 18% 8%, rgba(47, 123, 255, 0.28), transparent 58%),
-    radial-gradient(ellipse 60% 45% at 92% 96%, rgba(182, 255, 60, 0.16), transparent 55%),
-    linear-gradient(180deg, #07101c 0%, #05070c 42%, #05070c 100%);
+    radial-gradient(ellipse 70% 50% at 18% 8%, rgba(47, 123, 255, 0.14), transparent 58%),
+    radial-gradient(ellipse 60% 45% at 92% 96%, rgba(182, 255, 60, 0.1), transparent 55%),
+    var(--bg);
+}
+
+.dark .t2s-login-bg {
+  background:
+    radial-gradient(ellipse 70% 50% at 18% 8%, rgba(47, 123, 255, 0.22), transparent 58%),
+    radial-gradient(ellipse 60% 45% at 92% 96%, rgba(182, 255, 60, 0.12), transparent 55%),
+    var(--bg);
 }
 
 .t2s-login-bg::before {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.12;
+  opacity: 0.18;
   background-image:
-    linear-gradient(rgba(47, 123, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(rgba(47, 123, 255, 0.14) 1px, transparent 1px),
     linear-gradient(90deg, rgba(47, 123, 255, 0.1) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at center, black 20%, transparent 72%);
+}
+
+.t2s-theme-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  display: flex;
+  height: 40px;
+  width: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.t2s-theme-btn:hover {
+  color: var(--text);
 }
 
 .t2s-login-card {
@@ -49,12 +81,14 @@
   padding: 28px 24px 22px;
   border-radius: 28px;
   background:
-    linear-gradient(#0b1018, #0b1018) padding-box,
+    linear-gradient(var(--card), var(--card)) padding-box,
     linear-gradient(135deg, #2f7bff 0%, #2f7bff 42%, #b6ff3c 100%) border-box;
   border: 1px solid transparent;
-  box-shadow:
-    0 0 0 1px rgba(47, 123, 255, 0.12),
-    0 28px 70px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow), 0 24px 60px rgba(16, 24, 40, 0.08);
+}
+
+.dark .t2s-login-card {
+  box-shadow: var(--shadow), 0 28px 70px rgba(0, 0, 0, 0.45);
 }
 
 .t2s-login-form {
@@ -68,9 +102,9 @@
   width: 100%;
   margin: 0 0 12px;
   padding: 12px 14px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #080b12;
+  background: var(--bg);
 }
 
 .t2s-field:focus-within {
@@ -84,12 +118,12 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8b95a8;
+  color: var(--muted);
   line-height: 1.2;
 }
 
 .t2s-field:focus-within .t2s-field-label {
-  color: #6db3ff;
+  color: #2f7bff;
 }
 
 .t2s-field-row {
@@ -111,7 +145,7 @@
   border-radius: 0 !important;
   outline: none !important;
   background: transparent !important;
-  color: #f4f7fb !important;
+  color: var(--text) !important;
   font-size: 16px !important;
   line-height: 28px !important;
   appearance: none !important;
@@ -120,16 +154,16 @@
 }
 
 .t2s-login input.t2s-input::placeholder {
-  color: #5d677a;
+  color: var(--muted-2);
 }
 
 .t2s-login input.t2s-input:-webkit-autofill,
 .t2s-login input.t2s-input:-webkit-autofill:hover,
 .t2s-login input.t2s-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #f4f7fb !important;
-  caret-color: #f4f7fb;
-  box-shadow: 0 0 0 1000px #080b12 inset !important;
-  -webkit-box-shadow: 0 0 0 1000px #080b12 inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  caret-color: var(--text);
+  box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   transition: background-color 99999s ease-out 0s;
 }
 
@@ -137,7 +171,7 @@
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: #6db3ff;
+  color: #2f7bff;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -156,7 +190,7 @@
   font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  box-shadow: 0 0 28px rgba(182, 255, 60, 0.28);
+  box-shadow: 0 0 28px rgba(182, 255, 60, 0.22);
   cursor: pointer;
 }
 
@@ -176,13 +210,17 @@
   margin-top: 4px;
   border: 0;
   background: transparent;
-  color: #6db3ff;
+  color: #2f7bff;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
 
 .t2s-ghost:hover {
+  color: #1d5fd6;
+}
+
+.dark .t2s-ghost:hover {
   color: #b6ff3c;
 }
 
@@ -193,7 +231,7 @@
   padding: 10px 0 0;
   border: 0;
   background: transparent;
-  color: #9aa3b5;
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -201,20 +239,20 @@
 }
 
 .t2s-switch b {
-  color: #f4f7fb;
+  color: var(--text);
 }
 
 .t2s-demo {
   margin: 10px 0 0;
   text-align: center;
   font-size: 12px;
-  color: #6b7385;
+  color: var(--muted-2);
 }
 
 .t2s-hint {
   margin: 0 0 12px;
   font-size: 13px;
-  color: #9aa3b5;
+  color: var(--muted);
 }
 
 .t2s-alert {
@@ -226,14 +264,22 @@
 }
 
 .t2s-alert-ok {
-  border: 1px solid rgba(182, 255, 60, 0.3);
-  background: rgba(182, 255, 60, 0.1);
+  border: 1px solid rgba(182, 255, 60, 0.35);
+  background: rgba(182, 255, 60, 0.12);
+  color: #3f7a00;
+}
+
+.dark .t2s-alert-ok {
   color: #b6ff3c;
 }
 
 .t2s-alert-err {
   border: 1px solid rgba(244, 63, 94, 0.3);
   background: rgba(244, 63, 94, 0.1);
+  color: #be123c;
+}
+
+.dark .t2s-alert-err {
   color: #fda4af;
 }
 

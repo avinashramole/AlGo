@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../AuthContext";
 import { BrandMark } from "../components/BrandMark";
+import { colors } from "../theme";
 
 function looksLikeMobile(value: string) {
   let digits = String(value || "").replace(/\D/g, "");
@@ -122,7 +123,7 @@ export function LoginScreen() {
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
-          <BrandMark variant="stacked" />
+          <BrandMark variant="stacked" theme="light" />
           {page === "signup" ? (
             <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
           ) : null}
@@ -214,7 +215,7 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#5d677a"
+        placeholderTextColor={colors.muted}
         secureTextEntry={secret}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
@@ -224,14 +225,14 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: "#05070c" },
+  wrap: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
   card: {
     borderWidth: 1,
-    borderColor: "rgba(47,123,255,0.4)",
+    borderColor: colors.border,
     borderRadius: 28,
     padding: 22,
-    backgroundColor: "#0b1018",
+    backgroundColor: colors.card,
   },
   field: {
     marginBottom: 14,
@@ -239,12 +240,12 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: colors.border,
     borderRadius: 14,
-    backgroundColor: "#080b12",
+    backgroundColor: colors.bg,
   },
   label: {
-    color: "#8b95a8",
+    color: colors.muted,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1.2,
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: "transparent",
-    color: "#f4f7fb",
+    color: colors.text,
     height: 28,
     padding: 0,
     fontSize: 16,
@@ -267,9 +268,9 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#061006", fontWeight: "800" },
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
-  ghostText: { color: "#6db3ff", fontWeight: "700" },
+  ghostText: { color: colors.brand, fontWeight: "700" },
   switch: { marginTop: 8, height: 40, alignItems: "center", justifyContent: "center" },
-  switchText: { color: "#8b93a7", fontWeight: "700", fontSize: 13 },
-  hint: { textAlign: "center", color: "#8b93a7", marginTop: 12, marginBottom: 8, fontSize: 12 },
-  dev: { textAlign: "center", color: "#b6ff3c", marginTop: 8, fontSize: 13, fontWeight: "700" },
+  switchText: { color: colors.muted, fontWeight: "700", fontSize: 13 },
+  hint: { textAlign: "center", color: colors.muted, marginTop: 12, marginBottom: 8, fontSize: 12 },
+  dev: { textAlign: "center", color: "#3f7a00", marginTop: 8, fontSize: 13, fontWeight: "700" },
 });
