@@ -205,37 +205,62 @@ export function buildSyntheticChain(spot, step, wings = 10) {
   return rows;
 }
 
+function chainData(payload) {
+  const top = payload?.data || payload || {};
+  return top.data && (top.data.oc || top.data.last_price) ? top.data : top;
+}
+
+function ocEntries(oc) {
+  if (!oc) return [];
+  if (Array.isArray(oc)) {
+    return oc.map((row) => [row.strike ?? row.strike_price ?? row.strikePrice, row]);
+  }
+  return Object.entries(oc);
+}
+
+function chainLeg(row, kind) {
+  if (!row || typeof row !== "object") return {};
+  if (kind === "ce") return row.ce || row.CE || row.call || row.Call || {};
+  return row.pe || row.PE || row.put || row.Put || {};
+}
+
+function chainSecurityId(leg) {
+  const raw = leg?.security_id ?? leg?.securityId ?? leg?.SecurityId ?? leg?.scrip_id ?? leg?.scripId ?? 0;
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
+}
+
 export function parseDhanChain(payload, spot, step = 50) {
-  const data = payload?.data || payload || {};
-  const oc = data.oc || {};
-  const last = Number(data.last_price) || Number(spot) || 0;
-  const rows = Object.entries(oc)
+  const data = chainData(payload);
+  const oc = data.oc || data.OC || {};
+  const last = Number(data.last_price || data.lastPrice) || Number(spot) || 0;
+  const rows = ocEntries(oc)
     .map(([key, value]) => {
       const strike = Number(key);
-      const ce = value?.ce || {};
-      const pe = value?.pe || {};
+      const ce = chainLeg(value, "ce");
+      const pe = chainLeg(value, "pe");
       return {
         strike,
-        callLtp: Number(ce.last_price || 0),
-        callChg: pctChange(ce.last_price, ce.previous_close_price),
+        callLtp: Number(ce.last_price || ce.lastPrice || 0),
+        callChg: pctChange(ce.last_price || ce.lastPrice, ce.previous_close_price || ce.previousClosePrice),
         callOi: Number(ce.oi || 0),
-        callOiChg: Number(ce.oi || 0) - Number(ce.previous_oi || 0),
+        callOiChg: Number(ce.oi || 0) - Number(ce.previous_oi || ce.previousOi || 0),
         callVol: Number(ce.volume || 0),
-        callIv: round2(Number(ce.implied_volatility || 0)),
+        callIv: round2(Number(ce.implied_volatility || ce.impliedVolatility || 0)),
         callDelta: round2(Number(ce.greeks?.delta || 0)),
-        callBid: Number(ce.top_bid_price || 0),
-        callAsk: Number(ce.top_ask_price || 0),
-        callId: Number(ce.security_id || ce.securityId || 0) || undefined,
-        putLtp: Number(pe.last_price || 0),
-        putChg: pctChange(pe.last_price, pe.previous_close_price),
+        callBid: Number(ce.top_bid_price || ce.topBidPrice || 0),
+        callAsk: Number(ce.top_ask_price || ce.topAskPrice || 0),
+        callId: chainSecurityId(ce),
+        putLtp: Number(pe.last_price || pe.lastPrice || 0),
+        putChg: pctChange(pe.last_price || pe.lastPrice, pe.previous_close_price || pe.previousClosePrice),
         putOi: Number(pe.oi || 0),
-        putOiChg: Number(pe.oi || 0) - Number(pe.previous_oi || 0),
+        putOiChg: Number(pe.oi || 0) - Number(pe.previous_oi || pe.previousOi || 0),
         putVol: Number(pe.volume || 0),
-        putIv: round2(Number(pe.implied_volatility || 0)),
+        putIv: round2(Number(pe.implied_volatility || pe.impliedVolatility || 0)),
         putDelta: round2(Number(pe.greeks?.delta || 0)),
-        putBid: Number(pe.top_bid_price || 0),
-        putAsk: Number(pe.top_ask_price || 0),
-        putId: Number(pe.security_id || pe.securityId || 0) || undefined,
+        putBid: Number(pe.top_bid_price || pe.topBidPrice || 0),
+        putAsk: Number(pe.top_ask_price || pe.topAskPrice || 0),
+        putId: chainSecurityId(pe),
         atm: false,
       };
     })

@@ -539,6 +539,7 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
     ...stats,
     source: "demo",
     lastAt: Date.now(),
+    contractIds: 0,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   });
   return clone(state.optionMeta);
@@ -558,9 +559,14 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) 
     ...stats,
     source: source || state.optionMeta.source,
     lastAt: Date.now(),
+    contractIds: nextRows.filter((row) => row.callId || row.putId).length,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   });
   return clone(state.optionMeta);
+}
+
+export function currentOptionRows() {
+  return state.optionChain;
 }
 
 export function getOptionMeta() {

@@ -111,6 +111,7 @@ export type Snapshot = {
     lastAt: number | null;
     expiryLabel?: string;
     expiryLabels?: Record<string, string>;
+    contractIds?: number;
     underlyings?: Array<{ id: string; label: string; lot: number }>;
   };
   algos: Array<{

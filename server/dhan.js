@@ -4,6 +4,7 @@ import { markDhanLive } from "./brokers.js";
 import {
   applyLiveQuotes,
   applySyntheticOptionChain,
+  currentOptionRows,
   getChainSpot,
   getOptionMeta,
   replaceDhanBook,
@@ -12,7 +13,7 @@ import {
   setLiveCandles,
   setOptionDesk,
 } from "./market.js";
-import { resolveFrontFutures } from "./frontFutures.js";
+import { enrichOptionRows, lookupOptionSecurityId, parseOptionContract, resolveFrontFutures } from "./frontFutures.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, trimAroundAtm, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
@@ -548,9 +549,20 @@ async function loadExpiryList(und) {
   return upcomingExpiries(und.id);
 }
 
+function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
+  const next = enrichOptionRows(rows || currentOptionRows(), { symbol, expiry });
+  setOptionDesk({ symbol, expiry, expiries, rows: next, spot, source });
+  return next;
+}
+
 async function refreshOptionChain() {
   if (!accessToken) {
     applySyntheticOptionChain();
+    paintDesk({
+      symbol: getOptionMeta().symbol,
+      expiry: getOptionMeta().expiry,
+      source: "demo",
+    });
     return;
   }
   const desk = getOptionMeta();
@@ -569,10 +581,10 @@ async function refreshOptionChain() {
   if (!rows.length) {
     setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}.` });
     applySyntheticOptionChain(und.id, expiry);
-    setOptionDesk({ symbol: und.id, expiry, expiries, source: "demo" });
+    paintDesk({ symbol: und.id, expiry, expiries, source: "demo" });
     return;
   }
-  setOptionDesk({
+  paintDesk({
     symbol: und.id,
     expiry,
     expiries,
@@ -583,18 +595,19 @@ async function refreshOptionChain() {
 }
 
 export async function selectOptionDesk({ symbol, expiry }) {
+  await resolveFrontFutures().catch(() => []);
   const und = getUnderlying(symbol);
   const expiries = await loadExpiryList(und);
   const wanted = normalizeExpiry(expiry);
   const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
   applySyntheticOptionChain(und.id, chosen);
-  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
+  paintDesk({ symbol: und.id, expiry: chosen, expiries, source: accessToken ? "demo" : "demo" });
   if (accessToken) {
     try {
       await refreshOptionChain();
     } catch (error) {
       applySyntheticOptionChain(und.id, chosen);
-      setOptionDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
+      paintDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
       setDhanFeed({ error: error.message || "Dhan option chain failed" });
     }
   }
@@ -611,10 +624,10 @@ function startLiveLoop() {
     }
     void pullQuotes();
     startSocket();
+    void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
   })();
   void pullAccount();
   void pullNiftyCandles();
-  void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 1200);
@@ -674,9 +687,25 @@ export async function placeDhanOrder(payload = {}) {
     error.status = 400;
     throw error;
   }
-  const securityId = String(payload.securityId || "").trim();
+  let securityId = String(payload.securityId || "").trim();
   if (!securityId || securityId === "0") {
-    const error = new Error("This contract has no Dhan security ID. Wait for the live option chain, then BUY/SELL again.");
+    const parsed = parseOptionContract(payload.symbol);
+    const desk = getOptionMeta();
+    securityId = String(
+      await lookupOptionSecurityId({
+        symbol: payload.symbol || desk.symbol,
+        expiry: payload.expiry || desk.expiry,
+        strike: payload.strike || parsed?.strike,
+        option: payload.option || parsed?.option,
+      }),
+    ).trim();
+  }
+  if (!securityId || securityId === "0") {
+    const desk = getOptionMeta();
+    const label = payload.symbol || `${desk.symbol} ${payload.strike || ""} ${payload.option || ""}`.trim();
+    const error = new Error(
+      `No Dhan contract ID for ${label} (${normalizeExpiry(payload.expiry || desk.expiry) || "no expiry"}). Open Chain, pick the live expiry, wait a few seconds, then BUY/SELL again.`,
+    );
     error.status = 400;
     throw error;
   }

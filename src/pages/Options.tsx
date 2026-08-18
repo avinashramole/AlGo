@@ -41,6 +41,9 @@ export function Options() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        option,
+        strike: row.strike,
+        expiry: meta?.expiry,
         securityId: securityId ? String(securityId) : undefined,
         exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
@@ -125,13 +128,20 @@ export function Options() {
         )}
       >
         {data.dhanFeed?.live ? (
-          <>
-            BUY/SELL goes to Dhan. Open the{" "}
-            <Link to="/orders" className="underline">
-              order book
-            </Link>{" "}
-            or Dhan app to confirm. Order APIs need a static IP whitelist at Dhan.
-          </>
+          meta?.contractIds ? (
+            <>
+              BUY/SELL goes to Dhan ({meta.contractIds} contracts ready). Confirm in the{" "}
+              <Link to="/orders" className="underline">
+                order book
+              </Link>{" "}
+              and the Dhan app. Order APIs need a static IP whitelist at Dhan.
+            </>
+          ) : (
+            <>
+              Dhan is LIVE, but this chain still has no contract IDs. Wait a few seconds for the scrip list, then BUY/SELL
+              again. If it keeps failing, pick the Dhan expiry on this page.
+            </>
+          )
         ) : (
           <>
             Desk fill only until Dhan is LIVE. Paste Access Token on{" "}

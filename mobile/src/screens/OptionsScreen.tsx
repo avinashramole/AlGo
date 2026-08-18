@@ -27,6 +27,9 @@ export function OptionsScreen() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        option,
+        strike: row.strike,
+        expiry: meta?.expiry,
         securityId: securityId ? String(securityId) : undefined,
         exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
