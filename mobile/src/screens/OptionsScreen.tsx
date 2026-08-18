@@ -8,21 +8,23 @@ export function OptionsScreen() {
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings || [
     { id: "NIFTY", label: "NIFTY", lot: 75 },
-    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
+    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 15 },
+    { id: "FINNIFTY", label: "FINNIFTY", lot: 25 },
+    { id: "SENSEX", label: "SENSEX", lot: 10 },
   ];
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Option Chain</Text>
       <Text style={styles.muted}>
-        {meta?.symbol || "NIFTY"} · {meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
-        {meta?.pcr?.toFixed(2) || "—"}
+        {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
+        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
           <Pressable
             key={item.id}
-            onPress={() => void selectChain(item.id, meta?.expiry)}
+            onPress={() => void selectChain(item.id)}
             style={[styles.chip, meta?.symbol === item.id && styles.chipOn]}
           >
             <Text style={[styles.chipText, meta?.symbol === item.id && styles.chipTextOn]}>{item.label}</Text>
@@ -36,7 +38,9 @@ export function OptionsScreen() {
             onPress={() => void selectChain(meta?.symbol || "NIFTY", expiry)}
             style={[styles.chip, meta?.expiry === expiry && styles.chipOn]}
           >
-            <Text style={[styles.chipText, meta?.expiry === expiry && styles.chipTextOn]}>{expiry}</Text>
+            <Text style={[styles.chipText, meta?.expiry === expiry && styles.chipTextOn]}>
+              {meta?.expiryLabels?.[expiry] || expiry}
+            </Text>
           </Pressable>
         ))}
       </ScrollView>

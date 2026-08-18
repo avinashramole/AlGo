@@ -51,6 +51,8 @@ export type Snapshot = {
     atmIv: number;
     source: string;
     lastAt: number | null;
+    expiryLabel?: string;
+    expiryLabels?: Record<string, string>;
     underlyings?: Array<{ id: string; label: string; lot: number }>;
   };
   algos: Array<{

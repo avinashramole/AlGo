@@ -39,7 +39,7 @@ const fallback: Snapshot = {
     action: "BUY",
     symbol: "NIFTY 24,500 CE",
     strategy: "VWAP Depth",
-    expiry: "28 Aug",
+    expiry: "25 Aug",
     confidence: 91,
     risk: "LOW",
     metrics: [
@@ -72,19 +72,20 @@ const fallback: Snapshot = {
   },
   optionMeta: {
     symbol: "NIFTY",
-    expiry: "2026-08-20",
-    expiries: ["2026-08-20", "2026-08-27", "2026-09-03"],
+    expiry: "2026-08-25",
+    expiries: ["2026-08-25", "2026-09-01", "2026-09-08"],
     spot: 24580.25,
     pcr: 0.86,
     maxPain: 24500,
     atmIv: 12.4,
     source: "demo",
     lastAt: null,
-    underlyings: [
+    expiryLabel: "Tue, 25 Aug 2026",
+            underlyings: [
       { id: "NIFTY", label: "NIFTY", lot: 75 },
-      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
-      { id: "FINNIFTY", label: "FINNIFTY", lot: 65 },
-      { id: "SENSEX", label: "SENSEX", lot: 20 },
+      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 15 },
+      { id: "FINNIFTY", label: "FINNIFTY", lot: 25 },
+      { id: "SENSEX", label: "SENSEX", lot: 10 },
     ],
   },
 };

@@ -1,10 +1,13 @@
 import { getActiveBroker, publicBrokers } from "./brokers.js";
 import {
   UNDERLYINGS,
+  atmStrike,
   buildSyntheticChain,
   chainStats,
   getUnderlying,
+  normalizeExpiry,
   upcomingExpiries,
+  withExpiryLabels,
 } from "./optionChain.js";
 
 function clone(value) {
@@ -57,10 +60,10 @@ const state = {
     { label: "PCR", value: 64 },
   ],
   optionChain: buildSyntheticChain(24580.25, 50, 10),
-  optionMeta: {
+  optionMeta: withExpiryLabels({
     symbol: "NIFTY",
-    expiry: upcomingExpiries()[0] || "2026-08-20",
-    expiries: upcomingExpiries(),
+    expiry: upcomingExpiries("NIFTY")[0] || "2026-08-25",
+    expiries: upcomingExpiries("NIFTY"),
     spot: 24580.25,
     pcr: 0.86,
     maxPain: 24500,
@@ -68,7 +71,7 @@ const state = {
     source: "demo",
     lastAt: null,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
-  },
+  }),
   algos: [
     { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
     { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
@@ -119,7 +122,7 @@ const state = {
     action: "BUY",
     symbol: "NIFTY 24,500 CE",
     strategy: "VWAP Depth",
-    expiry: "28 Aug",
+    expiry: "25 Aug",
     confidence: 91,
     risk: "LOW",
     metrics: [
@@ -225,15 +228,24 @@ export function tickMarket() {
     return { ...algo, pnl };
   });
 
+  const spot = getChainSpot(state.optionMeta.symbol);
+  const und = getUnderlying(state.optionMeta.symbol);
+  const atm = atmStrike(spot, und.step);
+  const currentAtm = state.optionChain.find((row) => row.atm)?.strike;
+  if (atm !== currentAtm) {
+    applySyntheticOptionChain(state.optionMeta.symbol, state.optionMeta.expiry);
+    return;
+  }
   state.optionChain = state.optionChain.map((row) => ({
     ...row,
     callLtp: jitter(row.callLtp, 0.55),
     putLtp: jitter(row.putLtp, 0.55),
     callOi: Math.max(1000, Math.round((row.callOi || 0) + (Math.random() - 0.45) * 8000)),
     putOi: Math.max(1000, Math.round((row.putOi || 0) + (Math.random() - 0.45) * 8000)),
+    atm: row.strike === atm,
   }));
-  const stats = chainStats(state.optionChain, state.optionMeta.spot);
-  state.optionMeta = { ...state.optionMeta, ...stats, source: "demo" };
+  const stats = chainStats(state.optionChain, spot);
+  state.optionMeta = withExpiryLabels({ ...state.optionMeta, ...stats, source: "demo" });
 }
 
 export function snapshot() {
@@ -357,13 +369,17 @@ export function getChainSpot(symbol = state.optionMeta.symbol) {
 
 export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expiry = state.optionMeta.expiry) {
   const meta = getUnderlying(symbol);
-  const expiries = upcomingExpiries();
-  const chosen = expiry && expiries.includes(expiry) ? expiry : expiries[0];
+  const wanted = normalizeExpiry(expiry);
+  let expiries = upcomingExpiries(meta.id);
+  if (wanted && /^\d{4}-\d{2}-\d{2}$/.test(wanted) && !expiries.includes(wanted)) {
+    expiries = [...expiries, wanted].sort();
+  }
+  const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
   const spot = getChainSpot(meta.id);
   const rows = buildSyntheticChain(spot, meta.step, 10);
   const stats = chainStats(rows, spot);
   state.optionChain = rows;
-  state.optionMeta = {
+  state.optionMeta = withExpiryLabels({
     symbol: meta.id,
     expiry: chosen,
     expiries,
@@ -371,7 +387,7 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
     source: "demo",
     lastAt: Date.now(),
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
-  };
+  });
   return clone(state.optionMeta);
 }
 
@@ -381,7 +397,7 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) 
   const nextSpot = Number(spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
   state.optionChain = nextRows;
-  state.optionMeta = {
+  state.optionMeta = withExpiryLabels({
     ...state.optionMeta,
     symbol: meta.id,
     expiry: expiry || state.optionMeta.expiry,
@@ -390,7 +406,7 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) 
     source: source || state.optionMeta.source,
     lastAt: Date.now(),
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
-  };
+  });
   return clone(state.optionMeta);
 }
 

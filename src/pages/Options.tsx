@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct } from "../lib/format";
 
@@ -7,7 +7,9 @@ export function Options() {
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings || [
     { id: "NIFTY", label: "NIFTY", lot: 75 },
-    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
+    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 15 },
+    { id: "FINNIFTY", label: "FINNIFTY", lot: 25 },
+    { id: "SENSEX", label: "SENSEX", lot: 10 },
   ];
   const rows = data.optionChain || [];
   const maxOi = Math.max(1, ...rows.map((row) => Math.max(row.callOi || 0, row.putOi || 0)));
@@ -15,6 +17,8 @@ export function Options() {
 
   const atm = rows.find((row) => row.atm);
   const spot = meta?.spot || data.indices[0]?.price || 0;
+  const pcrText = meta?.pcr != null ? meta.pcr.toFixed(2) : "—";
+  const atmIvText = meta?.atmIv ? `${meta.atmIv.toFixed(1)}%` : "—";
 
   const trade = async (side: "CE" | "PE", row: (typeof rows)[number]) => {
     const key = `${row.strike}-${side}`;
@@ -35,14 +39,7 @@ export function Options() {
 
   const sourceLabel = meta?.source === "dhan" ? "DHAN LIVE" : data.dhanFeed?.live ? "DHAN · DEMO FALLBACK" : "DEMO";
 
-  const expiryLabel = useMemo(() => {
-    if (!meta?.expiry) return "—";
-    return new Date(`${meta.expiry}T00:00:00+05:30`).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  }, [meta?.expiry]);
+  const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
 
   return (
     <div className="space-y-3">
@@ -58,7 +55,7 @@ export function Options() {
             <button
               key={item.id}
               type="button"
-              onClick={() => void selectChain(item.id, meta?.expiry)}
+              onClick={() => void selectChain(item.id)}
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-semibold",
                 meta?.symbol === item.id ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)]",
@@ -74,7 +71,7 @@ export function Options() {
           >
             {(meta?.expiries || []).map((expiry) => (
               <option key={expiry} value={expiry}>
-                {expiry}
+                {meta?.expiryLabels?.[expiry] || expiry}
               </option>
             ))}
           </select>
@@ -83,9 +80,9 @@ export function Options() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat label="Spot" value={formatNumber(spot)} />
         <Stat label="ATM" value={atm ? String(atm.strike) : "—"} />
-        <Stat label="PCR" value={meta?.pcr ? meta.pcr.toFixed(2) : "—"} />
+        <Stat label="PCR" value={pcrText} />
         <Stat label="Max pain" value={meta?.maxPain ? formatNumber(meta.maxPain, 0) : "—"} />
-        <Stat label="ATM IV" value={meta?.atmIv ? `${meta.atmIv.toFixed(1)}%` : "—"} />
+        <Stat label="ATM IV" value={atmIvText} />
       </div>
       <section className="card overflow-x-auto">
         <table className="w-full min-w-[980px] text-left text-xs">

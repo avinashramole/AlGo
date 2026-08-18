@@ -1,35 +1,135 @@
 export const UNDERLYINGS = [
-  { id: "NIFTY", label: "NIFTY", indexSymbol: "NIFTY 50", step: 50, scrip: 13, segment: "IDX_I", lot: 75 },
-  { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 30 },
-  { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 65 },
-  { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 20 },
+  { id: "NIFTY", label: "NIFTY", indexSymbol: "NIFTY 50", step: 50, scrip: 13, segment: "IDX_I", lot: 75, expiryWeekday: "Tue", weekly: true },
+  { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 15, expiryWeekday: "Tue", weekly: false },
+  { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 25, expiryWeekday: "Tue", weekly: false },
+  { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 10, expiryWeekday: "Thu", weekly: true },
 ];
 
 export function getUnderlying(id) {
   return UNDERLYINGS.find((row) => row.id === id) || UNDERLYINGS[0];
 }
 
-function ymdKolkata(date) {
-  const parts = Object.fromEntries(
+function kolkataParts(date = new Date()) {
+  return Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      hourCycle: "h23",
     })
       .formatToParts(date)
       .filter((part) => part.type !== "literal")
       .map((part) => [part.type, part.value]),
   );
+}
+
+function ymdKolkata(date) {
+  const parts = kolkataParts(date);
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-export function upcomingExpiries(count = 8) {
+const MONTHS = {
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
+};
+
+export function normalizeExpiry(value) {
+  const raw = String(value || "").trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{4})/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  const mdy = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{2})$/);
+  if (mdy) return `20${mdy[3]}-${mdy[1]}-${mdy[2]}`;
+  const named = raw.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[a-z]*[-\s](\d{4})$/i);
+  if (named) {
+    const month = MONTHS[named[2].slice(0, 3).toLowerCase()];
+    if (month) return `${named[3]}-${month}-${named[1].padStart(2, "0")}`;
+  }
+  return raw;
+}
+
+export function formatExpiryLabel(ymd) {
+  const date = normalizeExpiry(ymd);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return ymd || "—";
+  const probe = new Date(`${date}T12:00:00+05:30`);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(probe);
+  const day = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit" }).format(probe);
+  const month = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", month: "short" }).format(probe);
+  const year = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", year: "numeric" }).format(probe);
+  return `${weekday}, ${day} ${month} ${year}`;
+}
+
+function afterExpiryCutoff() {
+  const parts = kolkataParts();
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= 15 * 60 + 30;
+}
+
+export function dropExpired(dates) {
+  const today = ymdKolkata(new Date());
+  const skipToday = afterExpiryCutoff();
+  return [...new Set((dates || []).map(normalizeExpiry))]
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .filter((date) => date > today || (date === today && !skipToday))
+    .sort();
+}
+
+function lastWeekdayOfMonth(year, month, weekday) {
+  const lastDay = new Date(Date.UTC(year, month, 0, 6, 30)).getUTCDate();
+  for (let day = lastDay; day >= 1; day -= 1) {
+    const probe = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T12:00:00+05:30`);
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(probe);
+    if (name === weekday) return ymdKolkata(probe);
+  }
+  return null;
+}
+
+export function upcomingExpiries(symbol = "NIFTY", count = 8) {
+  const und = getUnderlying(symbol);
+  const today = ymdKolkata(new Date());
+  const skipToday = afterExpiryCutoff();
   const dates = [];
-  for (let i = 0; i < 90 && dates.length < count; i += 1) {
-    const probe = new Date(Date.now() + i * 86_400_000);
-    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(probe);
-    if (weekday === "Thu") dates.push(ymdKolkata(probe));
+
+  if (und.weekly) {
+    for (let i = 0; i < 120 && dates.length < count; i += 1) {
+      const probe = new Date(Date.now() + i * 86_400_000);
+      const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(probe);
+      const ymd = ymdKolkata(probe);
+      if (weekday !== und.expiryWeekday) continue;
+      if (ymd < today) continue;
+      if (ymd === today && skipToday) continue;
+      dates.push(ymd);
+    }
+    return dates;
+  }
+
+  const now = kolkataParts();
+  let year = Number(now.year);
+  let month = Number(now.month);
+  while (dates.length < count) {
+    const ymd = lastWeekdayOfMonth(year, month, und.expiryWeekday);
+    if (ymd && ymd >= today && !(ymd === today && skipToday)) dates.push(ymd);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
   }
   return dates;
 }
@@ -47,6 +147,27 @@ function pctChange(last, prev) {
 
 export function atmStrike(spot, step) {
   return Math.round(Number(spot) / step) * step;
+}
+
+export function markAtmRows(rows, spot, step) {
+  const atm = atmStrike(spot, step);
+  let marked = false;
+  const next = rows.map((row) => {
+    const isAtm = row.strike === atm;
+    if (isAtm) marked = true;
+    return { ...row, atm: isAtm };
+  });
+  if (marked) return next;
+  let best = next[0];
+  let gap = Infinity;
+  for (const row of next) {
+    const d = Math.abs(row.strike - Number(spot));
+    if (d < gap) {
+      gap = d;
+      best = row;
+    }
+  }
+  return next.map((row) => ({ ...row, atm: row === best || row.strike === best?.strike }));
 }
 
 export function buildSyntheticChain(spot, step, wings = 10) {
@@ -84,7 +205,7 @@ export function buildSyntheticChain(spot, step, wings = 10) {
   return rows;
 }
 
-export function parseDhanChain(payload, spot) {
+export function parseDhanChain(payload, spot, step = 50) {
   const data = payload?.data || payload || {};
   const oc = data.oc || {};
   const last = Number(data.last_price) || Number(spot) || 0;
@@ -116,21 +237,11 @@ export function parseDhanChain(payload, spot) {
         atm: false,
       };
     })
-    .filter((row) => Number.isFinite(row.strike) && (row.callLtp > 0 || row.putLtp > 0))
+    .filter((row) => Number.isFinite(row.strike) && (row.callLtp > 0 || row.putLtp > 0 || row.callOi > 0 || row.putOi > 0))
     .sort((a, b) => a.strike - b.strike);
 
   if (!rows.length) return { rows: [], spot: last };
-  let atm = rows[0];
-  let best = Infinity;
-  for (const row of rows) {
-    const gap = Math.abs(row.strike - last);
-    if (gap < best) {
-      best = gap;
-      atm = row;
-    }
-  }
-  atm.atm = true;
-  return { rows, spot: last };
+  return { rows: markAtmRows(rows, last, step), spot: last };
 }
 
 export function trimAroundAtm(rows, wings = 12) {
@@ -164,5 +275,17 @@ export function chainStats(rows, spot) {
     spot: Number(spot || atm?.strike || 0),
     callOi,
     putOi,
+  };
+}
+
+export function withExpiryLabels(meta) {
+  const expiry = normalizeExpiry(meta.expiry);
+  const expiries = (meta.expiries || []).map(normalizeExpiry).filter(Boolean);
+  return {
+    ...meta,
+    expiry,
+    expiries,
+    expiryLabel: formatExpiryLabel(expiry),
+    expiryLabels: Object.fromEntries(expiries.map((date) => [date, formatExpiryLabel(date)])),
   };
 }

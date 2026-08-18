@@ -44,6 +44,8 @@ export type Snapshot = {
     maxPain: number;
     atmIv: number;
     source: string;
+    expiryLabel?: string;
+    expiryLabels?: Record<string, string>;
     underlyings?: Array<{ id: string; label: string; lot: number }>;
   };
   algos: Array<{

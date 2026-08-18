@@ -16,7 +16,8 @@ export function OptionChain() {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm font-bold">Option Chain</div>
         <Link to="/options" className="text-[11px] font-semibold text-brand-500">
-          {data.optionMeta?.symbol || "NIFTY"} · Spot {formatNumber(spot, 0)} →
+          {data.optionMeta?.symbol || "NIFTY"} · {data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "expiry"} · Spot{" "}
+          {formatNumber(spot, 0)} →
         </Link>
       </div>
       <table className="w-full text-left text-xs">
