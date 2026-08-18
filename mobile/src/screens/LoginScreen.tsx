@@ -122,55 +122,55 @@ export function LoginScreen() {
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <BrandMark />
-
-        {page === "signup" ? <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" placeholderTextColor="#6b7385" /> : null}
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          value={identifier}
-          onChangeText={(value) => {
-            setIdentifier(value);
-            setSentTo("");
-            setOtp("");
-          }}
-          placeholder="Gmail or mobile"
-          placeholderTextColor="#6b7385"
-        />
-        {sentTo ? (
-          <TextInput
-            style={styles.input}
-            keyboardType="number-pad"
-            value={otp}
-            onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="6-digit code"
-            placeholderTextColor="#6b7385"
+        <View style={styles.card}>
+          {page === "signup" ? (
+            <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
+          ) : null}
+          <Field
+            label="Gmail or mobile"
+            value={identifier}
+            onChangeText={(value) => {
+              setIdentifier(value);
+              setSentTo("");
+              setOtp("");
+            }}
+            placeholder="you@gmail.com or 98xxxxxxxx"
+            autoCapitalize="none"
           />
-        ) : null}
-        <TextInput
-          style={styles.input}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          placeholder={page === "signup" ? "Set password (min 6)" : "Password"}
-          placeholderTextColor="#6b7385"
-        />
-        {page === "signup" ? (
-          <TextInput style={styles.input} secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" placeholderTextColor="#6b7385" />
-        ) : null}
+          {sentTo ? (
+            <Field
+              label="6-digit code"
+              value={otp}
+              onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              keyboardType="number-pad"
+            />
+          ) : null}
+          <Field
+            label={page === "signup" ? "Set password (min 6)" : "Password"}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password"
+            secret
+          />
+          {page === "signup" ? (
+            <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Confirm password" secret />
+          ) : null}
 
-        <Pressable style={styles.button} onPress={() => void submit()} disabled={busy}>
-          <Text style={styles.buttonText}>
-            {busy ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
-          </Text>
-        </Pressable>
-        <Pressable style={styles.ghost} onPress={() => void sendCode()} disabled={busy}>
-          <Text style={styles.ghostText}>{sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}</Text>
-        </Pressable>
-        {page === "signin" && hasThumb ? (
-          <Pressable style={styles.ghost} onPress={() => void onThumb()} disabled={busy}>
-            <Text style={styles.ghostText}>Use thumb</Text>
+          <Pressable style={styles.button} onPress={() => void submit()} disabled={busy}>
+            <Text style={styles.buttonText}>
+              {busy ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
+            </Text>
           </Pressable>
-        ) : null}
+          <Pressable style={styles.ghost} onPress={() => void sendCode()} disabled={busy}>
+            <Text style={styles.ghostText}>{sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}</Text>
+          </Pressable>
+          {page === "signin" && hasThumb ? (
+            <Pressable style={styles.ghost} onPress={() => void onThumb()} disabled={busy}>
+              <Text style={styles.ghostText}>Use thumb</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <Pressable
           style={styles.switch}
@@ -189,18 +189,60 @@ export function LoginScreen() {
   );
 }
 
+function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  secret,
+  autoCapitalize,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  secret?: boolean;
+  autoCapitalize?: "none" | "sentences";
+  keyboardType?: "number-pad" | "default";
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#6b7385"
+        secureTextEntry={secret}
+        autoCapitalize={autoCapitalize}
+        keyboardType={keyboardType}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#05070c" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  card: {
+    borderWidth: 1,
+    borderColor: "#2f7bff",
+    borderRadius: 20,
+    padding: 20,
+    backgroundColor: "#0c1018",
+  },
+  field: { marginBottom: 14 },
+  label: { color: "#c5cddb", fontSize: 13, fontWeight: "600", marginBottom: 8 },
   input: {
     backgroundColor: "#080b12",
-    borderColor: "#243044",
+    borderColor: "#2a3a55",
     color: "#f4f7fb",
     borderWidth: 1,
     borderRadius: 12,
     height: 48,
     paddingHorizontal: 14,
-    marginBottom: 12,
   },
   button: {
     backgroundColor: "#b6ff3c",

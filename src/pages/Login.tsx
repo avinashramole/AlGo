@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
 import { useAuth } from "../context/AuthContext";
 
-const fieldClass = "login-input";
-
 function looksLikeMobile(value: string) {
   let digits = String(value || "").replace(/\D/g, "");
   if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
@@ -121,7 +119,7 @@ export function Login() {
       <div className="login-card">
         <BrandMark />
 
-        <form onSubmit={onSubmit}>
+        <form onSubmit={onSubmit} className="mt-2">
           {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" /> : null}
           <Field
             label="Gmail or mobile"
@@ -180,9 +178,16 @@ function Field({
   secret?: boolean;
 }) {
   return (
-    <label className="mb-3 block text-sm font-semibold text-slate-200">
-      {label}
-      <input className={fieldClass} type={secret ? "password" : "text"} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    <label className="login-field">
+      <span>{label}</span>
+      <input
+        className="login-input"
+        type={secret ? "password" : "text"}
+        value={value}
+        placeholder={placeholder}
+        autoComplete={secret ? "current-password" : "username"}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </label>
   );
 }
