@@ -1,4 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
+
+const lockup = require("../../assets/t2s-lockup.png");
+const emblem = require("../../assets/t2s-emblem.png");
 
 export function BrandMark({
   variant = "stacked",
@@ -10,13 +13,13 @@ export function BrandMark({
   const trade = theme === "light" ? "#111827" : "#f4f7fb";
 
   if (variant === "emblem") {
-    return <Letters size={40} />;
+    return <Image source={emblem} style={styles.emblem} />;
   }
 
   if (variant === "horizontal") {
     return (
       <View style={styles.row}>
-        <Letters size={40} />
+        <Image source={emblem} style={styles.emblem} />
         <Text style={styles.wordSm}>
           <Text style={{ color: trade }}>TRADE </Text>
           <Text style={styles.two}>2 </Text>
@@ -26,52 +29,14 @@ export function BrandMark({
     );
   }
 
-  return (
-    <View style={styles.plate}>
-      <Letters size={88} />
-      <Text style={styles.word}>
-        <Text style={styles.white}>TRADE </Text>
-        <Text style={styles.two}>2 </Text>
-        <Text style={styles.s}>SMART</Text>
-      </Text>
-      <View style={styles.tagRow}>
-        <Text style={styles.slashBlue}>{"//"}</Text>
-        <Text style={styles.tag}>INTELLIGENCE BEHIND EVERY TRADE.</Text>
-        <Text style={styles.slashGreen}>{"//"}</Text>
-      </View>
-    </View>
-  );
-}
-
-function Letters({ size }: { size: number }) {
-  return (
-    <Text style={{ fontSize: size * 0.5, fontWeight: "800", fontStyle: "italic", letterSpacing: -3 }}>
-      <Text style={{ color: "#2F7BFF" }}>T</Text>
-      <Text style={{ color: "#E8EEF5" }}>2</Text>
-      <Text style={{ color: "#22C55E" }}>S</Text>
-    </Text>
-  );
+  return <Image source={lockup} style={styles.lockup} resizeMode="contain" />;
 }
 
 const styles = StyleSheet.create({
-  plate: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    backgroundColor: "#05070c",
-    borderRadius: 32,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    width: "100%",
-  },
+  lockup: { width: "100%", maxWidth: 320, height: 320, borderRadius: 28, marginBottom: 16 },
+  emblem: { width: 40, height: 40, borderRadius: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   two: { color: "#2F7BFF" },
   s: { color: "#22C55E" },
-  white: { color: "#F4F7FB" },
-  word: { marginTop: 8, fontSize: 18, fontWeight: "800", fontStyle: "italic", letterSpacing: 3 },
   wordSm: { fontSize: 13, fontWeight: "800", letterSpacing: 1.6 },
-  tagRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
-  tag: { fontSize: 9, fontWeight: "600", letterSpacing: 1.1, color: "#ffffff" },
-  slashBlue: { color: "#2F7BFF", fontWeight: "800", letterSpacing: -1 },
-  slashGreen: { color: "#22C55E", fontWeight: "800", letterSpacing: -1 },
 });

@@ -312,25 +312,6 @@
   color: #1e3a8a;
 }
 
-.t2s-logo-plate {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  max-width: 340px;
-  aspect-ratio: 1;
-  padding: 28px 22px 24px;
-  border-radius: 36px;
-  background: #05070c;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-}
-
-.t2s-logo-plate-sm {
-  max-width: 220px;
-  padding: 16px 12px 14px;
-  border-radius: 24px;
-}
-
 .t2s-hero-art {
   width: min(100%, 360px);
   height: auto;
