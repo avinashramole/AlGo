@@ -9,15 +9,17 @@ type Props = {
   theme?: "dark" | "light";
   className?: string;
   showWordmark?: "always" | "responsive";
-  /** ink = all-black name (login screenshot). brand = blue 2 + green SMART */
-  wordmark?: "brand" | "ink";
+  align?: "start" | "center";
 };
 
 const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>> = {
-  stacked: { sm: "h-[88px] w-[88px]", md: "h-[132px] w-[132px]", lg: "h-[168px] w-[168px]" },
-  horizontal: { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-12 w-12" },
+  stacked: { sm: "h-[96px] w-[96px]", md: "h-[140px] w-[140px]", lg: "h-[168px] w-[168px]" },
+  horizontal: { sm: "h-9 w-9", md: "h-11 w-11", lg: "h-14 w-14" },
   emblem: { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-12 w-12" },
 };
+
+const BLUE = "#2f7bff";
+const GREEN = "#22c55e";
 
 export function BrandMark({
   variant = "stacked",
@@ -25,14 +27,11 @@ export function BrandMark({
   theme = "dark",
   className = "",
   showWordmark = "responsive",
-  wordmark = "brand",
+  align = "center",
 }: Props) {
   const uid = useId().replace(/:/g, "");
   const ink = theme === "light" ? "#111827" : "#f4f7fb";
-  const trade = wordmark === "ink" ? ink : theme === "light" ? "#111827" : "#f4f7fb";
-  const two = wordmark === "ink" ? ink : "#2f7bff";
-  const tag = theme === "light" ? "#6b7280" : "#9aa3b5";
-  const smart = wordmark === "ink" ? ink : theme === "light" ? "#5ea80e" : "#b6ff3c";
+  const tag = theme === "light" ? "#111827" : "#d1d5db";
 
   if (variant === "emblem") {
     return (
@@ -43,18 +42,14 @@ export function BrandMark({
   }
 
   if (variant === "horizontal") {
-    const nameSize = size === "sm" ? "text-[11px]" : size === "lg" ? "text-[16px]" : "text-[13px]";
+    const nameSize = size === "sm" ? "text-[11px]" : size === "lg" ? "text-[17px]" : "text-[13px]";
     const tagSize = size === "sm" ? "text-[8px]" : "text-[9px]";
     return (
       <span className={`inline-flex items-center gap-2.5 ${className}`}>
         <EmblemSvg id={uid} className={`shrink-0 ${emblemBox.horizontal[size]}`} />
         <span className={`min-w-0 leading-tight ${showWordmark === "always" ? "block" : "hidden sm:block"}`}>
-          <span className={`block font-extrabold tracking-[0.16em] ${nameSize}`}>
-            <span style={{ color: trade }}>TRADE </span>
-            <span style={{ color: two }}>2 </span>
-            <span style={{ color: smart }}>SMART</span>
-          </span>
-          <span className={`mt-0.5 tracking-wide ${showWordmark === "always" ? "block" : "hidden lg:block"} ${tagSize}`} style={{ color: tag }}>
+          <Wordmark className={nameSize} ink={ink} />
+          <span className={`mt-0.5 italic tracking-wide ${showWordmark === "always" ? "block" : "hidden lg:block"} ${tagSize}`} style={{ color: tag }}>
             Intelligence Behind Every Trade.
           </span>
         </span>
@@ -62,63 +57,150 @@ export function BrandMark({
     );
   }
 
-  const nameSize = size === "sm" ? "text-lg" : size === "lg" ? "text-[28px]" : "text-[22px]";
-  const tagSize = size === "sm" ? "text-[10px]" : "text-[13px]";
+  const nameSize = size === "sm" ? "text-lg" : size === "lg" ? "text-[26px]" : "text-[22px]";
+  const tagSize = size === "sm" ? "text-[10px]" : "text-[12px]";
+  const stackedAlign = align === "start" ? "items-start text-left" : "items-center text-center";
   return (
-    <span className={`flex flex-col items-center text-center ${className}`}>
+    <span className={`flex flex-col ${stackedAlign} ${className}`}>
       <EmblemSvg id={uid} className={emblemBox.stacked[size]} />
-      <span className={`mt-3 font-extrabold tracking-[0.22em] ${nameSize}`}>
-        <span style={{ color: trade }}>TRADE </span>
-        <span style={{ color: two }}>2 </span>
-        <span style={{ color: smart }}>SMART</span>
-      </span>
-      <span className={`mt-1.5 ${tagSize}`} style={{ color: tag }}>
-        Intelligence Behind Every Trade.
-      </span>
+      <Wordmark className={`mt-3 tracking-[0.18em] ${nameSize}`} ink={ink} />
+      <Tagline id={uid} className={`mt-2 ${tagSize}`} color={tag} wide={size === "lg"} />
+    </span>
+  );
+}
+
+function Wordmark({ className, ink }: { className?: string; ink: string }) {
+  return (
+    <span className={`block font-extrabold ${className || ""}`}>
+      <span style={{ color: ink }}>TRADE </span>
+      <span style={{ color: BLUE }}>2 </span>
+      <span style={{ color: GREEN }}>SMART</span>
+    </span>
+  );
+}
+
+function Tagline({ id, className, color, wide }: { id: string; className?: string; color: string; wide?: boolean }) {
+  const left = `${id}-tag-l`;
+  const right = `${id}-tag-r`;
+  return (
+    <span className={`inline-flex items-center gap-2 ${className || ""}`} style={{ color }}>
+      <svg width={wide ? 42 : 28} height="10" viewBox="0 0 42 10" aria-hidden="true">
+        <defs>
+          <linearGradient id={left} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={BLUE} />
+            <stop offset="100%" stopColor={BLUE} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points="0,5 7,1.5 7,8.5" fill={BLUE} />
+        <line x1="7" y1="5" x2="42" y2="5" stroke={`url(#${left})`} strokeWidth="1.6" />
+      </svg>
+      <span className="italic font-medium whitespace-nowrap">Intelligence Behind Every Trade.</span>
+      <svg width={wide ? 42 : 28} height="10" viewBox="0 0 42 10" aria-hidden="true">
+        <defs>
+          <linearGradient id={right} x1="1" y1="0" x2="0" y2="0">
+            <stop offset="0%" stopColor={GREEN} />
+            <stop offset="100%" stopColor={GREEN} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <line x1="0" y1="5" x2="35" y2="5" stroke={`url(#${right})`} strokeWidth="1.6" />
+        <polygon points="42,5 35,1.5 35,8.5" fill={GREEN} />
+      </svg>
     </span>
   );
 }
 
 function EmblemSvg({ id, className }: { id: string; className?: string }) {
-  const blue = `${id}-blue`;
-  const silver = `${id}-silver`;
-  const green = `${id}-green`;
-  const edge = `${id}-edge`;
+  const ring = `${id}-ring`;
+  const tBlue = `${id}-t`;
+  const sGreen = `${id}-s`;
   return (
-    <svg viewBox="0 0 240 240" className={className} role="img" aria-label="Trade 2 Smart">
+    <svg viewBox="0 0 280 260" className={className} role="img" aria-label="Trade 2 Smart">
       <defs>
-        <linearGradient id={blue} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7ec8ff" />
-          <stop offset="100%" stopColor="#2f7bff" />
+        <linearGradient id={ring} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stopColor={BLUE} />
+          <stop offset="55%" stopColor="#3b82f6" />
+          <stop offset="100%" stopColor={GREEN} />
         </linearGradient>
-        <linearGradient id={silver} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#c9d2de" />
+        <linearGradient id={tBlue} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#60a5fa" />
+          <stop offset="100%" stopColor={BLUE} />
         </linearGradient>
-        <linearGradient id={green} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ddff7a" />
-          <stop offset="100%" stopColor="#b6ff3c" />
-        </linearGradient>
-        <linearGradient id={edge} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#2f7bff" />
-          <stop offset="100%" stopColor="#b6ff3c" />
+        <linearGradient id={sGreen} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#86efac" />
+          <stop offset="100%" stopColor={GREEN} />
         </linearGradient>
       </defs>
-      <rect x="14" y="14" width="212" height="212" rx="56" fill="#080b12" stroke={`url(#${edge})`} strokeWidth="7" />
-      <text x="120" y="122" textAnchor="middle" fontFamily="Inter, Arial, sans-serif" fontSize="70" fontWeight="800" letterSpacing="-4">
-        <tspan fill={`url(#${blue})`}>T</tspan>
-        <tspan fill={`url(#${silver})`}>2</tspan>
-        <tspan fill={`url(#${green})`}>S</tspan>
-      </text>
-      <path
-        d="M58 174 H104 V152 H150 V130 H186"
+
+      <circle
+        cx="128"
+        cy="142"
+        r="96"
         fill="none"
-        stroke="#b6ff3c"
-        strokeWidth="8"
-        strokeLinecap="square"
-        strokeLinejoin="miter"
+        stroke={`url(#${ring})`}
+        strokeWidth="7"
+        strokeDasharray="520 83"
+        strokeDashoffset="36"
+        transform="rotate(-28 128 142)"
       />
-      <circle cx="186" cy="130" r="7" fill="#2f7bff" />
+
+      <g fill={GREEN} stroke="#16a34a" strokeWidth="1.2">
+        <line x1="86" y1="46" x2="86" y2="78" stroke={GREEN} strokeWidth="2" />
+        <rect x="80" y="54" width="12" height="18" rx="1" />
+        <line x1="106" y1="38" x2="106" y2="78" stroke={GREEN} strokeWidth="2" />
+        <rect x="99" y="46" width="14" height="26" rx="1" />
+        <line x1="128" y1="32" x2="128" y2="78" stroke={GREEN} strokeWidth="2" />
+        <rect x="121" y="38" width="14" height="34" rx="1" />
+        <line x1="150" y1="28" x2="150" y2="78" stroke={GREEN} strokeWidth="2" />
+        <rect x="143" y="32" width="14" height="40" rx="1" />
+      </g>
+
+      <g stroke={`url(#${tBlue})`} strokeWidth="4" strokeLinecap="round">
+        <line x1="22" y1="118" x2="58" y2="118" />
+        <line x1="16" y1="134" x2="56" y2="134" />
+        <line x1="26" y1="150" x2="60" y2="150" />
+      </g>
+      <g stroke={`url(#${sGreen})`} strokeWidth="4" strokeLinecap="round">
+        <line x1="198" y1="118" x2="236" y2="118" />
+        <line x1="196" y1="134" x2="242" y2="134" />
+        <line x1="200" y1="150" x2="232" y2="150" />
+      </g>
+
+      <text
+        x="78"
+        y="168"
+        fill={`url(#${tBlue})`}
+        fontFamily="Inter, Arial Black, sans-serif"
+        fontStyle="italic"
+        fontWeight="800"
+        fontSize="86"
+      >
+        T
+      </text>
+      <text
+        x="128"
+        y="162"
+        fill="#111827"
+        fontFamily="Inter, Arial Black, sans-serif"
+        fontStyle="italic"
+        fontWeight="800"
+        fontSize="52"
+      >
+        2
+      </text>
+      <text
+        x="158"
+        y="168"
+        fill={`url(#${sGreen})`}
+        fontFamily="Inter, Arial Black, sans-serif"
+        fontStyle="italic"
+        fontWeight="800"
+        fontSize="86"
+      >
+        S
+      </text>
+
+      <path d="M176 108 L226 52" stroke={GREEN} strokeWidth="12" strokeLinecap="round" />
+      <polygon points="214,38 248,34 230,70" fill={GREEN} />
     </svg>
   );
 }
