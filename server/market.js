@@ -179,14 +179,6 @@ function round2(value) {
   return Number(Number(value).toFixed(2));
 }
 
-const INDEX_SECURITY_IDS = {
-  "NIFTY 50": 13,
-  BANKNIFTY: 25,
-  FINNIFTY: 27,
-  SENSEX: 51,
-  "INDIA VIX": 21,
-};
-
 function withDeskQuotes(item) {
   const price = Number(item.price) || 0;
   const change = Number(item.change) || 0;
@@ -194,12 +186,13 @@ function withDeskQuotes(item) {
   const future = Number(item.future) > 0 ? Number(item.future) : round2(isVix ? price : price + Math.max(6, price * 0.00085));
   const vwap = Number(item.vwap) > 0 ? Number(item.vwap) : round2(isVix ? price : price - Math.max(2, price * 0.00032));
   const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : round2(price - change);
+  const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, "INDIA VIX": 21 };
   return {
     ...item,
     future,
     vwap,
     prevClose,
-    securityId: item.securityId || INDEX_SECURITY_IDS[item.symbol] || undefined,
+    securityId: item.securityId || ids[item.symbol] || undefined,
   };
 }
 
