@@ -31,6 +31,9 @@ type Draft = {
   name: string;
   kind: "indicator" | "price-action";
   symbol: string;
+  instrument: "future" | "option";
+  optionType: "CE" | "PE";
+  strikeOffset: string;
   side: string;
   lots: string;
   timeframe: string;
@@ -83,6 +86,9 @@ function blankDraft(): Draft {
     name: "",
     kind: "indicator",
     symbol: "NIFTY",
+    instrument: "future",
+    optionType: "CE",
+    strikeOffset: "0",
     side: "BUY",
     lots: "1",
     timeframe: "5m",
@@ -158,6 +164,7 @@ export function AlgoScreen() {
       targetPct: Number(draft.targetPct),
       buyValue: Number(draft.buyValue),
       sellValue: Number(draft.sellValue),
+      strikeOffset: Number(draft.strikeOffset),
     });
     setDraft(null);
   };
@@ -198,6 +205,35 @@ export function AlgoScreen() {
             />
           ))}
         </View>
+        <Text style={styles.muted}>Contract</Text>
+        <View style={styles.chips}>
+          <Chip label="Future" on={draft.instrument === "future"} onPress={() => setDraft({ ...draft, instrument: "future" })} />
+          <Chip label="Option CE/PE" on={draft.instrument === "option"} onPress={() => setDraft({ ...draft, instrument: "option" })} />
+        </View>
+        {draft.instrument === "option" ? (
+          <>
+            <Text style={styles.muted}>Call or put</Text>
+            <View style={styles.chips}>
+              <Chip label="CE" on={draft.optionType === "CE"} onPress={() => setDraft({ ...draft, optionType: "CE" })} />
+              <Chip label="PE" on={draft.optionType === "PE"} onPress={() => setDraft({ ...draft, optionType: "PE" })} />
+            </View>
+            <Text style={styles.muted}>Strike vs ATM</Text>
+            <View style={styles.chips}>
+              {[
+                ["-2", "ATM-2"],
+                ["-1", "ATM-1"],
+                ["0", "ATM"],
+                ["1", "ATM+1"],
+                ["2", "ATM+2"],
+              ].map(([id, label]) => (
+                <Chip key={id} label={label} on={draft.strikeOffset === id} onPress={() => setDraft({ ...draft, strikeOffset: id })} />
+              ))}
+            </View>
+            <Text style={styles.muted}>
+              Paper fills this CE/PE from the live option tape. Live sends the same contract to Dhan in market hours.
+            </Text>
+          </>
+        ) : null}
         {draft.kind === "indicator" ? (
           <>
             <Text style={styles.muted}>Indicator</Text>
@@ -311,7 +347,7 @@ export function AlgoScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Algo Desk</Text>
-      <Text style={styles.muted}>Paper trading uses the live feed. Fills stay on Paper Trading.</Text>
+      <Text style={styles.muted}>Paper trading uses the live feed. Pick Future or Option CE/PE. Fills stay on Paper Trading.</Text>
       <View style={styles.chips}>
         <Chip label="All" on={filter === "all"} onPress={() => setFilter("all")} />
         <Chip label="Indicator" on={filter === "indicator"} onPress={() => setFilter("indicator")} />
@@ -329,7 +365,9 @@ export function AlgoScreen() {
           <View style={styles.stats}>
             <Text style={{ color: algo.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(algo.pnl)}</Text>
             <Text style={styles.muted}>
-              {(algo.runMode === "paper" ? "Paper" : algo.runMode === "backtest" ? "Backtest" : "Live")} · {algo.lots || 1} lot × {algo.lotSize || lotFor(algo.symbol || "NIFTY")}
+              {(algo.runMode === "paper" ? "Paper" : algo.runMode === "backtest" ? "Backtest" : "Live")} ·{" "}
+              {algo.trade?.label || (algo.instrument === "option" ? `${algo.symbol || "NIFTY"} ${algo.optionType || "CE"}` : `${algo.symbol || "NIFTY"} FUT`)} ·{" "}
+              {algo.lots || 1} lot × {algo.lotSize || lotFor(algo.symbol || "NIFTY")}
             </Text>
           </View>
           {algo.lastBacktest ? (
@@ -357,6 +395,9 @@ export function AlgoScreen() {
                   name: algo.name,
                   kind: algo.kind === "price-action" ? "price-action" : "indicator",
                   symbol: algo.symbol || "NIFTY",
+                  instrument: algo.instrument === "option" ? "option" : "future",
+                  optionType: algo.optionType === "PE" ? "PE" : "CE",
+                  strikeOffset: String(algo.strikeOffset ?? 0),
                   side: algo.side || "BUY",
                   lots: String(algo.lots || 1),
                   timeframe: algo.timeframe || "5m",

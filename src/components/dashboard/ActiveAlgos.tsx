@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatInr } from "../../lib/format";
+import { contractLabel } from "../../lib/strategies";
 
 export function ActiveAlgos() {
   const { data, toggle } = useMarket();
@@ -37,9 +38,10 @@ export function ActiveAlgos() {
                   {algo.status}
                 </span>
               </div>
-              <div className="mt-1 flex gap-3 text-[11px] text-slate-400">
+              <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-slate-400">
                 <span className={algo.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(algo.pnl)}</span>
                 <span>WR {algo.winRate}%</span>
+                <span>{algo.trade?.label || contractLabel(algo)}</span>
                 <span>{algo.kind === "price-action" ? "Price action" : algo.tag}</span>
                 <span>{algo.runMode === "paper" ? "Paper" : algo.runMode === "backtest" ? "Backtest" : data.brokers?.find((item) => item.id === algo.brokerId)?.name || "Dhan"}</span>
               </div>

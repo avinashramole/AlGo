@@ -5,7 +5,7 @@ import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatInr } from "../lib/format";
-import { formatCondition, lotForSymbol, type AlgoStrategy } from "../lib/strategies";
+import { formatCondition, contractLabel, lotForSymbol, type AlgoStrategy } from "../lib/strategies";
 
 function backtestRangeLabel(row?: AlgoStrategy["lastBacktest"]) {
   if (!row) return "";
@@ -53,7 +53,7 @@ export function Algo() {
         <div>
           <h1 className="text-xl font-bold">Algo Desk</h1>
           <p className="text-sm text-slate-400">
-            Paper trade on the live Dhan feed (virtual fills only). Backtest last 1 year or custom dates. Live Dhan is only for strategies set to Live.
+            Paper trade on the live Dhan feed (virtual fills only). Choose Future or Option CE/PE. Backtest last 1 year or custom dates. Live Dhan sends the same contract in NSE hours.
           </p>
         </div>
         <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -111,7 +111,7 @@ export function Algo() {
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge>{kind === "indicator" ? "Indicator" : "Price action"}</Badge>
                   <Badge>{algo.runMode === "live" ? "Live Dhan" : algo.runMode === "backtest" ? "Backtest" : "Paper"}</Badge>
-                  <Badge>{algo.symbol || "NIFTY"}</Badge>
+                  <Badge>{algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`}</Badge>
                   <Badge>
                     {algo.lots || 1} lot × {algo.lotSize || lotForSymbol(algo.symbol)} = {algo.qty || (algo.lots || 1) * lotForSymbol(algo.symbol)} qty
                   </Badge>
@@ -121,6 +121,19 @@ export function Algo() {
                 <div className="mt-2 space-y-1 text-[11px] font-semibold text-slate-500">
                   <div>BUY when {formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)}</div>
                   <div>SELL when {formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)}</div>
+                  {algo.instrument === "option" ? (
+                    <div className={algo.trade?.ready ? "text-slate-500" : "text-amber-600"}>
+                      {algo.trade?.ready
+                        ? `Live ${algo.trade.symbol} · LTP ${algo.trade.ltp}`
+                        : algo.trade?.hint || "Open Options for live CE/PE"}
+                      {algo.lastSignal && algo.enabled ? ` · signal ${algo.lastSignal}` : ""}
+                    </div>
+                  ) : algo.trade?.ready ? (
+                    <div>
+                      Live {algo.trade.symbol} · LTP {algo.trade.ltp}
+                      {algo.lastSignal && algo.enabled ? ` · signal ${algo.lastSignal}` : ""}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-lg bg-[var(--bg)] p-3">

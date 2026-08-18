@@ -168,17 +168,32 @@ export function formatCondition(left, op, right, value) {
   return `${leftLabel} ${opLabel} ${rightLabel}`;
 }
 
+export function strikeOffsetLabel(offset) {
+  const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
+  if (n === 0) return "ATM";
+  return n > 0 ? `ATM+${n}` : `ATM${n}`;
+}
+
+export function contractLabel(algo) {
+  const symbol = algo.symbol || "NIFTY";
+  if (algo.instrument === "option") {
+    return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
+  }
+  return `${symbol} FUT`;
+}
+
 export function summarizeAlgo(algo) {
   const symbol = algo.symbol || "NIFTY";
   const tf = algo.timeframe || "5m";
   const lot = lotFor(symbol);
   const lots = algo.lots || 1;
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
+  const contract = contractLabel(algo);
   if (algo.kind === "price-action") {
     const pattern = algo.pattern || "ORB";
-    return `Price action · ${symbol} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · ${pattern} · ${tf} · ${size}`;
+    return `Price action · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · ${pattern} · ${tf} · ${size}`;
   }
-  return `Indicator · ${symbol} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · Sell when ${formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)} · ${tf} · ${size}`;
+  return `Indicator · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · Sell when ${formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)} · ${tf} · ${size}`;
 }
 
 export function normalizeAlgo(input = {}, existing = {}) {
@@ -210,6 +225,9 @@ export function normalizeAlgo(input = {}, existing = {}) {
     : ["live", "paper", "backtest"].includes(existing.runMode)
       ? existing.runMode
       : "paper";
+  const instrument = (input.instrument || existing.instrument) === "option" ? "option" : "future";
+  const optionType = (input.optionType || existing.optionType) === "PE" ? "PE" : "CE";
+  const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
   const next = {
     ...existing,
     id: existing.id || `a${Date.now()}`,
@@ -217,6 +235,9 @@ export function normalizeAlgo(input = {}, existing = {}) {
     kind,
     tag: kind === "indicator" ? "Indicator" : "Price action",
     symbol,
+    instrument,
+    optionType,
+    strikeOffset,
     side,
     lots,
     lotSize,
@@ -243,6 +264,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     enabled: existing.enabled ?? false,
     status: existing.status || "PAUSED",
   };
+  delete next.trade;
   next.summary = summarizeAlgo(next);
   return next;
 }

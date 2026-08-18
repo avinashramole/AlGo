@@ -27,6 +27,7 @@ import {
   getAlgo,
   pickBacktestTimeframe,
   resolveBacktestWindow,
+  drainPendingLiveAlgoOrders,
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,38 @@ app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 
 setInterval(tickMarket, 1500);
+setInterval(() => {
+  void flushLiveAlgoOrders();
+}, 1500);
+
+let flushingLiveAlgos = false;
+
+async function flushLiveAlgoOrders() {
+  if (flushingLiveAlgos || !isDhanLive()) return;
+  const queued = drainPendingLiveAlgoOrders();
+  if (!queued.length) return;
+  flushingLiveAlgos = true;
+  try {
+    for (const payload of queued) {
+      try {
+        const live = await placeDhanOrder(payload);
+        const order = placeOrder({ ...payload, brokerId: "dhan", live });
+        if (order?.error) {
+          console.log(`Strategy live fill book: ${order.error}`);
+        }
+      } catch (error) {
+        placeOrder({
+          ...payload,
+          brokerId: "dhan",
+          live: { orderId: `rej-algo-${Date.now()}`, status: "REJECTED" },
+        });
+        console.log(`Strategy live order failed: ${error.message || error}`);
+      }
+    }
+  } finally {
+    flushingLiveAlgos = false;
+  }
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "t2s-api", time: new Date().toISOString() });
@@ -184,6 +217,11 @@ app.post("/api/option-chain/select", async (req, res) => {
 });
 
 app.post("/api/algos/:id/toggle", (req, res) => {
+  const current = getAlgo(req.params.id);
+  if (current && current.runMode === "live" && !current.enabled && !isDhanLive()) {
+    res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
+    return;
+  }
   const algo = toggleAlgo(req.params.id);
   if (!algo) {
     res.status(404).json({ error: "Algo not found" });

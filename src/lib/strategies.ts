@@ -20,6 +20,9 @@ export type AlgoStrategy = {
   tag: string;
   kind?: StrategyKind;
   symbol?: string;
+  instrument?: "future" | "option";
+  optionType?: "CE" | "PE";
+  strikeOffset?: number;
   side?: "BUY" | "SELL" | "BOTH";
   lots?: number;
   lotSize?: number;
@@ -69,6 +72,18 @@ export type AlgoStrategy = {
   winRate: number;
   enabled: boolean;
   brokerId?: string;
+  lastSignal?: string;
+  trade?: {
+    kind?: "future" | "option";
+    symbol?: string;
+    option?: "CE" | "PE";
+    strike?: number;
+    expiry?: string;
+    ltp?: number;
+    label?: string;
+    ready?: boolean;
+    hint?: string;
+  };
 };
 
 export const STRATEGY_SYMBOLS = [
@@ -99,7 +114,15 @@ export const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
 export const RUN_MODES = [
   { id: "paper" as const, title: "Paper trading", text: "Uses the live Dhan feed. Fills stay virtual on Paper Trading — nothing is sent to Dhan." },
   { id: "backtest" as const, title: "Backtest", text: "Replay last 1 year or custom dates. See P&L, win rate, and trade book." },
-  { id: "live" as const, title: "Live Dhan", text: "Start only when Dhan is LIVE. Real orders go to Dhan." },
+  { id: "live" as const, title: "Live Dhan", text: "Start only when Dhan is LIVE. Real CE/PE or futures orders go to Dhan in NSE hours." },
+];
+
+export const OPTION_OFFSETS = [
+  { id: -2, label: "ATM − 2" },
+  { id: -1, label: "ATM − 1" },
+  { id: 0, label: "ATM" },
+  { id: 1, label: "ATM + 1" },
+  { id: 2, label: "ATM + 2" },
 ];
 
 export const OPERATORS: Array<{ id: ConditionOp; label: string }> = [
@@ -131,6 +154,24 @@ export const SOURCES: Array<{ id: ConditionSource; label: string }> = [
 
 export function lotForSymbol(symbol?: string) {
   return STRATEGY_SYMBOLS.find((row) => row.id === symbol)?.lot || 65;
+}
+
+export function strikeOffsetLabel(offset?: number) {
+  const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
+  return OPTION_OFFSETS.find((row) => row.id === n)?.label || "ATM";
+}
+
+export function contractLabel(algo: {
+  symbol?: string;
+  instrument?: string;
+  optionType?: string;
+  strikeOffset?: number;
+}) {
+  const symbol = algo.symbol || "NIFTY";
+  if (algo.instrument === "option") {
+    return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
+  }
+  return `${symbol} FUT`;
 }
 
 export function defaultConditions(kind: StrategyKind, indicator?: string, pattern?: string): Pick<
@@ -238,6 +279,9 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   kind,
   tag: kind === "indicator" ? "Indicator" : "Price action",
   symbol: "NIFTY",
+  instrument: "future",
+  optionType: "CE",
+  strikeOffset: 0,
   side: "BUY",
   lots: 1,
   lotSize: 65,

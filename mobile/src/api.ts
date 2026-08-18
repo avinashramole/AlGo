@@ -70,6 +70,9 @@ export type Snapshot = {
     tag: string;
     kind?: "indicator" | "price-action";
     symbol?: string;
+    instrument?: "future" | "option";
+    optionType?: "CE" | "PE";
+    strikeOffset?: number;
     side?: "BUY" | "SELL" | "BOTH";
     qty?: number;
     lots?: number;
@@ -113,6 +116,18 @@ export type Snapshot = {
     winRate: number;
     enabled: boolean;
     brokerId?: string;
+    lastSignal?: string;
+    trade?: {
+      kind?: "future" | "option";
+      symbol?: string;
+      option?: "CE" | "PE";
+      strike?: number;
+      expiry?: string;
+      ltp?: number;
+      label?: string;
+      ready?: boolean;
+      hint?: string;
+    };
   }>;
   positions: Array<{
     id: string;

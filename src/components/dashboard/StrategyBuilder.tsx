@@ -12,8 +12,11 @@ import {
   defaultConditions,
   emptyStrategy,
   formatCondition,
+  contractLabel,
+  strikeOffsetLabel,
   lotForSymbol,
   RUN_MODES,
+  OPTION_OFFSETS,
   type AlgoStrategy,
   type ConditionOp,
   type ConditionSource,
@@ -53,8 +56,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const preview = useMemo(() => {
     const buy = formatCondition(form.buyLeft, form.buyOp, form.buyRight, form.buyValue);
     const sell = formatCondition(form.sellLeft, form.sellOp, form.sellRight, form.sellValue);
-    return `${form.symbol} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
-  }, [form.buyLeft, form.buyOp, form.buyRight, form.buyValue, form.sellLeft, form.sellOp, form.sellRight, form.sellValue, form.symbol, lotSize, lots]);
+    return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
+  }, [form, lotSize, lots]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -121,6 +124,63 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             />
           ))}
         </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <TypeCard
+            active={(form.instrument || "future") === "future"}
+            title="Index future"
+            text="Trade the current-month future at live LTP"
+            onClick={() => set({ instrument: "future" })}
+          />
+          <TypeCard
+            active={form.instrument === "option"}
+            title="Option CE / PE"
+            text="ATM ± 2 from the live option tape. Paper fills virtual. Live sends the same contract to Dhan."
+            onClick={() => set({ instrument: "option", optionType: form.optionType || "CE", strikeOffset: form.strikeOffset || 0 })}
+          />
+        </div>
+
+        {form.instrument === "option" ? (
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold text-slate-500">Call or put</div>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {(["CE", "PE"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => set({ optionType: option })}
+                    className={cn(
+                      "h-10 rounded-lg border text-sm font-bold",
+                      (form.optionType || "CE") === option
+                        ? option === "CE"
+                          ? "border-emerald-500 bg-emerald-50 text-up dark:bg-emerald-950/40"
+                          : "border-rose-400 bg-rose-50 text-down dark:bg-rose-950/40"
+                        : "border-[var(--border)] bg-[var(--bg)]",
+                    )}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="text-xs font-semibold text-slate-500">
+              Strike
+              <select
+                className={fieldClass}
+                value={form.strikeOffset ?? 0}
+                onChange={(event) => set({ strikeOffset: Number(event.target.value) })}
+              >
+                {OPTION_OFFSETS.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
+            </label>
+          </div>
+        ) : null}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="text-xs font-semibold text-slate-500">
@@ -387,6 +447,29 @@ function ConditionRow({
       </div>
     </div>
   );
+}
+
+function liveOptionHint(
+  form: Partial<AlgoStrategy>,
+  data: {
+    optionMeta?: { symbol?: string; expiry?: string; expiryLabel?: string };
+    optionChain?: Array<{ strike: number; atm?: boolean; callLtp?: number; putLtp?: number }>;
+  },
+) {
+  const symbol = form.symbol || "NIFTY";
+  const option = form.optionType === "PE" ? "PE" : "CE";
+  const offset = Math.round(Number(form.strikeOffset) || 0);
+  if (data.optionMeta?.symbol !== symbol) {
+    return `Open Options on ${symbol} to see live ${option} LTP`;
+  }
+  const rows = data.optionChain || [];
+  const atmIndex = rows.findIndex((row) => row.atm);
+  if (atmIndex < 0) return "Waiting for ATM on the option tape";
+  const row = rows[atmIndex + offset];
+  if (!row) return `No ${strikeOffsetLabel(offset)} strike on this tape`;
+  const ltp = option === "PE" ? Number(row.putLtp) : Number(row.callLtp);
+  const expiry = data.optionMeta.expiryLabel || data.optionMeta.expiry || "";
+  return ltp > 0 ? `${symbol} ${row.strike} ${option} · LTP ${ltp} · ${expiry}` : `${symbol} ${row.strike} ${option} · waiting for LTP`;
 }
 
 function TypeCard({ active, title, text, onClick }: { active: boolean; title: string; text: string; onClick: () => void }) {
