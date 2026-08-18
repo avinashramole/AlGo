@@ -97,7 +97,7 @@ export const PATTERNS = [
 export const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
 
 export const RUN_MODES = [
-  { id: "paper" as const, title: "Paper trading", text: "Fills stay on Paper Trading. Nothing is sent to Dhan." },
+  { id: "paper" as const, title: "Paper trading", text: "Uses the live Dhan feed. Fills stay virtual on Paper Trading — nothing is sent to Dhan." },
   { id: "backtest" as const, title: "Backtest", text: "Replay last 1 year or custom dates. See P&L, win rate, and trade book." },
   { id: "live" as const, title: "Live Dhan", text: "Start only when Dhan is LIVE. Real orders go to Dhan." },
 ];

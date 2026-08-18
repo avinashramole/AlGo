@@ -83,11 +83,12 @@ export const defaultBrokers: BrokerAccount[] = [
     connected: true,
     active: false,
     mode: "paper",
-    clientId: "PAPER-001",
+    clientId: "PAPER",
     funds: 1000000,
-    marginUsed: 12000,
+    marginUsed: 0,
     status: "CONNECTED",
     keyHint: "",
+    virtual: true,
   },
 ];
 

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Alert } from "react-native";
 import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
 import { fallbackSnapshot } from "./fallback";
 
@@ -52,15 +53,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         try {
           await toggleAlgo(id);
           await refresh();
-        } catch {
-          setData((current) => ({
-            ...current,
-            algos: current.algos.map((algo) =>
-              algo.id === id
-                ? { ...algo, enabled: !algo.enabled, status: algo.enabled ? "PAUSED" : "LIVE" }
-                : algo,
-            ),
-          }));
+        } catch (err) {
+          Alert.alert("Paper / live", err instanceof Error ? err.message : "Could not start");
+          await refresh();
         }
       },
       order: async (payload: Record<string, unknown>) => {

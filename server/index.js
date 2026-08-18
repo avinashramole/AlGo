@@ -306,6 +306,16 @@ app.post("/api/orders", async (req, res) => {
 app.post("/api/orders/:id/cancel", async (req, res) => {
   try {
     const id = String(req.params.id || "");
+    const row = snapshot().orders.find((item) => String(item.id) === id);
+    if (row?.paper || row?.brokerId === "paper") {
+      const result = cancelOrder(id);
+      if (result.error) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+      res.json({ ok: true, order: result, snapshot: snapshot() });
+      return;
+    }
     if (isDhanLive() && id && !id.startsWith("o") && !id.startsWith("p")) {
       await cancelDhanOrder(id);
       res.json({ ok: true, live: true, snapshot: snapshot() });

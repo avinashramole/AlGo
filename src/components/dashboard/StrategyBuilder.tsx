@@ -195,7 +195,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               ))}
             </select>
             {form.runMode !== "live" ? (
-              <span className="mt-1 block font-medium text-slate-400">Paper Trading is used for paper and backtest.</span>
+              <span className="mt-1 block font-medium text-slate-400">Paper uses live quotes. Fills are virtual — they never go to Dhan.</span>
             ) : null}
           </label>
         </div>

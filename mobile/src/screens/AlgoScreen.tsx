@@ -185,6 +185,7 @@ export function AlgoScreen() {
           <Chip label="Backtest" on={draft.runMode === "backtest"} onPress={() => setDraft({ ...draft, runMode: "backtest" })} />
           <Chip label="Live Dhan" on={draft.runMode === "live"} onPress={() => setDraft({ ...draft, runMode: "live" })} />
         </View>
+        {draft.runMode === "paper" ? <Text style={styles.muted}>Paper uses live Dhan quotes. Fills stay virtual — nothing is sent to Dhan.</Text> : null}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>
@@ -310,6 +311,7 @@ export function AlgoScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Algo Desk</Text>
+      <Text style={styles.muted}>Paper trading uses the live feed. Fills stay on Paper Trading.</Text>
       <View style={styles.chips}>
         <Chip label="All" on={filter === "all"} onPress={() => setFilter("all")} />
         <Chip label="Indicator" on={filter === "indicator"} onPress={() => setFilter("indicator")} />

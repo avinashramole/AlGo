@@ -1,4 +1,4 @@
-import { getActiveBroker, publicBrokers } from "./brokers.js";
+import { getActiveBroker, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -356,9 +356,13 @@ function isSimRow(row) {
   return Boolean(row?.sim) || row?.live === false;
 }
 
+function isPaperRow(row) {
+  return Boolean(row?.paper) || row?.brokerId === "paper";
+}
+
 function liveDesk() {
   const live = isDhanFeedLive();
-  const keep = (row) => Boolean(row?.paper) || row?.brokerId === "paper" || (row?.live && !row?.sim);
+  const keep = (row) => isPaperRow(row) || (Boolean(row?.live) && !row?.sim);
   const orders = live ? state.orders.filter(keep) : state.orders;
   const positions = live ? state.positions.filter(keep) : state.positions;
   const closedTrades = live ? (state.closedTrades || []).filter(keep) : state.closedTrades || [];
@@ -373,19 +377,24 @@ export function clearSimulatedDesk() {
   state.algos = (state.algos || []).map((algo) =>
     algo.runMode === "paper" ? algo : { ...algo, pnl: algo.runMode === "backtest" ? algo.pnl : 0 },
   );
-  state.notifications = ["Dhan LIVE · real Dhan book only. Paper / backtest strategies stay on Paper Trading."];
+  state.notifications = ["Dhan LIVE · live quotes. Paper fills stay virtual. No simulated Dhan book."];
 }
 
 export function restoreSimulatedDesk() {
+  state.algos = (state.algos || []).map((algo) =>
+    algo.runMode === "paper" && algo.enabled ? { ...algo, enabled: false, status: "PAUSED" } : algo,
+  );
   state.orders = seedOrders();
   state.positions = seedPositions();
   state.closedTrades = seedClosedTrades();
   applySyntheticOptionChain();
+  syncPaperLedger();
 }
 
 export function tickMarket() {
   if (state.dhanFeed.live) {
     runPaperAlgos();
+    markPaperToMarket();
     return;
   }
 
@@ -406,6 +415,7 @@ export function tickMarket() {
   state.ohlc.low = Math.min(state.ohlc.low, nifty.price);
 
   state.positions = state.positions.map((row) => {
+    if (isPaperRow(row)) return row;
     const ltp = jitter(row.ltp, 0.35);
     const dir = row.type === "BUY" ? 1 : -1;
     const pnl = Number(((ltp - row.avg) * row.qty * dir).toFixed(2));
@@ -414,6 +424,7 @@ export function tickMarket() {
 
   state.algos = state.algos.map((algo) => {
     if (!algo.enabled) return algo;
+    if (algo.runMode === "paper" || algo.runMode === "backtest") return algo;
     const pnl = Number((algo.pnl + (Math.random() - 0.35) * 12).toFixed(2));
     return { ...algo, pnl };
   });
@@ -447,7 +458,65 @@ export function tickMarket() {
   runPaperAlgos();
 }
 
+function liveLtpForSymbol(symbol) {
+  const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
+  const option = raw.match(/(\d{3,6})\s*(CE|PE)\b/);
+  if (option) {
+    const strike = Number(option[1]);
+    const row = (state.optionChain || []).find((item) => Number(item.strike) === strike);
+    if (row) {
+      const ltp = option[2] === "PE" ? Number(row.putLtp) : Number(row.callLtp);
+      if (ltp > 0) return round2(ltp);
+    }
+  }
+  const indexName = relatedIndex(symbol);
+  const index = indexName
+    ? state.indices.find((item) => item.symbol === indexName || item.name === indexName)
+    : state.indices.find((item) => item.symbol === symbol || item.name === symbol);
+  if (/\bFUT\b/.test(raw) || /FUTURE/.test(raw)) {
+    const fut = Number(index?.future || index?.price);
+    if (fut > 0) return round2(fut);
+  }
+  if (index && Number(index.price) > 0) return round2(index.price);
+  const watch = [...(state.watchlist || []), ...(state.marketWatch || [])].find((item) => item.symbol === symbol);
+  if (watch && Number(watch.ltp) > 0) return round2(watch.ltp);
+  return 0;
+}
+
+function syncPaperLedger() {
+  const positions = (state.positions || []).filter(isPaperRow);
+  const closed = (state.closedTrades || []).filter(isPaperRow);
+  const realized = closed.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+  const unrealized = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+  const marginUsed = positions.reduce((sum, row) => sum + Math.abs(Number(row.avg || 0) * Number(row.qty || 0)), 0);
+  setPaperLedger({
+    funds: round2(PAPER_STARTING_FUNDS + realized + unrealized),
+    marginUsed: round2(marginUsed),
+  });
+  for (const algo of state.algos || []) {
+    if (algo.runMode !== "paper") continue;
+    const openPnl = positions.filter((row) => row.strategy === algo.name).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+    const closedPnl = closed.filter((row) => row.strategy === algo.name).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+    const trades = closed.filter((row) => row.strategy === algo.name);
+    const wins = trades.filter((row) => Number(row.pnl) > 0).length;
+    algo.pnl = round2(openPnl + closedPnl);
+    if (trades.length) algo.winRate = Math.round((wins / trades.length) * 100);
+  }
+}
+
+function markPaperToMarket() {
+  state.positions = (state.positions || []).map((row) => {
+    if (!isPaperRow(row)) return row;
+    const ltp = liveLtpForSymbol(row.symbol);
+    if (!(ltp > 0)) return row;
+    const dir = row.type === "BUY" ? 1 : -1;
+    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+  });
+  syncPaperLedger();
+}
+
 export function snapshot() {
+  markPaperToMarket();
   const brokers = publicBrokers();
   const active = getActiveBroker();
   const { orders, positions, closedTrades } = liveDesk();
@@ -489,6 +558,10 @@ export function toggleAlgo(id) {
     algo.enabled = false;
     algo.status = "BACKTEST";
     return { error: "Backtest strategies do not go live. Use Run backtest." };
+  }
+  const starting = !algo.enabled;
+  if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
+    return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
   }
   algo.enabled = !algo.enabled;
   if (algo.runMode === "paper") {
@@ -618,11 +691,12 @@ export function backtestAlgo(id, options = {}) {
 }
 
 function runPaperAlgos() {
+  if (!state.dhanFeed.live) return;
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "paper") continue;
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
-    const pack = candlesForBacktest(algo.timeframe, !state.dhanFeed.live);
+    const pack = candlesForBacktest(algo.timeframe, false);
     if (pack.candles.length < 32) continue;
     const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
     const open = state.positions.find((row) => (row.paper || row.brokerId === "paper") && row.strategy === algo.name);
@@ -639,12 +713,14 @@ function runPaperAlgos() {
     const index =
       state.indices.find((item) => item.name === algo.symbol || item.symbol === algo.symbol || String(item.symbol).startsWith(algo.symbol)) ||
       state.indices[0];
+    const livePrice = liveLtpForSymbol(`${algo.symbol} FUT`) || Number(index?.future || index?.price || signal.price || 0);
+    if (!(livePrice > 0)) continue;
     placeOrder({
       symbol: `${algo.symbol} FUT`,
       kind: "future",
       side: wantBuy ? "BUY" : "SELL",
       qty: algo.qty || 65,
-      price: Number(index?.future || index?.price || signal.price || 0),
+      price: livePrice,
       product: "MIS",
       type: "MARKET",
       brokerId: "paper",
@@ -672,15 +748,23 @@ export function placeOrder(payload) {
     return { error: "Connect this broker before placing an order" };
   }
   const live = payload.live;
+  const brokerId = account.id;
+  const isPaper = brokerId === "paper";
+  if (isPaper && !isDhanFeedLive()) {
+    return { error: "Paper fills use live prices. Connect Dhan LIVE first." };
+  }
   if (live?.orderId) {
     const existing = state.orders.find((row) => String(row.id) === String(live.orderId));
     if (existing) return existing;
   }
-  const brokerId = account.id;
   const type = String(payload.type || "MARKET").toUpperCase();
   const qty = Number(payload.qty) || 65;
   const demoDhan = brokerId === "dhan" && !live;
-  const isPaper = brokerId === "paper";
+  const livePrice = isPaper ? liveLtpForSymbol(payload.symbol) : 0;
+  const price = Number(livePrice || payload.price) || 0;
+  if (isPaper && !(price > 0)) {
+    return { error: "No live LTP for that contract yet. Wait for the Dhan feed." };
+  }
   const status = live ? mapLiveStatus(live.status) : type === "LIMIT" ? "PENDING" : "FILLED";
   const order = {
     id: live?.orderId ? String(live.orderId) : `o${Date.now()}`,
@@ -691,7 +775,7 @@ export function placeOrder(payload) {
     product: payload.product || "MIS",
     type,
     status,
-    price: Number(payload.price) || 142.75,
+    price: price || Number(payload.price) || 0,
     strategy: String(payload.strategy || ""),
     brokerId,
     brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
@@ -704,7 +788,7 @@ export function placeOrder(payload) {
       : demoDhan
         ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
         : brokerId === "paper"
-          ? "Paper fill at LTP"
+          ? "Paper fill at live LTP"
           : "Desk fill at LTP",
     createdAt: new Date().toISOString(),
   };
@@ -734,6 +818,7 @@ export function placeOrder(payload) {
         ? `Desk demo ${order.status}: ${order.side} ${order.symbol} (not sent to Dhan)`
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}`,
   );
+  if (isPaper) markPaperToMarket();
   return order;
 }
 
@@ -757,7 +842,8 @@ export function squareOff(id) {
   const account = brokers.brokers.find((item) => item.id === (pos.brokerId || brokers.activeBrokerId));
   if (!account?.connected) return { error: "Connect this broker before squaring off" };
   const dir = pos.type === "BUY" ? 1 : -1;
-  const exit = Number(pos.ltp || pos.avg);
+  const liveExit = isPaperRow(pos) ? liveLtpForSymbol(pos.symbol) : 0;
+  const exit = Number(liveExit || pos.ltp || pos.avg);
   const pnl = Number(((exit - pos.avg) * pos.qty * dir).toFixed(2));
   const order = {
     id: `o${Date.now()}`,
@@ -797,6 +883,7 @@ export function squareOff(id) {
   });
   state.positions.splice(index, 1);
   state.notifications.unshift(`Squared off ${pos.symbol} · ${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toFixed(2)}`);
+  if (isPaperRow(pos)) markPaperToMarket();
   return { ok: true, order, pnl };
 }
 
@@ -811,6 +898,10 @@ export function assignAlgoBroker(id, brokerId) {
   if (!account?.connected) return { error: "Connect this broker first" };
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Algo not found" };
+  if (algo.runMode === "paper" || algo.runMode === "backtest") {
+    algo.brokerId = "paper";
+    return clone(algo);
+  }
   algo.brokerId = brokerId;
   return clone(algo);
 }
@@ -1092,6 +1183,7 @@ export function applyLiveQuotes(quotes) {
     }));
   }
   runPaperAlgos();
+  markPaperToMarket();
 }
 
 export function getCandles(tf = "5m") {

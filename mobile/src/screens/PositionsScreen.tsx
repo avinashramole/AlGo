@@ -11,7 +11,7 @@ export function PositionsScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Positions</Text>
       <Text style={styles.muted}>
-        {data.dhanFeed?.live ? "LIVE · real Dhan positions only" : "Open book"}
+        {data.dhanFeed?.live ? "LIVE feed · Dhan actual + Paper virtual. No sim book." : "Open book"}
       </Text>
       <Card>
         <Text style={styles.muted}>UNREALIZED P&L</Text>
@@ -46,7 +46,7 @@ export function PositionsScreen() {
       ))
       ) : (
         <Card>
-          <Text style={styles.muted}>{data.dhanFeed?.live ? "No live Dhan positions" : "No open positions"}</Text>
+          <Text style={styles.muted}>{data.dhanFeed?.live ? "No live Dhan or paper positions" : "No open positions"}</Text>
         </Card>
       )}
     </ScrollView>

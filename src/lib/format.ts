@@ -20,6 +20,19 @@ export function formatInr(value: number) {
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
 }
 
+export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?: boolean; funds: number }) {
+  const amount = `₹${formatNumber(broker.funds, 0)}`;
+  if (broker.virtual || broker.id === "paper") return `${amount} virtual`;
+  if (broker.liveFeed) return `${amount} actual`;
+  return amount;
+}
+
+export function liveBookCopy(live?: boolean) {
+  return live
+    ? "LIVE feed · Dhan actual + Paper virtual fills. No simulated book or simulated balance."
+    : "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
+}
+
 export function formatIst(iso?: string) {
   if (!iso) return "—";
   const date = new Date(iso);

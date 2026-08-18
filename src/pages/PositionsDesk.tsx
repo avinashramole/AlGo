@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { SideBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatInr, formatIst, formatNumber } from "../lib/format";
+import { cn, formatInr, formatIst, formatNumber, liveBookCopy } from "../lib/format";
 
 export function PositionsDesk() {
   const { data, closePosition } = useMarket();
@@ -30,9 +30,7 @@ export function PositionsDesk() {
         <div>
           <h1 className="text-xl font-bold">Positions</h1>
           <p className="text-sm text-slate-400">
-            {data.dhanFeed?.live
-              ? "LIVE · only real Dhan positions. Empty means you have no open book at Dhan."
-              : "Open F&O book · square off is a market order on the same broker (Dhan when LIVE)"}
+            {liveBookCopy(data.dhanFeed?.live)}
           </p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
@@ -114,7 +112,7 @@ export function PositionsDesk() {
           </table>
         ) : (
           <div className="p-8 text-center text-sm text-slate-400">
-            {data.dhanFeed?.live ? "No live Dhan positions" : "No open positions"}
+            {data.dhanFeed?.live ? "No live Dhan or paper positions" : "No open positions"}
           </div>
         )}
       </section>

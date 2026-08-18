@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMarket } from "../context/MarketContext";
-import { formatNumber } from "../lib/format";
+import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
 
 export function Brokers() {
@@ -14,10 +14,9 @@ export function Brokers() {
   const [busy, setBusy] = useState(false);
 
   const connectedCount = brokers.filter((item) => item.connected).length;
-  const funds = useMemo(
-    () => brokers.filter((item) => item.connected).reduce((sum, item) => sum + item.funds, 0),
-    [brokers],
-  );
+  const dhan = brokers.find((item) => item.id === "dhan");
+  const paper = brokers.find((item) => item.id === "paper");
+  const actualFunds = dhan?.liveFeed ? dhan.funds : 0;
 
   const openForm = (broker: BrokerAccount) => {
     setSelected(broker);
@@ -61,8 +60,8 @@ export function Brokers() {
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <Stat label="Connected" value={String(connectedCount)} />
-        <Stat label="Active" value={brokers.find((item) => item.active)?.name || "Dhan"} />
-        <Stat label="Combined funds" value={`₹${formatNumber(funds, 0)}`} />
+        <Stat label="Dhan funds (actual)" value={dhan?.liveFeed ? `₹${formatNumber(actualFunds, 0)}` : "—"} />
+        <Stat label="Paper funds (virtual)" value={paper ? fundsCaption(paper) : "—"} />
       </div>
       <section className="card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -77,8 +76,9 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          Quotes start as soon as the token is live. LIVE mode shows only real Dhan quotes, orders, and positions — no
-          demo fills. Until then BUY/SELL stays on this desk. The token stays on this computer and is never saved in git.
+          Quotes start as soon as the token is live. Paper trading uses this live feed; fills stay virtual on Paper
+          Trading. Dhan funds are actual. Paper funds are virtual. No simulated balance is mixed in. Until the token
+          is live, BUY/SELL on Dhan stays on this desk. The token stays on this computer and is never saved in git.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
@@ -136,7 +136,7 @@ export function Brokers() {
             {broker.connected && (
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <Mini label="Client" value={broker.clientId || "—"} />
-                <Mini label="Funds" value={`₹${formatNumber(broker.funds, 0)}`} />
+                <Mini label="Funds" value={fundsCaption(broker)} />
                 <Mini label="Margin" value={`₹${formatNumber(broker.marginUsed, 0)}`} />
               </div>
             )}

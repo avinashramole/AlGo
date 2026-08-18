@@ -28,6 +28,13 @@ export function formatInr(value: number) {
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
 }
 
+export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?: boolean; funds: number }) {
+  const amount = `₹${formatNumber(broker.funds, 0)}`;
+  if (broker.virtual || broker.id === "paper") return `${amount} virtual`;
+  if (broker.liveFeed) return `${amount} actual`;
+  return amount;
+}
+
 /** VWAP vs LTP (base): above LTP is green, below LTP is red. */
 export function vwapColor(vwap: number, base: number) {
   const v = Number(vwap);

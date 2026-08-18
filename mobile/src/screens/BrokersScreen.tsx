@@ -2,7 +2,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useState } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
-import { colors, formatNumber } from "../theme";
+import { colors, formatNumber, fundsCaption } from "../theme";
 
 export function BrokersScreen() {
   const { data, connect, disconnect, activate } = useMarket();
@@ -42,8 +42,8 @@ export function BrokersScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Brokers</Text>
       <Text style={styles.muted}>
-        Main broker is Dhan. BUY/SELL hits Dhan only while the Access Token is LIVE. Dhan order APIs also need a static
-        IP whitelist on web.dhan.co.
+        Main broker is Dhan. Paper trading uses the live Dhan feed; fills stay virtual. Dhan funds are actual. Paper
+        funds are virtual. BUY/SELL hits Dhan only while the Access Token is LIVE.
       </Text>
       <Card>
         <View style={styles.row}>
@@ -68,7 +68,7 @@ export function BrokersScreen() {
           </View>
           {broker.connected && (
             <Text style={styles.muted}>
-              {broker.clientId || "No client yet"} · Funds ₹{formatNumber(broker.funds, 0)}
+              {broker.clientId || "No client yet"} · Funds {fundsCaption(broker)}
             </Text>
           )}
           <View style={styles.actions}>

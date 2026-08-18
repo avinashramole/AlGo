@@ -160,8 +160,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         try {
           await toggleAlgo(id);
           await refresh();
-        } catch {
+        } catch (err) {
           await refresh();
+          throw err;
         }
       },
       order: async (payload: Record<string, unknown>) => {

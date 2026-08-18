@@ -69,7 +69,7 @@ export function Positions() {
             ) : (
               <tr>
                 <td className="py-6 text-center text-slate-400" colSpan={7}>
-                  {data.dhanFeed?.live ? "No live Dhan positions" : "No open positions"}
+                  {data.dhanFeed?.live ? "No live Dhan or paper positions" : "No open positions"}
                 </td>
               </tr>
             )}

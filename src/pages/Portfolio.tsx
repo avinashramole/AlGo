@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatInr, formatNumber } from "../lib/format";
+import { cn, formatInr, formatNumber, fundsCaption } from "../lib/format";
 
 export function Portfolio() {
   const { data } = useMarket();
@@ -39,7 +39,7 @@ export function Portfolio() {
             <div className={cn("mt-1 text-lg font-bold", (data.pnlByBroker?.[broker.id] || 0) >= 0 ? "text-up" : "text-down")}>
               {formatInr(data.pnlByBroker?.[broker.id] || 0)}
             </div>
-            <div className="text-xs text-slate-400">Funds ₹{formatNumber(broker.funds, 0)}</div>
+            <div className="text-xs text-slate-400">Funds {fundsCaption(broker)}</div>
           </div>
         ))}
       </div>

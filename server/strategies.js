@@ -267,7 +267,7 @@ export function seedAlgos() {
         sellOp: "crosses_below",
         sellRight: "vwap",
       },
-      { id: "a1", pnl: 2840.5, winRate: 68, enabled: true, status: "LIVE", brokerId: "dhan" },
+      { id: "a1", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
     ),
     normalizeAlgo(
       {
@@ -288,7 +288,7 @@ export function seedAlgos() {
         sellRight: "value",
         sellValue: 68,
       },
-      { id: "a2", pnl: 1960.25, winRate: 61, enabled: true, status: "LIVE", brokerId: "dhan" },
+      { id: "a2", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
     ),
     normalizeAlgo(
       {
@@ -301,7 +301,7 @@ export function seedAlgos() {
         side: "BOTH",
         lots: 1,
       },
-      { id: "a3", pnl: -412.0, winRate: 54, enabled: false, status: "PAUSED", brokerId: "dhan" },
+      { id: "a3", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
     ),
   ];
 }

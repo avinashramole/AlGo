@@ -25,6 +25,8 @@ const sampleBooks = {
   fyers: [{ id: "f1", symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, avg: 74.1, ltp: 88.2, pnl: 916.5, brokerId: "fyers" }],
 };
 
+export const PAPER_STARTING_FUNDS = 10_00_000;
+
 const connections = {
   dhan: {
     connected: true,
@@ -38,11 +40,12 @@ const connections = {
   },
   paper: {
     connected: true,
-    clientId: "PAPER-001",
-    funds: 10_00_000,
-    marginUsed: 12_000,
+    clientId: "PAPER",
+    funds: PAPER_STARTING_FUNDS,
+    marginUsed: 0,
     mode: "paper",
     keyHint: "",
+    virtual: true,
   },
 };
 
@@ -64,6 +67,7 @@ function publicAccount(meta) {
     status: connected ? (conn.liveFeed ? "LIVE" : "CONNECTED") : "DISCONNECTED",
     keyHint: connected ? conn.keyHint || "" : "",
     liveFeed: Boolean(conn?.liveFeed),
+    virtual: meta.id === "paper" || Boolean(conn?.virtual),
   };
 }
 
@@ -84,7 +88,15 @@ export function connectBroker(id, payload = {}) {
   const meta = catalog.find((item) => item.id === id);
   if (!meta) return { error: "Unknown broker" };
   if (id === "paper") {
-    connections.paper = { connected: true, clientId: "PAPER-001", funds: 10_00_000, marginUsed: 12_000, mode: "paper", keyHint: "" };
+    connections.paper = {
+      connected: true,
+      clientId: "PAPER",
+      funds: PAPER_STARTING_FUNDS,
+      marginUsed: 0,
+      mode: "paper",
+      keyHint: "",
+      virtual: true,
+    };
     return { ok: true, account: publicAccount(meta), positions: [] };
   }
   if (id === MAIN_BROKER_ID) {
@@ -146,6 +158,22 @@ export function disconnectBroker(id) {
   delete connections[id];
   if (activeBrokerId === id) activeBrokerId = MAIN_BROKER_ID;
   return { ok: true, ...listBrokers() };
+}
+
+export function setPaperLedger({ funds, marginUsed } = {}) {
+  const nextFunds = Number(funds);
+  const nextMargin = Number(marginUsed);
+  connections.paper = {
+    ...connections.paper,
+    connected: true,
+    clientId: connections.paper?.clientId || "PAPER",
+    funds: Number.isFinite(nextFunds) ? nextFunds : PAPER_STARTING_FUNDS,
+    marginUsed: Number.isFinite(nextMargin) ? Math.max(0, nextMargin) : 0,
+    mode: "paper",
+    virtual: true,
+    keyHint: "",
+  };
+  return publicAccount(catalog.find((item) => item.id === "paper"));
 }
 
 export function activateBroker(id) {

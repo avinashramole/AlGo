@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { SideBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatInr, formatIst, formatNumber } from "../lib/format";
+import { cn, formatInr, formatIst, formatNumber, liveBookCopy } from "../lib/format";
 
 export function Reports() {
   const { data } = useMarket();
@@ -50,9 +50,7 @@ export function Reports() {
         <div>
           <h1 className="text-xl font-bold">Report</h1>
           <p className="text-sm text-slate-400">
-            {data.dhanFeed?.live
-              ? "LIVE · P&L from real Dhan orders and positions only"
-              : `P&L, trade book, and strategy contribution · ${report.date}`}
+            {liveBookCopy(data.dhanFeed?.live)}
           </p>
         </div>
         <div className="flex items-center gap-3">

@@ -52,7 +52,7 @@ export function Algo() {
         <div>
           <h1 className="text-xl font-bold">Algo Desk</h1>
           <p className="text-sm text-slate-400">
-            Paper trade or backtest a strategy first. Backtest last 1 year or custom dates. Live Dhan is only for strategies set to Live.
+            Paper trade on the live Dhan feed (virtual fills only). Backtest last 1 year or custom dates. Live Dhan is only for strategies set to Live.
           </p>
         </div>
         <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -176,7 +176,15 @@ export function Algo() {
                       Research only
                     </button>
                   ) : (
-                    <button type="button" onClick={() => void toggle(algo.id)} className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void toggle(algo.id).catch((err: unknown) => {
+                          window.alert(err instanceof Error ? err.message : "Could not start");
+                        });
+                      }}
+                      className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold"
+                    >
                       {algo.enabled ? "Pause" : algo.runMode === "paper" ? "Start paper" : "Start live"}
                     </button>
                   )}

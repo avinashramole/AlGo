@@ -328,6 +328,7 @@ export type BrokerAccount = {
   status: "CONNECTED" | "DISCONNECTED" | "REAUTH" | "LIVE";
   keyHint: string;
   liveFeed?: boolean;
+  virtual?: boolean;
 };
 
 export function login(email: string, password: string) {

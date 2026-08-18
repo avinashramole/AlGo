@@ -227,6 +227,7 @@ export type BrokerAccount = {
   segments: string[];
   keyHint?: string;
   liveFeed?: boolean;
+  virtual?: boolean;
 };
 
 export function login(email: string, password: string) {
