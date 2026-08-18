@@ -48,6 +48,10 @@
   mask-image: radial-gradient(ellipse at center, black 20%, transparent 72%);
 }
 
+.t2s-theme-btn {
+  display: none !important;
+}
+
 .t2s-login-card {
   position: relative;
   z-index: 1;
