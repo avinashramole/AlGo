@@ -47,10 +47,10 @@ This starts:
 
 Open **http://localhost:5173** in Chrome.
 
-- **Segin / new user:** Gmail OTP tab → name + Gmail → Send code → enter the 6-digit OTP
+- **Segin / new user:** Gmail OTP tab → **Connect Gmail** (Gmail + App Password) → name + Gmail → Send code → enter the OTP from inbox. After login, T2S emails a sign-in notice to that Gmail.
 - **Avinash demo:** Password tab → `demo@t2s.app` / `demo123`
 
-To email real OTPs, add Gmail App Password values to `.env` (see below) and restart.
+You can also connect Gmail later in **Settings**. Google Account → Security → 2-Step Verification → App passwords. Do not use your normal Gmail password.
 
 Keep this terminal open.
 

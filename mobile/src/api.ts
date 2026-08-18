@@ -270,6 +270,7 @@ export type OtpRequestResult = {
   to?: string;
   hint?: string;
   devOtp?: string;
+  gmail?: { connected?: boolean; user?: string };
 };
 
 export function requestOtp(email: string, name?: string) {
@@ -280,9 +281,23 @@ export function requestOtp(email: string, name?: string) {
 }
 
 export function verifyOtp(email: string, otp: string) {
-  return request<{ token: string; user: { name: string; email: string; desk: string } }>("/auth/otp/verify", {
+  return request<{ token: string; user: { name: string; email: string; desk: string }; mail?: { delivered?: boolean } }>(
+    "/auth/otp/verify",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, otp }),
+    },
+  );
+}
+
+export function getGmailStatus() {
+  return request<{ connected: boolean; user?: string }>("/auth/gmail");
+}
+
+export function connectGmail(email: string, appPassword: string) {
+  return request<{ ok: boolean; connected: boolean; user?: string }>("/auth/gmail", {
     method: "POST",
-    body: JSON.stringify({ email, otp }),
+    body: JSON.stringify({ email, appPassword }),
   });
 }
 

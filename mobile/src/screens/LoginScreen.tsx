@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { connectGmail, getGmailStatus } from "../api";
 import { useAuth } from "../AuthContext";
 import { colors } from "../theme";
 
@@ -14,6 +15,15 @@ export function LoginScreen() {
   const [hint, setHint] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mailConnected, setMailConnected] = useState(false);
+  const [senderEmail, setSenderEmail] = useState("");
+  const [appPassword, setAppPassword] = useState("");
+
+  useEffect(() => {
+    void getGmailStatus()
+      .then((row) => setMailConnected(Boolean(row.connected)))
+      .catch(() => undefined);
+  }, []);
 
   const sendCode = async () => {
     setBusy(true);
@@ -72,6 +82,32 @@ export function LoginScreen() {
       </View>
       {mode === "otp" ? (
         <>
+          {!mailConnected ? (
+            <>
+              <Text style={styles.hint}>Connect Gmail (App Password) so OTP and the after-login mail are emailed.</Text>
+              <TextInput style={styles.input} autoCapitalize="none" value={senderEmail} onChangeText={setSenderEmail} placeholder="Desk Gmail (sends mail)" />
+              <TextInput style={styles.input} secureTextEntry value={appPassword} onChangeText={setAppPassword} placeholder="App Password" />
+              <Pressable
+                style={styles.ghostBtn}
+                onPress={() => {
+                  setBusy(true);
+                  void connectGmail(senderEmail, appPassword)
+                    .then((row) => {
+                      setMailConnected(Boolean(row.connected));
+                      setAppPassword("");
+                      Alert.alert("Gmail connected", "Send the code next. It will arrive in Gmail.");
+                    })
+                    .catch((error) => Alert.alert("Gmail failed", error instanceof Error ? error.message : "Could not connect"))
+                    .finally(() => setBusy(false));
+                }}
+                disabled={busy}
+              >
+                <Text style={styles.ghostText}>Connect Gmail</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.hint}>Gmail is connected. OTP and a login mail go to the inbox.</Text>
+          )}
           <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name (Segin)" />
           <TextInput
             style={styles.input}
@@ -112,9 +148,9 @@ export function LoginScreen() {
         </Pressable>
       ) : null}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-      {devOtp ? <Text style={styles.dev}>Gmail SMTP not set yet. Code: {devOtp}</Text> : null}
+      {devOtp ? <Text style={styles.dev}>No Gmail send yet. Temporary code: {devOtp}</Text> : null}
       <Text style={styles.hint}>
-        {mode === "otp" ? "New user Segin: Gmail + OTP. Avinash can still use Password." : "Avinash demo: demo@t2s.app / demo123"}
+        {mode === "otp" ? "After login, T2S emails that Gmail a sign-in notice." : "Avinash demo: demo@t2s.app / demo123"}
       </Text>
     </KeyboardAvoidingView>
   );
@@ -157,6 +193,7 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontWeight: "700" },
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
+  ghostBtn: { height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   ghostText: { color: colors.brand, fontWeight: "700" },
   hint: { textAlign: "center", color: colors.muted, marginTop: 16, fontSize: 12 },
   dev: { textAlign: "center", color: "#b45309", marginTop: 8, fontSize: 13, fontWeight: "700" },

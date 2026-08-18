@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = path.join(__dirname, "data", "users.json");
+const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
 const MAX_ATTEMPTS = 5;
@@ -112,37 +113,122 @@ function issueSession(user) {
   return { token, user: publicUser(user) };
 }
 
-function gmailTransport() {
-  const user = String(process.env.GMAIL_USER || "").trim();
-  const pass = String(process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
-  if (!user || !pass) return null;
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: { user, pass },
-  });
-}
-
 function maskEmail(email) {
-  const [local, domain] = String(email).split("@");
+  const [local, domain] = String(email || "").split("@");
   if (!domain) return email;
   const keep = local.slice(0, 2);
   return `${keep}${"•".repeat(Math.max(1, local.length - 2))}@${domain}`;
 }
 
-async function sendOtpMail(email, code, name) {
-  const transport = gmailTransport();
-  if (!transport) {
-    return { delivered: false, reason: "gmail-not-configured" };
+function loadGmailCreds() {
+  try {
+    const row = JSON.parse(fs.readFileSync(GMAIL_FILE, "utf8"));
+    const user = normalizeEmail(row.user || row.email);
+    const pass = String(row.pass || row.appPassword || "").replace(/\s+/g, "");
+    if (user && pass) return { user, pass };
+  } catch {
+    /* fall through to env */
   }
-  const from = process.env.GMAIL_USER;
+  return {
+    user: normalizeEmail(process.env.GMAIL_USER || ""),
+    pass: String(process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, ""),
+  };
+}
+
+let gmailCreds = loadGmailCreds();
+
+function gmailReady() {
+  return Boolean(gmailCreds.user && gmailCreds.pass);
+}
+
+function gmailTransport() {
+  if (!gmailReady()) return null;
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: gmailCreds.user, pass: gmailCreds.pass },
+  });
+}
+
+export function gmailStatus() {
+  return {
+    connected: gmailReady(),
+    user: gmailCreds.user ? maskEmail(gmailCreds.user) : "",
+  };
+}
+
+export async function connectGmail({ email, appPassword } = {}) {
+  const user = normalizeEmail(email);
+  const pass = String(appPassword || "").replace(/\s+/g, "");
+  if (!isGmail(user)) {
+    const error = new Error("Desk mail must be a Gmail address (you@gmail.com).");
+    error.status = 400;
+    throw error;
+  }
+  if (pass.length < 8) {
+    const error = new Error("Paste the 16-character Gmail App Password (Google Account → Security → App passwords).");
+    error.status = 400;
+    throw error;
+  }
+  const transport = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+  });
+  try {
+    await transport.verify();
+  } catch (err) {
+    const error = new Error(
+      `Gmail refused the mailbox (${err.response || err.message || "auth failed"}). Use an App Password, not your normal Gmail password.`,
+    );
+    error.status = 400;
+    throw error;
+  }
+  gmailCreds = { user, pass };
+  fs.mkdirSync(path.dirname(GMAIL_FILE), { recursive: true });
+  fs.writeFileSync(GMAIL_FILE, `${JSON.stringify({ user, pass }, null, 2)}\n`);
+  return gmailStatus();
+}
+
+async function sendMail({ to, subject, text, html }) {
+  const transport = gmailTransport();
+  if (!transport) return { delivered: false, reason: "gmail-not-configured" };
   await transport.sendMail({
-    from: `T2S Algo <${from}>`,
+    from: `T2S Algo <${gmailCreds.user}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
+  return { delivered: true };
+}
+
+async function sendOtpMail(email, code, name) {
+  return sendMail({
     to: email,
     subject: `${code} is your T2S login code`,
     text: `Hi ${name || "there"},\n\nYour T2S Algo login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
-    html: `<p>Hi ${name || "there"},</p><p>Your T2S Algo login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes.</p>`,
+    html: `<p>Hi ${name || "there"},</p><p>Your T2S Algo login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
   });
-  return { delivered: true };
+}
+
+export async function notifyLogin(user) {
+  const email = normalizeEmail(user?.email);
+  if (!isGmail(email) || !gmailReady()) return { delivered: false };
+  const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  try {
+    return await sendMail({
+      to: email,
+      subject: `T2S login · ${user.name || "desk"}`,
+      text: `Hi ${user.name || "there"},\n\nYou signed in to T2S Algo Desk at ${when} IST.\nAccount: ${email}\n\nIf this was not you, change your Gmail password.\n`,
+      html: `<p>Hi ${user.name || "there"},</p><p>You signed in to <strong>T2S Algo Desk</strong> at <strong>${when} IST</strong>.</p><p>Account: ${email}</p><p>If this was not you, change your Gmail password.</p>`,
+    });
+  } catch (err) {
+    console.log(`Login mail failed: ${err.message || err}`);
+    return { delivered: false, error: err.message };
+  }
 }
 
 export function loginWithPassword(email, password) {
@@ -208,9 +294,10 @@ export async function requestOtp({ email, name } = {}) {
     newUser: !existing,
     to: maskEmail(key),
     hint: delivered
-      ? `Code sent to ${maskEmail(key)}. Check the Gmail inbox.`
-      : "Gmail SMTP is not set. Use the on-screen code, or add GMAIL_USER and GMAIL_APP_PASSWORD in .env.",
+      ? `Code sent to ${maskEmail(key)}. Check the Gmail inbox and Spam.`
+      : "Gmail is not connected, so nothing was emailed. Connect Gmail below (App Password), then send again.",
     devOtp: showCode ? code : undefined,
+    gmail: gmailStatus(),
   };
 }
 

@@ -10,3 +10,4 @@ tsconfig.node.tsbuildinfo
 .env
 server/.env
 server/data/users.json
+server/data/gmail.json

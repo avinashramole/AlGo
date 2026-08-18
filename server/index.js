@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { loginWithPassword, requestOtp, verifyOtp } from "./auth.js";
+import { connectGmail, gmailStatus, loginWithPassword, notifyLogin, requestOtp, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -104,12 +104,26 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "t2s-api", time: new Date().toISOString() });
 });
 
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
     const result = loginWithPassword(req.body?.email, req.body?.password);
-    res.json(result);
+    const mail = await notifyLogin(result.user);
+    res.json({ ...result, mail });
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Login failed" });
+  }
+});
+
+app.get("/api/auth/gmail", (_req, res) => {
+  res.json(gmailStatus());
+});
+
+app.post("/api/auth/gmail", async (req, res) => {
+  try {
+    const result = await connectGmail({ email: req.body?.email, appPassword: req.body?.appPassword || req.body?.password });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Gmail connect failed" });
   }
 });
 
@@ -122,10 +136,11 @@ app.post("/api/auth/otp/request", async (req, res) => {
   }
 });
 
-app.post("/api/auth/otp/verify", (req, res) => {
+app.post("/api/auth/otp/verify", async (req, res) => {
   try {
     const result = verifyOtp({ email: req.body?.email, otp: req.body?.otp });
-    res.json(result);
+    const mail = await notifyLogin(result.user);
+    res.json({ ...result, mail });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
   }

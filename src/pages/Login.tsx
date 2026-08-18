@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { connectGmail, getGmailStatus } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/format";
 
@@ -16,6 +17,19 @@ export function Login() {
   const [devOtp, setDevOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mailConnected, setMailConnected] = useState(false);
+  const [mailFrom, setMailFrom] = useState("");
+  const [senderEmail, setSenderEmail] = useState("");
+  const [appPassword, setAppPassword] = useState("");
+
+  useEffect(() => {
+    void getGmailStatus()
+      .then((row) => {
+        setMailConnected(Boolean(row.connected));
+        setMailFrom(row.user || "");
+      })
+      .catch(() => undefined);
+  }, []);
 
   const onPassword = async (event: FormEvent) => {
     event.preventDefault();
@@ -26,6 +40,23 @@ export function Login() {
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Start the API with npm start.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onConnectGmail = async (event: FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const result = await connectGmail(senderEmail, appPassword);
+      setMailConnected(Boolean(result.connected));
+      setMailFrom(result.user || senderEmail);
+      setAppPassword("");
+      setHint("Gmail connected. Send the code — it will arrive in the inbox.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not connect Gmail");
     } finally {
       setLoading(false);
     }
@@ -42,6 +73,10 @@ export function Login() {
       setSentTo(result.to || email);
       setHint(result.hint || "Check Gmail for the 6-digit code.");
       setDevOtp(result.devOtp || "");
+      if (result.gmail) {
+        setMailConnected(Boolean(result.gmail.connected));
+        setMailFrom(result.gmail.user || "");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send code");
     } finally {
@@ -108,6 +143,38 @@ export function Login() {
         </div>
 
         {mode === "otp" ? (
+          <>
+            <div className={cn("mb-4 rounded-xl border p-3", mailConnected ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30")}>
+              {mailConnected ? (
+                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                  Gmail sending from {mailFrom}. OTP and a login mail go to the inbox.
+                </p>
+              ) : (
+                <form onSubmit={onConnectGmail} className="space-y-2">
+                  <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                    Connect Gmail first so the code and the after-login mail are emailed. Google Account → Security → 2-Step Verification → App passwords.
+                  </p>
+                  <input
+                    className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm outline-none"
+                    value={senderEmail}
+                    onChange={(event) => setSenderEmail(event.target.value)}
+                    placeholder="Desk Gmail (sends mail)"
+                    autoComplete="off"
+                  />
+                  <input
+                    type="password"
+                    className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm outline-none"
+                    value={appPassword}
+                    onChange={(event) => setAppPassword(event.target.value)}
+                    placeholder="16-character App Password"
+                    autoComplete="off"
+                  />
+                  <button type="submit" disabled={loading} className="h-9 w-full rounded-lg bg-slate-900 text-xs font-semibold text-white dark:bg-white dark:text-slate-900">
+                    {loading ? "Connecting..." : "Connect Gmail"}
+                  </button>
+                </form>
+              )}
+            </div>
           <form onSubmit={sentTo ? onVerify : onSendCode}>
             <label className="mb-3 block text-sm font-semibold">
               Name (new user)
@@ -150,7 +217,7 @@ export function Login() {
             {hint ? <p className="mb-3 text-xs font-medium text-slate-500">{hint}</p> : null}
             {devOtp ? (
               <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                Gmail SMTP not set yet. Your code is {devOtp}
+                No Gmail send yet. Temporary code: {devOtp}. After connect, the next code and a login mail go to Gmail.
               </div>
             ) : null}
             {error ? <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-down dark:bg-rose-950/40">{error}</div> : null}
@@ -172,9 +239,10 @@ export function Login() {
               </button>
             ) : null}
             <p className="mt-4 text-center text-xs text-slate-400">
-              New user Segin: enter name, Gmail, then the OTP from inbox. Demo password login is still on the Password tab.
+              After a successful login, T2S emails that Gmail a sign-in notice. Demo password is on the Password tab.
             </p>
           </form>
+          </>
         ) : (
           <form onSubmit={onPassword}>
             <label className="mb-3 block text-sm font-semibold">
