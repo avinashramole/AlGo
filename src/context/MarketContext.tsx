@@ -14,6 +14,7 @@ import {
   toggleAlgo,
   updateAlgo,
   backtestAlgo,
+  type BacktestOptions,
   type PlaceOrderResult,
   type Snapshot,
 } from "../api/client";
@@ -121,7 +122,7 @@ type MarketContextValue = {
   selectChain: (symbol: string, expiry?: string) => Promise<void>;
   saveAlgo: (payload: Record<string, unknown>) => Promise<void>;
   removeAlgo: (id: string) => Promise<void>;
-  backtest: (id: string) => Promise<void>;
+  backtest: (id: string, options?: BacktestOptions) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   closePosition: (id: string) => Promise<void>;
 };
@@ -204,8 +205,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },
-      backtest: async (id: string) => {
-        const result = await backtestAlgo(id);
+      backtest: async (id: string, options?: BacktestOptions) => {
+        const result = await backtestAlgo(id, options);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

@@ -1,10 +1,20 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { BacktestRange, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatInr } from "../lib/format";
 import { formatCondition, lotForSymbol, type AlgoStrategy } from "../lib/strategies";
+
+function backtestRangeLabel(row?: AlgoStrategy["lastBacktest"]) {
+  if (!row) return "";
+  if (row.from && row.to) {
+    const prefix = row.range === "1y" ? "Last 1 year" : "Custom";
+    return `${prefix} ${row.from} → ${row.to}`;
+  }
+  return row.range === "1y" ? "Last 1 year" : "";
+}
 
 export function Algo() {
   const { data, toggle, routeAlgo, removeAlgo, backtest } = useMarket();
@@ -12,6 +22,8 @@ export function Algo() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AlgoStrategy | null>(null);
   const [busyId, setBusyId] = useState("");
+  const [rangeFor, setRangeFor] = useState<AlgoStrategy | null>(null);
+  const [rangeError, setRangeError] = useState("");
   const connected = (data.brokers || []).filter((item) => item.connected);
 
   const rows = data.algos.filter((algo) => {
@@ -40,7 +52,7 @@ export function Algo() {
         <div>
           <h1 className="text-xl font-bold">Algo Desk</h1>
           <p className="text-sm text-slate-400">
-            Paper trade or backtest a strategy first. Live Dhan is only for strategies set to Live.
+            Paper trade or backtest a strategy first. Backtest last 1 year or custom dates. Live Dhan is only for strategies set to Live.
           </p>
         </div>
         <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -121,7 +133,10 @@ export function Algo() {
                 </div>
                 {algo.lastBacktest ? (
                   <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-[11px] font-semibold text-slate-500">
-                    Last backtest · {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% ·{" "}
+                    Last backtest
+                    {backtestRangeLabel(algo.lastBacktest) ? ` · ${backtestRangeLabel(algo.lastBacktest)}` : ""}
+                    {" · "}
+                    {algo.lastBacktest.timeframe || algo.timeframe || "5m"} · {algo.lastBacktest.bars || 0} bars · {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% ·{" "}
                     <span className={(algo.lastBacktest.pnl || 0) >= 0 ? "text-up" : "text-down"}>{formatInr(algo.lastBacktest.pnl || 0)}</span>
                     {algo.lastBacktest.sample ? " · sample bars" : ""} · DD {formatInr(algo.lastBacktest.maxDrawdown || 0)}
                   </div>
@@ -149,8 +164,8 @@ export function Algo() {
                     type="button"
                     disabled={busyId === algo.id}
                     onClick={() => {
-                      setBusyId(algo.id);
-                      void backtest(algo.id).finally(() => setBusyId(""));
+                      setRangeError("");
+                      setRangeFor(algo as AlgoStrategy);
                     }}
                     className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold"
                   >
@@ -190,6 +205,30 @@ export function Algo() {
         onClose={() => {
           setBuilderOpen(false);
           setEditing(null);
+        }}
+      />
+      <BacktestRange
+        open={Boolean(rangeFor)}
+        name={rangeFor?.name}
+        busy={Boolean(rangeFor && busyId === rangeFor.id)}
+        error={rangeError}
+        onClose={() => {
+          if (busyId) return;
+          setRangeFor(null);
+          setRangeError("");
+        }}
+        onRun={(payload: BacktestRangePayload) => {
+          if (!rangeFor) return;
+          setBusyId(rangeFor.id);
+          setRangeError("");
+          void backtest(rangeFor.id, payload)
+            .then(() => {
+              setRangeFor(null);
+            })
+            .catch((err: unknown) => {
+              setRangeError(err instanceof Error ? err.message : "Backtest failed");
+            })
+            .finally(() => setBusyId(""));
         }}
       />
     </div>

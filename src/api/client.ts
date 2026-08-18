@@ -170,6 +170,10 @@ export type Snapshot = {
       pnl?: number;
       maxDrawdown?: number;
       sample?: boolean;
+      source?: string;
+      range?: "1y" | "custom" | string;
+      from?: string;
+      to?: string;
       book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
     };
     status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
@@ -411,10 +415,16 @@ export function deleteAlgo(id: string) {
   return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
 }
 
-export function backtestAlgo(id: string) {
+export type BacktestOptions = {
+  range?: "1y" | "custom";
+  from?: string;
+  to?: string;
+};
+
+export function backtestAlgo(id: string, options: BacktestOptions = {}) {
   return request<{ snapshot: Snapshot; backtest?: Record<string, unknown>; algo?: Snapshot["algos"][number] }>(
     `/algos/${id}/backtest`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify(options) },
   );
 }
 

@@ -97,7 +97,17 @@ export type Snapshot = {
     lookback?: number;
     summary?: string;
     runMode?: "live" | "paper" | "backtest";
-    lastBacktest?: { trades?: number; winRate?: number; pnl?: number; sample?: boolean };
+    lastBacktest?: {
+      trades?: number;
+      winRate?: number;
+      pnl?: number;
+      sample?: boolean;
+      timeframe?: string;
+      bars?: number;
+      range?: string;
+      from?: string;
+      to?: string;
+    };
     status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
     pnl: number;
     winRate: number;
@@ -259,8 +269,17 @@ export function deleteAlgo(id: string) {
   return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
 }
 
-export function backtestAlgo(id: string) {
-  return request<{ snapshot: Snapshot }>(`/algos/${id}/backtest`, { method: "POST" });
+export type BacktestOptions = {
+  range?: "1y" | "custom";
+  from?: string;
+  to?: string;
+};
+
+export function backtestAlgo(id: string, options: BacktestOptions = {}) {
+  return request<{ snapshot: Snapshot }>(`/algos/${id}/backtest`, {
+    method: "POST",
+    body: JSON.stringify(options),
+  });
 }
 
 export function placeOrder(payload: Record<string, unknown>) {

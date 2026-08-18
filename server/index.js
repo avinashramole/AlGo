@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -24,6 +24,9 @@ import {
   toggleAlgo,
   updateAlgo,
   backtestAlgo,
+  getAlgo,
+  pickBacktestTimeframe,
+  resolveBacktestWindow,
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -225,10 +228,39 @@ app.post("/api/algos/:id/broker", (req, res) => {
   res.json(result);
 });
 
-app.post("/api/algos/:id/backtest", (req, res) => {
-  const result = backtestAlgo(req.params.id);
+app.post("/api/algos/:id/backtest", async (req, res) => {
+  const algo = getAlgo(req.params.id);
+  if (!algo) {
+    res.status(404).json({ error: "Strategy not found" });
+    return;
+  }
+  const window = resolveBacktestWindow(req.body || {});
+  if (window.error) {
+    res.status(400).json({ error: window.error });
+    return;
+  }
+  const timeframe = pickBacktestTimeframe(algo.timeframe, window.days);
+  let candles = [];
+  if (isDhanLive()) {
+    try {
+      candles = await fetchDhanHistory({
+        symbol: algo.symbol,
+        from: window.from,
+        to: window.to,
+        timeframe,
+      });
+    } catch {
+      candles = [];
+    }
+  }
+  const result = backtestAlgo(req.params.id, {
+    range: window.range,
+    from: window.from,
+    to: window.to,
+    candles,
+  });
   if (result.error) {
-    res.status(404).json({ error: result.error });
+    res.status(result.error.includes("not found") ? 404 : 400).json({ error: result.error });
     return;
   }
   res.json({ ...result, snapshot: snapshot() });

@@ -58,6 +58,10 @@ export type AlgoStrategy = {
     pnl?: number;
     maxDrawdown?: number;
     sample?: boolean;
+    source?: string;
+    range?: "1y" | "custom" | string;
+    from?: string;
+    to?: string;
     book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
   };
   status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
@@ -94,7 +98,7 @@ export const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
 
 export const RUN_MODES = [
   { id: "paper" as const, title: "Paper trading", text: "Fills stay on Paper Trading. Nothing is sent to Dhan." },
-  { id: "backtest" as const, title: "Backtest", text: "Replay candles and see P&L, win rate, and trade book." },
+  { id: "backtest" as const, title: "Backtest", text: "Replay last 1 year or custom dates. See P&L, win rate, and trade book." },
   { id: "live" as const, title: "Live Dhan", text: "Start only when Dhan is LIVE. Real orders go to Dhan." },
 ];
 

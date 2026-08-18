@@ -694,6 +694,84 @@ export function getDhanCredentials() {
   return { clientId, tokenHint: tokenHint(accessToken) };
 }
 
+const CHART_UNDERLYINGS = {
+  NIFTY: { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "NIFTY 50": { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  BANKNIFTY: { securityId: "25", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  "BANK NIFTY": { securityId: "25", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  FINNIFTY: { securityId: "27", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  SENSEX: { securityId: "51", exchangeSegment: "IDX_I", instrument: "INDEX" },
+};
+
+function chartInstrument(symbol) {
+  const key = String(symbol || "NIFTY")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return CHART_UNDERLYINGS[key] || CHART_UNDERLYINGS[key.split(" ")[0]] || CHART_UNDERLYINGS.NIFTY;
+}
+
+function dateOnly(value) {
+  return String(value || "").slice(0, 10);
+}
+
+function intradayInterval(timeframe) {
+  const tf = String(timeframe || "");
+  if (tf === "1m") return "1";
+  if (tf === "5m") return "5";
+  if (tf === "15m") return "15";
+  if (tf === "1H" || tf === "1h") return "60";
+  return null;
+}
+
+export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
+  if (!accessToken) return [];
+  const inst = chartInstrument(symbol);
+  const fromDate = dateOnly(from);
+  const toDate = dateOnly(to);
+  if (!fromDate || !toDate) return [];
+  const interval = intradayInterval(timeframe);
+  const days = Math.max(1, Math.round((Date.parse(`${toDate}T15:30:00+05:30`) - Date.parse(`${fromDate}T09:15:00+05:30`)) / 86_400_000));
+
+  const historical = async () => {
+    const payload = await dhanPost("/charts/historical", accessToken, clientId, {
+      securityId: inst.securityId,
+      exchangeSegment: inst.exchangeSegment,
+      instrument: inst.instrument,
+      expiryCode: 0,
+      oi: false,
+      fromDate,
+      toDate,
+    });
+    return mapChartCandles(payload);
+  };
+
+  const tryIntraday = days <= 45 && interval;
+  if (tryIntraday) {
+    try {
+      const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
+        securityId: inst.securityId,
+        exchangeSegment: inst.exchangeSegment,
+        instrument: inst.instrument,
+        interval,
+        oi: false,
+        fromDate: `${fromDate} 09:15:00`,
+        toDate: `${toDate} 15:30:00`,
+      });
+      const candles = mapChartCandles(payload);
+      if (candles.length >= 40) return candles;
+    } catch {
+      /* daily history is the reliable 1-year path */
+    }
+  }
+
+  try {
+    return await historical();
+  } catch {
+    return [];
+  }
+}
+
 function fnoSegment(symbol) {
   return String(symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO";
 }

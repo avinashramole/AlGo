@@ -46,6 +46,148 @@ export function generateCandles(count, startPrice, seed = 42) {
   return candles;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+export function ymdIST(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function shiftYmd(ymd, days) {
+  const [year, month, day] = String(ymd).split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + Number(days || 0)));
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+}
+
+function isYmd(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+export function resolveBacktestWindow(options = {}) {
+  const today = ymdIST();
+  const rangeRaw = String(options.range || "").toLowerCase();
+  const custom =
+    rangeRaw === "custom" || ((options.from || options.to) && rangeRaw !== "1y" && rangeRaw !== "year");
+  let from;
+  let to;
+  let range;
+  if (custom) {
+    from = String(options.from || "").slice(0, 10);
+    to = String(options.to || today).slice(0, 10);
+    range = "custom";
+    if (!isYmd(from) || !isYmd(to)) {
+      return { error: "Custom backtest needs from and to dates (YYYY-MM-DD)" };
+    }
+  } else {
+    to = today;
+    from = shiftYmd(today, -365);
+    range = "1y";
+  }
+  const fromMs = Date.parse(`${from}T09:15:00+05:30`);
+  const toMs = Date.parse(`${to}T15:30:00+05:30`);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+    return { error: "Invalid backtest dates" };
+  }
+  if (fromMs >= toMs) {
+    return { error: "From date must be before to date" };
+  }
+  const days = Math.round((toMs - fromMs) / 86_400_000) + 1;
+  if (days > 400) {
+    return { error: "Date range cannot be longer than 400 days" };
+  }
+  if (days < 2) {
+    return { error: "Pick at least two calendar days" };
+  }
+  return { from, to, range, days, fromMs, toMs };
+}
+
+export function pickBacktestTimeframe(requested, days) {
+  const tf = String(requested || "5m");
+  if (days <= 14) return tf;
+  if (days <= 45) return tf === "1m" ? "5m" : tf;
+  if (tf === "1H" || tf === "1h") return "1H";
+  return "1H";
+}
+
+function sessionSlots(tf) {
+  if (tf === "1D" || tf === "1d" || tf === "day") return ["15:30"];
+  const step = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : 60;
+  const slots = [];
+  for (let minute = 9 * 60 + 15; minute < 15 * 60 + 30; minute += step) {
+    slots.push(`${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`);
+  }
+  return slots.length ? slots : ["15:30"];
+}
+
+function tradingDays(from, to) {
+  const days = [];
+  let cur = from;
+  while (cur <= to) {
+    const weekday = new Date(`${cur}T12:00:00+05:30`).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) days.push(cur);
+    cur = shiftYmd(cur, 1);
+    if (days.length > 420) break;
+  }
+  return days;
+}
+
+export function generateRangeCandles({ from, to, timeframe = "1H", startPrice = 24580, seed = 42 }) {
+  const rand = seeded(seed);
+  const days = tradingDays(from, to);
+  let slots = sessionSlots(timeframe);
+  if (days.length * slots.length > 2200) {
+    slots = sessionSlots("1H");
+  }
+  if (days.length * slots.length > 2200) {
+    slots = sessionSlots("1D");
+  }
+  const candles = [];
+  let price = startPrice;
+  const driftScale = slots.length <= 1 ? 90 : slots.length <= 8 ? 42 : 18;
+  for (const day of days) {
+    for (const slot of slots) {
+      const drift = (rand() - 0.48) * driftScale;
+      const open = price;
+      const close = Math.max(100, open + drift);
+      const high = Math.max(open, close) + rand() * 12;
+      const low = Math.min(open, close) - rand() * 12;
+      const volume = 800_000 + rand() * 2_400_000;
+      candles.push({
+        time: Date.parse(`${day}T${slot}:00+05:30`),
+        open,
+        high,
+        low,
+        close,
+        volume,
+      });
+      price = close;
+    }
+  }
+  return candles;
+}
+
+function inferTimeframe(candles, fallback = "1H") {
+  if (!candles || candles.length < 2) return fallback;
+  const delta = Number(candles[1].time) - Number(candles[0].time);
+  if (delta <= 90_000) return "1m";
+  if (delta <= 8 * 60_000) return "5m";
+  if (delta <= 20 * 60_000) return "15m";
+  if (delta <= 2 * 60 * 60_000) return "1H";
+  return "1D";
+}
+
 const state = {
   indices: [
     withDeskQuotes({ symbol: "NIFTY 50", name: "NIFTY", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24455, 24410, 24480, 24510, 24490, 24540, 24580] }),
@@ -397,11 +539,69 @@ function candlesForBacktest(tf, allowSample = true) {
   return { candles: generateCandles(count, price, 91), sample: true };
 }
 
-export function backtestAlgo(id) {
+export function getAlgo(id) {
+  const algo = state.algos.find((item) => item.id === id);
+  return algo ? clone(algo) : null;
+}
+
+function usableCandles(rows, fromMs, toMs) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      time: Number(row.time),
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+      volume: Number(row.volume || 0),
+    }))
+    .filter(
+      (row) =>
+        Number.isFinite(row.time) &&
+        Number.isFinite(row.close) &&
+        row.close > 0 &&
+        row.time >= fromMs - 86_400_000 &&
+        row.time <= toMs + 86_400_000,
+    )
+    .sort((a, b) => a.time - b.time);
+}
+
+export function backtestAlgo(id, options = {}) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Strategy not found" };
-  const pack = candlesForBacktest(algo.timeframe, true);
-  const result = { ...runBacktest(algo, pack.candles), sample: pack.sample };
+  const window = resolveBacktestWindow(options);
+  if (window.error) return { error: window.error };
+  const wantedTf = pickBacktestTimeframe(algo.timeframe, window.days);
+  let candles = usableCandles(options.candles, window.fromMs, window.toMs);
+  let sample = false;
+  let source = "dhan";
+  if (candles.length < 40) {
+    const index =
+      state.indices.find(
+        (item) => item.name === algo.symbol || item.symbol === algo.symbol || String(item.symbol).startsWith(algo.symbol || "NIFTY"),
+      ) || state.indices[0];
+    candles = generateRangeCandles({
+      from: window.from,
+      to: window.to,
+      timeframe: wantedTf,
+      startPrice: Number(index?.price || 24580),
+      seed: 91 + String(algo.symbol || "NIFTY").length,
+    });
+    sample = true;
+    source = "sample";
+  }
+  if (candles.length < 32) {
+    return { error: "Not enough bars in that date range" };
+  }
+  const usedTf = inferTimeframe(candles, wantedTf);
+  const result = {
+    ...runBacktest({ ...algo, timeframe: usedTf }, candles),
+    sample,
+    source,
+    range: window.range,
+    from: window.from,
+    to: window.to,
+  };
+  result.timeframe = usedTf;
   algo.lastBacktest = result;
   algo.pnl = result.pnl;
   algo.winRate = result.winRate;
@@ -410,8 +610,9 @@ export function backtestAlgo(id) {
     algo.status = "BACKTEST";
     algo.brokerId = "paper";
   }
+  const rangeLabel = window.range === "1y" ? "last 1 year" : `${window.from} → ${window.to}`;
   state.notifications.unshift(
-    `Backtest ${algo.name}: ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${pack.sample ? " · sample bars" : ""}`,
+    `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${sample ? " · sample bars" : ""}`,
   );
   return { ok: true, algo: clone(algo), backtest: result };
 }

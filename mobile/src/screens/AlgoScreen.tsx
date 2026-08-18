@@ -102,9 +102,38 @@ function blankDraft(): Draft {
   };
 }
 
+type RangeDraft = {
+  id: string;
+  name: string;
+  range: "1y" | "custom";
+  from: string;
+  to: string;
+};
+
+function localYmd(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function yearAgoYmd() {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 1);
+  return localYmd(date);
+}
+
+function backtestRangeLabel(row?: { range?: string; from?: string; to?: string }) {
+  if (!row) return "";
+  if (row.from && row.to) return `${row.range === "1y" ? "1Y" : "Custom"} ${row.from} → ${row.to}`;
+  return row.range === "1y" ? "Last 1 year" : "";
+}
+
 export function AlgoScreen() {
   const { data, toggle, saveAlgo, removeAlgo, backtest } = useMarket();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [rangeDraft, setRangeDraft] = useState<RangeDraft | null>(null);
+  const [rangeBusy, setRangeBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | "indicator" | "price-action">("all");
 
   const rows = data.algos.filter((algo) => {
@@ -234,6 +263,50 @@ export function AlgoScreen() {
     );
   }
 
+  if (rangeDraft) {
+    const run = async () => {
+      setRangeBusy(true);
+      try {
+        if (rangeDraft.range === "custom") {
+          await backtest(rangeDraft.id, { range: "custom", from: rangeDraft.from, to: rangeDraft.to });
+        } else {
+          await backtest(rangeDraft.id, { range: "1y" });
+        }
+        setRangeDraft(null);
+      } catch (err) {
+        Alert.alert("Backtest failed", err instanceof Error ? err.message : "Try again");
+      } finally {
+        setRangeBusy(false);
+      }
+    };
+    return (
+      <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Run backtest</Text>
+        <Text style={styles.muted}>{rangeDraft.name} · last 1 year or custom dates</Text>
+        <View style={styles.chips}>
+          <Chip label="Last 1 year" on={rangeDraft.range === "1y"} onPress={() => setRangeDraft({ ...rangeDraft, range: "1y" })} />
+          <Chip label="Custom dates" on={rangeDraft.range === "custom"} onPress={() => setRangeDraft({ ...rangeDraft, range: "custom" })} />
+        </View>
+        {rangeDraft.range === "custom" ? (
+          <>
+            <Field label="From (YYYY-MM-DD)" value={rangeDraft.from} onChange={(from) => setRangeDraft({ ...rangeDraft, from })} />
+            <Field label="To (YYYY-MM-DD)" value={rangeDraft.to} onChange={(to) => setRangeDraft({ ...rangeDraft, to })} />
+          </>
+        ) : (
+          <Text style={styles.muted}>
+            From {yearAgoYmd()} to {localYmd()}
+          </Text>
+        )}
+        <Pressable style={styles.cta} onPress={() => void run()} disabled={rangeBusy}>
+          <Text style={styles.ctaText}>{rangeBusy ? "Testing..." : "Run backtest"}</Text>
+        </Pressable>
+        <Pressable style={styles.ghost} onPress={() => !rangeBusy && setRangeDraft(null)}>
+          <Text style={styles.ghostText}>Cancel</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Algo Desk</Text>
@@ -259,7 +332,10 @@ export function AlgoScreen() {
           </View>
           {algo.lastBacktest ? (
             <Text style={styles.muted}>
-              Backtest {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% · {formatInr(algo.lastBacktest.pnl || 0)}
+              Backtest {backtestRangeLabel(algo.lastBacktest)}
+              {backtestRangeLabel(algo.lastBacktest) ? " · " : ""}
+              {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% · {formatInr(algo.lastBacktest.pnl || 0)}
+              {algo.lastBacktest.sample ? " · sample" : ""}
             </Text>
           ) : null}
           {algo.runMode === "backtest" ? (
@@ -300,7 +376,18 @@ export function AlgoScreen() {
             >
               <Text style={styles.smallBtnText}>Edit</Text>
             </Pressable>
-            <Pressable style={styles.smallBtn} onPress={() => void backtest(algo.id)}>
+            <Pressable
+              style={styles.smallBtn}
+              onPress={() =>
+                setRangeDraft({
+                  id: algo.id,
+                  name: algo.name,
+                  range: "1y",
+                  from: yearAgoYmd(),
+                  to: localYmd(),
+                })
+              }
+            >
               <Text style={styles.smallBtnText}>Backtest</Text>
             </Pressable>
             <Pressable style={styles.smallBtn} onPress={() => remove(algo.id, algo.name)}>
