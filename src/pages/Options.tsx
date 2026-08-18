@@ -18,13 +18,11 @@ export function Options() {
   const [busy, setBusy] = useState("");
   const [lots, setLots] = useState(1);
   const [note, setNote] = useState("");
-  const [range, setRange] = useState<"all" | "atm">("all");
   const visibleRows = useMemo(() => {
-    if (range !== "atm") return rows;
     const atmIndex = rows.findIndex((row) => row.atm);
-    if (atmIndex < 0) return rows;
-    return rows.slice(Math.max(0, atmIndex - 12), atmIndex + 13);
-  }, [rows, range]);
+    if (atmIndex < 0) return rows.slice(0, 21);
+    return rows.slice(Math.max(0, atmIndex - 10), atmIndex + 11);
+  }, [rows]);
   const maxOi = Math.max(1, ...visibleRows.map((row) => Math.max(row.callOi || 0, row.putOi || 0)));
 
   const atm = rows.find((row) => row.atm);
@@ -78,7 +76,7 @@ export function Options() {
         <div>
           <h1 className="text-xl font-bold">Option Chain</h1>
           <p className="text-sm text-slate-400">
-            {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · {sourceLabel}
+            {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · ATM ±10 · {sourceLabel}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -119,13 +117,6 @@ export function Options() {
               1 lot = {lotSize} · qty {qty}
             </span>
           </label>
-          <button
-            type="button"
-            onClick={() => setRange((value) => (value === "all" ? "atm" : "all"))}
-            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold"
-          >
-            {range === "all" ? `All ${rows.length} strikes` : "ATM ±12"}
-          </button>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -239,8 +230,8 @@ export function Options() {
         </table>
       </section>
       <p className="text-xs text-slate-400">
-        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). The desk looks up the Dhan contract on the server
-        from the index, expiry, strike, and CE/PE. Orders reach Dhan only while the live Access Token is connected.
+        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). This page shows ATM ±10 strikes only. The desk
+        looks up the Dhan contract on the server. Orders reach Dhan only while the live Access Token is connected.
       </p>
     </div>
   );

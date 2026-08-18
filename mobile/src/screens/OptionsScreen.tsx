@@ -1,5 +1,5 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatNumber, formatPct } from "../theme";
@@ -14,18 +14,16 @@ export function OptionsScreen() {
     { id: "SENSEX", label: "SENSEX", lot: 20 },
   ];
   const lot = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
-  const [range, setRange] = useState<"all" | "atm">("atm");
   const futures = (data.futures || []).filter(
     (row) =>
       row.front && (!meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol)),
   );
   const visibleRows = useMemo(() => {
     const rows = data.optionChain || [];
-    if (range !== "atm") return rows;
     const atm = rows.findIndex((row) => row.atm);
-    if (atm < 0) return rows.slice(0, 9);
-    return rows.slice(Math.max(0, atm - 4), atm + 5);
-  }, [data.optionChain, range]);
+    if (atm < 0) return rows.slice(0, 21);
+    return rows.slice(Math.max(0, atm - 10), atm + 11);
+  }, [data.optionChain]);
 
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
@@ -82,6 +80,7 @@ export function OptionsScreen() {
         {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · 1 lot = {lot}
         {"\n"}
         {data.dhanFeed?.live ? "Orders go to Dhan. The desk looks up the live contract." : "Desk fill only until Access Token on Brokers"}
+        {" · ATM ±10"}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
@@ -107,14 +106,6 @@ export function OptionsScreen() {
           </Pressable>
         ))}
       </ScrollView>
-      <View style={styles.chips}>
-        <Pressable onPress={() => setRange("atm")} style={[styles.chip, range === "atm" && styles.chipOn]}>
-          <Text style={[styles.chipText, range === "atm" && styles.chipTextOn]}>ATM</Text>
-        </Pressable>
-        <Pressable onPress={() => setRange("all")} style={[styles.chip, range === "all" && styles.chipOn]}>
-          <Text style={[styles.chipText, range === "all" && styles.chipTextOn]}>All strikes ({(data.optionChain || []).length})</Text>
-        </Pressable>
-      </View>
       {futures.map((row) => (
         <Card key={`${row.root}-${row.expiry}`}>
           <Text style={styles.strike}>{row.name || row.symbol}</Text>

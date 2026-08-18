@@ -10,19 +10,13 @@ export function OptionIdsTape() {
   const rows = data.optionChain || [];
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
-  const [strikeQuery, setStrikeQuery] = useState("");
-  const [range, setRange] = useState<"atm" | "all">("atm");
 
   const visible = useMemo(() => {
-    const wanted = strikeQuery.trim();
-    let next = rows;
-    if (range === "atm") {
-      const atmIndex = next.findIndex((row) => row.atm);
-      if (atmIndex >= 0) next = next.slice(Math.max(0, atmIndex - 8), atmIndex + 9);
-    }
-    if (wanted) next = next.filter((row) => String(row.strike).includes(wanted));
+    const atmIndex = rows.findIndex((row) => row.atm);
+    const next =
+      atmIndex < 0 ? rows.slice(0, 21) : rows.slice(Math.max(0, atmIndex - 10), atmIndex + 11);
     return next;
-  }, [rows, range, strikeQuery]);
+  }, [rows]);
 
   const lot = meta?.underlyings?.find((item) => item.id === symbol)?.lot || 65;
 
@@ -63,7 +57,7 @@ export function OptionIdsTape() {
         <div>
           <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            Strike in the centre. CE left, PE right · LTP, buyers, sellers, %, VWAP, volume. BUY/SELL is 1 lot MIS.
+            ATM ±10 strikes. Strike in the centre. CE left, PE right · LTP, buyers, sellers, %, VWAP, volume.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -80,19 +74,6 @@ export function OptionIdsTape() {
               {meta?.expiryLabels?.[item] || item}
             </button>
           ))}
-          <input
-            className="h-8 w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
-            placeholder="Strike"
-            value={strikeQuery}
-            onChange={(event) => setStrikeQuery(event.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => setRange((value) => (value === "atm" ? "all" : "atm"))}
-            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold"
-          >
-            {range === "atm" ? "ATM" : `All ${rows.length}`}
-          </button>
         </div>
       </div>
       {note ? <div className="mb-2 text-xs font-semibold text-slate-500">{note}</div> : null}
