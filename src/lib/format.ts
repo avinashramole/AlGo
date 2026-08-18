@@ -20,6 +20,35 @@ export function formatInr(value: number) {
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
 }
 
+export function formatIstClock(date = new Date()) {
+  const clock = date.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  return `${clock.toUpperCase()} IST`;
+}
+
+export function isNseSessionOpen(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
+  return !weekend && minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
+}
+
 export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?: boolean; funds: number }) {
   const amount = `₹${formatNumber(broker.funds, 0)}`;
   if (broker.virtual || broker.id === "paper") return `${amount} virtual`;

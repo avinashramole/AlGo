@@ -5,6 +5,7 @@ import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
+import { cn, formatIstClock, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -17,12 +18,16 @@ export function Header() {
     return () => window.clearInterval(id);
   }, []);
 
-  const time = now.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+  const marketOpen = isNseSessionOpen(now);
+  const dhanLive = Boolean(data.dhanFeed?.live);
+  const lastTick = data.dhanFeed?.lastTickAt
+    ? new Date(data.dhanFeed.lastTickAt).toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : null;
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-[var(--border)] bg-[var(--card)] px-5">
@@ -38,11 +43,22 @@ export function Header() {
       </div>
       <div className="ml-auto flex items-center gap-3">
         <BrokerSwitch />
-        <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-          <span className="pulse-dot h-2 w-2 rounded-full bg-up" />
-          {data.marketStatus === "OPEN" ? "Market Open" : "Market Closed"}
-          {data.dhanFeed?.live ? " · DHAN LIVE" : live ? " · LIVE" : " · DEMO"}
-          <span className="font-medium text-emerald-600/80 dark:text-emerald-400">{time.toUpperCase()}</span>
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
+            marketOpen
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
+          )}
+          title={marketOpen ? "NSE cash/F&O session 09:15–15:30 IST" : "NSE is closed. Session 09:15–15:30 IST, Mon–Fri."}
+        >
+          <span className={cn("h-2 w-2 rounded-full", marketOpen ? "pulse-dot bg-up" : "bg-slate-400")} />
+          {marketOpen ? "Market Open" : "Market Closed"}
+          {dhanLive ? " · DHAN LIVE" : live ? " · LIVE" : " · DEMO"}
+          <span className={cn("font-medium", marketOpen ? "text-emerald-600/80 dark:text-emerald-400" : "text-slate-500")}>
+            {formatIstClock(now)}
+          </span>
+          {dhanLive && lastTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
         <Link to="/notifications" className="icon-btn" title="Notifications">
           <Bell size={17} />

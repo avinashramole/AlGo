@@ -231,6 +231,14 @@ export type Snapshot = {
   activeBrokerId: string;
   mainBrokerId?: string;
   marketStatus: string;
+  marketSession?: {
+    status: string;
+    open: boolean;
+    reason?: string;
+    hours?: string;
+    weekday?: string;
+    ist?: string;
+  };
   serverTime: string;
   dhanFeed?: {
     live: boolean;

@@ -65,6 +65,42 @@ export function ymdIST(date = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+export function nseMarketSession(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  const hour = Number(parts.hour);
+  const minute = Number(parts.minute);
+  const minutes = hour * 60 + minute;
+  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
+  const openMins = 9 * 60 + 15;
+  const closeMins = 15 * 60 + 30;
+  const inHours = minutes >= openMins && minutes < closeMins;
+  const open = !weekend && inHours;
+  let reason = "session";
+  if (weekend) reason = "weekend";
+  else if (minutes < openMins) reason = "before-open";
+  else if (minutes >= closeMins) reason = "after-close";
+  return {
+    status: open ? "OPEN" : "CLOSED",
+    open,
+    reason,
+    hours: "09:15–15:30 IST",
+    weekday: parts.weekday,
+    ist: `${parts.hour}:${parts.minute}:${parts.second}`,
+  };
+}
+
 export function shiftYmd(ymd, days) {
   const [year, month, day] = String(ymd).split("-").map(Number);
   const next = new Date(Date.UTC(year, month - 1, day + Number(days || 0)));
@@ -546,7 +582,8 @@ export function snapshot() {
     indices: publicIndices(publicState.indices),
     optionChain: publicOptionRows(publicState.optionChain),
     settings: { ...state.settings, broker: active.name },
-    marketStatus: "OPEN",
+    marketStatus: nseMarketSession().status,
+    marketSession: nseMarketSession(),
     serverTime: new Date().toISOString(),
   };
 }

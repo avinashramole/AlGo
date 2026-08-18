@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
-import { colors, formatInr, formatNumber, formatPct, vwapColor } from "../theme";
+import { colors, formatInr, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -32,7 +32,10 @@ export function HomeScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <View style={styles.top}>
         <Text style={styles.brand}>T2S</Text>
-        <Text style={styles.live}>{live ? "LIVE" : "DEMO"} · {data.marketStatus}</Text>
+        <Text style={[styles.live, !isNseSessionOpen() && { color: colors.muted }]}>
+          {isNseSessionOpen() ? "Market Open" : "Market Closed"}
+          {data.dhanFeed?.live ? " · DHAN LIVE" : live ? " · LIVE" : " · DEMO"}
+        </Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         {data.indices.map((item) => {
