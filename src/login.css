@@ -33,30 +33,12 @@
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.18;
+  opacity: 0.12;
   background-image:
-    linear-gradient(rgba(47, 123, 255, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(47, 123, 255, 0.12) 1px, transparent 1px);
+    linear-gradient(rgba(47, 123, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 123, 255, 0.1) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at center, black 20%, transparent 72%);
-}
-
-.t2s-login-bg::after {
-  content: "";
-  position: absolute;
-  right: -4%;
-  bottom: 8%;
-  width: min(42vw, 420px);
-  height: 180px;
-  opacity: 0.22;
-  background:
-    linear-gradient(#b6ff3c, #b6ff3c) 8% 70% / 10px 42% no-repeat,
-    linear-gradient(#2f7bff, #2f7bff) 22% 55% / 10px 62% no-repeat,
-    linear-gradient(#b6ff3c, #b6ff3c) 36% 40% / 10px 78% no-repeat,
-    linear-gradient(#2f7bff, #2f7bff) 50% 58% / 10px 54% no-repeat,
-    linear-gradient(#b6ff3c, #b6ff3c) 64% 28% / 10px 88% no-repeat,
-    linear-gradient(#2f7bff, #2f7bff) 78% 48% / 10px 66% no-repeat,
-    linear-gradient(#b6ff3c, #b6ff3c) 92% 18% / 10px 96% no-repeat;
 }
 
 .t2s-login-card {
@@ -73,14 +55,6 @@
   box-shadow:
     0 0 0 1px rgba(47, 123, 255, 0.12),
     0 28px 70px rgba(0, 0, 0, 0.5);
-}
-
-.t2s-login-lead {
-  margin: 18px 0 0;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #8b95a8;
 }
 
 .t2s-login-form {

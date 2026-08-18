@@ -119,10 +119,7 @@ export function Login() {
     <div className="t2s-login">
       <div className="t2s-login-bg" aria-hidden="true" />
       <div className="t2s-login-card">
-        <BrandMark variant="stacked" size="md" theme="dark" />
-        <p className="t2s-login-lead">
-          {page === "signup" ? "Create account with Gmail or a 10-digit mobile number." : "Gmail or 10-digit mobile, then your password."}
-        </p>
+        <BrandMark variant="stacked" size="sm" theme="dark" />
 
         <form onSubmit={onSubmit} className="t2s-login-form" autoComplete="on">
           {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" /> : null}

@@ -123,9 +123,6 @@ export function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <BrandMark variant="stacked" />
-          <Text style={styles.lead}>
-            {page === "signup" ? "Create account with Gmail or a 10-digit mobile number." : "Gmail or 10-digit mobile, then your password."}
-          </Text>
           {page === "signup" ? (
             <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
           ) : null}
@@ -229,7 +226,6 @@ function Field({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#05070c" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  lead: { color: "#8b95a8", fontSize: 13, textAlign: "center", marginTop: 14, marginBottom: 22, lineHeight: 19 },
   card: {
     borderWidth: 1,
     borderColor: "rgba(47,123,255,0.4)",
