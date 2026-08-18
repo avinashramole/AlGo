@@ -132,6 +132,7 @@ export function OptionsScreen() {
                 <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
+                <Text style={styles.vwap}>{formatNumber(row.callVwap || row.callLtp)}</Text>
                 <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
                 <Pressable style={styles.sell} onPress={() => void trade("CE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
@@ -145,6 +146,7 @@ export function OptionsScreen() {
                 <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
+                <Text style={styles.vwap}>{formatNumber(row.putVwap || row.putLtp)}</Text>
                 <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
                 <Pressable style={styles.sell} onPress={() => void trade("PE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
@@ -181,6 +183,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between" },
   actions: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
   price: { fontWeight: "800", fontSize: 16 },
+  vwap: { fontWeight: "600", fontSize: 12, color: colors.muted },
   buy: { backgroundColor: colors.up, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   sell: { backgroundColor: colors.down, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   actionText: { color: "#fff", fontWeight: "800", fontSize: 11 },

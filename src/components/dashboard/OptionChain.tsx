@@ -61,6 +61,7 @@ export function OptionChain() {
               <td className="py-2.5">
                 <div className="inline-flex items-center gap-1">
                   <MiniButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
+                  <span className="text-[10px] text-slate-400">{formatNumber(row.callVwap || row.callLtp)}</span>
                   <span className="font-semibold">{formatNumber(row.callLtp)}</span>
                   <MiniButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
                 </div>
@@ -72,6 +73,7 @@ export function OptionChain() {
               <td className="py-2.5 text-right">
                 <div className="inline-flex items-center justify-end gap-1">
                   <MiniButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
+                  <span className="text-[10px] text-slate-400">{formatNumber(row.putVwap || row.putLtp)}</span>
                   <span className="font-semibold">{formatNumber(row.putLtp)}</span>
                   <MiniButton busy={busy} id={`${row.strike}-PE`} side="SELL" onClick={() => void trade("PE", "SELL", row)} />
                 </div>

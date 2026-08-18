@@ -58,7 +58,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         <div>
           <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10 strikes. BUY left of LTP, SELL right of LTP. CE left, strike centre, PE right.
+            ATM ±10 strikes. BUY left of VWAP and LTP, SELL right. CE left, strike centre, PE right.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -91,18 +91,18 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           </tr>
           <tr>
             <th className="pb-2 font-semibold">Buy</th>
+            <th className="pb-2 font-semibold">VWAP</th>
             <th className="pb-2 font-semibold">LTP</th>
             <th className="pb-2 font-semibold">Sell</th>
             <th className="pb-2 font-semibold">Buyers</th>
             <th className="pb-2 font-semibold">Sellers</th>
             <th className="pb-2 font-semibold">%</th>
-            <th className="pb-2 font-semibold">VWAP</th>
             <th className="pb-2 text-center font-semibold">Strike</th>
-            <th className="pb-2 text-right font-semibold">VWAP</th>
             <th className="pb-2 text-right font-semibold">%</th>
             <th className="pb-2 text-right font-semibold">Sellers</th>
             <th className="pb-2 text-right font-semibold">Buyers</th>
             <th className="pb-2 text-right font-semibold">Buy</th>
+            <th className="pb-2 text-right font-semibold">VWAP</th>
             <th className="pb-2 text-right font-semibold">LTP</th>
             <th className="pb-2 text-right font-semibold">Sell</th>
           </tr>
@@ -113,6 +113,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
               <td className="py-2">
                 <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
               </td>
+              <td className="py-2">{formatNumber(row.callVwap || row.callLtp)}</td>
               <td className="py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
               <td className="py-2">
                 <SideButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
@@ -120,14 +121,12 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
               <td className="py-2">{formatOi(row.callBuy || 0)}</td>
               <td className="py-2">{formatOi(row.callSell || 0)}</td>
               <td className={cn("py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
-              <td className="py-2">{formatNumber(row.callVwap || row.callLtp)}</td>
               <td className="py-2 text-center">
                 <div className={cn("inline-flex rounded-md px-2 py-1 font-bold", row.atm ? "bg-brand-500 text-white" : "bg-[var(--bg)]")}>
                   {row.strike}
                   {row.atm ? " ATM" : ""}
                 </div>
               </td>
-              <td className="py-2 text-right">{formatNumber(row.putVwap || row.putLtp)}</td>
               <td className={cn("py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
               <td className="py-2 text-right">{formatOi(row.putSell || 0)}</td>
               <td className="py-2 text-right">{formatOi(row.putBuy || 0)}</td>
@@ -136,6 +135,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
                   <SideButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
                 </div>
               </td>
+              <td className="py-2 text-right">{formatNumber(row.putVwap || row.putLtp)}</td>
               <td className="py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
               <td className="py-2 text-right">
                 <div className="flex justify-end">
