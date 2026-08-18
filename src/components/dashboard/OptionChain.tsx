@@ -62,6 +62,7 @@ export function OptionChain() {
             <tr key={row.strike} className={cn("soft-row", row.atm && "bg-brand-50/70 dark:bg-brand-500/10")}>
               <td className="py-2.5">
                 <div className="font-semibold">{formatNumber(row.callLtp)}</div>
+                <div className="text-[10px] font-mono text-slate-400">ID {row.callId || "—"}</div>
                 <div className={cn("text-[10px]", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</div>
                 <MiniTrade
                   busy={busy}
@@ -75,6 +76,7 @@ export function OptionChain() {
               </td>
               <td className="py-2.5 text-right">
                 <div className="font-semibold">{formatNumber(row.putLtp)}</div>
+                <div className="text-[10px] font-mono text-slate-400">ID {row.putId || "—"}</div>
                 <div className={cn("text-[10px]", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</div>
                 <div className="flex justify-end">
                   <MiniTrade

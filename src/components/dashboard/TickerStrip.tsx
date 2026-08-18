@@ -15,6 +15,7 @@ export function TickerStrip() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
+                {item.securityId ? <div className="text-[10px] font-mono text-slate-400">ID {item.securityId}</div> : null}
                 <div className="mt-1 text-lg font-bold leading-none">{formatNumber(item.price)}</div>
                 <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today

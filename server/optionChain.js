@@ -264,7 +264,7 @@ export function parseDhanChain(payload, spot, step = 50) {
         atm: false,
       };
     })
-    .filter((row) => Number.isFinite(row.strike) && (row.callLtp > 0 || row.putLtp > 0 || row.callOi > 0 || row.putOi > 0))
+    .filter((row) => Number.isFinite(row.strike) && (row.callLtp > 0 || row.putLtp > 0 || row.callOi > 0 || row.putOi > 0 || row.callId || row.putId))
     .sort((a, b) => a.strike - b.strike);
 
   if (!rows.length) return { rows: [], spot: last };

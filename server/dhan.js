@@ -13,8 +13,8 @@ import {
   setLiveCandles,
   setOptionDesk,
 } from "./market.js";
-import { enrichOptionRows, lookupOptionSecurityId, parseOptionContract, resolveFrontFutures } from "./frontFutures.js";
-import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, trimAroundAtm, upcomingExpiries } from "./optionChain.js";
+import { buildScripChain, lookupOptionSecurityId, parseOptionContract, resolveFrontFutures, scripExpiries } from "./frontFutures.js";
+import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
 const DHAN_FEED_WS = "wss://api-feed.dhan.co";
@@ -535,23 +535,37 @@ function startSocket() {
 }
 
 async function loadExpiryList(und) {
-  if (!accessToken) return upcomingExpiries(und.id);
+  await resolveFrontFutures().catch(() => []);
+  const fromScrip = scripExpiries(und.id);
+  if (!accessToken) return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
   try {
     const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, {
       UnderlyingScrip: und.scrip,
       UnderlyingSeg: und.segment,
     });
     const dates = dropExpired(Array.isArray(list?.data) ? list.data : []);
-    if (dates.length) return dates;
+    const merged = [...new Set([...dates, ...fromScrip].map(normalizeExpiry).filter(Boolean))].sort();
+    if (merged.length) return merged;
   } catch {
     /* fall through */
   }
-  return upcomingExpiries(und.id);
+  return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
 }
 
 function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
-  const next = enrichOptionRows(rows || currentOptionRows(), { symbol, expiry });
-  setOptionDesk({ symbol, expiry, expiries, rows: next, spot, source });
+  const desk = getOptionMeta();
+  const und = getUnderlying(symbol || desk.symbol);
+  const chosen = expiry || desk.expiry;
+  const nextSpot = Number(spot) || getChainSpot(und.id);
+  const next = buildScripChain({
+    symbol: und.id,
+    expiry: chosen,
+    spot: nextSpot,
+    step: und.step,
+    liveRows: rows || currentOptionRows(),
+    wings: 12,
+  });
+  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, rows: next, spot: nextSpot, source });
   return next;
 }
 
@@ -577,8 +591,7 @@ async function refreshOptionChain() {
     Expiry: expiry,
   });
   const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
-  const rows = trimAroundAtm(parsed.rows, 12);
-  if (!rows.length) {
+  if (!parsed.rows.length) {
     setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}.` });
     applySyntheticOptionChain(und.id, expiry);
     paintDesk({ symbol: und.id, expiry, expiries, source: "demo" });
@@ -588,7 +601,7 @@ async function refreshOptionChain() {
     symbol: und.id,
     expiry,
     expiries,
-    rows,
+    rows: parsed.rows,
     spot: parsed.spot || getChainSpot(und.id),
     source: "dhan",
   });

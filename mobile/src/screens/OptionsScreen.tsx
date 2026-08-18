@@ -85,6 +85,7 @@ export function OptionsScreen() {
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.muted}>CALL</Text>
               <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
+              <Text style={styles.muted}>ID {row.callId || "—"}</Text>
               <Text style={{ color: row.callChg >= 0 ? colors.up : colors.down }}>{formatPct(row.callChg)}</Text>
               <View style={styles.actions}>
                 <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row)}>
@@ -98,6 +99,7 @@ export function OptionsScreen() {
             <View style={{ flex: 1, alignItems: "flex-end" }}>
               <Text style={styles.muted}>PUT</Text>
               <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
+              <Text style={styles.muted}>ID {row.putId || "—"}</Text>
               <Text style={{ color: row.putChg >= 0 ? colors.up : colors.down }}>{formatPct(row.putChg)}</Text>
               <View style={styles.actions}>
                 <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row)}>

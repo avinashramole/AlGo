@@ -1,4 +1,4 @@
-import { dropExpired, normalizeExpiry } from "./optionChain.js";
+import { buildSyntheticChain, dropExpired, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
 
 const SCRIP_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const CACHE_MS = 12 * 60 * 60 * 1000;
@@ -19,7 +19,7 @@ const FALLBACK = [
 
 const ROOTS = new Set(UNDERLYINGS.map((row) => row.root));
 
-let cache = { at: 0, instruments: FALLBACK, options: new Map() };
+let cache = { at: 0, instruments: FALLBACK, options: new Map(), byExpiry: new Map() };
 let loading = null;
 
 function splitCsvLine(line) {
@@ -52,6 +52,18 @@ function optionKey(root, expiry, strike, option) {
   return `${optionRoot(root)}|${normalizeExpiry(expiry)}|${Number(strike)}|${String(option || "").toUpperCase()}`;
 }
 
+function expiryKey(root, expiry) {
+  return `${optionRoot(root)}|${normalizeExpiry(expiry)}`;
+}
+
+function strikeBucket(byExpiry, root, expiry, strike) {
+  const key = expiryKey(root, expiry);
+  if (!byExpiry.has(key)) byExpiry.set(key, new Map());
+  const strikes = byExpiry.get(key);
+  if (!strikes.has(strike)) strikes.set(strike, {});
+  return strikes.get(strike);
+}
+
 async function loadScripMaster() {
   if (cache.at && Date.now() - cache.at < CACHE_MS) return cache;
   if (loading) return loading;
@@ -66,6 +78,7 @@ async function loadScripMaster() {
       const idx = Object.fromEntries(cols.map((col, i) => [col, i]));
       const grouped = Object.fromEntries(UNDERLYINGS.map((row) => [row.root, []]));
       const options = new Map();
+      const byExpiry = new Map();
 
       for (let i = 1; i < lines.length; i += 1) {
         const line = lines[i];
@@ -88,6 +101,9 @@ async function loadScripMaster() {
           const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
           if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
             options.set(optionKey(root, expiry, strike, option), String(securityId));
+            const ids = strikeBucket(byExpiry, root, expiry, strike);
+            if (option === "CE") ids.callId = securityId;
+            else ids.putId = securityId;
           }
         }
       }
@@ -110,6 +126,7 @@ async function loadScripMaster() {
         at: Date.now(),
         instruments: instruments.length ? instruments : FALLBACK,
         options,
+        byExpiry,
       };
       return cache;
     } catch {
@@ -117,6 +134,7 @@ async function loadScripMaster() {
         at: Date.now(),
         instruments: cache.instruments.length ? cache.instruments : FALLBACK,
         options: cache.options instanceof Map ? cache.options : new Map(),
+        byExpiry: cache.byExpiry instanceof Map ? cache.byExpiry : new Map(),
       };
       return cache;
     } finally {
@@ -141,6 +159,66 @@ export async function lookupOptionSecurityId({ symbol, expiry, strike, option } 
   if (!root || !opt || !px || !exp) return "";
   const data = await loadScripMaster();
   return data.options.get(optionKey(root, exp, px, opt)) || "";
+}
+
+export function scripExpiries(symbol) {
+  const root = optionRoot(symbol);
+  const prefix = `${root}|`;
+  const dates = [];
+  for (const key of cache.byExpiry.keys()) {
+    if (key.startsWith(prefix)) dates.push(key.slice(prefix.length));
+  }
+  return dropExpired([...new Set(dates)].sort());
+}
+
+export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 12 } = {}) {
+  const root = optionRoot(symbol);
+  const exp = normalizeExpiry(expiry);
+  const bucket = cache.byExpiry.get(expiryKey(root, exp));
+  const liveMap = new Map((liveRows || []).map((row) => [Number(row.strike), row]));
+  const synthMap = new Map(
+    buildSyntheticChain(spot || 0, step, 16).map((row) => [Number(row.strike), row]),
+  );
+  const strikes = new Set([...(bucket ? bucket.keys() : []), ...liveMap.keys()]);
+  if (!strikes.size) {
+    return enrichOptionRows(liveRows || [], { symbol, expiry });
+  }
+  const hasLive = (liveRows || []).some((row) => Number(row.callLtp) > 0 || Number(row.putLtp) > 0);
+  const rows = [...strikes]
+    .filter((strike) => Number.isFinite(Number(strike)))
+    .sort((a, b) => a - b)
+    .map((strike) => {
+      const live = liveMap.get(Number(strike)) || {};
+      const ids = bucket?.get(Number(strike)) || {};
+      const synth = synthMap.get(Number(strike)) || {};
+      const callId = Number(live.callId || ids.callId || 0) || undefined;
+      const putId = Number(live.putId || ids.putId || 0) || undefined;
+      return {
+        strike: Number(strike),
+        callLtp: hasLive ? Number(live.callLtp || 0) : Number(live.callLtp || synth.callLtp || 0),
+        callChg: Number(live.callChg || synth.callChg || 0),
+        callOi: Number(live.callOi || synth.callOi || 0),
+        callOiChg: Number(live.callOiChg || synth.callOiChg || 0),
+        callVol: Number(live.callVol || synth.callVol || 0),
+        callIv: Number(live.callIv || synth.callIv || 0),
+        callDelta: Number(live.callDelta || synth.callDelta || 0),
+        callBid: Number(live.callBid || 0),
+        callAsk: Number(live.callAsk || 0),
+        callId,
+        putLtp: hasLive ? Number(live.putLtp || 0) : Number(live.putLtp || synth.putLtp || 0),
+        putChg: Number(live.putChg || synth.putChg || 0),
+        putOi: Number(live.putOi || synth.putOi || 0),
+        putOiChg: Number(live.putOiChg || synth.putOiChg || 0),
+        putVol: Number(live.putVol || synth.putVol || 0),
+        putIv: Number(live.putIv || synth.putIv || 0),
+        putDelta: Number(live.putDelta || synth.putDelta || 0),
+        putBid: Number(live.putBid || 0),
+        putAsk: Number(live.putAsk || 0),
+        putId,
+        atm: Boolean(live.atm),
+      };
+    });
+  return trimAroundAtm(markAtmRows(rows, spot, step), wings);
 }
 
 export function enrichOptionRows(rows, { symbol, expiry } = {}) {

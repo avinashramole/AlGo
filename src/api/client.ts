@@ -76,6 +76,7 @@ export type Snapshot = {
     future?: number;
     vwap?: number;
     prevClose?: number;
+    securityId?: number;
   }>;
   ohlc: { open: number; high: number; low: number; close: number };
   dnaScores: Array<{ label: string; value: number }>;

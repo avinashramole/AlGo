@@ -72,6 +72,7 @@ export function Options() {
           <h1 className="text-xl font-bold">Option Chain</h1>
           <p className="text-sm text-slate-400">
             {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · {sourceLabel}
+            {meta?.contractIds ? ` · ${meta.contractIds} security IDs` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -154,14 +155,14 @@ export function Options() {
       </div>
       {note ? <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold">{note}</div> : null}
       <section className="card overflow-x-auto">
-        <table className="w-full min-w-[1180px] text-left text-xs">
+        <table className="w-full min-w-[1280px] text-left text-xs">
           <thead className="bg-[var(--bg)] text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
-              <th colSpan={6} className="px-3 py-2 text-center font-bold text-up">
+              <th colSpan={7} className="px-3 py-2 text-center font-bold text-up">
                 CALLS
               </th>
               <th className="px-3 py-2 text-center font-bold">Strike</th>
-              <th colSpan={6} className="px-3 py-2 text-center font-bold text-down">
+              <th colSpan={7} className="px-3 py-2 text-center font-bold text-down">
                 PUTS
               </th>
             </tr>
@@ -171,9 +172,11 @@ export function Options() {
               <th className="px-3 py-2 font-semibold">IV</th>
               <th className="px-3 py-2 font-semibold">LTP</th>
               <th className="px-3 py-2 font-semibold">Chg</th>
+              <th className="px-3 py-2 font-semibold">ID</th>
               <th className="px-3 py-2 font-semibold">Trade</th>
               <th className="px-3 py-2 text-center font-semibold">Strike</th>
               <th className="px-3 py-2 text-right font-semibold">Trade</th>
+              <th className="px-3 py-2 text-right font-semibold">ID</th>
               <th className="px-3 py-2 text-right font-semibold">Chg</th>
               <th className="px-3 py-2 text-right font-semibold">LTP</th>
               <th className="px-3 py-2 text-right font-semibold">IV</th>
@@ -192,6 +195,7 @@ export function Options() {
                 <td className="px-3 py-2">{row.callIv ? `${row.callIv.toFixed(1)}` : "—"}</td>
                 <td className="px-3 py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
                 <td className={cn("px-3 py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
+                <td className="px-3 py-2 font-mono text-[10px] text-slate-500">{row.callId || "—"}</td>
                 <td className="px-3 py-2">
                   <TradeButtons
                     busy={busy}
@@ -216,6 +220,7 @@ export function Options() {
                     />
                   </div>
                 </td>
+                <td className="px-3 py-2 text-right font-mono text-[10px] text-slate-500">{row.putId || "—"}</td>
                 <td className={cn("px-3 py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
                 <td className="px-3 py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
                 <td className="px-3 py-2 text-right">{row.putIv ? `${row.putIv.toFixed(1)}` : "—"}</td>
@@ -230,8 +235,8 @@ export function Options() {
         </table>
       </section>
       <p className="text-xs text-slate-400">
-        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). It reaches Dhan only while the live Access Token is
-        connected. Otherwise the fill stays on this desk.
+        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). Every strike shows its Dhan security ID. It reaches
+        Dhan only while the live Access Token is connected. Otherwise the fill stays on this desk.
       </p>
     </div>
   );
