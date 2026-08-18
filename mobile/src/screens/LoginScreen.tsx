@@ -126,6 +126,10 @@ export function LoginScreen() {
           <View style={styles.brand}>
             <BrandMark variant="horizontal" theme="light" />
           </View>
+          <Text style={styles.welcome}>
+            {page === "signup" ? "Create account" : "Welcome Back!"}
+          </Text>
+          <Text style={styles.sub}>{page === "signup" ? "Create your Trade 2 Smart account" : "Login to your Trade 2 Smart account"}</Text>
           {page === "signup" ? (
             <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
           ) : null}
@@ -229,7 +233,9 @@ function Field({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  brand: { alignItems: "center", marginBottom: 24 },
+  brand: { alignItems: "center", marginBottom: 18 },
+  welcome: { color: colors.text, fontSize: 28, fontWeight: "800", marginBottom: 6 },
+  sub: { color: colors.muted, fontSize: 14, marginBottom: 20 },
   card: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -251,8 +257,8 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: colors.brand,
-    height: 44,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,

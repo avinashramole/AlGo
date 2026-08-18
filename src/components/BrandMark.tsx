@@ -43,7 +43,7 @@ export function BrandMark({ variant = "stacked", size = "md", theme = "dark", cl
             <span style={{ color: "#2f7bff" }}>2 </span>
             <span style={{ color: smart }}>SMART</span>
           </span>
-          <span className={`mt-0.5 hidden tracking-wide lg:block ${tagSize}`} style={{ color: tag }}>
+          <span className={`mt-0.5 tracking-wide ${showWordmark === "always" ? "block" : "hidden lg:block"} ${tagSize}`} style={{ color: tag }}>
             Intelligence Behind Every Trade.
           </span>
         </span>

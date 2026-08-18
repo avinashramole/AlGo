@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { ArrowRight, Eye, EyeOff, Lock, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
+import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import "../login.css";
 
@@ -29,6 +31,7 @@ export function Login() {
   const [devOtp, setDevOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   const channel = channelOf(identifier);
 
@@ -103,6 +106,8 @@ export function Login() {
       setLoading(true);
       try {
         await login(identifier || "demo@t2s.app", password);
+        if (!remember) sessionStorage.setItem("t2s-session-only", "1");
+        else sessionStorage.removeItem("t2s-session-only");
         navigate("/");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Sign in failed");
@@ -117,78 +122,110 @@ export function Login() {
 
   return (
     <div className="t2s-login">
-      <div className="card t2s-login-card">
-        <div className="mb-6 flex justify-center">
-          <BrandMark variant="horizontal" size="lg" theme="light" showWordmark="always" />
+      <Watermark />
+      <aside className="t2s-login-hero">
+        <BrandMark variant="horizontal" size="lg" theme="light" showWordmark="always" />
+        <div className="t2s-hero-copy">
+          <h1>
+            <span className="t2s-blue">Smart</span> Tools.
+            <br />
+            Real <span className="t2s-green">Results.</span>
+            <br />
+            Better Tomorrow.
+          </h1>
+          <p>Make smarter decisions with powerful analytics and real-time market insights.</p>
         </div>
+        <LoginHeroArt />
+      </aside>
 
-        <form onSubmit={onSubmit} autoComplete="on">
-          {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" /> : null}
-          <Field
-            label="Gmail or mobile"
-            value={identifier}
-            onChange={(value) => {
-              setIdentifier(value);
-              setSentTo("");
-              setOtp("");
-            }}
-            placeholder="you@gmail.com or 98xxxxxxxx"
-            autoComplete="username"
-          />
-          {sentTo ? (
+      <section className="t2s-login-panel">
+        <div className="t2s-login-card">
+          <div className="t2s-login-mobile-brand mb-5 flex justify-center lg:hidden">
+            <BrandMark variant="horizontal" size="md" theme="light" showWordmark="always" />
+          </div>
+          <h2 className="t2s-login-title">
+            {page === "signup" ? "Create account" : <>Welcome <span>Back!</span></>}
+          </h2>
+          <p className="t2s-login-sub">
+            {page === "signup" ? "Create your Trade 2 Smart account" : "Login to your Trade 2 Smart account"}
+          </p>
+
+          <form onSubmit={onSubmit} autoComplete="on">
+            {page === "signup" ? <Field icon="user" label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" /> : null}
             <Field
-              label="6-digit code"
-              value={otp}
-              onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              autoComplete="one-time-code"
+              icon="user"
+              label="Gmail or mobile"
+              value={identifier}
+              onChange={(value) => {
+                setIdentifier(value);
+                setSentTo("");
+                setOtp("");
+              }}
+              placeholder="Email or mobile"
+              autoComplete="username"
             />
-          ) : null}
-          <Field
-            label={page === "signup" ? "Set password" : "Password"}
-            value={password}
-            onChange={setPassword}
-            placeholder={page === "signup" ? "At least 6 characters" : "Enter password"}
-            secret
-            autoComplete={page === "signup" ? "new-password" : "current-password"}
-          />
-          {page === "signup" ? (
-            <Field label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
-          ) : null}
-          <Notice error={error} hint={hint} devOtp={devOtp} />
-          <button type="submit" disabled={loading} className="mt-1 h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
-            {loading ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
-          </button>
-          <button type="button" className="mt-2 h-10 w-full text-sm font-semibold text-brand-500" disabled={loading} onClick={() => void onSendCode()}>
-            {sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}
-          </button>
-        </form>
+            {sentTo ? (
+              <Field icon="lock" label="6-digit code" value={otp} onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" autoComplete="one-time-code" />
+            ) : null}
+            <Field
+              icon="lock"
+              label={page === "signup" ? "Set password" : "Password"}
+              value={password}
+              onChange={setPassword}
+              placeholder="Password"
+              secret
+              autoComplete={page === "signup" ? "new-password" : "current-password"}
+            />
+            {page === "signup" ? (
+              <Field icon="lock" label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
+            ) : null}
 
-        <button
-          type="button"
-          className="mt-4 w-full text-center text-sm text-slate-500"
-          onClick={() => {
-            setPage(page === "signup" ? "signin" : "signup");
-            resetNotice();
-          }}
-        >
-          {page === "signup" ? (
-            <>
-              Have an account? <span className="font-semibold text-slate-900">Sign in</span>
-            </>
-          ) : (
-            <>
-              New here? <span className="font-semibold text-slate-900">Create account</span>
-            </>
-          )}
-        </button>
-        {page === "signin" ? <p className="mt-3 text-center text-xs text-slate-400">Demo: demo@t2s.app / demo123</p> : null}
-      </div>
+            {page === "signin" ? (
+              <div className="t2s-row">
+                <label className="t2s-check">
+                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+                  Remember me
+                </label>
+                <button type="button" className="t2s-forgot" disabled={loading} onClick={() => void onSendCode()}>
+                  Forgot Password?
+                </button>
+              </div>
+            ) : null}
+
+            <Notice error={error} hint={hint} devOtp={devOtp} />
+            <button type="submit" disabled={loading} className="t2s-submit">
+              {loading ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Login"}
+              <ArrowRight size={18} />
+            </button>
+          </form>
+
+          <button
+            type="button"
+            className="t2s-switch"
+            onClick={() => {
+              setPage(page === "signup" ? "signin" : "signup");
+              resetNotice();
+            }}
+          >
+            {page === "signup" ? (
+              <>
+                Have an account? <b>Login</b>
+              </>
+            ) : (
+              <>
+                Don't have an account? <b>Sign Up</b>
+              </>
+            )}
+          </button>
+          {page === "signin" ? <p className="t2s-demo">Demo: demo@t2s.app / demo123</p> : null}
+        </div>
+      </section>
     </div>
   );
 }
 
 function Field({
+  icon,
   label,
   value,
   onChange,
@@ -196,6 +233,7 @@ function Field({
   secret,
   autoComplete,
 }: {
+  icon: "user" | "lock";
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -205,20 +243,21 @@ function Field({
 }) {
   const [show, setShow] = useState(false);
   return (
-    <label className="mb-3 block text-sm font-semibold">
-      {label}
-      <span className="mt-1 flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3">
+    <label className="t2s-field">
+      <span className="t2s-field-box">
+        {icon === "user" ? <User size={18} /> : <Lock size={18} />}
         <input
-          className="t2s-input h-11 min-w-0 flex-1 border-0 bg-transparent font-normal outline-none"
+          className="t2s-input"
           type={secret && !show ? "password" : "text"}
           value={value}
-          placeholder={placeholder}
+          placeholder={placeholder || label}
           autoComplete={autoComplete}
+          aria-label={label}
           onChange={(event) => onChange(event.target.value)}
         />
         {secret ? (
-          <button type="button" className="shrink-0 text-xs font-semibold text-brand-500" onClick={() => setShow((current) => !current)}>
-            {show ? "Hide" : "Show"}
+          <button type="button" className="t2s-eye" onClick={() => setShow((current) => !current)} aria-label={show ? "Hide password" : "Show password"}>
+            {show ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         ) : null}
       </span>
@@ -229,9 +268,28 @@ function Field({
 function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: string }) {
   return (
     <>
-      {hint ? <p className="mb-3 text-sm text-slate-500">{hint}</p> : null}
-      {devOtp ? <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-up">Temporary code: {devOtp}</div> : null}
-      {error ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-down">{error}</div> : null}
+      {hint ? <p className="t2s-hint">{hint}</p> : null}
+      {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
+      {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
+    </>
+  );
+}
+
+function Watermark() {
+  return (
+    <>
+      <svg className="t2s-login-watermark" viewBox="0 0 220 140" fill="none" aria-hidden="true">
+        <path d="M10 90 L40 70 L70 100 L110 40 L150 60 L210 20" stroke="#2f7bff" strokeWidth="4" />
+        <rect x="36" y="48" width="8" height="40" fill="#22c55e" />
+        <rect x="66" y="62" width="8" height="38" fill="#2f7bff" />
+        <rect x="106" y="28" width="8" height="52" fill="#22c55e" />
+        <rect x="146" y="44" width="8" height="40" fill="#2f7bff" />
+      </svg>
+      <svg className="t2s-login-waves" viewBox="0 0 400 180" fill="none" aria-hidden="true">
+        <path d="M0 80 C80 20, 160 140, 240 70 C300 20, 360 90, 400 50" stroke="#cbd5e1" strokeWidth="2" />
+        <path d="M0 110 C90 50, 170 160, 260 100 C320 60, 360 120, 400 90" stroke="#dbe4ee" strokeWidth="2" />
+        <path d="M0 140 C70 90, 180 170, 280 120 C340 90, 370 140, 400 130" stroke="#e5e7eb" strokeWidth="2" />
+      </svg>
     </>
   );
 }
