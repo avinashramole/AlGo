@@ -55,17 +55,17 @@ const state = {
     { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
   ],
   algos: [
-    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "paper" },
-    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "paper" },
-    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412.0, winRate: 54, enabled: false, brokerId: "paper" },
+    { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
+    { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
+    { id: "a3", name: "ORB Breakout", tag: "Index", status: "PAUSED", pnl: -412.0, winRate: 54, enabled: false, brokerId: "dhan" },
   ],
   positions: [
-    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "paper" },
-    { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "paper" },
-    { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "paper" },
-    { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 65, avg: 96.8, ltp: 118.4, pnl: 1404.0, brokerId: "paper" },
-    { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0, brokerId: "paper" },
-    { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5, brokerId: "paper" },
+    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 75, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
+    { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "dhan" },
+    { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "dhan" },
+    { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 65, avg: 96.8, ltp: 118.4, pnl: 1404.0, brokerId: "dhan" },
+    { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0, brokerId: "dhan" },
+    { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5, brokerId: "dhan" },
   ],
   signals: [
     { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
@@ -131,7 +131,7 @@ const state = {
     product: "MIS",
     confirmation: "Enabled",
     riskGuard: "Max 2% per trade",
-    broker: "Paper Trading",
+    broker: "Dhan",
     notifications: "Signals + fills",
   },
 };
@@ -180,7 +180,7 @@ export function snapshot() {
   const totalPnl = state.positions.reduce((sum, row) => sum + row.pnl, 0);
   const byBroker = {};
   for (const row of state.positions) {
-    const key = row.brokerId || "paper";
+    const key = row.brokerId || "dhan";
     byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
   }
   return {
@@ -189,6 +189,7 @@ export function snapshot() {
     pnlByBroker: byBroker,
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
+    mainBrokerId: brokers.mainBrokerId,
     settings: { ...state.settings, broker: active.name },
     marketStatus: "OPEN",
     serverTime: new Date().toISOString(),
@@ -205,7 +206,7 @@ export function toggleAlgo(id) {
 
 export function placeOrder(payload) {
   const brokers = publicBrokers();
-  const requested = String(payload.brokerId || brokers.activeBrokerId || "paper");
+  const requested = String(payload.brokerId || brokers.activeBrokerId || "dhan");
   const account = brokers.brokers.find((item) => item.id === requested);
   if (!account?.connected) {
     return { error: "Connect this broker before placing an order" };
@@ -258,7 +259,7 @@ export function applyBrokerPositions(positions, brokerId) {
 
 export function dropBrokerPositions(brokerId) {
   state.positions = state.positions.filter((row) => row.brokerId !== brokerId);
-  state.algos = state.algos.map((algo) => (algo.brokerId === brokerId ? { ...algo, brokerId: "paper", enabled: false, status: "PAUSED" } : algo));
+  state.algos = state.algos.map((algo) => (algo.brokerId === brokerId ? { ...algo, brokerId: "dhan", enabled: false, status: "PAUSED" } : algo));
 }
 
 export function addChat(text) {

@@ -9,7 +9,7 @@ export function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { user, logout } = useAuth();
   const { data } = useMarket();
-  const active = data.brokers?.find((item) => item.active)?.name || "Paper Trading";
+  const active = data.brokers?.find((item) => item.active)?.name || "Dhan";
   const connected = data.brokers?.filter((item) => item.connected).length || 1;
   return (
     <View style={styles.page}>

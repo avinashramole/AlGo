@@ -45,7 +45,7 @@ export function Algo() {
               Route to broker
               <select
                 className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-semibold"
-                value={algo.brokerId || "paper"}
+                value={algo.brokerId || "dhan"}
                 onChange={(event) => void routeAlgo(algo.id, event.target.value)}
               >
                 {connected.map((item) => (

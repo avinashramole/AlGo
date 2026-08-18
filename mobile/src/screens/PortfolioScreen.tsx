@@ -22,7 +22,7 @@ export function PortfolioScreen() {
           </View>
           <View style={styles.row}>
             <Text style={styles.muted}>
-              {row.brokerId || "paper"} · Qty {row.qty} · Avg {formatNumber(row.avg)}
+              {row.brokerId || "dhan"} · Qty {row.qty} · Avg {formatNumber(row.avg)}
             </Text>
             <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
           </View>

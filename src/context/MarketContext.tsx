@@ -54,9 +54,10 @@ const fallback: Snapshot = {
   chat: [],
   settings: {},
   totalPnl: positions.reduce((sum, row) => sum + row.pnl, 0),
-  pnlByBroker: { paper: positions.reduce((sum, row) => sum + row.pnl, 0) },
+  pnlByBroker: { dhan: positions.reduce((sum, row) => sum + row.pnl, 0) },
   brokers: defaultBrokers,
-  activeBrokerId: "paper",
+  activeBrokerId: "dhan",
+  mainBrokerId: "dhan",
   marketStatus: "OPEN",
   serverTime: new Date().toISOString(),
 };

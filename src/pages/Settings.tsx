@@ -11,7 +11,7 @@ export function Settings() {
     ["Default product", data.settings.product || "MIS"],
     ["Order confirmation", data.settings.confirmation || "Enabled"],
     ["Risk guard", data.settings.riskGuard || "Max 2% per trade"],
-    ["Active broker", data.brokers?.find((item) => item.active)?.name || "Paper Trading"],
+    ["Active broker", data.brokers?.find((item) => item.active)?.name || "Dhan"],
     ["Connected brokers", String((data.brokers || []).filter((item) => item.connected).length)],
     ["Notifications", data.settings.notifications || "Signals + fills"],
   ];

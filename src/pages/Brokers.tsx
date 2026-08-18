@@ -36,11 +36,13 @@ export function Brokers() {
     <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold">Brokers</h1>
-        <p className="text-sm text-slate-400">Connect multiple Indian brokers. Orders and algos route to the active account.</p>
+        <p className="text-sm text-slate-400">
+          Main broker is <b>Dhan</b>. Also connect Zerodha, Kotak Neo, and Fyers.
+        </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <Stat label="Connected" value={String(connectedCount)} />
-        <Stat label="Active" value={brokers.find((item) => item.active)?.name || "Paper"} />
+        <Stat label="Active" value={brokers.find((item) => item.active)?.name || "Dhan"} />
         <Stat label="Combined funds" value={`₹${formatNumber(funds, 0)}`} />
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
@@ -55,7 +57,14 @@ export function Brokers() {
                   {broker.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <div className="font-bold">{broker.name}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="font-bold">{broker.name}</div>
+                    {broker.main && (
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-extrabold text-up dark:bg-emerald-950/40">
+                        MAIN
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-slate-400">
                     {broker.vendor} · {broker.segments.join(", ")} · {broker.mode}
                   </div>
@@ -88,7 +97,7 @@ export function Brokers() {
                       Set active
                     </button>
                   )}
-                  {broker.id !== "paper" && (
+                  {broker.id !== "paper" && !broker.main && (
                     <button
                       type="button"
                       onClick={() => void disconnect(broker.id)}

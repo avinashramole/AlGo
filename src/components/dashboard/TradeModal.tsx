@@ -44,7 +44,7 @@ export function TradeModal({ open, onClose }: Props) {
           </button>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <Field label="Broker" value={(data.brokers || []).find((item) => item.id === data.activeBrokerId)?.name || "Paper"} />
+          <Field label="Broker" value={(data.brokers || []).find((item) => item.id === data.activeBrokerId)?.name || "Dhan"} />
           <Field label="Product" value="MIS" />
           <Field label="Order type" value="MARKET" />
           <Field label="Quantity" value="75 (1 lot)" />

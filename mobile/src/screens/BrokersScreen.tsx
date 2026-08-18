@@ -24,13 +24,13 @@ export function BrokersScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Brokers</Text>
-      <Text style={styles.muted}>Connect Paper, Zerodha, Upstox, Angel One, Dhan and more.</Text>
+      <Text style={styles.muted}>Main broker is Dhan. Also connect Zerodha, Kotak Neo, and Fyers.</Text>
       {brokers.map((broker) => (
         <Card key={broker.id}>
           <View style={styles.row}>
             <Text style={styles.name}>{broker.name}</Text>
             <Text style={{ color: broker.connected ? colors.up : colors.muted, fontWeight: "800", fontSize: 11 }}>
-              {broker.active ? "ACTIVE" : broker.status}
+              {broker.main ? "MAIN" : broker.active ? "ACTIVE" : broker.status}
             </Text>
           </View>
           {broker.connected && (
@@ -46,7 +46,7 @@ export function BrokersScreen() {
                     <Text style={styles.primaryText}>Set active</Text>
                   </Pressable>
                 )}
-                {broker.id !== "paper" && (
+                {broker.id !== "paper" && !broker.main && (
                   <Pressable style={styles.ghost} onPress={() => void disconnect(broker.id)}>
                     <Text style={styles.ghostText}>Disconnect</Text>
                   </Pressable>

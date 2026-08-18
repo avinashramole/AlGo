@@ -31,7 +31,7 @@ export function ActiveAlgos() {
                 <span className={algo.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(algo.pnl)}</span>
                 <span>WR {algo.winRate}%</span>
                 <span>{algo.tag}</span>
-                <span>{data.brokers?.find((item) => item.id === algo.brokerId)?.name || "Paper"}</span>
+                <span>{data.brokers?.find((item) => item.id === algo.brokerId)?.name || "Dhan"}</span>
               </div>
             </div>
             <button

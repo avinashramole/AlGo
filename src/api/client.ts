@@ -83,6 +83,7 @@ export type Snapshot = {
   pnlByBroker: Record<string, number>;
   brokers: BrokerAccount[];
   activeBrokerId: string;
+  mainBrokerId?: string;
   marketStatus: string;
   serverTime: string;
 };
@@ -94,6 +95,7 @@ export type BrokerAccount = {
   color: string;
   auth: string;
   segments: string[];
+  main?: boolean;
   connected: boolean;
   active: boolean;
   mode: string;

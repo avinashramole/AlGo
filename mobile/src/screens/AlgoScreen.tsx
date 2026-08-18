@@ -13,7 +13,7 @@ export function AlgoScreen() {
           <View style={styles.row}>
             <View>
               <Text style={styles.name}>{algo.name}</Text>
-              <Text style={styles.muted}>{algo.tag} · {algo.brokerId || "paper"}</Text>
+              <Text style={styles.muted}>{algo.tag} · {algo.brokerId || "dhan"}</Text>
             </View>
             <Pill text={algo.status} up={algo.status === "LIVE"} />
           </View>

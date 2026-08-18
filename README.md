@@ -99,10 +99,13 @@ Open **Brokers** in the left menu (or on the phone: Portfolio → Brokers).
 
 Supported accounts:
 
-- Paper Trading (always on)
-- Zerodha Kite, Upstox, Angel One, Dhan, Fyers, Groww, 5Paisa, ICICI Direct, Kotak Neo
+- **Dhan** (main, always connected)
+- Zerodha Kite
+- Kotak Neo
+- Fyers
+- Paper Trading (backup)
 
-Sandbox connect: client ID `demo` and API key `demo123`.
+Sandbox connect for Zerodha / Kotak / Fyers: client ID `demo` and API key `demo123`.
 
 The header broker dropdown sets which account new orders use. Each algo can be routed to a different connected broker.
 

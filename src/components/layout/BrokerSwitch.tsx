@@ -10,7 +10,7 @@ export function BrokerSwitch() {
     <div className="flex items-center gap-2">
       <select
         className="h-9 max-w-[160px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold outline-none"
-        value={active?.id || "paper"}
+        value={active?.id || "dhan"}
         onChange={(event) => {
           void activate(event.target.value).catch(() => undefined);
         }}
