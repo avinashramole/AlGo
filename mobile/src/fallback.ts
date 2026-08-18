@@ -57,6 +57,7 @@ export const fallbackSnapshot: Snapshot = {
   },
   fiiDii: { fii: { buy: 12480, sell: 10840, net: 1640 }, dii: { buy: 9860, sell: 8420, net: 1440 } },
   sentiment: 91,
+  orders: [],
   notifications: ["VWAP Depth generated BUY on NIFTY 24500 CE"],
   totalPnl: 2432.25,
   pnlByBroker: { dhan: 2432.25 },

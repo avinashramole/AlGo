@@ -11,7 +11,10 @@ import { Login } from "./pages/Login";
 import { Markets } from "./pages/Markets";
 import { Notifications } from "./pages/Notifications";
 import { Options } from "./pages/Options";
+import { Orders } from "./pages/Orders";
 import { Portfolio } from "./pages/Portfolio";
+import { PositionsDesk } from "./pages/PositionsDesk";
+import { Reports } from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Signals } from "./pages/Signals";
 
@@ -39,6 +42,9 @@ export default function App() {
         <Route path="options" element={<Options />} />
         <Route path="signals" element={<Signals />} />
         <Route path="algo" element={<Algo />} />
+        <Route path="orders" element={<Orders />} />
+        <Route path="positions" element={<PositionsDesk />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="portfolio" element={<Portfolio />} />
         <Route path="brokers" element={<Brokers />} />
         <Route path="analytics" element={<Analytics />} />

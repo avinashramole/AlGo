@@ -12,6 +12,59 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type DeskOrder = {
+  id: string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  qty: number;
+  filledQty?: number;
+  price: number;
+  product?: string;
+  type?: string;
+  status: "PENDING" | "PARTIAL" | "FILLED" | "REJECTED" | "CANCELLED" | string;
+  strategy?: string;
+  brokerId?: string;
+  brokerName?: string;
+  reason?: string;
+  createdAt?: string;
+};
+
+export type DeskReport = {
+  date: string;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  grossPnl: number;
+  charges: number;
+  netPnl: number;
+  openPositions: number;
+  ordersToday: number;
+  filledToday: number;
+  pendingToday: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  turnover: number;
+  byBroker: Array<{ id: string; trades: number; wins: number; pnl: number; unrealized?: number; winRate: number }>;
+  byStrategy: Array<{ name: string; trades: number; wins: number; pnl: number; winRate: number }>;
+  bySymbol: Array<{ symbol: string; trades: number; wins: number; pnl: number; winRate: number }>;
+  daily: Array<{ date: string; pnl: number; trades: number; unrealized?: number }>;
+  tradeBook: Array<{
+    id: string;
+    symbol: string;
+    side: "BUY" | "SELL";
+    qty: number;
+    entry: number;
+    exit: number;
+    pnl: number;
+    product?: string;
+    strategy?: string;
+    brokerId?: string;
+    closedAt?: string;
+    status?: string;
+  }>;
+};
+
 export type Snapshot = {
   indices: Array<{
     symbol: string;
@@ -104,8 +157,13 @@ export type Snapshot = {
     avg: number;
     ltp: number;
     pnl: number;
+    product?: string;
+    strategy?: string;
+    openedAt?: string;
     brokerId?: string;
   }>;
+  orders: DeskOrder[];
+  report?: DeskReport;
   signals: Array<{
     id: string;
     action: "BUY" | "SELL";
@@ -130,7 +188,6 @@ export type Snapshot = {
     metrics: Array<{ label: string; value: number }>;
   };
   sentiment: number;
-  orders: Array<Record<string, unknown>>;
   notifications: string[];
   chat: Array<{ from: string; text: string; mine?: boolean }>;
   settings: Record<string, string>;
@@ -196,7 +253,15 @@ export function toggleAlgo(id: string) {
 }
 
 export function placeOrder(payload: Record<string, unknown>) {
-  return request("/orders", { method: "POST", body: JSON.stringify(payload) });
+  return request<{ snapshot?: Snapshot }>("/orders", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function cancelOrder(id: string) {
+  return request<{ snapshot: Snapshot }>(`/orders/${id}/cancel`, { method: "POST" });
+}
+
+export function squareOff(id: string) {
+  return request<{ snapshot: Snapshot }>(`/positions/${id}/squareoff`, { method: "POST" });
 }
 
 export function sendChat(text: string) {

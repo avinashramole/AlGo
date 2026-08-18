@@ -9,6 +9,7 @@ import {
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
+import { buildReport, enrichPositions, seedClosedTrades, seedOrders } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
 
 function clone(value) {
@@ -74,14 +75,14 @@ const state = {
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
   algos: seedAlgos(),
-  positions: [
+  positions: enrichPositions([
     { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
     { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "dhan" },
     { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "dhan" },
     { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 60, avg: 96.8, ltp: 118.4, pnl: 1296.0, brokerId: "dhan" },
     { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0, brokerId: "dhan" },
     { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5, brokerId: "dhan" },
-  ],
+  ]),
   signals: [
     { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
     { id: "s2", action: "SELL", symbol: "BANKNIFTY 52200 CE", strategy: "Mean Revert", time: "09:21:02", confidence: 77 },
@@ -130,7 +131,8 @@ const state = {
     ],
   },
   sentiment: 91,
-  orders: [],
+  orders: seedOrders(),
+  closedTrades: seedClosedTrades(),
   notifications: [
     "VWAP Depth generated BUY on NIFTY 24500 CE",
     "Momentum Rider filled FINNIFTY 24900 CE",
@@ -274,11 +276,12 @@ export function snapshot() {
     const key = row.brokerId || "dhan";
     byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
   }
-  const { liveCandles: _liveCandles, ...publicState } = clone(state);
+  const { liveCandles: _liveCandles, closedTrades: _closedTrades, ...publicState } = clone(state);
   return {
     ...publicState,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
+    report: buildReport(state),
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
@@ -334,32 +337,105 @@ export function placeOrder(payload) {
     return { error: "Connect this broker before placing an order" };
   }
   const brokerId = account.id;
+  const type = String(payload.type || "MARKET").toUpperCase();
+  const qty = Number(payload.qty) || 65;
+  const status = type === "LIMIT" ? "PENDING" : "FILLED";
   const order = {
     id: `o${Date.now()}`,
     symbol: payload.symbol || "NIFTY 24500 CE",
-    side: payload.side || "BUY",
-    qty: Number(payload.qty) || 65,
+    side: payload.side === "SELL" ? "SELL" : "BUY",
+    qty,
+    filledQty: status === "FILLED" ? qty : 0,
     product: payload.product || "MIS",
-    type: payload.type || "MARKET",
-    status: "FILLED",
+    type,
+    status,
     price: Number(payload.price) || 142.75,
+    strategy: String(payload.strategy || ""),
     brokerId,
     brokerName: account.name,
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
-  state.positions.unshift({
-    id: `p${Date.now()}`,
-    symbol: order.symbol,
-    type: order.side,
-    qty: order.qty,
-    avg: order.price,
-    ltp: order.price,
-    pnl: 0,
-    brokerId,
-  });
+  if (status === "FILLED") {
+    state.positions.unshift({
+      id: `p${Date.now()}`,
+      symbol: order.symbol,
+      type: order.side,
+      qty: order.qty,
+      avg: order.price,
+      ltp: order.price,
+      pnl: 0,
+      product: order.product,
+      strategy: order.strategy,
+      brokerId,
+      openedAt: order.createdAt,
+    });
+  }
   state.notifications.unshift(`${account.name} ${order.status}: ${order.side} ${order.symbol}`);
   return order;
+}
+
+export function cancelOrder(id) {
+  const order = state.orders.find((item) => item.id === id);
+  if (!order) return { error: "Order not found" };
+  if (order.status !== "PENDING" && order.status !== "PARTIAL") {
+    return { error: "Only pending orders can be cancelled" };
+  }
+  order.status = "CANCELLED";
+  order.filledQty = Number(order.filledQty || 0);
+  state.notifications.unshift(`Cancelled ${order.side} ${order.symbol}`);
+  return clone(order);
+}
+
+export function squareOff(id) {
+  const index = state.positions.findIndex((item) => item.id === id);
+  if (index < 0) return { error: "Position not found" };
+  const pos = state.positions[index];
+  const brokers = publicBrokers();
+  const account = brokers.brokers.find((item) => item.id === (pos.brokerId || brokers.activeBrokerId));
+  if (!account?.connected) return { error: "Connect this broker before squaring off" };
+  const dir = pos.type === "BUY" ? 1 : -1;
+  const exit = Number(pos.ltp || pos.avg);
+  const pnl = Number(((exit - pos.avg) * pos.qty * dir).toFixed(2));
+  const order = {
+    id: `o${Date.now()}`,
+    symbol: pos.symbol,
+    side: pos.type === "BUY" ? "SELL" : "BUY",
+    qty: pos.qty,
+    filledQty: pos.qty,
+    product: pos.product || "MIS",
+    type: "MARKET",
+    status: "FILLED",
+    price: exit,
+    strategy: pos.strategy || "",
+    brokerId: account.id,
+    brokerName: account.name,
+    createdAt: new Date().toISOString(),
+  };
+  state.orders.unshift(order);
+  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
+  state.closedTrades.unshift({
+    id: `t${Date.now()}`,
+    symbol: pos.symbol,
+    side: pos.type,
+    qty: pos.qty,
+    entry: pos.avg,
+    exit,
+    pnl,
+    product: pos.product || "MIS",
+    strategy: pos.strategy || "",
+    brokerId: account.id,
+    closedAt: order.createdAt,
+  });
+  state.positions.splice(index, 1);
+  state.notifications.unshift(`Squared off ${pos.symbol} · ${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toFixed(2)}`);
+  return { ok: true, order, pnl };
+}
+
+export function replaceDhanOrders(rows) {
+  const incoming = Array.isArray(rows) ? rows : [];
+  const others = state.orders.filter((row) => row.brokerId !== "dhan");
+  state.orders = [...incoming, ...others];
 }
 
 export function assignAlgoBroker(id, brokerId) {

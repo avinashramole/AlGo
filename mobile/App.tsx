@@ -13,7 +13,10 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MarketsScreen } from "./src/screens/MarketsScreen";
 import { OptionsScreen } from "./src/screens/OptionsScreen";
+import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { PortfolioScreen } from "./src/screens/PortfolioScreen";
+import { PositionsScreen } from "./src/screens/PositionsScreen";
+import { ReportScreen } from "./src/screens/ReportScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { SignalsScreen } from "./src/screens/SignalsScreen";
 import { TradeScreen } from "./src/screens/TradeScreen";
@@ -59,6 +62,9 @@ function Root() {
         <>
           <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
           <Stack.Screen name="Options" component={OptionsScreen} />
+          <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: "Order Book" }} />
+          <Stack.Screen name="Positions" component={PositionsScreen} />
+          <Stack.Screen name="Report" component={ReportScreen} />
           <Stack.Screen name="Brokers" component={BrokersScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Trade" component={TradeScreen} options={{ title: "Review Trade" }} />

@@ -28,6 +28,15 @@ export function PortfolioScreen() {
           </View>
         </Card>
       ))}
+      <Pressable onPress={() => navigation.navigate("Orders")}>
+        <Text style={styles.link}>Order book →</Text>
+      </Pressable>
+      <Pressable onPress={() => navigation.navigate("Positions")}>
+        <Text style={styles.link}>Positions →</Text>
+      </Pressable>
+      <Pressable onPress={() => navigation.navigate("Report")}>
+        <Text style={styles.link}>Report →</Text>
+      </Pressable>
       <Pressable onPress={() => navigation.navigate("Brokers")}>
         <Text style={styles.link}>Brokers →</Text>
       </Pressable>

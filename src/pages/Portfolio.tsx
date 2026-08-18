@@ -10,11 +10,22 @@ export function Portfolio() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-xl font-bold">Portfolio</h1>
-        <Link to="/brokers" className="text-sm font-semibold text-brand-500">
-          Manage brokers
-        </Link>
+        <div className="flex flex-wrap gap-3 text-sm font-semibold">
+          <Link to="/orders" className="text-brand-500">
+            Order book
+          </Link>
+          <Link to="/positions" className="text-brand-500">
+            Positions
+          </Link>
+          <Link to="/reports" className="text-brand-500">
+            Report
+          </Link>
+          <Link to="/brokers" className="text-brand-500">
+            Brokers
+          </Link>
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <Card label="Invested" value={`₹${formatNumber(invested)}`} />

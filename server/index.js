@@ -10,6 +10,7 @@ import {
   applyBrokerPositions,
   applySyntheticOptionChain,
   assignAlgoBroker,
+  cancelOrder,
   createAlgo,
   deleteAlgo,
   dropBrokerPositions,
@@ -17,6 +18,7 @@ import {
   getOptionMeta,
   placeOrder,
   snapshot,
+  squareOff,
   tickMarket,
   toggleAlgo,
   updateAlgo,
@@ -209,7 +211,29 @@ app.post("/api/orders", (req, res) => {
     res.status(400).json({ error: order.error });
     return;
   }
-  res.status(201).json(order);
+  res.status(201).json({ ok: true, order, snapshot: snapshot() });
+});
+
+app.post("/api/orders/:id/cancel", (req, res) => {
+  const result = cancelOrder(req.params.id);
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true, order: result, snapshot: snapshot() });
+});
+
+app.post("/api/positions/:id/squareoff", (req, res) => {
+  const result = squareOff(req.params.id);
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ...result, snapshot: snapshot() });
+});
+
+app.get("/api/report", (_req, res) => {
+  res.json(snapshot().report);
 });
 
 app.post("/api/chat", (req, res) => {

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { activateBroker, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, selectOptionChain, toggleAlgo, updateAlgo, type Snapshot } from "./api";
+import { activateBroker, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type Snapshot } from "./api";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -14,6 +14,8 @@ type MarketContextValue = {
   selectChain: (symbol: string, expiry?: string) => Promise<void>;
   saveAlgo: (payload: Record<string, unknown>) => Promise<void>;
   removeAlgo: (id: string) => Promise<void>;
+  cancel: (id: string) => Promise<void>;
+  closePosition: (id: string) => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -98,6 +100,24 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         const result = await deleteAlgo(id);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
+      },
+      cancel: async (id: string) => {
+        try {
+          const result = await cancelOrder(id);
+          if (result.snapshot) setData(result.snapshot);
+          else await refresh();
+        } catch {
+          /* offline */
+        }
+      },
+      closePosition: async (id: string) => {
+        try {
+          const result = await squareOff(id);
+          if (result.snapshot) setData(result.snapshot);
+          else await refresh();
+        } catch {
+          /* offline */
+        }
       },
     }),
     [data, live, refresh],

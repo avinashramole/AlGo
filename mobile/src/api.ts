@@ -94,8 +94,51 @@ export type Snapshot = {
     avg: number;
     ltp: number;
     pnl: number;
+    product?: string;
+    strategy?: string;
+    openedAt?: string;
     brokerId?: string;
   }>;
+  orders?: Array<{
+    id: string;
+    symbol: string;
+    side: "BUY" | "SELL";
+    qty: number;
+    filledQty?: number;
+    price: number;
+    product?: string;
+    type?: string;
+    status: string;
+    strategy?: string;
+    brokerId?: string;
+    brokerName?: string;
+    reason?: string;
+    createdAt?: string;
+  }>;
+  report?: {
+    date: string;
+    realizedPnl: number;
+    unrealizedPnl: number;
+    grossPnl: number;
+    charges: number;
+    netPnl: number;
+    trades: number;
+    wins: number;
+    losses: number;
+    winRate: number;
+    byStrategy: Array<{ name: string; trades: number; wins: number; pnl: number; winRate: number }>;
+    tradeBook: Array<{
+      id: string;
+      symbol: string;
+      side: "BUY" | "SELL";
+      qty: number;
+      entry: number;
+      exit: number;
+      pnl: number;
+      strategy?: string;
+      closedAt?: string;
+    }>;
+  };
   signals: Array<{ id: string; action: "BUY" | "SELL"; symbol: string; strategy: string; time: string; confidence: number }>;
   marketWatch: Array<{ symbol: string; ltp: number; chg: number; volume: string }>;
   featuredSignal: {
@@ -175,6 +218,14 @@ export function deleteAlgo(id: string) {
 
 export function placeOrder(payload: Record<string, unknown>) {
   return request("/orders", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function cancelOrder(id: string) {
+  return request<{ snapshot: Snapshot }>(`/orders/${id}/cancel`, { method: "POST" });
+}
+
+export function squareOff(id: string) {
+  return request<{ snapshot: Snapshot }>(`/positions/${id}/squareoff`, { method: "POST" });
 }
 
 export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {

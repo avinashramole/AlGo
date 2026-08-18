@@ -7,6 +7,7 @@ import {
   getChainSpot,
   getOptionMeta,
   replaceDhanBook,
+  replaceDhanOrders,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
@@ -221,6 +222,34 @@ function asList(raw) {
   return [];
 }
 
+function mapDhanOrders(raw) {
+  const statusMap = {
+    TRANSIT: "PENDING",
+    PENDING: "PENDING",
+    REJECTED: "REJECTED",
+    CANCELLED: "CANCELLED",
+    TRADED: "FILLED",
+    PART_TRADED: "PARTIAL",
+    EXPIRED: "CANCELLED",
+  };
+  return asList(raw).map((row) => ({
+    id: String(row.orderId || row.dhanOrderId || `dhan-${row.securityId}`),
+    symbol: row.tradingSymbol || String(row.securityId || ""),
+    side: String(row.transactionType || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+    qty: Number(row.quantity || 0),
+    filledQty: Number(row.filledQty || 0),
+    price: Number(row.price || row.tradedPrice || 0),
+    product: row.productType || "MIS",
+    type: row.orderType || "MARKET",
+    status: statusMap[row.orderStatus] || row.orderStatus || "PENDING",
+    strategy: "",
+    brokerId: "dhan",
+    brokerName: "Dhan",
+    reason: row.omsErrorDescription || row.rejectedReason || "",
+    createdAt: row.createTime || row.updateTime || new Date().toISOString(),
+  }));
+}
+
 function mapDhanPositions(raw) {
   const list = asList(raw);
   return list
@@ -240,6 +269,8 @@ function mapDhanPositions(raw) {
         avg: Number(avg.toFixed(2)),
         ltp: Number((Number.isFinite(implied) ? implied : avg).toFixed(2)),
         pnl: Number(pnl.toFixed(2)),
+        product: row.productType || "MIS",
+        strategy: "",
         brokerId: "dhan",
       };
     });
@@ -264,15 +295,17 @@ function mapDhanHoldings(raw) {
 async function pullAccount() {
   if (!accessToken) return;
   try {
-    const [positionsRaw, holdingsRaw] = await Promise.all([
+    const [positionsRaw, holdingsRaw, ordersRaw] = await Promise.all([
       dhanGet("/positions", accessToken, clientId).catch(() => []),
       dhanGet("/holdings", accessToken, clientId).catch(() => []),
+      dhanGet("/orders", accessToken, clientId).catch(() => []),
     ]);
     const positions = mapDhanPositions(positionsRaw);
     const holdings = mapDhanHoldings(holdingsRaw).filter(
       (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
     );
     replaceDhanBook([...positions, ...holdings]);
+    replaceDhanOrders(mapDhanOrders(ordersRaw));
     setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
   } catch (error) {
     setDhanFeed({ error: error.message || "Dhan positions request failed" });

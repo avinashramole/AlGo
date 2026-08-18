@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { brokerName } from "../../lib/brokers";
@@ -13,7 +14,9 @@ export function Positions() {
   return (
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-sm font-bold">Positions</div>
+        <Link to="/positions" className="text-sm font-bold hover:text-brand-500">
+          Positions
+        </Link>
         <select
           className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] font-semibold"
           value={filter}
