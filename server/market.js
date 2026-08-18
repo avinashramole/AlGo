@@ -12,6 +12,7 @@ import {
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
+import { evaluateSignals, runBacktest } from "./backtest.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -215,19 +216,22 @@ function isSimRow(row) {
 
 function liveDesk() {
   const live = isDhanFeedLive();
-  const orders = live ? state.orders.filter((row) => !isSimRow(row) && row.live) : state.orders;
-  const positions = live ? state.positions.filter((row) => !isSimRow(row)) : state.positions;
-  const closedTrades = live ? (state.closedTrades || []).filter((row) => !isSimRow(row)) : state.closedTrades || [];
+  const keep = (row) => Boolean(row?.paper) || row?.brokerId === "paper" || (row?.live && !row?.sim);
+  const orders = live ? state.orders.filter(keep) : state.orders;
+  const positions = live ? state.positions.filter(keep) : state.positions;
+  const closedTrades = live ? (state.closedTrades || []).filter(keep) : state.closedTrades || [];
   return { live, orders, positions, closedTrades };
 }
 
 export function clearSimulatedDesk() {
-  state.orders = [];
-  state.positions = [];
-  state.closedTrades = [];
+  state.orders = state.orders.filter((row) => row.paper || row.brokerId === "paper");
+  state.positions = state.positions.filter((row) => row.paper || row.brokerId === "paper");
+  state.closedTrades = (state.closedTrades || []).filter((row) => row.paper || row.brokerId === "paper");
   state.liveCandles = [];
-  state.algos = (state.algos || []).map((algo) => ({ ...algo, pnl: 0 }));
-  state.notifications = ["Dhan LIVE · only real orders and positions from Dhan"];
+  state.algos = (state.algos || []).map((algo) =>
+    algo.runMode === "paper" ? algo : { ...algo, pnl: algo.runMode === "backtest" ? algo.pnl : 0 },
+  );
+  state.notifications = ["Dhan LIVE · real Dhan book only. Paper / backtest strategies stay on Paper Trading."];
 }
 
 export function restoreSimulatedDesk() {
@@ -238,7 +242,10 @@ export function restoreSimulatedDesk() {
 }
 
 export function tickMarket() {
-  if (state.dhanFeed.live) return;
+  if (state.dhanFeed.live) {
+    runPaperAlgos();
+    return;
+  }
 
   state.indices = state.indices.map((item) => {
     const next = jitter(item.price, item.symbol === "INDIA VIX" ? 0.04 : item.price * 0.00012);
@@ -295,6 +302,7 @@ export function tickMarket() {
   }));
   const stats = chainStats(state.optionChain, spot);
   state.optionMeta = withExpiryLabels({ ...state.optionMeta, ...stats, source: "demo" });
+  runPaperAlgos();
 }
 
 export function snapshot() {
@@ -335,19 +343,30 @@ export function snapshot() {
 export function toggleAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;
+  if (algo.runMode === "backtest") {
+    algo.enabled = false;
+    algo.status = "BACKTEST";
+    return { error: "Backtest strategies do not go live. Use Run backtest." };
+  }
   algo.enabled = !algo.enabled;
-  algo.status = algo.enabled ? "LIVE" : "PAUSED";
+  if (algo.runMode === "paper") {
+    algo.brokerId = "paper";
+    algo.status = algo.enabled ? "PAPER" : "PAUSED";
+  } else {
+    algo.status = algo.enabled ? "LIVE" : "PAUSED";
+  }
   return clone(algo);
 }
 
 export function createAlgo(payload) {
   const algo = normalizeAlgo(payload || {});
   algo.enabled = false;
-  algo.status = "PAUSED";
+  algo.status = algo.runMode === "backtest" ? "BACKTEST" : "PAUSED";
   algo.pnl = 0;
-  algo.winRate = 50;
+  algo.winRate = 0;
+  if (algo.runMode === "paper" || algo.runMode === "backtest") algo.brokerId = "paper";
   state.algos.unshift(algo);
-  state.notifications.unshift(`Strategy added: ${algo.name}`);
+  state.notifications.unshift(`Strategy added: ${algo.name} · ${algo.runMode || "live"}`);
   return clone(algo);
 }
 
@@ -367,6 +386,71 @@ export function deleteAlgo(id) {
   state.algos = state.algos.filter((item) => item.id !== id);
   state.notifications.unshift(`Strategy deleted: ${algo.name}`);
   return { ok: true, id };
+}
+
+function candlesForBacktest(tf, allowSample = true) {
+  const live = getCandles(tf || "5m");
+  if (live.length >= 40) return { candles: live, sample: false };
+  if (!allowSample) return { candles: live, sample: false };
+  const price = Number(state.indices[0]?.price || 24580);
+  const count = tf === "1m" ? 180 : tf === "15m" ? 96 : tf === "1H" ? 80 : 120;
+  return { candles: generateCandles(count, price, 91), sample: true };
+}
+
+export function backtestAlgo(id) {
+  const algo = state.algos.find((item) => item.id === id);
+  if (!algo) return { error: "Strategy not found" };
+  const pack = candlesForBacktest(algo.timeframe, true);
+  const result = { ...runBacktest(algo, pack.candles), sample: pack.sample };
+  algo.lastBacktest = result;
+  algo.pnl = result.pnl;
+  algo.winRate = result.winRate;
+  if (algo.runMode === "backtest") {
+    algo.enabled = false;
+    algo.status = "BACKTEST";
+    algo.brokerId = "paper";
+  }
+  state.notifications.unshift(
+    `Backtest ${algo.name}: ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${pack.sample ? " · sample bars" : ""}`,
+  );
+  return { ok: true, algo: clone(algo), backtest: result };
+}
+
+function runPaperAlgos() {
+  const now = Date.now();
+  for (const algo of state.algos) {
+    if (!algo.enabled || algo.runMode !== "paper") continue;
+    if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
+    const pack = candlesForBacktest(algo.timeframe, !state.dhanFeed.live);
+    if (pack.candles.length < 32) continue;
+    const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
+    const open = state.positions.find((row) => (row.paper || row.brokerId === "paper") && row.strategy === algo.name);
+    if (open) {
+      if ((open.type === "BUY" && signal.sell) || (open.type === "SELL" && signal.buy)) {
+        squareOff(open.id);
+        algo.lastPaperAt = now;
+      }
+      continue;
+    }
+    const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
+    const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
+    if (!wantBuy && !wantSell) continue;
+    const index =
+      state.indices.find((item) => item.name === algo.symbol || item.symbol === algo.symbol || String(item.symbol).startsWith(algo.symbol)) ||
+      state.indices[0];
+    placeOrder({
+      symbol: `${algo.symbol} FUT`,
+      kind: "future",
+      side: wantBuy ? "BUY" : "SELL",
+      qty: algo.qty || 65,
+      price: Number(index?.future || index?.price || signal.price || 0),
+      product: "MIS",
+      type: "MARKET",
+      brokerId: "paper",
+      strategy: algo.name,
+    });
+    algo.lastPaperAt = now;
+  }
 }
 
 function mapLiveStatus(status) {
@@ -395,6 +479,7 @@ export function placeOrder(payload) {
   const type = String(payload.type || "MARKET").toUpperCase();
   const qty = Number(payload.qty) || 65;
   const demoDhan = brokerId === "dhan" && !live;
+  const isPaper = brokerId === "paper";
   const status = live ? mapLiveStatus(live.status) : type === "LIMIT" ? "PENDING" : "FILLED";
   const order = {
     id: live?.orderId ? String(live.orderId) : `o${Date.now()}`,
@@ -410,7 +495,8 @@ export function placeOrder(payload) {
     brokerId,
     brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
     live: Boolean(live),
-    sim: !live,
+    sim: !live && !isPaper,
+    paper: isPaper,
     securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
     reason: live
       ? `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`
@@ -435,8 +521,9 @@ export function placeOrder(payload) {
       strategy: order.strategy,
       brokerId,
       openedAt: order.createdAt,
-      sim: true,
+      sim: !isPaper,
       live: false,
+      paper: isPaper,
     });
   }
   state.notifications.unshift(
@@ -484,8 +571,9 @@ export function squareOff(id) {
     strategy: pos.strategy || "",
     brokerId: account.id,
     brokerName: account.name,
-    sim: true,
+    sim: !pos.paper,
     live: false,
+    paper: Boolean(pos.paper || pos.brokerId === "paper"),
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
@@ -502,8 +590,9 @@ export function squareOff(id) {
     strategy: pos.strategy || "",
     brokerId: account.id,
     closedAt: order.createdAt,
-    sim: true,
+    sim: !pos.paper,
     live: false,
+    paper: Boolean(pos.paper || pos.brokerId === "paper"),
   });
   state.positions.splice(index, 1);
   state.notifications.unshift(`Squared off ${pos.symbol} · ${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toFixed(2)}`);
@@ -801,6 +890,7 @@ export function applyLiveQuotes(quotes) {
       putLtp: round2(Math.max(0.05, row.putLtp - move * 0.08)),
     }));
   }
+  runPaperAlgos();
 }
 
 export function getCandles(tf = "5m") {

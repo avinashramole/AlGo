@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { activateBroker, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type Snapshot } from "./api";
+import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type Snapshot } from "./api";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -14,6 +14,7 @@ type MarketContextValue = {
   selectChain: (symbol: string, expiry?: string) => Promise<void>;
   saveAlgo: (payload: Record<string, unknown>) => Promise<void>;
   removeAlgo: (id: string) => Promise<void>;
+  backtest: (id: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   closePosition: (id: string) => Promise<void>;
 };
@@ -96,6 +97,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       removeAlgo: async (id: string) => {
         const result = await deleteAlgo(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      backtest: async (id: string) => {
+        const result = await backtestAlgo(id);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

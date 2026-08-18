@@ -13,6 +13,7 @@ import {
   emptyStrategy,
   formatCondition,
   lotForSymbol,
+  RUN_MODES,
   type AlgoStrategy,
   type ConditionOp,
   type ConditionSource,
@@ -104,6 +105,23 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           />
         </div>
 
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {RUN_MODES.map((mode) => (
+            <TypeCard
+              key={mode.id}
+              active={(form.runMode || "paper") === mode.id}
+              title={mode.title}
+              text={mode.text}
+              onClick={() =>
+                set({
+                  runMode: mode.id,
+                  brokerId: mode.id === "live" ? data.activeBrokerId || "dhan" : "paper",
+                })
+              }
+            />
+          ))}
+        </div>
+
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="text-xs font-semibold text-slate-500">
             Strategy name
@@ -164,13 +182,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Broker
-            <select className={fieldClass} value={form.brokerId || "dhan"} onChange={(event) => set({ brokerId: event.target.value })}>
-              {connected.map((item) => (
+            <select
+              className={fieldClass}
+              value={form.runMode === "live" ? form.brokerId || "dhan" : "paper"}
+              disabled={form.runMode !== "live"}
+              onChange={(event) => set({ brokerId: event.target.value })}
+            >
+              {(form.runMode === "live" ? connected : connected.filter((item) => item.id === "paper" || item.id === "dhan")).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>
               ))}
             </select>
+            {form.runMode !== "live" ? (
+              <span className="mt-1 block font-medium text-slate-400">Paper Trading is used for paper and backtest.</span>
+            ) : null}
           </label>
         </div>
 

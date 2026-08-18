@@ -53,7 +53,7 @@ export type Algo = {
   sellRight?: string;
   sellValue?: number;
   summary?: string;
-  status: "LIVE" | "PAUSED";
+  status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
   pnl: number;
   winRate: number;
   enabled: boolean;

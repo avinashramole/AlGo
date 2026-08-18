@@ -23,6 +23,7 @@ import {
   tickMarket,
   toggleAlgo,
   updateAlgo,
+  backtestAlgo,
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -185,6 +186,10 @@ app.post("/api/algos/:id/toggle", (req, res) => {
     res.status(404).json({ error: "Algo not found" });
     return;
   }
+  if (algo.error) {
+    res.status(400).json({ error: algo.error, snapshot: snapshot() });
+    return;
+  }
   res.json({ ...algo, snapshot: snapshot() });
 });
 
@@ -218,6 +223,15 @@ app.post("/api/algos/:id/broker", (req, res) => {
     return;
   }
   res.json(result);
+});
+
+app.post("/api/algos/:id/backtest", (req, res) => {
+  const result = backtestAlgo(req.params.id);
+  if (result.error) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  res.json({ ...result, snapshot: snapshot() });
 });
 
 app.post("/api/orders", async (req, res) => {
@@ -288,6 +302,15 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
       return;
     }
     if (isDhanLive()) {
+      if (pos.paper || pos.brokerId === "paper") {
+        const result = squareOff(req.params.id);
+        if (result.error) {
+          res.status(400).json({ error: result.error });
+          return;
+        }
+        res.json({ ...result, snapshot: snapshot() });
+        return;
+      }
       if (pos.sim || pos.brokerId !== "dhan" || !pos.securityId || !String(pos.id).startsWith("dhan-pos-")) {
         res.status(400).json({ error: "LIVE mode only squares real Dhan positions." });
         return;

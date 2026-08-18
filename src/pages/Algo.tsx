@@ -7,10 +7,11 @@ import { cn, formatInr } from "../lib/format";
 import { formatCondition, lotForSymbol, type AlgoStrategy } from "../lib/strategies";
 
 export function Algo() {
-  const { data, toggle, routeAlgo, removeAlgo } = useMarket();
+  const { data, toggle, routeAlgo, removeAlgo, backtest } = useMarket();
   const [filter, setFilter] = useState<"all" | "indicator" | "price-action">("all");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AlgoStrategy | null>(null);
+  const [busyId, setBusyId] = useState("");
   const connected = (data.brokers || []).filter((item) => item.connected);
 
   const rows = data.algos.filter((algo) => {
@@ -38,7 +39,9 @@ export function Algo() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Algo Desk</h1>
-          <p className="text-sm text-slate-400">Build indicator or price-action strategies, then edit, pause, or delete them</p>
+          <p className="text-sm text-slate-400">
+            Paper trade or backtest a strategy first. Live Dhan is only for strategies set to Live.
+          </p>
         </div>
         <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
           <Plus size={16} />
@@ -80,7 +83,13 @@ export function Algo() {
                   <span
                     className={cn(
                       "rounded px-1.5 py-0.5 text-[10px] font-bold",
-                      algo.status === "LIVE" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-amber-50 text-amber-600 dark:bg-amber-950/40",
+                      algo.status === "LIVE"
+                        ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
+                        : algo.status === "PAPER"
+                          ? "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
+                          : algo.status === "BACKTEST"
+                            ? "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+                            : "bg-amber-50 text-amber-600 dark:bg-amber-950/40",
                     )}
                   >
                     {algo.status}
@@ -88,6 +97,7 @@ export function Algo() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge>{kind === "indicator" ? "Indicator" : "Price action"}</Badge>
+                  <Badge>{algo.runMode === "live" ? "Live Dhan" : algo.runMode === "backtest" ? "Backtest" : "Paper"}</Badge>
                   <Badge>{algo.symbol || "NIFTY"}</Badge>
                   <Badge>
                     {algo.lots || 1} lot × {algo.lotSize || lotForSymbol(algo.symbol)} = {algo.qty || (algo.lots || 1) * lotForSymbol(algo.symbol)} qty
@@ -109,6 +119,13 @@ export function Algo() {
                     <div className="text-lg font-bold">{algo.winRate}%</div>
                   </div>
                 </div>
+                {algo.lastBacktest ? (
+                  <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-[11px] font-semibold text-slate-500">
+                    Last backtest · {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% ·{" "}
+                    <span className={(algo.lastBacktest.pnl || 0) >= 0 ? "text-up" : "text-down"}>{formatInr(algo.lastBacktest.pnl || 0)}</span>
+                    {algo.lastBacktest.sample ? " · sample bars" : ""} · DD {formatInr(algo.lastBacktest.maxDrawdown || 0)}
+                  </div>
+                ) : null}
                 <label className="mt-3 block text-[10px] font-semibold uppercase text-slate-400">
                   Route to broker
                   <select
@@ -123,14 +140,31 @@ export function Algo() {
                     ))}
                   </select>
                 </label>
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <button type="button" onClick={() => openEdit(algo as AlgoStrategy)} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-[var(--border)] text-xs font-semibold">
                     <Pencil size={13} />
                     Edit
                   </button>
-                  <button type="button" onClick={() => void toggle(algo.id)} className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold">
-                    {algo.enabled ? "Pause" : "Start"}
+                  <button
+                    type="button"
+                    disabled={busyId === algo.id}
+                    onClick={() => {
+                      setBusyId(algo.id);
+                      void backtest(algo.id).finally(() => setBusyId(""));
+                    }}
+                    className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold"
+                  >
+                    {busyId === algo.id ? "Testing..." : "Backtest"}
                   </button>
+                  {algo.runMode === "backtest" ? (
+                    <button type="button" disabled className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold text-slate-400">
+                      Research only
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => void toggle(algo.id)} className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold">
+                      {algo.enabled ? "Pause" : algo.runMode === "paper" ? "Start paper" : "Start live"}
+                    </button>
+                  )}
                   <button type="button" onClick={() => void remove(algo as AlgoStrategy)} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-rose-200 text-xs font-semibold text-down dark:border-rose-900">
                     <Trash2 size={13} />
                     Delete

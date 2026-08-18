@@ -13,6 +13,7 @@ import {
   squareOff,
   toggleAlgo,
   updateAlgo,
+  backtestAlgo,
   type PlaceOrderResult,
   type Snapshot,
 } from "../api/client";
@@ -120,6 +121,7 @@ type MarketContextValue = {
   selectChain: (symbol: string, expiry?: string) => Promise<void>;
   saveAlgo: (payload: Record<string, unknown>) => Promise<void>;
   removeAlgo: (id: string) => Promise<void>;
+  backtest: (id: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   closePosition: (id: string) => Promise<void>;
 };
@@ -158,14 +160,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           await toggleAlgo(id);
           await refresh();
         } catch {
-          setData((current) => ({
-            ...current,
-            algos: current.algos.map((algo) =>
-              algo.id === id
-                ? { ...algo, enabled: !algo.enabled, status: algo.enabled ? "PAUSED" : "LIVE" }
-                : algo,
-            ),
-          }));
+          await refresh();
         }
       },
       order: async (payload: Record<string, unknown>) => {
@@ -206,6 +201,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       removeAlgo: async (id: string) => {
         const result = await deleteAlgo(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      backtest: async (id: string) => {
+        const result = await backtestAlgo(id);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

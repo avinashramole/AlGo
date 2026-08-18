@@ -158,7 +158,21 @@ export type Snapshot = {
     sellRight?: string;
     sellValue?: number;
     summary?: string;
-    status: "LIVE" | "PAUSED";
+    runMode?: "live" | "paper" | "backtest";
+    lastBacktest?: {
+      ranAt?: string;
+      timeframe?: string;
+      bars?: number;
+      trades?: number;
+      wins?: number;
+      losses?: number;
+      winRate?: number;
+      pnl?: number;
+      maxDrawdown?: number;
+      sample?: boolean;
+      book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
+    };
+    status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
     pnl: number;
     winRate: number;
     enabled: boolean;
@@ -395,6 +409,13 @@ export function updateAlgo(id: string, payload: Record<string, unknown>) {
 
 export function deleteAlgo(id: string) {
   return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
+}
+
+export function backtestAlgo(id: string) {
+  return request<{ snapshot: Snapshot; backtest?: Record<string, unknown>; algo?: Snapshot["algos"][number] }>(
+    `/algos/${id}/backtest`,
+    { method: "POST" },
+  );
 }
 
 export function selectOptionChain(symbol: string, expiry?: string) {

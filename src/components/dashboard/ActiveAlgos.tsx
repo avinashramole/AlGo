@@ -27,7 +27,11 @@ export function ActiveAlgos() {
                     "rounded px-1.5 py-0.5 text-[10px] font-bold",
                     algo.status === "LIVE"
                       ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
-                      : "bg-amber-50 text-amber-600 dark:bg-amber-950/40",
+                      : algo.status === "PAPER"
+                        ? "bg-sky-50 text-sky-700 dark:bg-sky-950/40"
+                        : algo.status === "BACKTEST"
+                          ? "bg-violet-50 text-violet-700 dark:bg-violet-950/40"
+                          : "bg-amber-50 text-amber-600 dark:bg-amber-950/40",
                   )}
                 >
                   {algo.status}
@@ -37,7 +41,7 @@ export function ActiveAlgos() {
                 <span className={algo.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(algo.pnl)}</span>
                 <span>WR {algo.winRate}%</span>
                 <span>{algo.kind === "price-action" ? "Price action" : algo.tag}</span>
-                <span>{data.brokers?.find((item) => item.id === algo.brokerId)?.name || "Dhan"}</span>
+                <span>{algo.runMode === "paper" ? "Paper" : algo.runMode === "backtest" ? "Backtest" : data.brokers?.find((item) => item.id === algo.brokerId)?.name || "Dhan"}</span>
               </div>
             </div>
             <button

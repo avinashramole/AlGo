@@ -46,6 +46,7 @@ type Draft = {
   sellOp: string;
   sellRight: string;
   sellValue: string;
+  runMode: "live" | "paper" | "backtest";
 };
 
 function lotFor(symbol: string) {
@@ -97,11 +98,12 @@ function blankDraft(): Draft {
     sellOp: "crosses_below",
     sellRight: "vwap",
     sellValue: "0",
+    runMode: "paper",
   };
 }
 
 export function AlgoScreen() {
-  const { data, toggle, saveAlgo, removeAlgo } = useMarket();
+  const { data, toggle, saveAlgo, removeAlgo, backtest } = useMarket();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [filter, setFilter] = useState<"all" | "indicator" | "price-action">("all");
 
@@ -147,6 +149,12 @@ export function AlgoScreen() {
         <View style={styles.chips}>
           <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator", ...defaultConditions("indicator", draft.indicator, draft.pattern) })} />
           <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action", ...defaultConditions("price-action", draft.indicator, draft.pattern) })} />
+        </View>
+        <Text style={styles.muted}>Run mode</Text>
+        <View style={styles.chips}>
+          <Chip label="Paper" on={draft.runMode === "paper"} onPress={() => setDraft({ ...draft, runMode: "paper" })} />
+          <Chip label="Backtest" on={draft.runMode === "backtest"} onPress={() => setDraft({ ...draft, runMode: "backtest" })} />
+          <Chip label="Live Dhan" on={draft.runMode === "live"} onPress={() => setDraft({ ...draft, runMode: "live" })} />
         </View>
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
@@ -246,13 +254,22 @@ export function AlgoScreen() {
           <View style={styles.stats}>
             <Text style={{ color: algo.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(algo.pnl)}</Text>
             <Text style={styles.muted}>
-              {algo.lots || 1} lot × {algo.lotSize || lotFor(algo.symbol || "NIFTY")}
+              {(algo.runMode === "paper" ? "Paper" : algo.runMode === "backtest" ? "Backtest" : "Live")} · {algo.lots || 1} lot × {algo.lotSize || lotFor(algo.symbol || "NIFTY")}
             </Text>
           </View>
+          {algo.lastBacktest ? (
+            <Text style={styles.muted}>
+              Backtest {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% · {formatInr(algo.lastBacktest.pnl || 0)}
+            </Text>
+          ) : null}
+          {algo.runMode === "backtest" ? (
+            <Text style={styles.muted}>Research only — run Backtest</Text>
+          ) : (
           <View style={styles.row}>
             <Text style={styles.muted}>{algo.enabled ? "Running" : "Paused"}</Text>
             <Switch value={algo.enabled} onValueChange={() => void toggle(algo.id)} />
           </View>
+          )}
           <View style={styles.actions}>
             <Pressable
               style={styles.smallBtn}
@@ -277,10 +294,14 @@ export function AlgoScreen() {
                   sellOp: algo.sellOp || "crosses_below",
                   sellRight: algo.sellRight || "vwap",
                   sellValue: String(algo.sellValue || 0),
+                  runMode: algo.runMode === "live" || algo.runMode === "backtest" ? algo.runMode : "paper",
                 })
               }
             >
               <Text style={styles.smallBtnText}>Edit</Text>
+            </Pressable>
+            <Pressable style={styles.smallBtn} onPress={() => void backtest(algo.id)}>
+              <Text style={styles.smallBtnText}>Backtest</Text>
             </Pressable>
             <Pressable style={styles.smallBtn} onPress={() => remove(algo.id, algo.name)}>
               <Text style={[styles.smallBtnText, { color: colors.down }]}>Delete</Text>

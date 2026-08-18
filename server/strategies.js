@@ -205,6 +205,11 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const lots = Math.max(1, Math.round(num(input.lots, existing.lots || 1)));
   const lotSize = lotFor(symbol);
   const name = String(input.name || existing.name || "").trim() || (kind === "indicator" ? `${indicator} ${symbol}` : `${pattern} ${symbol}`);
+  const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+    ? input.runMode
+    : ["live", "paper", "backtest"].includes(existing.runMode)
+      ? existing.runMode
+      : "paper";
   const next = {
     ...existing,
     id: existing.id || `a${Date.now()}`,
@@ -230,7 +235,9 @@ export function normalizeAlgo(input = {}, existing = {}) {
     rangeMinutes: [15, 30, 60].includes(Number(input.rangeMinutes)) ? Number(input.rangeMinutes) : existing.rangeMinutes || 15,
     lookback: Math.max(5, Math.round(num(input.lookback, existing.lookback || 20))),
     ...conditions,
-    brokerId: String(input.brokerId || existing.brokerId || "dhan"),
+    runMode,
+    brokerId: runMode === "live" ? String(input.brokerId || existing.brokerId || "dhan") : "paper",
+    lastBacktest: existing.lastBacktest || null,
     pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
     winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 50,
     enabled: existing.enabled ?? false,

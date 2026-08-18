@@ -46,7 +46,21 @@ export type AlgoStrategy = {
   sellRight?: ConditionSource;
   sellValue?: number;
   summary?: string;
-  status: "LIVE" | "PAUSED";
+  runMode?: "live" | "paper" | "backtest";
+  lastBacktest?: {
+    ranAt?: string;
+    timeframe?: string;
+    bars?: number;
+    trades?: number;
+    wins?: number;
+    losses?: number;
+    winRate?: number;
+    pnl?: number;
+    maxDrawdown?: number;
+    sample?: boolean;
+    book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
+  };
+  status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
   pnl: number;
   winRate: number;
   enabled: boolean;
@@ -77,6 +91,12 @@ export const PATTERNS = [
 ];
 
 export const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
+
+export const RUN_MODES = [
+  { id: "paper" as const, title: "Paper trading", text: "Fills stay on Paper Trading. Nothing is sent to Dhan." },
+  { id: "backtest" as const, title: "Backtest", text: "Replay candles and see P&L, win rate, and trade book." },
+  { id: "live" as const, title: "Live Dhan", text: "Start only when Dhan is LIVE. Real orders go to Dhan." },
+];
 
 export const OPERATORS: Array<{ id: ConditionOp; label: string }> = [
   { id: "crosses_above", label: "Crosses above" },
@@ -232,7 +252,8 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   rangeMinutes: 15,
   lookback: 20,
   ...defaultConditions(kind, "VWAP", "ORB"),
-  brokerId: "dhan",
+  runMode: "paper",
+  brokerId: "paper",
   enabled: false,
   status: "PAUSED",
 });

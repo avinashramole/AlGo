@@ -96,7 +96,9 @@ export type Snapshot = {
     rangeMinutes?: number;
     lookback?: number;
     summary?: string;
-    status: "LIVE" | "PAUSED";
+    runMode?: "live" | "paper" | "backtest";
+    lastBacktest?: { trades?: number; winRate?: number; pnl?: number; sample?: boolean };
+    status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
     pnl: number;
     winRate: number;
     enabled: boolean;
@@ -255,6 +257,10 @@ export function updateAlgo(id: string, payload: Record<string, unknown>) {
 
 export function deleteAlgo(id: string) {
   return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
+}
+
+export function backtestAlgo(id: string) {
+  return request<{ snapshot: Snapshot }>(`/algos/${id}/backtest`, { method: "POST" });
 }
 
 export function placeOrder(payload: Record<string, unknown>) {
