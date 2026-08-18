@@ -5,7 +5,7 @@ export function FuturesTape() {
   const { data, order } = useMarket();
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
-  const rows = data.futures || [];
+  const rows = (data.futures || []).filter((row) => row.front);
 
   const trade = async (row: (typeof rows)[number], side: "BUY" | "SELL") => {
     const key = `${row.root}-${row.expiry}-${side}`;
@@ -42,7 +42,7 @@ export function FuturesTape() {
     return (
       <section className="card p-4">
         <div className="text-sm font-bold">Index futures</div>
-        <p className="mt-2 text-xs text-slate-400">Loading live index futures…</p>
+        <p className="mt-2 text-xs text-slate-400">Loading this month’s index futures…</p>
       </section>
     );
   }
@@ -51,10 +51,10 @@ export function FuturesTape() {
     <section className="card overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-sm font-bold">Index futures</div>
+          <div className="text-sm font-bold">Index futures · current month</div>
           <p className="text-xs text-slate-400">
-            Front-month and later contracts. BUY/SELL is 1 lot MIS on Dhan when LIVE. The desk looks up the contract on
-            the server.
+            Front-month contract only. BUY/SELL is 1 lot MIS on Dhan when LIVE. The desk looks up the contract on the
+            server.
           </p>
         </div>
         {note ? <div className="text-xs font-semibold text-slate-500">{note}</div> : null}
@@ -72,14 +72,7 @@ export function FuturesTape() {
         <tbody>
           {rows.map((row) => (
             <tr key={`${row.root}-${row.expiry}`} className="soft-row">
-              <td className="py-2 font-semibold">
-                {row.symbol}
-                {row.front ? (
-                  <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold text-up dark:bg-emerald-950/40">
-                    FRONT
-                  </span>
-                ) : null}
-              </td>
+              <td className="py-2 font-semibold">{row.symbol}</td>
               <td className="py-2 text-slate-500">{row.expiry || "—"}</td>
               <td className="py-2 text-slate-500">{row.segment}</td>
               <td className="py-2 text-right">{row.lot}</td>

@@ -15,7 +15,10 @@ export function OptionsScreen() {
   ];
   const lot = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
   const [range, setRange] = useState<"all" | "atm">("atm");
-  const futures = (data.futures || []).filter((row) => !meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol));
+  const futures = (data.futures || []).filter(
+    (row) =>
+      row.front && (!meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol)),
+  );
   const visibleRows = useMemo(() => {
     const rows = data.optionChain || [];
     if (range !== "atm") return rows;
@@ -109,7 +112,7 @@ export function OptionsScreen() {
           <Text style={[styles.chipText, range === "atm" && styles.chipTextOn]}>ATM</Text>
         </Pressable>
         <Pressable onPress={() => setRange("all")} style={[styles.chip, range === "all" && styles.chipOn]}>
-          <Text style={[styles.chipText, range === "all" && styles.chipTextOn]}>All IDs ({(data.optionChain || []).length})</Text>
+          <Text style={[styles.chipText, range === "all" && styles.chipTextOn]}>All strikes ({(data.optionChain || []).length})</Text>
         </Pressable>
       </View>
       {futures.map((row) => (

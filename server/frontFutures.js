@@ -310,7 +310,7 @@ function withoutIds(row) {
 }
 
 export function publicFutures() {
-  return listFutures().map(withoutIds);
+  return listFutures().filter((row) => row.front).map(withoutIds);
 }
 
 export function publicIndices(indices) {
