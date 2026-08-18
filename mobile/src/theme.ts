@@ -23,6 +23,11 @@ export function formatPct(value: number, digits = 2) {
   return `${sign}${value.toFixed(digits)}%`;
 }
 
+export function formatInr(value: number) {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
+}
+
 export function isNseSessionOpen(date = new Date()) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
