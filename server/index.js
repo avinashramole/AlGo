@@ -449,6 +449,12 @@ app.post("/api/chat", (req, res) => {
   res.json(addChat(text));
 });
 
+app.use("/api", (req, res) => {
+  res.status(404).json({
+    error: `${req.method} ${req.originalUrl} was not found. The API on port 4000 is old — stop it and run npm start again.`,
+  });
+});
+
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
   const booted = await bootDhanFromEnv();

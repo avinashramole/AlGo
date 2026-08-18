@@ -5,11 +5,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${response.status})`);
+  const text = await response.text();
+  let body: { error?: string } = {};
+  try {
+    body = text ? (JSON.parse(text) as { error?: string }) : {};
+  } catch {
+    /* HTML 404 from an old Express process */
   }
-  return response.json() as Promise<T>;
+  if (!response.ok) {
+    throw new Error(
+      body.error ||
+        (response.status === 404
+          ? "API route missing. Stop the old process on port 4000 and run npm start again."
+          : `Request failed (${response.status})`),
+    );
+  }
+  return (body as T) || ({} as T);
 }
 
 export type DeskOrder = {
