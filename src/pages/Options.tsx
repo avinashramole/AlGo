@@ -167,17 +167,17 @@ export function Options() {
             </tr>
             <tr>
               <th className="px-3 py-2 font-semibold">OI</th>
-              <th className="px-3 py-2 font-semibold">Volume</th>
               <th className="px-3 py-2 font-semibold">IV</th>
+              <th className="px-3 py-2 font-semibold">Buy</th>
               <th className="px-3 py-2 font-semibold">LTP</th>
+              <th className="px-3 py-2 font-semibold">Sell</th>
               <th className="px-3 py-2 font-semibold">Chg</th>
-              <th className="px-3 py-2 font-semibold">Trade</th>
               <th className="px-3 py-2 text-center font-semibold">Strike</th>
-              <th className="px-3 py-2 text-right font-semibold">Trade</th>
               <th className="px-3 py-2 text-right font-semibold">Chg</th>
+              <th className="px-3 py-2 text-right font-semibold">Buy</th>
               <th className="px-3 py-2 text-right font-semibold">LTP</th>
+              <th className="px-3 py-2 text-right font-semibold">Sell</th>
               <th className="px-3 py-2 text-right font-semibold">IV</th>
-              <th className="px-3 py-2 text-right font-semibold">Volume</th>
               <th className="px-3 py-2 text-right font-semibold">OI</th>
             </tr>
           </thead>
@@ -188,38 +188,34 @@ export function Options() {
                   <OiBar value={row.callOi || 0} max={maxOi} side="call" />
                   <div className="font-semibold">{formatOi(row.callOi || 0)}</div>
                 </td>
-                <td className="px-3 py-2 text-slate-500">{formatOi(row.callVol || 0)}</td>
                 <td className="px-3 py-2">{row.callIv ? `${row.callIv.toFixed(1)}` : "—"}</td>
-                <td className="px-3 py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
-                <td className={cn("px-3 py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
                 <td className="px-3 py-2">
-                  <TradeButtons
-                    busy={busy}
-                    strike={row.strike}
-                    option="CE"
-                    onTrade={(action) => void trade("CE", action, row)}
-                  />
+                  <TradeButton busy={busy} strike={row.strike} option="CE" side="BUY" onTrade={() => void trade("CE", "BUY", row)} />
                 </td>
+                <td className="px-3 py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
+                <td className="px-3 py-2">
+                  <TradeButton busy={busy} strike={row.strike} option="CE" side="SELL" onTrade={() => void trade("CE", "SELL", row)} />
+                </td>
+                <td className={cn("px-3 py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
                 <td className="px-3 py-2 text-center">
                   <div className={cn("inline-flex rounded-md px-2 py-1 font-bold", row.atm ? "bg-brand-500 text-white" : "bg-[var(--bg)]")}>
                     {row.strike}
                     {row.atm ? " ATM" : ""}
                   </div>
                 </td>
+                <td className={cn("px-3 py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
                 <td className="px-3 py-2">
                   <div className="flex justify-end">
-                    <TradeButtons
-                      busy={busy}
-                      strike={row.strike}
-                      option="PE"
-                      onTrade={(action) => void trade("PE", action, row)}
-                    />
+                    <TradeButton busy={busy} strike={row.strike} option="PE" side="BUY" onTrade={() => void trade("PE", "BUY", row)} />
                   </div>
                 </td>
-                <td className={cn("px-3 py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
                 <td className="px-3 py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex justify-end">
+                    <TradeButton busy={busy} strike={row.strike} option="PE" side="SELL" onTrade={() => void trade("PE", "SELL", row)} />
+                  </div>
+                </td>
                 <td className="px-3 py-2 text-right">{row.putIv ? `${row.putIv.toFixed(1)}` : "—"}</td>
-                <td className="px-3 py-2 text-right text-slate-500">{formatOi(row.putVol || 0)}</td>
                 <td className="px-3 py-2 text-right">
                   <div className="font-semibold">{formatOi(row.putOi || 0)}</div>
                   <OiBar value={row.putOi || 0} max={maxOi} side="put" />
@@ -237,36 +233,31 @@ export function Options() {
   );
 }
 
-function TradeButtons({
+function TradeButton({
   busy,
   strike,
   option,
+  side,
   onTrade,
 }: {
   busy: string;
   strike: number;
   option: "CE" | "PE";
-  onTrade: (action: "BUY" | "SELL") => void;
+  side: "BUY" | "SELL";
+  onTrade: () => void;
 }) {
   return (
-    <div className="inline-flex gap-1">
-      <button
-        type="button"
-        disabled={Boolean(busy)}
-        onClick={() => onTrade("BUY")}
-        className="h-7 rounded-md bg-emerald-500 px-2 text-[10px] font-bold text-white disabled:opacity-50"
-      >
-        {busy === `${strike}-${option}-BUY` ? "..." : "BUY"}
-      </button>
-      <button
-        type="button"
-        disabled={Boolean(busy)}
-        onClick={() => onTrade("SELL")}
-        className="h-7 rounded-md bg-rose-500 px-2 text-[10px] font-bold text-white disabled:opacity-50"
-      >
-        {busy === `${strike}-${option}-SELL` ? "..." : "SELL"}
-      </button>
-    </div>
+    <button
+      type="button"
+      disabled={Boolean(busy)}
+      onClick={onTrade}
+      className={cn(
+        "h-7 rounded-md px-2 text-[10px] font-bold text-white disabled:opacity-50",
+        side === "BUY" ? "bg-emerald-500" : "bg-rose-500",
+      )}
+    >
+      {busy === `${strike}-${option}-${side}` ? "..." : side}
+    </button>
   );
 }
 

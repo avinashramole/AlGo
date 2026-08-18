@@ -57,7 +57,7 @@ export function OptionIdsTape() {
         <div>
           <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10 strikes. Strike in the centre. CE left, PE right · LTP, buyers, sellers, %, VWAP, volume.
+            ATM ±10 strikes. BUY left of LTP, SELL right of LTP. CE left, strike centre, PE right.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -77,7 +77,7 @@ export function OptionIdsTape() {
         </div>
       </div>
       {note ? <div className="mb-2 text-xs font-semibold text-slate-500">{note}</div> : null}
-      <table className="w-full min-w-[1180px] text-left text-xs">
+      <table className="w-full min-w-[1100px] text-left text-xs">
         <thead className="text-[10px] uppercase tracking-wide text-slate-400">
           <tr>
             <th colSpan={7} className="pb-2 text-center font-bold text-up">
@@ -89,52 +89,58 @@ export function OptionIdsTape() {
             </th>
           </tr>
           <tr>
+            <th className="pb-2 font-semibold">Buy</th>
             <th className="pb-2 font-semibold">LTP</th>
+            <th className="pb-2 font-semibold">Sell</th>
             <th className="pb-2 font-semibold">Buyers</th>
             <th className="pb-2 font-semibold">Sellers</th>
             <th className="pb-2 font-semibold">%</th>
             <th className="pb-2 font-semibold">VWAP</th>
-            <th className="pb-2 font-semibold">Vol</th>
-            <th className="pb-2 font-semibold">Trade</th>
             <th className="pb-2 text-center font-semibold">Strike</th>
-            <th className="pb-2 text-right font-semibold">Trade</th>
-            <th className="pb-2 text-right font-semibold">LTP</th>
-            <th className="pb-2 text-right font-semibold">Buyers</th>
-            <th className="pb-2 text-right font-semibold">Sellers</th>
-            <th className="pb-2 text-right font-semibold">%</th>
             <th className="pb-2 text-right font-semibold">VWAP</th>
-            <th className="pb-2 text-right font-semibold">Vol</th>
+            <th className="pb-2 text-right font-semibold">%</th>
+            <th className="pb-2 text-right font-semibold">Sellers</th>
+            <th className="pb-2 text-right font-semibold">Buyers</th>
+            <th className="pb-2 text-right font-semibold">Buy</th>
+            <th className="pb-2 text-right font-semibold">LTP</th>
+            <th className="pb-2 text-right font-semibold">Sell</th>
           </tr>
         </thead>
         <tbody>
           {visible.map((row) => (
             <tr key={row.strike} className={cn("soft-row", row.atm && "bg-brand-50/80 dark:bg-brand-500/10")}>
+              <td className="py-2">
+                <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
+              </td>
               <td className="py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
+              <td className="py-2">
+                <SideButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
+              </td>
               <td className="py-2">{formatOi(row.callBuy || 0)}</td>
               <td className="py-2">{formatOi(row.callSell || 0)}</td>
               <td className={cn("py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
               <td className="py-2">{formatNumber(row.callVwap || row.callLtp)}</td>
-              <td className="py-2">{formatOi(row.callVol || 0)}</td>
-              <td className="py-2">
-                <MiniTrade busy={busy} id={`${row.strike}-CE`} onBuy={() => void trade("CE", "BUY", row)} onSell={() => void trade("CE", "SELL", row)} />
-              </td>
               <td className="py-2 text-center">
                 <div className={cn("inline-flex rounded-md px-2 py-1 font-bold", row.atm ? "bg-brand-500 text-white" : "bg-[var(--bg)]")}>
                   {row.strike}
                   {row.atm ? " ATM" : ""}
                 </div>
               </td>
+              <td className="py-2 text-right">{formatNumber(row.putVwap || row.putLtp)}</td>
+              <td className={cn("py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
+              <td className="py-2 text-right">{formatOi(row.putSell || 0)}</td>
+              <td className="py-2 text-right">{formatOi(row.putBuy || 0)}</td>
               <td className="py-2 text-right">
                 <div className="flex justify-end">
-                  <MiniTrade busy={busy} id={`${row.strike}-PE`} onBuy={() => void trade("PE", "BUY", row)} onSell={() => void trade("PE", "SELL", row)} />
+                  <SideButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
                 </div>
               </td>
               <td className="py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
-              <td className="py-2 text-right">{formatOi(row.putBuy || 0)}</td>
-              <td className="py-2 text-right">{formatOi(row.putSell || 0)}</td>
-              <td className={cn("py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
-              <td className="py-2 text-right">{formatNumber(row.putVwap || row.putLtp)}</td>
-              <td className="py-2 text-right">{formatOi(row.putVol || 0)}</td>
+              <td className="py-2 text-right">
+                <div className="flex justify-end">
+                  <SideButton busy={busy} id={`${row.strike}-PE`} side="SELL" onClick={() => void trade("PE", "SELL", row)} />
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -143,35 +149,28 @@ export function OptionIdsTape() {
   );
 }
 
-function MiniTrade({
+function SideButton({
   busy,
   id,
-  onBuy,
-  onSell,
+  side,
+  onClick,
 }: {
   busy: string;
   id: string;
-  onBuy: () => void;
-  onSell: () => void;
+  side: "BUY" | "SELL";
+  onClick: () => void;
 }) {
   return (
-    <div className="inline-flex gap-1">
-      <button
-        type="button"
-        disabled={Boolean(busy)}
-        onClick={onBuy}
-        className="h-7 rounded-md bg-emerald-500 px-2 text-[10px] font-bold text-white disabled:opacity-50"
-      >
-        {busy === `${id}-BUY` ? "..." : "BUY"}
-      </button>
-      <button
-        type="button"
-        disabled={Boolean(busy)}
-        onClick={onSell}
-        className="h-7 rounded-md bg-rose-500 px-2 text-[10px] font-bold text-white disabled:opacity-50"
-      >
-        {busy === `${id}-SELL` ? "..." : "SELL"}
-      </button>
-    </div>
+    <button
+      type="button"
+      disabled={Boolean(busy)}
+      onClick={onClick}
+      className={cn(
+        "h-7 rounded-md px-2 text-[10px] font-bold text-white disabled:opacity-50",
+        side === "BUY" ? "bg-emerald-500" : "bg-rose-500",
+      )}
+    >
+      {busy === `${id}-${side}` ? "..." : side}
+    </button>
   );
 }

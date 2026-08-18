@@ -128,29 +128,29 @@ export function OptionsScreen() {
           <View style={styles.row}>
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.muted}>CALL</Text>
-              <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
-              <Text style={{ color: row.callChg >= 0 ? colors.up : colors.down }}>{formatPct(row.callChg)}</Text>
               <View style={styles.actions}>
                 <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
+                <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
                 <Pressable style={styles.sell} onPress={() => void trade("CE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
                 </Pressable>
               </View>
+              <Text style={{ color: row.callChg >= 0 ? colors.up : colors.down }}>{formatPct(row.callChg)}</Text>
             </View>
             <View style={{ flex: 1, alignItems: "flex-end" }}>
               <Text style={styles.muted}>PUT</Text>
-              <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
-              <Text style={{ color: row.putChg >= 0 ? colors.up : colors.down }}>{formatPct(row.putChg)}</Text>
               <View style={styles.actions}>
                 <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
+                <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
                 <Pressable style={styles.sell} onPress={() => void trade("PE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
                 </Pressable>
               </View>
+              <Text style={{ color: row.putChg >= 0 ? colors.up : colors.down }}>{formatPct(row.putChg)}</Text>
             </View>
           </View>
         </Card>
@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
   chipTextOn: { color: "#fff" },
   strike: { fontWeight: "800", marginBottom: 8 },
   row: { flexDirection: "row", justifyContent: "space-between" },
-  price: { fontWeight: "800", fontSize: 16, marginTop: 4 },
-  actions: { flexDirection: "row", gap: 6, marginTop: 8 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  price: { fontWeight: "800", fontSize: 16 },
   buy: { backgroundColor: colors.up, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   sell: { backgroundColor: colors.down, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   actionText: { color: "#fff", fontWeight: "800", fontSize: 11 },
