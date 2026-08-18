@@ -4,48 +4,98 @@
 }
 
 .t2s-login {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 1fr;
-  color-scheme: dark;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(47, 123, 255, 0.2), transparent 38%),
-    radial-gradient(circle at 88% 88%, rgba(182, 255, 60, 0.12), transparent 36%),
-    #05070c;
-  color: #f4f7fb;
-  font-family: Inter, system-ui, sans-serif;
-}
-
-.t2s-login-brand {
-  display: none;
-}
-
-.t2s-login-panel {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px 20px 36px;
+  padding: 28px 16px 36px;
+  overflow: hidden;
+  color-scheme: dark;
+  color: #f4f7fb;
+  font-family: Inter, system-ui, sans-serif;
+  background: #05070c;
+}
+
+.t2s-login-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 18% 8%, rgba(47, 123, 255, 0.28), transparent 58%),
+    radial-gradient(ellipse 60% 45% at 92% 96%, rgba(182, 255, 60, 0.16), transparent 55%),
+    linear-gradient(180deg, #07101c 0%, #05070c 42%, #05070c 100%);
+}
+
+.t2s-login-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(47, 123, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 123, 255, 0.12) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 72%);
+}
+
+.t2s-login-bg::after {
+  content: "";
+  position: absolute;
+  right: -4%;
+  bottom: 8%;
+  width: min(42vw, 420px);
+  height: 180px;
+  opacity: 0.22;
+  background:
+    linear-gradient(#b6ff3c, #b6ff3c) 8% 70% / 10px 42% no-repeat,
+    linear-gradient(#2f7bff, #2f7bff) 22% 55% / 10px 62% no-repeat,
+    linear-gradient(#b6ff3c, #b6ff3c) 36% 40% / 10px 78% no-repeat,
+    linear-gradient(#2f7bff, #2f7bff) 50% 58% / 10px 54% no-repeat,
+    linear-gradient(#b6ff3c, #b6ff3c) 64% 28% / 10px 88% no-repeat,
+    linear-gradient(#2f7bff, #2f7bff) 78% 48% / 10px 66% no-repeat,
+    linear-gradient(#b6ff3c, #b6ff3c) 92% 18% / 10px 96% no-repeat;
 }
 
 .t2s-login-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 420px;
+  padding: 28px 24px 22px;
+  border-radius: 28px;
+  background:
+    linear-gradient(#0b1018, #0b1018) padding-box,
+    linear-gradient(135deg, #2f7bff 0%, #2f7bff 42%, #b6ff3c 100%) border-box;
+  border: 1px solid transparent;
+  box-shadow:
+    0 0 0 1px rgba(47, 123, 255, 0.12),
+    0 28px 70px rgba(0, 0, 0, 0.5);
 }
 
-.t2s-login-mobile-brand {
-  margin-bottom: 20px;
+.t2s-login-lead {
+  margin: 18px 0 0;
   text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #8b95a8;
+}
+
+.t2s-login-form {
+  margin-top: 22px;
 }
 
 .t2s-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  margin: 0 0 14px;
-  padding: 10px 14px 12px;
+  margin: 0 0 12px;
+  padding: 12px 14px 13px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+  border-radius: 16px;
   background: #080b12;
 }
 
@@ -58,7 +108,7 @@
   display: block;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #8b95a8;
   line-height: 1.2;
@@ -79,6 +129,7 @@
   display: block !important;
   flex: 1 1 auto;
   width: 100% !important;
+  min-width: 0;
   height: 28px !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -123,9 +174,9 @@
   display: block;
   width: 100%;
   height: 50px;
-  margin-top: 6px;
+  margin-top: 8px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 16px;
   background: #b6ff3c;
   color: #061006;
   font-size: 15px;
@@ -148,7 +199,7 @@
   display: block;
   width: 100%;
   height: 42px;
-  margin-top: 6px;
+  margin-top: 4px;
   border: 0;
   background: transparent;
   color: #6db3ff;
@@ -164,7 +215,8 @@
 .t2s-switch {
   display: block;
   width: 100%;
-  margin-top: 18px;
+  margin-top: 8px;
+  padding: 10px 0 0;
   border: 0;
   background: transparent;
   color: #9aa3b5;
@@ -179,7 +231,7 @@
 }
 
 .t2s-demo {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   text-align: center;
   font-size: 12px;
   color: #6b7385;
@@ -211,78 +263,8 @@
   color: #fda4af;
 }
 
-.t2s-login-copy {
-  max-width: 420px;
-}
-
-.t2s-login-copy h1 {
-  margin: 18px 0 8px;
-  font-size: 34px;
-  line-height: 1.15;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-
-.t2s-login-copy p {
-  margin: 0 0 28px;
-  color: #9aa3b5;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-.t2s-login-points {
-  display: grid;
-  gap: 14px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.t2s-login-points li {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  color: #d5dbe8;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.t2s-login-dot {
-  width: 8px;
-  height: 8px;
-  margin-top: 6px;
-  border-radius: 99px;
-  background: #b6ff3c;
-  box-shadow: 0 0 12px rgba(182, 255, 60, 0.7);
-  flex: 0 0 auto;
-}
-
-@media (min-width: 900px) {
-  .t2s-login {
-    grid-template-columns: 1.05fr 0.95fr;
-  }
-
-  .t2s-login-brand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 48px;
-    border-right: 1px solid rgba(47, 123, 255, 0.18);
-  }
-
-  .t2s-login-mobile-brand {
-    display: none;
-  }
-
-  .t2s-login-panel {
-    padding: 48px;
-  }
-
+@media (min-width: 640px) {
   .t2s-login-card {
-    padding: 32px;
-    border-radius: 24px;
-    background: rgba(12, 16, 24, 0.92);
-    border: 1px solid rgba(47, 123, 255, 0.28);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    padding: 36px 36px 28px;
   }
 }

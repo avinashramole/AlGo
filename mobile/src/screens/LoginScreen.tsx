@@ -121,12 +121,11 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <BrandMark variant="stacked" />
-        <Text style={styles.heading}>{page === "signup" ? "Create your account" : "Welcome back"}</Text>
-        <Text style={styles.subhead}>
-          {page === "signup" ? "Use Gmail or a 10-digit mobile number." : "Sign in with Gmail or mobile, then your password."}
-        </Text>
         <View style={styles.card}>
+          <BrandMark variant="stacked" />
+          <Text style={styles.lead}>
+            {page === "signup" ? "Create account with Gmail or a 10-digit mobile number." : "Gmail or 10-digit mobile, then your password."}
+          </Text>
           {page === "signup" ? (
             <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
           ) : null}
@@ -230,14 +229,13 @@ function Field({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#05070c" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  heading: { color: "#f4f7fb", fontSize: 26, fontWeight: "800", textAlign: "center" },
-  subhead: { color: "#8b95a8", fontSize: 14, textAlign: "center", marginTop: 8, marginBottom: 20, lineHeight: 20 },
+  lead: { color: "#8b95a8", fontSize: 13, textAlign: "center", marginTop: 14, marginBottom: 22, lineHeight: 19 },
   card: {
     borderWidth: 1,
-    borderColor: "rgba(47,123,255,0.35)",
-    borderRadius: 24,
-    padding: 20,
-    backgroundColor: "#0c1018",
+    borderColor: "rgba(47,123,255,0.4)",
+    borderRadius: 28,
+    padding: 22,
+    backgroundColor: "#0b1018",
   },
   field: {
     marginBottom: 14,
