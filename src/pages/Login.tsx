@@ -205,7 +205,7 @@ export function Login() {
     <div className="t2s-login">
       <Watermark />
       <aside className="t2s-login-hero">
-        <BrandMark variant="stacked" size="lg" theme="light" align="start" />
+        <BrandMark variant="stacked" size="lg" plate />
         <div className="t2s-hero-copy">
           <h1>
             <span className="t2s-blue">Smart</span> Tools.
@@ -222,7 +222,7 @@ export function Login() {
       <section className="t2s-login-panel">
         <div className="t2s-login-card">
           <div className="t2s-login-mobile-brand mb-5 flex justify-center lg:hidden">
-            <BrandMark variant="horizontal" size="md" theme="light" showWordmark="always" />
+            <BrandMark variant="stacked" size="sm" plate />
           </div>
           <h2 className="t2s-login-title">{title}</h2>
           <p className="t2s-login-sub">{sub}</p>

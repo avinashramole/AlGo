@@ -193,7 +193,7 @@ export function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <View style={styles.brand}>
-            <BrandMark variant="horizontal" theme="light" />
+            <BrandMark variant="stacked" />
           </View>
           <Text style={styles.welcome}>
             {page === "signup" ? "Create account" : page === "reset" ? "Reset password" : "Welcome Back!"}

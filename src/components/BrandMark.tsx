@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-/** stacked — login; horizontal — header; emblem — sidebar / tab */
+/** stacked — login lockup; horizontal — header; emblem — sidebar / tab */
 export type BrandVariant = "stacked" | "horizontal" | "emblem";
 
 type Props = {
@@ -9,11 +9,12 @@ type Props = {
   theme?: "dark" | "light";
   className?: string;
   showWordmark?: "always" | "responsive";
-  align?: "start" | "center";
+  /** Official black plate behind the stacked lockup, as in the brand art. */
+  plate?: boolean;
 };
 
 const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>> = {
-  stacked: { sm: "h-[100px] w-[100px]", md: "h-[148px] w-[148px]", lg: "h-[176px] w-[176px]" },
+  stacked: { sm: "h-[100px] w-[100px]", md: "h-[148px] w-[148px]", lg: "h-[188px] w-[188px]" },
   horizontal: { sm: "h-9 w-9", md: "h-11 w-11", lg: "h-14 w-14" },
   emblem: { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-12 w-12" },
 };
@@ -21,6 +22,7 @@ const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>
 const BLUE = "#007BFF";
 const GREEN = "#32CD32";
 const LIME = "#ADFF2F";
+const SILVER = "#E8EEF5";
 
 export function BrandMark({
   variant = "stacked",
@@ -28,11 +30,9 @@ export function BrandMark({
   theme = "dark",
   className = "",
   showWordmark = "responsive",
-  align = "center",
+  plate = false,
 }: Props) {
   const uid = useId().replace(/:/g, "");
-  const ink = theme === "light" ? "#1e293b" : "#e8eef5";
-  const tag = theme === "light" ? "#334155" : "#f8fafc";
 
   if (variant === "emblem") {
     return (
@@ -45,60 +45,64 @@ export function BrandMark({
   if (variant === "horizontal") {
     const nameSize = size === "sm" ? "text-[11px]" : size === "lg" ? "text-[17px]" : "text-[13px]";
     const tagSize = size === "sm" ? "text-[7px]" : "text-[8px]";
+    const trade = theme === "light" ? "#1e293b" : SILVER;
+    const tag = theme === "light" ? "#334155" : "#f8fafc";
     return (
       <span className={`inline-flex items-center gap-2.5 ${className}`}>
         <EmblemSvg id={uid} className={`shrink-0 ${emblemBox.horizontal[size]}`} />
         <span className={`min-w-0 leading-tight ${showWordmark === "always" ? "block" : "hidden sm:block"}`}>
-          <Wordmark className={nameSize} ink={ink} />
+          <Wordmark className={nameSize} trade={trade} />
           <span className={`mt-0.5 block font-semibold uppercase tracking-[0.14em] ${showWordmark === "always" ? "" : "hidden lg:block"} ${tagSize}`} style={{ color: tag }}>
-            Intelligence <span style={{ color: GREEN }}>Behind</span> Every Trade.
+            Intelligence Behind Every Trade.
           </span>
         </span>
       </span>
     );
   }
 
-  const nameSize = size === "sm" ? "text-lg" : size === "lg" ? "text-[28px]" : "text-[22px]";
-  const stackedAlign = align === "start" ? "items-start text-left" : "items-center text-center";
-  return (
-    <span className={`flex flex-col ${stackedAlign} ${className}`}>
+  const nameSize = size === "sm" ? "text-[20px]" : size === "lg" ? "text-[30px]" : "text-[24px]";
+  const lockup = (
+    <span className={`flex flex-col items-center text-center ${className}`}>
       <EmblemSvg id={uid} className={emblemBox.stacked[size]} />
-      <Wordmark className={`mt-3 ${nameSize}`} ink={ink} />
-      <Tagline id={uid} className="mt-2.5" color={tag} wide={size === "lg"} />
+      <Wordmark className={`mt-3 ${nameSize}`} trade={SILVER} />
+      <Tagline id={uid} className="mt-3" wide={size === "lg"} />
     </span>
   );
+
+  if (!plate) return lockup;
+  return <span className={`t2s-logo-plate t2s-logo-plate-${size}`}>{lockup}</span>;
 }
 
-function Wordmark({ className, ink }: { className?: string; ink: string }) {
+function Wordmark({ className, trade }: { className?: string; trade: string }) {
   return (
-    <span className={`block font-black italic tracking-[0.12em] ${className || ""}`} style={{ textShadow: "0 2px 0 rgba(15,23,42,0.18)" }}>
-      <span style={{ color: ink }}>TRADE </span>
+    <span className={`block font-black italic tracking-[0.14em] ${className || ""}`} style={{ textShadow: "0 3px 0 rgba(0,0,0,0.45)" }}>
+      <span style={{ color: trade }}>TRADE </span>
       <span style={{ color: BLUE }}>2 </span>
       <span style={{ color: GREEN }}>SMART</span>
     </span>
   );
 }
 
-function Tagline({ id, className, color, wide }: { id: string; className?: string; color: string; wide?: boolean }) {
+function Tagline({ id, className, wide }: { id: string; className?: string; wide?: boolean }) {
   const bar = `${id}-bar`;
-  const w = wide ? 22 : 16;
+  const w = wide ? 26 : 18;
   return (
-    <span className={`flex flex-col items-center ${className || ""}`}>
-      <span className="inline-flex items-center gap-2">
+    <span className={`flex w-full max-w-[340px] flex-col items-center ${className || ""}`}>
+      <span className="inline-flex items-center gap-2.5">
         <SlantLines color={BLUE} width={w} />
-        <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color }}>
-          Intelligence <span style={{ color: GREEN }}>Behind</span> Every Trade.
+        <span className="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.18em] text-white sm:text-[10px]">
+          Intelligence Behind Every Trade.
         </span>
         <SlantLines color={GREEN} width={w} />
       </span>
-      <svg className="mt-1.5 w-full max-w-[320px]" height="3" viewBox="0 0 320 3" aria-hidden="true">
+      <svg className="mt-2 w-full" height="3" viewBox="0 0 320 3" aria-hidden="true">
         <defs>
           <linearGradient id={bar} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor={BLUE} />
             <stop offset="100%" stopColor={LIME} />
           </linearGradient>
         </defs>
-        <line x1="8" y1="1.5" x2="312" y2="1.5" stroke={`url(#${bar})`} strokeWidth="2" />
+        <line x1="4" y1="1.5" x2="316" y2="1.5" stroke={`url(#${bar})`} strokeWidth="2" />
       </svg>
     </span>
   );
@@ -107,8 +111,8 @@ function Tagline({ id, className, color, wide }: { id: string; className?: strin
 function SlantLines({ color, width }: { color: string; width: number }) {
   return (
     <svg width={width} height="12" viewBox="0 0 22 12" aria-hidden="true">
-      <line x1="1" y1="11" x2="12" y2="1" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="9" y1="11" x2="20" y2="1" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="1" y1="11" x2="12" y2="1" stroke={color} strokeWidth="2.4" strokeLinecap="round" />
+      <line x1="9" y1="11" x2="20" y2="1" stroke={color} strokeWidth="2.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -145,7 +149,7 @@ function EmblemSvg({ id, className }: { id: string; className?: string }) {
           <stop offset="100%" stopColor="#15803D" />
         </linearGradient>
         <filter id={shadow} x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="2" dy="5" stdDeviation="2.4" floodColor="#000000" floodOpacity="0.4" />
+          <feDropShadow dx="2" dy="5" stdDeviation="2.4" floodColor="#000000" floodOpacity="0.45" />
         </filter>
       </defs>
 
