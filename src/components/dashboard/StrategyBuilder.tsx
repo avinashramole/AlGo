@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useMarket } from "../context/MarketContext";
-import { cn } from "../lib/format";
+import { useMarket } from "../../context/MarketContext";
+import { cn } from "../../lib/format";
 import {
   INDICATORS,
   PATTERNS,
@@ -11,7 +11,7 @@ import {
   lotForSymbol,
   type AlgoStrategy,
   type StrategyKind,
-} from "../lib/strategies";
+} from "../../lib/strategies";
 
 type Props = {
   open: boolean;
