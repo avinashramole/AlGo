@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
-import { cn, formatNumber, formatOi, formatPct } from "../../lib/format";
+import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
 
 export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const { data, selectChain, order } = useMarket();
@@ -113,7 +113,9 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
               <td className="py-2">
                 <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
               </td>
-              <td className="py-2">{formatNumber(row.callVwap || row.callLtp)}</td>
+              <td className={cn("py-2 font-semibold", vwapTone(row.callVwap || row.callLtp, row.callLtp))}>
+                {formatNumber(row.callVwap || row.callLtp)}
+              </td>
               <td className="py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
               <td className="py-2">
                 <SideButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
@@ -135,7 +137,9 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
                   <SideButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
                 </div>
               </td>
-              <td className="py-2 text-right">{formatNumber(row.putVwap || row.putLtp)}</td>
+              <td className={cn("py-2 text-right font-semibold", vwapTone(row.putVwap || row.putLtp, row.putLtp))}>
+                {formatNumber(row.putVwap || row.putLtp)}
+              </td>
               <td className="py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
               <td className="py-2 text-right">
                 <div className="flex justify-end">

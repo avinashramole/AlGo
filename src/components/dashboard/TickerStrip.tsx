@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cn, formatChange, formatNumber, formatPct } from "../../lib/format";
+import { cn, formatChange, formatNumber, formatPct, vwapTone } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
 
@@ -58,7 +58,9 @@ export function TickerStrip() {
                 </div>
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">VWAP</div>
-                  <div className="text-sm font-bold">{formatNumber(item.vwap || item.price)}</div>
+                  <div className={cn("text-sm font-bold", vwapTone(item.vwap || item.price, item.price))}>
+                    {formatNumber(item.vwap || item.price)}
+                  </div>
                   <div className="text-[10px] text-slate-400">{item.lot ? `1 lot = ${item.lot}` : ""}</div>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
-import { colors, formatInr, formatNumber, formatPct } from "../theme";
+import { colors, formatInr, formatNumber, formatPct, vwapColor } from "../theme";
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -54,7 +54,9 @@ export function HomeScreen() {
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>
-                      <Text style={styles.deskVal}>{formatNumber(item.vwap || item.price)}</Text>
+                      <Text style={[styles.deskVal, { color: vwapColor(item.vwap || item.price, item.price) }]}>
+                        {formatNumber(item.vwap || item.price)}
+                      </Text>
                     </View>
                   </View>
                 ) : null}

@@ -2,7 +2,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useMemo } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
-import { colors, formatNumber, formatPct } from "../theme";
+import { colors, formatNumber, formatPct, vwapColor } from "../theme";
 
 export function OptionsScreen() {
   const { data, selectChain, order } = useMarket();
@@ -132,7 +132,9 @@ export function OptionsScreen() {
                 <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
-                <Text style={styles.vwap}>{formatNumber(row.callVwap || row.callLtp)}</Text>
+                <Text style={[styles.vwap, { color: vwapColor(row.callVwap || row.callLtp, row.callLtp) }]}>
+                  {formatNumber(row.callVwap || row.callLtp)}
+                </Text>
                 <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
                 <Pressable style={styles.sell} onPress={() => void trade("CE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>
@@ -146,7 +148,9 @@ export function OptionsScreen() {
                 <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row)}>
                   <Text style={styles.actionText}>BUY</Text>
                 </Pressable>
-                <Text style={styles.vwap}>{formatNumber(row.putVwap || row.putLtp)}</Text>
+                <Text style={[styles.vwap, { color: vwapColor(row.putVwap || row.putLtp, row.putLtp) }]}>
+                  {formatNumber(row.putVwap || row.putLtp)}
+                </Text>
                 <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
                 <Pressable style={styles.sell} onPress={() => void trade("PE", "SELL", row)}>
                   <Text style={styles.actionText}>SELL</Text>

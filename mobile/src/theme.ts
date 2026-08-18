@@ -27,3 +27,13 @@ export function formatInr(value: number) {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
 }
+
+/** VWAP vs LTP (base): above LTP is green, below LTP is red. */
+export function vwapColor(vwap: number, base: number) {
+  const v = Number(vwap);
+  const b = Number(base);
+  if (!Number.isFinite(v) || !Number.isFinite(b) || b <= 0) return colors.muted;
+  if (v > b) return colors.up;
+  if (v < b) return colors.down;
+  return colors.muted;
+}

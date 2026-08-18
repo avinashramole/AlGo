@@ -42,6 +42,16 @@ export function formatOi(value: number) {
   return Math.round(n).toLocaleString("en-IN");
 }
 
+/** VWAP vs LTP (base): above LTP is green, below LTP is red. */
+export function vwapTone(vwap: number, base: number) {
+  const v = Number(vwap);
+  const b = Number(base);
+  if (!Number.isFinite(v) || !Number.isFinite(b) || b <= 0) return "text-slate-400";
+  if (v > b) return "text-up";
+  if (v < b) return "text-down";
+  return "text-slate-400";
+}
+
 export function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
