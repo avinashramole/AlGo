@@ -1,6 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#05070c"/>
-  <text x="6" y="46" font-family="Inter, Arial Black, sans-serif" font-style="italic" font-weight="800" font-size="28">
-    <tspan fill="#2F7BFF">T</tspan><tspan fill="#E8EEF5">2</tspan><tspan fill="#22C55E">S</tspan>
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 300">
+  <rect width="320" height="300" rx="48" fill="#05070c"/>
+  <defs>
+    <linearGradient id="ring" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1D4ED8"/>
+      <stop offset="45%" stop-color="#2F7BFF"/>
+      <stop offset="100%" stop-color="#9AFF3D"/>
+    </linearGradient>
+    <linearGradient id="t" x1="0.15" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#7DD3FF"/>
+      <stop offset="100%" stop-color="#2F7BFF"/>
+    </linearGradient>
+    <linearGradient id="two" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+    <linearGradient id="s" x1="0.15" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#E8FF7A"/>
+      <stop offset="100%" stop-color="#22C55E"/>
+    </linearGradient>
+  </defs>
+  <path d="M 62 214 A 118 118 0 1 1 258 52" fill="none" stroke="url(#ring)" stroke-width="16" stroke-linecap="round"/>
+  <path d="M246 62 L292 18" stroke="#9AFF3D" stroke-width="16" stroke-linecap="round"/>
+  <polygon points="272,4 312,12 284,44" fill="#9AFF3D"/>
+  <g fill="#22C55E">
+    <rect x="104" y="60" width="16" height="24" rx="2"/>
+    <rect x="131" y="50" width="18" height="34" rx="2"/>
+    <rect x="161" y="40" width="18" height="44" rx="2"/>
+    <rect x="191" y="32" width="18" height="52" rx="2"/>
+  </g>
+  <g font-family="Inter, Arial Black, sans-serif" font-style="italic" font-weight="800">
+    <text x="58" y="198" font-size="108" fill="url(#t)">T</text>
+    <text x="148" y="190" font-size="74" fill="url(#two)">2</text>
+    <text x="198" y="198" font-size="108" fill="url(#s)">S</text>
+  </g>
 </svg>

@@ -7,32 +7,28 @@ export function BrandMark({
   variant?: "stacked" | "horizontal" | "emblem";
   theme?: "dark" | "light";
 }) {
-  const trade = theme === "light" ? "#111827" : "#ffffff";
+  const trade = theme === "light" ? "#111827" : "#f4f7fb";
 
   if (variant === "emblem") {
-    return <Letters size={36} />;
+    return <Letters size={40} />;
   }
 
   if (variant === "horizontal") {
     return (
       <View style={styles.row}>
         <Letters size={40} />
-        <View>
-          <Text style={styles.wordSm}>
-            <Text style={{ color: trade }}>TRADE </Text>
-            <Text style={styles.two}>2 </Text>
-            <Text style={styles.s}>SMART</Text>
-          </Text>
-          <Text style={styles.tagSm}>INTELLIGENCE BEHIND EVERY TRADE.</Text>
-        </View>
+        <Text style={styles.wordSm}>
+          <Text style={{ color: trade }}>TRADE </Text>
+          <Text style={styles.two}>2 </Text>
+          <Text style={styles.s}>SMART</Text>
+        </Text>
       </View>
     );
   }
 
   return (
     <View style={styles.plate}>
-      <Text style={styles.chart}>▲</Text>
-      <Letters size={72} />
+      <Letters size={88} />
       <Text style={styles.word}>
         <Text style={styles.white}>TRADE </Text>
         <Text style={styles.two}>2 </Text>
@@ -49,7 +45,7 @@ export function BrandMark({
 
 function Letters({ size }: { size: number }) {
   return (
-    <Text style={{ fontSize: size * 0.42, fontWeight: "800", fontStyle: "italic", letterSpacing: -2 }}>
+    <Text style={{ fontSize: size * 0.5, fontWeight: "800", fontStyle: "italic", letterSpacing: -3 }}>
       <Text style={{ color: "#2F7BFF" }}>T</Text>
       <Text style={{ color: "#E8EEF5" }}>2</Text>
       <Text style={{ color: "#22C55E" }}>S</Text>
@@ -60,25 +56,22 @@ function Letters({ size }: { size: number }) {
 const styles = StyleSheet.create({
   plate: {
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: 16,
     backgroundColor: "#05070c",
-    borderRadius: 28,
-    paddingVertical: 22,
+    borderRadius: 32,
+    paddingVertical: 24,
     paddingHorizontal: 16,
     width: "100%",
-    aspectRatio: 1,
-    justifyContent: "center",
   },
-  chart: { color: "#22C55E", fontSize: 22, marginBottom: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   two: { color: "#2F7BFF" },
   s: { color: "#22C55E" },
-  white: { color: "#ffffff" },
-  word: { marginTop: 10, fontSize: 18, fontWeight: "800", letterSpacing: 3 },
+  white: { color: "#F4F7FB" },
+  word: { marginTop: 8, fontSize: 18, fontWeight: "800", fontStyle: "italic", letterSpacing: 3 },
   wordSm: { fontSize: 13, fontWeight: "800", letterSpacing: 1.6 },
   tagRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
   tag: { fontSize: 9, fontWeight: "600", letterSpacing: 1.1, color: "#ffffff" },
-  tagSm: { fontSize: 8, marginTop: 2, fontWeight: "600", letterSpacing: 0.8, color: "#94a3b8" },
   slashBlue: { color: "#2F7BFF", fontWeight: "800", letterSpacing: -1 },
   slashGreen: { color: "#22C55E", fontWeight: "800", letterSpacing: -1 },
 });
