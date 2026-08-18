@@ -269,6 +269,14 @@ export function tickMarket() {
     putLtp: jitter(row.putLtp, 0.55),
     callOi: Math.max(1000, Math.round((row.callOi || 0) + (Math.random() - 0.45) * 8000)),
     putOi: Math.max(1000, Math.round((row.putOi || 0) + (Math.random() - 0.45) * 8000)),
+    callVol: Math.max(0, Math.round((row.callVol || 0) + (Math.random() - 0.4) * 4000)),
+    putVol: Math.max(0, Math.round((row.putVol || 0) + (Math.random() - 0.4) * 4000)),
+    callBuy: Math.max(0, Math.round((row.callBuy || 0) + (Math.random() - 0.45) * 120)),
+    callSell: Math.max(0, Math.round((row.callSell || 0) + (Math.random() - 0.45) * 120)),
+    putBuy: Math.max(0, Math.round((row.putBuy || 0) + (Math.random() - 0.45) * 120)),
+    putSell: Math.max(0, Math.round((row.putSell || 0) + (Math.random() - 0.45) * 120)),
+    callVwap: jitter(row.callVwap || row.callLtp, 0.25),
+    putVwap: jitter(row.putVwap || row.putLtp, 0.25),
     atm: row.strike === atm,
   }));
   const stats = chainStats(state.optionChain, spot);

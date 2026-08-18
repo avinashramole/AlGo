@@ -1,77 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
-import { getContracts, type OptionStrikeContract } from "../../api/client";
+import { useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
+import { cn, formatNumber, formatOi, formatPct } from "../../lib/format";
 
 export function OptionIdsTape() {
-  const { data, order } = useMarket();
-  const symbol = data.optionMeta?.symbol || "NIFTY";
-  const [rows, setRows] = useState<OptionStrikeContract[]>([]);
-  const [counts, setCounts] = useState({ options: 0, strikes: 0, futures: 0 });
-  const [expiry, setExpiry] = useState("");
-  const [strikeQuery, setStrikeQuery] = useState("");
+  const { data, selectChain, order } = useMarket();
+  const meta = data.optionMeta;
+  const symbol = meta?.symbol || "NIFTY";
+  const expiries = (meta?.expiries || []).slice(0, 4);
+  const rows = data.optionChain || [];
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    setError("");
-    void getContracts(symbol)
-      .then((catalog) => {
-        if (cancelled) return;
-        setRows(catalog.optionStrikes || []);
-        setCounts({
-          options: catalog.counts?.options || 0,
-          strikes: catalog.counts?.strikes || 0,
-          futures: catalog.counts?.futures || 0,
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not load option contracts");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol]);
-
-  const expiries = useMemo(
-    () => [...new Set(rows.map((row) => row.expiry).filter(Boolean))],
-    [rows],
-  );
+  const [strikeQuery, setStrikeQuery] = useState("");
+  const [range, setRange] = useState<"atm" | "all">("atm");
 
   const visible = useMemo(() => {
     const wanted = strikeQuery.trim();
-    return rows.filter((row) => {
-      if (expiry && row.expiry !== expiry) return false;
-      if (wanted && !String(row.strike).includes(wanted)) return false;
-      return true;
-    });
-  }, [rows, expiry, strikeQuery]);
+    let next = rows;
+    if (range === "atm") {
+      const atmIndex = next.findIndex((row) => row.atm);
+      if (atmIndex >= 0) next = next.slice(Math.max(0, atmIndex - 8), atmIndex + 9);
+    }
+    if (wanted) next = next.filter((row) => String(row.strike).includes(wanted));
+    return next;
+  }, [rows, range, strikeQuery]);
 
-  const trade = async (row: OptionStrikeContract, option: "CE" | "PE", side: "BUY" | "SELL") => {
-    const key = `${row.expiry}-${row.strike}-${option}-${side}`;
+  const lot = meta?.underlyings?.find((item) => item.id === symbol)?.lot || 65;
+
+  const trade = async (option: "CE" | "PE", side: "BUY" | "SELL", row: (typeof rows)[number]) => {
+    const key = `${row.strike}-${option}-${side}`;
     setBusy(key);
     setNote("");
     try {
       const result = await order({
-        symbol: `${row.root} ${row.strike} ${option}`,
+        symbol: `${symbol} ${row.strike} ${option}`,
         side,
-        qty: row.qty || row.lot,
+        qty: lot,
         lots: 1,
-        price: 0,
+        price: option === "CE" ? row.callLtp : row.putLtp,
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
         option,
         strike: row.strike,
-        expiry: row.expiry,
-        exchangeSegment: row.segment,
+        expiry: meta?.expiry,
+        exchangeSegment: String(symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
       setNote(
         result.live
-          ? `Sent to Dhan · ${side} ${row.root} ${row.strike} ${option}`
-          : result.warning || `Desk fill · ${side} ${row.root} ${row.strike} ${option}`,
+          ? `Sent to Dhan · ${side} ${symbol} ${row.strike} ${option}`
+          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option}`,
       );
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Order failed");
@@ -84,86 +61,103 @@ export function OptionIdsTape() {
     <section className="card overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-sm font-bold">Index options · all expiries</div>
+          <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            {symbol} · {counts.strikes} strikes · {counts.options} contracts · {counts.futures} futures. BUY/SELL is 1
-            lot MIS. The desk looks up the live contract on the server.
+            Strike in the centre. CE left, PE right · LTP, buyers, sellers, %, VWAP, volume. BUY/SELL is 1 lot MIS.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="h-8 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
-            value={expiry}
-            onChange={(event) => setExpiry(event.target.value)}
-          >
-            <option value="">All expiries</option>
-            {expiries.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+          {expiries.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => void selectChain(symbol, item)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold",
+                meta?.expiry === item ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)]",
+              )}
+            >
+              {meta?.expiryLabels?.[item] || item}
+            </button>
+          ))}
           <input
-            className="h-8 w-28 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
+            className="h-8 w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
             placeholder="Strike"
             value={strikeQuery}
             onChange={(event) => setStrikeQuery(event.target.value)}
           />
+          <button
+            type="button"
+            onClick={() => setRange((value) => (value === "atm" ? "all" : "atm"))}
+            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold"
+          >
+            {range === "atm" ? "ATM" : `All ${rows.length}`}
+          </button>
         </div>
       </div>
-      {error ? <div className="mb-2 text-xs font-semibold text-down">{error}</div> : null}
       {note ? <div className="mb-2 text-xs font-semibold text-slate-500">{note}</div> : null}
-      {!rows.length ? (
-        <p className="text-xs text-slate-400">Loading live option contracts…</p>
-      ) : (
-        <table className="w-full min-w-[640px] text-left text-xs">
-          <thead className="text-[10px] uppercase tracking-wide text-slate-400">
-            <tr>
-              <th className="pb-2 font-semibold">Expiry</th>
-              <th className="pb-2 font-semibold">Strike</th>
-              <th className="pb-2 text-right font-semibold">CE</th>
-              <th className="pb-2 text-right font-semibold">PE</th>
+      <table className="w-full min-w-[1180px] text-left text-xs">
+        <thead className="text-[10px] uppercase tracking-wide text-slate-400">
+          <tr>
+            <th colSpan={7} className="pb-2 text-center font-bold text-up">
+              CE
+            </th>
+            <th className="pb-2 text-center font-bold">Strike</th>
+            <th colSpan={7} className="pb-2 text-center font-bold text-down">
+              PE
+            </th>
+          </tr>
+          <tr>
+            <th className="pb-2 font-semibold">LTP</th>
+            <th className="pb-2 font-semibold">Buyers</th>
+            <th className="pb-2 font-semibold">Sellers</th>
+            <th className="pb-2 font-semibold">%</th>
+            <th className="pb-2 font-semibold">VWAP</th>
+            <th className="pb-2 font-semibold">Vol</th>
+            <th className="pb-2 font-semibold">Trade</th>
+            <th className="pb-2 text-center font-semibold">Strike</th>
+            <th className="pb-2 text-right font-semibold">Trade</th>
+            <th className="pb-2 text-right font-semibold">LTP</th>
+            <th className="pb-2 text-right font-semibold">Buyers</th>
+            <th className="pb-2 text-right font-semibold">Sellers</th>
+            <th className="pb-2 text-right font-semibold">%</th>
+            <th className="pb-2 text-right font-semibold">VWAP</th>
+            <th className="pb-2 text-right font-semibold">Vol</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((row) => (
+            <tr key={row.strike} className={cn("soft-row", row.atm && "bg-brand-50/80 dark:bg-brand-500/10")}>
+              <td className="py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
+              <td className="py-2">{formatOi(row.callBuy || 0)}</td>
+              <td className="py-2">{formatOi(row.callSell || 0)}</td>
+              <td className={cn("py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
+              <td className="py-2">{formatNumber(row.callVwap || row.callLtp)}</td>
+              <td className="py-2">{formatOi(row.callVol || 0)}</td>
+              <td className="py-2">
+                <MiniTrade busy={busy} id={`${row.strike}-CE`} onBuy={() => void trade("CE", "BUY", row)} onSell={() => void trade("CE", "SELL", row)} />
+              </td>
+              <td className="py-2 text-center">
+                <div className={cn("inline-flex rounded-md px-2 py-1 font-bold", row.atm ? "bg-brand-500 text-white" : "bg-[var(--bg)]")}>
+                  {row.strike}
+                  {row.atm ? " ATM" : ""}
+                </div>
+              </td>
+              <td className="py-2 text-right">
+                <div className="flex justify-end">
+                  <MiniTrade busy={busy} id={`${row.strike}-PE`} onBuy={() => void trade("PE", "BUY", row)} onSell={() => void trade("PE", "SELL", row)} />
+                </div>
+              </td>
+              <td className="py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
+              <td className="py-2 text-right">{formatOi(row.putBuy || 0)}</td>
+              <td className="py-2 text-right">{formatOi(row.putSell || 0)}</td>
+              <td className={cn("py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
+              <td className="py-2 text-right">{formatNumber(row.putVwap || row.putLtp)}</td>
+              <td className="py-2 text-right">{formatOi(row.putVol || 0)}</td>
             </tr>
-          </thead>
-          <tbody>
-            {visible.slice(0, 400).map((row) => (
-              <tr key={`${row.root}-${row.expiry}-${row.strike}`} className="soft-row">
-                <td className="py-2 text-slate-500">{row.expiry}</td>
-                <td className="py-2 font-bold">{row.strike}</td>
-                <td className="py-2 text-right">
-                  {row.hasCall !== false ? (
-                    <MiniTrade
-                      busy={busy}
-                      id={`${row.expiry}-${row.strike}-CE`}
-                      onBuy={() => void trade(row, "CE", "BUY")}
-                      onSell={() => void trade(row, "CE", "SELL")}
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="py-2 text-right">
-                  {row.hasPut !== false ? (
-                    <MiniTrade
-                      busy={busy}
-                      id={`${row.expiry}-${row.strike}-PE`}
-                      onBuy={() => void trade(row, "PE", "BUY")}
-                      onSell={() => void trade(row, "PE", "SELL")}
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {visible.length > 400 ? (
-        <p className="mt-2 text-[11px] text-slate-400">
-          Showing 400 of {visible.length} strikes. Filter by expiry or strike to see the rest.
-        </p>
-      ) : null}
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }

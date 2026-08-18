@@ -94,6 +94,9 @@ export type Snapshot = {
     callVol?: number;
     callIv?: number;
     callDelta?: number;
+    callBuy?: number;
+    callSell?: number;
+    callVwap?: number;
     callId?: number;
     putLtp: number;
     putChg: number;
@@ -102,6 +105,9 @@ export type Snapshot = {
     putVol?: number;
     putIv?: number;
     putDelta?: number;
+    putBuy?: number;
+    putSell?: number;
+    putVwap?: number;
     putId?: number;
     atm?: boolean;
   }>;

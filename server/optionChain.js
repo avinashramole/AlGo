@@ -192,6 +192,9 @@ export function buildSyntheticChain(spot, step, wings = 10) {
       callVol: Math.round(Math.max(12_000, 180_000 - distance * 12_000)),
       callIv: round2(11.2 + distance * 0.35),
       callDelta: round2(Math.max(0.04, Math.min(0.96, 0.5 - i * 0.045))),
+      callBuy: Math.round(Math.max(65, 4200 - distance * 220)),
+      callSell: Math.round(Math.max(65, 3800 - distance * 200)),
+      callVwap: round2(callLtp * (i <= 0 ? 0.992 : 1.008)),
       putLtp,
       putChg: round2((i >= 0 ? 5 : -3) + i * 0.35),
       putOi: Math.max(80_000, putOi),
@@ -199,6 +202,9 @@ export function buildSyntheticChain(spot, step, wings = 10) {
       putVol: Math.round(Math.max(12_000, 170_000 - distance * 11_000)),
       putIv: round2(12.1 + distance * 0.38),
       putDelta: round2(Math.min(-0.04, Math.max(-0.96, -0.5 - i * 0.045))),
+      putBuy: Math.round(Math.max(65, 4000 - distance * 210)),
+      putSell: Math.round(Math.max(65, 3600 - distance * 190)),
+      putVwap: round2(putLtp * (i >= 0 ? 0.992 : 1.008)),
       atm: strike === atm,
     });
   }
@@ -250,6 +256,9 @@ export function parseDhanChain(payload, spot, step = 50) {
         callDelta: round2(Number(ce.greeks?.delta || 0)),
         callBid: Number(ce.top_bid_price || ce.topBidPrice || 0),
         callAsk: Number(ce.top_ask_price || ce.topAskPrice || 0),
+        callBuy: Number(ce.top_bid_quantity || ce.topBidQuantity || 0),
+        callSell: Number(ce.top_ask_quantity || ce.topAskQuantity || 0),
+        callVwap: Number(ce.average_price || ce.averagePrice || 0),
         callId: chainSecurityId(ce),
         putLtp: Number(pe.last_price || pe.lastPrice || 0),
         putChg: pctChange(pe.last_price || pe.lastPrice, pe.previous_close_price || pe.previousClosePrice),
@@ -260,6 +269,9 @@ export function parseDhanChain(payload, spot, step = 50) {
         putDelta: round2(Number(pe.greeks?.delta || 0)),
         putBid: Number(pe.top_bid_price || pe.topBidPrice || 0),
         putAsk: Number(pe.top_ask_price || pe.topAskPrice || 0),
+        putBuy: Number(pe.top_bid_quantity || pe.topBidQuantity || 0),
+        putSell: Number(pe.top_ask_quantity || pe.topAskQuantity || 0),
+        putVwap: Number(pe.average_price || pe.averagePrice || 0),
         putId: chainSecurityId(pe),
         atm: false,
       };
@@ -305,14 +317,25 @@ export function chainStats(rows, spot) {
   };
 }
 
+export function nearestExpiries(dates, count = 4, keep) {
+  const live = dropExpired(dates);
+  const wanted = normalizeExpiry(keep);
+  const next = live.slice(0, count);
+  if (wanted && live.includes(wanted) && !next.includes(wanted)) {
+    return [...next.slice(0, Math.max(0, count - 1)), wanted];
+  }
+  return next;
+}
+
 export function withExpiryLabels(meta) {
   const expiry = normalizeExpiry(meta.expiry);
-  const expiries = (meta.expiries || []).map(normalizeExpiry).filter(Boolean);
+  const expiries = nearestExpiries(meta.expiries || [], 4, expiry);
+  const chosen = expiries.includes(expiry) ? expiry : expiries[0] || expiry;
   return {
     ...meta,
-    expiry,
+    expiry: chosen,
     expiries,
-    expiryLabel: formatExpiryLabel(expiry),
+    expiryLabel: formatExpiryLabel(chosen),
     expiryLabels: Object.fromEntries(expiries.map((date) => [date, formatExpiryLabel(date)])),
   };
 }
