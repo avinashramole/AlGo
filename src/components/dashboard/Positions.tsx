@@ -1,0 +1,85 @@
+import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useMarket } from "../../context/MarketContext";
+import { brokerName } from "../../lib/brokers";
+import { cn, formatInr, formatNumber } from "../../lib/format";
+
+export function Positions() {
+  const { data } = useMarket();
+  const [filter, setFilter] = useState("all");
+  const rows = data.positions.filter((row) => filter === "all" || row.brokerId === filter);
+  const total = rows.reduce((sum, row) => sum + row.pnl, 0);
+  const brokers = [{ id: "all", name: "All brokers" }, ...(data.brokers || []).filter((item) => item.connected)];
+
+  return (
+    <section className="card overflow-hidden p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <Link to="/positions" className="text-sm font-bold hover:text-brand-500">
+          Positions
+        </Link>
+        <select
+          className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] font-semibold"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        >
+          {brokers.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] text-left text-xs">
+          <thead className="text-[10px] uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="pb-2 font-semibold">Symbol</th>
+              <th className="pb-2 font-semibold">Broker</th>
+              <th className="pb-2 font-semibold">Type</th>
+              <th className="pb-2 text-right font-semibold">Qty</th>
+              <th className="pb-2 text-right font-semibold">Avg</th>
+              <th className="pb-2 text-right font-semibold">LTP</th>
+              <th className="pb-2 text-right font-semibold">P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((row) => (
+                <tr key={row.id} className="soft-row">
+                  <td className="py-2.5 font-semibold">{row.symbol}</td>
+                  <td className="py-2.5 text-slate-500">{brokerName(data.brokers, row.brokerId)}</td>
+                  <td className="py-2.5">
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[10px] font-bold",
+                        row.type === "BUY" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-rose-50 text-down dark:bg-rose-950/40",
+                      )}
+                    >
+                      {row.type}
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-right">{row.qty}</td>
+                  <td className="py-2.5 text-right">{formatNumber(row.avg)}</td>
+                  <td className="py-2.5 text-right">{formatNumber(row.ltp)}</td>
+                  <td className={cn("py-2.5 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>
+                    {formatInr(row.pnl)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-6 text-center text-slate-400" colSpan={7}>
+                  {data.dhanFeed?.live ? "No live Dhan or paper positions" : "No open positions"}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex items-center justify-between rounded-lg bg-[var(--bg)] px-3 py-2 text-sm">
+        <span className="text-xs font-semibold text-slate-400">Total P&L</span>
+        <span className={`font-extrabold ${total >= 0 ? "text-up" : "text-down"}`}>{formatInr(total)}</span>
+      </div>
+    </section>
+  );
+}
