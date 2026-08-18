@@ -9,6 +9,7 @@ import {
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
+import { attachContractIds, listFutures, listIndexContracts } from "./frontFutures.js";
 import { buildReport, enrichPositions, seedClosedTrades, seedOrders } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
 
@@ -293,6 +294,12 @@ export function snapshot() {
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
     dhanFeed: clone(state.dhanFeed),
+    futures: listFutures(),
+    contracts: {
+      indices: listIndexContracts(),
+      futures: listFutures(),
+    },
+    indices: attachContractIds(publicState.indices),
     settings: { ...state.settings, broker: active.name },
     marketStatus: "OPEN",
     serverTime: new Date().toISOString(),
@@ -669,6 +676,8 @@ export function applyLiveQuotes(quotes) {
     const ltp = Number(quote.ltp);
     if (index && quote.kind === "future" && Number.isFinite(ltp) && ltp > 0) {
       index.future = round2(ltp);
+      if (quote.securityId) index.futureId = String(quote.securityId);
+      if (quote.expiry) index.futureExpiry = quote.expiry;
       const futVwap = Number(quote.vwap);
       if (futVwap > 0) index.vwap = round2(futVwap);
       continue;

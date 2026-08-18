@@ -4,10 +4,10 @@ const SCRIP_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const CACHE_MS = 12 * 60 * 60 * 1000;
 
 const UNDERLYINGS = [
-  { parent: "NIFTY 50", root: "NIFTY", exchange: "NSE", segment: "NSE_FNO" },
-  { parent: "BANKNIFTY", root: "BANKNIFTY", exchange: "NSE", segment: "NSE_FNO" },
-  { parent: "FINNIFTY", root: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO" },
-  { parent: "SENSEX", root: "SENSEX", exchange: "BSE", segment: "BSE_FNO" },
+  { parent: "NIFTY 50", root: "NIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 65, indexId: 13, indexSegment: "IDX_I" },
+  { parent: "BANKNIFTY", root: "BANKNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 30, indexId: 25, indexSegment: "IDX_I" },
+  { parent: "FINNIFTY", root: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 60, indexId: 27, indexSegment: "IDX_I" },
+  { parent: "SENSEX", root: "SENSEX", exchange: "BSE", segment: "BSE_FNO", lot: 20, indexId: 51, indexSegment: "IDX_I" },
 ];
 
 const FALLBACK = [
@@ -19,7 +19,7 @@ const FALLBACK = [
 
 const ROOTS = new Set(UNDERLYINGS.map((row) => row.root));
 
-let cache = { at: 0, instruments: FALLBACK, options: new Map(), byExpiry: new Map() };
+let cache = { at: 0, instruments: FALLBACK, options: new Map(), byExpiry: new Map(), futures: {} };
 let loading = null;
 
 function splitCsvLine(line) {
@@ -95,7 +95,13 @@ async function loadScripMaster() {
         const securityId = Number(parts[idx.SEM_SMST_SECURITY_ID]);
         if (!expiry || !Number.isFinite(securityId) || securityId <= 0) continue;
         if (instrument === "FUTIDX") {
-          grouped[root].push({ expiry, securityId, trading });
+          grouped[root].push({
+            expiry,
+            securityId,
+            trading,
+            lot: Number(parts[idx.SEM_LOT_UNITS]) || und.lot,
+            segment: und.segment,
+          });
         } else if (instrument === "OPTIDX") {
           const option = String(parts[idx.SEM_OPTION_TYPE] || "").toUpperCase();
           const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
@@ -127,6 +133,7 @@ async function loadScripMaster() {
         instruments: instruments.length ? instruments : FALLBACK,
         options,
         byExpiry,
+        futures: grouped,
       };
       return cache;
     } catch {
@@ -135,6 +142,7 @@ async function loadScripMaster() {
         instruments: cache.instruments.length ? cache.instruments : FALLBACK,
         options: cache.options instanceof Map ? cache.options : new Map(),
         byExpiry: cache.byExpiry instanceof Map ? cache.byExpiry : new Map(),
+        futures: cache.futures || {},
       };
       return cache;
     } finally {
@@ -148,6 +156,76 @@ async function loadScripMaster() {
 export async function resolveFrontFutures() {
   const data = await loadScripMaster();
   return data.instruments;
+}
+
+export async function lookupFutureSecurityId({ symbol, expiry } = {}) {
+  const root = optionRoot(symbol);
+  if (!root) return "";
+  const data = await loadScripMaster();
+  const rows = [...(data.futures?.[root] || [])].sort((a, b) => String(a.expiry).localeCompare(String(b.expiry)));
+  const wanted = normalizeExpiry(expiry);
+  const live = rows.filter((row) => dropExpired([row.expiry]).includes(row.expiry));
+  const match = wanted ? rows.find((row) => row.expiry === wanted) : live[0] || rows[0];
+  return match ? String(match.securityId) : "";
+}
+
+export function listFutures() {
+  const out = [];
+  for (const und of UNDERLYINGS) {
+    const rows = [...(cache.futures?.[und.root] || [])].sort((a, b) => String(a.expiry).localeCompare(String(b.expiry)));
+    const live = rows.filter((row) => row.expiry && dropExpired([row.expiry]).includes(row.expiry));
+    const usable = live.length ? live : rows;
+    const front = usable[0];
+    for (const row of usable) {
+      out.push({
+        root: und.root,
+        parent: und.parent,
+        symbol: `${und.root} FUT`,
+        name: row.expiry ? `${und.root} FUT ${row.expiry}` : `${und.root} FUT`,
+        kind: "future",
+        expiry: row.expiry || "",
+        securityId: String(row.securityId),
+        segment: row.segment || und.segment,
+        lot: Number(row.lot) || und.lot,
+        qty: Number(row.lot) || und.lot,
+        front: Boolean(front && row.securityId === front.securityId),
+        tradable: true,
+      });
+    }
+  }
+  return out;
+}
+
+export function listIndexContracts() {
+  return UNDERLYINGS.map((und) => ({
+    root: und.root,
+    parent: und.parent,
+    symbol: und.parent,
+    kind: "index",
+    securityId: String(und.indexId),
+    segment: und.indexSegment,
+    lot: und.lot,
+    tradable: false,
+    note: "Quotes only. Trade the future or options.",
+  }));
+}
+
+export function attachContractIds(indices) {
+  const futs = listFutures();
+  return (indices || []).map((item) => {
+    const root = optionRoot(item.symbol);
+    const und = UNDERLYINGS.find((row) => row.root === root || row.parent === item.symbol);
+    const front = futs.find((row) => row.root === root && row.front);
+    return {
+      ...item,
+      securityId: item.securityId || und?.indexId,
+      indexId: und?.indexId || item.securityId,
+      futureId: item.futureId || front?.securityId,
+      futureExpiry: item.futureExpiry || front?.expiry,
+      futureSegment: item.futureSegment || front?.segment,
+      lot: item.lot || front?.lot || und?.lot,
+    };
+  });
 }
 
 export async function lookupOptionSecurityId({ symbol, expiry, strike, option } = {}) {

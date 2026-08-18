@@ -13,7 +13,7 @@ import {
   setLiveCandles,
   setOptionDesk,
 } from "./market.js";
-import { buildScripChain, lookupOptionSecurityId, parseOptionContract, resolveFrontFutures, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, lookupFutureSecurityId, lookupOptionSecurityId, parseOptionContract, resolveFrontFutures, scripExpiries } from "./frontFutures.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
@@ -182,6 +182,8 @@ function flattenQuotes(payload) {
         symbol: instrument.symbol,
         parent: instrument.parent || instrument.symbol,
         kind: instrument.kind,
+        securityId: instrument.securityId,
+        expiry: instrument.expiry,
         ltp,
         open: Number(quote.ohlc?.open ?? quote.open),
         high: Number(quote.ohlc?.high ?? quote.high),
@@ -701,8 +703,19 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   let securityId = String(payload.securityId || "").trim();
+  const parsed = parseOptionContract(payload.symbol);
+  const isFuture = payload.kind === "future" || /\bFUT\b/i.test(String(payload.symbol || ""));
   if (!securityId || securityId === "0") {
-    const parsed = parseOptionContract(payload.symbol);
+    if (isFuture || (!parsed && !payload.option && !payload.strike)) {
+      securityId = String(
+        await lookupFutureSecurityId({
+          symbol: payload.symbol,
+          expiry: payload.expiry,
+        }),
+      ).trim();
+    }
+  }
+  if (!securityId || securityId === "0") {
     const desk = getOptionMeta();
     securityId = String(
       await lookupOptionSecurityId({

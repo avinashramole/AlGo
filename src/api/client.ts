@@ -77,6 +77,11 @@ export type Snapshot = {
     vwap?: number;
     prevClose?: number;
     securityId?: number;
+    indexId?: number;
+    futureId?: string;
+    futureExpiry?: string;
+    futureSegment?: string;
+    lot?: number;
   }>;
   ohlc: { open: number; high: number; low: number; close: number };
   dnaScores: Array<{ label: string; value: number }>;
@@ -214,6 +219,34 @@ export type Snapshot = {
     quoteCount?: number;
     positionCount?: number;
     holdingCount?: number;
+  };
+  futures?: Array<{
+    root: string;
+    parent: string;
+    symbol: string;
+    name: string;
+    kind: "future";
+    expiry: string;
+    securityId: string;
+    segment: string;
+    lot: number;
+    qty: number;
+    front?: boolean;
+    tradable?: boolean;
+  }>;
+  contracts?: {
+    indices: Array<{
+      root: string;
+      parent: string;
+      symbol: string;
+      kind: "index";
+      securityId: string;
+      segment: string;
+      lot: number;
+      tradable: boolean;
+      note?: string;
+    }>;
+    futures: Snapshot["futures"];
   };
 };
 

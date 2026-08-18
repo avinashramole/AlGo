@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
   applyBrokerPositions,
@@ -149,6 +150,27 @@ app.get("/api/candles", (req, res) => {
 
 app.get("/api/option-chain", (_req, res) => {
   res.json({ ...getOptionMeta(), rows: snapshot().optionChain });
+});
+
+app.get("/api/contracts", (_req, res) => {
+  const snap = snapshot();
+  res.json({
+    indices: snap.contracts?.indices || [],
+    futures: snap.futures || [],
+    options: (snap.optionChain || []).flatMap((row) => {
+      const symbol = snap.optionMeta?.symbol || "NIFTY";
+      const expiry = snap.optionMeta?.expiry;
+      const segment = String(symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO";
+      return [
+        row.callId
+          ? { kind: "option", symbol: `${symbol} ${row.strike} CE`, strike: row.strike, option: "CE", expiry, securityId: String(row.callId), segment, tradable: true }
+          : null,
+        row.putId
+          ? { kind: "option", symbol: `${symbol} ${row.strike} PE`, strike: row.strike, option: "PE", expiry, securityId: String(row.putId), segment, tradable: true }
+          : null,
+      ].filter(Boolean);
+    }),
+  });
 });
 
 app.post("/api/option-chain/select", async (req, res) => {
@@ -313,5 +335,11 @@ app.listen(port, "0.0.0.0", async () => {
     console.log("Dhan live feed started from DHAN_ACCESS_TOKEN");
   } else if (process.env.DHAN_ACCESS_TOKEN) {
     console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
+  }
+  try {
+    const futs = await resolveFrontFutures();
+    console.log(`Dhan scrip master ready · ${futs.length} front-month index futures`);
+  } catch (error) {
+    console.log(`Scrip master not loaded: ${error.message}`);
   }
 });

@@ -76,6 +76,7 @@ const fallback: Snapshot = {
     profileName: null,
     quoteCount: 0,
   },
+  futures: [],
   optionMeta: {
     symbol: "NIFTY",
     expiry: "2026-08-25",

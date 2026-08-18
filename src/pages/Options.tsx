@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { FuturesTape } from "../components/dashboard/FuturesTape";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct } from "../lib/format";
 
@@ -154,6 +155,7 @@ export function Options() {
         )}
       </div>
       {note ? <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold">{note}</div> : null}
+      <FuturesTape />
       <section className="card overflow-x-auto">
         <table className="w-full min-w-[1280px] text-left text-xs">
           <thead className="bg-[var(--bg)] text-[10px] uppercase tracking-wide text-slate-400">

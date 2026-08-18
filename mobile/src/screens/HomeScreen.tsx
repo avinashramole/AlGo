@@ -1,13 +1,37 @@
 import { useNavigation } from "@react-navigation/native";
-import { ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatInr, formatNumber, formatPct } from "../theme";
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
-  const { data, live } = useMarket();
+  const { data, live, order } = useMarket();
   const signal = data.featuredSignal;
+  const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
+    if (!item.futureId) {
+      Alert.alert("No future ID", "Wait for the scrip master, then try again.");
+      return;
+    }
+    const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
+    try {
+      const result = await order({
+        symbol: `${root} FUT`,
+        kind: "future",
+        side,
+        qty: item.lot || 65,
+        price: item.future || item.price,
+        product: "MIS",
+        type: "MARKET",
+        brokerId: data.activeBrokerId,
+        securityId: String(item.futureId),
+        expiry: item.futureExpiry,
+      });
+      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${root} FUT · ID ${item.futureId}`);
+    } catch (err) {
+      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+    }
+  };
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -23,6 +47,7 @@ export function HomeScreen() {
             <Card key={item.symbol}>
               <View style={{ width: 168 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
+                <Text style={styles.tiny}>IDX {item.indexId || item.securityId || "—"}</Text>
                 <Text style={styles.price}>{formatNumber(item.price)}</Text>
                 <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
                   {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
@@ -32,11 +57,22 @@ export function HomeScreen() {
                     <View>
                       <Text style={styles.tiny}>FUT</Text>
                       <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                      <Text style={styles.tiny}>ID {item.futureId || "—"}</Text>
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>
                       <Text style={styles.deskVal}>{formatNumber(item.vwap || item.price)}</Text>
                     </View>
+                  </View>
+                ) : null}
+                {showDeriv && item.futureId ? (
+                  <View style={styles.deskRow}>
+                    <Pressable style={styles.buy} onPress={() => void tradeFuture(item, "BUY")}>
+                      <Text style={styles.ctaText}>BUY FUT</Text>
+                    </Pressable>
+                    <Pressable style={styles.sell} onPress={() => void tradeFuture(item, "SELL")}>
+                      <Text style={styles.ctaText}>SELL</Text>
+                    </Pressable>
                   </View>
                 ) : null}
               </View>
@@ -99,6 +135,8 @@ const styles = StyleSheet.create({
   metricVal: { color: colors.brand, fontWeight: "800", marginTop: 4 },
   cta: { marginTop: 12, height: 44, borderRadius: 12, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   ctaText: { color: "#fff", fontWeight: "700" },
+  buy: { flex: 1, height: 32, borderRadius: 8, backgroundColor: colors.up, alignItems: "center", justifyContent: "center" },
+  sell: { flex: 1, height: 32, borderRadius: 8, backgroundColor: colors.down, alignItems: "center", justifyContent: "center" },
   barBg: { height: 8, backgroundColor: "#e5e7eb", borderRadius: 99, overflow: "hidden" },
   barFill: { height: 8, backgroundColor: colors.up },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
