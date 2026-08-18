@@ -20,6 +20,13 @@ export function formatInr(value: number) {
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
 }
 
+export function formatOi(value: number) {
+  const n = Number(value) || 0;
+  if (Math.abs(n) >= 10_000_000) return `${(n / 10_000_000).toFixed(2)} Cr`;
+  if (Math.abs(n) >= 100_000) return `${(n / 100_000).toFixed(2)} L`;
+  return Math.round(n).toLocaleString("en-IN");
+}
+
 export function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }

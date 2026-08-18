@@ -27,10 +27,32 @@ export type Snapshot = {
     strike: number;
     callLtp: number;
     callChg: number;
+    callOi?: number;
+    callOiChg?: number;
+    callVol?: number;
+    callIv?: number;
+    callDelta?: number;
     putLtp: number;
     putChg: number;
+    putOi?: number;
+    putOiChg?: number;
+    putVol?: number;
+    putIv?: number;
+    putDelta?: number;
     atm?: boolean;
   }>;
+  optionMeta?: {
+    symbol: string;
+    expiry: string;
+    expiries: string[];
+    spot: number;
+    pcr: number;
+    maxPain: number;
+    atmIv: number;
+    source: string;
+    lastAt: number | null;
+    underlyings?: Array<{ id: string; label: string; lot: number }>;
+  };
   algos: Array<{
     id: string;
     name: string;
@@ -165,4 +187,11 @@ export function activateBroker(id: string) {
 
 export function assignAlgoBroker(id: string, brokerId: string) {
   return request(`/algos/${id}/broker`, { method: "POST", body: JSON.stringify({ brokerId }) });
+}
+
+export function selectOptionChain(symbol: string, expiry?: string) {
+  return request<{ snapshot: Snapshot }>(`/option-chain/select`, {
+    method: "POST",
+    body: JSON.stringify({ symbol, expiry }),
+  });
 }

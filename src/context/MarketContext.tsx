@@ -6,6 +6,7 @@ import {
   disconnectBroker,
   getSnapshot,
   placeOrder,
+  selectOptionChain,
   toggleAlgo,
   type Snapshot,
 } from "../api/client";
@@ -69,6 +70,23 @@ const fallback: Snapshot = {
     profileName: null,
     quoteCount: 0,
   },
+  optionMeta: {
+    symbol: "NIFTY",
+    expiry: "2026-08-20",
+    expiries: ["2026-08-20", "2026-08-27", "2026-09-03"],
+    spot: 24580.25,
+    pcr: 0.86,
+    maxPain: 24500,
+    atmIv: 12.4,
+    source: "demo",
+    lastAt: null,
+    underlyings: [
+      { id: "NIFTY", label: "NIFTY", lot: 75 },
+      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
+      { id: "FINNIFTY", label: "FINNIFTY", lot: 65 },
+      { id: "SENSEX", label: "SENSEX", lot: 20 },
+    ],
+  },
 };
 
 type MarketContextValue = {
@@ -81,6 +99,7 @@ type MarketContextValue = {
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
   routeAlgo: (id: string, brokerId: string) => Promise<void>;
+  selectChain: (symbol: string, expiry?: string) => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -149,6 +168,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       routeAlgo: async (id: string, brokerId: string) => {
         await assignAlgoBroker(id, brokerId);
         await refresh();
+      },
+      selectChain: async (symbol: string, expiry?: string) => {
+        const result = await selectOptionChain(symbol, expiry);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
       },
     }),
     [data, live, refresh],

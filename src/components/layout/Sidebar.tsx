@@ -20,7 +20,7 @@ import { cn } from "../../lib/format";
 const items: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: "/", label: "Home", icon: Home },
   { to: "/markets", label: "Markets", icon: BarChart3 },
-  { to: "/options", label: "Options", icon: Layers },
+  { to: "/options", label: "Chain", icon: Layers },
   { to: "/signals", label: "Signals", icon: Zap },
   { to: "/algo", label: "Algo", icon: Cpu },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },

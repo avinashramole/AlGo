@@ -125,6 +125,8 @@ Sandbox connect for Zerodha / Kotak / Fyers: client ID `demo` and API key `demo1
 
 The header broker dropdown sets which account new orders use. Each algo can be routed to a different connected broker.
 
+Open **Chain** in the left menu for the full option chain (NIFTY / BANKNIFTY / FINNIFTY / SENSEX). With a Dhan Access Token connected, strikes, OI, IV, and PCR come from DhanHQ.
+
 ---
 
 ## Project folders

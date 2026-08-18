@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { activateBroker, connectBroker, disconnectBroker, getSnapshot, placeOrder, toggleAlgo, type Snapshot } from "./api";
+import { activateBroker, connectBroker, disconnectBroker, getSnapshot, placeOrder, selectOptionChain, toggleAlgo, type Snapshot } from "./api";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -11,6 +11,7 @@ type MarketContextValue = {
   connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
+  selectChain: (symbol: string, expiry?: string) => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -77,6 +78,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       activate: async (id: string) => {
         const result = await activateBroker(id);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      selectChain: async (symbol: string, expiry?: string) => {
+        const result = await selectOptionChain(symbol, expiry);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

@@ -34,6 +34,7 @@ function Tabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Markets" component={MarketsScreen} />
+      <Tab.Screen name="Chain" component={OptionsScreen} />
       <Tab.Screen name="Signals" component={SignalsScreen} />
       <Tab.Screen name="Algo" component={AlgoScreen} />
       <Tab.Screen name="Portfolio" component={PortfolioScreen} />

@@ -1,7 +1,17 @@
 import { Buffer } from "node:buffer";
 import { WebSocket } from "ws";
 import { markDhanLive } from "./brokers.js";
-import { applyLiveQuotes, replaceDhanBook, setDhanFeed, setLiveCandles } from "./market.js";
+import {
+  applyLiveQuotes,
+  applySyntheticOptionChain,
+  getChainSpot,
+  getOptionMeta,
+  replaceDhanBook,
+  setDhanFeed,
+  setLiveCandles,
+  setOptionDesk,
+} from "./market.js";
+import { getUnderlying, parseDhanChain, trimAroundAtm, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
 const DHAN_FEED_WS = "wss://api-feed.dhan.co";
@@ -28,6 +38,7 @@ let accessToken = "";
 let clientId = "";
 let pollTimer = null;
 let accountTimer = null;
+let chainTimer = null;
 let socket = null;
 let reconnectTimer = null;
 let usedFallback = false;
@@ -411,17 +422,81 @@ function startSocket() {
   });
 }
 
+async function refreshOptionChain() {
+  if (!accessToken) {
+    applySyntheticOptionChain();
+    return;
+  }
+  const desk = getOptionMeta();
+  const und = getUnderlying(desk.symbol);
+  const payload = await dhanPost("/optionchain", accessToken, clientId, {
+    UnderlyingScrip: und.scrip,
+    UnderlyingSeg: und.segment,
+    Expiry: desk.expiry,
+  });
+  const parsed = parseDhanChain(payload, getChainSpot(und.id));
+  const rows = trimAroundAtm(parsed.rows, 12);
+  if (!rows.length) {
+    setDhanFeed({ error: "Dhan option chain returned no strikes." });
+    return;
+  }
+  setOptionDesk({
+    symbol: und.id,
+    expiry: desk.expiry,
+    expiries: desk.expiries,
+    rows,
+    spot: parsed.spot,
+    source: "dhan",
+  });
+}
+
+export async function selectOptionDesk({ symbol, expiry }) {
+  const und = getUnderlying(symbol);
+  let expiries = upcomingExpiries();
+  if (accessToken) {
+    try {
+      const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, {
+        UnderlyingScrip: und.scrip,
+        UnderlyingSeg: und.segment,
+      });
+      const dates = Array.isArray(list?.data) ? list.data : [];
+      if (dates.length) expiries = dates;
+    } catch {
+      /* keep weekly Thursday list */
+    }
+  }
+  const chosen = expiry && expiries.includes(expiry) ? expiry : expiries[0];
+  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, source: accessToken ? "dhan" : "demo" });
+  if (accessToken) {
+    try {
+      await refreshOptionChain();
+    } catch (error) {
+      applySyntheticOptionChain(und.id, chosen);
+      setDhanFeed({ error: error.message || "Dhan option chain failed" });
+    }
+  } else {
+    applySyntheticOptionChain(und.id, chosen);
+  }
+  return getOptionMeta();
+}
+
 function startLiveLoop() {
   stopLiveLoop(false);
   void pullQuotes();
   void pullAccount();
   void pullNiftyCandles();
+  void refreshOptionChain().catch(() => undefined);
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 1200);
   accountTimer = setInterval(() => {
     void pullAccount();
   }, 20_000);
+  chainTimer = setInterval(() => {
+    void refreshOptionChain().catch((error) => {
+      setDhanFeed({ error: error.message || "Dhan option chain failed" });
+    });
+  }, 4000);
   startSocket();
 }
 
@@ -433,6 +508,10 @@ function stopLiveLoop(clearCreds) {
   if (accountTimer) {
     clearInterval(accountTimer);
     accountTimer = null;
+  }
+  if (chainTimer) {
+    clearInterval(chainTimer);
+    chainTimer = null;
   }
   stopSocket();
   if (clearCreds) {

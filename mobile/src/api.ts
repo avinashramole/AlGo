@@ -25,7 +25,27 @@ export type Snapshot = {
   indices: Array<{ symbol: string; price: number; change: number; changePct: number; spark: number[] }>;
   ohlc: { open: number; high: number; low: number; close: number };
   dnaScores: Array<{ label: string; value: number }>;
-  optionChain: Array<{ strike: number; callLtp: number; callChg: number; putLtp: number; putChg: number; atm?: boolean }>;
+  optionChain: Array<{
+    strike: number;
+    callLtp: number;
+    callChg: number;
+    callOi?: number;
+    putLtp: number;
+    putChg: number;
+    putOi?: number;
+    atm?: boolean;
+  }>;
+  optionMeta?: {
+    symbol: string;
+    expiry: string;
+    expiries: string[];
+    spot: number;
+    pcr: number;
+    maxPain: number;
+    atmIv: number;
+    source: string;
+    underlyings?: Array<{ id: string; label: string; lot: number }>;
+  };
   algos: Array<{
     id: string;
     name: string;
@@ -128,4 +148,11 @@ export function disconnectBroker(id: string) {
 
 export function activateBroker(id: string) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/activate`, { method: "POST" });
+}
+
+export function selectOptionChain(symbol: string, expiry?: string) {
+  return request<{ snapshot: Snapshot }>("/option-chain/select", {
+    method: "POST",
+    body: JSON.stringify({ symbol, expiry }),
+  });
 }

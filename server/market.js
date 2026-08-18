@@ -1,4 +1,11 @@
 import { getActiveBroker, publicBrokers } from "./brokers.js";
+import {
+  UNDERLYINGS,
+  buildSyntheticChain,
+  chainStats,
+  getUnderlying,
+  upcomingExpiries,
+} from "./optionChain.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -49,11 +56,19 @@ const state = {
     { label: "OI Build", value: 72 },
     { label: "PCR", value: 64 },
   ],
-  optionChain: [
-    { strike: 24400, callLtp: 212.4, callChg: 8.2, putLtp: 38.15, putChg: -11.4 },
-    { strike: 24500, callLtp: 142.75, callChg: 6.8, putLtp: 62.4, putChg: -8.1, atm: true },
-    { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
-  ],
+  optionChain: buildSyntheticChain(24580.25, 50, 10),
+  optionMeta: {
+    symbol: "NIFTY",
+    expiry: upcomingExpiries()[0] || "2026-08-20",
+    expiries: upcomingExpiries(),
+    spot: 24580.25,
+    pcr: 0.86,
+    maxPain: 24500,
+    atmIv: 12.4,
+    source: "demo",
+    lastAt: null,
+    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+  },
   algos: [
     { id: "a1", name: "VWAP Depth", tag: "Intraday", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
     { id: "a2", name: "Momentum Rider", tag: "Options", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
@@ -212,9 +227,13 @@ export function tickMarket() {
 
   state.optionChain = state.optionChain.map((row) => ({
     ...row,
-    callLtp: jitter(row.callLtp, 0.6),
-    putLtp: jitter(row.putLtp, 0.6),
+    callLtp: jitter(row.callLtp, 0.55),
+    putLtp: jitter(row.putLtp, 0.55),
+    callOi: Math.max(1000, Math.round((row.callOi || 0) + (Math.random() - 0.45) * 8000)),
+    putOi: Math.max(1000, Math.round((row.putOi || 0) + (Math.random() - 0.45) * 8000)),
   }));
+  const stats = chainStats(state.optionChain, state.optionMeta.spot);
+  state.optionMeta = { ...state.optionMeta, ...stats, source: "demo" };
 }
 
 export function snapshot() {
@@ -328,6 +347,55 @@ export function setLiveCandles(candles) {
     nifty.price = round2(last.close);
     nifty.spark = pushSpark(nifty.spark, last.close);
   }
+}
+
+export function getChainSpot(symbol = state.optionMeta.symbol) {
+  const meta = getUnderlying(symbol);
+  const index = state.indices.find((item) => item.symbol === meta.indexSymbol);
+  return Number(index?.price || state.optionMeta.spot || 24580);
+}
+
+export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expiry = state.optionMeta.expiry) {
+  const meta = getUnderlying(symbol);
+  const expiries = upcomingExpiries();
+  const chosen = expiry && expiries.includes(expiry) ? expiry : expiries[0];
+  const spot = getChainSpot(meta.id);
+  const rows = buildSyntheticChain(spot, meta.step, 10);
+  const stats = chainStats(rows, spot);
+  state.optionChain = rows;
+  state.optionMeta = {
+    symbol: meta.id,
+    expiry: chosen,
+    expiries,
+    ...stats,
+    source: "demo",
+    lastAt: Date.now(),
+    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+  };
+  return clone(state.optionMeta);
+}
+
+export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) {
+  const meta = getUnderlying(symbol || state.optionMeta.symbol);
+  const nextRows = Array.isArray(rows) && rows.length ? rows : state.optionChain;
+  const nextSpot = Number(spot) || getChainSpot(meta.id);
+  const stats = chainStats(nextRows, nextSpot);
+  state.optionChain = nextRows;
+  state.optionMeta = {
+    ...state.optionMeta,
+    symbol: meta.id,
+    expiry: expiry || state.optionMeta.expiry,
+    expiries: expiries?.length ? expiries : state.optionMeta.expiries,
+    ...stats,
+    source: source || state.optionMeta.source,
+    lastAt: Date.now(),
+    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+  };
+  return clone(state.optionMeta);
+}
+
+export function getOptionMeta() {
+  return clone(state.optionMeta);
 }
 
 export function addChat(text) {
@@ -445,7 +513,7 @@ export function applyLiveQuotes(quotes) {
   });
 
   const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
-  if (nifty && indexPrev["NIFTY 50"]) {
+  if (nifty && indexPrev["NIFTY 50"] && state.optionMeta?.source !== "dhan") {
     const move = nifty.price - indexPrev["NIFTY 50"];
     state.optionChain = state.optionChain.map((row) => ({
       ...row,

@@ -4,13 +4,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import {
   addChat,
   applyBrokerPositions,
+  applySyntheticOptionChain,
   assignAlgoBroker,
   dropBrokerPositions,
   getCandles,
+  getOptionMeta,
   placeOrder,
   snapshot,
   tickMarket,
@@ -138,6 +140,23 @@ app.post("/api/brokers/:id/activate", (req, res) => {
 
 app.get("/api/candles", (req, res) => {
   res.json(getCandles(String(req.query.tf || "5m")));
+});
+
+app.get("/api/option-chain", (_req, res) => {
+  res.json({ ...getOptionMeta(), rows: snapshot().optionChain });
+});
+
+app.post("/api/option-chain/select", async (req, res) => {
+  try {
+    await selectOptionDesk({
+      symbol: String(req.body?.symbol || "NIFTY"),
+      expiry: req.body?.expiry,
+    });
+    res.json({ ok: true, meta: getOptionMeta(), snapshot: snapshot() });
+  } catch (error) {
+    applySyntheticOptionChain(String(req.body?.symbol || "NIFTY"), req.body?.expiry);
+    res.status(error.status || 400).json({ error: error.message || "Option chain failed", snapshot: snapshot() });
+  }
 });
 
 app.post("/api/algos/:id/toggle", (req, res) => {
