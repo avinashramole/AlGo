@@ -117,11 +117,12 @@ export function Login() {
 
   return (
     <div className="t2s-login">
-      <div className="t2s-login-bg" aria-hidden="true" />
-      <div className="t2s-login-card">
-        <BrandMark variant="stacked" size="md" theme="light" />
+      <div className="card t2s-login-card">
+        <div className="mb-6 flex justify-center">
+          <BrandMark variant="horizontal" size="lg" theme="light" showWordmark="always" />
+        </div>
 
-        <form onSubmit={onSubmit} className="t2s-login-form" autoComplete="on">
+        <form onSubmit={onSubmit} autoComplete="on">
           {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" /> : null}
           <Field
             label="Gmail or mobile"
@@ -155,17 +156,17 @@ export function Login() {
             <Field label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
           ) : null}
           <Notice error={error} hint={hint} devOtp={devOtp} />
-          <button type="submit" disabled={loading} className="t2s-submit">
+          <button type="submit" disabled={loading} className="mt-1 h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
             {loading ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
           </button>
-          <button type="button" className="t2s-ghost" disabled={loading} onClick={() => void onSendCode()}>
+          <button type="button" className="mt-2 h-10 w-full text-sm font-semibold text-brand-500" disabled={loading} onClick={() => void onSendCode()}>
             {sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}
           </button>
         </form>
 
         <button
           type="button"
-          className="t2s-switch"
+          className="mt-4 w-full text-center text-sm text-slate-500"
           onClick={() => {
             setPage(page === "signup" ? "signin" : "signup");
             resetNotice();
@@ -173,15 +174,15 @@ export function Login() {
         >
           {page === "signup" ? (
             <>
-              Have an account? <b>Sign in</b>
+              Have an account? <span className="font-semibold text-slate-900">Sign in</span>
             </>
           ) : (
             <>
-              New here? <b>Create account</b>
+              New here? <span className="font-semibold text-slate-900">Create account</span>
             </>
           )}
         </button>
-        {page === "signin" ? <p className="t2s-demo">Demo: demo@t2s.app / demo123</p> : null}
+        {page === "signin" ? <p className="mt-3 text-center text-xs text-slate-400">Demo: demo@t2s.app / demo123</p> : null}
       </div>
     </div>
   );
@@ -204,11 +205,11 @@ function Field({
 }) {
   const [show, setShow] = useState(false);
   return (
-    <label className="t2s-field">
-      <span className="t2s-field-label">{label}</span>
-      <span className="t2s-field-row">
+    <label className="mb-3 block text-sm font-semibold">
+      {label}
+      <span className="mt-1 flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3">
         <input
-          className="t2s-input"
+          className="t2s-input h-11 min-w-0 flex-1 border-0 bg-transparent font-normal outline-none"
           type={secret && !show ? "password" : "text"}
           value={value}
           placeholder={placeholder}
@@ -216,7 +217,7 @@ function Field({
           onChange={(event) => onChange(event.target.value)}
         />
         {secret ? (
-          <button type="button" className="t2s-field-toggle" onClick={() => setShow((current) => !current)}>
+          <button type="button" className="shrink-0 text-xs font-semibold text-brand-500" onClick={() => setShow((current) => !current)}>
             {show ? "Hide" : "Show"}
           </button>
         ) : null}
@@ -228,9 +229,9 @@ function Field({
 function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: string }) {
   return (
     <>
-      {hint ? <p className="t2s-hint">{hint}</p> : null}
-      {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
-      {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
+      {hint ? <p className="mb-3 text-sm text-slate-500">{hint}</p> : null}
+      {devOtp ? <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-up">Temporary code: {devOtp}</div> : null}
+      {error ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-down">{error}</div> : null}
     </>
   );
 }

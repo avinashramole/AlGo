@@ -8,6 +8,7 @@ type Props = {
   size?: "sm" | "md" | "lg";
   theme?: "dark" | "light";
   className?: string;
+  showWordmark?: "always" | "responsive";
 };
 
 const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>> = {
@@ -16,7 +17,7 @@ const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>
   emblem: { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-12 w-12" },
 };
 
-export function BrandMark({ variant = "stacked", size = "md", theme = "dark", className = "" }: Props) {
+export function BrandMark({ variant = "stacked", size = "md", theme = "dark", className = "", showWordmark = "responsive" }: Props) {
   const uid = useId().replace(/:/g, "");
   const trade = theme === "light" ? "#111827" : "#f4f7fb";
   const tag = theme === "light" ? "#6b7280" : "#9aa3b5";
@@ -36,7 +37,7 @@ export function BrandMark({ variant = "stacked", size = "md", theme = "dark", cl
     return (
       <span className={`inline-flex items-center gap-2.5 ${className}`}>
         <EmblemSvg id={uid} className={`shrink-0 ${emblemBox.horizontal[size]}`} />
-        <span className="hidden min-w-0 leading-tight sm:block">
+        <span className={`min-w-0 leading-tight ${showWordmark === "always" ? "block" : "hidden sm:block"}`}>
           <span className={`block font-extrabold tracking-[0.16em] ${nameSize}`}>
             <span style={{ color: trade }}>TRADE </span>
             <span style={{ color: "#2f7bff" }}>2 </span>

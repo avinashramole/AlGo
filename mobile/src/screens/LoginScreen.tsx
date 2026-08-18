@@ -123,7 +123,9 @@ export function LoginScreen() {
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
-          <BrandMark variant="stacked" theme="light" />
+          <View style={styles.brand}>
+            <BrandMark variant="horizontal" theme="light" />
+          </View>
           {page === "signup" ? (
             <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
           ) : null}
@@ -227,50 +229,39 @@ function Field({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  brand: { alignItems: "center", marginBottom: 24 },
   card: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 28,
-    padding: 22,
+    borderRadius: 12,
+    padding: 24,
     backgroundColor: colors.card,
   },
-  field: {
-    marginBottom: 14,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
+  field: { marginBottom: 12 },
+  label: { color: colors.text, fontSize: 14, fontWeight: "600", marginBottom: 6 },
+  input: {
+    height: 44,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: colors.bg,
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: "transparent",
     color: colors.text,
-    height: 28,
-    padding: 0,
-    fontSize: 16,
+    paddingHorizontal: 12,
+    fontSize: 15,
   },
   button: {
-    backgroundColor: "#b6ff3c",
-    height: 48,
+    backgroundColor: colors.brand,
+    height: 44,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 4,
   },
-  buttonText: { color: "#061006", fontWeight: "800" },
+  buttonText: { color: "#fff", fontWeight: "600", fontSize: 14 },
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
-  ghostText: { color: colors.brand, fontWeight: "700" },
+  ghostText: { color: colors.brand, fontWeight: "600" },
   switch: { marginTop: 8, height: 40, alignItems: "center", justifyContent: "center" },
-  switchText: { color: colors.muted, fontWeight: "700", fontSize: 13 },
+  switchText: { color: colors.muted, fontSize: 14 },
   hint: { textAlign: "center", color: colors.muted, marginTop: 12, marginBottom: 8, fontSize: 12 },
-  dev: { textAlign: "center", color: "#3f7a00", marginTop: 8, fontSize: 13, fontWeight: "700" },
+  dev: { textAlign: "center", color: colors.up, marginTop: 8, fontSize: 13, fontWeight: "700" },
 });
