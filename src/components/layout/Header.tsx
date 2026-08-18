@@ -69,13 +69,13 @@ export function Header() {
         <button type="button" onClick={toggleTheme} className="icon-btn" title="Theme">
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
-        <div className="hidden items-center gap-2 sm:flex" title={user?.email}>
+        <div className="hidden items-center gap-2 sm:flex" title={user?.email || user?.mobile || ""}>
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
             {(user?.name || "T").slice(0, 1).toUpperCase()}
           </div>
           <div className="hidden lg:block">
             <div className="text-xs font-bold leading-tight">{user?.name || "T2S"}</div>
-            <div className="text-[10px] font-semibold text-slate-400">{user?.email || ""}</div>
+            <div className="text-[10px] font-semibold text-slate-400">{user?.email || user?.mobile || ""}</div>
           </div>
         </div>
         <button type="button" onClick={logout} className="icon-btn" title="Log out">

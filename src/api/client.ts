@@ -365,16 +365,28 @@ export type BrokerAccount = {
   virtual?: boolean;
 };
 
-export function login(email: string, password: string) {
-  return request<{ token: string; user: { name: string; email: string; desk: string } }>("/login", {
+export type AuthUser = {
+  id?: string;
+  name: string;
+  email: string;
+  mobile?: string;
+  desk: string;
+  hasPassword?: boolean;
+  thumbEnabled?: boolean;
+};
+
+export function login(identifier: string, password: string) {
+  return request<{ token: string; user: AuthUser }>("/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, email: identifier, password }),
   });
 }
 
 export type OtpRequestResult = {
   ok: boolean;
   sent: boolean;
+  channel?: "gmail" | "mobile";
+  purpose?: string;
   newUser?: boolean;
   to?: string;
   hint?: string;
@@ -382,21 +394,45 @@ export type OtpRequestResult = {
   gmail?: { connected?: boolean; user?: string };
 };
 
-export function requestOtp(email: string, name?: string) {
+export function requestOtp(payload: { identifier: string; name?: string; channel?: "gmail" | "mobile"; purpose?: "signup" | "login" }) {
   return request<OtpRequestResult>("/auth/otp/request", {
     method: "POST",
-    body: JSON.stringify({ email, name }),
+    body: JSON.stringify(payload),
   });
 }
 
-export function verifyOtp(email: string, otp: string) {
-  return request<{ token: string; user: { name: string; email: string; desk: string }; mail?: { delivered?: boolean } }>(
-    "/auth/otp/verify",
-    {
-      method: "POST",
-      body: JSON.stringify({ email, otp }),
-    },
-  );
+export function verifyOtp(payload: { identifier: string; otp: string; purpose?: "signup" | "login" }) {
+  return request<{ token?: string; user?: AuthUser; verified?: boolean; mail?: { delivered?: boolean } }>("/auth/otp/verify", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function signup(payload: {
+  name: string;
+  identifier: string;
+  otp: string;
+  password: string;
+  channel: "gmail" | "mobile";
+}) {
+  return request<{ token: string; user: AuthUser }>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function enableThumb(token: string) {
+  return request<{ ok: boolean; thumbToken: string; user: AuthUser }>("/auth/thumb/enable", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function loginThumb(thumbToken: string) {
+  return request<{ token: string; user: AuthUser }>("/auth/thumb", {
+    method: "POST",
+    body: JSON.stringify({ thumbToken }),
+  });
 }
 
 export function getGmailStatus() {

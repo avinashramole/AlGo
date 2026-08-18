@@ -10,7 +10,9 @@ One trading desk. Same login, same live demo data.
 
 Demo login (Avinash): **demo@t2s.app** / **demo123**
 
-New user **Segin** (and any other Gmail): sign in with **Gmail OTP** on the login screen.
+**Sign up:** verify **Gmail OTP** or **mobile OTP**, then set a password.
+
+**Sign in:** Gmail or mobile + **password**, **OTP**, or **thumb** (fingerprint / Face ID / Windows Hello after you enable it in Settings).
 
 ---
 
@@ -47,10 +49,11 @@ This starts:
 
 Open **http://localhost:5173** in Chrome.
 
-- **Segin / new user:** Gmail OTP tab → **Connect Gmail** (Gmail + App Password) → name + Gmail → Send code → enter the OTP from inbox. After login, T2S emails a sign-in notice to that Gmail.
-- **Avinash demo:** Password tab → `demo@t2s.app` / `demo123`
+- **New user:** Sign up → Gmail OTP or Mobile OTP → enter the 6-digit code → set password (min 6). You are signed in after that.
+- **Next visits:** Sign in → Password (Gmail or 10-digit mobile + password), OTP, or Thumb.
+- **Avinash demo:** Password → `demo@t2s.app` / `demo123`
 
-You can also connect Gmail later in **Settings**. Google Account → Security → 2-Step Verification → App passwords. Do not use your normal Gmail password.
+Connect Gmail (App Password) so Gmail codes and login notices are emailed. Mobile SMS needs `FAST2SMS_API_KEY`. Without those, the screen shows a temporary code. Enable **Thumb** in Settings after login. Google Account → Security → 2-Step Verification → App passwords. Do not use your normal Gmail password.
 
 Keep this terminal open.
 
@@ -82,7 +85,7 @@ A QR code appears.
 - **Android:** open Expo Go and scan the QR code  
 - **iPhone:** open the Camera app, scan the QR code, then open in Expo Go  
 
-Login: Gmail OTP (Segin) or `demo@t2s.app` / `demo123`
+Login: Sign up with Gmail or mobile OTP, then password / OTP / thumb. Demo: `demo@t2s.app` / `demo123`
 
 The phone talks to the API on your computer, so leave `npm start` running in the first terminal.
 
@@ -126,9 +129,10 @@ DHAN_CLIENT_ID=your-client-id
 DHAN_ACCESS_TOKEN=your-jwt
 GMAIL_USER=yourname@gmail.com
 GMAIL_APP_PASSWORD=your-16-char-app-password
+FAST2SMS_API_KEY=your-fast2sms-key
 ```
 
-**Gmail OTP:** Google Account → Security → 2-Step Verification → App passwords. Paste the 16-character password. Without these, the login screen still shows a one-time code so you can add Segin immediately.
+**Gmail OTP:** Google Account → Security → 2-Step Verification → App passwords. Paste the 16-character password. **Mobile OTP:** Fast2SMS API key, or use the on-screen code. Without Gmail/SMS, the login screen still shows a one-time code so you can sign up immediately.
 
 Then restart `npm start`. The header shows **DHAN LIVE** when quotes are coming from Dhan. Open positions and NIFTY candles also load from your Dhan account. The token is kept in server memory only.
 

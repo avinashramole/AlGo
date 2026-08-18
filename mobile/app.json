@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
-        }
+        },
+        "NSFaceIDUsageDescription": "Unlock T2S with Face ID or fingerprint."
       }
     },
     "android": {
@@ -30,10 +31,19 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": ["USE_BIOMETRIC", "USE_FINGERPRINT"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Unlock T2S with Face ID or fingerprint."
+        }
+      ]
+    ]
   }
 }

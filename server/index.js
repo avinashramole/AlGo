@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { connectGmail, gmailStatus, loginWithPassword, notifyLogin, requestOtp, verifyOtp } from "./auth.js";
+import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -106,7 +106,7 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/login", async (req, res) => {
   try {
-    const result = loginWithPassword(req.body?.email, req.body?.password);
+    const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
     const mail = await notifyLogin(result.user);
     res.json({ ...result, mail });
   } catch (error) {
@@ -129,7 +129,14 @@ app.post("/api/auth/gmail", async (req, res) => {
 
 app.post("/api/auth/otp/request", async (req, res) => {
   try {
-    const result = await requestOtp({ email: req.body?.email, name: req.body?.name });
+    const result = await requestOtp({
+      email: req.body?.email,
+      mobile: req.body?.mobile,
+      identifier: req.body?.identifier,
+      name: req.body?.name,
+      channel: req.body?.channel,
+      purpose: req.body?.purpose,
+    });
     res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not send code", needName: Boolean(error.needName) });
@@ -138,11 +145,50 @@ app.post("/api/auth/otp/request", async (req, res) => {
 
 app.post("/api/auth/otp/verify", async (req, res) => {
   try {
-    const result = verifyOtp({ email: req.body?.email, otp: req.body?.otp });
+    const result = verifyOtp({
+      email: req.body?.email,
+      mobile: req.body?.mobile,
+      identifier: req.body?.identifier,
+      otp: req.body?.otp,
+      purpose: req.body?.purpose,
+    });
+    if (result.token) {
+      const mail = await notifyLogin(result.user);
+      res.json({ ...result, mail });
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
+  }
+});
+
+app.post("/api/auth/signup", async (req, res) => {
+  try {
+    const result = completeSignup(req.body || {});
+    const mail = await notifyLogin(result.user);
+    res.status(201).json({ ...result, mail });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Sign up failed" });
+  }
+});
+
+app.post("/api/auth/thumb/enable", (req, res) => {
+  try {
+    const token = String(req.body?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    res.json(enableThumb(token));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not enable thumb" });
+  }
+});
+
+app.post("/api/auth/thumb", async (req, res) => {
+  try {
+    const result = loginWithThumb(req.body?.thumbToken);
     const mail = await notifyLogin(result.user);
     res.json({ ...result, mail });
   } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
+    res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
   }
 });
 
