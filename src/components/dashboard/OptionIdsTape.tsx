@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct } from "../../lib/format";
 
-export function OptionIdsTape() {
+export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const { data, selectChain, order } = useMarket();
   const meta = data.optionMeta;
   const symbol = meta?.symbol || "NIFTY";
@@ -19,6 +19,7 @@ export function OptionIdsTape() {
   }, [rows]);
 
   const lot = meta?.underlyings?.find((item) => item.id === symbol)?.lot || 65;
+  const qty = Math.max(1, lots) * lot;
 
   const trade = async (option: "CE" | "PE", side: "BUY" | "SELL", row: (typeof rows)[number]) => {
     const key = `${row.strike}-${option}-${side}`;
@@ -28,8 +29,8 @@ export function OptionIdsTape() {
       const result = await order({
         symbol: `${symbol} ${row.strike} ${option}`,
         side,
-        qty: lot,
-        lots: 1,
+        qty,
+        lots: Math.max(1, lots),
         price: option === "CE" ? row.callLtp : row.putLtp,
         product: "MIS",
         type: "MARKET",
@@ -41,8 +42,8 @@ export function OptionIdsTape() {
       });
       setNote(
         result.live
-          ? `Sent to Dhan · ${side} ${symbol} ${row.strike} ${option}`
-          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option}`,
+          ? `Sent to Dhan · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
+          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
       );
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Order failed");
