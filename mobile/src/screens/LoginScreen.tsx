@@ -4,12 +4,25 @@ import { connectGmail, getGmailStatus } from "../api";
 import { useAuth } from "../AuthContext";
 import { colors } from "../theme";
 
+function looksLikeMobile(value: string) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
+  return /^[6-9]\d{9}$/.test(digits);
+}
+
+function looksLikeGmail(value: string) {
+  return /@gmail\.com$|@googlemail\.com$/i.test(String(value || "").trim());
+}
+
+function channelOf(value: string): "gmail" | "mobile" {
+  return looksLikeMobile(value) ? "mobile" : "gmail";
+}
+
 export function LoginScreen() {
   const { login, requestOtp, verifyOtp, signup, loginThumb, hasThumb } = useAuth();
   const [page, setPage] = useState<"signin" | "signup">("signin");
-  const [method, setMethod] = useState<"password" | "otp" | "thumb">("password");
-  const [channel, setChannel] = useState<"gmail" | "mobile">("gmail");
-  const [name, setName] = useState("Segin");
+  const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -21,6 +34,9 @@ export function LoginScreen() {
   const [mailConnected, setMailConnected] = useState(false);
   const [senderEmail, setSenderEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
+
+  const channel = channelOf(identifier);
+  const showGmail = looksLikeGmail(identifier);
 
   useEffect(() => {
     void getGmailStatus()
@@ -53,55 +69,58 @@ export function LoginScreen() {
       setDevOtp(result.devOtp || "");
       if (result.gmail) setMailConnected(Boolean(result.gmail.connected));
     } catch (error) {
-      fail("OTP failed", error);
+      fail("Could not send code", error);
     } finally {
       setBusy(false);
     }
   };
 
-  const onPassword = async () => {
-    setBusy(true);
-    try {
-      await login(identifier || "demo@t2s.app", password);
-    } catch (error) {
-      fail("Sign in failed", error);
-    } finally {
-      setBusy(false);
+  const submit = async () => {
+    if (page === "signup") {
+      if (!sentTo) {
+        await sendCode();
+        return;
+      }
+      if (password !== confirm) {
+        Alert.alert("Password", "Passwords do not match.");
+        return;
+      }
+      setBusy(true);
+      try {
+        await signup({ name, identifier, otp, password, channel });
+      } catch (error) {
+        fail("Sign up failed", error);
+      } finally {
+        setBusy(false);
+      }
+      return;
     }
-  };
 
-  const onOtpSignIn = async () => {
-    if (!sentTo) {
-      await sendCode();
+    if (otp.length === 6) {
+      setBusy(true);
+      try {
+        await verifyOtp(identifier, otp);
+      } catch (error) {
+        fail("Sign in failed", error);
+      } finally {
+        setBusy(false);
+      }
       return;
     }
-    setBusy(true);
-    try {
-      await verifyOtp(identifier, otp);
-    } catch (error) {
-      fail("Sign in failed", error);
-    } finally {
-      setBusy(false);
-    }
-  };
 
-  const onSignup = async () => {
-    if (!sentTo) {
-      await sendCode();
+    if (password) {
+      setBusy(true);
+      try {
+        await login(identifier || "demo@t2s.app", password);
+      } catch (error) {
+        fail("Sign in failed", error);
+      } finally {
+        setBusy(false);
+      }
       return;
     }
-    if (password !== confirm) {
-      Alert.alert("Password", "Passwords do not match.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await signup({ name, identifier, otp, password, channel });
-    } catch (error) {
-      fail("Sign up failed", error);
-    } finally {
-      setBusy(false);
-    }
+
+    await sendCode();
   };
 
   const onThumb = async () => {
@@ -115,35 +134,13 @@ export function LoginScreen() {
     }
   };
 
-  const showGmail = channel === "gmail" && (page === "signup" || method === "otp");
-
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.logo}>
           <Text style={styles.logoText}>T2</Text>
         </View>
-        <Text style={styles.title}>{page === "signup" ? "Sign up" : "Sign in"}</Text>
-        <Text style={styles.sub}>Trade 2 Smart · iOS + Android</Text>
-
-        <View style={styles.tabs}>
-          <Tab label="Sign in" on={page === "signin"} onPress={() => { setPage("signin"); reset(); }} />
-          <Tab label="Sign up" on={page === "signup"} onPress={() => { setPage("signup"); setMethod("otp"); setChannel("gmail"); reset(); }} />
-        </View>
-
-        {page === "signin" ? (
-          <View style={styles.tabs}>
-            <Tab label="Password" on={method === "password"} onPress={() => { setMethod("password"); reset(); }} />
-            <Tab label="Gmail" on={method === "otp" && channel === "gmail"} onPress={() => { setMethod("otp"); setChannel("gmail"); reset(); }} />
-            <Tab label="Mobile" on={method === "otp" && channel === "mobile"} onPress={() => { setMethod("otp"); setChannel("mobile"); reset(); }} />
-            <Tab label="Thumb" on={method === "thumb"} onPress={() => { setMethod("thumb"); reset(); }} />
-          </View>
-        ) : (
-          <View style={styles.tabs}>
-            <Tab label="Gmail" on={channel === "gmail"} onPress={() => { setChannel("gmail"); reset(); }} />
-            <Tab label="Mobile" on={channel === "mobile"} onPress={() => { setChannel("mobile"); reset(); }} />
-          </View>
-        )}
+        <Text style={styles.title}>Trade 2 Smart</Text>
 
         {showGmail ? (
           mailConnected ? (
@@ -174,108 +171,66 @@ export function LoginScreen() {
           )
         ) : null}
 
-        {page === "signin" && method === "password" ? (
-          <>
-            <TextInput style={styles.input} autoCapitalize="none" value={identifier} onChangeText={setIdentifier} placeholder="Gmail or mobile" />
-            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder="Password" />
-            <Pressable style={styles.button} onPress={() => void onPassword()} disabled={busy}>
-              <Text style={styles.buttonText}>{busy ? "Please wait..." : "Sign in"}</Text>
-            </Pressable>
-            <Text style={styles.hint}>Demo: demo@t2s.app / demo123</Text>
-          </>
+        {page === "signup" ? <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" /> : null}
+        <TextInput
+          style={styles.input}
+          autoCapitalize="none"
+          value={identifier}
+          onChangeText={(value) => {
+            setIdentifier(value);
+            setSentTo("");
+            setOtp("");
+          }}
+          placeholder="Gmail or mobile"
+        />
+        {sentTo ? (
+          <TextInput
+            style={styles.input}
+            keyboardType="number-pad"
+            value={otp}
+            onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="6-digit code"
+          />
         ) : null}
-
-        {page === "signin" && method === "otp" ? (
-          <>
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              keyboardType={channel === "mobile" ? "phone-pad" : "email-address"}
-              value={identifier}
-              onChangeText={(value) => { setIdentifier(value); setSentTo(""); }}
-              placeholder={channel === "mobile" ? "98xxxxxxxx" : "you@gmail.com"}
-            />
-            {sentTo ? (
-              <TextInput
-                style={styles.input}
-                keyboardType="number-pad"
-                value={otp}
-                onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="6-digit code"
-              />
-            ) : null}
-            <Pressable style={styles.button} onPress={() => void onOtpSignIn()} disabled={busy}>
-              <Text style={styles.buttonText}>{busy ? "Please wait..." : sentTo ? "Sign in" : "Send code"}</Text>
-            </Pressable>
-            {sentTo ? (
-              <Pressable style={styles.ghost} onPress={() => void sendCode()} disabled={busy}>
-                <Text style={styles.ghostText}>Resend code</Text>
-              </Pressable>
-            ) : null}
-          </>
-        ) : null}
-
-        {page === "signin" && method === "thumb" ? (
-          <>
-            <Text style={styles.hint}>
-              {hasThumb
-                ? "Use fingerprint or Face ID on this phone."
-                : "Sign in with password, Gmail, or mobile first, then enable Thumb in Settings."}
-            </Text>
-            <Pressable style={styles.button} onPress={() => void onThumb()} disabled={busy || !hasThumb}>
-              <Text style={styles.buttonText}>{busy ? "Please wait..." : "Sign in with thumb"}</Text>
-            </Pressable>
-          </>
-        ) : null}
-
+        <TextInput
+          style={styles.input}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          placeholder={page === "signup" ? "Set password (min 6)" : "Password"}
+        />
         {page === "signup" ? (
-          <>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name (Segin)" />
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              keyboardType={channel === "mobile" ? "phone-pad" : "email-address"}
-              value={identifier}
-              onChangeText={(value) => { setIdentifier(value); setSentTo(""); }}
-              placeholder={channel === "mobile" ? "98xxxxxxxx" : "you@gmail.com"}
-            />
-            {sentTo ? (
-              <>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="number-pad"
-                  value={otp}
-                  onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="6-digit code"
-                />
-                <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder="Set password (min 6)" />
-                <TextInput style={styles.input} secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
-              </>
-            ) : null}
-            <Pressable style={styles.button} onPress={() => void onSignup()} disabled={busy}>
-              <Text style={styles.buttonText}>{busy ? "Please wait..." : sentTo ? "Create account" : "Send code"}</Text>
-            </Pressable>
-            {sentTo ? (
-              <Pressable style={styles.ghost} onPress={() => void sendCode()} disabled={busy}>
-                <Text style={styles.ghostText}>Resend code</Text>
-              </Pressable>
-            ) : null}
-            <Text style={styles.hint}>Verify Gmail or mobile, set a password, then sign in with password, Gmail, mobile, or thumb.</Text>
-          </>
+          <TextInput style={styles.input} secureTextEntry value={confirm} onChangeText={setConfirm} placeholder="Confirm password" />
         ) : null}
 
+        <Pressable style={styles.button} onPress={() => void submit()} disabled={busy}>
+          <Text style={styles.buttonText}>
+            {busy ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
+          </Text>
+        </Pressable>
+        <Pressable style={styles.ghost} onPress={() => void sendCode()} disabled={busy}>
+          <Text style={styles.ghostText}>{sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}</Text>
+        </Pressable>
+        {page === "signin" && hasThumb ? (
+          <Pressable style={styles.ghost} onPress={() => void onThumb()} disabled={busy}>
+            <Text style={styles.ghostText}>Use thumb</Text>
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          style={styles.switch}
+          onPress={() => {
+            setPage(page === "signup" ? "signin" : "signup");
+            reset();
+          }}
+        >
+          <Text style={styles.switchText}>{page === "signup" ? "Have an account? Sign in" : "New here? Create account"}</Text>
+        </Pressable>
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         {devOtp ? <Text style={styles.dev}>Temporary code: {devOtp}</Text> : null}
+        {page === "signin" ? <Text style={styles.hint}>Demo: demo@t2s.app / demo123</Text> : null}
       </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-function Tab({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  return (
-    <Pressable style={[styles.tab, on && styles.tabOn]} onPress={onPress}>
-      <Text style={[styles.tabText, on && styles.tabTextOn]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -292,13 +247,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logoText: { color: "#fff", fontWeight: "800", fontSize: 18 },
-  title: { fontSize: 28, fontWeight: "800", color: colors.text },
-  sub: { color: colors.muted, marginBottom: 24, marginTop: 4 },
-  tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  tab: { flexGrow: 1, minWidth: 72, height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
-  tabOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  tabText: { fontWeight: "700", fontSize: 12 },
-  tabTextOn: { color: "#fff" },
+  title: { fontSize: 28, fontWeight: "800", color: colors.text, marginBottom: 24 },
   input: {
     backgroundColor: colors.card,
     borderColor: colors.border,
@@ -319,6 +268,8 @@ const styles = StyleSheet.create({
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
   ghostBtn: { height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   ghostText: { color: colors.brand, fontWeight: "700" },
+  switch: { marginTop: 8, height: 40, alignItems: "center", justifyContent: "center" },
+  switchText: { color: colors.muted, fontWeight: "700", fontSize: 13 },
   hint: { textAlign: "center", color: colors.muted, marginTop: 12, marginBottom: 8, fontSize: 12 },
   dev: { textAlign: "center", color: "#b45309", marginTop: 8, fontSize: 13, fontWeight: "700" },
 });

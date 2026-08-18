@@ -10,11 +10,9 @@ One trading desk. Same login, same live demo data.
 
 Demo login (Avinash): **demo@t2s.app** / **demo123**
 
-**Sign up:** verify **Gmail** or **mobile** with a 6-digit code, then set a password.
+**Sign up:** Gmail or mobile + code, then set a password. Use **New here? Create account**.
 
-**Sign in (web):** Gmail or mobile + **password**, or a Gmail / mobile **code**.
-
-**Sign in (phone):** password, Gmail / mobile code, or **thumb** (fingerprint / Face ID after you enable it in Settings).
+**Sign in:** one screen — Gmail or mobile + password, or **Sign in with code**. Phone also has **Use thumb**.
 
 ---
 
@@ -51,10 +49,9 @@ This starts:
 
 Open **http://localhost:5173** in Chrome.
 
-- **New user:** Sign up → Gmail or Mobile → enter the 6-digit code → set password (min 6). You are signed in after that.
-- **Next visits (web):** Sign in → Password, Gmail, or Mobile.
-- **Phone:** Password, Gmail, Mobile, or Thumb (enable Thumb in Settings).
-- **Avinash demo:** Password → `demo@t2s.app` / `demo123`
+- **New user:** Create account → Gmail or mobile → send code → set password.
+- **Sign in:** Gmail or mobile + password, or Sign in with code. Phone also has Use thumb.
+- **Avinash demo:** `demo@t2s.app` / `demo123`
 
 Connect Gmail (App Password) so Gmail codes and login notices are emailed. Mobile SMS needs `FAST2SMS_API_KEY`. Without those, the screen shows a temporary code. Google Account → Security → 2-Step Verification → App passwords. Do not use your normal Gmail password.
 
