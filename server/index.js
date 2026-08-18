@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -136,6 +136,7 @@ app.post("/api/auth/otp/request", async (req, res) => {
       name: req.body?.name,
       channel: req.body?.channel,
       purpose: req.body?.purpose,
+      provider: req.body?.provider,
     });
     res.json(result);
   } catch (error) {
@@ -160,6 +161,16 @@ app.post("/api/auth/otp/verify", async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
+  }
+});
+
+app.post("/api/auth/reset", async (req, res) => {
+  try {
+    const result = resetPassword(req.body || {});
+    const mail = await notifyLogin(result.user);
+    res.json({ ...result, mail });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not reset password" });
   }
 });
 

@@ -55,9 +55,6 @@
   line-height: 1.15;
   font-weight: 800;
   letter-spacing: -0.03em;
-}
-
-.t2s-login-title span {
   color: var(--blue);
 }
 
@@ -187,6 +184,56 @@
   cursor: default;
 }
 
+.t2s-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.t2s-or::before,
+.t2s-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.t2s-or span {
+  flex: 0 0 auto;
+}
+
+.t2s-social {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.t2s-social-btn {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.t2s-social-btn:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
+}
+
+.t2s-social-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .t2s-switch {
   display: block;
   width: 100%;
@@ -261,6 +308,10 @@
   color: var(--green);
 }
 
+.t2s-navy {
+  color: #1e3a8a;
+}
+
 .t2s-hero-art {
   width: min(100%, 420px);
   height: auto;
@@ -284,6 +335,12 @@
   height: 180px;
   opacity: 0.35;
   pointer-events: none;
+}
+
+.t2s-login-waves-top {
+  top: 0;
+  bottom: auto;
+  opacity: 0.28;
 }
 
 @media (max-width: 959px) {

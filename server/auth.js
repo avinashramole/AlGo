@@ -46,8 +46,38 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function emailDomain(email) {
+  const value = normalizeEmail(email);
+  const at = value.lastIndexOf("@");
+  if (at < 1) return "";
+  return value.slice(at + 1);
+}
+
 function isGmail(email) {
-  return /^[a-z0-9._%+-]+@gmail\.com$/.test(email) || /^[a-z0-9._%+-]+@googlemail\.com$/.test(email);
+  const domain = emailDomain(email);
+  return domain === "gmail.com" || domain === "googlemail.com";
+}
+
+function isMicrosoft(email) {
+  const domain = emailDomain(email);
+  return ["outlook.com", "hotmail.com", "live.com", "msn.com", "outlook.in"].includes(domain);
+}
+
+function isApple(email) {
+  const domain = emailDomain(email);
+  return ["icloud.com", "me.com", "mac.com"].includes(domain);
+}
+
+function assertEmailForProvider(email, provider) {
+  if (provider === "microsoft") {
+    if (!isMicrosoft(email)) throw fail("Use your Microsoft email (Outlook / Hotmail / Live).");
+    return;
+  }
+  if (provider === "apple") {
+    if (!isApple(email)) throw fail("Use your Apple ID email (iCloud).");
+    return;
+  }
+  if (!isGmail(email)) throw fail("Use a Gmail address (you@gmail.com).");
 }
 
 export function normalizeMobile(value) {
@@ -323,11 +353,21 @@ export function loginWithPassword(identifier, password) {
   return issueSession(user);
 }
 
-export async function requestOtp({ email, mobile, identifier, name, channel, purpose } = {}) {
+export async function requestOtp({ email, mobile, identifier, name, channel, purpose, provider } = {}) {
   const wanted = channel === "mobile" || isMobile(identifier || mobile) ? "mobile" : "gmail";
   const target = wanted === "mobile" ? normalizeMobile(identifier || mobile || email) : normalizeEmail(identifier || email);
-  const intent = purpose === "signup" ? "signup" : "login";
-  if (wanted === "gmail" && !isGmail(target)) throw fail("Use a Gmail address (you@gmail.com).");
+  const intent = purpose === "signup" ? "signup" : purpose === "reset" ? "reset" : "login";
+  if (provider && wanted === "mobile") {
+    throw fail("Enter the email for Google, Microsoft, or Apple — not a mobile number.");
+  }
+  if (wanted === "gmail") {
+    if (provider) assertEmailForProvider(target, provider);
+    else if (intent === "signup" && !isGmail(target)) {
+      throw fail("Use a Gmail address (you@gmail.com), or continue with Microsoft / Apple.");
+    } else if (!target.includes("@")) {
+      throw fail("Enter a valid email.");
+    }
+  }
   if (wanted === "mobile" && !isMobile(target)) throw fail("Enter a 10-digit Indian mobile number.");
   const existing = findUser(target);
   const displayName = String(name || existing?.name || "").trim();
@@ -339,7 +379,7 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
     }
     if (existing?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
   } else if (!existing) {
-    throw fail("No account for that Gmail / mobile. Sign up first.");
+    throw fail("No account for that email / mobile. Sign up first.");
   }
   const key = otpKey(wanted, target);
   const prev = otps.get(key);
@@ -392,13 +432,28 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
 export function verifyOtp({ email, mobile, identifier, otp, purpose } = {}) {
   const target = identifier || email || mobile;
   const channel = isMobile(target) ? "mobile" : "gmail";
-  const intent = purpose === "signup" ? "signup" : "login";
+  const intent = purpose === "signup" ? "signup" : purpose === "reset" ? "reset" : "login";
   consumeOtp(channel, target, otp, intent);
   if (intent === "signup") {
     return { ok: true, verified: true, channel, identifier: channel === "mobile" ? normalizeMobile(target) : normalizeEmail(target) };
   }
+  if (intent === "reset") {
+    return { ok: true, verified: true, channel, identifier: channel === "mobile" ? normalizeMobile(target) : normalizeEmail(target) };
+  }
   const user = findUser(target);
-  if (!user) throw fail("No account for that Gmail / mobile. Sign up first.");
+  if (!user) throw fail("No account for that email / mobile. Sign up first.");
+  return issueSession(user);
+}
+
+export function resetPassword({ email, mobile, identifier, otp, password } = {}) {
+  const target = identifier || email || mobile;
+  const channel = isMobile(target) ? "mobile" : "gmail";
+  if (String(password || "").length < 6) throw fail("Password must be at least 6 characters.");
+  consumeOtp(channel, target, otp, "reset");
+  const user = findUser(target);
+  if (!user) throw fail("No account for that email / mobile. Sign up first.");
+  user.password = hashPassword(password);
+  persist();
   return issueSession(user);
 }
 

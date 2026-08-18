@@ -7,21 +7,33 @@ import {
   login as loginRequest,
   loginThumb as loginThumbApi,
   requestOtp as requestOtpApi,
+  resetPassword as resetPasswordApi,
   signup as signupApi,
   updateProfile as updateProfileApi,
   verifyOtp as verifyOtpApi,
   type AuthUser,
+  type OtpPurpose,
   type OtpRequestResult,
+  type SocialProvider,
 } from "./api";
+
+type OtpPayload = {
+  identifier: string;
+  name?: string;
+  channel?: "gmail" | "mobile";
+  purpose?: OtpPurpose;
+  provider?: SocialProvider;
+};
 
 type AuthContextValue = {
   ready: boolean;
   user: AuthUser | null;
   hasThumb: boolean;
   login: (identifier: string, password: string) => Promise<void>;
-  requestOtp: (payload: { identifier: string; name?: string; channel?: "gmail" | "mobile"; purpose?: "signup" | "login" }) => Promise<OtpRequestResult>;
+  requestOtp: (payload: OtpPayload) => Promise<OtpRequestResult>;
   verifyOtp: (identifier: string, otp: string) => Promise<void>;
   signup: (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }) => Promise<void>;
+  resetPassword: (payload: { identifier: string; otp: string; password: string }) => Promise<void>;
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
   updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
@@ -80,8 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(demoUser);
         }
       },
-      requestOtp: (payload: { identifier: string; name?: string; channel?: "gmail" | "mobile"; purpose?: "signup" | "login" }) =>
-        requestOtpApi(payload),
+      requestOtp: (payload: OtpPayload) => requestOtpApi(payload),
       verifyOtp: async (identifier: string, otp: string) => {
         const result = await verifyOtpApi({ identifier, otp, purpose: "login" });
         if (!result.token || !result.user) throw new Error("Could not sign in with OTP");
@@ -90,6 +101,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signup: async (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }) => {
         const result = await signupApi(payload);
+        await persist(result.user, result.token);
+        setUser(result.user);
+      },
+      resetPassword: async (payload: { identifier: string; otp: string; password: string }) => {
+        const result = await resetPasswordApi(payload);
         await persist(result.user, result.token);
         setUser(result.user);
       },

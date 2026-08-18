@@ -9,6 +9,8 @@ type Props = {
   theme?: "dark" | "light";
   className?: string;
   showWordmark?: "always" | "responsive";
+  /** ink = all-black name (login screenshot). brand = blue 2 + green SMART */
+  wordmark?: "brand" | "ink";
 };
 
 const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>> = {
@@ -17,11 +19,20 @@ const emblemBox: Record<BrandVariant, Record<NonNullable<Props["size"]>, string>
   emblem: { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-12 w-12" },
 };
 
-export function BrandMark({ variant = "stacked", size = "md", theme = "dark", className = "", showWordmark = "responsive" }: Props) {
+export function BrandMark({
+  variant = "stacked",
+  size = "md",
+  theme = "dark",
+  className = "",
+  showWordmark = "responsive",
+  wordmark = "brand",
+}: Props) {
   const uid = useId().replace(/:/g, "");
-  const trade = theme === "light" ? "#111827" : "#f4f7fb";
+  const ink = theme === "light" ? "#111827" : "#f4f7fb";
+  const trade = wordmark === "ink" ? ink : theme === "light" ? "#111827" : "#f4f7fb";
+  const two = wordmark === "ink" ? ink : "#2f7bff";
   const tag = theme === "light" ? "#6b7280" : "#9aa3b5";
-  const smart = theme === "light" ? "#5ea80e" : "#b6ff3c";
+  const smart = wordmark === "ink" ? ink : theme === "light" ? "#5ea80e" : "#b6ff3c";
 
   if (variant === "emblem") {
     return (
@@ -40,7 +51,7 @@ export function BrandMark({ variant = "stacked", size = "md", theme = "dark", cl
         <span className={`min-w-0 leading-tight ${showWordmark === "always" ? "block" : "hidden sm:block"}`}>
           <span className={`block font-extrabold tracking-[0.16em] ${nameSize}`}>
             <span style={{ color: trade }}>TRADE </span>
-            <span style={{ color: "#2f7bff" }}>2 </span>
+            <span style={{ color: two }}>2 </span>
             <span style={{ color: smart }}>SMART</span>
           </span>
           <span className={`mt-0.5 tracking-wide ${showWordmark === "always" ? "block" : "hidden lg:block"} ${tagSize}`} style={{ color: tag }}>
@@ -58,7 +69,7 @@ export function BrandMark({ variant = "stacked", size = "md", theme = "dark", cl
       <EmblemSvg id={uid} className={emblemBox.stacked[size]} />
       <span className={`mt-3 font-extrabold tracking-[0.22em] ${nameSize}`}>
         <span style={{ color: trade }}>TRADE </span>
-        <span style={{ color: "#2f7bff" }}>2 </span>
+        <span style={{ color: two }}>2 </span>
         <span style={{ color: smart }}>SMART</span>
       </span>
       <span className={`mt-1.5 ${tagSize}`} style={{ color: tag }}>

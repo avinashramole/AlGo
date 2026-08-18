@@ -285,15 +285,31 @@ export type OtpRequestResult = {
   gmail?: { connected?: boolean; user?: string };
 };
 
-export function requestOtp(payload: { identifier: string; name?: string; channel?: "gmail" | "mobile"; purpose?: "signup" | "login" }) {
+export type OtpPurpose = "signup" | "login" | "reset";
+export type SocialProvider = "google" | "microsoft" | "apple";
+
+export function requestOtp(payload: {
+  identifier: string;
+  name?: string;
+  channel?: "gmail" | "mobile";
+  purpose?: OtpPurpose;
+  provider?: SocialProvider;
+}) {
   return request<OtpRequestResult>("/auth/otp/request", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function verifyOtp(payload: { identifier: string; otp: string; purpose?: "signup" | "login" }) {
+export function verifyOtp(payload: { identifier: string; otp: string; purpose?: OtpPurpose }) {
   return request<{ token?: string; user?: AuthUser; verified?: boolean; mail?: { delivered?: boolean } }>("/auth/otp/verify", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resetPassword(payload: { identifier: string; otp: string; password: string }) {
+  return request<{ token: string; user: AuthUser }>("/auth/reset", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../AuthContext";
 import { BrandMark } from "../components/BrandMark";
+import type { SocialProvider } from "../api";
 import { colors } from "../theme";
 
 function looksLikeMobile(value: string) {
@@ -15,9 +16,15 @@ function channelOf(value: string): "gmail" | "mobile" {
   return looksLikeMobile(value) ? "mobile" : "gmail";
 }
 
+function socialHint(provider: SocialProvider) {
+  if (provider === "microsoft") return "Enter your Microsoft email (Outlook / Hotmail / Live) first.";
+  if (provider === "apple") return "Enter your Apple ID email (iCloud / me.com) first.";
+  return "Enter your Gmail (you@gmail.com) first.";
+}
+
 export function LoginScreen() {
-  const { login, requestOtp, verifyOtp, signup, loginThumb, hasThumb } = useAuth();
-  const [page, setPage] = useState<"signin" | "signup">("signin");
+  const { login, requestOtp, verifyOtp, signup, resetPassword, loginThumb, hasThumb } = useAuth();
+  const [page, setPage] = useState<"signin" | "signup" | "reset">("signin");
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -35,35 +42,69 @@ export function LoginScreen() {
     setOtp("");
     setHint("");
     setDevOtp("");
+    setPassword("");
+    setConfirm("");
   };
 
   const fail = (title: string, error: unknown) => {
     Alert.alert(title, error instanceof Error ? error.message : "Try again");
   };
 
-  const sendCode = async () => {
+  const sendCode = async (purpose: "signup" | "login" | "reset", provider?: SocialProvider) => {
+    if (!identifier.trim()) {
+      Alert.alert("Email", provider ? socialHint(provider) : "Enter your Gmail or mobile first.");
+      return false;
+    }
+    if (purpose === "signup" && name.trim().length < 2) {
+      Alert.alert("Name", "Enter your name, then send the code.");
+      return false;
+    }
     setBusy(true);
     try {
       const result = await requestOtp({
         identifier,
         name,
-        channel,
-        purpose: page === "signup" ? "signup" : "login",
+        channel: provider ? "gmail" : channel,
+        purpose,
+        provider,
       });
       setSentTo(result.to || identifier);
       setHint(result.hint || "Enter the 6-digit code.");
       setDevOtp(result.devOtp || "");
+      return true;
     } catch (error) {
       fail("Could not send code", error);
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
   const submit = async () => {
+    if (page === "reset") {
+      if (!sentTo) {
+        const ok = await sendCode("reset");
+        if (ok) setPage("reset");
+        return;
+      }
+      if (password !== confirm) {
+        Alert.alert("Password", "Passwords do not match.");
+        return;
+      }
+      setBusy(true);
+      try {
+        await resetPassword({ identifier, otp, password });
+      } catch (error) {
+        fail("Could not reset password", error);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (page === "signup") {
       if (!sentTo) {
-        await sendCode();
+        await sendCode("signup");
         return;
       }
       if (password !== confirm) {
@@ -81,7 +122,7 @@ export function LoginScreen() {
       return;
     }
 
-    if (otp.length === 6) {
+    if (sentTo) {
       setBusy(true);
       try {
         await verifyOtp(identifier, otp);
@@ -93,19 +134,32 @@ export function LoginScreen() {
       return;
     }
 
-    if (password) {
-      setBusy(true);
-      try {
-        await login(identifier || "demo@t2s.app", password);
-      } catch (error) {
-        fail("Sign in failed", error);
-      } finally {
-        setBusy(false);
-      }
+    if (!password) {
+      Alert.alert("Password", "Enter your password, or continue with Google / Microsoft / Apple.");
       return;
     }
 
-    await sendCode();
+    setBusy(true);
+    try {
+      await login(identifier || "demo@t2s.app", password);
+    } catch (error) {
+      fail("Sign in failed", error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSocial = async (provider: SocialProvider) => {
+    await sendCode(page === "signup" ? "signup" : "login", provider);
+  };
+
+  const onForgot = async () => {
+    const ok = await sendCode("reset");
+    if (ok) {
+      setPage("reset");
+      setPassword("");
+      setConfirm("");
+    }
   };
 
   const onThumb = async () => {
@@ -119,6 +173,21 @@ export function LoginScreen() {
     }
   };
 
+  const submitLabel =
+    busy
+      ? "Please wait..."
+      : page === "signup"
+        ? sentTo
+          ? "Create account"
+          : "Send code"
+        : page === "reset"
+          ? sentTo
+            ? "Reset password"
+            : "Send reset code"
+          : sentTo
+            ? "Verify & Login"
+            : "Login";
+
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -127,12 +196,16 @@ export function LoginScreen() {
             <BrandMark variant="horizontal" theme="light" />
           </View>
           <Text style={styles.welcome}>
-            {page === "signup" ? "Create account" : "Welcome Back!"}
+            {page === "signup" ? "Create account" : page === "reset" ? "Reset password" : "Welcome Back!"}
           </Text>
-          <Text style={styles.sub}>{page === "signup" ? "Create your Trade 2 Smart account" : "Login to your Trade 2 Smart account"}</Text>
-          {page === "signup" ? (
-            <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" />
-          ) : null}
+          <Text style={styles.sub}>
+            {page === "signup"
+              ? "Create your Trade 2 Smart account"
+              : page === "reset"
+                ? "Enter the code we sent, then choose a new password"
+                : "Login to your Trade 2 Smart account"}
+          </Text>
+          {page === "signup" ? <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" /> : null}
           <Field
             label="Gmail or mobile"
             value={identifier}
@@ -141,7 +214,7 @@ export function LoginScreen() {
               setSentTo("");
               setOtp("");
             }}
-            placeholder="you@gmail.com or 98xxxxxxxx"
+            placeholder="Email or mobile"
             autoCapitalize="none"
           />
           {sentTo ? (
@@ -153,25 +226,49 @@ export function LoginScreen() {
               keyboardType="number-pad"
             />
           ) : null}
-          <Field
-            label={page === "signup" ? "Set password (min 6)" : "Password"}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password"
-            secret
-          />
-          {page === "signup" ? (
-            <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Confirm password" secret />
+          {page === "signin" && !sentTo ? (
+            <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secret />
+          ) : null}
+          {(page === "signup" || page === "reset") && sentTo ? (
+            <>
+              <Field
+                label={page === "reset" ? "New password" : "Set password (min 6)"}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                secret
+              />
+              <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Confirm password" secret />
+            </>
+          ) : null}
+
+          {page === "signin" && !sentTo ? (
+            <Pressable style={styles.ghost} onPress={() => void onForgot()} disabled={busy}>
+              <Text style={styles.ghostText}>Forgot Password?</Text>
+            </Pressable>
           ) : null}
 
           <Pressable style={styles.button} onPress={() => void submit()} disabled={busy}>
-            <Text style={styles.buttonText}>
-              {busy ? "Please wait..." : page === "signup" ? (sentTo ? "Create account" : "Send code") : "Sign in"}
-            </Text>
+            <Text style={styles.buttonText}>{submitLabel}</Text>
           </Pressable>
-          <Pressable style={styles.ghost} onPress={() => void sendCode()} disabled={busy}>
-            <Text style={styles.ghostText}>{sentTo ? "Resend code" : page === "signup" ? "Send code" : "Sign in with code"}</Text>
-          </Pressable>
+
+          {page !== "reset" ? (
+            <>
+              <Text style={styles.or}>or continue with</Text>
+              <View style={styles.social}>
+                <Pressable style={styles.socialBtn} onPress={() => void onSocial("google")} disabled={busy}>
+                  <Text style={styles.socialText}>Google</Text>
+                </Pressable>
+                <Pressable style={styles.socialBtn} onPress={() => void onSocial("microsoft")} disabled={busy}>
+                  <Text style={styles.socialText}>Microsoft</Text>
+                </Pressable>
+                <Pressable style={styles.socialBtn} onPress={() => void onSocial("apple")} disabled={busy}>
+                  <Text style={styles.socialText}>Apple</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
+
           {page === "signin" && hasThumb ? (
             <Pressable style={styles.ghost} onPress={() => void onThumb()} disabled={busy}>
               <Text style={styles.ghostText}>Use thumb</Text>
@@ -182,11 +279,13 @@ export function LoginScreen() {
         <Pressable
           style={styles.switch}
           onPress={() => {
-            setPage(page === "signup" ? "signin" : "signup");
+            setPage(page === "signin" ? "signup" : "signin");
             reset();
           }}
         >
-          <Text style={styles.switchText}>{page === "signup" ? "Have an account? Sign in" : "New here? Create account"}</Text>
+          <Text style={styles.switchText}>
+            {page === "signup" ? "Have an account? Sign in" : page === "reset" ? "Remembered it? Login" : "Don't have an account? Sign Up"}
+          </Text>
         </Pressable>
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         {devOtp ? <Text style={styles.dev}>Temporary code: {devOtp}</Text> : null}
@@ -266,6 +365,18 @@ const styles = StyleSheet.create({
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 14 },
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
   ghostText: { color: colors.brand, fontWeight: "600" },
+  or: { textAlign: "center", color: colors.muted, marginTop: 18, marginBottom: 10, fontSize: 13 },
+  social: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  socialBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socialText: { color: colors.text, fontSize: 12, fontWeight: "600" },
   switch: { marginTop: 8, height: 40, alignItems: "center", justifyContent: "center" },
   switchText: { color: colors.muted, fontSize: 14 },
   hint: { textAlign: "center", color: colors.muted, marginTop: 12, marginBottom: 8, fontSize: 12 },
