@@ -105,6 +105,22 @@ Supported accounts:
 - Fyers
 - Paper Trading (backup)
 
+### Dhan live feed (Access Token)
+
+1. Log in at https://web.dhan.co  
+2. Open **My Profile → Access DhanHQ APIs**  
+3. Copy **Client ID** and the **Access Token** (valid about 24 hours)  
+4. In T2S open **Brokers → Connect live feed** and paste both fields  
+
+Or put them in a local `.env` file (never commit this file):
+
+```
+DHAN_CLIENT_ID=your-client-id
+DHAN_ACCESS_TOKEN=your-jwt
+```
+
+Then restart `npm start`. The header shows **DHAN LIVE** when quotes are coming from Dhan. The token is kept in server memory only.
+
 Sandbox connect for Zerodha / Kotak / Fyers: client ID `demo` and API key `demo123`.
 
 The header broker dropdown sets which account new orders use. Each algo can be routed to a different connected broker.

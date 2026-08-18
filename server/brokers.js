@@ -28,11 +28,13 @@ const sampleBooks = {
 const connections = {
   dhan: {
     connected: true,
-    clientId: "DHAN-MAIN",
-    funds: 12_50_000,
-    marginUsed: 96_400,
-    mode: "live",
-    keyHint: "••••DHAN",
+    clientId: "",
+    funds: 0,
+    marginUsed: 0,
+    mode: "idle",
+    keyHint: "",
+    displayName: "Dhan",
+    liveFeed: false,
   },
   paper: {
     connected: true,
@@ -52,14 +54,16 @@ function publicAccount(meta) {
   return {
     ...meta,
     main: Boolean(meta.main),
+    name: conn?.displayName || meta.name,
     connected,
     active: activeBrokerId === meta.id,
     mode: conn?.mode || (meta.id === "paper" ? "paper" : "sandbox"),
     clientId: connected ? conn.clientId : "",
     funds: connected ? conn.funds : 0,
     marginUsed: connected ? conn.marginUsed : 0,
-    status: connected ? "CONNECTED" : "DISCONNECTED",
+    status: connected ? (conn.liveFeed ? "LIVE" : "CONNECTED") : "DISCONNECTED",
     keyHint: connected ? conn.keyHint || "" : "",
+    liveFeed: Boolean(conn?.liveFeed),
   };
 }
 
@@ -72,7 +76,8 @@ export function listBrokers() {
 }
 
 export function getActiveBroker() {
-  return catalog.find((item) => item.id === activeBrokerId) || catalog.find((item) => item.id === MAIN_BROKER_ID) || catalog[0];
+  const meta = catalog.find((item) => item.id === activeBrokerId) || catalog.find((item) => item.id === MAIN_BROKER_ID) || catalog[0];
+  return publicAccount(meta);
 }
 
 export function connectBroker(id, payload = {}) {
@@ -83,16 +88,7 @@ export function connectBroker(id, payload = {}) {
     return { ok: true, account: publicAccount(meta), positions: [] };
   }
   if (id === MAIN_BROKER_ID) {
-    connections.dhan = {
-      connected: true,
-      clientId: String(payload.clientId || "DHAN-MAIN").trim() || "DHAN-MAIN",
-      funds: 12_50_000,
-      marginUsed: 96_400,
-      mode: "live",
-      keyHint: "••••DHAN",
-    };
-    activeBrokerId = MAIN_BROKER_ID;
-    return { ok: true, account: publicAccount(meta), positions: clone(sampleBooks.dhan) };
+    return { error: "Dhan live feed needs Client ID and Access Token from web.dhan.co." };
   }
 
   const clientId = String(payload.clientId || payload.userId || "").trim();
@@ -112,8 +108,40 @@ export function connectBroker(id, payload = {}) {
   return { ok: true, account: publicAccount(meta), positions: clone(sampleBooks[id] || []) };
 }
 
+export function markDhanLive({ clientId, funds, marginUsed, keyHint, displayName }) {
+  connections.dhan = {
+    connected: true,
+    clientId: String(clientId || "").trim(),
+    funds: Number(funds) || 0,
+    marginUsed: Number(marginUsed) || 0,
+    mode: "live",
+    keyHint: keyHint || "",
+    displayName: displayName || "Dhan",
+    liveFeed: true,
+  };
+  activeBrokerId = MAIN_BROKER_ID;
+  return publicAccount(catalog.find((item) => item.id === MAIN_BROKER_ID));
+}
+
+export function idleDhan() {
+  connections.dhan = {
+    connected: true,
+    clientId: connections.dhan?.clientId || "",
+    funds: connections.dhan?.funds || 0,
+    marginUsed: connections.dhan?.marginUsed || 0,
+    mode: "idle",
+    keyHint: "",
+    displayName: "Dhan",
+    liveFeed: false,
+  };
+  return publicAccount(catalog.find((item) => item.id === MAIN_BROKER_ID));
+}
+
 export function disconnectBroker(id) {
-  if (id === MAIN_BROKER_ID) return { error: "Dhan is the main broker and stays connected" };
+  if (id === MAIN_BROKER_ID) {
+    idleDhan();
+    return { ok: true, stoppedLive: true, ...listBrokers() };
+  }
   if (id === "paper") return { error: "Paper trading stays connected" };
   delete connections[id];
   if (activeBrokerId === id) activeBrokerId = MAIN_BROKER_ID;

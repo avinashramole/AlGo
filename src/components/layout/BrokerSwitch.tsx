@@ -18,10 +18,15 @@ export function BrokerSwitch() {
       >
         {connected.map((item) => (
           <option key={item.id} value={item.id}>
-            {item.name}
+            {item.liveFeed ? `${item.name} LIVE` : item.name}
           </option>
         ))}
       </select>
+      {data.dhanFeed?.live && (
+        <span className="rounded bg-emerald-50 px-1.5 py-1 text-[10px] font-extrabold text-up dark:bg-emerald-950/40">
+          DHAN LIVE
+        </span>
+      )}
       <Link to="/brokers" className="text-[11px] font-semibold text-brand-500">
         Brokers
       </Link>

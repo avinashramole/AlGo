@@ -86,6 +86,16 @@ export type Snapshot = {
   mainBrokerId?: string;
   marketStatus: string;
   serverTime: string;
+  dhanFeed?: {
+    live: boolean;
+    source: string;
+    lastTickAt: number | null;
+    error: string | null;
+    tokenHint: string | null;
+    profileName: string | null;
+    clientId?: string | null;
+    quoteCount?: number;
+  };
 };
 
 export type BrokerAccount = {
@@ -102,8 +112,9 @@ export type BrokerAccount = {
   clientId: string;
   funds: number;
   marginUsed: number;
-  status: "CONNECTED" | "DISCONNECTED" | "REAUTH";
+  status: "CONNECTED" | "DISCONNECTED" | "REAUTH" | "LIVE";
   keyHint: string;
+  liveFeed?: boolean;
 };
 
 export function login(email: string, password: string) {
@@ -135,7 +146,7 @@ export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
 }
 
-export function connectBroker(id: string, payload: { clientId: string; apiKey: string }) {
+export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
     method: "POST",
     body: JSON.stringify(payload),

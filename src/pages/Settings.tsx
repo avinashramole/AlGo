@@ -12,6 +12,7 @@ export function Settings() {
     ["Order confirmation", data.settings.confirmation || "Enabled"],
     ["Risk guard", data.settings.riskGuard || "Max 2% per trade"],
     ["Active broker", data.brokers?.find((item) => item.active)?.name || "Dhan"],
+    ["Dhan feed", data.dhanFeed?.live ? `Live · ${data.dhanFeed.tokenHint || "connected"}` : "Waiting for access token"],
     ["Connected brokers", String((data.brokers || []).filter((item) => item.connected).length)],
     ["Notifications", data.settings.notifications || "Signals + fills"],
   ];

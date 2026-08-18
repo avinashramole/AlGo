@@ -60,6 +60,15 @@ const fallback: Snapshot = {
   mainBrokerId: "dhan",
   marketStatus: "OPEN",
   serverTime: new Date().toISOString(),
+  dhanFeed: {
+    live: false,
+    source: "idle",
+    lastTickAt: null,
+    error: null,
+    tokenHint: null,
+    profileName: null,
+    quoteCount: 0,
+  },
 };
 
 type MarketContextValue = {
@@ -68,7 +77,7 @@ type MarketContextValue = {
   refresh: () => Promise<void>;
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<void>;
-  connect: (id: string, payload: { clientId: string; apiKey: string }) => Promise<void>;
+  connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
   routeAlgo: (id: string, brokerId: string) => Promise<void>;
@@ -122,7 +131,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         await placeOrder(payload);
         await refresh();
       },
-      connect: async (id: string, payload: { clientId: string; apiKey: string }) => {
+      connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
         const result = await connectBroker(id, payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();

@@ -134,13 +134,54 @@ const state = {
     broker: "Dhan",
     notifications: "Signals + fills",
   },
+  dhanFeed: {
+    live: false,
+    source: "idle",
+    lastTickAt: null,
+    error: null,
+    tokenHint: null,
+    profileName: null,
+    clientId: null,
+    quoteCount: 0,
+  },
+  liveCandles: [],
 };
+
+const INDEX_ALIASES = {
+  "NIFTY 50": "NIFTY 50",
+  "BANK NIFTY": "BANKNIFTY",
+  BANKNIFTY: "BANKNIFTY",
+  FINNIFTY: "FINNIFTY",
+  SENSEX: "SENSEX",
+  "INDIA VIX": "INDIA VIX",
+};
+
+function round2(value) {
+  return Number(Number(value).toFixed(2));
+}
+
+export function setDhanFeed(patch) {
+  state.dhanFeed = { ...state.dhanFeed, ...patch };
+}
+
+export function isDhanFeedLive() {
+  return Boolean(state.dhanFeed.live);
+}
 
 function jitter(price, magnitude) {
   return Number((price + (Math.random() - 0.48) * magnitude).toFixed(2));
 }
 
 export function tickMarket() {
+  if (state.dhanFeed.live) {
+    state.algos = state.algos.map((algo) => {
+      if (!algo.enabled) return algo;
+      const pnl = Number((algo.pnl + (Math.random() - 0.35) * 4).toFixed(2));
+      return { ...algo, pnl };
+    });
+    return;
+  }
+
   state.indices = state.indices.map((item) => {
     const next = jitter(item.price, item.symbol === "INDIA VIX" ? 0.04 : item.price * 0.00012);
     const spark = item.spark.slice(1).concat(next);
@@ -183,13 +224,15 @@ export function snapshot() {
     const key = row.brokerId || "dhan";
     byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
   }
+  const { liveCandles: _liveCandles, ...publicState } = clone(state);
   return {
-    ...clone(state),
+    ...publicState,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
+    dhanFeed: clone(state.dhanFeed),
     settings: { ...state.settings, broker: active.name },
     marketStatus: "OPEN",
     serverTime: new Date().toISOString(),
@@ -268,7 +311,144 @@ export function addChat(text) {
   return clone(state.chat);
 }
 
+function relatedIndex(symbol) {
+  const upper = String(symbol || "").toUpperCase();
+  if (upper.includes("BANKNIFTY") || upper.includes("BANK NIFTY")) return "BANKNIFTY";
+  if (upper.includes("FINNIFTY")) return "FINNIFTY";
+  if (upper.includes("SENSEX")) return "SENSEX";
+  if (upper.includes("NIFTY")) return "NIFTY 50";
+  return null;
+}
+
+function pushSpark(spark, value) {
+  const next = (spark || []).slice(-7);
+  next.push(round2(value));
+  return next;
+}
+
+function seedLiveCandles(price) {
+  state.liveCandles = generateCandles(90, price, 91);
+  const last = state.liveCandles[state.liveCandles.length - 1];
+  if (last) {
+    last.close = price;
+    last.high = Math.max(last.high, price);
+    last.low = Math.min(last.low, price);
+  }
+}
+
+function updateLiveCandle(price) {
+  if (!state.liveCandles.length) seedLiveCandles(price);
+  const last = state.liveCandles[state.liveCandles.length - 1];
+  const now = Date.now();
+  if (!last || now - last.time >= 60_000) {
+    const open = last ? last.close : price;
+    state.liveCandles.push({
+      time: now,
+      open,
+      high: Math.max(open, price),
+      low: Math.min(open, price),
+      close: price,
+      volume: 800_000,
+    });
+    if (state.liveCandles.length > 120) state.liveCandles.shift();
+    return;
+  }
+  last.close = price;
+  last.high = Math.max(last.high, price);
+  last.low = Math.min(last.low, price);
+}
+
+export function applyLiveQuotes(quotes) {
+  const indexPrev = Object.fromEntries(state.indices.map((item) => [item.symbol, item.price]));
+
+  for (const quote of quotes) {
+    const ltp = Number(quote.ltp);
+    if (!Number.isFinite(ltp) || ltp <= 0) continue;
+    const indexSymbol = INDEX_ALIASES[quote.symbol] || quote.symbol;
+    const index = state.indices.find((item) => item.symbol === indexSymbol);
+    if (index) {
+      const prevClose = Number(quote.close) > 0 ? Number(quote.close) : index.price;
+      const change = round2(ltp - prevClose);
+      const changePct = round2(prevClose ? (change / prevClose) * 100 : 0);
+      index.price = round2(ltp);
+      index.change = change;
+      index.changePct = changePct;
+      index.spark = pushSpark(index.spark, ltp);
+      if (index.symbol === "NIFTY 50") {
+        const open = Number(quote.open) > 0 ? Number(quote.open) : state.ohlc.open;
+        state.ohlc = {
+          open: round2(open),
+          high: round2(Number(quote.high) > 0 ? Math.max(quote.high, ltp) : Math.max(state.ohlc.high, ltp)),
+          low: round2(Number(quote.low) > 0 ? Math.min(quote.low, ltp) : Math.min(state.ohlc.low, ltp)),
+          close: round2(ltp),
+        };
+        updateLiveCandle(ltp);
+      }
+    }
+
+    const watch = state.watchlist.find((item) => item.symbol === quote.symbol);
+    if (watch) {
+      const prev = watch.ltp;
+      watch.ltp = round2(ltp);
+      watch.chg = round2(prev ? ((ltp - prev) / prev) * 100 : watch.chg);
+    }
+
+    const row = state.marketWatch.find((item) => item.symbol === quote.symbol || item.symbol === indexSymbol);
+    if (row) {
+      const prev = row.ltp;
+      row.ltp = round2(ltp);
+      row.chg = round2(prev ? ((ltp - prev) / prev) * 100 : row.chg);
+    }
+  }
+
+  state.positions = state.positions.map((row) => {
+    const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
+    if (equity) {
+      const ltp = round2(equity.ltp);
+      const dir = row.type === "BUY" ? 1 : -1;
+      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+    }
+    const indexName = relatedIndex(row.symbol);
+    if (!indexName || !indexPrev[indexName]) return row;
+    const nextIndex = state.indices.find((item) => item.symbol === indexName);
+    if (!nextIndex) return row;
+    const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
+    if (!Number.isFinite(movePct) || movePct === 0) return row;
+    const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
+    const dir = row.type === "BUY" ? 1 : -1;
+    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+  });
+
+  const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
+  if (nifty && indexPrev["NIFTY 50"]) {
+    const move = nifty.price - indexPrev["NIFTY 50"];
+    state.optionChain = state.optionChain.map((row) => ({
+      ...row,
+      callLtp: round2(Math.max(0.05, row.callLtp + move * 0.08)),
+      putLtp: round2(Math.max(0.05, row.putLtp - move * 0.08)),
+    }));
+  }
+}
+
 export function getCandles(tf = "5m") {
+  if (state.dhanFeed.live && state.liveCandles.length) {
+    const step = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" ? 60 : 5;
+    if (step <= 1) return clone(state.liveCandles);
+    const grouped = [];
+    for (let i = 0; i < state.liveCandles.length; i += step) {
+      const slice = state.liveCandles.slice(i, i + step);
+      if (!slice.length) continue;
+      grouped.push({
+        time: slice[0].time,
+        open: slice[0].open,
+        high: Math.max(...slice.map((row) => row.high)),
+        low: Math.min(...slice.map((row) => row.low)),
+        close: slice[slice.length - 1].close,
+        volume: slice.reduce((sum, row) => sum + row.volume, 0),
+      });
+    }
+    return grouped;
+  }
   const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
   return generateCandles(count, 24420, tf.length * 17);
 }

@@ -66,6 +66,16 @@ export type Snapshot = {
   activeBrokerId?: string;
   mainBrokerId?: string;
   marketStatus: string;
+  dhanFeed?: {
+    live: boolean;
+    source: string;
+    lastTickAt: number | null;
+    error: string | null;
+    tokenHint: string | null;
+    profileName: string | null;
+    clientId?: string | null;
+    quoteCount?: number;
+  };
 };
 
 export type BrokerAccount = {
@@ -82,6 +92,8 @@ export type BrokerAccount = {
   marginUsed: number;
   status: string;
   segments: string[];
+  keyHint?: string;
+  liveFeed?: boolean;
 };
 
 export function login(email: string, password: string) {
@@ -103,7 +115,7 @@ export function placeOrder(payload: Record<string, unknown>) {
   return request("/orders", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function connectBroker(id: string, payload: { clientId: string; apiKey: string }) {
+export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
     method: "POST",
     body: JSON.stringify(payload),
