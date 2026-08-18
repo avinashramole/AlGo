@@ -13,7 +13,7 @@ import {
   setLiveCandles,
   setOptionDesk,
 } from "./market.js";
-import { buildScripChain, lookupFutureSecurityId, lookupOptionSecurityId, parseOptionContract, resolveFrontFutures, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
@@ -701,35 +701,21 @@ export async function placeDhanOrder(payload = {}) {
     error.status = 400;
     throw error;
   }
-  let securityId = String(payload.securityId || "").trim();
-  const parsed = parseOptionContract(payload.symbol);
-  const isFuture = payload.kind === "future" || /\bFUT\b/i.test(String(payload.symbol || ""));
+  const desk = getOptionMeta();
+  let securityId = await resolveTradableSecurityId({
+    symbol: payload.symbol,
+    expiry: payload.expiry || desk.expiry,
+    strike: payload.strike,
+    option: payload.option,
+    kind: payload.kind,
+  });
   if (!securityId || securityId === "0") {
-    if (isFuture || (!parsed && !payload.option && !payload.strike)) {
-      securityId = String(
-        await lookupFutureSecurityId({
-          symbol: payload.symbol,
-          expiry: payload.expiry,
-        }),
-      ).trim();
-    }
+    securityId = String(payload.securityId || "").trim();
   }
   if (!securityId || securityId === "0") {
-    const desk = getOptionMeta();
-    securityId = String(
-      await lookupOptionSecurityId({
-        symbol: payload.symbol || desk.symbol,
-        expiry: payload.expiry || desk.expiry,
-        strike: payload.strike || parsed?.strike,
-        option: payload.option || parsed?.option,
-      }),
-    ).trim();
-  }
-  if (!securityId || securityId === "0") {
-    const desk = getOptionMeta();
     const label = payload.symbol || `${desk.symbol} ${payload.strike || ""} ${payload.option || ""}`.trim();
     const error = new Error(
-      `No Dhan contract ID for ${label} (${normalizeExpiry(payload.expiry || desk.expiry) || "no expiry"}). Open Chain, pick the live expiry, wait a few seconds, then BUY/SELL again.`,
+      `No live Dhan contract for ${label} (${normalizeExpiry(payload.expiry || desk.expiry) || "no expiry"}). Pick the contract on Chain, then BUY/SELL again.`,
     );
     error.status = 400;
     throw error;

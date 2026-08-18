@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { contractCatalog, resolveFrontFutures } from "./frontFutures.js";
+import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
   applyBrokerPositions,
@@ -159,7 +159,7 @@ app.get("/api/contracts", async (req, res) => {
     /* return whatever the scrip cache already has */
   }
   res.json(
-    contractCatalog({
+    publicCatalog({
       symbol: req.query.symbol ? String(req.query.symbol) : "",
       expiry: req.query.expiry ? String(req.query.expiry) : "",
     }),

@@ -9,7 +9,7 @@ import {
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
-import { attachContractIds, listFutures, listIndexContracts, optionCount } from "./frontFutures.js";
+import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, enrichPositions, seedClosedTrades, seedOrders } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
 
@@ -294,13 +294,14 @@ export function snapshot() {
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
     dhanFeed: clone(state.dhanFeed),
-    futures: listFutures(),
+    futures: publicFutures(),
     contracts: {
-      indices: listIndexContracts(),
-      futures: listFutures(),
+      indices: listIndexContracts().map(({ securityId, ...row }) => row),
+      futures: publicFutures(),
       optionCount: optionCount(),
     },
-    indices: attachContractIds(publicState.indices),
+    indices: publicIndices(publicState.indices),
+    optionChain: publicOptionRows(publicState.optionChain),
     settings: { ...state.settings, broker: active.name },
     marketStatus: "OPEN",
     serverTime: new Date().toISOString(),

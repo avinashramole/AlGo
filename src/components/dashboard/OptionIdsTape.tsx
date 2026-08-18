@@ -28,7 +28,7 @@ export function OptionIdsTape() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not load option IDs");
+        setError(err instanceof Error ? err.message : "Could not load option contracts");
       });
     return () => {
       cancelled = true;
@@ -50,8 +50,6 @@ export function OptionIdsTape() {
   }, [rows, expiry, strikeQuery]);
 
   const trade = async (row: OptionStrikeContract, option: "CE" | "PE", side: "BUY" | "SELL") => {
-    const securityId = option === "CE" ? row.callId : row.putId;
-    if (!securityId) return;
     const key = `${row.expiry}-${row.strike}-${option}-${side}`;
     setBusy(key);
     setNote("");
@@ -68,13 +66,12 @@ export function OptionIdsTape() {
         option,
         strike: row.strike,
         expiry: row.expiry,
-        securityId,
         exchangeSegment: row.segment,
       });
       setNote(
         result.live
-          ? `Sent to Dhan · ${side} ${row.root} ${row.strike} ${option} · ID ${securityId}`
-          : result.warning || `Desk fill · ${side} ${row.root} ${row.strike} ${option} · ID ${securityId}`,
+          ? `Sent to Dhan · ${side} ${row.root} ${row.strike} ${option}`
+          : result.warning || `Desk fill · ${side} ${row.root} ${row.strike} ${option}`,
       );
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Order failed");
@@ -87,10 +84,10 @@ export function OptionIdsTape() {
     <section className="card overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-sm font-bold">Index options · every live ID</div>
+          <div className="text-sm font-bold">Index options · all expiries</div>
           <p className="text-xs text-slate-400">
-            {symbol} · {counts.options} OPTIDX IDs · {counts.strikes} strikes · {counts.futures} futures. BUY/SELL is 1
-            lot MIS on Dhan when LIVE.
+            {symbol} · {counts.strikes} strikes · {counts.options} contracts · {counts.futures} futures. BUY/SELL is 1
+            lot MIS. The desk looks up the live contract on the server.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -117,16 +114,14 @@ export function OptionIdsTape() {
       {error ? <div className="mb-2 text-xs font-semibold text-down">{error}</div> : null}
       {note ? <div className="mb-2 text-xs font-semibold text-slate-500">{note}</div> : null}
       {!rows.length ? (
-        <p className="text-xs text-slate-400">Loading Dhan option security IDs from the scrip master…</p>
+        <p className="text-xs text-slate-400">Loading live option contracts…</p>
       ) : (
-        <table className="w-full min-w-[820px] text-left text-xs">
+        <table className="w-full min-w-[640px] text-left text-xs">
           <thead className="text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
               <th className="pb-2 font-semibold">Expiry</th>
               <th className="pb-2 font-semibold">Strike</th>
-              <th className="pb-2 font-semibold">CE ID</th>
               <th className="pb-2 text-right font-semibold">CE</th>
-              <th className="pb-2 font-semibold">PE ID</th>
               <th className="pb-2 text-right font-semibold">PE</th>
             </tr>
           </thead>
@@ -135,9 +130,8 @@ export function OptionIdsTape() {
               <tr key={`${row.root}-${row.expiry}-${row.strike}`} className="soft-row">
                 <td className="py-2 text-slate-500">{row.expiry}</td>
                 <td className="py-2 font-bold">{row.strike}</td>
-                <td className="py-2 font-mono font-bold">{row.callId || "—"}</td>
                 <td className="py-2 text-right">
-                  {row.callId ? (
+                  {row.hasCall !== false ? (
                     <MiniTrade
                       busy={busy}
                       id={`${row.expiry}-${row.strike}-CE`}
@@ -148,9 +142,8 @@ export function OptionIdsTape() {
                     "—"
                   )}
                 </td>
-                <td className="py-2 font-mono font-bold">{row.putId || "—"}</td>
                 <td className="py-2 text-right">
-                  {row.putId ? (
+                  {row.hasPut !== false ? (
                     <MiniTrade
                       busy={busy}
                       id={`${row.expiry}-${row.strike}-PE`}

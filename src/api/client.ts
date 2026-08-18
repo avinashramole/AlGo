@@ -227,7 +227,6 @@ export type Snapshot = {
     name: string;
     kind: "future";
     expiry: string;
-    securityId: string;
     segment: string;
     lot: number;
     qty: number;
@@ -240,7 +239,6 @@ export type Snapshot = {
       parent: string;
       symbol: string;
       kind: "index";
-      securityId: string;
       segment: string;
       lot: number;
       tradable: boolean;
@@ -256,7 +254,6 @@ export type LiveContract = {
   parent?: string;
   symbol: string;
   kind: "index" | "future" | "option";
-  securityId: string;
   segment: string;
   lot: number;
   qty?: number;
@@ -274,8 +271,8 @@ export type OptionStrikeContract = {
   parent: string;
   strike: number;
   expiry: string;
-  callId: string;
-  putId: string;
+  hasCall?: boolean;
+  hasPut?: boolean;
   segment: string;
   lot: number;
   qty: number;

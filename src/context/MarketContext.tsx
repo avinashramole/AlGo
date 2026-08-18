@@ -79,10 +79,10 @@ const fallback: Snapshot = {
   futures: [],
   contracts: {
     indices: [
-      { root: "NIFTY", parent: "NIFTY 50", symbol: "NIFTY 50", kind: "index", securityId: "13", segment: "IDX_I", lot: 65, tradable: false },
-      { root: "BANKNIFTY", parent: "BANKNIFTY", symbol: "BANKNIFTY", kind: "index", securityId: "25", segment: "IDX_I", lot: 30, tradable: false },
-      { root: "FINNIFTY", parent: "FINNIFTY", symbol: "FINNIFTY", kind: "index", securityId: "27", segment: "IDX_I", lot: 60, tradable: false },
-      { root: "SENSEX", parent: "SENSEX", symbol: "SENSEX", kind: "index", securityId: "51", segment: "IDX_I", lot: 20, tradable: false },
+      { root: "NIFTY", parent: "NIFTY 50", symbol: "NIFTY 50", kind: "index", segment: "IDX_I", lot: 65, tradable: false },
+      { root: "BANKNIFTY", parent: "BANKNIFTY", symbol: "BANKNIFTY", kind: "index", segment: "IDX_I", lot: 30, tradable: false },
+      { root: "FINNIFTY", parent: "FINNIFTY", symbol: "FINNIFTY", kind: "index", segment: "IDX_I", lot: 60, tradable: false },
+      { root: "SENSEX", parent: "SENSEX", symbol: "SENSEX", kind: "index", segment: "IDX_I", lot: 20, tradable: false },
     ],
     futures: [],
     optionCount: 0,

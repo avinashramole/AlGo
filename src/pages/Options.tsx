@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FuturesTape } from "../components/dashboard/FuturesTape";
-import { IndexIds } from "../components/dashboard/IndexIds";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct } from "../lib/format";
@@ -42,7 +41,6 @@ export function Options() {
     try {
       const ltp = option === "CE" ? row.callLtp : row.putLtp;
       const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
-      const securityId = option === "CE" ? row.callId : row.putId;
       const result = await order({
         symbol,
         side: action,
@@ -54,7 +52,6 @@ export function Options() {
         option,
         strike: row.strike,
         expiry: meta?.expiry,
-        securityId: securityId ? String(securityId) : undefined,
         exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
       if (result.live) {
@@ -82,7 +79,6 @@ export function Options() {
           <h1 className="text-xl font-bold">Option Chain</h1>
           <p className="text-sm text-slate-400">
             {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · {sourceLabel}
-            {meta?.contractIds ? ` · ${meta.contractIds} security IDs` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -146,20 +142,13 @@ export function Options() {
         )}
       >
         {data.dhanFeed?.live ? (
-          meta?.contractIds ? (
-            <>
-              BUY/SELL goes to Dhan ({meta.contractIds} contracts ready). Confirm in the{" "}
-              <Link to="/orders" className="underline">
-                order book
-              </Link>{" "}
-              and the Dhan app. Order APIs need a static IP whitelist at Dhan.
-            </>
-          ) : (
-            <>
-              Dhan is LIVE, but this chain still has no contract IDs. Wait a few seconds for the scrip list, then BUY/SELL
-              again. If it keeps failing, pick the Dhan expiry on this page.
-            </>
-          )
+          <>
+            BUY/SELL goes to Dhan. The desk looks up the live contract on the server. Confirm in the{" "}
+            <Link to="/orders" className="underline">
+              order book
+            </Link>{" "}
+            and the Dhan app. Order APIs need a static IP whitelist at Dhan.
+          </>
         ) : (
           <>
             Desk fill only until Dhan is LIVE. Paste Access Token on{" "}
@@ -171,18 +160,17 @@ export function Options() {
         )}
       </div>
       {note ? <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold">{note}</div> : null}
-      <IndexIds />
       <FuturesTape />
       <OptionIdsTape />
       <section className="card overflow-x-auto">
-        <table className="w-full min-w-[1280px] text-left text-xs">
+        <table className="w-full min-w-[1080px] text-left text-xs">
           <thead className="bg-[var(--bg)] text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
-              <th colSpan={7} className="px-3 py-2 text-center font-bold text-up">
+              <th colSpan={6} className="px-3 py-2 text-center font-bold text-up">
                 CALLS
               </th>
               <th className="px-3 py-2 text-center font-bold">Strike</th>
-              <th colSpan={7} className="px-3 py-2 text-center font-bold text-down">
+              <th colSpan={6} className="px-3 py-2 text-center font-bold text-down">
                 PUTS
               </th>
             </tr>
@@ -192,11 +180,9 @@ export function Options() {
               <th className="px-3 py-2 font-semibold">IV</th>
               <th className="px-3 py-2 font-semibold">LTP</th>
               <th className="px-3 py-2 font-semibold">Chg</th>
-              <th className="px-3 py-2 font-semibold">ID</th>
               <th className="px-3 py-2 font-semibold">Trade</th>
               <th className="px-3 py-2 text-center font-semibold">Strike</th>
               <th className="px-3 py-2 text-right font-semibold">Trade</th>
-              <th className="px-3 py-2 text-right font-semibold">ID</th>
               <th className="px-3 py-2 text-right font-semibold">Chg</th>
               <th className="px-3 py-2 text-right font-semibold">LTP</th>
               <th className="px-3 py-2 text-right font-semibold">IV</th>
@@ -215,7 +201,6 @@ export function Options() {
                 <td className="px-3 py-2">{row.callIv ? `${row.callIv.toFixed(1)}` : "—"}</td>
                 <td className="px-3 py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
                 <td className={cn("px-3 py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
-                <td className="px-3 py-2 font-mono text-[10px] text-slate-500">{row.callId || "—"}</td>
                 <td className="px-3 py-2">
                   <TradeButtons
                     busy={busy}
@@ -240,7 +225,6 @@ export function Options() {
                     />
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-[10px] text-slate-500">{row.putId || "—"}</td>
                 <td className={cn("px-3 py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
                 <td className="px-3 py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
                 <td className="px-3 py-2 text-right">{row.putIv ? `${row.putIv.toFixed(1)}` : "—"}</td>
@@ -255,9 +239,8 @@ export function Options() {
         </table>
       </section>
       <p className="text-xs text-slate-400">
-        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). The chain lists every live OPTIDX strike for this
-        expiry with its Dhan security ID. The tables above list every index quote ID, FUTIDX ID, and option ID across
-        expiries. Orders reach Dhan only while the live Access Token is connected.
+        Buy / Sell is a MIS market order for {lots} lot ({qty} qty). The desk looks up the Dhan contract on the server
+        from the index, expiry, strike, and CE/PE. Orders reach Dhan only while the live Access Token is connected.
       </p>
     </div>
   );

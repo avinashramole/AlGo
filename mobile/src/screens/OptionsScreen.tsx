@@ -27,7 +27,6 @@ export function OptionsScreen() {
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
     const ltp = option === "CE" ? row.callLtp : row.putLtp;
-    const securityId = option === "CE" ? row.callId : row.putId;
     try {
       const result = await order({
         symbol,
@@ -40,11 +39,10 @@ export function OptionsScreen() {
         option,
         strike: row.strike,
         expiry: meta?.expiry,
-        securityId: securityId ? String(securityId) : undefined,
         exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
       if (result.live) {
-        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty · ID ${securityId || "—"}`);
+        Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty`);
       } else {
         Alert.alert("Desk fill only", result.warning || `${action} ${symbol} · ${lot} qty. Connect live Access Token on Brokers to send this to Dhan.`);
       }
@@ -64,11 +62,10 @@ export function OptionsScreen() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
-        securityId: row.securityId,
         expiry: row.expiry,
         exchangeSegment: row.segment,
       });
-      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${row.name || row.symbol} · ID ${row.securityId}`);
+      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${row.name || row.symbol}`);
     } catch (err) {
       Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
     }
@@ -81,7 +78,7 @@ export function OptionsScreen() {
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
         {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · 1 lot = {lot}
         {"\n"}
-        {data.dhanFeed?.live ? "Orders go to Dhan with the contract security ID" : "Desk fill only until Access Token on Brokers"}
+        {data.dhanFeed?.live ? "Orders go to Dhan. The desk looks up the live contract." : "Desk fill only until Access Token on Brokers"}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
@@ -116,9 +113,9 @@ export function OptionsScreen() {
         </Pressable>
       </View>
       {futures.map((row) => (
-        <Card key={`${row.root}-${row.expiry}-${row.securityId}`}>
+        <Card key={`${row.root}-${row.expiry}`}>
           <Text style={styles.strike}>{row.name || row.symbol}</Text>
-          <Text style={styles.muted}>FUT ID {row.securityId} · {row.segment} · lot {row.lot}</Text>
+          <Text style={styles.muted}>{row.segment} · lot {row.lot}</Text>
           <View style={styles.actions}>
             <Pressable style={styles.buy} onPress={() => void tradeFuture(row, "BUY")}>
               <Text style={styles.actionText}>BUY</Text>
@@ -138,7 +135,6 @@ export function OptionsScreen() {
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.muted}>CALL</Text>
               <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
-              <Text style={styles.muted}>ID {row.callId || "—"}</Text>
               <Text style={{ color: row.callChg >= 0 ? colors.up : colors.down }}>{formatPct(row.callChg)}</Text>
               <View style={styles.actions}>
                 <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row)}>
@@ -152,7 +148,6 @@ export function OptionsScreen() {
             <View style={{ flex: 1, alignItems: "flex-end" }}>
               <Text style={styles.muted}>PUT</Text>
               <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
-              <Text style={styles.muted}>ID {row.putId || "—"}</Text>
               <Text style={{ color: row.putChg >= 0 ? colors.up : colors.down }}>{formatPct(row.putChg)}</Text>
               <View style={styles.actions}>
                 <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row)}>

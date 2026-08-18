@@ -9,10 +9,6 @@ export function HomeScreen() {
   const { data, live, order } = useMarket();
   const signal = data.featuredSignal;
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
-    if (!item.futureId) {
-      Alert.alert("No future ID", "Wait for the scrip master, then try again.");
-      return;
-    }
     const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
     try {
       const result = await order({
@@ -24,10 +20,9 @@ export function HomeScreen() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
-        securityId: String(item.futureId),
         expiry: item.futureExpiry,
       });
-      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${root} FUT · ID ${item.futureId}`);
+      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${root} FUT`);
     } catch (err) {
       Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
     }
@@ -47,7 +42,6 @@ export function HomeScreen() {
             <Card key={item.symbol}>
               <View style={{ width: 168 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
-                <Text style={styles.tiny}>IDX {item.indexId || item.securityId || "—"}</Text>
                 <Text style={styles.price}>{formatNumber(item.price)}</Text>
                 <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
                   {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
@@ -57,7 +51,6 @@ export function HomeScreen() {
                     <View>
                       <Text style={styles.tiny}>FUT</Text>
                       <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
-                      <Text style={styles.tiny}>ID {item.futureId || "—"}</Text>
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>
@@ -65,7 +58,7 @@ export function HomeScreen() {
                     </View>
                   </View>
                 ) : null}
-                {showDeriv && item.futureId ? (
+                {showDeriv ? (
                   <View style={styles.deskRow}>
                     <Pressable style={styles.buy} onPress={() => void tradeFuture(item, "BUY")}>
                       <Text style={styles.ctaText}>BUY FUT</Text>

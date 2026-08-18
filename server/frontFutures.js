@@ -303,6 +303,38 @@ export function contractCatalog({ symbol, expiry } = {}) {
   };
 }
 
+function withoutIds(row) {
+  if (!row || typeof row !== "object") return row;
+  const { securityId: _securityId, callId: _callId, putId: _putId, indexId: _indexId, futureId: _futureId, ...rest } = row;
+  return rest;
+}
+
+export function publicFutures() {
+  return listFutures().map(withoutIds);
+}
+
+export function publicIndices(indices) {
+  return attachContractIds(indices).map(withoutIds);
+}
+
+export function publicOptionRows(rows) {
+  return (rows || []).map(withoutIds);
+}
+
+export function publicCatalog(filters = {}) {
+  const catalog = contractCatalog(filters);
+  return {
+    indices: catalog.indices.map(withoutIds),
+    futures: catalog.futures.map(withoutIds),
+    options: catalog.options.map(withoutIds),
+    optionStrikes: catalog.optionStrikes.map((row) => {
+      const { callId, putId, ...rest } = row;
+      return { ...rest, hasCall: Boolean(callId), hasPut: Boolean(putId) };
+    }),
+    counts: catalog.counts,
+  };
+}
+
 export function optionCount() {
   return cache.options instanceof Map ? cache.options.size : 0;
 }
@@ -334,6 +366,27 @@ export async function lookupOptionSecurityId({ symbol, expiry, strike, option } 
   if (!root || !opt || !px || !exp) return "";
   const data = await loadScripMaster();
   return data.options.get(optionKey(root, exp, px, opt)) || "";
+}
+
+export async function resolveTradableSecurityId({ symbol, expiry, strike, option, kind } = {}) {
+  const parsed = parseOptionContract(symbol);
+  const isFuture = kind === "future" || /\bFUT\b/i.test(String(symbol || ""));
+  if (isFuture) {
+    return String(await lookupFutureSecurityId({ symbol, expiry })).trim();
+  }
+  const opt = String(option || parsed?.option || "").toUpperCase();
+  const px = Number(strike || parsed?.strike || 0);
+  if (opt && px) {
+    return String(
+      await lookupOptionSecurityId({
+        symbol: symbol || parsed?.root,
+        expiry,
+        strike: px,
+        option: opt,
+      }),
+    ).trim();
+  }
+  return "";
 }
 
 export function scripExpiries(symbol) {

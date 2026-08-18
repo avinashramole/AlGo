@@ -192,7 +192,6 @@ export type Snapshot = {
     symbol: string;
     name: string;
     expiry: string;
-    securityId: string;
     segment: string;
     lot: number;
     qty: number;
@@ -235,9 +234,9 @@ export function getContracts(symbol?: string, expiry?: string) {
   if (expiry) query.set("expiry", expiry);
   const suffix = query.toString() ? `?${query}` : "";
   return request<{
-    indices: Array<{ symbol: string; securityId: string; segment: string; lot: number; tradable?: boolean }>;
-    futures: Array<{ symbol: string; name?: string; expiry: string; securityId: string; segment: string; lot: number; qty?: number; front?: boolean }>;
-    options: Array<{ symbol: string; option: "CE" | "PE"; strike: number; expiry: string; securityId: string; segment: string; lot: number }>;
+    indices: Array<{ symbol: string; segment: string; lot: number; tradable?: boolean }>;
+    futures: Array<{ symbol: string; name?: string; expiry: string; segment: string; lot: number; qty?: number; front?: boolean }>;
+    options: Array<{ symbol: string; option: "CE" | "PE"; strike: number; expiry: string; segment: string; lot: number }>;
     counts: { indices: number; futures: number; options: number; strikes: number };
   }>(`/contracts${suffix}`);
 }

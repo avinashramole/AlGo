@@ -8,9 +8,8 @@ export function TickerStrip() {
   const [busy, setBusy] = useState("");
 
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
-    if (!item.futureId) return;
-    const key = `${item.futureId}-${side}`;
     const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
+    const key = `${root}-${side}`;
     setBusy(key);
     try {
       await order({
@@ -22,7 +21,6 @@ export function TickerStrip() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
-        securityId: String(item.futureId),
         expiry: item.futureExpiry,
         exchangeSegment: item.futureSegment,
       });
@@ -44,7 +42,6 @@ export function TickerStrip() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
-                <div className="text-[10px] font-mono text-slate-400">Index ID {item.indexId || item.securityId || "—"}</div>
                 <div className="mt-1 text-lg font-bold leading-none">{formatNumber(item.price)}</div>
                 <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today
@@ -57,7 +54,7 @@ export function TickerStrip() {
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Future</div>
                   <div className="text-sm font-bold">{formatNumber(item.future || item.price)}</div>
-                  <div className="text-[10px] font-mono text-slate-400">FUT ID {item.futureId || "—"}</div>
+                  <div className="text-[10px] text-slate-400">{item.futureExpiry || ""}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">VWAP</div>
@@ -66,7 +63,7 @@ export function TickerStrip() {
                 </div>
               </div>
             ) : null}
-            {showDeriv && item.futureId ? (
+            {showDeriv ? (
               <div className="mt-2 flex gap-1">
                 <button
                   type="button"
@@ -74,7 +71,7 @@ export function TickerStrip() {
                   onClick={() => void tradeFuture(item, "BUY")}
                   className="h-7 flex-1 rounded-md bg-emerald-500 text-[10px] font-bold text-white disabled:opacity-50"
                 >
-                  {busy === `${item.futureId}-BUY` ? "..." : `BUY ${root} FUT`}
+                  {busy === `${root}-BUY` ? "..." : `BUY ${root} FUT`}
                 </button>
                 <button
                   type="button"
@@ -82,7 +79,7 @@ export function TickerStrip() {
                   onClick={() => void tradeFuture(item, "SELL")}
                   className="h-7 flex-1 rounded-md bg-rose-500 text-[10px] font-bold text-white disabled:opacity-50"
                 >
-                  {busy === `${item.futureId}-SELL` ? "..." : "SELL"}
+                  {busy === `${root}-SELL` ? "..." : "SELL"}
                 </button>
               </div>
             ) : null}
