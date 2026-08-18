@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../../lib/format";
 
 export type BacktestRangePayload = {
@@ -42,19 +42,23 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
     setTo(localYmd());
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="card w-full max-w-md p-5">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-bold">Run backtest</div>
-            <div className="text-xs text-slate-400">{name || "Strategy"} · last 1 year or custom dates</div>
-          </div>
-          <button type="button" onClick={onClose} className="icon-btn" aria-label="Close">
-            <X size={16} />
-          </button>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/55 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Run backtest"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-4">
+          <div className="text-lg font-bold">Run backtest</div>
+          <div className="text-xs text-slate-400">{name || "Strategy"} · pick a date range</div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -66,7 +70,9 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
             )}
           >
             <div className="text-sm font-bold">Last 1 year</div>
-            <div className="mt-1 text-[11px] text-slate-400">From {yearAgoYmd()} to today</div>
+            <div className="mt-1 text-[11px] text-slate-400">
+              {yearAgoYmd()} → {localYmd()}
+            </div>
           </button>
           <button
             type="button"
@@ -77,7 +83,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
             )}
           >
             <div className="text-sm font-bold">Custom dates</div>
-            <div className="mt-1 text-[11px] text-slate-400">Pick from and to</div>
+            <div className="mt-1 text-[11px] text-slate-400">Choose from and to</div>
           </button>
         </div>
         {range === "custom" ? (
@@ -119,6 +125,91 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
             {busy ? "Testing..." : "Run backtest"}
           </button>
         </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+type InlineProps = {
+  busy?: boolean;
+  error?: string;
+  onCancel: () => void;
+  onRun: (payload: BacktestRangePayload) => void;
+};
+
+export function BacktestRangeInline({ busy, error, onCancel, onRun }: InlineProps) {
+  const [range, setRange] = useState<"1y" | "custom">("1y");
+  const [from, setFrom] = useState(yearAgoYmd());
+  const [to, setTo] = useState(localYmd());
+
+  return (
+    <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
+      <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setRange("1y")}
+          className={cn(
+            "rounded-lg border px-2 py-2 text-left",
+            range === "1y" ? "border-brand-500 bg-white dark:bg-[var(--card)]" : "border-[var(--border)] bg-[var(--bg)]",
+          )}
+        >
+          <div className="text-xs font-bold">Last 1 year</div>
+          <div className="mt-0.5 text-[10px] text-slate-400">
+            {yearAgoYmd()} → {localYmd()}
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setRange("custom")}
+          className={cn(
+            "rounded-lg border px-2 py-2 text-left",
+            range === "custom" ? "border-brand-500 bg-white dark:bg-[var(--card)]" : "border-[var(--border)] bg-[var(--bg)]",
+          )}
+        >
+          <div className="text-xs font-bold">Custom dates</div>
+          <div className="mt-0.5 text-[10px] text-slate-400">Pick from and to</div>
+        </button>
+      </div>
+      {range === "custom" ? (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <label className="text-[10px] font-semibold uppercase text-slate-500">
+            From
+            <input
+              className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
+              type="date"
+              value={from}
+              max={to}
+              onChange={(event) => setFrom(event.target.value)}
+            />
+          </label>
+          <label className="text-[10px] font-semibold uppercase text-slate-500">
+            To
+            <input
+              className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
+              type="date"
+              value={to}
+              min={from}
+              max={localYmd()}
+              onChange={(event) => setTo(event.target.value)}
+            />
+          </label>
+        </div>
+      ) : null}
+      {error ? <div className="mt-2 text-xs font-semibold text-down">{error}</div> : null}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onCancel} className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy || (range === "custom" && (!from || !to))}
+          onClick={() => onRun(range === "custom" ? { range: "custom", from, to } : { range: "1y" })}
+          className="h-9 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? "Testing..." : "Run backtest"}
+        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { BacktestRange, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
+import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
@@ -22,9 +22,10 @@ export function Algo() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AlgoStrategy | null>(null);
   const [busyId, setBusyId] = useState("");
-  const [rangeFor, setRangeFor] = useState<AlgoStrategy | null>(null);
+  const [rangeId, setRangeId] = useState("");
   const [rangeError, setRangeError] = useState("");
   const connected = (data.brokers || []).filter((item) => item.connected);
+  const rangeFor = data.algos.find((item) => item.id === rangeId) || null;
 
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
@@ -163,13 +164,15 @@ export function Algo() {
                   <button
                     type="button"
                     disabled={busyId === algo.id}
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
                       setRangeError("");
-                      setRangeFor(algo as AlgoStrategy);
+                      setRangeId(algo.id);
                     }}
-                    className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold"
+                    className="h-10 rounded-xl border border-brand-500 bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
                   >
-                    {busyId === algo.id ? "Testing..." : "Backtest"}
+                    {busyId === algo.id ? "Testing..." : rangeId === algo.id ? "Pick range below" : "Backtest"}
                   </button>
                   {algo.runMode === "backtest" ? (
                     <button type="button" disabled className="h-10 rounded-xl border border-[var(--border)] text-xs font-semibold text-slate-400">
@@ -194,6 +197,29 @@ export function Algo() {
                   </button>
                 </div>
                 <div className="mt-2 text-[11px] text-slate-400">Broker {brokerName(data.brokers, algo.brokerId)} · SL {algo.slPct || 0.4}% · Target {algo.targetPct || 0.8}%</div>
+                {rangeId === algo.id ? (
+                  <BacktestRangeInline
+                    busy={busyId === algo.id}
+                    error={rangeError}
+                    onCancel={() => {
+                      if (busyId) return;
+                      setRangeId("");
+                      setRangeError("");
+                    }}
+                    onRun={(payload: BacktestRangePayload) => {
+                      setBusyId(algo.id);
+                      setRangeError("");
+                      void backtest(algo.id, payload)
+                        .then(() => {
+                          setRangeId("");
+                        })
+                        .catch((err: unknown) => {
+                          setRangeError(err instanceof Error ? err.message : "Backtest failed");
+                        })
+                        .finally(() => setBusyId(""));
+                    }}
+                  />
+                ) : null}
               </section>
             );
           })}
@@ -222,7 +248,7 @@ export function Algo() {
         error={rangeError}
         onClose={() => {
           if (busyId) return;
-          setRangeFor(null);
+          setRangeId("");
           setRangeError("");
         }}
         onRun={(payload: BacktestRangePayload) => {
@@ -231,7 +257,7 @@ export function Algo() {
           setRangeError("");
           void backtest(rangeFor.id, payload)
             .then(() => {
-              setRangeFor(null);
+              setRangeId("");
             })
             .catch((err: unknown) => {
               setRangeError(err instanceof Error ? err.message : "Backtest failed");
