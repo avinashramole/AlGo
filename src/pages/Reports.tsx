@@ -49,7 +49,11 @@ export function Reports() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Report</h1>
-          <p className="text-sm text-slate-400">P&L, trade book, and strategy contribution · {report.date}</p>
+          <p className="text-sm text-slate-400">
+            {data.dhanFeed?.live
+              ? "LIVE · P&L from real Dhan orders and positions only"
+              : `P&L, trade book, and strategy contribution · ${report.date}`}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Link to="/orders" className="text-sm font-semibold text-brand-500">

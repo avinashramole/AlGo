@@ -399,26 +399,26 @@ export function scripExpiries(symbol) {
   return dropExpired([...new Set(dates)].sort());
 }
 
-export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10 } = {}) {
+export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10, liveOnly = false } = {}) {
   const root = optionRoot(symbol);
   const exp = normalizeExpiry(expiry);
   const bucket = cache.byExpiry.get(expiryKey(root, exp));
   const liveMap = new Map((liveRows || []).map((row) => [Number(row.strike), row]));
-  const synthMap = new Map(
-    buildSyntheticChain(spot || 0, step, 16).map((row) => [Number(row.strike), row]),
-  );
+  const synthMap = liveOnly
+    ? new Map()
+    : new Map(buildSyntheticChain(spot || 0, step, 16).map((row) => [Number(row.strike), row]));
   const strikes = new Set([...(bucket ? bucket.keys() : []), ...liveMap.keys()]);
   if (!strikes.size) {
     return enrichOptionRows(liveRows || [], { symbol, expiry });
   }
-  const hasLive = (liveRows || []).some((row) => Number(row.callLtp) > 0 || Number(row.putLtp) > 0);
+  const hasLive = liveOnly || (liveRows || []).some((row) => Number(row.callLtp) > 0 || Number(row.putLtp) > 0);
   const rows = [...strikes]
     .filter((strike) => Number.isFinite(Number(strike)))
     .sort((a, b) => a - b)
     .map((strike) => {
       const live = liveMap.get(Number(strike)) || {};
       const ids = bucket?.get(Number(strike)) || {};
-      const synth = synthMap.get(Number(strike)) || {};
+      const synth = liveOnly ? {} : synthMap.get(Number(strike)) || {};
       const callId = Number(live.callId || ids.callId || 0) || undefined;
       const putId = Number(live.putId || ids.putId || 0) || undefined;
       return {

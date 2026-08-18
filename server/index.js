@@ -265,6 +265,10 @@ app.post("/api/orders/:id/cancel", async (req, res) => {
       res.json({ ok: true, live: true, snapshot: snapshot() });
       return;
     }
+    if (isDhanLive()) {
+      res.status(400).json({ error: "LIVE mode only cancels real Dhan orders." });
+      return;
+    }
     const result = cancelOrder(id);
     if (result.error) {
       res.status(400).json({ error: result.error });
@@ -283,7 +287,11 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
       res.status(404).json({ error: "Position not found" });
       return;
     }
-    if (isDhanLive() && pos.brokerId === "dhan" && pos.securityId && String(pos.id).startsWith("dhan-pos-")) {
+    if (isDhanLive()) {
+      if (pos.sim || pos.brokerId !== "dhan" || !pos.securityId || !String(pos.id).startsWith("dhan-pos-")) {
+        res.status(400).json({ error: "LIVE mode only squares real Dhan positions." });
+        return;
+      }
       await placeDhanOrder({
         symbol: pos.symbol,
         name: pos.symbol,

@@ -22,7 +22,7 @@ export function Options() {
   const atmIvText = meta?.atmIv ? `${meta.atmIv.toFixed(1)}%` : "—";
   const lotSize = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
   const qty = Math.max(1, lots) * lotSize;
-  const sourceLabel = meta?.source === "dhan" ? "DHAN LIVE" : data.dhanFeed?.live ? "DHAN · DEMO FALLBACK" : "DEMO";
+  const sourceLabel = data.dhanFeed?.live ? (meta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain") : "DEMO";
   const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
 
   return (

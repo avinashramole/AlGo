@@ -37,7 +37,11 @@ export function Orders() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Order Book</h1>
-          <p className="text-sm text-slate-400">Today’s orders · Dhan LIVE fills come from the broker, demo fills stay on this desk</p>
+          <p className="text-sm text-slate-400">
+            {data.dhanFeed?.live
+              ? "LIVE · only real Dhan orders. Empty means nothing is open at Dhan today."
+              : "Today’s orders · demo fills stay on this desk until Dhan is LIVE"}
+          </p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
           <Link to="/positions" className="text-brand-500">
@@ -132,7 +136,9 @@ export function Orders() {
             </tbody>
           </table>
         ) : (
-          <div className="p-8 text-center text-sm text-slate-400">No orders in this view</div>
+          <div className="p-8 text-center text-sm text-slate-400">
+            {data.dhanFeed?.live ? "No live Dhan orders in this view" : "No orders in this view"}
+          </div>
         )}
       </section>
     </div>

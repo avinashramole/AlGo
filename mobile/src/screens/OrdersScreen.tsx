@@ -10,7 +10,9 @@ export function OrdersScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Order Book</Text>
-      <Text style={styles.muted}>{orders.length} orders today</Text>
+      <Text style={styles.muted}>
+        {data.dhanFeed?.live ? `${orders.length} live Dhan orders today` : `${orders.length} orders today`}
+      </Text>
       {orders.map((row) => (
         <Card key={row.id}>
           <View style={styles.row}>

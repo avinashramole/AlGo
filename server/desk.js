@@ -7,6 +7,10 @@ function istIso(day, hour, minute, second = 0) {
   return new Date(utcMs).toISOString();
 }
 
+function asSim(row) {
+  return { ...row, sim: true, live: false };
+}
+
 export function seedOrders() {
   return [
     {
@@ -160,7 +164,18 @@ export function seedOrders() {
       brokerName: "Dhan",
       createdAt: istIso(18, 11, 5, 11),
     },
-  ];
+  ].map(asSim);
+}
+
+export function seedPositions() {
+  return enrichPositions([
+    { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
+    { id: "p2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 186.2, ltp: 164.5, pnl: 651.0, brokerId: "dhan" },
+    { id: "p3", symbol: "NIFTY 24600 CE", type: "BUY", qty: 50, avg: 74.1, ltp: 88.2, pnl: 705.0, brokerId: "dhan" },
+    { id: "p4", symbol: "FINNIFTY 24900 CE", type: "BUY", qty: 60, avg: 96.8, ltp: 118.4, pnl: 1296.0, brokerId: "dhan" },
+    { id: "p5", symbol: "SENSEX 80600 CE", type: "BUY", qty: 20, avg: 142.0, ltp: 168.35, pnl: 527.0, brokerId: "dhan" },
+    { id: "p6", symbol: "NIFTY 24400 PE", type: "SELL", qty: 50, avg: 52.6, ltp: 38.15, pnl: 722.5, brokerId: "dhan" },
+  ]);
 }
 
 export function seedClosedTrades() {
@@ -230,7 +245,7 @@ export function seedClosedTrades() {
       brokerId: "dhan",
       closedAt: istIso(16, 15, 4, 51),
     },
-  ];
+  ].map(asSim);
 }
 
 export function enrichPositions(rows) {
@@ -248,6 +263,8 @@ export function enrichPositions(rows) {
     openedAt: row.openedAt || new Date().toISOString(),
     ...row,
     ...(meta[row.id] || {}),
+    sim: row.sim !== false && !String(row.id).startsWith("dhan-"),
+    live: Boolean(row.live) || String(row.id).startsWith("dhan-"),
   }));
 }
 

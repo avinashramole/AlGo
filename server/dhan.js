@@ -4,11 +4,13 @@ import { markDhanLive } from "./brokers.js";
 import {
   applyLiveQuotes,
   applySyntheticOptionChain,
+  clearSimulatedDesk,
   currentOptionRows,
   getChainSpot,
   getOptionMeta,
   replaceDhanBook,
   replaceDhanOrders,
+  restoreSimulatedDesk,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
@@ -277,6 +279,7 @@ function mapDhanOrders(raw) {
     brokerName: "Dhan",
     securityId: String(row.securityId || ""),
     live: true,
+    sim: false,
     reason: row.omsErrorDescription || row.rejectedReason || "",
     createdAt: row.createTime || row.updateTime || new Date().toISOString(),
   }));
@@ -305,6 +308,8 @@ function mapDhanPositions(raw) {
         strategy: "",
         securityId: String(row.securityId || ""),
         brokerId: "dhan",
+        live: true,
+        sim: false,
       };
     });
 }
@@ -322,6 +327,8 @@ function mapDhanHoldings(raw) {
       ltp: Number(Number(row.avgCostPrice || 0).toFixed(2)),
       pnl: 0,
       brokerId: "dhan",
+      live: true,
+      sim: false,
     }));
 }
 
@@ -559,14 +566,17 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const und = getUnderlying(symbol || desk.symbol);
   const chosen = expiry || desk.expiry;
   const nextSpot = Number(spot) || getChainSpot(und.id);
+  const liveOnly = Boolean(accessToken);
+  const liveRows = rows !== undefined ? rows : liveOnly ? currentOptionRows() : currentOptionRows();
   const next = buildScripChain({
     symbol: und.id,
     expiry: chosen,
     spot: nextSpot,
     step: und.step,
-    liveRows: rows || currentOptionRows(),
+    liveRows,
+    liveOnly,
   });
-  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, rows: next, spot: nextSpot, source });
+  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, rows: next, spot: nextSpot, source: liveOnly ? source || "dhan" : source });
   return next;
 }
 
@@ -594,8 +604,7 @@ async function refreshOptionChain() {
   const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
   if (!parsed.rows.length) {
     setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}.` });
-    applySyntheticOptionChain(und.id, expiry);
-    paintDesk({ symbol: und.id, expiry, expiries, source: "demo" });
+    paintDesk({ symbol: und.id, expiry, expiries, rows: [], source: "dhan" });
     return;
   }
   paintDesk({
@@ -614,16 +623,17 @@ export async function selectOptionDesk({ symbol, expiry }) {
   const expiries = await loadExpiryList(und);
   const wanted = normalizeExpiry(expiry);
   const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
-  applySyntheticOptionChain(und.id, chosen);
-  paintDesk({ symbol: und.id, expiry: chosen, expiries, source: accessToken ? "demo" : "demo" });
-  if (accessToken) {
-    try {
-      await refreshOptionChain();
-    } catch (error) {
-      applySyntheticOptionChain(und.id, chosen);
-      paintDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
-      setDhanFeed({ error: error.message || "Dhan option chain failed" });
-    }
+  if (!accessToken) {
+    applySyntheticOptionChain(und.id, chosen);
+    paintDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
+    return getOptionMeta();
+  }
+  paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
+  try {
+    await refreshOptionChain();
+  } catch (error) {
+    paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
+    setDhanFeed({ error: error.message || "Dhan option chain failed" });
   }
   return getOptionMeta();
 }
@@ -836,12 +846,14 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     positionCount: 0,
     holdingCount: 0,
   });
+  clearSimulatedDesk();
   startLiveLoop();
   return { profile, funds, tokenHint: tokenHint(accessToken) };
 }
 
 export function stopDhanLive() {
   stopLiveLoop(true);
+  restoreSimulatedDesk();
   setDhanFeed({
     live: false,
     source: "idle",

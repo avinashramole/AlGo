@@ -24,19 +24,24 @@ export function PriceChart() {
   const ohlc = data.ohlc;
   const dhanLive = Boolean(data.dhanFeed?.live);
   const [tf, setTf] = useState<(typeof timeframes)[number]>("5m");
-  const [candles, setCandles] = useState<Candle[]>(() => generateCandles(80, 24420, 17));
+  const [candles, setCandles] = useState<Candle[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
         const next = await getCandles(tf);
-        if (!cancelled && next?.length) setCandles(next);
+        if (cancelled) return;
+        if (next?.length) setCandles(next);
+        else if (dhanLive) setCandles([]);
       } catch {
-        if (!cancelled) {
-          const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
-          setCandles(generateCandles(count, ohlc.close || 24420, tf.length * 17));
+        if (cancelled) return;
+        if (dhanLive) {
+          setCandles([]);
+          return;
         }
+        const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
+        setCandles(generateCandles(count, ohlc.close || 24420, tf.length * 17));
       }
     };
     void load();

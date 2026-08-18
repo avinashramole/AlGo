@@ -10,11 +10,15 @@ export function PositionsScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Positions</Text>
+      <Text style={styles.muted}>
+        {data.dhanFeed?.live ? "LIVE · real Dhan positions only" : "Open book"}
+      </Text>
       <Card>
         <Text style={styles.muted}>UNREALIZED P&L</Text>
         <Text style={[styles.pnl, { color: pnl >= 0 ? colors.up : colors.down }]}>{formatInr(pnl)}</Text>
       </Card>
-      {data.positions.map((row) => (
+      {data.positions.length ? (
+        data.positions.map((row) => (
         <Card key={row.id}>
           <View style={styles.row}>
             <Text style={styles.symbol}>{row.symbol}</Text>
@@ -39,7 +43,12 @@ export function PositionsScreen() {
             <Text style={styles.btnText}>Square off</Text>
           </Pressable>
         </Card>
-      ))}
+      ))
+      ) : (
+        <Card>
+          <Text style={styles.muted}>{data.dhanFeed?.live ? "No live Dhan positions" : "No open positions"}</Text>
+        </Card>
+      )}
     </ScrollView>
   );
 }

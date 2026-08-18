@@ -77,8 +77,8 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          Quotes start as soon as the token is live. Orders go to Dhan only in that LIVE state — until then BUY/SELL is a
-          desk fill. The token stays on this computer and is never saved in git.
+          Quotes start as soon as the token is live. LIVE mode shows only real Dhan quotes, orders, and positions — no
+          demo fills. Until then BUY/SELL stays on this desk. The token stays on this computer and is never saved in git.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />

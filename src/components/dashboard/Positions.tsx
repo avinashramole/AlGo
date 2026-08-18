@@ -43,28 +43,36 @@ export function Positions() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="soft-row">
-                <td className="py-2.5 font-semibold">{row.symbol}</td>
-                <td className="py-2.5 text-slate-500">{brokerName(data.brokers, row.brokerId)}</td>
-                <td className="py-2.5">
-                  <span
-                    className={cn(
-                      "rounded px-1.5 py-0.5 text-[10px] font-bold",
-                      row.type === "BUY" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-rose-50 text-down dark:bg-rose-950/40",
-                    )}
-                  >
-                    {row.type}
-                  </span>
-                </td>
-                <td className="py-2.5 text-right">{row.qty}</td>
-                <td className="py-2.5 text-right">{formatNumber(row.avg)}</td>
-                <td className="py-2.5 text-right">{formatNumber(row.ltp)}</td>
-                <td className={cn("py-2.5 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>
-                  {formatInr(row.pnl)}
+            {rows.length ? (
+              rows.map((row) => (
+                <tr key={row.id} className="soft-row">
+                  <td className="py-2.5 font-semibold">{row.symbol}</td>
+                  <td className="py-2.5 text-slate-500">{brokerName(data.brokers, row.brokerId)}</td>
+                  <td className="py-2.5">
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[10px] font-bold",
+                        row.type === "BUY" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-rose-50 text-down dark:bg-rose-950/40",
+                      )}
+                    >
+                      {row.type}
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-right">{row.qty}</td>
+                  <td className="py-2.5 text-right">{formatNumber(row.avg)}</td>
+                  <td className="py-2.5 text-right">{formatNumber(row.ltp)}</td>
+                  <td className={cn("py-2.5 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>
+                    {formatInr(row.pnl)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-6 text-center text-slate-400" colSpan={7}>
+                  {data.dhanFeed?.live ? "No live Dhan positions" : "No open positions"}
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
