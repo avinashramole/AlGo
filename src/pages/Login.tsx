@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { connectGmail, getGmailStatus } from "../api/client";
+import { BrandMark } from "../components/BrandMark";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/format";
 
@@ -159,7 +160,7 @@ export function Login() {
   return (
     <div className="login-shell">
       <div className="login-card">
-        <img src="/t2s-logo.png" alt="Trade 2 Smart" className="mx-auto mb-6 h-40 w-40 object-contain sm:h-48 sm:w-48" />
+        <BrandMark />
 
         {showGmail ? (
           <GmailBox

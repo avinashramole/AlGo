@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { connectGmail, getGmailStatus } from "../api";
 import { useAuth } from "../AuthContext";
+import { BrandMark } from "../components/BrandMark";
 
 function looksLikeMobile(value: string) {
   let digits = String(value || "").replace(/\D/g, "");
@@ -136,7 +137,7 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Image source={require("../../assets/t2s-logo.png")} style={styles.logoImg} resizeMode="contain" />
+        <BrandMark />
 
         {showGmail ? (
           mailConnected ? (
@@ -236,7 +237,6 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#05070c" },
   scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  logoImg: { width: 220, height: 220, alignSelf: "center", marginBottom: 16 },
   input: {
     backgroundColor: "#080b12",
     borderColor: "#243044",
