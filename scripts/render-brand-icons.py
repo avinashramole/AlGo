@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Rasterize Trade 2 Smart emblem into app icon variants from the brand sheet."""
+"""Rasterize the Trade 2 Smart emblem into app icon variants."""
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -14,6 +13,7 @@ BLUE = (47, 123, 255, 255)
 LIME = (182, 255, 60, 255)
 SILVER = (232, 238, 245, 255)
 DARK = (5, 7, 12, 255)
+PLATE = (8, 11, 18, 255)
 WHITE = (255, 255, 255, 255)
 
 
@@ -36,62 +36,47 @@ def paint_gradient(size: int) -> Image.Image:
     return img
 
 
-def draw_emblem(canvas: Image.Image, box: tuple[int, int, int, int]) -> None:
+def draw_emblem(canvas: Image.Image, box: tuple[int, int, int, int], plate: bool = True) -> None:
     x0, y0, x1, y1 = box
-    w = x1 - x0
+    w = max(1, x1 - x0)
     scale = w / 240
-    cx, cy = x0 + w / 2, y0 + w / 2
     draw = ImageDraw.Draw(canvas)
-    r = 104 * scale
-    stroke = max(3, int(8 * scale))
-
-    steps = 96
-    start = math.radians(-18)
-    span = 560 / (560 + 92) * 2 * math.pi
-    for i in range(steps):
-        t0 = i / steps
-        t1 = (i + 1) / steps
-        a0 = start + span * t0
-        a1 = start + span * t1
-        color = lerp(BLUE[:3], LIME[:3], t0)
-        draw.arc(
-            [cx - r, cy - r, cx + r, cy + r],
-            math.degrees(a0),
-            math.degrees(a1),
-            fill=(*color, 255),
+    radius = max(8, int(56 * scale))
+    stroke = max(2, int(7 * scale))
+    inset = stroke // 2
+    if plate:
+        draw.rounded_rectangle(
+            [x0 + inset, y0 + inset, x1 - inset, y1 - inset],
+            radius=radius,
+            fill=PLATE,
+            outline=BLUE,
             width=stroke,
         )
+        lime_w = max(2, stroke)
+        draw.line([(x1 - radius, y0 + stroke), (x1 - stroke, y0 + radius)], fill=LIME, width=lime_w)
 
-    arrow = [
-        (x0 + 188 * scale, y0 + 36 * scale),
-        (x0 + 214 * scale, y0 + 28 * scale),
-        (x0 + 196 * scale, y0 + 58 * scale),
-    ]
-    draw.polygon(arrow, fill=LIME)
-
-    candles = [(96, 52, 10, 28), (115, 42, 10, 38), (134, 32, 10, 48)]
-    wicks = [(94, 58, 14, 3.5), (94, 72, 14, 3.5), (113, 48, 14, 3.5), (113, 72, 14, 3.5), (132, 38, 14, 3.5), (132, 72, 14, 3.5)]
-    for x, y, cw, ch in candles:
-        draw.rounded_rectangle(
-            [x0 + x * scale, y0 + y * scale, x0 + (x + cw) * scale, y0 + (y + ch) * scale],
-            radius=max(1, int(1.5 * scale)),
-            fill=LIME,
-        )
-    for x, y, cw, ch in wicks:
-        draw.rounded_rectangle(
-            [x0 + x * scale, y0 + y * scale, x0 + (x + cw) * scale, y0 + (y + ch) * scale],
-            radius=max(1, int(scale)),
-            fill=LIME,
-        )
-
-    font = load_font(max(12, int(64 * scale)))
+    font = load_font(max(12, int(70 * scale)))
     letters = [("T", BLUE), ("2", SILVER), ("S", LIME)]
-    total = sum(draw.textlength(ch, font=font) for ch, _ in letters) - 4 * scale
-    cursor = cx - total / 2
-    ty = y0 + 158 * scale - font.size * 0.82
+    total = sum(draw.textlength(ch, font=font) for ch, _ in letters) - 6 * scale
+    cursor = x0 + w / 2 - total / 2
+    ty = y0 + 122 * scale - font.size * 0.78
     for ch, color in letters:
         draw.text((cursor, ty), ch, font=font, fill=color)
-        cursor += draw.textlength(ch, font=font) - 2 * scale
+        cursor += draw.textlength(ch, font=font) - 3 * scale
+
+    step = max(3, int(8 * scale))
+    points = [
+        (x0 + 58 * scale, y0 + 174 * scale),
+        (x0 + 104 * scale, y0 + 174 * scale),
+        (x0 + 104 * scale, y0 + 152 * scale),
+        (x0 + 150 * scale, y0 + 152 * scale),
+        (x0 + 150 * scale, y0 + 130 * scale),
+        (x0 + 186 * scale, y0 + 130 * scale),
+    ]
+    draw.line(points, fill=LIME, width=step, joint="miter")
+    r = max(3, int(7 * scale))
+    cx, cy = points[-1]
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=BLUE)
 
 
 def square_icon(size: int, kind: str) -> Image.Image:
@@ -101,14 +86,14 @@ def square_icon(size: int, kind: str) -> Image.Image:
         img = paint_gradient(size)
     else:
         img = Image.new("RGBA", (size, size), DARK)
-    pad = int(size * 0.12)
-    draw_emblem(img, (pad, pad, size - pad, size - pad))
+    pad = int(size * 0.08)
+    draw_emblem(img, (pad, pad, size - pad, size - pad), plate=kind != "gradient")
     return img
 
 
 def foreground(size: int) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    pad = int(size * 0.18)
+    pad = int(size * 0.12)
     draw_emblem(img, (pad, pad, size - pad, size - pad))
     return img
 
@@ -116,13 +101,12 @@ def foreground(size: int) -> Image.Image:
 def monochrome(size: int) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    pad = int(size * 0.18)
-    box = [pad, pad, size - pad, size - pad]
-    draw.ellipse(box, outline=WHITE, width=max(4, size // 32))
+    pad = int(size * 0.12)
+    draw.rounded_rectangle([pad, pad, size - pad, size - pad], radius=size // 6, outline=WHITE, width=max(4, size // 36))
     font = load_font(size // 5)
     text = "T2S"
     tw = draw.textlength(text, font=font)
-    draw.text(((size - tw) / 2, size * 0.42), text, font=font, fill=WHITE)
+    draw.text(((size - tw) / 2, size * 0.36), text, font=font, fill=WHITE)
     return img
 
 
