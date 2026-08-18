@@ -119,7 +119,7 @@ DHAN_CLIENT_ID=your-client-id
 DHAN_ACCESS_TOKEN=your-jwt
 ```
 
-Then restart `npm start`. The header shows **DHAN LIVE** when quotes are coming from Dhan. The token is kept in server memory only.
+Then restart `npm start`. The header shows **DHAN LIVE** when quotes are coming from Dhan. Open positions and NIFTY candles also load from your Dhan account. The token is kept in server memory only.
 
 Sandbox connect for Zerodha / Kotak / Fyers: client ID `demo` and API key `demo123`.
 

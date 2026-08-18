@@ -143,6 +143,8 @@ const state = {
     profileName: null,
     clientId: null,
     quoteCount: 0,
+    positionCount: 0,
+    holdingCount: 0,
   },
   liveCandles: [],
 };
@@ -303,6 +305,29 @@ export function applyBrokerPositions(positions, brokerId) {
 export function dropBrokerPositions(brokerId) {
   state.positions = state.positions.filter((row) => row.brokerId !== brokerId);
   state.algos = state.algos.map((algo) => (algo.brokerId === brokerId ? { ...algo, brokerId: "dhan", enabled: false, status: "PAUSED" } : algo));
+}
+
+export function replaceDhanBook(rows) {
+  const incoming = Array.isArray(rows) ? rows : [];
+  const others = state.positions.filter((row) => row.brokerId !== "dhan");
+  state.positions = [...incoming, ...others];
+}
+
+export function setLiveCandles(candles) {
+  if (!Array.isArray(candles) || !candles.length) return;
+  state.liveCandles = candles;
+  const last = candles[candles.length - 1];
+  state.ohlc = {
+    open: round2(candles[0]?.open ?? last.open),
+    high: round2(Math.max(...candles.map((row) => row.high))),
+    low: round2(Math.min(...candles.map((row) => row.low))),
+    close: round2(last.close),
+  };
+  const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
+  if (nifty && last.close > 0) {
+    nifty.price = round2(last.close);
+    nifty.spark = pushSpark(nifty.spark, last.close);
+  }
 }
 
 export function addChat(text) {

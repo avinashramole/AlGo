@@ -95,6 +95,8 @@ export type Snapshot = {
     profileName: string | null;
     clientId?: string | null;
     quoteCount?: number;
+    positionCount?: number;
+    holdingCount?: number;
   };
 };
 

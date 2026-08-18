@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { WebSocket } from "ws";
 import { markDhanLive } from "./brokers.js";
-import { applyLiveQuotes, setDhanFeed } from "./market.js";
+import { applyLiveQuotes, replaceDhanBook, setDhanFeed, setLiveCandles } from "./market.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
 const DHAN_FEED_WS = "wss://api-feed.dhan.co";
@@ -27,6 +27,7 @@ const INSTRUMENTS = [
 let accessToken = "";
 let clientId = "";
 let pollTimer = null;
+let accountTimer = null;
 let socket = null;
 let reconnectTimer = null;
 let usedFallback = false;
@@ -143,6 +144,139 @@ function flattenQuotes(payload) {
     }
   }
   return quotes;
+}
+
+function kolkataStamp(date, time) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day} ${time || `${parts.hour}:${parts.minute}:${parts.second}`}`;
+}
+
+function epochMs(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return Date.now();
+  return n > 10_000_000_000 ? n : n * 1000;
+}
+
+function mapChartCandles(payload) {
+  const opens = payload?.open || [];
+  const highs = payload?.high || [];
+  const lows = payload?.low || [];
+  const closes = payload?.close || [];
+  const volumes = payload?.volume || [];
+  const times = payload?.timestamp || [];
+  const candles = [];
+  for (let i = 0; i < closes.length; i += 1) {
+    const close = Number(closes[i]);
+    if (!Number.isFinite(close) || close <= 0) continue;
+    candles.push({
+      time: epochMs(times[i]),
+      open: Number(opens[i] ?? close),
+      high: Number(highs[i] ?? close),
+      low: Number(lows[i] ?? close),
+      close,
+      volume: Number(volumes[i] || 0),
+    });
+  }
+  return candles;
+}
+
+function asList(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data)) return raw.data;
+  return [];
+}
+
+function mapDhanPositions(raw) {
+  const list = asList(raw);
+  return list
+    .filter((row) => row.positionType !== "CLOSED" && Number(row.netQty) !== 0)
+    .map((row) => {
+      const qty = Math.abs(Number(row.netQty) || 0);
+      const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
+      const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
+      const pnl = Number(row.unrealizedProfit || 0);
+      const dir = type === "BUY" ? 1 : -1;
+      const implied = qty ? avg + pnl / (qty * dir) : avg;
+      return {
+        id: `dhan-pos-${row.securityId}-${row.productType || "MIS"}`,
+        symbol: row.tradingSymbol || String(row.securityId),
+        type,
+        qty,
+        avg: Number(avg.toFixed(2)),
+        ltp: Number((Number.isFinite(implied) ? implied : avg).toFixed(2)),
+        pnl: Number(pnl.toFixed(2)),
+        brokerId: "dhan",
+      };
+    });
+}
+
+function mapDhanHoldings(raw) {
+  const list = asList(raw);
+  return list
+    .filter((row) => Number(row.availableQty || row.totalQty) > 0)
+    .map((row) => ({
+      id: `dhan-hold-${row.securityId}`,
+      symbol: row.tradingSymbol || String(row.securityId),
+      type: "BUY",
+      qty: Number(row.availableQty || row.totalQty),
+      avg: Number(Number(row.avgCostPrice || 0).toFixed(2)),
+      ltp: Number(Number(row.avgCostPrice || 0).toFixed(2)),
+      pnl: 0,
+      brokerId: "dhan",
+    }));
+}
+
+async function pullAccount() {
+  if (!accessToken) return;
+  try {
+    const [positionsRaw, holdingsRaw] = await Promise.all([
+      dhanGet("/positions", accessToken, clientId).catch(() => []),
+      dhanGet("/holdings", accessToken, clientId).catch(() => []),
+    ]);
+    const positions = mapDhanPositions(positionsRaw);
+    const holdings = mapDhanHoldings(holdingsRaw).filter(
+      (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
+    );
+    replaceDhanBook([...positions, ...holdings]);
+    setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
+  } catch (error) {
+    setDhanFeed({ error: error.message || "Dhan positions request failed" });
+  }
+}
+
+async function pullNiftyCandles() {
+  if (!accessToken) return;
+  try {
+    const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:15:00");
+    const to = kolkataStamp(new Date());
+    const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
+      securityId: "13",
+      exchangeSegment: "IDX_I",
+      instrument: "INDEX",
+      interval: "1",
+      oi: false,
+      fromDate: from,
+      toDate: to,
+    });
+    const candles = mapChartCandles(payload);
+    if (candles.length) setLiveCandles(candles);
+  } catch {
+    /* quotes still drive the last bar */
+  }
 }
 
 async function pullQuotes() {
@@ -280,9 +414,14 @@ function startSocket() {
 function startLiveLoop() {
   stopLiveLoop(false);
   void pullQuotes();
+  void pullAccount();
+  void pullNiftyCandles();
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 1200);
+  accountTimer = setInterval(() => {
+    void pullAccount();
+  }, 20_000);
   startSocket();
 }
 
@@ -290,6 +429,10 @@ function stopLiveLoop(clearCreds) {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (accountTimer) {
+    clearInterval(accountTimer);
+    accountTimer = null;
   }
   stopSocket();
   if (clearCreds) {
@@ -368,6 +511,8 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     profileName: profile.dhanClientName || null,
     clientId,
     quoteCount: 0,
+    positionCount: 0,
+    holdingCount: 0,
   });
   startLiveLoop();
   return { profile, funds, tokenHint: tokenHint(accessToken) };
@@ -383,6 +528,8 @@ export function stopDhanLive() {
     tokenHint: null,
     profileName: null,
     quoteCount: 0,
+    positionCount: 0,
+    holdingCount: 0,
   });
 }
 

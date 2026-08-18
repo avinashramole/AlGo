@@ -78,14 +78,15 @@ export function Brokers() {
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
           The token stays on this computer and is never saved in git.
         </p>
-        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
           <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
+          <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
           <Mini
             label="Last tick"
             value={feed?.lastTickAt ? new Date(feed.lastTickAt).toLocaleTimeString("en-IN") : "—"}
           />
-          <Mini label="Profile" value={feed?.profileName || "—"} />
+          <Mini label="Profile" value={feed?.profileName || feed?.clientId || "—"} />
         </div>
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}
       </section>
