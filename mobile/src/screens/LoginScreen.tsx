@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { connectGmail, getGmailStatus } from "../api";
 import { useAuth } from "../AuthContext";
 import { BrandMark } from "../components/BrandMark";
 
@@ -9,10 +8,6 @@ function looksLikeMobile(value: string) {
   if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
   if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
   return /^[6-9]\d{9}$/.test(digits);
-}
-
-function looksLikeGmail(value: string) {
-  return /@gmail\.com$|@googlemail\.com$/i.test(String(value || "").trim());
 }
 
 function channelOf(value: string): "gmail" | "mobile" {
@@ -31,18 +26,8 @@ export function LoginScreen() {
   const [hint, setHint] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mailConnected, setMailConnected] = useState(false);
-  const [senderEmail, setSenderEmail] = useState("");
-  const [appPassword, setAppPassword] = useState("");
 
   const channel = channelOf(identifier);
-  const showGmail = looksLikeGmail(identifier);
-
-  useEffect(() => {
-    void getGmailStatus()
-      .then((row) => setMailConnected(Boolean(row.connected)))
-      .catch(() => undefined);
-  }, []);
 
   const reset = () => {
     setSentTo("");
@@ -67,7 +52,6 @@ export function LoginScreen() {
       setSentTo(result.to || identifier);
       setHint(result.hint || "Enter the 6-digit code.");
       setDevOtp(result.devOtp || "");
-      if (result.gmail) setMailConnected(Boolean(result.gmail.connected));
     } catch (error) {
       fail("Could not send code", error);
     } finally {
@@ -138,35 +122,6 @@ export function LoginScreen() {
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <BrandMark />
-
-        {showGmail ? (
-          mailConnected ? (
-            <Text style={styles.hint}>Gmail is connected. Login codes and a sign-in mail go to the inbox.</Text>
-          ) : (
-            <>
-              <Text style={styles.hint}>Connect Gmail (App Password) so login codes and the after-login mail are emailed.</Text>
-              <TextInput style={styles.input} autoCapitalize="none" value={senderEmail} onChangeText={setSenderEmail} placeholder="Desk Gmail (sends mail)" placeholderTextColor="#6b7385" />
-              <TextInput style={styles.input} secureTextEntry value={appPassword} onChangeText={setAppPassword} placeholder="App Password" placeholderTextColor="#6b7385" />
-              <Pressable
-                style={styles.ghostBtn}
-                disabled={busy}
-                onPress={() => {
-                  setBusy(true);
-                  void connectGmail(senderEmail, appPassword)
-                    .then((row) => {
-                      setMailConnected(Boolean(row.connected));
-                      setAppPassword("");
-                      Alert.alert("Gmail connected", "Send the code next.");
-                    })
-                    .catch((error) => fail("Gmail failed", error))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                <Text style={styles.ghostText}>Connect Gmail</Text>
-              </Pressable>
-            </>
-          )
-        ) : null}
 
         {page === "signup" ? <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" placeholderTextColor="#6b7385" /> : null}
         <TextInput
@@ -256,7 +211,6 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#061006", fontWeight: "800" },
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
-  ghostBtn: { height: 40, borderRadius: 12, borderWidth: 1, borderColor: "#2f7bff", alignItems: "center", justifyContent: "center", marginBottom: 12 },
   ghostText: { color: "#6db3ff", fontWeight: "700" },
   switch: { marginTop: 8, height: 40, alignItems: "center", justifyContent: "center" },
   switchText: { color: "#8b93a7", fontWeight: "700", fontSize: 13 },

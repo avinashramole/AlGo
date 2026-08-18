@@ -1,9 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { connectGmail, getGmailStatus } from "../api/client";
 import { BrandMark } from "../components/BrandMark";
 import { useAuth } from "../context/AuthContext";
-import { cn } from "../lib/format";
 
 const fieldClass = "login-input";
 
@@ -12,10 +10,6 @@ function looksLikeMobile(value: string) {
   if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
   if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
   return /^[6-9]\d{9}$/.test(digits);
-}
-
-function looksLikeGmail(value: string) {
-  return /@gmail\.com$|@googlemail\.com$/i.test(String(value || "").trim());
 }
 
 function channelOf(value: string): "gmail" | "mobile" {
@@ -36,22 +30,8 @@ export function Login() {
   const [devOtp, setDevOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mailConnected, setMailConnected] = useState(false);
-  const [mailFrom, setMailFrom] = useState("");
-  const [senderEmail, setSenderEmail] = useState("");
-  const [appPassword, setAppPassword] = useState("");
 
   const channel = channelOf(identifier);
-  const showGmail = looksLikeGmail(identifier);
-
-  useEffect(() => {
-    void getGmailStatus()
-      .then((row) => {
-        setMailConnected(Boolean(row.connected));
-        setMailFrom(row.user || "");
-      })
-      .catch(() => undefined);
-  }, []);
 
   const resetNotice = () => {
     setError("");
@@ -59,23 +39,6 @@ export function Login() {
     setDevOtp("");
     setSentTo("");
     setOtp("");
-  };
-
-  const onConnectGmail = async (event: FormEvent) => {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const result = await connectGmail(senderEmail, appPassword);
-      setMailConnected(Boolean(result.connected));
-      setMailFrom(result.user || senderEmail);
-      setAppPassword("");
-      setHint("Gmail connected. Codes and login mail will go to the inbox.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect Gmail");
-    } finally {
-      setLoading(false);
-    }
   };
 
   const onSendCode = async () => {
@@ -93,10 +56,6 @@ export function Login() {
       setSentTo(result.to || identifier);
       setHint(result.hint || "Enter the 6-digit code.");
       setDevOtp(result.devOtp || "");
-      if (result.gmail) {
-        setMailConnected(Boolean(result.gmail.connected));
-        setMailFrom(result.gmail.user || "");
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send code");
     } finally {
@@ -161,19 +120,6 @@ export function Login() {
     <div className="login-shell">
       <div className="login-card">
         <BrandMark />
-
-        {showGmail ? (
-          <GmailBox
-            connected={mailConnected}
-            from={mailFrom}
-            senderEmail={senderEmail}
-            appPassword={appPassword}
-            loading={loading}
-            onSender={setSenderEmail}
-            onPass={setAppPassword}
-            onSubmit={onConnectGmail}
-          />
-        ) : null}
 
         <form onSubmit={onSubmit}>
           {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" /> : null}
@@ -256,42 +202,5 @@ function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: 
       {devOtp ? <div className="mb-3 rounded-lg border border-[#b6ff3c]/30 bg-[#b6ff3c]/10 px-3 py-2 text-sm font-semibold text-[#b6ff3c]">Temporary code: {devOtp}</div> : null}
       {error ? <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</div> : null}
     </>
-  );
-}
-
-function GmailBox({
-  connected,
-  from,
-  senderEmail,
-  appPassword,
-  loading,
-  onSender,
-  onPass,
-  onSubmit,
-}: {
-  connected: boolean;
-  from: string;
-  senderEmail: string;
-  appPassword: string;
-  loading: boolean;
-  onSender: (value: string) => void;
-  onPass: (value: string) => void;
-  onSubmit: (event: FormEvent) => void;
-}) {
-  return (
-    <div className={cn("mb-4 rounded-xl border p-3", connected ? "border-[#b6ff3c]/40 bg-[#b6ff3c]/10" : "border-[#2f7bff]/40 bg-[#2f7bff]/10")}>
-      {connected ? (
-        <p className="text-xs font-semibold text-[#b6ff3c]">Gmail sending from {from}.</p>
-      ) : (
-        <form onSubmit={onSubmit} className="space-y-2">
-          <p className="text-xs font-semibold text-slate-200">Connect Gmail (App Password) to email login codes and notices.</p>
-          <input className="login-input" value={senderEmail} onChange={(event) => onSender(event.target.value)} placeholder="Desk Gmail" />
-          <input type="password" className="login-input" value={appPassword} onChange={(event) => onPass(event.target.value)} placeholder="App Password" />
-          <button type="submit" disabled={loading} className="h-9 w-full rounded-lg bg-[#2f7bff] text-xs font-semibold text-white">
-            Connect Gmail
-          </button>
-        </form>
-      )}
-    </div>
   );
 }
