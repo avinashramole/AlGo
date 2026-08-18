@@ -9,3 +9,4 @@ tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo
 .env
 server/.env
+server/data/users.json

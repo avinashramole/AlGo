@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { loginWithPassword, requestOtp, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -104,19 +105,30 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/login", (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const password = String(req.body?.password || "");
-  const valid = (email === "demo@t2s.app" || email === "demo") && password === "demo123";
-
-  if (!valid) {
-    res.status(401).json({ error: "Use demo@t2s.app / demo123" });
-    return;
+  try {
+    const result = loginWithPassword(req.body?.email, req.body?.password);
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 401).json({ error: error.message || "Login failed" });
   }
+});
 
-  res.json({
-    token: "t2s-demo-token",
-    user: { name: "Avinash", email: "demo@t2s.app", desk: "Index Options" },
-  });
+app.post("/api/auth/otp/request", async (req, res) => {
+  try {
+    const result = await requestOtp({ email: req.body?.email, name: req.body?.name });
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not send code", needName: Boolean(error.needName) });
+  }
+});
+
+app.post("/api/auth/otp/verify", (req, res) => {
+  try {
+    const result = verifyOtp({ email: req.body?.email, otp: req.body?.otp });
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
+  }
 });
 
 app.get("/api/snapshot", (_req, res) => {

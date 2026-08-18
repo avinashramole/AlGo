@@ -252,6 +252,29 @@ export function login(email: string, password: string) {
   });
 }
 
+export type OtpRequestResult = {
+  ok: boolean;
+  sent: boolean;
+  newUser?: boolean;
+  to?: string;
+  hint?: string;
+  devOtp?: string;
+};
+
+export function requestOtp(email: string, name?: string) {
+  return request<OtpRequestResult>("/auth/otp/request", {
+    method: "POST",
+    body: JSON.stringify({ email, name }),
+  });
+}
+
+export function verifyOtp(email: string, otp: string) {
+  return request<{ token: string; user: { name: string; email: string; desk: string } }>("/auth/otp/verify", {
+    method: "POST",
+    body: JSON.stringify({ email, otp }),
+  });
+}
+
 export function getSnapshot() {
   return request<Snapshot>("/snapshot");
 }

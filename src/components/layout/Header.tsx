@@ -1,4 +1,4 @@
-import { Bell, LogOut, MessageSquare, Moon, Search, Sun, User } from "lucide-react";
+import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BrokerSwitch } from "./BrokerSwitch";
@@ -69,8 +69,14 @@ export function Header() {
         <button type="button" onClick={toggleTheme} className="icon-btn" title="Theme">
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-white" title={user?.name}>
-          <User size={16} />
+        <div className="hidden items-center gap-2 sm:flex" title={user?.email}>
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+            {(user?.name || "T").slice(0, 1).toUpperCase()}
+          </div>
+          <div className="hidden lg:block">
+            <div className="text-xs font-bold leading-tight">{user?.name || "T2S"}</div>
+            <div className="text-[10px] font-semibold text-slate-400">{user?.email || ""}</div>
+          </div>
         </div>
         <button type="button" onClick={logout} className="icon-btn" title="Log out">
           <LogOut size={17} />

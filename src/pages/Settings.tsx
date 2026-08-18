@@ -6,6 +6,7 @@ export function Settings() {
   const { user, logout } = useAuth();
   const { data } = useMarket();
   const rows = [
+    ["Name", user?.name || "Avinash"],
     ["Account", user?.email || "demo@t2s.app"],
     ["Desk", user?.desk || "Index Options"],
     ["Default product", data.settings.product || "MIS"],

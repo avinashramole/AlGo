@@ -1,15 +1,22 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { login as loginRequest } from "../api/client";
+import { login as loginRequest, requestOtp as requestOtpApi, verifyOtp as verifyOtpApi, type OtpRequestResult } from "../api/client";
 
 type User = { name: string; email: string; desk: string };
 
 type AuthContextValue = {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  requestOtp: (email: string, name?: string) => Promise<OtpRequestResult>;
+  verifyOtp: (email: string, otp: string) => Promise<void>;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function persist(user: User, token: string) {
+  localStorage.setItem("t2s-token", token);
+  localStorage.setItem("t2s-user", JSON.stringify(user));
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
@@ -27,15 +34,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password === "demo123";
         try {
           const result = await loginRequest(email, password);
-          localStorage.setItem("t2s-token", result.token);
-          localStorage.setItem("t2s-user", JSON.stringify(result.user));
+          persist(result.user, result.token);
           setUser(result.user);
         } catch (error) {
           if (!isDemo) throw error;
-          localStorage.setItem("t2s-token", "t2s-offline-token");
-          localStorage.setItem("t2s-user", JSON.stringify(demoUser));
+          persist(demoUser, "t2s-offline-token");
           setUser(demoUser);
         }
+      },
+      requestOtp: (email: string, name?: string) => requestOtpApi(email, name),
+      verifyOtp: async (email: string, otp: string) => {
+        const result = await verifyOtpApi(email, otp);
+        persist(result.user, result.token);
+        setUser(result.user);
       },
       logout: () => {
         localStorage.removeItem("t2s-token");

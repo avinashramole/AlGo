@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { login as loginRequest } from "./api";
+import { login as loginRequest, requestOtp as requestOtpApi, verifyOtp as verifyOtpApi, type OtpRequestResult } from "./api";
 
 type User = { name: string; email: string; desk: string };
 
@@ -8,6 +8,8 @@ type AuthContextValue = {
   ready: boolean;
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  requestOtp: (email: string, name?: string) => Promise<OtpRequestResult>;
+  verifyOtp: (email: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -43,6 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await AsyncStorage.setItem("t2s-user", JSON.stringify(demoUser));
           setUser(demoUser);
         }
+      },
+      requestOtp: (email: string, name?: string) => requestOtpApi(email, name),
+      verifyOtp: async (email: string, otp: string) => {
+        const result = await verifyOtpApi(email, otp);
+        await AsyncStorage.setItem("t2s-user", JSON.stringify(result.user));
+        setUser(result.user);
       },
       logout: async () => {
         await AsyncStorage.removeItem("t2s-user");

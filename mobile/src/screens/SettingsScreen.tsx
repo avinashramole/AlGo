@@ -15,6 +15,7 @@ export function SettingsScreen() {
     <View style={styles.page}>
       <Text style={styles.title}>Settings</Text>
       <Card>
+        <Row label="Name" value={user?.name || "Avinash"} />
         <Row label="Account" value={user?.email || "demo@t2s.app"} />
         <Row label="Desk" value={user?.desk || "Index Options"} />
         <Row label="Active broker" value={active} />

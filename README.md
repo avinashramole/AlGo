@@ -8,7 +8,9 @@ One trading desk. Same login, same live demo data.
 | **Android** | Expo Go app on your phone |
 | **iOS** | Expo Go app on iPhone / iPad |
 
-Demo login: **demo@t2s.app** / **demo123**
+Demo login (Avinash): **demo@t2s.app** / **demo123**
+
+New user **Segin** (and any other Gmail): sign in with **Gmail OTP** on the login screen.
 
 ---
 
@@ -43,7 +45,12 @@ This starts:
 - API on http://localhost:4000  
 - Website on http://localhost:5173  
 
-Open **http://localhost:5173** in Chrome. Log in with `demo@t2s.app` / `demo123`.
+Open **http://localhost:5173** in Chrome.
+
+- **Segin / new user:** Gmail OTP tab → name + Gmail → Send code → enter the 6-digit OTP
+- **Avinash demo:** Password tab → `demo@t2s.app` / `demo123`
+
+To email real OTPs, add Gmail App Password values to `.env` (see below) and restart.
 
 Keep this terminal open.
 
@@ -75,7 +82,7 @@ A QR code appears.
 - **Android:** open Expo Go and scan the QR code  
 - **iPhone:** open the Camera app, scan the QR code, then open in Expo Go  
 
-Login: `demo@t2s.app` / `demo123`
+Login: Gmail OTP (Segin) or `demo@t2s.app` / `demo123`
 
 The phone talks to the API on your computer, so leave `npm start` running in the first terminal.
 
@@ -117,7 +124,11 @@ Or put them in a local `.env` file (never commit this file):
 ```
 DHAN_CLIENT_ID=your-client-id
 DHAN_ACCESS_TOKEN=your-jwt
+GMAIL_USER=yourname@gmail.com
+GMAIL_APP_PASSWORD=your-16-char-app-password
 ```
+
+**Gmail OTP:** Google Account → Security → 2-Step Verification → App passwords. Paste the 16-character password. Without these, the login screen still shows a one-time code so you can add Segin immediately.
 
 Then restart `npm start`. The header shows **DHAN LIVE** when quotes are coming from Dhan. Open positions and NIFTY candles also load from your Dhan account. The token is kept in server memory only.
 
