@@ -4,6 +4,13 @@
 }
 
 .t2s-login {
+  --bg: #f3f5f8;
+  --card: #ffffff;
+  --border: #e7ebf2;
+  --text: #111827;
+  --muted: #6b7280;
+  --muted-2: #9ca3af;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.08);
   position: relative;
   isolation: isolate;
   min-height: 100vh;
@@ -18,10 +25,6 @@
   background: var(--bg);
 }
 
-.dark .t2s-login {
-  color-scheme: dark;
-}
-
 .t2s-login-bg {
   position: absolute;
   inset: 0;
@@ -30,13 +33,6 @@
   background:
     radial-gradient(ellipse 70% 50% at 18% 8%, rgba(47, 123, 255, 0.14), transparent 58%),
     radial-gradient(ellipse 60% 45% at 92% 96%, rgba(182, 255, 60, 0.1), transparent 55%),
-    var(--bg);
-}
-
-.dark .t2s-login-bg {
-  background:
-    radial-gradient(ellipse 70% 50% at 18% 8%, rgba(47, 123, 255, 0.22), transparent 58%),
-    radial-gradient(ellipse 60% 45% at 92% 96%, rgba(182, 255, 60, 0.12), transparent 55%),
     var(--bg);
 }
 
@@ -52,27 +48,6 @@
   mask-image: radial-gradient(ellipse at center, black 20%, transparent 72%);
 }
 
-.t2s-theme-btn {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  z-index: 2;
-  display: flex;
-  height: 40px;
-  width: 40px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.t2s-theme-btn:hover {
-  color: var(--text);
-}
-
 .t2s-login-card {
   position: relative;
   z-index: 1;
@@ -85,10 +60,6 @@
     linear-gradient(135deg, #2f7bff 0%, #2f7bff 42%, #b6ff3c 100%) border-box;
   border: 1px solid transparent;
   box-shadow: var(--shadow), 0 24px 60px rgba(16, 24, 40, 0.08);
-}
-
-.dark .t2s-login-card {
-  box-shadow: var(--shadow), 0 28px 70px rgba(0, 0, 0, 0.45);
 }
 
 .t2s-login-form {
@@ -220,10 +191,6 @@
   color: #1d5fd6;
 }
 
-.dark .t2s-ghost:hover {
-  color: #b6ff3c;
-}
-
 .t2s-switch {
   display: block;
   width: 100%;
@@ -269,18 +236,10 @@
   color: #3f7a00;
 }
 
-.dark .t2s-alert-ok {
-  color: #b6ff3c;
-}
-
 .t2s-alert-err {
   border: 1px solid rgba(244, 63, 94, 0.3);
   background: rgba(244, 63, 94, 0.1);
   color: #be123c;
-}
-
-.dark .t2s-alert-err {
-  color: #fda4af;
 }
 
 @media (min-width: 640px) {

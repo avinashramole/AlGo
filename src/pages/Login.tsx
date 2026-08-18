@@ -1,9 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Moon, Sun } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
 import { useAuth } from "../context/AuthContext";
-import { useTheme } from "../context/ThemeContext";
 import "../login.css";
 
 function looksLikeMobile(value: string) {
@@ -19,7 +17,6 @@ function channelOf(value: string): "gmail" | "mobile" {
 
 export function Login() {
   const { login, requestOtp, verifyOtp, signup } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [page, setPage] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -121,11 +118,8 @@ export function Login() {
   return (
     <div className="t2s-login">
       <div className="t2s-login-bg" aria-hidden="true" />
-      <button type="button" className="t2s-theme-btn" onClick={toggleTheme} title={theme === "light" ? "Dark theme" : "Light theme"}>
-        {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
-      </button>
       <div className="t2s-login-card">
-        <BrandMark variant="stacked" size="md" theme={theme} />
+        <BrandMark variant="stacked" size="md" theme="light" />
 
         <form onSubmit={onSubmit} className="t2s-login-form" autoComplete="on">
           {page === "signup" ? <Field label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" /> : null}
