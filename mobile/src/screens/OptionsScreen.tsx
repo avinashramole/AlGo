@@ -1,10 +1,10 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatNumber, formatPct } from "../theme";
 
 export function OptionsScreen() {
-  const { data, selectChain } = useMarket();
+  const { data, selectChain, order } = useMarket();
   const meta = data.optionMeta;
   const underlyings = meta?.underlyings || [
     { id: "NIFTY", label: "NIFTY", lot: 65 },
@@ -12,13 +12,32 @@ export function OptionsScreen() {
     { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
     { id: "SENSEX", label: "SENSEX", lot: 20 },
   ];
+  const lot = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
+
+  const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", strike: number, ltp: number) => {
+    const symbol = `${meta?.symbol || "NIFTY"} ${strike} ${option}`;
+    try {
+      await order({
+        symbol,
+        side: action,
+        qty: lot,
+        price: ltp,
+        product: "MIS",
+        type: "MARKET",
+        brokerId: data.activeBrokerId,
+      });
+      Alert.alert("Order sent", `${action} ${symbol} · ${lot} qty`);
+    } catch (err) {
+      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+    }
+  };
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Option Chain</Text>
       <Text style={styles.muted}>
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
-        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"}
+        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · 1 lot = {lot}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
@@ -27,7 +46,9 @@ export function OptionsScreen() {
             onPress={() => void selectChain(item.id)}
             style={[styles.chip, meta?.symbol === item.id && styles.chipOn]}
           >
-            <Text style={[styles.chipText, meta?.symbol === item.id && styles.chipTextOn]}>{item.label} {item.lot}</Text>
+            <Text style={[styles.chipText, meta?.symbol === item.id && styles.chipTextOn]}>
+              {item.label} {item.lot}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -38,9 +59,7 @@ export function OptionsScreen() {
             onPress={() => void selectChain(meta?.symbol || "NIFTY", expiry)}
             style={[styles.chip, meta?.expiry === expiry && styles.chipOn]}
           >
-            <Text style={[styles.chipText, meta?.expiry === expiry && styles.chipTextOn]}>
-              {meta?.expiryLabels?.[expiry] || expiry}
-            </Text>
+            <Text style={[styles.chipText, meta?.expiry === expiry && styles.chipTextOn]}>{meta?.expiryLabels?.[expiry] || expiry}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -50,17 +69,31 @@ export function OptionsScreen() {
             {row.strike} {row.atm ? "ATM" : ""}
           </Text>
           <View style={styles.row}>
-            <View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.muted}>CALL</Text>
               <Text style={styles.price}>{formatNumber(row.callLtp)}</Text>
               <Text style={{ color: row.callChg >= 0 ? colors.up : colors.down }}>{formatPct(row.callChg)}</Text>
-              {row.callOi ? <Text style={styles.muted}>OI {Math.round(row.callOi).toLocaleString("en-IN")}</Text> : null}
+              <View style={styles.actions}>
+                <Pressable style={styles.buy} onPress={() => void trade("CE", "BUY", row.strike, row.callLtp)}>
+                  <Text style={styles.actionText}>BUY</Text>
+                </Pressable>
+                <Pressable style={styles.sell} onPress={() => void trade("CE", "SELL", row.strike, row.callLtp)}>
+                  <Text style={styles.actionText}>SELL</Text>
+                </Pressable>
+              </View>
             </View>
-            <View style={{ alignItems: "flex-end" }}>
+            <View style={{ flex: 1, alignItems: "flex-end" }}>
               <Text style={styles.muted}>PUT</Text>
               <Text style={styles.price}>{formatNumber(row.putLtp)}</Text>
               <Text style={{ color: row.putChg >= 0 ? colors.up : colors.down }}>{formatPct(row.putChg)}</Text>
-              {row.putOi ? <Text style={styles.muted}>OI {Math.round(row.putOi).toLocaleString("en-IN")}</Text> : null}
+              <View style={styles.actions}>
+                <Pressable style={styles.buy} onPress={() => void trade("PE", "BUY", row.strike, row.putLtp)}>
+                  <Text style={styles.actionText}>BUY</Text>
+                </Pressable>
+                <Pressable style={styles.sell} onPress={() => void trade("PE", "SELL", row.strike, row.putLtp)}>
+                  <Text style={styles.actionText}>SELL</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         </Card>
@@ -90,4 +123,8 @@ const styles = StyleSheet.create({
   strike: { fontWeight: "800", marginBottom: 8 },
   row: { flexDirection: "row", justifyContent: "space-between" },
   price: { fontWeight: "800", fontSize: 16, marginTop: 4 },
+  actions: { flexDirection: "row", gap: 6, marginTop: 8 },
+  buy: { backgroundColor: colors.up, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  sell: { backgroundColor: colors.down, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  actionText: { color: "#fff", fontWeight: "800", fontSize: 11 },
 });

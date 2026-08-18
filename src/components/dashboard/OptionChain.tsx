@@ -1,15 +1,36 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatPct } from "../../lib/format";
 
 export function OptionChain() {
-  const { data } = useMarket();
+  const { data, order } = useMarket();
+  const [busy, setBusy] = useState("");
   const rows = (data.optionChain || []).filter((_row, index, list) => {
     const atm = list.findIndex((item) => item.atm);
     if (atm < 0) return index < 5;
     return Math.abs(index - atm) <= 2;
   });
   const spot = data.optionMeta?.spot || data.indices[0]?.price || 0;
+  const lot = data.optionMeta?.underlyings?.find((item) => item.id === data.optionMeta?.symbol)?.lot || 65;
+
+  const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof rows)[number]) => {
+    const key = `${row.strike}-${option}-${action}`;
+    setBusy(key);
+    try {
+      await order({
+        symbol: `${data.optionMeta?.symbol || "NIFTY"} ${row.strike} ${option}`,
+        side: action,
+        qty: lot,
+        price: option === "CE" ? row.callLtp : row.putLtp,
+        product: "MIS",
+        type: "MARKET",
+        brokerId: data.activeBrokerId,
+      });
+    } finally {
+      setBusy("");
+    }
+  };
 
   return (
     <section className="card overflow-hidden p-4">
@@ -34,6 +55,12 @@ export function OptionChain() {
               <td className="py-2.5">
                 <div className="font-semibold">{formatNumber(row.callLtp)}</div>
                 <div className={cn("text-[10px]", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</div>
+                <MiniTrade
+                  busy={busy}
+                  id={`${row.strike}-CE`}
+                  onBuy={() => void trade("CE", "BUY", row)}
+                  onSell={() => void trade("CE", "SELL", row)}
+                />
               </td>
               <td className="py-2.5 text-center">
                 <div className="inline-flex rounded-md bg-[var(--bg)] px-2 py-1 font-bold">{row.strike}</div>
@@ -41,11 +68,32 @@ export function OptionChain() {
               <td className="py-2.5 text-right">
                 <div className="font-semibold">{formatNumber(row.putLtp)}</div>
                 <div className={cn("text-[10px]", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</div>
+                <div className="flex justify-end">
+                  <MiniTrade
+                    busy={busy}
+                    id={`${row.strike}-PE`}
+                    onBuy={() => void trade("PE", "BUY", row)}
+                    onSell={() => void trade("PE", "SELL", row)}
+                  />
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </section>
+  );
+}
+
+function MiniTrade({ busy, id, onBuy, onSell }: { busy: string; id: string; onBuy: () => void; onSell: () => void }) {
+  return (
+    <div className="mt-1 inline-flex gap-1">
+      <button type="button" disabled={Boolean(busy)} onClick={onBuy} className="h-5 rounded bg-emerald-500 px-1.5 text-[9px] font-bold text-white disabled:opacity-50">
+        {busy === `${id}-BUY` ? "..." : "BUY"}
+      </button>
+      <button type="button" disabled={Boolean(busy)} onClick={onSell} className="h-5 rounded bg-rose-500 px-1.5 text-[9px] font-bold text-white disabled:opacity-50">
+        {busy === `${id}-SELL` ? "..." : "SELL"}
+      </button>
+    </div>
   );
 }

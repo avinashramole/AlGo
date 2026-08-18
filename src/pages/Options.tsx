@@ -14,31 +14,41 @@ export function Options() {
   const rows = data.optionChain || [];
   const maxOi = Math.max(1, ...rows.map((row) => Math.max(row.callOi || 0, row.putOi || 0)));
   const [busy, setBusy] = useState("");
+  const [lots, setLots] = useState(1);
+  const [note, setNote] = useState("");
 
   const atm = rows.find((row) => row.atm);
   const spot = meta?.spot || data.indices[0]?.price || 0;
   const pcrText = meta?.pcr != null ? meta.pcr.toFixed(2) : "—";
   const atmIvText = meta?.atmIv ? `${meta.atmIv.toFixed(1)}%` : "—";
+  const lotSize = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
+  const qty = Math.max(1, lots) * lotSize;
 
-  const trade = async (side: "CE" | "PE", row: (typeof rows)[number]) => {
-    const key = `${row.strike}-${side}`;
+  const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof rows)[number]) => {
+    const key = `${row.strike}-${option}-${action}`;
     setBusy(key);
+    setNote("");
     try {
-      const ltp = side === "CE" ? row.callLtp : row.putLtp;
+      const ltp = option === "CE" ? row.callLtp : row.putLtp;
+      const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
       await order({
-        symbol: `${meta?.symbol || "NIFTY"} ${row.strike} ${side}`,
-        side: "BUY",
-        qty: underlyings.find((item) => item.id === meta?.symbol)?.lot || 65,
+        symbol,
+        side: action,
+        qty,
         price: ltp,
+        product: "MIS",
+        type: "MARKET",
         brokerId: data.activeBrokerId,
       });
+      setNote(`${action} ${symbol} · ${lots} lot × ${lotSize} = ${qty} qty @ ${formatNumber(ltp)}`);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Order failed");
     } finally {
       setBusy("");
     }
   };
 
   const sourceLabel = meta?.source === "dhan" ? "DHAN LIVE" : data.dhanFeed?.live ? "DHAN · DEMO FALLBACK" : "DEMO";
-
   const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
 
   return (
@@ -50,7 +60,7 @@ export function Options() {
             {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · {sourceLabel}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {underlyings.map((item) => (
             <button
               key={item.id}
@@ -75,6 +85,19 @@ export function Options() {
               </option>
             ))}
           </select>
+          <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-semibold">
+            Lots
+            <input
+              className="h-7 w-14 rounded border border-[var(--border)] bg-[var(--bg)] px-2 font-bold"
+              type="number"
+              min={1}
+              value={lots}
+              onChange={(event) => setLots(Math.max(1, Number(event.target.value) || 1))}
+            />
+            <span className="text-slate-400">
+              1 lot = {lotSize} · qty {qty}
+            </span>
+          </label>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -84,15 +107,16 @@ export function Options() {
         <Stat label="Max pain" value={meta?.maxPain ? formatNumber(meta.maxPain, 0) : "—"} />
         <Stat label="ATM IV" value={atmIvText} />
       </div>
+      {note ? <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold">{note}</div> : null}
       <section className="card overflow-x-auto">
-        <table className="w-full min-w-[980px] text-left text-xs">
+        <table className="w-full min-w-[1180px] text-left text-xs">
           <thead className="bg-[var(--bg)] text-[10px] uppercase tracking-wide text-slate-400">
             <tr>
-              <th colSpan={5} className="px-3 py-2 text-center font-bold text-up">
+              <th colSpan={6} className="px-3 py-2 text-center font-bold text-up">
                 CALLS
               </th>
               <th className="px-3 py-2 text-center font-bold">Strike</th>
-              <th colSpan={5} className="px-3 py-2 text-center font-bold text-down">
+              <th colSpan={6} className="px-3 py-2 text-center font-bold text-down">
                 PUTS
               </th>
             </tr>
@@ -102,7 +126,9 @@ export function Options() {
               <th className="px-3 py-2 font-semibold">IV</th>
               <th className="px-3 py-2 font-semibold">LTP</th>
               <th className="px-3 py-2 font-semibold">Chg</th>
+              <th className="px-3 py-2 font-semibold">Trade</th>
               <th className="px-3 py-2 text-center font-semibold">Strike</th>
+              <th className="px-3 py-2 text-right font-semibold">Trade</th>
               <th className="px-3 py-2 text-right font-semibold">Chg</th>
               <th className="px-3 py-2 text-right font-semibold">LTP</th>
               <th className="px-3 py-2 text-right font-semibold">IV</th>
@@ -119,36 +145,34 @@ export function Options() {
                 </td>
                 <td className="px-3 py-2 text-slate-500">{formatOi(row.callVol || 0)}</td>
                 <td className="px-3 py-2">{row.callIv ? `${row.callIv.toFixed(1)}` : "—"}</td>
-                <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    disabled={Boolean(busy)}
-                    onClick={() => void trade("CE", row)}
-                    className="font-bold text-up hover:underline"
-                    title="Buy call"
-                  >
-                    {formatNumber(row.callLtp)}
-                  </button>
-                </td>
+                <td className="px-3 py-2 font-bold text-up">{formatNumber(row.callLtp)}</td>
                 <td className={cn("px-3 py-2", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</td>
+                <td className="px-3 py-2">
+                  <TradeButtons
+                    busy={busy}
+                    strike={row.strike}
+                    option="CE"
+                    onTrade={(action) => void trade("CE", action, row)}
+                  />
+                </td>
                 <td className="px-3 py-2 text-center">
                   <div className={cn("inline-flex rounded-md px-2 py-1 font-bold", row.atm ? "bg-brand-500 text-white" : "bg-[var(--bg)]")}>
                     {row.strike}
                     {row.atm ? " ATM" : ""}
                   </div>
                 </td>
-                <td className={cn("px-3 py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
-                <td className="px-3 py-2 text-right">
-                  <button
-                    type="button"
-                    disabled={Boolean(busy)}
-                    onClick={() => void trade("PE", row)}
-                    className="font-bold text-down hover:underline"
-                    title="Buy put"
-                  >
-                    {formatNumber(row.putLtp)}
-                  </button>
+                <td className="px-3 py-2">
+                  <div className="flex justify-end">
+                    <TradeButtons
+                      busy={busy}
+                      strike={row.strike}
+                      option="PE"
+                      onTrade={(action) => void trade("PE", action, row)}
+                    />
+                  </div>
                 </td>
+                <td className={cn("px-3 py-2 text-right", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</td>
+                <td className="px-3 py-2 text-right font-bold text-down">{formatNumber(row.putLtp)}</td>
                 <td className="px-3 py-2 text-right">{row.putIv ? `${row.putIv.toFixed(1)}` : "—"}</td>
                 <td className="px-3 py-2 text-right text-slate-500">{formatOi(row.putVol || 0)}</td>
                 <td className="px-3 py-2 text-right">
@@ -161,8 +185,41 @@ export function Options() {
         </table>
       </section>
       <p className="text-xs text-slate-400">
-        Click a call or put LTP to send a MIS order on the active broker. Connect Dhan with an Access Token to load the live chain from DhanHQ.
+        Buy / Sell sends a MIS market order for {lots} lot ({qty} qty) on the active broker. Connect Dhan with an Access Token for the live chain.
       </p>
+    </div>
+  );
+}
+
+function TradeButtons({
+  busy,
+  strike,
+  option,
+  onTrade,
+}: {
+  busy: string;
+  strike: number;
+  option: "CE" | "PE";
+  onTrade: (action: "BUY" | "SELL") => void;
+}) {
+  return (
+    <div className="inline-flex gap-1">
+      <button
+        type="button"
+        disabled={Boolean(busy)}
+        onClick={() => onTrade("BUY")}
+        className="h-7 rounded-md bg-emerald-500 px-2 text-[10px] font-bold text-white disabled:opacity-50"
+      >
+        {busy === `${strike}-${option}-BUY` ? "..." : "BUY"}
+      </button>
+      <button
+        type="button"
+        disabled={Boolean(busy)}
+        onClick={() => onTrade("SELL")}
+        className="h-7 rounded-md bg-rose-500 px-2 text-[10px] font-bold text-white disabled:opacity-50"
+      >
+        {busy === `${strike}-${option}-SELL` ? "..." : "SELL"}
+      </button>
     </div>
   );
 }
@@ -180,10 +237,7 @@ function OiBar({ value, max, side }: { value: number; max: number; side: "call" 
   const width = Math.max(8, Math.round((value / max) * 100));
   return (
     <div className="mb-1 h-1.5 w-full overflow-hidden rounded bg-slate-100 dark:bg-slate-800">
-      <div
-        className={cn("h-full rounded", side === "call" ? "bg-emerald-400" : "ml-auto bg-rose-400")}
-        style={{ width: `${width}%` }}
-      />
+      <div className={cn("h-full rounded", side === "call" ? "bg-emerald-400" : "ml-auto bg-rose-400")} style={{ width: `${width}%` }} />
     </div>
   );
 }
