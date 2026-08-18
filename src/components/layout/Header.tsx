@@ -1,6 +1,7 @@
 import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { BrandMark } from "../BrandMark";
 import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
@@ -41,9 +42,9 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-[var(--border)] bg-[var(--card)] px-5">
-      <div className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-        Trade 2 Smart
-      </div>
+      <Link to="/" className="shrink-0" title="Trade 2 Smart">
+        <BrandMark variant="horizontal" size="md" theme={theme} />
+      </Link>
       <div className="relative mx-auto w-full max-w-xl">
         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
         <input

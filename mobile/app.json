@@ -8,9 +8,9 @@
     "userInterfaceStyle": "light",
     "scheme": "t2salgo",
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2f54eb"
+      "backgroundColor": "#05070c"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,7 +25,7 @@
     "android": {
       "package": "com.t2s.algo",
       "adaptiveIcon": {
-        "backgroundColor": "#2f54eb",
+        "backgroundColor": "#05070c",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

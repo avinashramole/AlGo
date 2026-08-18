@@ -119,7 +119,7 @@ export function Login() {
     <div className="t2s-login">
       <aside className="t2s-login-brand">
         <div className="t2s-login-copy">
-          <BrandMark size="md" />
+          <BrandMark variant="stacked" size="lg" theme="dark" />
           <h1>Trade from a live options desk.</h1>
           <p>One login for Gmail or mobile. Your name, email, and number stay on your profile after you sign in.</p>
           <ul className="t2s-login-points">
@@ -142,7 +142,7 @@ export function Login() {
       <section className="t2s-login-panel">
         <div className="t2s-login-card">
           <div className="t2s-login-mobile-brand">
-            <BrandMark size="sm" />
+            <BrandMark variant="stacked" size="sm" theme="dark" />
           </div>
           <h2 style={headingStyle}>{page === "signup" ? "Create your account" : "Welcome back"}</h2>
           <p style={subheadStyle}>{page === "signup" ? "Use Gmail or a 10-digit mobile number." : "Sign in with Gmail or mobile, then your password."}</p>

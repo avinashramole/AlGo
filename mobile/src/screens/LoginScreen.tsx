@@ -121,7 +121,7 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <BrandMark />
+        <BrandMark variant="stacked" />
         <Text style={styles.heading}>{page === "signup" ? "Create your account" : "Welcome back"}</Text>
         <Text style={styles.subhead}>
           {page === "signup" ? "Use Gmail or a 10-digit mobile number." : "Sign in with Gmail or mobile, then your password."}

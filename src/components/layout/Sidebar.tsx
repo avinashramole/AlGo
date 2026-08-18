@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { BrandMark } from "../BrandMark";
 import { useTheme } from "../../context/ThemeContext";
 import { cn } from "../../lib/format";
 
@@ -42,9 +43,9 @@ export function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-[68px] flex-col items-center border-r border-[var(--border)] bg-[var(--card)] py-3">
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-sm font-extrabold text-white shadow-card">
-        T2
-      </div>
+      <NavLink to="/" end title="Trade 2 Smart" className="mb-4 flex h-10 w-10 items-center justify-center">
+        <BrandMark variant="emblem" size="md" />
+      </NavLink>
       <nav className="flex flex-1 flex-col gap-1">
         {items.map((item) => (
           <NavLink

@@ -2,11 +2,12 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./src/AuthContext";
 import { MarketProvider } from "./src/MarketContext";
+import { BrandMark } from "./src/components/BrandMark";
 import { AlgoScreen } from "./src/screens/AlgoScreen";
 import { BrokersScreen } from "./src/screens/BrokersScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -51,8 +52,8 @@ function Root() {
   if (!ready) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
-        <ActivityIndicator color={colors.brand} />
-        <Text style={{ marginTop: 8, color: colors.muted }}>Starting T2S...</Text>
+        <BrandMark variant="emblem" />
+        <Text style={{ marginTop: 12, color: colors.muted }}>Starting T2S...</Text>
       </View>
     );
   }
