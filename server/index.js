@@ -555,6 +555,7 @@ app.use("/api", (req, res) => {
 
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
+  console.log("T2S Dhan orders: send-through (not blocked locally)");
   console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   try {
     const publicIp = await thisComputerPublicIpv4();

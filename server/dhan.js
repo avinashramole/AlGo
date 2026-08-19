@@ -88,21 +88,6 @@ function parseDhanIpPayload(json) {
   return { detectedIP, primaryIP, secondaryIP, ipMatchStatus, ordersAllowed };
 }
 
-function ipMismatch(ip) {
-  const saved = listedIps(ip);
-  return Boolean(ip?.detectedIP && saved.length && !saved.includes(ip.detectedIP));
-}
-
-function ipOrderHint(ip) {
-  if (ipMismatch(ip)) {
-    return ` Dhan saw ${ip.detectedIP}. Saved: ${listedIps(ip).join(" / ")}. Run npm start on this PC (Chrome localhost:5173). Ignore Vite 192.168.x.`;
-  }
-  if (ip?.detectedIP && listedIps(ip).includes(ip.detectedIP)) {
-    return ` Dhan already sees ${ip.detectedIP}, which is saved. Generate a new Access Token on web.dhan.co and paste it on Brokers. Do not add another IP.`;
-  }
-  return " If Brokers already shows your saved IP, generate a new Access Token on web.dhan.co and paste it. Do not add another IP.";
-}
-
 async function fetchDhanIp() {
   if (!accessToken) return null;
   try {
@@ -132,17 +117,21 @@ async function fetchDhanIp() {
   }
 }
 
-function isInvalidIpMessage(text) {
-  return /invalid ip|ip whitelist|whitelisted ip/i.test(String(text || ""));
+function describeIp(ip) {
+  if (!ip) return "getIP (none)";
+  const saved = listedIps(ip).join("/") || "none";
+  const allowed = ip.ordersAllowed === true ? "yes" : ip.ordersAllowed === false ? "no" : "—";
+  return `getIP sees ${ip.detectedIP || "—"} saved ${saved} allowed ${allowed}`;
 }
 
-async function rejectIfInvalidIp(error) {
-  const text = String(error?.message || "");
-  if (!isInvalidIpMessage(text)) return error;
-  const ip = await fetchDhanIp();
-  error.message = `Invalid IP.${ipOrderHint(ip)}`.trim();
-  error.status = error.status || 400;
-  return error;
+function formatPlaceError(error, ip, body) {
+  const raw = error?.body ? JSON.stringify(error.body).slice(0, 280) : "";
+  const sent = body
+    ? `sent ${body.transactionType} ${body.exchangeSegment} ${body.productType} ${body.orderType} qty ${body.quantity}`
+    : "";
+  return [String(error?.message || "Dhan order failed"), describeIp(ip), sent, raw ? `raw ${raw}` : ""]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function authHeaders(token, id) {
@@ -901,7 +890,7 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
-  await fetchDhanIp();
+  const ip = await fetchDhanIp();
   const body = {
     dhanClientId: String(clientId),
     correlationId: `t2s${Date.now()}`.slice(0, 30),
@@ -924,7 +913,8 @@ export async function placeDhanOrder(payload = {}) {
   try {
     result = await dhanPost("/orders", accessToken, clientId, body);
   } catch (error) {
-    throw await rejectIfInvalidIp(error);
+    error.message = formatPlaceError(error, ip, body);
+    throw error;
   }
   const data = result?.data && typeof result.data === "object" ? result.data : result || {};
   const orderId = String(data.orderId || data.order_id || result?.orderId || "");
@@ -932,7 +922,9 @@ export async function placeDhanOrder(payload = {}) {
   if (!orderId || status.toUpperCase() === "REJECTED") {
     const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
     error.status = 400;
-    throw await rejectIfInvalidIp(error);
+    error.body = result;
+    error.message = formatPlaceError(error, ip, body);
+    throw error;
   }
   try {
     await pullAccount();
@@ -995,8 +987,9 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     throw error;
   }
   accessToken = cleanToken;
-  clientId = profile.dhanClientId || cleanId;
+  clientId = String(profile.dhanClientId || profile.data?.dhanClientId || cleanId).trim();
   usedFallback = false;
+  console.log(`Dhan live client ${clientId}`);
 
   const fundsNum = (value) => {
     const n = Number(value);

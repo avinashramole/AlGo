@@ -9,26 +9,42 @@ if (typeof net.setDefaultAutoSelectFamily === "function") {
   net.setDefaultAutoSelectFamily(false);
 }
 
-/**
- * HTTPS call that always exits this PC over IPv4.
- * Node fetch() can still pick IPv6 even with ipv4first, and Dhan then
- * returns Invalid IP against the IPv4 whitelist.
- */
-export function ipv4Request(url, { method = "GET", headers = {}, body, timeoutMs = 20000 } = {}) {
-  return new Promise((resolve, reject) => {
-    const target = new URL(url);
-    const payload = body == null ? null : Buffer.from(String(body));
-    const nextHeaders = { ...headers };
-    if (payload) nextHeaders["Content-Length"] = String(payload.length);
+const loggedHosts = new Set();
 
+function lookupIPv4(hostname) {
+  return new Promise((resolve, reject) => {
+    dns.lookup(hostname, { family: 4, all: false }, (err, address) => {
+      if (err) reject(err);
+      else resolve(address);
+    });
+  });
+}
+
+/**
+ * HTTPS call that connects to the resolved IPv4 address (TLS SNI stays on the hostname).
+ * Node fetch() / Happy Eyeballs can still leave over IPv6, which Dhan rejects.
+ */
+export async function ipv4Request(url, { method = "GET", headers = {}, body, timeoutMs = 20000 } = {}) {
+  const target = new URL(url);
+  const address = await lookupIPv4(target.hostname);
+  if (!loggedHosts.has(target.hostname)) {
+    loggedHosts.add(target.hostname);
+    console.log(`T2S IPv4 connect ${target.hostname} -> ${address}`);
+  }
+  const payload = body == null ? null : Buffer.from(String(body));
+  const nextHeaders = { Host: target.hostname, ...headers };
+  if (payload) nextHeaders["Content-Length"] = String(payload.length);
+
+  return new Promise((resolve, reject) => {
     const req = https.request(
       {
         protocol: target.protocol,
-        hostname: target.hostname,
-        port: target.port || 443,
+        hostname: address,
+        port: Number(target.port) || 443,
         path: `${target.pathname}${target.search}`,
         method,
         headers: nextHeaders,
+        servername: target.hostname,
         family: 4,
       },
       (res) => {
