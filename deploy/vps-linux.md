@@ -162,6 +162,38 @@ If Chrome cannot open the domain, the hosting panel is still blocking 80/443. **
 
 ---
 
+## If SSH times out from Windows
+
+`Connection timed out` means your **PC** cannot reach port **22**. The VPS can still be up.
+
+1. Do **not** keep retrying from the same PC. That can ban your home IP.
+2. SSH user is **root**, not the hosting-panel name:
+
+```bat
+ssh root@66.116.248.198
+```
+
+`tradeadmin` is usually the website-panel login. It is not the SSH user unless you created it on Linux.
+
+3. Turn on your phone hotspot, join it from the PC, then run the same `ssh root@...` command. If that works, your home internet or a ban is blocking port 22.
+4. Open the VPS **hosting panel** in Chrome (not PowerShell). Look for **Console**, **VNC**, **KVM**, or **Terminal**. Login there as **root**.
+5. In that console, allow SSH and unban (skip any command that prints `command not found`):
+
+```bash
+systemctl start sshd || systemctl start ssh
+firewall-cmd --permanent --add-service=ssh
+firewall-cmd --reload
+csf -a YOUR.HOME.IP
+fail2ban-client set sshd unbanip YOUR.HOME.IP
+```
+
+Get **YOUR.HOME.IP** on the PC Chrome: https://api.ipify.org  
+Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443/4000.
+
+6. `C:\opt\t2s` is Windows. Linux commands belong in SSH or the web console, not in `PS C:\opt\t2s>`.
+
+---
+
 ## Later updates
 
 ```bash
