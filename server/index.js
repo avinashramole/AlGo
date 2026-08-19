@@ -63,6 +63,13 @@ loadEnv();
 
 const app = express();
 const port = Number(process.env.PORT) || 4000;
+const PREVIEW_ORDER_ERROR =
+  "This is a Cursor preview. Open Chrome on your PC at http://localhost:5173 (keep npm start running). Dhan BUY/SELL from a preview uses a different IP. Do not add another IP.";
+
+function isPreviewRequest(req) {
+  const origin = `${req.headers.origin || ""} ${req.headers.referer || ""}`;
+  return /cvm\.dev|cursor\.sh|ngrok|trycloudflare|githubpreview|github\.dev/i.test(origin);
+}
 
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
@@ -420,6 +427,10 @@ app.post("/api/orders", async (req, res) => {
   const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
   try {
     if (brokerId === "dhan" && isDhanLive()) {
+      if (isPreviewRequest(req)) {
+        res.status(400).json({ ok: false, live: false, error: PREVIEW_ORDER_ERROR });
+        return;
+      }
       const live = await placeDhanOrder(body);
       let order = snapshot().orders.find((row) => String(row.id) === String(live.orderId));
       if (!order) {
@@ -508,6 +519,10 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
       }
       if (pos.sim || pos.brokerId !== "dhan" || !pos.securityId || !String(pos.id).startsWith("dhan-pos-")) {
         res.status(400).json({ error: "LIVE mode only squares real Dhan positions." });
+        return;
+      }
+      if (isPreviewRequest(req)) {
+        res.status(400).json({ error: PREVIEW_ORDER_ERROR });
         return;
       }
       await placeDhanOrder({

@@ -31,6 +31,7 @@ import {
   marketWatch,
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
+import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
 
 const fallback: Snapshot = {
   indices,
@@ -166,6 +167,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
       },
       order: async (payload: Record<string, unknown>) => {
+        if (isRemotePreviewHost()) {
+          throw new Error(PREVIEW_DESK_MESSAGE);
+        }
         const result = await placeOrder(payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();

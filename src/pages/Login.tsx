@@ -5,6 +5,7 @@ import { BrandMark } from "../components/BrandMark";
 import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import type { SocialProvider } from "../api/client";
+import { PreviewDeskBanner } from "../lib/deskHost";
 import "../login.css";
 
 function looksLikeMobile(value: string) {
@@ -203,6 +204,7 @@ export function Login() {
 
   return (
     <div className="t2s-login">
+      <PreviewDeskBanner />
       <Watermark />
       <aside className="t2s-login-hero">
         <BrandMark variant="stacked" size="lg" theme="light" />
