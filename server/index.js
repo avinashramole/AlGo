@@ -1,4 +1,4 @@
-import "./ipv4.js";
+import { thisComputerPublicIpv4 } from "./ipv4.js";
 import cors from "cors";
 import express from "express";
 import fs from "node:fs";
@@ -555,6 +555,11 @@ app.use("/api", (req, res) => {
 
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
+  const publicIp = await thisComputerPublicIpv4();
+  if (publicIp) {
+    console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
+    console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
+  }
   const booted = await bootDhanFromEnv();
   if (booted) {
     console.log("Dhan live feed started from DHAN_ACCESS_TOKEN");

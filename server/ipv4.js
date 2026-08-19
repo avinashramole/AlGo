@@ -7,3 +7,13 @@ dns.setDefaultResultOrder("ipv4first");
 if (typeof net.setDefaultAutoSelectFamily === "function") {
   net.setDefaultAutoSelectFamily(false);
 }
+
+export async function thisComputerPublicIpv4() {
+  try {
+    const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(5000) });
+    const body = await res.json();
+    return String(body.ip || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
