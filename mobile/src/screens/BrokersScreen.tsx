@@ -2,7 +2,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useState } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
-import { colors, formatNumber, fundsCaption } from "../theme";
+import { colors, fundsCaption } from "../theme";
 
 export function BrokersScreen() {
   const { data, connect, disconnect, activate } = useMarket();
@@ -10,16 +10,24 @@ export function BrokersScreen() {
   const feed = data.dhanFeed;
   const [clientId, setClientId] = useState("");
   const [secret, setSecret] = useState("");
+  const [dhanClientId, setDhanClientId] = useState("");
+  const [dhanToken, setDhanToken] = useState("");
   const [target, setTarget] = useState<string | null>(null);
+  const targetBroker = brokers.find((item) => item.id === target);
+  const clientLocked = Boolean(targetBroker?.liveFeed || (targetBroker && targetBroker.id !== "dhan" && targetBroker.connected));
 
   const openForm = (id: string) => {
+    const broker = brokers.find((item) => item.id === id);
     setTarget(id);
     if (id === "dhan") {
-      setClientId(brokers.find((item) => item.id === "dhan")?.clientId || feed?.clientId || "");
+      setClientId(broker?.liveFeed ? broker.clientId || feed?.clientId || "" : dhanClientId || broker?.clientId || "");
+      setSecret("");
+    } else if (broker?.connected) {
+      setClientId(broker.clientId || "");
       setSecret("");
     } else {
-      setClientId("demo");
-      setSecret("demo123");
+      setClientId("");
+      setSecret("");
     }
   };
 
@@ -33,6 +41,15 @@ export function BrokersScreen() {
       }
       setTarget(null);
       setSecret("");
+    } catch (error) {
+      Alert.alert("Connect failed", error instanceof Error ? error.message : "Check Client ID and Access Token");
+    }
+  };
+
+  const connectDhanCard = async () => {
+    try {
+      await connect("dhan", { clientId: dhanClientId, accessToken: dhanToken, apiKey: dhanToken });
+      setDhanToken("");
     } catch (error) {
       Alert.alert("Connect failed", error instanceof Error ? error.message : "Check Client ID and Access Token");
     }
@@ -66,55 +83,93 @@ export function BrokersScreen() {
               {broker.main ? (broker.liveFeed ? "MAIN LIVE" : "MAIN") : broker.active ? "ACTIVE" : broker.status}
             </Text>
           </View>
-          {broker.connected && (
+          {broker.id === "dhan" && broker.liveFeed ? (
             <Text style={styles.muted}>
               {broker.clientId || "No client yet"} · Funds {fundsCaption(broker)}
             </Text>
-          )}
-          <View style={styles.actions}>
-            {broker.id === "dhan" ? (
-              <>
-                <Pressable style={styles.primary} onPress={() => openForm("dhan")}>
-                  <Text style={styles.primaryText}>{broker.liveFeed ? "Update token" : "Connect live feed"}</Text>
-                </Pressable>
-                {broker.liveFeed && (
-                  <Pressable style={styles.ghost} onPress={() => void disconnect("dhan")}>
-                    <Text style={styles.ghostText}>Stop live</Text>
-                  </Pressable>
-                )}
-              </>
-            ) : broker.connected ? (
-              <>
-                {!broker.active && (
-                  <Pressable style={styles.primary} onPress={() => void activate(broker.id)}>
-                    <Text style={styles.primaryText}>Set active</Text>
-                  </Pressable>
-                )}
-                {broker.id !== "paper" && (
-                  <Pressable style={styles.ghost} onPress={() => void disconnect(broker.id)}>
-                    <Text style={styles.ghostText}>Disconnect</Text>
-                  </Pressable>
-                )}
-              </>
-            ) : (
-              <Pressable style={styles.primary} onPress={() => openForm(broker.id)}>
-                <Text style={styles.primaryText}>Connect sandbox</Text>
+          ) : broker.id !== "dhan" && broker.connected ? (
+            <Text style={styles.muted}>
+              {broker.clientId || "No client yet"} · Funds {fundsCaption(broker)}
+            </Text>
+          ) : null}
+          {broker.id === "dhan" && !broker.liveFeed ? (
+            <View>
+              <TextInput
+                style={styles.input}
+                value={dhanClientId}
+                onChangeText={setDhanClientId}
+                placeholder="Client ID"
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={styles.input}
+                value={dhanToken}
+                onChangeText={setDhanToken}
+                placeholder="Access token"
+                autoCapitalize="none"
+                secureTextEntry
+              />
+              <Pressable style={[styles.primary, { marginTop: 10 }]} onPress={() => void connectDhanCard()}>
+                <Text style={styles.primaryText}>Connect live feed</Text>
               </Pressable>
-            )}
-          </View>
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              {broker.id === "dhan" ? (
+                <>
+                  <Pressable style={styles.primary} onPress={() => openForm("dhan")}>
+                    <Text style={styles.primaryText}>Update token</Text>
+                  </Pressable>
+                  {broker.liveFeed && (
+                    <Pressable
+                      style={styles.ghost}
+                      onPress={() => {
+                        const last = broker.clientId || "";
+                        void disconnect("dhan").then(() => {
+                          if (last) setDhanClientId(last);
+                        });
+                      }}
+                    >
+                      <Text style={styles.ghostText}>Stop live</Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : broker.connected ? (
+                <>
+                  {!broker.active && (
+                    <Pressable style={styles.primary} onPress={() => void activate(broker.id)}>
+                      <Text style={styles.primaryText}>Set active</Text>
+                    </Pressable>
+                  )}
+                  {broker.id !== "paper" && (
+                    <Pressable style={styles.ghost} onPress={() => void disconnect(broker.id)}>
+                      <Text style={styles.ghostText}>Disconnect</Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : (
+                <Pressable style={styles.primary} onPress={() => openForm(broker.id)}>
+                  <Text style={styles.primaryText}>Connect sandbox</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         </Card>
       ))}
       {target && (
         <Card>
           <Text style={styles.name}>
-            {target === "dhan" ? "Dhan Access Token" : `Connect ${brokers.find((item) => item.id === target)?.name}`}
+            {target === "dhan" ? "Update Dhan access token" : `Connect ${brokers.find((item) => item.id === target)?.name}`}
           </Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, clientLocked ? styles.locked : null]}
             value={clientId}
-            onChangeText={setClientId}
+            onChangeText={(value) => {
+              if (!clientLocked) setClientId(value);
+            }}
             placeholder="Client ID"
             autoCapitalize="none"
+            editable={!clientLocked}
           />
           <TextInput
             style={styles.input}
@@ -157,4 +212,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
     backgroundColor: colors.bg,
   },
+  locked: { backgroundColor: "#eef2f6", color: colors.muted },
 });
