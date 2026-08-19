@@ -26,7 +26,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body.error ||
         (response.status === 404
           ? "API route missing. Stop the old process on port 4000 and run npm start again."
-          : `Request failed ${response.status}`),
+          : response.status === 502 || response.status === 503 || response.status === 504
+            ? "API is not running. Keep npm start open. Open http://localhost:5173"
+            : `Request failed ${response.status}`),
     );
   }
   return (body as T) || ({} as T);
@@ -41,6 +43,7 @@ export type Snapshot = {
     spark: number[];
     future?: number;
     vwap?: number;
+    futureVwap?: number;
     prevClose?: number;
     securityId?: number;
     indexId?: number;
@@ -55,10 +58,12 @@ export type Snapshot = {
     callLtp: number;
     callChg: number;
     callOi?: number;
+    callVwap?: number;
     callId?: number;
     putLtp: number;
     putChg: number;
     putOi?: number;
+    putVwap?: number;
     putId?: number;
     atm?: boolean;
   }>;
@@ -223,6 +228,13 @@ export type Snapshot = {
     profileName: string | null;
     clientId?: string | null;
     quoteCount?: number;
+    ipCheck?: {
+      detectedIP: string;
+      primaryIP: string;
+      secondaryIP: string;
+      ipMatchStatus: string;
+      ordersAllowed: boolean;
+    } | null;
   };
   futures?: Array<{
     root: string;

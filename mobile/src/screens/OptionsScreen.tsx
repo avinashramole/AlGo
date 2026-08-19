@@ -37,6 +37,7 @@ export function OptionsScreen() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        kind: "option",
         option,
         strike: row.strike,
         expiry: meta?.expiry,
@@ -73,7 +74,8 @@ export function OptionsScreen() {
   };
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+    <View style={styles.page}>
+      <View style={styles.head}>
       <Text style={styles.title}>Option Chain</Text>
       <Text style={styles.muted}>
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
@@ -106,20 +108,32 @@ export function OptionsScreen() {
           </Pressable>
         ))}
       </ScrollView>
-      {futures.map((row) => (
-        <Card key={`${row.root}-${row.expiry}`}>
-          <Text style={styles.strike}>{row.name || row.symbol}</Text>
-          <Text style={styles.muted}>{row.segment} · lot {row.lot}</Text>
-          <View style={styles.actions}>
-            <Pressable style={styles.buy} onPress={() => void tradeFuture(row, "BUY")}>
-              <Text style={styles.actionText}>BUY</Text>
-            </Pressable>
-            <Pressable style={styles.sell} onPress={() => void tradeFuture(row, "SELL")}>
-              <Text style={styles.actionText}>SELL</Text>
-            </Pressable>
-          </View>
-        </Card>
-      ))}
+      {futures.map((row) => {
+        const index =
+          data.indices.find((item) => item.symbol === row.parent) ||
+          data.indices.find((item) => item.symbol === row.root) ||
+          data.indices.find((item) => row.root === "NIFTY" && item.symbol === "NIFTY 50");
+        const ltp = Number(index?.future) > 0 ? Number(index?.future) : Number(index?.price) || 0;
+        const vwap = Number(index?.futureVwap || index?.vwap) > 0 ? Number(index?.futureVwap || index?.vwap) : ltp;
+        return (
+          <Card key={`${row.root}-${row.expiry}`}>
+            <Text style={styles.strike}>{row.name || row.symbol}</Text>
+            <Text style={styles.muted}>{row.segment} · lot {row.lot}</Text>
+            <View style={styles.actions}>
+              <Text style={styles.price}>{formatNumber(ltp)}</Text>
+              <Text style={[styles.vwap, { color: vwapColor(vwap, ltp) }]}>{formatNumber(vwap)}</Text>
+              <Pressable style={styles.buy} onPress={() => void tradeFuture(row, "BUY")}>
+                <Text style={styles.actionText}>BUY</Text>
+              </Pressable>
+              <Pressable style={styles.sell} onPress={() => void tradeFuture(row, "SELL")}>
+                <Text style={styles.actionText}>SELL</Text>
+              </Pressable>
+            </View>
+          </Card>
+        );
+      })}
+      </View>
+      <ScrollView style={styles.chain} contentContainerStyle={styles.chainContent}>
       {visibleRows.map((row) => (
         <Card key={row.strike}>
           <Text style={styles.strike}>
@@ -161,13 +175,16 @@ export function OptionsScreen() {
           </View>
         </Card>
       ))}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 40 },
+  head: { paddingHorizontal: 16, paddingTop: 16 },
+  chain: { flex: 1, minHeight: 0 },
+  chainContent: { paddingHorizontal: 16, paddingBottom: 40 },
   title: { fontSize: 22, fontWeight: "800" },
   muted: { color: colors.muted, marginTop: 4, marginBottom: 8, fontSize: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },

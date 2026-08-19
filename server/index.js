@@ -1,3 +1,4 @@
+import { thisComputerPublicIpv4 } from "./ipv4.js";
 import cors from "cors";
 import express from "express";
 import fs from "node:fs";
@@ -447,7 +448,11 @@ app.post("/api/orders", async (req, res) => {
       snapshot: snapshot(),
     });
   } catch (error) {
-    res.status(error.status || 400).json({ ok: false, live: false, error: error.message || "Order failed" });
+    res.status(error.status || 400).json({
+      ok: false,
+      live: false,
+      error: String(error.message || "Order failed"),
+    });
   }
 });
 
@@ -550,13 +555,19 @@ app.use("/api", (req, res) => {
 
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
-  const booted = await bootDhanFromEnv();
-  if (booted) {
-    console.log("Dhan live feed started from DHAN_ACCESS_TOKEN");
-  } else if (process.env.DHAN_ACCESS_TOKEN) {
-    console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
-  }
+  console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   try {
+    const publicIp = await thisComputerPublicIpv4();
+    if (publicIp) {
+      console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
+      console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
+    }
+    const booted = await bootDhanFromEnv();
+    if (booted) {
+      console.log("Dhan live feed started from DHAN_ACCESS_TOKEN");
+    } else if (process.env.DHAN_ACCESS_TOKEN) {
+      console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
+    }
     const futs = await resolveFrontFutures();
     const catalog = contractCatalog();
     console.log(
@@ -564,6 +575,6 @@ app.listen(port, "0.0.0.0", async () => {
     );
     await selectOptionDesk({ symbol: "NIFTY" }).catch(() => undefined);
   } catch (error) {
-    console.log(`Scrip master not loaded: ${error.message}`);
+    console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }
 });

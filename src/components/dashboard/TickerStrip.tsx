@@ -58,8 +58,13 @@ export function TickerStrip() {
                 </div>
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">VWAP</div>
-                  <div className={cn("text-sm font-bold", vwapTone(item.vwap || item.price, item.price))}>
-                    {formatNumber(item.vwap || item.price)}
+                  <div
+                    className={cn(
+                      "text-sm font-bold",
+                      vwapTone(item.futureVwap || item.vwap || item.future || item.price, item.future || item.price),
+                    )}
+                  >
+                    {formatNumber(item.futureVwap || item.vwap || item.price)}
                   </div>
                   <div className="text-[10px] text-slate-400">{item.lot ? `1 lot = ${item.lot}` : ""}</div>
                 </div>

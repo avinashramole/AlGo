@@ -26,6 +26,7 @@ export function OptionChain() {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        kind: "option",
         option,
         strike: row.strike,
         expiry: data.optionMeta?.expiry,

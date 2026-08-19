@@ -1,3 +1,4 @@
+import { ipv4Request } from "./ipv4.js";
 import { Buffer } from "node:buffer";
 import { WebSocket } from "ws";
 import { markDhanLive } from "./brokers.js";
@@ -59,6 +60,54 @@ function tokenHint(token) {
   return `••••${clean.slice(-4)}`;
 }
 
+function listedIps(ip) {
+  return [ip?.primaryIP, ip?.secondaryIP].filter((value) => value && value !== "NA");
+}
+
+function ipOrderHint(ip) {
+  if (!ip?.detectedIP) {
+    return " Generate a new Access Token on web.dhan.co after the static IP was saved, then paste it on Brokers. Quotes can still run.";
+  }
+  const saved = listedIps(ip);
+  if (ip.ordersAllowed) {
+    return ` Dhan sees ${ip.detectedIP} and that IP is already saved. Generate a new Access Token on web.dhan.co now, then paste it on Brokers.`;
+  }
+  return ` Dhan saw ${ip.detectedIP}. Saved on Dhan: ${saved.join(" / ") || "none"}. Those must be the same. Generate a new Access Token after the IP was saved, then paste it on Brokers.`;
+}
+
+async function fetchDhanIp() {
+  if (!accessToken) return null;
+  try {
+    const json = await dhanGet("/ip/getIP", accessToken, clientId);
+    const data = json?.data && typeof json.data === "object" ? json.data : json || {};
+    const ip = {
+      detectedIP: String(data.detectedIP || data.detectedIp || ""),
+      primaryIP: String(data.primaryIP || data.primaryIp || ""),
+      secondaryIP: String(data.secondaryIP || data.secondaryIp || ""),
+      ipMatchStatus: String(data.ipMatchStatus || ""),
+      ordersAllowed: Boolean(data.ordersAllowed),
+    };
+    if (!ip.detectedIP && !ip.primaryIP) return null;
+    setDhanFeed({ ipCheck: ip });
+    const saved = listedIps(ip).join(" / ") || "none";
+    console.log(
+      `Dhan IP check: sees ${ip.detectedIP || "unknown"} · saved ${saved} · orders ${ip.ordersAllowed ? "allowed" : "blocked"}`,
+    );
+    return ip;
+  } catch {
+    return null;
+  }
+}
+
+async function rejectIfInvalidIp(error) {
+  const text = String(error?.message || "");
+  if (!/invalid ip|dh-905|whitelist/i.test(text)) return error;
+  const ip = await fetchDhanIp();
+  error.message = `Invalid IP.${ipOrderHint(ip)}`.trim();
+  error.status = error.status || 400;
+  return error;
+}
+
 function authHeaders(token, id) {
   const headers = {
     Accept: "application/json",
@@ -68,10 +117,52 @@ function authHeaders(token, id) {
   return headers;
 }
 
-async function dhanGet(path, token, id) {
-  const res = await fetch(`${DHAN_API}${path}`, {
-    headers: authHeaders(token, id),
-  });
+function remarkText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return String(value.error_message || value.errorMessage || value.message || value.error_code || value.errorCode || "");
+}
+
+function dhanErrorText(json, fallback) {
+  const nested = json?.error && typeof json.error === "object" ? json.error : null;
+  const data = json?.data && typeof json.data === "object" ? json.data : null;
+  const message =
+    json?.errorMessage ||
+    json?.error_message ||
+    nested?.errorMessage ||
+    nested?.error_message ||
+    remarkText(json?.remarks) ||
+    data?.errorMessage ||
+    data?.error_message ||
+    json?.message ||
+    (typeof json?.raw === "string" && json.raw.length < 180 ? json.raw : "") ||
+    fallback;
+  return clarifyDhanOrderError(String(message || fallback || "Dhan request failed"));
+}
+
+function clarifyDhanOrderError(message) {
+  if (!/invalid ip|dh-905|whitelist|not authorised|not authorized/i.test(message)) return message;
+  return "Invalid IP — Dhan did not place this order. Quotes can still run. BUY/SELL uses the static IP already saved on web.dhan.co → Access DhanHQ APIs. If that IP is already there, regenerate the Access Token and paste it on Brokers.";
+}
+
+function dhanFailed(json, res) {
+  if (res && !res.ok) return true;
+  if (!json || typeof json !== "object") return false;
+  const status = String(json.status || json.Status || "").toLowerCase();
+  if (status === "failure" || status === "failed" || status === "error") return true;
+  if (json.errorCode || json.errorType || json.error?.errorCode || json.error?.errorType) return true;
+  const orderStatus = String(json.orderStatus || json.data?.orderStatus || json.order_status || "").toUpperCase();
+  return orderStatus === "REJECTED";
+}
+
+function throwDhanError(json, res) {
+  const error = new Error(dhanErrorText(json, `Dhan API ${res?.status || ""}`.trim()));
+  error.status = res?.ok ? 400 : res?.status || 400;
+  error.body = json;
+  throw error;
+}
+
+async function readDhanJson(res) {
   const text = await res.text();
   let json = null;
   try {
@@ -79,23 +170,19 @@ async function dhanGet(path, token, id) {
   } catch {
     json = { raw: text };
   }
-  if (!res.ok) {
-    const message =
-      json?.errorMessage ||
-      json?.error?.errorMessage ||
-      json?.message ||
-      json?.remarks ||
-      `Dhan API ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    error.body = json;
-    throw error;
-  }
+  if (dhanFailed(json, res)) throwDhanError(json, res);
   return json;
 }
 
+async function dhanGet(path, token, id) {
+  const res = await ipv4Request(`${DHAN_API}${path}`, {
+    headers: authHeaders(token, id),
+  });
+  return readDhanJson(res);
+}
+
 async function dhanPost(path, token, id, body) {
-  const res = await fetch(`${DHAN_API}${path}`, {
+  const res = await ipv4Request(`${DHAN_API}${path}`, {
     method: "POST",
     headers: {
       ...authHeaders(token, id),
@@ -103,52 +190,15 @@ async function dhanPost(path, token, id, body) {
     },
     body: JSON.stringify(body),
   });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  if (!res.ok) {
-    const message =
-      json?.errorMessage ||
-      json?.error?.errorMessage ||
-      json?.message ||
-      json?.remarks ||
-      `Dhan API ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    error.body = json;
-    throw error;
-  }
-  return json;
+  return readDhanJson(res);
 }
 
 async function dhanDelete(path, token, id) {
-  const res = await fetch(`${DHAN_API}${path}`, {
+  const res = await ipv4Request(`${DHAN_API}${path}`, {
     method: "DELETE",
     headers: authHeaders(token, id),
   });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  if (!res.ok) {
-    const message =
-      json?.errorMessage ||
-      json?.error?.errorMessage ||
-      json?.message ||
-      json?.remarks ||
-      `Dhan API ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    error.body = json;
-    throw error;
-  }
+  const json = await readDhanJson(res);
   return json || { ok: true };
 }
 
@@ -815,31 +865,49 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
-  const result = await dhanPost("/orders", accessToken, clientId, {
-    dhanClientId: clientId,
-    correlationId: `t2s${Date.now()}`.slice(0, 30),
-    transactionType: payload.side === "SELL" ? "SELL" : "BUY",
-    exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
-    productType: productType(payload.product),
-    orderType,
-    validity: "DAY",
-    securityId,
-    quantity: qty,
-    disclosedQuantity: 0,
-    price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
-    triggerPrice: 0,
-    afterMarketOrder: false,
-  });
+  const ip = await fetchDhanIp();
+  if (ip && !ip.ordersAllowed) {
+    const error = new Error(`Invalid IP.${ipOrderHint(ip)}`);
+    error.status = 400;
+    throw error;
+  }
+  let result;
+  try {
+    result = await dhanPost("/orders", accessToken, clientId, {
+      dhanClientId: clientId,
+      correlationId: `t2s${Date.now()}`.slice(0, 30),
+      transactionType: payload.side === "SELL" ? "SELL" : "BUY",
+      exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
+      productType: productType(payload.product),
+      orderType,
+      validity: "DAY",
+      securityId: String(securityId),
+      quantity: qty,
+      disclosedQuantity: 0,
+      price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
+      triggerPrice: 0,
+      afterMarketOrder: false,
+    });
+  } catch (error) {
+    throw await rejectIfInvalidIp(error);
+  }
+  const data = result?.data && typeof result.data === "object" ? result.data : result || {};
+  const orderId = String(data.orderId || data.order_id || result?.orderId || "");
+  const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
+  if (!orderId || status.toUpperCase() === "REJECTED") {
+    const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
+    error.status = 400;
+    throw await rejectIfInvalidIp(error);
+  }
   try {
     await pullAccount();
   } catch {
     /* order is still at Dhan */
   }
-  const data = result?.data || result || {};
   return {
-    orderId: String(data.orderId || data.order_id || result?.orderId || ""),
-    status: data.orderStatus || data.order_status || result?.orderStatus || "TRANSIT",
-    securityId,
+    orderId,
+    status: status || "TRANSIT",
+    securityId: String(securityId),
     filledQty: Number(data.filledQty || result?.filledQty || 0),
     raw: result,
   };
@@ -923,9 +991,11 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
+    ipCheck: null,
   });
   clearSimulatedDesk();
   startLiveLoop();
+  await fetchDhanIp();
   return { profile, funds, tokenHint: tokenHint(accessToken) };
 }
 
@@ -942,6 +1012,7 @@ export function stopDhanLive() {
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
+    ipCheck: null,
   });
 }
 
