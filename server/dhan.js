@@ -65,12 +65,14 @@ function listedIps(ip) {
 }
 
 function ipOrderHint(ip) {
-  if (!ip?.detectedIP) return "";
+  if (!ip?.detectedIP) {
+    return " Generate a new Access Token on web.dhan.co after the static IP was saved, then paste it on Brokers. Quotes can still run.";
+  }
   const saved = listedIps(ip);
   if (ip.ordersAllowed) {
-    return ` Dhan sees this computer as ${ip.detectedIP} and lists it. If BUY/SELL still says Invalid IP, generate a new Access Token after that IP was saved, then paste it on Brokers.`;
+    return ` Dhan sees ${ip.detectedIP} and that IP is already saved. Generate a new Access Token on web.dhan.co now, then paste it on Brokers.`;
   }
-  return ` Dhan saw ${ip.detectedIP}. Saved on Dhan: ${saved.join(" / ") || "none"}. BUY/SELL uses this computer (the T2S API), not the browser. Quotes can still run.`;
+  return ` Dhan saw ${ip.detectedIP}. Saved on Dhan: ${saved.join(" / ") || "none"}. Those must be the same. Generate a new Access Token after the IP was saved, then paste it on Brokers.`;
 }
 
 async function fetchDhanIp() {
@@ -859,6 +861,12 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
+  const ip = await fetchDhanIp();
+  if (ip && !ip.ordersAllowed) {
+    const error = new Error(`Invalid IP.${ipOrderHint(ip)}`);
+    error.status = 400;
+    throw error;
+  }
   let result;
   try {
     result = await dhanPost("/orders", accessToken, clientId, {
