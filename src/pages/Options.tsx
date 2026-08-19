@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { FuturesTape } from "../components/dashboard/FuturesTape";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, isNseSessionOpen } from "../lib/format";
@@ -105,7 +104,6 @@ export function Options() {
             </>
           )}
         </div>
-        <FuturesTape />
       </div>
       <OptionIdsTape lots={lots} />
     </div>
