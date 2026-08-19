@@ -81,8 +81,8 @@ export function BrokersScreen() {
         ) : null}
         {feed?.ipCheck && !feed.ipCheck.ordersAllowed ? (
           <Text style={{ color: colors.down, marginTop: 6, fontSize: 12 }}>
-            Invalid IP means Dhan saw {feed.ipCheck.detectedIP || "another IP"}, not your saved whitelist. Run T2S on
-            that computer. A Cursor preview uses a different IP.
+            Invalid IP means Dhan saw {feed.ipCheck.detectedIP || "another IP"}, not your saved whitelist. Run T2S with
+            npm start on this PC. If those two numbers already match, generate a new Access Token and paste it here.
           </Text>
         ) : null}
         {feed?.error ? <Text style={{ color: colors.down, marginTop: 6, fontSize: 12 }}>{feed.error}</Text> : null}

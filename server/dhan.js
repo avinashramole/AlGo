@@ -1,4 +1,4 @@
-import "./ipv4.js";
+import { ipv4Request } from "./ipv4.js";
 import { Buffer } from "node:buffer";
 import { WebSocket } from "ws";
 import { markDhanLive } from "./brokers.js";
@@ -89,6 +89,10 @@ async function fetchDhanIp() {
     };
     if (!ip.detectedIP && !ip.primaryIP) return null;
     setDhanFeed({ ipCheck: ip });
+    const saved = listedIps(ip).join(" / ") || "none";
+    console.log(
+      `Dhan IP check: sees ${ip.detectedIP || "unknown"} · saved ${saved} · orders ${ip.ordersAllowed ? "allowed" : "blocked"}`,
+    );
     return ip;
   } catch {
     return null;
@@ -171,14 +175,14 @@ async function readDhanJson(res) {
 }
 
 async function dhanGet(path, token, id) {
-  const res = await fetch(`${DHAN_API}${path}`, {
+  const res = await ipv4Request(`${DHAN_API}${path}`, {
     headers: authHeaders(token, id),
   });
   return readDhanJson(res);
 }
 
 async function dhanPost(path, token, id, body) {
-  const res = await fetch(`${DHAN_API}${path}`, {
+  const res = await ipv4Request(`${DHAN_API}${path}`, {
     method: "POST",
     headers: {
       ...authHeaders(token, id),
@@ -190,7 +194,7 @@ async function dhanPost(path, token, id, body) {
 }
 
 async function dhanDelete(path, token, id) {
-  const res = await fetch(`${DHAN_API}${path}`, {
+  const res = await ipv4Request(`${DHAN_API}${path}`, {
     method: "DELETE",
     headers: authHeaders(token, id),
   });

@@ -99,9 +99,9 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          Quotes start as soon as the token is live. BUY/SELL is checked against the IP of <b>this computer</b> (the T2S
-          API), not the browser. If Dhan already has your IP saved but BUY/SELL says Invalid IP, Dhan is seeing a
-          different IP than the one listed.
+          Quotes start as soon as the token is live. BUY/SELL is checked against the public IPv4 of <b>this computer</b>{" "}
+          (the T2S API on port 4000), not Chrome and not Vite&apos;s 192.168.x Network line. If Dhan already has your IP
+          saved but BUY/SELL says Invalid IP, generate a new Access Token after that IP was saved and paste it here.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
@@ -124,9 +124,10 @@ export function Brokers() {
         {feed?.ipCheck && !feed.ipCheck.ordersAllowed ? (
           <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">
             Invalid IP happens because Dhan saw <b>{feed.ipCheck.detectedIP || "a different IP"}</b>, not the saved{" "}
-            {feed.ipCheck.primaryIP || "whitelist"}. Run T2S with <code>npm start</code> on the computer that has that
-            saved IP. A Cursor preview uses a different IP. If the numbers already match, generate a new Access Token
-            after the IP was saved and paste it here.
+            {feed.ipCheck.primaryIP || "whitelist"}. Keep <code>npm start</code> open on this PC (Chrome at
+            localhost:5173). Ignore Vite 192.168.x — Dhan never uses that. A Cursor preview uses a different IP. If
+            Dhan sees and saved primary already match, generate a new Access Token after the IP was saved and paste it
+            here.
           </div>
         ) : null}
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}
