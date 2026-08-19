@@ -86,6 +86,7 @@ export type Snapshot = {
     spark: number[];
     future?: number;
     vwap?: number;
+    futureVwap?: number;
     prevClose?: number;
     securityId?: number;
     indexId?: number;

@@ -92,13 +92,13 @@ export function formatOi(value: number) {
   return Math.round(n).toLocaleString("en-IN");
 }
 
-/** VWAP vs LTP (base): above LTP is green, below LTP is red. */
+/** VWAP vs LTP: LTP < VWAP is red, LTP > VWAP is green. Same on options and index futures. */
 export function vwapTone(vwap: number, base: number) {
   const v = Number(vwap);
   const b = Number(base);
   if (!Number.isFinite(v) || !Number.isFinite(b) || b <= 0) return "text-slate-400";
-  if (v > b) return "text-up";
-  if (v < b) return "text-down";
+  if (b < v) return "text-down";
+  if (b > v) return "text-up";
   return "text-slate-400";
 }
 

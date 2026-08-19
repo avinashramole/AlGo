@@ -7,6 +7,7 @@ export type IndexQuote = {
   spark: number[];
   future?: number;
   vwap?: number;
+  futureVwap?: number;
   prevClose?: number;
 };
 
