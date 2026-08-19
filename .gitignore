@@ -11,3 +11,4 @@ tsconfig.node.tsbuildinfo
 server/.env
 server/data/users.json
 server/data/gmail.json
+*.zip
