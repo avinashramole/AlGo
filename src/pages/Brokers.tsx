@@ -4,7 +4,7 @@ import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
 
 export function Brokers() {
-  const { data, connect, disconnect, activate } = useMarket();
+  const { data, connect, enableAuto, disconnect, activate } = useMarket();
   const brokers = data.brokers || [];
   const feed = data.dhanFeed;
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
@@ -12,6 +12,8 @@ export function Brokers() {
   const [secret, setSecret] = useState("");
   const [dhanClientId, setDhanClientId] = useState("");
   const [dhanToken, setDhanToken] = useState("");
+  const [dhanPin, setDhanPin] = useState("");
+  const [dhanTotp, setDhanTotp] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -60,6 +62,24 @@ export function Brokers() {
     }
   };
 
+  const connectDhanAuto = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await enableAuto({
+        clientId: dhanClientId || feed?.clientId || "",
+        pin: dhanPin,
+        totpSecret: dhanTotp,
+      });
+      setDhanPin("");
+      setDhanTotp("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate token");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const connectDhanCard = async () => {
     setBusy(true);
     setError("");
@@ -98,12 +118,11 @@ export function Brokers() {
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          Quotes start as soon as the token is live. BUY/SELL uses the public IPv4 of this PC (port 4000), not Chrome
-          and not Vite 192.168.x. Your Static IP 1 is already saved. If BUY/SELL fails, read the exact Dhan message —
-          DH-905 is often a bad order field, not a missing IP.
+          Dhan Access Tokens last <b>24 hours</b>. Paste a token once, or save PIN + TOTP secret so T2S generates a new
+          token and keeps LIVE after a VPS restart. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste
+          the <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
         </p>
-        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
           <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
           <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
@@ -112,6 +131,20 @@ export function Brokers() {
             value={feed?.lastTickAt ? new Date(feed.lastTickAt).toLocaleTimeString("en-IN") : "—"}
           />
           <Mini label="Profile" value={feed?.profileName || feed?.clientId || "—"} />
+          <Mini
+            label="Auto token"
+            value={
+              feed?.autoMode === "generate" ? "PIN + TOTP" : feed?.autoMode === "renew" ? "renew 24h" : "off"
+            }
+          />
+          <Mini
+            label="Token until"
+            value={
+              feed?.tokenExpiry
+                ? new Date(feed.tokenExpiry).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                : "—"
+            }
+          />
         </div>
         {feed?.ipCheck ? (
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
@@ -137,6 +170,52 @@ export function Brokers() {
           </div>
         ) : null}
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <label className="block text-xs font-semibold">
+            Client ID
+            <input
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+              value={dhanClientId}
+              onChange={(event) => setDhanClientId(event.target.value)}
+              placeholder={feed?.clientId || "Client ID"}
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-xs font-semibold">
+            Dhan PIN
+            <input
+              type="password"
+              inputMode="numeric"
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+              value={dhanPin}
+              onChange={(event) => setDhanPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="4–6 digit PIN"
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-xs font-semibold">
+            TOTP secret key
+            <input
+              type="password"
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+              value={dhanTotp}
+              onChange={(event) => setDhanTotp(event.target.value)}
+              placeholder="Setup TOTP secret, not 6-digit code"
+              autoComplete="off"
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void connectDhanAuto()}
+          className="mt-2 h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? "Generating..." : feed?.live ? "Refresh token with PIN + TOTP" : "Generate token and keep LIVE"}
+        </button>
+        {error && selected === null ? (
+          <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>
+        ) : null}
       </section>
       <div className="grid gap-3 lg:grid-cols-2">
         {brokers.map((broker) => (
@@ -224,7 +303,7 @@ export function Brokers() {
                   onClick={() => void connectDhanCard()}
                   className="h-9 w-full rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
                 >
-                  {busy ? "Connecting..." : "Connect live feed"}
+                  {busy ? "Connecting..." : "Connect with access token"}
                 </button>
               </div>
             ) : (

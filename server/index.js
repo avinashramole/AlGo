@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -238,6 +238,27 @@ app.get("/api/snapshot", (_req, res) => {
 
 app.get("/api/brokers", (_req, res) => {
   res.json(publicBrokers());
+});
+
+app.post("/api/brokers/dhan/auto", async (req, res) => {
+  try {
+    const result = await enableDhanAuto({
+      clientId: req.body?.clientId,
+      pin: req.body?.pin,
+      totpSecret: req.body?.totpSecret || req.body?.totp,
+    });
+    res.json({
+      ok: true,
+      live: true,
+      tokenHint: result.tokenHint,
+      autoMode: result.autoMode,
+      tokenExpiry: result.tokenExpiry,
+      account: publicBrokers().brokers.find((item) => item.id === "dhan"),
+      snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not generate Dhan token" });
+  }
 });
 
 app.post("/api/brokers/:id/connect", async (req, res) => {
@@ -608,7 +629,7 @@ app.listen(port, "0.0.0.0", async () => {
     }
     const booted = await bootDhanFromEnv();
     if (booted) {
-      console.log("Dhan live feed started from DHAN_ACCESS_TOKEN");
+      console.log("Dhan live feed started (saved token or PIN + TOTP)");
     } else if (process.env.DHAN_ACCESS_TOKEN) {
       console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
     }

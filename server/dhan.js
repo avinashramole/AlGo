@@ -18,6 +18,15 @@ import {
 } from "./market.js";
 import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import {
+  canAutoGenerate,
+  dhanTokenStatus,
+  generateDhanAccessToken,
+  loadDhanSession,
+  markDhanAutoStart,
+  persistPastedToken,
+  renewDhanAccessToken,
+} from "./dhanToken.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
 const DHAN_FEED_WS = "wss://api-feed.dhan.co";
@@ -45,6 +54,7 @@ let clientId = "";
 let pollTimer = null;
 let accountTimer = null;
 let chainTimer = null;
+let tokenTimer = null;
 let socket = null;
 let reconnectTimer = null;
 let usedFallback = false;
@@ -778,6 +788,7 @@ function startLiveLoop() {
       setDhanFeed({ error: error.message || "Dhan option chain failed" });
     });
   }, 4000);
+  scheduleTokenKeepAlive();
 }
 
 function stopLiveLoop(clearCreds) {
@@ -792,6 +803,10 @@ function stopLiveLoop(clearCreds) {
   if (chainTimer) {
     clearInterval(chainTimer);
     chainTimer = null;
+  }
+  if (tokenTimer) {
+    clearTimeout(tokenTimer);
+    tokenTimer = null;
   }
   stopSocket();
   if (clearCreds) {
@@ -1102,14 +1117,21 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     positionCount: 0,
     holdingCount: 0,
     ipCheck: null,
+    ...dhanTokenStatus(),
+  });
+  persistPastedToken({
+    clientId,
+    accessToken,
+    expiryTime: loadDhanSession().expiryTime,
   });
   clearSimulatedDesk();
   startLiveLoop();
   await fetchDhanIp();
-  return { profile, funds, tokenHint: tokenHint(accessToken) };
+  return { profile, funds, tokenHint: tokenHint(accessToken), ...dhanTokenStatus() };
 }
 
 export function stopDhanLive() {
+  markDhanAutoStart(false);
   stopLiveLoop(true);
   restoreSimulatedDesk();
   setDhanFeed({
@@ -1123,22 +1145,94 @@ export function stopDhanLive() {
     positionCount: 0,
     holdingCount: 0,
     ipCheck: null,
+    autoRenew: false,
+    autoMode: "off",
+    tokenExpiry: null,
+    autoStart: false,
   });
 }
 
-export async function bootDhanFromEnv() {
-  const token = process.env.DHAN_ACCESS_TOKEN || "";
-  const id = process.env.DHAN_CLIENT_ID || "";
-  if (!token || !id) return false;
+export async function enableDhanAuto({ clientId, pin, totpSecret }) {
+  const generated = await generateDhanAccessToken({ clientId, pin, totpSecret });
+  return startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+}
+
+function scheduleTokenKeepAlive() {
+  if (tokenTimer) {
+    clearTimeout(tokenTimer);
+    tokenTimer = null;
+  }
+  const session = loadDhanSession();
+  const expiry = Date.parse(session.expiryTime || "");
+  let wait = 6 * 60 * 60 * 1000;
+  if (Number.isFinite(expiry)) {
+    wait = Math.max(5 * 60 * 1000, expiry - Date.now() - 60 * 60 * 1000);
+  }
+  if (canAutoGenerate()) wait = Math.min(wait, 20 * 60 * 60 * 1000);
+  tokenTimer = setTimeout(() => {
+    void keepDhanTokenFresh();
+  }, wait);
+}
+
+async function keepDhanTokenFresh() {
   try {
-    await startDhanLive({ accessToken: token, clientId: id });
-    return true;
+    if (canAutoGenerate()) {
+      const generated = await generateDhanAccessToken();
+      await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+      console.log("Dhan LIVE token auto-generated");
+      return;
+    }
+    const renewed = await renewDhanAccessToken();
+    await startDhanLive({ accessToken: renewed.accessToken, clientId: renewed.clientId });
+    console.log("Dhan LIVE token auto-renewed");
   } catch (error) {
+    console.log(`Dhan token keep-alive failed: ${error.message || error}`);
+    setDhanFeed({ error: `Access token refresh failed: ${error.message || error}` });
+    tokenTimer = setTimeout(() => {
+      void keepDhanTokenFresh();
+    }, 15 * 60 * 1000);
+  }
+}
+
+export async function bootDhanFromEnv() {
+  const session = loadDhanSession();
+  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || "").trim();
+  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
+  if (session.autoStart === false && !process.env.DHAN_ACCESS_TOKEN) return false;
+
+  if (token && id) {
+    try {
+      await startDhanLive({ accessToken: token, clientId: id });
+      return true;
+    } catch (error) {
+      console.log(`Saved Dhan token failed: ${error.message || error}`);
+    }
+  }
+  if (canAutoGenerate()) {
+    try {
+      await enableDhanAuto({
+        clientId: id || session.clientId,
+        pin: session.pin,
+        totpSecret: session.totpSecret,
+      });
+      console.log("Dhan live feed started from PIN + TOTP");
+      return true;
+    } catch (error) {
+      setDhanFeed({
+        live: false,
+        source: "idle",
+        error: `Auto token failed: ${error.message}`,
+        ...dhanTokenStatus(),
+      });
+      return false;
+    }
+  }
+  if (process.env.DHAN_ACCESS_TOKEN) {
     setDhanFeed({
       live: false,
       source: "idle",
-      error: `Env token failed: ${error.message}`,
+      error: "Env token failed. Paste a new Access Token or save PIN + TOTP secret on Brokers.",
     });
-    return false;
   }
+  return false;
 }

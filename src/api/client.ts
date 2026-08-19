@@ -287,6 +287,10 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    autoRenew?: boolean;
+    autoMode?: string;
+    tokenExpiry?: string | null;
+    autoStart?: boolean;
   };
   futures?: Array<{
     root: string;
@@ -530,6 +534,18 @@ export function squareOff(id: string) {
 
 export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export function enableDhanAuto(payload: { clientId: string; pin: string; totpSecret: string }) {
+  return request<{
+    ok: boolean;
+    live?: boolean;
+    error?: string;
+    tokenHint?: string;
+    autoMode?: string;
+    tokenExpiry?: string;
+    snapshot?: Snapshot;
+  }>("/brokers/dhan/auto", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {

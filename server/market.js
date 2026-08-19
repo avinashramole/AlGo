@@ -336,6 +336,10 @@ const state = {
     positionCount: 0,
     holdingCount: 0,
     ipCheck: null,
+    autoRenew: false,
+    autoMode: "off",
+    tokenExpiry: null,
+    autoStart: false,
   },
   liveCandles: [],
 };
