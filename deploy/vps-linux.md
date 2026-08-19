@@ -1,60 +1,114 @@
-# Linux VPS (Ubuntu)
+# Host Trade 2 Smart on Linux VPS — step by step
 
-VPS public IPv4: **66.116.248.198**
+VPS: **66.116.248.198**  
+Website: **http://66.116.248.198:4000**  
+Do **not** run `npm start` on the VPS. That is only for your Windows PC (port 5173).
 
-This runs **one Node process**. The website and `/api` share the same port (default 4000). Do not use `npm start` on the VPS — that is the Windows/PC Vite desk.
+Live Dhan BUY/SELL from this VPS uses **66.116.248.198**. Dhan Static IP 1 is your home PC **150.129.129.108**. Quotes can run on the VPS. Live orders stay on the PC desk (`http://localhost:5173`) unless Dhan Static IP 1 is already the VPS address.
 
-Open in Chrome: **http://66.116.248.198:4000**
+---
 
-## Dhan IP
+## Step 1 — Log in to the VPS from Windows
 
-BUY/SELL leaves from **this VPS** (`66.116.248.198`), not from Chrome and not from your home PC. After start, the log prints:
+On your PC, open **Command Prompt** (or PowerShell):
 
-`Dhan BUY/SELL uses this PC public IPv4: 66.116.248.198`
+```bat
+ssh root@66.116.248.198
+```
 
-Dhan Static IP 1 on your account is **150.129.129.108** (home PC). Those two numbers are different. Quotes can still run on the VPS. Live BUY/SELL from the VPS will not, unless Dhan Static IP 1 is already `66.116.248.198`. For live orders today, keep using the PC desk at http://localhost:5173.
+If your login is not `root`, use that username instead, for example `ssh ubuntu@66.116.248.198`.
 
-## Install (Ubuntu)
+Type `yes` if it asks about the fingerprint. Enter the VPS password. You should see a Linux prompt.
+
+---
+
+## Step 2 — Install Node.js and Git
+
+Paste these lines one block at a time:
 
 ```bash
 sudo apt update
-sudo apt install -y git unzip
+sudo apt install -y git unzip curl
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
+node -v
+npm -v
+```
+
+You should see Node v22.x and an npm version.
+
+---
+
+## Step 3 — Download T2S
+
+```bash
 sudo mkdir -p /opt/t2s
 sudo chown "$USER":"$USER" /opt/t2s
 git clone https://github.com/avinashramole/AlGo.git /opt/t2s
 cd /opt/t2s
 git checkout cursor/all-desk-checks-00e8
 git pull origin cursor/all-desk-checks-00e8
+```
+
+---
+
+## Step 4 — Install packages and build the website
+
+```bash
+cd /opt/t2s
 npm run setup:vps
 npm run build
+```
+
+Wait until the build finishes with no red error.
+
+---
+
+## Step 5 — Open the firewall
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 4000/tcp
+sudo ufw enable
+sudo ufw status
+```
+
+If the VPS panel has a **security group / firewall** (not only ufw), also allow inbound **TCP 4000** there.
+
+---
+
+## Step 6 — Optional Dhan token on boot
+
+```bash
+cd /opt/t2s
 cp .env.example .env
 nano .env
 ```
 
-Put `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN` in `.env` if you want the feed to start on boot. Token lasts about 24 hours; you can also paste it on Brokers after login.
+Fill `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN` if you want the live feed to start with the server. Save: Ctrl+O, Enter, Ctrl+X.
 
-Open the firewall:
+You can skip this and paste the token later on Brokers in the browser.
 
-```bash
-sudo ufw allow 4000/tcp
-sudo ufw allow OpenSSH
-sudo ufw enable
-```
+---
 
-If this VPS uses a cloud security group (not ufw), allow inbound TCP **4000** to `66.116.248.198`.
-
-## Run once (test)
+## Step 7 — Test once
 
 ```bash
 cd /opt/t2s
 PORT=4000 npm run start:vps
 ```
 
-Chrome: **http://66.116.248.198:4000**. Keep this terminal open for the test. Ctrl+C to stop.
+On your PC Chrome open **http://66.116.248.198:4000**
 
-## Run forever (systemd)
+You should see Trade 2 Smart login (demo: `demo@t2s.app` / `demo123`).
+
+In the VPS terminal you should see `T2S API running` and `Website is served from this same port`.
+
+Stop the test with **Ctrl+C**.
+
+---
+
+## Step 8 — Keep it running after you close SSH
 
 ```bash
 sudo cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
@@ -63,13 +117,17 @@ sudo systemctl enable --now t2s
 sudo systemctl status t2s
 ```
 
-Logs:
+Press `q` to leave the status screen. Site stays up at **http://66.116.248.198:4000**
+
+Watch logs:
 
 ```bash
 sudo journalctl -u t2s -f
 ```
 
-Update later:
+---
+
+## Later updates
 
 ```bash
 cd /opt/t2s
@@ -78,3 +136,5 @@ npm run setup:vps
 npm run build
 sudo systemctl restart t2s
 ```
+
+If Chrome cannot open the site: VPS is running (`sudo systemctl status t2s`), port 4000 is open, and you are using **http://66.116.248.198:4000** (not 5173, not localhost).
