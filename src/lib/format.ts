@@ -92,7 +92,7 @@ export function formatOi(value: number) {
   return Math.round(n).toLocaleString("en-IN");
 }
 
-/** Option chain VWAP: LTP below VWAP is red, LTP above VWAP is green. */
+/** VWAP vs LTP: LTP < VWAP is red, LTP > VWAP is green. Same on options and index futures. */
 export function vwapTone(vwap: number, base: number) {
   const v = Number(vwap);
   const b = Number(base);

@@ -61,7 +61,7 @@ export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?
   return amount;
 }
 
-/** Option chain VWAP: LTP below VWAP is red, LTP above VWAP is green. */
+/** VWAP vs LTP: LTP < VWAP is red, LTP > VWAP is green. Same on options and index futures. */
 export function vwapColor(vwap: number, base: number) {
   const v = Number(vwap);
   const b = Number(base);

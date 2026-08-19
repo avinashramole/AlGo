@@ -41,6 +41,7 @@ export type Snapshot = {
     spark: number[];
     future?: number;
     vwap?: number;
+    futureVwap?: number;
     prevClose?: number;
     securityId?: number;
     indexId?: number;
@@ -55,10 +56,12 @@ export type Snapshot = {
     callLtp: number;
     callChg: number;
     callOi?: number;
+    callVwap?: number;
     callId?: number;
     putLtp: number;
     putChg: number;
     putOi?: number;
+    putVwap?: number;
     putId?: number;
     atm?: boolean;
   }>;

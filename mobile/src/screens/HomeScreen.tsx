@@ -63,8 +63,18 @@ export function HomeScreen() {
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>
-                      <Text style={[styles.deskVal, { color: vwapColor(item.vwap || item.price, item.price) }]}>
-                        {formatNumber(item.vwap || item.price)}
+                      <Text
+                        style={[
+                          styles.deskVal,
+                          {
+                            color: vwapColor(
+                              item.futureVwap || item.vwap || item.future || item.price,
+                              item.future || item.price,
+                            ),
+                          },
+                        ]}
+                      >
+                        {formatNumber(item.futureVwap || item.vwap || item.price)}
                       </Text>
                     </View>
                   </View>

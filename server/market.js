@@ -444,7 +444,12 @@ function withDeskQuotes(item) {
   const change = Number(item.change) || 0;
   const isVix = item.symbol === "INDIA VIX";
   const future = Number(item.future) > 0 ? Number(item.future) : round2(isVix ? price : price + Math.max(6, price * 0.00085));
-  const vwap = Number(item.vwap) > 0 ? Number(item.vwap) : round2(isVix ? price : price - Math.max(2, price * 0.00032));
+  const vwap =
+    Number(item.futureVwap) > 0
+      ? Number(item.futureVwap)
+      : Number(item.vwap) > 0
+        ? Number(item.vwap)
+        : round2(isVix ? price : price - Math.max(2, price * 0.00032));
   const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : round2(price - change);
   const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, "INDIA VIX": 21 };
   return {
@@ -529,8 +534,10 @@ export function tickMarket() {
     const prevClose = item.prevClose > 0 ? item.prevClose : round2(next - change);
     const changePct = Number(((change / (prevClose || next - change || 1)) * 100).toFixed(2));
     const future = item.symbol === "INDIA VIX" ? next : jitter((item.future || next) + (next - item.price), 0.35);
-    const vwap = item.symbol === "INDIA VIX" ? next : jitter(item.vwap || next, item.price * 0.00004);
-    return withDeskQuotes({ ...item, price: next, change, changePct, spark, future, vwap, prevClose });
+    const futureVwap = item.symbol === "INDIA VIX" ? next : item.futureVwap > 0 ? jitter(item.futureVwap, item.price * 0.00004) : 0;
+    const vwap =
+      item.symbol === "INDIA VIX" ? next : futureVwap > 0 ? futureVwap : jitter(item.vwap || next, item.price * 0.00004);
+    return withDeskQuotes({ ...item, price: next, change, changePct, spark, future, vwap, futureVwap, prevClose });
   });
 
   const nifty = state.indices[0];
@@ -1273,7 +1280,10 @@ export function applyLiveQuotes(quotes) {
       if (quote.securityId) index.futureId = String(quote.securityId);
       if (quote.expiry) index.futureExpiry = quote.expiry;
       const futVwap = Number(quote.vwap);
-      if (futVwap > 0) index.vwap = round2(futVwap);
+      if (futVwap > 0) {
+        index.futureVwap = round2(futVwap);
+        index.vwap = round2(futVwap);
+      }
       continue;
     }
     if (index && Number(quote.prevClose) > 0 && !(Number.isFinite(ltp) && ltp > 0)) {
@@ -1293,9 +1303,11 @@ export function applyLiveQuotes(quotes) {
       index.change = day.change;
       index.changePct = day.changePct;
       index.prevClose = day.prevClose;
-      if (vwap > 0) index.vwap = round2(vwap);
-      else if (!(index.vwap > 0) || Math.abs(index.vwap - ltp) / ltp > 0.012) {
-        index.vwap = round2(ltp - Math.max(2, ltp * 0.00032));
+      if (!(index.futureVwap > 0)) {
+        if (vwap > 0) index.vwap = round2(vwap);
+        else if (!(index.vwap > 0) || Math.abs(index.vwap - ltp) / ltp > 0.012) {
+          index.vwap = round2(ltp - Math.max(2, ltp * 0.00032));
+        }
       }
       if (!(index.future > 0) || Math.abs(index.future - ltp) / ltp > 0.012) {
         index.future = round2(ltp + Math.max(6, ltp * 0.00085));

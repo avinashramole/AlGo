@@ -106,20 +106,30 @@ export function OptionsScreen() {
           </Pressable>
         ))}
       </ScrollView>
-      {futures.map((row) => (
-        <Card key={`${row.root}-${row.expiry}`}>
-          <Text style={styles.strike}>{row.name || row.symbol}</Text>
-          <Text style={styles.muted}>{row.segment} · lot {row.lot}</Text>
-          <View style={styles.actions}>
-            <Pressable style={styles.buy} onPress={() => void tradeFuture(row, "BUY")}>
-              <Text style={styles.actionText}>BUY</Text>
-            </Pressable>
-            <Pressable style={styles.sell} onPress={() => void tradeFuture(row, "SELL")}>
-              <Text style={styles.actionText}>SELL</Text>
-            </Pressable>
-          </View>
-        </Card>
-      ))}
+      {futures.map((row) => {
+        const index =
+          data.indices.find((item) => item.symbol === row.parent) ||
+          data.indices.find((item) => item.symbol === row.root) ||
+          data.indices.find((item) => row.root === "NIFTY" && item.symbol === "NIFTY 50");
+        const ltp = Number(index?.future) > 0 ? Number(index?.future) : Number(index?.price) || 0;
+        const vwap = Number(index?.futureVwap || index?.vwap) > 0 ? Number(index?.futureVwap || index?.vwap) : ltp;
+        return (
+          <Card key={`${row.root}-${row.expiry}`}>
+            <Text style={styles.strike}>{row.name || row.symbol}</Text>
+            <Text style={styles.muted}>{row.segment} · lot {row.lot}</Text>
+            <View style={styles.actions}>
+              <Text style={styles.price}>{formatNumber(ltp)}</Text>
+              <Text style={[styles.vwap, { color: vwapColor(vwap, ltp) }]}>{formatNumber(vwap)}</Text>
+              <Pressable style={styles.buy} onPress={() => void tradeFuture(row, "BUY")}>
+                <Text style={styles.actionText}>BUY</Text>
+              </Pressable>
+              <Pressable style={styles.sell} onPress={() => void tradeFuture(row, "SELL")}>
+                <Text style={styles.actionText}>SELL</Text>
+              </Pressable>
+            </View>
+          </Card>
+        );
+      })}
       {visibleRows.map((row) => (
         <Card key={row.strike}>
           <Text style={styles.strike}>
