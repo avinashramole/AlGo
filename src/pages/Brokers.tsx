@@ -99,9 +99,9 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          Quotes start as soon as the token is live. Paper trading uses this live feed; fills stay virtual on Paper
-          Trading. Dhan funds are actual. Paper funds are virtual. No simulated balance is mixed in. Until the token
-          is live, BUY/SELL on Dhan stays on this desk. The token stays on this computer and is never saved in git.
+          Quotes start as soon as the token is live. BUY/SELL is checked against the IP of <b>this computer</b> (the T2S
+          API), not the browser. If Dhan already has your IP saved but BUY/SELL says Invalid IP, Dhan is seeing a
+          different IP than the one listed.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
@@ -113,6 +113,22 @@ export function Brokers() {
           />
           <Mini label="Profile" value={feed?.profileName || feed?.clientId || "—"} />
         </div>
+        {feed?.ipCheck ? (
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+            <Mini label="Dhan sees" value={feed.ipCheck.detectedIP || "—"} />
+            <Mini label="Saved primary" value={feed.ipCheck.primaryIP || "—"} />
+            <Mini label="Saved secondary" value={feed.ipCheck.secondaryIP && feed.ipCheck.secondaryIP !== "NA" ? feed.ipCheck.secondaryIP : "—"} />
+            <Mini label="Orders allowed" value={feed.ipCheck.ordersAllowed ? "yes" : "no"} />
+          </div>
+        ) : null}
+        {feed?.ipCheck && !feed.ipCheck.ordersAllowed ? (
+          <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">
+            Invalid IP happens because Dhan saw <b>{feed.ipCheck.detectedIP || "a different IP"}</b>, not the saved{" "}
+            {feed.ipCheck.primaryIP || "whitelist"}. Run T2S with <code>npm start</code> on the computer that has that
+            saved IP. A Cursor preview uses a different IP. If the numbers already match, generate a new Access Token
+            after the IP was saved and paste it here.
+          </div>
+        ) : null}
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}
       </section>
       <div className="grid gap-3 lg:grid-cols-2">

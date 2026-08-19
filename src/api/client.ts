@@ -278,6 +278,13 @@ export type Snapshot = {
     quoteCount?: number;
     positionCount?: number;
     holdingCount?: number;
+    ipCheck?: {
+      detectedIP: string;
+      primaryIP: string;
+      secondaryIP: string;
+      ipMatchStatus: string;
+      ordersAllowed: boolean;
+    } | null;
   };
   futures?: Array<{
     root: string;
