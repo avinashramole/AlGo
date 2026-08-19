@@ -59,6 +59,48 @@ function tokenHint(token) {
   return `••••${clean.slice(-4)}`;
 }
 
+function listedIps(ip) {
+  return [ip?.primaryIP, ip?.secondaryIP].filter((value) => value && value !== "NA");
+}
+
+function ipOrderHint(ip) {
+  if (!ip?.detectedIP) return "";
+  const saved = listedIps(ip);
+  if (ip.ordersAllowed) {
+    return ` Dhan sees this computer as ${ip.detectedIP} and lists it. If BUY/SELL still says Invalid IP, generate a new Access Token after that IP was saved, then paste it on Brokers.`;
+  }
+  return ` Dhan saw ${ip.detectedIP}. Saved on Dhan: ${saved.join(" / ") || "none"}. BUY/SELL uses this computer (the T2S API), not the browser. Quotes can still run.`;
+}
+
+async function fetchDhanIp() {
+  if (!accessToken) return null;
+  try {
+    const json = await dhanGet("/ip/getIP", accessToken, clientId);
+    const data = json?.data && typeof json.data === "object" ? json.data : json || {};
+    const ip = {
+      detectedIP: String(data.detectedIP || data.detectedIp || ""),
+      primaryIP: String(data.primaryIP || data.primaryIp || ""),
+      secondaryIP: String(data.secondaryIP || data.secondaryIp || ""),
+      ipMatchStatus: String(data.ipMatchStatus || ""),
+      ordersAllowed: Boolean(data.ordersAllowed),
+    };
+    if (!ip.detectedIP && !ip.primaryIP) return null;
+    setDhanFeed({ ipCheck: ip });
+    return ip;
+  } catch {
+    return null;
+  }
+}
+
+async function rejectIfInvalidIp(error) {
+  const text = String(error?.message || "");
+  if (!/invalid ip|dh-905|whitelist/i.test(text)) return error;
+  const ip = await fetchDhanIp();
+  error.message = `Invalid IP.${ipOrderHint(ip)}`.trim();
+  error.status = error.status || 400;
+  return error;
+}
+
 function authHeaders(token, id) {
   const headers = {
     Accept: "application/json",
@@ -815,30 +857,48 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
-  const result = await dhanPost("/orders", accessToken, clientId, {
-    dhanClientId: clientId,
-    correlationId: `t2s${Date.now()}`.slice(0, 30),
-    transactionType: payload.side === "SELL" ? "SELL" : "BUY",
-    exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
-    productType: productType(payload.product),
-    orderType,
-    validity: "DAY",
-    securityId,
-    quantity: qty,
-    disclosedQuantity: 0,
-    price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
-    triggerPrice: 0,
-    afterMarketOrder: false,
-  });
+  let result;
+  try {
+    result = await dhanPost("/orders", accessToken, clientId, {
+      dhanClientId: clientId,
+      correlationId: `t2s${Date.now()}`.slice(0, 30),
+      transactionType: payload.side === "SELL" ? "SELL" : "BUY",
+      exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
+      productType: productType(payload.product),
+      orderType,
+      validity: "DAY",
+      securityId,
+      quantity: qty,
+      disclosedQuantity: 0,
+      price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
+      triggerPrice: 0,
+      afterMarketOrder: false,
+    });
+  } catch (error) {
+    throw await rejectIfInvalidIp(error);
+  }
+  const payloadStatus = String(result?.status || result?.Status || "").toLowerCase();
+  const data = result?.data && typeof result.data === "object" ? result.data : result || {};
+  const orderId = String(data.orderId || data.order_id || result?.orderId || "");
+  const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
+  if (payloadStatus === "failure" || payloadStatus === "failed" || !orderId || status.toUpperCase() === "REJECTED") {
+    const remarks = result?.remarks;
+    const remarkText =
+      typeof remarks === "string"
+        ? remarks
+        : remarks?.error_message || remarks?.errorMessage || result?.errorMessage || "Dhan did not place this order.";
+    const error = new Error(String(remarkText));
+    error.status = 400;
+    throw await rejectIfInvalidIp(error);
+  }
   try {
     await pullAccount();
   } catch {
     /* order is still at Dhan */
   }
-  const data = result?.data || result || {};
   return {
-    orderId: String(data.orderId || data.order_id || result?.orderId || ""),
-    status: data.orderStatus || data.order_status || result?.orderStatus || "TRANSIT",
+    orderId,
+    status: status || "TRANSIT",
     securityId,
     filledQty: Number(data.filledQty || result?.filledQty || 0),
     raw: result,
@@ -923,9 +983,11 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
+    ipCheck: null,
   });
   clearSimulatedDesk();
   startLiveLoop();
+  await fetchDhanIp();
   return { profile, funds, tokenHint: tokenHint(accessToken) };
 }
 
@@ -942,6 +1004,7 @@ export function stopDhanLive() {
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
+    ipCheck: null,
   });
 }
 

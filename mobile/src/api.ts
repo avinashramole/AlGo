@@ -223,6 +223,13 @@ export type Snapshot = {
     profileName: string | null;
     clientId?: string | null;
     quoteCount?: number;
+    ipCheck?: {
+      detectedIP: string;
+      primaryIP: string;
+      secondaryIP: string;
+      ipMatchStatus: string;
+      ordersAllowed: boolean;
+    } | null;
   };
   futures?: Array<{
     root: string;

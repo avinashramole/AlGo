@@ -335,6 +335,7 @@ const state = {
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
+    ipCheck: null,
   },
   liveCandles: [],
 };
