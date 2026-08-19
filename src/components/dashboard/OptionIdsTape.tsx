@@ -10,6 +10,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const rows = data.optionChain || [];
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
+  const [noteFail, setNoteFail] = useState(false);
 
   const visible = useMemo(() => {
     const atmIndex = rows.findIndex((row) => row.atm);
@@ -25,6 +26,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
     const key = `${row.strike}-${option}-${side}`;
     setBusy(key);
     setNote("");
+    setNoteFail(false);
     try {
       const result = await order({
         symbol: `${symbol} ${row.strike} ${option}`,
@@ -35,6 +37,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         product: "MIS",
         type: "MARKET",
         brokerId: data.activeBrokerId,
+        kind: "option",
         option,
         strike: row.strike,
         expiry: meta?.expiry,
@@ -46,7 +49,10 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
       );
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "Order failed");
+      const message = err instanceof Error ? err.message : "Order failed";
+      setNoteFail(true);
+      setNote(message);
+      window.alert(message);
     } finally {
       setBusy("");
     }
@@ -78,7 +84,9 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           ))}
         </div>
       </div>
-      {note ? <div className="mb-2 shrink-0 text-xs font-semibold text-slate-500">{note}</div> : null}
+      {note ? (
+        <div className={cn("mb-2 shrink-0 text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[1100px] text-left text-xs">
         <thead className="sticky top-0 z-10 bg-[var(--card)] text-[10px] uppercase tracking-wide text-slate-400 shadow-[inset_0_-1px_0_var(--border)] [&_th]:bg-[var(--card)]">
