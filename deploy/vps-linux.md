@@ -82,13 +82,13 @@ firewall-cmd --permanent --add-port=4000/tcp
 firewall-cmd --reload
 ```
 
+If it prints **FirewallD is not running**, skip this step. The site can still work. If Chrome cannot open the site, allow TCP **4000** in the VPS **hosting panel** (not on Windows).
+
 If `firewall-cmd` is missing:
 
 ```bash
 iptables -I INPUT -p tcp --dport 4000 -j ACCEPT
 ```
-
-Also allow TCP **4000** in the VPS panel firewall if it has one.
 
 ---
 
