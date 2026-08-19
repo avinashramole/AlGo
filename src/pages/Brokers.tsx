@@ -99,9 +99,9 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Open <b>web.dhan.co</b> → My Profile → Access DhanHQ APIs. Copy Client ID and the 24-hour Access Token.
-          Quotes start as soon as the token is live. BUY/SELL is checked against the public IPv4 of <b>this computer</b>{" "}
-          (the T2S API on port 4000), not Chrome and not Vite&apos;s 192.168.x Network line. If Dhan already has your IP
-          saved but BUY/SELL says Invalid IP, generate a new Access Token after that IP was saved and paste it here.
+          Quotes start as soon as the token is live. BUY/SELL uses the public IPv4 of this PC (port 4000), not Chrome
+          and not Vite 192.168.x. Your Static IP 1 is already saved. If BUY/SELL fails, read the exact Dhan message —
+          DH-905 is often a bad order field, not a missing IP.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
@@ -118,16 +118,22 @@ export function Brokers() {
             <Mini label="Dhan sees" value={feed.ipCheck.detectedIP || "—"} />
             <Mini label="Saved primary" value={feed.ipCheck.primaryIP || "—"} />
             <Mini label="Saved secondary" value={feed.ipCheck.secondaryIP && feed.ipCheck.secondaryIP !== "NA" ? feed.ipCheck.secondaryIP : "—"} />
-            <Mini label="Orders allowed" value={feed.ipCheck.ordersAllowed ? "yes" : "no"} />
+            <Mini
+              label="Orders allowed"
+              value={
+                feed.ipCheck.ordersAllowed === true ? "yes" : feed.ipCheck.ordersAllowed === false ? "no" : "—"
+              }
+            />
           </div>
         ) : null}
-        {feed?.ipCheck && !feed.ipCheck.ordersAllowed ? (
+        {feed?.ipCheck?.detectedIP &&
+        feed.ipCheck.primaryIP &&
+        feed.ipCheck.detectedIP !== feed.ipCheck.primaryIP &&
+        feed.ipCheck.detectedIP !== feed.ipCheck.secondaryIP ? (
           <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">
-            Invalid IP happens because Dhan saw <b>{feed.ipCheck.detectedIP || "a different IP"}</b>, not the saved{" "}
-            {feed.ipCheck.primaryIP || "whitelist"}. Keep <code>npm start</code> open on this PC (Chrome at
-            localhost:5173). Ignore Vite 192.168.x — Dhan never uses that. A Cursor preview uses a different IP. If
-            Dhan sees and saved primary already match, generate a new Access Token after the IP was saved and paste it
-            here.
+            Dhan saw <b>{feed.ipCheck.detectedIP}</b>, not saved {feed.ipCheck.primaryIP}. Keep{" "}
+            <code>npm start</code> on this PC and open localhost:5173. Ignore Vite 192.168.x. Do not add another IP if
+            Static IP 1 is already {feed.ipCheck.primaryIP}.
           </div>
         ) : null}
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}

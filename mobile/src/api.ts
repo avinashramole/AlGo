@@ -233,7 +233,7 @@ export type Snapshot = {
       primaryIP: string;
       secondaryIP: string;
       ipMatchStatus: string;
-      ordersAllowed: boolean;
+      ordersAllowed: boolean | null;
     } | null;
   };
   futures?: Array<{

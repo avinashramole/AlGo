@@ -76,13 +76,16 @@ export function BrokersScreen() {
         {feed?.ipCheck ? (
           <Text style={styles.muted}>
             Dhan sees {feed.ipCheck.detectedIP || "—"} · saved {feed.ipCheck.primaryIP || "—"} · orders{" "}
-            {feed.ipCheck.ordersAllowed ? "allowed" : "blocked"}
+            {feed.ipCheck.ordersAllowed === true ? "allowed" : feed.ipCheck.ordersAllowed === false ? "blocked" : "unknown"}
           </Text>
         ) : null}
-        {feed?.ipCheck && !feed.ipCheck.ordersAllowed ? (
+        {feed?.ipCheck?.detectedIP &&
+        feed.ipCheck.primaryIP &&
+        feed.ipCheck.detectedIP !== feed.ipCheck.primaryIP &&
+        feed.ipCheck.detectedIP !== feed.ipCheck.secondaryIP ? (
           <Text style={{ color: colors.down, marginTop: 6, fontSize: 12 }}>
-            Invalid IP means Dhan saw {feed.ipCheck.detectedIP || "another IP"}, not your saved whitelist. Run T2S with
-            npm start on this PC. If those two numbers already match, generate a new Access Token and paste it here.
+            Dhan saw {feed.ipCheck.detectedIP}, not saved {feed.ipCheck.primaryIP}. Run npm start on this PC. Do not add
+            another IP.
           </Text>
         ) : null}
         {feed?.error ? <Text style={{ color: colors.down, marginTop: 6, fontSize: 12 }}>{feed.error}</Text> : null}

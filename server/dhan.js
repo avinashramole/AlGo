@@ -64,44 +64,81 @@ function listedIps(ip) {
   return [ip?.primaryIP, ip?.secondaryIP].filter((value) => value && value !== "NA");
 }
 
-function ipOrderHint(ip) {
-  if (!ip?.detectedIP) {
-    return " Generate a new Access Token on web.dhan.co after the static IP was saved, then paste it on Brokers. Quotes can still run.";
+function parseBoolFlag(value) {
+  if (value === true || value === false) return value;
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "true" || text === "yes" || text === "1") return true;
+  if (text === "false" || text === "no" || text === "0") return false;
+  return null;
+}
+
+function parseDhanIpPayload(json) {
+  const nested = json?.data && typeof json.data === "object" ? json.data : null;
+  const data = nested && (nested.primaryIP || nested.primaryIp || nested.detectedIP || nested.detectedIp) ? nested : json || {};
+  const detectedIP = String(data.detectedIP || data.detectedIp || data.sourceIP || "").trim();
+  const primaryIP = String(data.primaryIP || data.primaryIp || "").trim();
+  const secondaryIP = String(data.secondaryIP || data.secondaryIp || "").trim();
+  const ipMatchStatus = String(data.ipMatchStatus || "").trim();
+  const saved = listedIps({ primaryIP, secondaryIP });
+  let ordersAllowed = parseBoolFlag(data.ordersAllowed);
+  if (ordersAllowed == null && detectedIP && saved.includes(detectedIP)) ordersAllowed = true;
+  if (ordersAllowed == null && /PRIMARY_MATCH|SECONDARY_MATCH|IP_MATCHED|^MATCHED$/i.test(ipMatchStatus)) {
+    ordersAllowed = true;
   }
+  return { detectedIP, primaryIP, secondaryIP, ipMatchStatus, ordersAllowed };
+}
+
+function ipMismatch(ip) {
   const saved = listedIps(ip);
-  if (ip.ordersAllowed) {
-    return ` Dhan sees ${ip.detectedIP} and that IP is already saved. Generate a new Access Token on web.dhan.co now, then paste it on Brokers.`;
+  return Boolean(ip?.detectedIP && saved.length && !saved.includes(ip.detectedIP));
+}
+
+function ipOrderHint(ip) {
+  if (ipMismatch(ip)) {
+    return ` Dhan saw ${ip.detectedIP}. Saved: ${listedIps(ip).join(" / ")}. Run npm start on this PC (Chrome localhost:5173). Ignore Vite 192.168.x.`;
   }
-  return ` Dhan saw ${ip.detectedIP}. Saved on Dhan: ${saved.join(" / ") || "none"}. Those must be the same. Generate a new Access Token after the IP was saved, then paste it on Brokers.`;
+  if (ip?.detectedIP && listedIps(ip).includes(ip.detectedIP)) {
+    return ` Dhan already sees ${ip.detectedIP}, which is saved. Generate a new Access Token on web.dhan.co and paste it on Brokers. Do not add another IP.`;
+  }
+  return " If Brokers already shows your saved IP, generate a new Access Token on web.dhan.co and paste it. Do not add another IP.";
 }
 
 async function fetchDhanIp() {
   if (!accessToken) return null;
   try {
-    const json = await dhanGet("/ip/getIP", accessToken, clientId);
-    const data = json?.data && typeof json.data === "object" ? json.data : json || {};
-    const ip = {
-      detectedIP: String(data.detectedIP || data.detectedIp || ""),
-      primaryIP: String(data.primaryIP || data.primaryIp || ""),
-      secondaryIP: String(data.secondaryIP || data.secondaryIp || ""),
-      ipMatchStatus: String(data.ipMatchStatus || ""),
-      ordersAllowed: Boolean(data.ordersAllowed),
-    };
+    const res = await ipv4Request(`${DHAN_API}/ip/getIP`, { headers: authHeaders(accessToken, clientId) });
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
+    console.log(`Dhan getIP HTTP ${res.status}: ${String(text || "").slice(0, 400)}`);
+    if (!res.ok) return null;
+    const ip = parseDhanIpPayload(json);
     if (!ip.detectedIP && !ip.primaryIP) return null;
     setDhanFeed({ ipCheck: ip });
     const saved = listedIps(ip).join(" / ") || "none";
+    const allowed =
+      ip.ordersAllowed === true ? "allowed" : ip.ordersAllowed === false ? "blocked" : "unknown";
     console.log(
-      `Dhan IP check: sees ${ip.detectedIP || "unknown"} · saved ${saved} · orders ${ip.ordersAllowed ? "allowed" : "blocked"}`,
+      `Dhan IP check: sees ${ip.detectedIP || "not returned"} · saved ${saved} · orders ${allowed}`,
     );
     return ip;
-  } catch {
+  } catch (error) {
+    console.log(`Dhan getIP failed: ${error.message || error}`);
     return null;
   }
 }
 
+function isInvalidIpMessage(text) {
+  return /invalid ip|ip whitelist|whitelisted ip/i.test(String(text || ""));
+}
+
 async function rejectIfInvalidIp(error) {
   const text = String(error?.message || "");
-  if (!/invalid ip|dh-905|whitelist/i.test(text)) return error;
+  if (!isInvalidIpMessage(text)) return error;
   const ip = await fetchDhanIp();
   error.message = `Invalid IP.${ipOrderHint(ip)}`.trim();
   error.status = error.status || 400;
@@ -126,6 +163,7 @@ function remarkText(value) {
 function dhanErrorText(json, fallback) {
   const nested = json?.error && typeof json.error === "object" ? json.error : null;
   const data = json?.data && typeof json.data === "object" ? json.data : null;
+  const code = json?.errorCode || nested?.errorCode || data?.errorCode || json?.error_code || "";
   const message =
     json?.errorMessage ||
     json?.error_message ||
@@ -137,12 +175,9 @@ function dhanErrorText(json, fallback) {
     json?.message ||
     (typeof json?.raw === "string" && json.raw.length < 180 ? json.raw : "") ||
     fallback;
-  return clarifyDhanOrderError(String(message || fallback || "Dhan request failed"));
-}
-
-function clarifyDhanOrderError(message) {
-  if (!/invalid ip|dh-905|whitelist|not authorised|not authorized/i.test(message)) return message;
-  return "Invalid IP — Dhan did not place this order. Quotes can still run. BUY/SELL uses the static IP already saved on web.dhan.co → Access DhanHQ APIs. If that IP is already there, regenerate the Access Token and paste it on Brokers.";
+  const clean = String(message || fallback || "Dhan request failed");
+  if (code && !clean.includes(String(code))) return `Dhan ${code}: ${clean}`;
+  return clean;
 }
 
 function dhanFailed(json, res) {
@@ -156,6 +191,7 @@ function dhanFailed(json, res) {
 }
 
 function throwDhanError(json, res) {
+  console.log(`Dhan API error HTTP ${res?.status}: ${JSON.stringify(json).slice(0, 400)}`);
   const error = new Error(dhanErrorText(json, `Dhan API ${res?.status || ""}`.trim()));
   error.status = res?.ok ? 400 : res?.status || 400;
   error.body = json;
@@ -865,29 +901,28 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
-  const ip = await fetchDhanIp();
-  if (ip && !ip.ordersAllowed) {
-    const error = new Error(`Invalid IP.${ipOrderHint(ip)}`);
-    error.status = 400;
-    throw error;
-  }
+  await fetchDhanIp();
+  const body = {
+    dhanClientId: String(clientId),
+    correlationId: `t2s${Date.now()}`.slice(0, 30),
+    transactionType: payload.side === "SELL" ? "SELL" : "BUY",
+    exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
+    productType: productType(payload.product),
+    orderType,
+    validity: "DAY",
+    securityId: String(securityId),
+    quantity: qty,
+    disclosedQuantity: 0,
+    price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
+    triggerPrice: 0,
+    afterMarketOrder: false,
+  };
+  console.log(
+    `Dhan ${body.transactionType} ${body.exchangeSegment} ${body.productType} ${body.orderType} qty ${body.quantity} security ${body.securityId}`,
+  );
   let result;
   try {
-    result = await dhanPost("/orders", accessToken, clientId, {
-      dhanClientId: clientId,
-      correlationId: `t2s${Date.now()}`.slice(0, 30),
-      transactionType: payload.side === "SELL" ? "SELL" : "BUY",
-      exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
-      productType: productType(payload.product),
-      orderType,
-      validity: "DAY",
-      securityId: String(securityId),
-      quantity: qty,
-      disclosedQuantity: 0,
-      price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
-      triggerPrice: 0,
-      afterMarketOrder: false,
-    });
+    result = await dhanPost("/orders", accessToken, clientId, body);
   } catch (error) {
     throw await rejectIfInvalidIp(error);
   }
