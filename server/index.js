@@ -440,7 +440,13 @@ app.post("/api/orders", async (req, res) => {
           return;
         }
       }
-      res.status(201).json({ ok: true, live: true, order, snapshot: snapshot() });
+      res.status(201).json({
+        ok: true,
+        live: true,
+        afterMarketOrder: Boolean(live.afterMarketOrder),
+        order,
+        snapshot: snapshot(),
+      });
       return;
     }
     const order = placeOrder({ ...body, brokerId, live: null });

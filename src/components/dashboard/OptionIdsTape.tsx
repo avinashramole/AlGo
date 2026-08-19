@@ -45,7 +45,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
       });
       setNote(
         result.live
-          ? `Sent to Dhan · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
+          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
           : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
       );
     } catch (err) {

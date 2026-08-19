@@ -44,7 +44,7 @@ export function FuturesTape() {
       });
       setNote(
         result.live
-          ? `Sent to Dhan · ${side} ${row.name}`
+          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${row.name}`
           : result.warning || `Desk fill · ${side} ${row.name}`,
       );
     } catch (err) {

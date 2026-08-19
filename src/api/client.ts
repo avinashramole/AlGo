@@ -509,6 +509,7 @@ export function toggleAlgo(id: string) {
 export type PlaceOrderResult = {
   ok: boolean;
   live?: boolean;
+  afterMarketOrder?: boolean;
   warning?: string;
   error?: string;
   order?: DeskOrder;

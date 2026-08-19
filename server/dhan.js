@@ -124,7 +124,47 @@ function describeIp(ip) {
   return `getIP sees ${ip.detectedIP || "—"} saved ${saved} allowed ${allowed}`;
 }
 
+function errorBlob(error) {
+  return `${error?.message || ""} ${JSON.stringify(error?.body || {})}`;
+}
+
+function isClosedMarketError(error) {
+  return /market is closed|offline order|after[\s-]?market order/i.test(errorBlob(error));
+}
+
+function nseSessionOpen(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
+  return !weekend && minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
+}
+
+function withAmo(body) {
+  return {
+    ...body,
+    afterMarketOrder: true,
+    amoTime: "OPEN",
+    correlationId: `t2s${Date.now()}`.slice(0, 30),
+  };
+}
+
 function formatPlaceError(error, ip, body) {
+  if (isClosedMarketError(error)) {
+    return body?.afterMarketOrder
+      ? "NSE is closed (09:15–15:30 IST). Dhan did not accept this after-market order. Place it when the market opens."
+      : "NSE is closed (09:15–15:30 IST). Dhan asked for an offline/AMO order.";
+  }
   const raw = error?.body ? JSON.stringify(error.body).slice(0, 280) : "";
   const sent = body
     ? `sent ${body.transactionType} ${body.exchangeSegment} ${body.productType} ${body.orderType} qty ${body.quantity}`
@@ -915,7 +955,8 @@ export async function placeDhanOrder(payload = {}) {
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
   const ip = await fetchDhanIp();
-  const body = {
+  const useAmo = payload.afterMarketOrder === true || payload.amo === true || !nseSessionOpen();
+  let body = {
     dhanClientId: String(clientId),
     correlationId: `t2s${Date.now()}`.slice(0, 30),
     transactionType: payload.side === "SELL" ? "SELL" : "BUY",
@@ -928,17 +969,33 @@ export async function placeDhanOrder(payload = {}) {
     disclosedQuantity: 0,
     price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
     triggerPrice: 0,
-    afterMarketOrder: false,
+    afterMarketOrder: useAmo,
   };
-  console.log(
-    `Dhan ${body.transactionType} ${body.exchangeSegment} ${body.productType} ${body.orderType} qty ${body.quantity} security ${body.securityId}`,
-  );
+  if (useAmo) body.amoTime = "OPEN";
+
+  const submit = (orderBody) => {
+    console.log(
+      `Dhan ${orderBody.afterMarketOrder ? "AMO " : ""}${orderBody.transactionType} ${orderBody.exchangeSegment} ${orderBody.productType} ${orderBody.orderType} qty ${orderBody.quantity} security ${orderBody.securityId}${orderBody.amoTime ? ` ${orderBody.amoTime}` : ""}`,
+    );
+    return dhanPost("/orders", accessToken, clientId, orderBody);
+  };
+
   let result;
   try {
-    result = await dhanPost("/orders", accessToken, clientId, body);
+    result = await submit(body);
   } catch (error) {
-    error.message = formatPlaceError(error, ip, body);
-    throw error;
+    if (!body.afterMarketOrder && isClosedMarketError(error)) {
+      body = withAmo(body);
+      try {
+        result = await submit(body);
+      } catch (retryError) {
+        retryError.message = formatPlaceError(retryError, ip, body);
+        throw retryError;
+      }
+    } else {
+      error.message = formatPlaceError(error, ip, body);
+      throw error;
+    }
   }
   const data = result?.data && typeof result.data === "object" ? result.data : result || {};
   const orderId = String(data.orderId || data.order_id || result?.orderId || "");
@@ -960,6 +1017,7 @@ export async function placeDhanOrder(payload = {}) {
     status: status || "TRANSIT",
     securityId: String(securityId),
     filledQty: Number(data.filledQty || result?.filledQty || 0),
+    afterMarketOrder: Boolean(body.afterMarketOrder),
     raw: result,
   };
 }
