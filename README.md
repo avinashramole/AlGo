@@ -180,6 +180,6 @@ npm run build
 PORT=4000 npm run start:vps
 ```
 
-Open `http://VPS-IP:4000`. Step-by-step Ubuntu + systemd: `deploy/vps-linux.md`.
+Open `http://66.116.248.198:4000`. Step-by-step Ubuntu + systemd: `deploy/vps-linux.md`.
 
-Live Dhan BUY/SELL uses the **VPS public IPv4** printed in the log. That must already match Dhan Static IP 1.
+Live Dhan BUY/SELL on the VPS uses **66.116.248.198**. Dhan Static IP 1 is your home PC `150.129.129.108`. For live orders keep the PC desk, or only run BUY/SELL on the machine whose public IPv4 is already saved on Dhan.
