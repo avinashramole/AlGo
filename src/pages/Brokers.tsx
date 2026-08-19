@@ -10,6 +10,8 @@ export function Brokers() {
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
   const [clientId, setClientId] = useState("");
   const [secret, setSecret] = useState("");
+  const [dhanClientId, setDhanClientId] = useState("");
+  const [dhanToken, setDhanToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -17,17 +19,26 @@ export function Brokers() {
   const dhan = brokers.find((item) => item.id === "dhan");
   const paper = brokers.find((item) => item.id === "paper");
   const actualFunds = dhan?.liveFeed ? dhan.funds : 0;
+  const clientLocked = Boolean(selected?.liveFeed || (selected && selected.id !== "dhan" && selected.connected));
 
   const openForm = (broker: BrokerAccount) => {
     setSelected(broker);
     setError("");
     if (broker.id === "dhan") {
-      setClientId(broker.clientId || feed?.clientId || "");
+      setClientId(broker.liveFeed ? broker.clientId || feed?.clientId || "" : dhanClientId || broker.clientId || "");
+      setSecret("");
+    } else if (broker.connected) {
+      setClientId(broker.clientId || "");
       setSecret("");
     } else {
-      setClientId("demo");
-      setSecret("demo123");
+      setClientId("");
+      setSecret("");
     }
+  };
+
+  const submitDhan = async (id: string, token: string) => {
+    await connect("dhan", { clientId: id, accessToken: token, apiKey: token });
+    setDhanToken("");
   };
 
   const submit = async () => {
@@ -36,12 +47,24 @@ export function Brokers() {
     setError("");
     try {
       if (selected.id === "dhan") {
-        await connect("dhan", { clientId, accessToken: secret, apiKey: secret });
+        await submitDhan(clientId, secret);
       } else {
         await connect(selected.id, { clientId, apiKey: secret });
       }
       setSelected(null);
       setSecret("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not connect");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const connectDhanCard = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await submitDhan(dhanClientId, dhanToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not connect");
     } finally {
@@ -133,13 +156,55 @@ export function Brokers() {
                 {broker.active ? "ACTIVE" : broker.status}
               </span>
             </div>
-            {broker.connected && (
+            {broker.id === "dhan" && broker.liveFeed ? (
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <Mini label="Client" value={broker.clientId || "—"} />
                 <Mini label="Funds" value={fundsCaption(broker)} />
                 <Mini label="Margin" value={`₹${formatNumber(broker.marginUsed, 0)}`} />
               </div>
-            )}
+            ) : broker.id !== "dhan" && broker.connected ? (
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <Mini label="Client" value={broker.clientId || "—"} />
+                <Mini label="Funds" value={fundsCaption(broker)} />
+                <Mini label="Margin" value={`₹${formatNumber(broker.marginUsed, 0)}`} />
+              </div>
+            ) : null}
+            {broker.id === "dhan" && !broker.liveFeed ? (
+              <div className="mt-3 space-y-2">
+                <label className="block text-xs font-semibold">
+                  Client ID
+                  <input
+                    className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                    value={dhanClientId}
+                    onChange={(event) => setDhanClientId(event.target.value)}
+                    placeholder="Paste Client ID from web.dhan.co"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="block text-xs font-semibold">
+                  Access token
+                  <input
+                    type="password"
+                    className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                    value={dhanToken}
+                    onChange={(event) => setDhanToken(event.target.value)}
+                    placeholder="24-hour Access Token"
+                    autoComplete="off"
+                  />
+                </label>
+                {error && selected === null ? (
+                  <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void connectDhanCard()}
+                  className="h-9 w-full rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {busy ? "Connecting..." : "Connect live feed"}
+                </button>
+              </div>
+            ) : (
             <div className="mt-3 flex gap-2">
               {broker.id === "dhan" ? (
                 <>
@@ -148,12 +213,17 @@ export function Brokers() {
                     onClick={() => openForm(broker)}
                     className="h-9 flex-1 rounded-lg bg-brand-500 text-xs font-semibold text-white"
                   >
-                    {broker.liveFeed ? "Update access token" : "Connect live feed"}
+                    Update access token
                   </button>
                   {broker.liveFeed && (
                     <button
                       type="button"
-                      onClick={() => void disconnect(broker.id)}
+                      onClick={() => {
+                        const last = broker.clientId || "";
+                        void disconnect(broker.id).then(() => {
+                          if (last) setDhanClientId(last);
+                        });
+                      }}
                       className="h-9 flex-1 rounded-lg border border-[var(--border)] text-xs font-semibold"
                     >
                       Stop live feed
@@ -191,6 +261,7 @@ export function Brokers() {
                 </button>
               )}
             </div>
+            )}
           </section>
         ))}
       </div>
@@ -203,19 +274,27 @@ export function Brokers() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="card w-full max-w-md p-5">
             <div className="text-sm font-bold">
-              {selected.id === "dhan" ? "Connect Dhan live feed" : `Connect ${selected.name}`}
+              {selected.id === "dhan" ? "Update Dhan access token" : `Connect ${selected.name}`}
             </div>
             <p className="mt-1 text-xs text-slate-400">
               {selected.id === "dhan"
-                ? "Paste Client ID and Access Token from web.dhan.co → My Profile → Access DhanHQ APIs."
-                : "Sandbox login. Try client ID demo and API key demo123."}
+                ? clientLocked
+                  ? "Client ID stays on the live Dhan account. Paste a new Access Token only."
+                  : "Paste Client ID and Access Token from web.dhan.co → My Profile → Access DhanHQ APIs."
+                : "Sandbox login. Enter Client ID and API key. Use demo / demo123 if you do not have an app yet."}
             </p>
             <label className="mt-3 block text-xs font-semibold">
               Client ID
               <input
-                className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                className={`mt-1 h-10 w-full rounded-lg border border-[var(--border)] px-3 text-sm ${
+                  clientLocked ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-slate-800" : "bg-[var(--bg)]"
+                }`}
                 value={clientId}
-                onChange={(event) => setClientId(event.target.value)}
+                onChange={(event) => {
+                  if (!clientLocked) setClientId(event.target.value);
+                }}
+                readOnly={clientLocked}
+                placeholder={selected.id === "dhan" ? "Client ID from web.dhan.co" : "Client ID"}
                 autoComplete="off"
               />
             </label>
