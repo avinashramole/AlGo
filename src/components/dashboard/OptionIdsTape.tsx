@@ -64,7 +64,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         <div>
           <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10. On a phone tap BUY/SELL on each strike. On a wide screen the full chain table scrolls sideways.
+            ATM ±10. Phone shows LTP, VWAP, and BUY/SELL on each strike. VWAP colour is the same as desktop.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -87,30 +87,44 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         <div className={cn("mb-2 break-words text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
       ) : null}
       <div className="space-y-2 md:hidden">
-        {visible.map((row) => (
-          <div key={row.strike} className={cn("rounded-xl border border-[var(--border)] p-2", row.atm && "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10")}>
-            <div className="mb-2 text-center text-sm font-bold">
-              {row.strike}
-              {row.atm ? " ATM" : ""}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <div className="mb-1 text-[10px] font-bold uppercase text-up">CE {formatNumber(row.callLtp)}</div>
-                <div className="flex gap-1">
-                  <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
-                  <SideButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
+        {visible.map((row) => {
+          const callVwap = row.callVwap || row.callLtp;
+          const putVwap = row.putVwap || row.putLtp;
+          return (
+            <div key={row.strike} className={cn("rounded-xl border border-[var(--border)] p-2", row.atm && "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10")}>
+              <div className="mb-2 text-center text-sm font-bold">
+                {row.strike}
+                {row.atm ? " ATM" : ""}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-up">CE</div>
+                  <div className="text-sm font-bold text-up">{formatNumber(row.callLtp)}</div>
+                  <div className={cn("text-[11px] font-semibold", vwapTone(callVwap, row.callLtp))}>
+                    VWAP {formatNumber(callVwap)}
+                  </div>
+                  <div className={cn("text-[10px]", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</div>
+                  <div className="mt-1 flex gap-1">
+                    <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
+                    <SideButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase text-down">PE</div>
+                  <div className="text-sm font-bold text-down">{formatNumber(row.putLtp)}</div>
+                  <div className={cn("text-[11px] font-semibold", vwapTone(putVwap, row.putLtp))}>
+                    VWAP {formatNumber(putVwap)}
+                  </div>
+                  <div className={cn("text-[10px]", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</div>
+                  <div className="mt-1 flex justify-end gap-1">
+                    <SideButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
+                    <SideButton busy={busy} id={`${row.strike}-PE`} side="SELL" onClick={() => void trade("PE", "SELL", row)} />
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="mb-1 text-right text-[10px] font-bold uppercase text-down">PE {formatNumber(row.putLtp)}</div>
-                <div className="flex justify-end gap-1">
-                  <SideButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
-                  <SideButton busy={busy} id={`${row.strike}-PE`} side="SELL" onClick={() => void trade("PE", "SELL", row)} />
-                </div>
-              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="hidden min-h-0 flex-1 overflow-auto md:block">
         <table className="w-full min-w-[1100px] text-left text-xs">
