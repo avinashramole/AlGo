@@ -16,7 +16,7 @@ import {
   setLiveCandles,
   setOptionDesk,
 } from "./market.js";
-import { buildScripChain, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
@@ -858,6 +858,17 @@ function productType(product) {
   return "INTRADAY";
 }
 
+function securityIdFromOpenChain(payload = {}) {
+  const parsed = parseOptionContract(payload.symbol);
+  const strike = Number(payload.strike || parsed?.strike || 0);
+  const option = String(payload.option || parsed?.option || "").toUpperCase();
+  const opt = option === "PUT" || option === "P" ? "PE" : option === "CALL" || option === "C" ? "CE" : option;
+  if (!strike || (opt !== "CE" && opt !== "PE")) return "";
+  const row = currentOptionRows().find((item) => Number(item.strike) === strike);
+  if (!row) return "";
+  return String((opt === "PE" ? row.putId : row.callId) || "");
+}
+
 export async function placeDhanOrder(payload = {}) {
   if (!accessToken || !clientId) {
     const error = new Error("Dhan live is off. Open Brokers and paste Client ID + Access Token.");
@@ -865,13 +876,26 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const desk = getOptionMeta();
-  let securityId = await resolveTradableSecurityId({
-    symbol: payload.symbol,
-    expiry: payload.expiry || desk.expiry,
-    strike: payload.strike,
-    option: payload.option,
-    kind: payload.kind,
-  });
+  let securityId = securityIdFromOpenChain(payload);
+  if (!securityId || securityId === "0") {
+    securityId = await resolveTradableSecurityId({
+      symbol: payload.symbol,
+      expiry: payload.expiry || desk.expiry,
+      strike: payload.strike,
+      option: payload.option,
+      kind: payload.kind,
+    });
+  }
+  if (!securityId || securityId === "0") {
+    await reloadScripMaster();
+    securityId = await resolveTradableSecurityId({
+      symbol: payload.symbol,
+      expiry: payload.expiry || desk.expiry,
+      strike: payload.strike,
+      option: payload.option,
+      kind: payload.kind,
+    });
+  }
   if (!securityId || securityId === "0") {
     securityId = String(payload.securityId || "").trim();
   }

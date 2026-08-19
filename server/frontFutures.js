@@ -23,7 +23,30 @@ let cache = { at: 0, instruments: FALLBACK, options: new Map(), byExpiry: new Ma
 let loading = null;
 
 function splitCsvLine(line) {
-  return line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""));
+  const out = [];
+  let cur = "";
+  let quoted = false;
+  for (const ch of String(line || "")) {
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (ch === "," && !quoted) {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function optionType(value) {
+  const raw = String(value || "").toUpperCase();
+  if (raw === "PE" || raw === "PUT" || raw === "P") return "PE";
+  if (raw === "CE" || raw === "CALL" || raw === "C") return "CE";
+  return raw;
 }
 
 function pickFront(rows) {
@@ -74,7 +97,7 @@ async function loadScripMaster() {
       if (!res.ok) throw new Error(`scrip master ${res.status}`);
       const text = await res.text();
       const lines = text.split(/\r?\n/).filter(Boolean);
-      const cols = splitCsvLine(lines[0] || "");
+      const cols = splitCsvLine(lines[0] || "").map((col, i) => (i === 0 ? col.replace(/^\uFEFF/, "") : col));
       const idx = Object.fromEntries(cols.map((col, i) => [col, i]));
       const grouped = Object.fromEntries(UNDERLYINGS.map((row) => [row.root, []]));
       const options = new Map();
@@ -103,7 +126,7 @@ async function loadScripMaster() {
             segment: und.segment,
           });
         } else if (instrument === "OPTIDX") {
-          const option = String(parts[idx.SEM_OPTION_TYPE] || "").toUpperCase();
+          const option = optionType(parts[idx.SEM_OPTION_TYPE]);
           const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
           if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
             options.set(optionKey(root, expiry, strike, option), String(securityId));
@@ -136,12 +159,13 @@ async function loadScripMaster() {
         futures: grouped,
       };
       return cache;
-    } catch {
+    } catch (error) {
+      console.log(`Dhan scrip master failed: ${error.message || error}`);
       cache = {
-        at: Date.now(),
+        at: 0,
         instruments: cache.instruments.length ? cache.instruments : FALLBACK,
-        options: cache.options instanceof Map ? cache.options : new Map(),
-        byExpiry: cache.byExpiry instanceof Map ? cache.byExpiry : new Map(),
+        options: cache.options instanceof Map && cache.options.size ? cache.options : new Map(),
+        byExpiry: cache.byExpiry instanceof Map && cache.byExpiry.size ? cache.byExpiry : new Map(),
         futures: cache.futures || {},
       };
       return cache;
@@ -357,15 +381,34 @@ export function attachContractIds(indices) {
   });
 }
 
+export async function reloadScripMaster() {
+  if (loading) return loading;
+  cache.at = 0;
+  return loadScripMaster();
+}
+
 export async function lookupOptionSecurityId({ symbol, expiry, strike, option } = {}) {
   const parsed = parseOptionContract(symbol);
   const root = optionRoot(symbol || parsed?.root);
-  const opt = String(option || parsed?.option || "").toUpperCase();
+  const opt = optionType(option || parsed?.option);
   const px = Number(strike || parsed?.strike || 0);
   const exp = normalizeExpiry(expiry);
-  if (!root || !opt || !px || !exp) return "";
+  if (!root || (opt !== "CE" && opt !== "PE") || !px || !exp) return "";
   const data = await loadScripMaster();
-  return data.options.get(optionKey(root, exp, px, opt)) || "";
+  const direct = data.options.get(optionKey(root, exp, px, opt));
+  if (direct) return String(direct);
+  const bucket = data.byExpiry.get(expiryKey(root, exp));
+  if (bucket) {
+    const ids = bucket.get(px) || bucket.get(Number(px));
+    const found = opt === "PE" ? ids?.putId : ids?.callId;
+    if (found) return String(found);
+    for (const [strikeKey, idsAt] of bucket.entries()) {
+      if (Math.abs(Number(strikeKey) - px) > 0.01) continue;
+      const id = opt === "PE" ? idsAt?.putId : idsAt?.callId;
+      if (id) return String(id);
+    }
+  }
+  return "";
 }
 
 export async function resolveTradableSecurityId({ symbol, expiry, strike, option, kind } = {}) {
@@ -374,7 +417,7 @@ export async function resolveTradableSecurityId({ symbol, expiry, strike, option
   if (isFuture) {
     return String(await lookupFutureSecurityId({ symbol, expiry })).trim();
   }
-  const opt = String(option || parsed?.option || "").toUpperCase();
+  const opt = optionType(option || parsed?.option);
   const px = Number(strike || parsed?.strike || 0);
   if (opt && px) {
     return String(
