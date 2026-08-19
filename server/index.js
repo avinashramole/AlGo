@@ -64,7 +64,7 @@ loadEnv();
 const app = express();
 const port = Number(process.env.PORT) || 4000;
 const PREVIEW_ORDER_ERROR =
-  "This is a Cursor preview. Open Chrome on your PC at http://localhost:5173 (keep npm start running). Dhan BUY/SELL from a preview uses a different IP. Do not add another IP.";
+  "Chrome is fine, but this address is a Cursor preview (agent.cvm.dev), not your PC. In the Chrome address bar type exactly http://localhost:5173 and press Enter. Keep npm start running. Do not add another IP.";
 
 function isPreviewRequest(req) {
   const origin = `${req.headers.origin || ""} ${req.headers.referer || ""}`;
