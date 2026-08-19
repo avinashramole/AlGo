@@ -10,7 +10,7 @@ if (typeof net.setDefaultAutoSelectFamily === "function") {
 
 export async function thisComputerPublicIpv4() {
   try {
-    const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(5000) });
+    const res = await fetch("https://api.ipify.org?format=json");
     const body = await res.json();
     return String(body.ip || "").trim() || null;
   } catch {
