@@ -73,7 +73,8 @@ export function OptionsScreen() {
   };
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+    <View style={styles.page}>
+      <View style={styles.head}>
       <Text style={styles.title}>Option Chain</Text>
       <Text style={styles.muted}>
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
@@ -120,6 +121,8 @@ export function OptionsScreen() {
           </View>
         </Card>
       ))}
+      </View>
+      <ScrollView style={styles.chain} contentContainerStyle={styles.chainContent}>
       {visibleRows.map((row) => (
         <Card key={row.strike}>
           <Text style={styles.strike}>
@@ -161,13 +164,16 @@ export function OptionsScreen() {
           </View>
         </Card>
       ))}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 40 },
+  head: { paddingHorizontal: 16, paddingTop: 16 },
+  chain: { flex: 1, minHeight: 0 },
+  chainContent: { paddingHorizontal: 16, paddingBottom: 40 },
   title: { fontSize: 22, fontWeight: "800" },
   muted: { color: colors.muted, marginTop: 4, marginBottom: 8, fontSize: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },

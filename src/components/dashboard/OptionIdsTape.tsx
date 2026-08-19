@@ -53,12 +53,13 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   };
 
   return (
-    <section className="card overflow-x-auto p-4">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+    <section className="card flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+      <div className="mb-3 shrink-0 flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10 strikes. BUY left of VWAP and LTP, SELL right. CE left, strike centre, PE right.
+            ATM ±10 strikes. BUY left of VWAP and LTP, SELL right. CE left, strike centre, PE right. Scroll the chain
+            only.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -77,9 +78,10 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           ))}
         </div>
       </div>
-      {note ? <div className="mb-2 text-xs font-semibold text-slate-500">{note}</div> : null}
-      <table className="w-full min-w-[1100px] text-left text-xs">
-        <thead className="text-[10px] uppercase tracking-wide text-slate-400">
+      {note ? <div className="mb-2 shrink-0 text-xs font-semibold text-slate-500">{note}</div> : null}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full min-w-[1100px] text-left text-xs">
+        <thead className="sticky top-0 z-10 bg-[var(--card)] text-[10px] uppercase tracking-wide text-slate-400 shadow-[inset_0_-1px_0_var(--border)] [&_th]:bg-[var(--card)]">
           <tr>
             <th colSpan={7} className="pb-2 text-center font-bold text-up">
               CE
@@ -149,7 +151,8 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </section>
   );
 }
