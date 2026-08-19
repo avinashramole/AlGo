@@ -61,12 +61,12 @@ export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?
   return amount;
 }
 
-/** VWAP vs LTP (base): above LTP is green, below LTP is red. */
+/** Option chain VWAP: LTP below VWAP is red, LTP above VWAP is green. */
 export function vwapColor(vwap: number, base: number) {
   const v = Number(vwap);
   const b = Number(base);
   if (!Number.isFinite(v) || !Number.isFinite(b) || b <= 0) return colors.muted;
-  if (v > b) return colors.up;
-  if (v < b) return colors.down;
+  if (b < v) return colors.down;
+  if (b > v) return colors.up;
   return colors.muted;
 }
