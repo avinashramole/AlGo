@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Trade 2 Smart</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,9 +12,62 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #1d39c4;
+      }
+      #t2s-boot {
+        min-height: 100vh;
+        margin: 0;
+        padding: 32px 24px;
+        box-sizing: border-box;
+        font-family: Inter, system-ui, sans-serif;
+        background: #1d39c4;
+        color: #fff;
+      }
+      #t2s-boot h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+      #t2s-boot p {
+        margin: 12px 0 0;
+        line-height: 1.5;
+        max-width: 40rem;
+      }
+      #t2s-boot code {
+        background: rgba(255, 255, 255, 0.15);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="t2s-boot">
+        <h1>Trade 2 Smart</h1>
+        <p>Loading the desk…</p>
+        <p>
+          If this stays here, Chrome is on the wrong address. Type
+          <code>http://localhost:5173</code> after <code>npm start</code> on your PC.
+        </p>
+      </div>
+    </div>
+    <script>
+      window.addEventListener(
+        "error",
+        function (event) {
+          var root = document.getElementById("root");
+          if (!root) return;
+          root.innerHTML =
+            '<div id="t2s-boot"><h1>T2S failed to start</h1><p>' +
+            String((event && event.message) || "Script error") +
+            "</p><p>In Chrome type <code>http://localhost:5173</code> and press Enter. Keep npm start open.</p></div>";
+        },
+        true,
+      );
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

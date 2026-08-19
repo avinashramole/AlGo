@@ -167,3 +167,19 @@ npx eas build -p ios --profile preview
 ```
 
 You do **not** need this to try the app today. Expo Go is enough.
+
+---
+
+## Linux VPS
+
+The PC desk is `npm start` (Vite on 5173). A VPS should use the production build:
+
+```bash
+npm run setup:vps
+npm run build
+PORT=4000 npm run start:vps
+```
+
+Open `http://66.116.248.198:4000`. Step-by-step Ubuntu + systemd: `deploy/vps-linux.md`.
+
+Live Dhan BUY/SELL on the VPS uses **66.116.248.198**. Dhan Static IP 1 is your home PC `150.129.129.108`. For live orders keep the PC desk, or only run BUY/SELL on the machine whose public IPv4 is already saved on Dhan.

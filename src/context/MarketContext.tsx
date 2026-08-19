@@ -7,6 +7,7 @@ import {
   createAlgo,
   deleteAlgo,
   disconnectBroker,
+  enableDhanAuto,
   getSnapshot,
   placeOrder,
   selectOptionChain,
@@ -31,6 +32,7 @@ import {
   marketWatch,
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
+import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
 
 const fallback: Snapshot = {
   indices,
@@ -116,6 +118,7 @@ type MarketContextValue = {
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
+  enableAuto: (payload: { clientId: string; pin: string; totpSecret: string }) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
   routeAlgo: (id: string, brokerId: string) => Promise<void>;
@@ -166,6 +169,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
       },
       order: async (payload: Record<string, unknown>) => {
+        if (isRemotePreviewHost()) {
+          throw new Error(PREVIEW_DESK_MESSAGE);
+        }
         const result = await placeOrder(payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
@@ -177,6 +183,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
         const result = await connectBroker(id, payload);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      enableAuto: async (payload: { clientId: string; pin: string; totpSecret: string }) => {
+        const result = await enableDhanAuto(payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

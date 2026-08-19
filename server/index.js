@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -63,6 +63,13 @@ loadEnv();
 
 const app = express();
 const port = Number(process.env.PORT) || 4000;
+const PREVIEW_ORDER_ERROR =
+  "Chrome is fine, but this address is a Cursor preview (agent.cvm.dev), not your PC. In the Chrome address bar type exactly http://localhost:5173 and press Enter. Keep npm start running. Do not add another IP.";
+
+function isPreviewRequest(req) {
+  const origin = `${req.headers.origin || ""} ${req.headers.referer || ""}`;
+  return /cvm\.dev|cursor\.sh|ngrok|trycloudflare|githubpreview|github\.dev/i.test(origin);
+}
 
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
@@ -231,6 +238,27 @@ app.get("/api/snapshot", (_req, res) => {
 
 app.get("/api/brokers", (_req, res) => {
   res.json(publicBrokers());
+});
+
+app.post("/api/brokers/dhan/auto", async (req, res) => {
+  try {
+    const result = await enableDhanAuto({
+      clientId: req.body?.clientId,
+      pin: req.body?.pin,
+      totpSecret: req.body?.totpSecret || req.body?.totp,
+    });
+    res.json({
+      ok: true,
+      live: true,
+      tokenHint: result.tokenHint,
+      autoMode: result.autoMode,
+      tokenExpiry: result.tokenExpiry,
+      account: publicBrokers().brokers.find((item) => item.id === "dhan"),
+      snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not generate Dhan token" });
+  }
 });
 
 app.post("/api/brokers/:id/connect", async (req, res) => {
@@ -420,6 +448,10 @@ app.post("/api/orders", async (req, res) => {
   const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
   try {
     if (brokerId === "dhan" && isDhanLive()) {
+      if (isPreviewRequest(req)) {
+        res.status(400).json({ ok: false, live: false, error: PREVIEW_ORDER_ERROR });
+        return;
+      }
       const live = await placeDhanOrder(body);
       let order = snapshot().orders.find((row) => String(row.id) === String(live.orderId));
       if (!order) {
@@ -429,7 +461,13 @@ app.post("/api/orders", async (req, res) => {
           return;
         }
       }
-      res.status(201).json({ ok: true, live: true, order, snapshot: snapshot() });
+      res.status(201).json({
+        ok: true,
+        live: true,
+        afterMarketOrder: Boolean(live.afterMarketOrder),
+        order,
+        snapshot: snapshot(),
+      });
       return;
     }
     const order = placeOrder({ ...body, brokerId, live: null });
@@ -510,6 +548,10 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
         res.status(400).json({ error: "LIVE mode only squares real Dhan positions." });
         return;
       }
+      if (isPreviewRequest(req)) {
+        res.status(400).json({ error: PREVIEW_ORDER_ERROR });
+        return;
+      }
       await placeDhanOrder({
         symbol: pos.symbol,
         name: pos.symbol,
@@ -553,9 +595,32 @@ app.use("/api", (req, res) => {
   });
 });
 
+const dist = path.join(__dirname, "..", "dist");
+const distIndex = path.join(dist, "index.html");
+const serveWebsite = fs.existsSync(distIndex);
+if (serveWebsite) {
+  app.use(express.static(dist));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      next();
+      return;
+    }
+    if (req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+    res.sendFile(distIndex);
+  });
+}
+
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
-  console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
+  console.log("T2S Dhan orders: send-through (not blocked locally)");
+  if (serveWebsite) {
+    console.log(`Website is served from this same port. Open http://THIS-SERVER:${port}`);
+  } else {
+    console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
+  }
   try {
     const publicIp = await thisComputerPublicIpv4();
     if (publicIp) {
@@ -564,7 +629,7 @@ app.listen(port, "0.0.0.0", async () => {
     }
     const booted = await bootDhanFromEnv();
     if (booted) {
-      console.log("Dhan live feed started from DHAN_ACCESS_TOKEN");
+      console.log("Dhan live feed started (saved token or PIN + TOTP)");
     } else if (process.env.DHAN_ACCESS_TOKEN) {
       console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
     }

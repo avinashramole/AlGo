@@ -45,7 +45,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
       });
       setNote(
         result.live
-          ? `Sent to Dhan · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
+          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
           : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
       );
     } catch (err) {
@@ -59,13 +59,12 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   };
 
   return (
-    <section className="card flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-      <div className="mb-3 shrink-0 flex flex-wrap items-end justify-between gap-2">
+    <section className="card p-3 md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden md:p-4">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 md:shrink-0">
         <div>
           <div className="text-sm font-bold">Index options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
-            ATM ±10 strikes. BUY left of VWAP and LTP, SELL right. CE left, strike centre, PE right. Scroll the chain
-            only.
+            ATM ±10. Phone shows LTP, VWAP, and BUY/SELL on each strike. VWAP colour is the same as desktop.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -85,9 +84,49 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         </div>
       </div>
       {note ? (
-        <div className={cn("mb-2 shrink-0 text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
+        <div className={cn("mb-2 break-words text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="space-y-2 md:hidden">
+        {visible.map((row) => {
+          const callVwap = row.callVwap || row.callLtp;
+          const putVwap = row.putVwap || row.putLtp;
+          return (
+            <div key={row.strike} className={cn("rounded-xl border border-[var(--border)] p-2", row.atm && "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10")}>
+              <div className="mb-2 text-center text-sm font-bold">
+                {row.strike}
+                {row.atm ? " ATM" : ""}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-up">CE</div>
+                  <div className="text-sm font-bold text-up">{formatNumber(row.callLtp)}</div>
+                  <div className={cn("text-[11px] font-semibold", vwapTone(callVwap, row.callLtp))}>
+                    VWAP {formatNumber(callVwap)}
+                  </div>
+                  <div className={cn("text-[10px]", row.callChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.callChg)}</div>
+                  <div className="mt-1 flex gap-1">
+                    <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />
+                    <SideButton busy={busy} id={`${row.strike}-CE`} side="SELL" onClick={() => void trade("CE", "SELL", row)} />
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase text-down">PE</div>
+                  <div className="text-sm font-bold text-down">{formatNumber(row.putLtp)}</div>
+                  <div className={cn("text-[11px] font-semibold", vwapTone(putVwap, row.putLtp))}>
+                    VWAP {formatNumber(putVwap)}
+                  </div>
+                  <div className={cn("text-[10px]", row.putChg >= 0 ? "text-up" : "text-down")}>{formatPct(row.putChg)}</div>
+                  <div className="mt-1 flex justify-end gap-1">
+                    <SideButton busy={busy} id={`${row.strike}-PE`} side="BUY" onClick={() => void trade("PE", "BUY", row)} />
+                    <SideButton busy={busy} id={`${row.strike}-PE`} side="SELL" onClick={() => void trade("PE", "SELL", row)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="hidden min-h-0 flex-1 overflow-auto md:block">
         <table className="w-full min-w-[1100px] text-left text-xs">
         <thead className="sticky top-0 z-10 bg-[var(--card)] text-[10px] uppercase tracking-wide text-slate-400 shadow-[inset_0_-1px_0_var(--border)] [&_th]:bg-[var(--card)]">
           <tr>
@@ -182,7 +221,7 @@ function SideButton({
       disabled={Boolean(busy)}
       onClick={onClick}
       className={cn(
-        "h-7 rounded-md px-2 text-[10px] font-bold text-white disabled:opacity-50",
+        "h-10 min-w-[3.25rem] flex-1 rounded-md px-2 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:min-w-0 md:flex-none md:text-[10px]",
         side === "BUY" ? "bg-emerald-500" : "bg-rose-500",
       )}
     >

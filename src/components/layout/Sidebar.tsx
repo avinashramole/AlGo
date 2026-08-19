@@ -42,7 +42,7 @@ export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-[68px] flex-col items-center border-r border-[var(--border)] bg-[var(--card)] py-3">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[68px] flex-col items-center border-r border-[var(--border)] bg-[var(--card)] py-3 md:flex">
       <NavLink to="/" end title="Trade 2 Smart" className="mb-4 flex h-10 w-10 items-center justify-center">
         <BrandMark variant="emblem" size="md" />
       </NavLink>

@@ -1,0 +1,16 @@
+[Unit]
+Description=Trade 2 Smart API and website
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/t2s
+Environment=NODE_ENV=production
+Environment=PORT=4000
+EnvironmentFile=-/opt/t2s/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

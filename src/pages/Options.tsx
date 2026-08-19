@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { FuturesTape } from "../components/dashboard/FuturesTape";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { useMarket } from "../context/MarketContext";
-import { cn, formatNumber } from "../lib/format";
+import { cn, formatNumber, isNseSessionOpen } from "../lib/format";
 
 export function Options() {
   const { data, selectChain } = useMarket();
@@ -26,7 +25,7 @@ export function Options() {
   const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] min-h-0 flex-col gap-3 overflow-hidden">
+    <div className="flex min-h-0 flex-col gap-3 md:h-full md:overflow-hidden">
       <div className="shrink-0 space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -78,6 +77,7 @@ export function Options() {
           )}
         >
           {data.dhanFeed?.live ? (
+            isNseSessionOpen() ? (
             <>
               BUY/SELL goes to Dhan. Confirm in the{" "}
               <Link to="/orders" className="underline">
@@ -85,6 +85,15 @@ export function Options() {
               </Link>{" "}
               and the Dhan app.
             </>
+            ) : (
+            <>
+              NSE is closed (09:15–15:30 IST). BUY/SELL is sent to Dhan as an after-market order for next open. Confirm in the{" "}
+              <Link to="/orders" className="underline">
+                order book
+              </Link>{" "}
+              and the Dhan app AMO tab.
+            </>
+            )
           ) : (
             <>
               Desk fill only until Dhan is LIVE. Paste Access Token on{" "}
@@ -95,7 +104,6 @@ export function Options() {
             </>
           )}
         </div>
-        <FuturesTape />
       </div>
       <OptionIdsTape lots={lots} />
     </div>

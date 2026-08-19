@@ -56,7 +56,7 @@ export function normalizeExpiry(value) {
   if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
   const mdy = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{2})$/);
   if (mdy) return `20${mdy[3]}-${mdy[1]}-${mdy[2]}`;
-  const named = raw.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[a-z]*[-\s](\d{4})$/i);
+  const named = raw.match(/(\d{1,2})[-\s]([A-Za-z]{3})[a-z]*[-\s,]+(\d{4})/i);
   if (named) {
     const month = MONTHS[named[2].slice(0, 3).toLowerCase()];
     if (month) return `${named[3]}-${month}-${named[1].padStart(2, "0")}`;
