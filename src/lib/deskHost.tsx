@@ -2,9 +2,7 @@ export const PREVIEW_DESK_MESSAGE =
   "Chrome is fine, but this address is a Cursor preview (agent.cvm.dev), not your PC. In the Chrome address bar type exactly http://localhost:5173 and press Enter. Keep npm start running on your computer. Do not add another IP.";
 
 export function isRemotePreviewHost(host = typeof window === "undefined" ? "" : window.location.hostname) {
-  return /cvm\.dev|cursor\.com|cursor\.sh|ngrok|trycloudflare|githubpreview|github\.dev|cloudfront|amazonaws/i.test(
-    String(host || ""),
-  );
+  return /cvm\.dev|cursor\.sh|ngrok|trycloudflare|githubpreview|github\.dev/i.test(String(host || ""));
 }
 
 export function PreviewDeskBanner() {

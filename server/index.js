@@ -568,10 +568,32 @@ app.use("/api", (req, res) => {
   });
 });
 
+const dist = path.join(__dirname, "..", "dist");
+const distIndex = path.join(dist, "index.html");
+const serveWebsite = fs.existsSync(distIndex);
+if (serveWebsite) {
+  app.use(express.static(dist));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      next();
+      return;
+    }
+    if (req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+    res.sendFile(distIndex);
+  });
+}
+
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
   console.log("T2S Dhan orders: send-through (not blocked locally)");
-  console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
+  if (serveWebsite) {
+    console.log(`Website is served from this same port. Open http://THIS-SERVER:${port}`);
+  } else {
+    console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
+  }
   try {
     const publicIp = await thisComputerPublicIpv4();
     if (publicIp) {
