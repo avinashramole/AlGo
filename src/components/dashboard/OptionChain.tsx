@@ -109,7 +109,7 @@ function MiniButton({
       disabled={Boolean(busy)}
       onClick={onClick}
       className={cn(
-        "h-5 rounded px-1.5 text-[9px] font-bold text-white disabled:opacity-50",
+        "h-8 min-w-[2.5rem] rounded px-2 text-[10px] font-bold text-white disabled:opacity-50 md:h-5 md:min-w-0 md:px-1.5 md:text-[9px]",
         side === "BUY" ? "bg-emerald-500" : "bg-rose-500",
       )}
     >

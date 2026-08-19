@@ -76,7 +76,7 @@ export function TickerStrip() {
                   type="button"
                   disabled={Boolean(busy)}
                   onClick={() => void tradeFuture(item, "BUY")}
-                  className="h-7 flex-1 rounded-md bg-emerald-500 text-[10px] font-bold text-white disabled:opacity-50"
+                  className="h-10 flex-1 rounded-md bg-emerald-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
                   {busy === `${root}-BUY` ? "..." : `BUY ${root} FUT`}
                 </button>
@@ -84,7 +84,7 @@ export function TickerStrip() {
                   type="button"
                   disabled={Boolean(busy)}
                   onClick={() => void tradeFuture(item, "SELL")}
-                  className="h-7 flex-1 rounded-md bg-rose-500 text-[10px] font-bold text-white disabled:opacity-50"
+                  className="h-10 flex-1 rounded-md bg-rose-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
                   {busy === `${root}-SELL` ? "..." : "SELL"}
                 </button>

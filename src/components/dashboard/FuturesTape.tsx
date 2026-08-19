@@ -67,20 +67,59 @@ export function FuturesTape() {
   }
 
   return (
-    <section className="card overflow-x-auto p-4">
+    <section className="card p-3 md:overflow-x-auto md:p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="text-sm font-bold">Index futures · current month</div>
-          <p className="text-xs text-slate-400">
+          <p className="hidden text-xs text-slate-400 md:block">
             Front-month contract only. BUY/SELL is 1 lot MIS on Dhan when LIVE. The desk looks up the contract on the
             server.
           </p>
         </div>
         {note ? (
-          <div className={`text-xs font-semibold ${noteFail ? "text-down" : "text-slate-500"}`}>{note}</div>
+          <div className={`break-words text-xs font-semibold ${noteFail ? "text-down" : "text-slate-500"}`}>{note}</div>
         ) : null}
       </div>
-      <table className="w-full min-w-[760px] text-left text-xs">
+      <div className="space-y-2 md:hidden">
+        {rows.map((row) => {
+          const quotes = futureQuotes(row, data.indices);
+          return (
+            <div key={`${row.root}-${row.expiry}`} className="rounded-xl border border-[var(--border)] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-sm font-bold">{row.symbol}</div>
+                  <div className="text-[11px] text-slate-400">{row.expiry || "—"} · lot {row.lot}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold">{formatNumber(quotes.ltp)}</div>
+                  <div className={cn("text-[11px] font-semibold", vwapTone(quotes.vwap, quotes.ltp))}>
+                    VWAP {formatNumber(quotes.vwap)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void trade(row, "BUY")}
+                  className="h-10 flex-1 rounded-lg bg-emerald-500 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  {busy === `${row.root}-${row.expiry}-BUY` ? "..." : "BUY"}
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void trade(row, "SELL")}
+                  className="h-10 flex-1 rounded-lg bg-rose-500 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  {busy === `${row.root}-${row.expiry}-SELL` ? "..." : "SELL"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <table className="hidden w-full min-w-[760px] text-left text-xs md:table">
         <thead className="text-[10px] uppercase tracking-wide text-slate-400">
           <tr>
             <th className="pb-2 font-semibold">Contract</th>

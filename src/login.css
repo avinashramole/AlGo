@@ -8,8 +8,9 @@
   --green: #22c55e;
   box-sizing: border-box;
   position: relative;
-  overflow: hidden;
+  overflow: auto;
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: 1fr;
   color-scheme: light;
@@ -36,7 +37,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px 16px 36px;
+  padding: 28px 16px calc(36px + env(safe-area-inset-bottom));
 }
 
 .t2s-login-card {
@@ -101,7 +102,7 @@
   outline: none !important;
   background: transparent !important;
   color: var(--text) !important;
-  font-size: 15px !important;
+  font-size: 16px !important;
   font-weight: 400 !important;
   appearance: none !important;
   -webkit-appearance: none !important;
@@ -348,11 +349,16 @@
   .t2s-login-waves {
     display: none;
   }
+
+  .t2s-login-title {
+    font-size: 26px;
+  }
 }
 
 @media (min-width: 960px) {
   .t2s-login {
     position: relative;
+    overflow: hidden;
     grid-template-columns: minmax(0, 480px) 420px;
     justify-content: center;
     align-items: center;
