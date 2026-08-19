@@ -1,3 +1,4 @@
+import "./ipv4.js";
 import cors from "cors";
 import express from "express";
 import fs from "node:fs";
