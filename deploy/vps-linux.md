@@ -1,7 +1,9 @@
 # Host Trade 2 Smart on Linux VPS — step by step
 
 VPS: **66.116.248.198**  
-Website: **http://66.116.248.198:4000**  
+Domain: **trade2smart.com**  
+Website: **https://trade2smart.com** (after Step 6)  
+Until DNS is ready: **http://66.116.248.198:4000**  
 This machine is **not Ubuntu**. If `apt` is missing, use **dnf** or **yum** (Rocky / Alma / CentOS / RHEL).
 
 Do **not** run these commands in Windows PowerShell. SSH first until you see `[root@trade2smart ~]#`.
@@ -111,6 +113,52 @@ systemctl status t2s
 ```
 
 Press `q` to leave status.
+
+---
+
+## Step 6 — Point trade2smart.com at this VPS
+
+Do this on the website where you bought the domain (GoDaddy, Namecheap, Hostinger, Cloudflare, BigRock, etc.). Not in SSH.
+
+Add two **A** records:
+
+| Host / Name | Type | Value | TTL |
+|---|---|---|---|
+| `@` (or blank, or `trade2smart.com`) | A | `66.116.248.198` | 300 or Auto |
+| `www` | A | `66.116.248.198` | 300 or Auto |
+
+Save. Wait until this works on your PC (can take a few minutes):
+
+```bat
+nslookup trade2smart.com
+```
+
+You must see **66.116.248.198**. If you still see an old IP, wait and try again. Do not continue until it matches.
+
+T2S must already be running (`systemctl status t2s` shows **active**). Open TCP **80** and **443** in the VPS **hosting panel**. Then in SSH:
+
+```bash
+cd /opt/t2s
+git pull origin cursor/all-desk-checks-00e8
+dnf -y install epel-release
+dnf -y install nginx certbot python3-certbot-nginx
+setsebool -P httpd_can_network_connect 1
+cp /opt/t2s/deploy/nginx-trade2smart.conf /etc/nginx/conf.d/trade2smart.conf
+nginx -t
+systemctl enable --now nginx
+systemctl reload nginx
+certbot --nginx -d trade2smart.com -d www.trade2smart.com
+```
+
+If `dnf` is missing, use `yum` in those same lines. If `setsebool` errors, skip it.
+
+If certbot asks questions: type your email, agree to terms, then choose to redirect HTTP to HTTPS.
+
+Chrome: **https://trade2smart.com**
+
+Login: `demo@t2s.app` / `demo123`
+
+If Chrome cannot open the domain, the hosting panel is still blocking 80/443. **http://66.116.248.198:4000** can still work.
 
 ---
 
