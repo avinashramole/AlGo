@@ -68,10 +68,52 @@ function authHeaders(token, id) {
   return headers;
 }
 
-async function dhanGet(path, token, id) {
-  const res = await fetch(`${DHAN_API}${path}`, {
-    headers: authHeaders(token, id),
-  });
+function remarkText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return String(value.error_message || value.errorMessage || value.message || value.error_code || value.errorCode || "");
+}
+
+function dhanErrorText(json, fallback) {
+  const nested = json?.error && typeof json.error === "object" ? json.error : null;
+  const data = json?.data && typeof json.data === "object" ? json.data : null;
+  const message =
+    json?.errorMessage ||
+    json?.error_message ||
+    nested?.errorMessage ||
+    nested?.error_message ||
+    remarkText(json?.remarks) ||
+    data?.errorMessage ||
+    data?.error_message ||
+    json?.message ||
+    (typeof json?.raw === "string" && json.raw.length < 180 ? json.raw : "") ||
+    fallback;
+  return clarifyDhanOrderError(String(message || fallback || "Dhan request failed"));
+}
+
+function clarifyDhanOrderError(message) {
+  if (!/invalid ip|dh-905|whitelist|not authorised|not authorized/i.test(message)) return message;
+  return "Invalid IP — Dhan did not place this order. Quotes can still run. BUY/SELL uses the static IP already saved on web.dhan.co → Access DhanHQ APIs. If that IP is already there, regenerate the Access Token and paste it on Brokers.";
+}
+
+function dhanFailed(json, res) {
+  if (res && !res.ok) return true;
+  if (!json || typeof json !== "object") return false;
+  const status = String(json.status || json.Status || "").toLowerCase();
+  if (status === "failure" || status === "failed" || status === "error") return true;
+  if (json.errorCode || json.errorType || json.error?.errorCode || json.error?.errorType) return true;
+  const orderStatus = String(json.orderStatus || json.data?.orderStatus || json.order_status || "").toUpperCase();
+  return orderStatus === "REJECTED";
+}
+
+function throwDhanError(json, res) {
+  const error = new Error(dhanErrorText(json, `Dhan API ${res?.status || ""}`.trim()));
+  error.status = res?.ok ? 400 : res?.status || 400;
+  error.body = json;
+  throw error;
+}
+
+async function readDhanJson(res) {
   const text = await res.text();
   let json = null;
   try {
@@ -79,19 +121,15 @@ async function dhanGet(path, token, id) {
   } catch {
     json = { raw: text };
   }
-  if (!res.ok) {
-    const message =
-      json?.errorMessage ||
-      json?.error?.errorMessage ||
-      json?.message ||
-      json?.remarks ||
-      `Dhan API ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    error.body = json;
-    throw error;
-  }
+  if (dhanFailed(json, res)) throwDhanError(json, res);
   return json;
+}
+
+async function dhanGet(path, token, id) {
+  const res = await fetch(`${DHAN_API}${path}`, {
+    headers: authHeaders(token, id),
+  });
+  return readDhanJson(res);
 }
 
 async function dhanPost(path, token, id, body) {
@@ -103,26 +141,7 @@ async function dhanPost(path, token, id, body) {
     },
     body: JSON.stringify(body),
   });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  if (!res.ok) {
-    const message =
-      json?.errorMessage ||
-      json?.error?.errorMessage ||
-      json?.message ||
-      json?.remarks ||
-      `Dhan API ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    error.body = json;
-    throw error;
-  }
-  return json;
+  return readDhanJson(res);
 }
 
 async function dhanDelete(path, token, id) {
@@ -130,25 +149,7 @@ async function dhanDelete(path, token, id) {
     method: "DELETE",
     headers: authHeaders(token, id),
   });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  if (!res.ok) {
-    const message =
-      json?.errorMessage ||
-      json?.error?.errorMessage ||
-      json?.message ||
-      json?.remarks ||
-      `Dhan API ${res.status}`;
-    const error = new Error(message);
-    error.status = res.status;
-    error.body = json;
-    throw error;
-  }
+  const json = await readDhanJson(res);
   return json || { ok: true };
 }
 
@@ -823,23 +824,30 @@ export async function placeDhanOrder(payload = {}) {
     productType: productType(payload.product),
     orderType,
     validity: "DAY",
-    securityId,
+    securityId: String(securityId),
     quantity: qty,
     disclosedQuantity: 0,
     price: orderType === "LIMIT" ? Number(payload.price || 0) : 0,
     triggerPrice: 0,
     afterMarketOrder: false,
   });
+  const data = result?.data && typeof result.data === "object" ? result.data : result || {};
+  const orderId = String(data.orderId || data.order_id || result?.orderId || "");
+  const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
+  if (!orderId || status.toUpperCase() === "REJECTED") {
+    const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
+    error.status = 400;
+    throw error;
+  }
   try {
     await pullAccount();
   } catch {
     /* order is still at Dhan */
   }
-  const data = result?.data || result || {};
   return {
-    orderId: String(data.orderId || data.order_id || result?.orderId || ""),
-    status: data.orderStatus || data.order_status || result?.orderStatus || "TRANSIT",
-    securityId,
+    orderId,
+    status: status || "TRANSIT",
+    securityId: String(securityId),
     filledQty: Number(data.filledQty || result?.filledQty || 0),
     raw: result,
   };

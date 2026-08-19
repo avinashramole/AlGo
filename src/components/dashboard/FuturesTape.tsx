@@ -5,12 +5,14 @@ export function FuturesTape() {
   const { data, order } = useMarket();
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
+  const [noteFail, setNoteFail] = useState(false);
   const rows = (data.futures || []).filter((row) => row.front);
 
   const trade = async (row: (typeof rows)[number], side: "BUY" | "SELL") => {
     const key = `${row.root}-${row.expiry}-${side}`;
     setBusy(key);
     setNote("");
+    setNoteFail(false);
     try {
       const result = await order({
         symbol: row.symbol,
@@ -32,7 +34,10 @@ export function FuturesTape() {
           : result.warning || `Desk fill · ${side} ${row.name}`,
       );
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "Order failed");
+      const message = err instanceof Error ? err.message : "Order failed";
+      setNoteFail(true);
+      setNote(message);
+      window.alert(message);
     } finally {
       setBusy("");
     }
@@ -57,7 +62,9 @@ export function FuturesTape() {
             server.
           </p>
         </div>
-        {note ? <div className="text-xs font-semibold text-slate-500">{note}</div> : null}
+        {note ? (
+          <div className={`text-xs font-semibold ${noteFail ? "text-down" : "text-slate-500"}`}>{note}</div>
+        ) : null}
       </div>
       <table className="w-full min-w-[640px] text-left text-xs">
         <thead className="text-[10px] uppercase tracking-wide text-slate-400">

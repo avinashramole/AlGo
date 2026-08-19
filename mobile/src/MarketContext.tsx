@@ -62,6 +62,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         const result = await placeOrder(payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
+        const status = String(result.order?.status || "").toUpperCase();
+        if (result.error || result.ok === false || status === "REJECTED") {
+          throw new Error(result.error || result.order?.reason || "Dhan did not place this order.");
+        }
         return result;
       },
       connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {

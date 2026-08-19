@@ -447,7 +447,11 @@ app.post("/api/orders", async (req, res) => {
       snapshot: snapshot(),
     });
   } catch (error) {
-    res.status(error.status || 400).json({ ok: false, live: false, error: error.message || "Order failed" });
+    res.status(error.status || 400).json({
+      ok: false,
+      live: false,
+      error: String(error.message || "Order failed"),
+    });
   }
 });
 
