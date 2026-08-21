@@ -8,6 +8,7 @@ import {
   msUntilDailyRenewal,
   nextDailyRenewalAt,
   parseDhanExpiry,
+  requirePinTotp,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -65,6 +66,10 @@ test("retryAfterMs reads seconds or milliseconds", () => {
   assert.equal(retryAfterMs({ headers: { "retry-after": "2" } }, 1000), 2000);
   assert.equal(retryAfterMs({ headers: { "retry-after": "1500" } }, 1000), 1500);
   assert.equal(retryAfterMs({ headers: {} }, 3000), 3000);
+});
+
+test("requirePinTotp demands PIN + TOTP on the server", () => {
+  assert.throws(() => requirePinTotp({ clientId: "1100000001", pin: "", totpSecret: "" }), /PIN \+ TOTP is required/);
 });
 
 test("nextDailyRenewalAt resets at 8:00 AM IST", () => {

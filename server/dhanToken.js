@@ -105,6 +105,27 @@ export function canAutoGenerate() {
   return Boolean(session.clientId && session.pin && session.totpSecret);
 }
 
+export function requirePinTotp({ clientId, pin, totpSecret } = {}) {
+  const session = loadDhanSession();
+  const creds = {
+    clientId: String(clientId || session.clientId || "").trim(),
+    pin: String(pin || session.pin || "").trim(),
+    totpSecret: String(totpSecret || session.totpSecret || "").trim(),
+  };
+  if (!creds.clientId) {
+    throw Object.assign(new Error("Dhan Client ID is required on the server to change the access token."), { status: 400 });
+  }
+  if (!/^\d{4,6}$/.test(creds.pin) || creds.totpSecret.length < 10) {
+    throw Object.assign(
+      new Error(
+        "PIN + TOTP is required on the server to change the Dhan token. Save them on Brokers, or set DHAN_CLIENT_ID, DHAN_PIN, and DHAN_TOTP_SECRET.",
+      ),
+      { status: 400 },
+    );
+  }
+  return creds;
+}
+
 export function jwtExpiryIso(token) {
   try {
     const parts = String(token || "").split(".");

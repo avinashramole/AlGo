@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -250,14 +250,40 @@ app.post("/api/brokers/dhan/auto", async (req, res) => {
     res.json({
       ok: true,
       live: true,
+      rotated: true,
       tokenHint: result.tokenHint,
       autoMode: result.autoMode,
       tokenExpiry: result.tokenExpiry,
+      nextRenewAt: result.nextRenewAt,
       account: publicBrokers().brokers.find((item) => item.id === "dhan"),
       snapshot: snapshot(),
     });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not generate Dhan token" });
+  }
+});
+
+app.post("/api/brokers/dhan/refresh", async (req, res) => {
+  try {
+    const result = await rotateDhanAccessToken({
+      clientId: req.body?.clientId,
+      pin: req.body?.pin,
+      totpSecret: req.body?.totpSecret || req.body?.totp,
+      reason: "api",
+    });
+    res.json({
+      ok: true,
+      live: true,
+      rotated: true,
+      tokenHint: result.tokenHint,
+      autoMode: result.autoMode,
+      tokenExpiry: result.tokenExpiry,
+      nextRenewAt: result.nextRenewAt,
+      account: publicBrokers().brokers.find((item) => item.id === "dhan"),
+      snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not change Dhan token" });
   }
 });
 

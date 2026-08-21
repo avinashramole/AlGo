@@ -541,12 +541,28 @@ export function enableDhanAuto(payload: { clientId: string; pin: string; totpSec
   return request<{
     ok: boolean;
     live?: boolean;
+    rotated?: boolean;
     error?: string;
     tokenHint?: string;
     autoMode?: string;
     tokenExpiry?: string;
+    nextRenewAt?: string;
     snapshot?: Snapshot;
   }>("/brokers/dhan/auto", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function refreshDhanToken(payload: { clientId?: string; pin?: string; totpSecret?: string } = {}) {
+  return request<{
+    ok: boolean;
+    live?: boolean;
+    rotated?: boolean;
+    error?: string;
+    tokenHint?: string;
+    autoMode?: string;
+    tokenExpiry?: string;
+    nextRenewAt?: string;
+    snapshot?: Snapshot;
+  }>("/brokers/dhan/refresh", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {

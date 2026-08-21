@@ -27,9 +27,9 @@ import {
   isDhanRateLimitError,
   loadDhanSession,
   markDhanAutoStart,
+  requirePinTotp,
   persistPastedToken,
   msUntilDailyRenewal,
-  renewDhanAccessToken,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -1262,9 +1262,17 @@ export function stopDhanLive() {
   });
 }
 
+export async function rotateDhanAccessToken({ clientId, pin, totpSecret, reason = "api" } = {}) {
+  const creds = requirePinTotp({ clientId, pin, totpSecret });
+  const generated = await generateDhanAccessToken(creds);
+  const live = await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+  lastKeepAliveAt = Date.now();
+  console.log(`Dhan LIVE token changed with PIN + TOTP (${reason}) · expires ${generated.expiryTime}`);
+  return { ...live, rotated: true, expiryTime: generated.expiryTime };
+}
+
 export async function enableDhanAuto({ clientId, pin, totpSecret }) {
-  const generated = await generateDhanAccessToken({ clientId, pin, totpSecret });
-  return startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+  return rotateDhanAccessToken({ clientId, pin, totpSecret, reason: "save" });
 }
 
 function tokenMsRemaining() {
@@ -1297,7 +1305,7 @@ function scheduleTokenKeepAlive() {
 
 async function keepDhanTokenFresh(reason = "schedule") {
   if (keepAlivePromise) return keepAlivePromise;
-  if (reason !== "auth" && Date.now() - lastKeepAliveAt < 45_000) {
+  if (reason !== "auth" && reason !== "api" && Date.now() - lastKeepAliveAt < 45_000) {
     scheduleTokenKeepAlive();
     return;
   }
@@ -1313,23 +1321,7 @@ async function keepDhanTokenFresh(reason = "schedule") {
         console.log(`Dhan LIVE restarted after ${reason} without minting a new token`);
         return;
       }
-      if (canAutoGenerate()) {
-        const generated = await generateDhanAccessToken();
-        await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
-        lastKeepAliveAt = Date.now();
-        console.log(`Dhan LIVE token auto-generated (${reason})`);
-        return;
-      }
-      if (reason === "auth") {
-        throw Object.assign(
-          new Error("Access token expired. Save PIN + TOTP on Brokers so T2S can generate a new one."),
-          { status: 401, authExpired: true },
-        );
-      }
-      const renewed = await renewDhanAccessToken();
-      await startDhanLive({ accessToken: renewed.accessToken, clientId: renewed.clientId });
-      lastKeepAliveAt = Date.now();
-      console.log(`Dhan LIVE token auto-renewed (${reason})`);
+      await rotateDhanAccessToken({ reason });
     } catch (error) {
       if (isDhanRateLimitError(error)) {
         const wait = Math.min(5 * 60 * 1000, error.retryAfterMs || 30_000);
@@ -1428,7 +1420,7 @@ export async function bootDhanFromEnv() {
     setDhanFeed({
       live: false,
       source: "idle",
-      error: "Env token failed. Paste a new Access Token or save PIN + TOTP secret on Brokers.",
+      error: "Env token failed. PIN + TOTP is required on the server to change the Dhan token.",
     });
   }
   return false;
