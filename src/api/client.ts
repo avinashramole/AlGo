@@ -290,6 +290,7 @@ export type Snapshot = {
     autoRenew?: boolean;
     autoMode?: string;
     tokenExpiry?: string | null;
+    nextRenewAt?: string | null;
     autoStart?: boolean;
   };
   futures?: Array<{

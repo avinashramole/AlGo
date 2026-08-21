@@ -47,6 +47,43 @@ export function saveDhanSession(patch = {}) {
   return next;
 }
 
+export const TOKEN_RENEW_HOUR_IST = 8;
+const RENEW_GRACE_MS = 15 * 60 * 1000;
+
+function kolkataParts(date) {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+}
+
+export function nextDailyRenewalAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
+  const parts = kolkataParts(new Date(from));
+  const today = Date.parse(
+    `${parts.year}-${parts.month}-${parts.day}T${String(hour).padStart(2, "0")}:00:00+05:30`,
+  );
+  if (!Number.isFinite(today)) return from + 24 * 60 * 60 * 1000;
+  if (from < today) return today;
+  if (from - today < RENEW_GRACE_MS) return today;
+  return today + 24 * 60 * 60 * 1000;
+}
+
+export function msUntilDailyRenewal(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
+  return Math.max(5_000, nextDailyRenewalAt(from, hour) - from);
+}
+
 export function dhanTokenStatus() {
   const session = loadDhanSession();
   const autoGenerate = Boolean(session.pin && session.totpSecret && session.clientId);
@@ -58,6 +95,7 @@ export function dhanTokenStatus() {
     autoRenew: autoGenerate || Boolean(session.accessToken && session.source === "web"),
     autoMode: autoGenerate ? "generate" : session.source === "web" ? "renew" : "off",
     tokenExpiry: expiryTime || session.expiryTime || null,
+    nextRenewAt: new Date(nextDailyRenewalAt()).toISOString(),
     autoStart: session.autoStart !== false,
   };
 }

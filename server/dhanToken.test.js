@@ -5,6 +5,8 @@ import {
   isDhanAuthExpiredError,
   isDhanRateLimitError,
   jwtExpiryIso,
+  msUntilDailyRenewal,
+  nextDailyRenewalAt,
   parseDhanExpiry,
   resolveTokenExpiry,
   retryAfterMs,
@@ -63,4 +65,17 @@ test("retryAfterMs reads seconds or milliseconds", () => {
   assert.equal(retryAfterMs({ headers: { "retry-after": "2" } }, 1000), 2000);
   assert.equal(retryAfterMs({ headers: { "retry-after": "1500" } }, 1000), 1500);
   assert.equal(retryAfterMs({ headers: {} }, 3000), 3000);
+});
+
+test("nextDailyRenewalAt resets at 8:00 AM IST", () => {
+  const eightAm = Date.parse("2026-08-21T02:30:00.000Z");
+  const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
+  const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const nextEight = Date.parse("2026-08-22T02:30:00.000Z");
+  assert.equal(nextDailyRenewalAt(sevenAm), eightAm);
+  assert.equal(nextDailyRenewalAt(eightOhFive), eightAm);
+  assert.equal(nextDailyRenewalAt(nineAm), nextEight);
+  assert.equal(msUntilDailyRenewal(sevenAm), 60 * 60 * 1000);
+  assert.equal(msUntilDailyRenewal(eightOhFive), 5_000);
 });

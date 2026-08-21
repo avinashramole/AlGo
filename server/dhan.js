@@ -28,6 +28,7 @@ import {
   loadDhanSession,
   markDhanAutoStart,
   persistPastedToken,
+  msUntilDailyRenewal,
   renewDhanAccessToken,
   resolveTokenExpiry,
   retryAfterMs,
@@ -1256,6 +1257,7 @@ export function stopDhanLive() {
     autoRenew: false,
     autoMode: "off",
     tokenExpiry: null,
+    nextRenewAt: null,
     autoStart: false,
   });
 }
@@ -1282,28 +1284,19 @@ function scheduleTokenKeepAlive() {
     tokenTimer = null;
   }
   const remaining = tokenMsRemaining();
-  let wait;
-  if (!Number.isFinite(remaining)) {
-    wait = 6 * 60 * 60 * 1000;
-  } else if (remaining <= 10 * 60 * 1000) {
-    wait = 5_000;
-  } else {
-    wait = remaining - 45 * 60 * 1000;
+  let wait = msUntilDailyRenewal();
+  if (Number.isFinite(remaining)) {
+    wait = Math.min(wait, Math.max(5_000, remaining - 5 * 60 * 1000));
   }
-  if (canAutoGenerate()) wait = Math.min(wait, 20 * 60 * 60 * 1000);
-  wait = Math.max(5_000, wait);
   tokenTimer = setTimeout(() => {
     void keepDhanTokenFresh("schedule");
   }, wait);
+  const fireAt = new Date(Date.now() + wait).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  console.log(`Dhan token auto-renew at ${fireAt} · daily reset 8:00 AM IST`);
 }
 
 async function keepDhanTokenFresh(reason = "schedule") {
   if (keepAlivePromise) return keepAlivePromise;
-  const remaining = tokenMsRemaining();
-  if (reason === "schedule" && Number.isFinite(remaining) && remaining > 50 * 60 * 1000) {
-    scheduleTokenKeepAlive();
-    return;
-  }
   if (reason !== "auth" && Date.now() - lastKeepAliveAt < 45_000) {
     scheduleTokenKeepAlive();
     return;

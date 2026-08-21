@@ -119,11 +119,12 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Dhan Access Tokens last <b>24 hours</b>. Paste a token once, or save PIN + TOTP secret so T2S generates a new
-          token about 45 minutes before expiry and after a VPS restart. A <b>429</b> is a rate limit, not an expired
-          token — T2S backs off and keeps the current token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ
-          APIs. Paste the <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
+          token every day at <b>8:00 AM IST</b> (and sooner if this token would expire before that). A <b>429</b> is a
+          rate limit, not an expired token — T2S backs off and keeps the current token. Setup TOTP on web.dhan.co → My
+          Profile → Access DhanHQ APIs. Paste the <b>secret key</b> from the QR, not the 6-digit code that changes every
+          30 seconds.
         </p>
-        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
           <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
           <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
@@ -135,7 +136,28 @@ export function Brokers() {
           <Mini
             label="Auto token"
             value={
-              feed?.autoMode === "generate" ? "PIN + TOTP" : feed?.autoMode === "renew" ? "renew 24h" : "off"
+              feed?.autoMode === "generate"
+                ? "PIN + TOTP · 8:00 AM"
+                : feed?.autoMode === "renew"
+                  ? "renew 8:00 AM"
+                  : "off"
+            }
+          />
+          <Mini
+            label="Renews"
+            value={
+              feed?.nextRenewAt
+                ? new Date(feed.nextRenewAt).toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    day: "2-digit",
+                    month: "short",
+                    hour12: true,
+                  })
+                : feed?.autoRenew
+                  ? "8:00 AM IST"
+                  : "—"
             }
           />
           <Mini
