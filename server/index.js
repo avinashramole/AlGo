@@ -638,7 +638,9 @@ app.listen(port, "0.0.0.0", async () => {
     console.log(
       `Dhan scrip master ready · ${futs.length} front-month futures · ${catalog.counts.futures} FUTIDX · ${catalog.counts.options} OPTIDX`,
     );
-    await selectOptionDesk({ symbol: "NIFTY" }).catch(() => undefined);
+    if (!isDhanLive()) {
+      await selectOptionDesk({ symbol: "NIFTY" }).catch(() => undefined);
+    }
   } catch (error) {
     console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }

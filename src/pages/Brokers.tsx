@@ -119,8 +119,9 @@ export function Brokers() {
         </div>
         <p className="mt-2 text-xs text-slate-400">
           Dhan Access Tokens last <b>24 hours</b>. Paste a token once, or save PIN + TOTP secret so T2S generates a new
-          token and keeps LIVE after a VPS restart. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste
-          the <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
+          token about 45 minutes before expiry and after a VPS restart. A <b>429</b> is a rate limit, not an expired
+          token — T2S backs off and keeps the current token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ
+          APIs. Paste the <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
         </p>
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
