@@ -20,12 +20,18 @@ import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFu
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
+  dhanErrorFlags,
   dhanTokenStatus,
   generateDhanAccessToken,
+  isDhanAuthExpiredError,
+  isDhanRateLimitError,
   loadDhanSession,
   markDhanAutoStart,
+  requirePinTotp,
   persistPastedToken,
-  renewDhanAccessToken,
+  msUntilDailyRenewal,
+  resolveTokenExpiry,
+  retryAfterMs,
 } from "./dhanToken.js";
 
 const DHAN_API = "https://api.dhan.co/v2";
@@ -59,6 +65,39 @@ let socket = null;
 let reconnectTimer = null;
 let usedFallback = false;
 let futureInstruments = [];
+let lastTickAt = 0;
+let keepAlivePromise = null;
+let lastKeepAliveAt = 0;
+let quoteBackoffUntil = 0;
+let chainBusy = false;
+let requestSlot = Promise.resolve();
+let nextAnyRequestAt = 0;
+let nextOptionChainAt = 0;
+let nextQuoteAt = 0;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function waitForDhanSlot(kind) {
+  const job = requestSlot.then(async () => {
+    const now = Date.now();
+    const wait = Math.max(0, nextAnyRequestAt - now, kind === "optionchain" ? nextOptionChainAt - now : 0, kind === "quote" ? nextQuoteAt - now : 0);
+    if (wait) await sleep(wait);
+    const t = Date.now();
+    nextAnyRequestAt = t + 220;
+    if (kind === "optionchain") nextOptionChainAt = t + 3500;
+    if (kind === "quote") nextQuoteAt = t + 1100;
+  });
+  requestSlot = job.catch(() => undefined);
+  return job;
+}
+
+function requestKind(path) {
+  if (String(path || "").startsWith("/optionchain")) return "optionchain";
+  if (String(path || "").includes("/marketfeed")) return "quote";
+  return "other";
+}
 
 function liveInstruments() {
   return INSTRUMENTS.concat(futureInstruments);
@@ -202,7 +241,12 @@ function remarkText(value) {
 function dhanErrorText(json, fallback) {
   const nested = json?.error && typeof json.error === "object" ? json.error : null;
   const data = json?.data && typeof json.data === "object" ? json.data : null;
-  const code = json?.errorCode || nested?.errorCode || data?.errorCode || json?.error_code || "";
+  const flags = dhanErrorFlags(json);
+  const code = flags.codes.filter((item) => item !== "200").find((item) => item.startsWith("DH-") || /^\d{3}$/.test(item)) || "";
+  const dataMessage =
+    data && !Array.isArray(data)
+      ? Object.values(data).find((value) => typeof value === "string" && value.trim())
+      : "";
   const message =
     json?.errorMessage ||
     json?.error_message ||
@@ -211,6 +255,7 @@ function dhanErrorText(json, fallback) {
     remarkText(json?.remarks) ||
     data?.errorMessage ||
     data?.error_message ||
+    dataMessage ||
     json?.message ||
     (typeof json?.raw === "string" && json.raw.length < 180 ? json.raw : "") ||
     fallback;
@@ -231,9 +276,16 @@ function dhanFailed(json, res) {
 
 function throwDhanError(json, res) {
   console.log(`Dhan API error HTTP ${res?.status}: ${JSON.stringify(json).slice(0, 400)}`);
-  const error = new Error(dhanErrorText(json, `Dhan API ${res?.status || ""}`.trim()));
-  error.status = res?.ok ? 400 : res?.status || 400;
+  const flags = dhanErrorFlags(json, res?.status);
+  const fallback = flags.rateLimit
+    ? "Dhan 429 rate limit. Slowing requests — token is still valid."
+    : `Dhan API ${res?.status || ""}`.trim();
+  const error = new Error(dhanErrorText(json, fallback));
+  error.status = flags.rateLimit ? 429 : flags.authExpired ? 401 : res?.ok ? 400 : res?.status || 400;
   error.body = json;
+  error.rateLimit = flags.rateLimit;
+  error.authExpired = flags.authExpired;
+  error.retryAfterMs = retryAfterMs(res, flags.rateLimit ? 2000 : 0);
   throw error;
 }
 
@@ -249,32 +301,41 @@ async function readDhanJson(res) {
   return json;
 }
 
+async function dhanSend(method, path, token, id, body) {
+  const kind = requestKind(path);
+  let lastError = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await waitForDhanSlot(kind);
+    const headers = authHeaders(token, id);
+    if (body != null) headers["Content-Type"] = "application/json";
+    const res = await ipv4Request(`${DHAN_API}${path}`, {
+      method,
+      headers,
+      body: body == null ? undefined : JSON.stringify(body),
+    });
+    try {
+      return await readDhanJson(res);
+    } catch (error) {
+      lastError = error;
+      if (!isDhanRateLimitError(error) || attempt === 3) throw error;
+      const wait = Math.min(20_000, error.retryAfterMs || 1500 * 2 ** attempt);
+      console.log(`Dhan ${path} 429 · retry in ${wait}ms`);
+      await sleep(wait);
+    }
+  }
+  throw lastError;
+}
+
 async function dhanGet(path, token, id) {
-  const res = await ipv4Request(`${DHAN_API}${path}`, {
-    headers: authHeaders(token, id),
-  });
-  return readDhanJson(res);
+  return dhanSend("GET", path, token, id);
 }
 
 async function dhanPost(path, token, id, body) {
-  const res = await ipv4Request(`${DHAN_API}${path}`, {
-    method: "POST",
-    headers: {
-      ...authHeaders(token, id),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  return readDhanJson(res);
+  return dhanSend("POST", path, token, id, body);
 }
 
 async function dhanDelete(path, token, id) {
-  const res = await ipv4Request(`${DHAN_API}${path}`, {
-    method: "DELETE",
-    headers: authHeaders(token, id),
-  });
-  const json = await readDhanJson(res);
-  return json || { ok: true };
+  return (await dhanSend("DELETE", path, token, id)) || { ok: true };
 }
 
 function quoteBody(useFallback, instruments = liveInstruments()) {
@@ -457,8 +518,26 @@ function mapDhanHoldings(raw) {
     }));
 }
 
+function handleDhanPollError(area, error) {
+  if (isDhanRateLimitError(error)) {
+    const wait = Math.min(30_000, error.retryAfterMs || 4000);
+    quoteBackoffUntil = Math.max(quoteBackoffUntil, Date.now() + wait);
+    setDhanFeed({
+      error: `Dhan 429 rate limit on ${area}. Backing off ${Math.round(wait / 1000)}s — token is still valid, not renewing.`,
+    });
+    return;
+  }
+  if (isDhanAuthExpiredError(error)) {
+    setDhanFeed({ error: `Dhan access token expired (${area}). Auto-renewing…` });
+    void keepDhanTokenFresh("auth");
+    return;
+  }
+  setDhanFeed({ error: error.message || `Dhan ${area} request failed` });
+}
+
 async function pullAccount() {
   if (!accessToken) return;
+  if (Date.now() < quoteBackoffUntil) return;
   try {
     const [positionsRaw, holdingsRaw, ordersRaw] = await Promise.all([
       dhanGet("/positions", accessToken, clientId).catch(() => []),
@@ -473,12 +552,13 @@ async function pullAccount() {
     replaceDhanOrders(mapDhanOrders(ordersRaw));
     setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
   } catch (error) {
-    setDhanFeed({ error: error.message || "Dhan positions request failed" });
+    handleDhanPollError("positions", error);
   }
 }
 
 async function pullNiftyCandles() {
   if (!accessToken) return;
+  if (Date.now() < quoteBackoffUntil) return;
   try {
     const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:15:00");
     const to = kolkataStamp(new Date());
@@ -500,20 +580,32 @@ async function pullNiftyCandles() {
 
 async function pullQuotes() {
   if (!accessToken || !clientId) return;
+  if (Date.now() < quoteBackoffUntil) return;
+  if (socket?.readyState === 1 && lastTickAt && Date.now() - lastTickAt < 5000) return;
   try {
-    let payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(usedFallback)).catch(() => null);
+    let payload = null;
+    try {
+      payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(usedFallback));
+    } catch (error) {
+      if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+      payload = null;
+    }
     let quotes = payload ? flattenQuotes(payload) : [];
     if (!quotes.length) {
-      payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(usedFallback));
-      quotes = flattenQuotes(payload);
+      try {
+        payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(usedFallback));
+        quotes = flattenQuotes(payload);
+      } catch (error) {
+        if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+      }
     }
     if (!quotes.length && !usedFallback) {
       usedFallback = true;
-      payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(true)).catch(() => null);
-      quotes = payload ? flattenQuotes(payload) : [];
-      if (!quotes.length) {
-        payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(true));
-        quotes = flattenQuotes(payload);
+      try {
+        payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(true));
+        quotes = payload ? flattenQuotes(payload) : [];
+      } catch (error) {
+        if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
       }
     }
     if (!quotes.length) {
@@ -524,11 +616,12 @@ async function pullQuotes() {
       throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");
     }
     if (quotes.length) {
+      lastTickAt = Date.now();
       applyLiveQuotes(quotes);
       setDhanFeed({
         live: true,
         source: socket?.readyState === 1 ? "websocket" : "rest",
-        lastTickAt: Date.now(),
+        lastTickAt,
         error: null,
         quoteCount: quotes.length,
       });
@@ -539,10 +632,7 @@ async function pullQuotes() {
       });
     }
   } catch (error) {
-    setDhanFeed({
-      live: Boolean(accessToken),
-      error: error.message || "Dhan quote request failed",
-    });
+    handleDhanPollError("quotes", error);
   }
 }
 
@@ -642,11 +732,12 @@ function startSocket() {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       const quotes = parseFeedPackets(buffer);
       if (quotes.length) {
+        lastTickAt = Date.now();
         applyLiveQuotes(quotes);
         setDhanFeed({
           live: true,
           source: "websocket",
-          lastTickAt: Date.now(),
+          lastTickAt,
           error: null,
           quoteCount: quotes.length,
         });
@@ -758,7 +849,7 @@ export async function selectOptionDesk({ symbol, expiry }) {
     await refreshOptionChain();
   } catch (error) {
     paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
-    setDhanFeed({ error: error.message || "Dhan option chain failed" });
+    handleDhanPollError("option chain", error);
   }
   return getOptionMeta();
 }
@@ -771,23 +862,35 @@ function startLiveLoop() {
     } catch {
       futureInstruments = [];
     }
-    void pullQuotes();
     startSocket();
+    await sleep(400);
+    void pullQuotes();
+    await sleep(400);
     void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
   })();
-  void pullAccount();
-  void pullNiftyCandles();
+  setTimeout(() => {
+    void pullAccount();
+  }, 800);
+  setTimeout(() => {
+    void pullNiftyCandles();
+  }, 1400);
   pollTimer = setInterval(() => {
     void pullQuotes();
-  }, 1200);
+  }, 2500);
   accountTimer = setInterval(() => {
     void pullAccount();
   }, 20_000);
   chainTimer = setInterval(() => {
-    void refreshOptionChain().catch((error) => {
-      setDhanFeed({ error: error.message || "Dhan option chain failed" });
-    });
-  }, 4000);
+    if (chainBusy || Date.now() < quoteBackoffUntil) return;
+    chainBusy = true;
+    void refreshOptionChain()
+      .catch((error) => {
+        handleDhanPollError("option chain", error);
+      })
+      .finally(() => {
+        chainBusy = false;
+      });
+  }, 6000);
   scheduleTokenKeepAlive();
 }
 
@@ -1105,6 +1208,17 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     keyHint: tokenHint(accessToken),
     displayName: profile.dhanClientName ? `Dhan · ${profile.dhanClientName}` : "Dhan",
   });
+  persistPastedToken({
+    clientId,
+    accessToken,
+    expiryTime: resolveTokenExpiry({
+      accessToken,
+      expiryTime: loadDhanSession().expiryTime,
+      tokenValidity: profile.tokenValidity,
+      fallbackHours: 24,
+    }),
+    tokenValidity: profile.tokenValidity,
+  });
   setDhanFeed({
     live: true,
     source: "rest",
@@ -1118,11 +1232,6 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     holdingCount: 0,
     ipCheck: null,
     ...dhanTokenStatus(),
-  });
-  persistPastedToken({
-    clientId,
-    accessToken,
-    expiryTime: loadDhanSession().expiryTime,
   });
   clearSimulatedDesk();
   startLiveLoop();
@@ -1148,13 +1257,33 @@ export function stopDhanLive() {
     autoRenew: false,
     autoMode: "off",
     tokenExpiry: null,
+    nextRenewAt: null,
     autoStart: false,
   });
 }
 
+export async function rotateDhanAccessToken({ clientId, pin, totpSecret, reason = "api" } = {}) {
+  const creds = requirePinTotp({ clientId, pin, totpSecret });
+  const generated = await generateDhanAccessToken(creds);
+  const live = await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+  lastKeepAliveAt = Date.now();
+  console.log(`Dhan LIVE token changed with PIN + TOTP (${reason}) · expires ${generated.expiryTime}`);
+  return { ...live, rotated: true, expiryTime: generated.expiryTime };
+}
+
 export async function enableDhanAuto({ clientId, pin, totpSecret }) {
-  const generated = await generateDhanAccessToken({ clientId, pin, totpSecret });
-  return startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+  return rotateDhanAccessToken({ clientId, pin, totpSecret, reason: "save" });
+}
+
+function tokenMsRemaining() {
+  const session = loadDhanSession();
+  const expiry = Date.parse(
+    resolveTokenExpiry({
+      accessToken: session.accessToken || accessToken,
+      expiryTime: session.expiryTime,
+    }) || "",
+  );
+  return Number.isFinite(expiry) ? expiry - Date.now() : NaN;
 }
 
 function scheduleTokenKeepAlive() {
@@ -1162,36 +1291,76 @@ function scheduleTokenKeepAlive() {
     clearTimeout(tokenTimer);
     tokenTimer = null;
   }
-  const session = loadDhanSession();
-  const expiry = Date.parse(session.expiryTime || "");
-  let wait = 6 * 60 * 60 * 1000;
-  if (Number.isFinite(expiry)) {
-    wait = Math.max(5 * 60 * 1000, expiry - Date.now() - 60 * 60 * 1000);
+  const remaining = tokenMsRemaining();
+  let wait = msUntilDailyRenewal();
+  if (Number.isFinite(remaining)) {
+    wait = Math.min(wait, Math.max(5_000, remaining - 5 * 60 * 1000));
   }
-  if (canAutoGenerate()) wait = Math.min(wait, 20 * 60 * 60 * 1000);
   tokenTimer = setTimeout(() => {
-    void keepDhanTokenFresh();
+    void keepDhanTokenFresh("schedule");
   }, wait);
+  const fireAt = new Date(Date.now() + wait).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  console.log(`Dhan token auto-renew at ${fireAt} · daily reset 8:00 AM IST`);
 }
 
-async function keepDhanTokenFresh() {
-  try {
-    if (canAutoGenerate()) {
-      const generated = await generateDhanAccessToken();
-      await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
-      console.log("Dhan LIVE token auto-generated");
-      return;
-    }
-    const renewed = await renewDhanAccessToken();
-    await startDhanLive({ accessToken: renewed.accessToken, clientId: renewed.clientId });
-    console.log("Dhan LIVE token auto-renewed");
-  } catch (error) {
-    console.log(`Dhan token keep-alive failed: ${error.message || error}`);
-    setDhanFeed({ error: `Access token refresh failed: ${error.message || error}` });
-    tokenTimer = setTimeout(() => {
-      void keepDhanTokenFresh();
-    }, 15 * 60 * 1000);
+async function keepDhanTokenFresh(reason = "schedule") {
+  if (keepAlivePromise) return keepAlivePromise;
+  if (reason !== "auth" && reason !== "api" && Date.now() - lastKeepAliveAt < 45_000) {
+    scheduleTokenKeepAlive();
+    return;
   }
+
+  keepAlivePromise = (async () => {
+    try {
+      const session = loadDhanSession();
+      const remainingNow = tokenMsRemaining();
+      const tokenStillGood = Number.isFinite(remainingNow) && remainingNow > 20 * 60 * 1000;
+      if ((reason === "retry" || reason === "boot") && tokenStillGood && session.accessToken && session.clientId) {
+        await startDhanLive({ accessToken: session.accessToken, clientId: session.clientId });
+        lastKeepAliveAt = Date.now();
+        console.log(`Dhan LIVE restarted after ${reason} without minting a new token`);
+        return;
+      }
+      await rotateDhanAccessToken({ reason });
+    } catch (error) {
+      if (isDhanRateLimitError(error)) {
+        const wait = Math.min(5 * 60 * 1000, error.retryAfterMs || 30_000);
+        console.log(`Dhan token keep-alive 429 · retry in ${wait}ms`);
+        setDhanFeed({
+          error: `Dhan 429 rate limit during token refresh. Retrying in ${Math.round(wait / 1000)}s — existing token was not discarded.`,
+        });
+        tokenTimer = setTimeout(() => {
+          void keepDhanTokenFresh("retry");
+        }, wait);
+        return;
+      }
+      console.log(`Dhan token keep-alive failed: ${error.message || error}`);
+      setDhanFeed({ error: `Access token refresh failed: ${error.message || error}` });
+      tokenTimer = setTimeout(() => {
+        void keepDhanTokenFresh("retry");
+      }, 15 * 60 * 1000);
+    }
+  })().finally(() => {
+    keepAlivePromise = null;
+  });
+  return keepAlivePromise;
+}
+
+async function startDhanWithRetry(token, id, attempts = 4) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await startDhanLive({ accessToken: token, clientId: id });
+      return true;
+    } catch (error) {
+      lastError = error;
+      if (!isDhanRateLimitError(error) || attempt === attempts - 1) break;
+      const wait = Math.min(20_000, error.retryAfterMs || 1500 * 2 ** attempt);
+      console.log(`Saved Dhan token hit 429 · retry live start in ${wait}ms`);
+      await sleep(wait);
+    }
+  }
+  throw lastError;
 }
 
 export async function bootDhanFromEnv() {
@@ -1202,9 +1371,21 @@ export async function bootDhanFromEnv() {
 
   if (token && id) {
     try {
-      await startDhanLive({ accessToken: token, clientId: id });
+      await startDhanWithRetry(token, id);
       return true;
     } catch (error) {
+      if (isDhanRateLimitError(error)) {
+        setDhanFeed({
+          live: false,
+          source: "idle",
+          error: "Dhan 429 rate limit while starting live feed. Token was kept; retry shortly or click Generate token.",
+          ...dhanTokenStatus(),
+        });
+        tokenTimer = setTimeout(() => {
+          void keepDhanTokenFresh("boot");
+        }, Math.min(60_000, error.retryAfterMs || 15_000));
+        return false;
+      }
       console.log(`Saved Dhan token failed: ${error.message || error}`);
     }
   }
@@ -1218,12 +1399,20 @@ export async function bootDhanFromEnv() {
       console.log("Dhan live feed started from PIN + TOTP");
       return true;
     } catch (error) {
+      const rate = isDhanRateLimitError(error);
       setDhanFeed({
         live: false,
         source: "idle",
-        error: `Auto token failed: ${error.message}`,
+        error: rate
+          ? `Dhan 429 rate limit while generating token. ${error.message}`
+          : `Auto token failed: ${error.message}`,
         ...dhanTokenStatus(),
       });
+      if (rate) {
+        tokenTimer = setTimeout(() => {
+          void keepDhanTokenFresh("retry");
+        }, 30_000);
+      }
       return false;
     }
   }
@@ -1231,7 +1420,7 @@ export async function bootDhanFromEnv() {
     setDhanFeed({
       live: false,
       source: "idle",
-      error: "Env token failed. Paste a new Access Token or save PIN + TOTP secret on Brokers.",
+      error: "Env token failed. PIN + TOTP is required on the server to change the Dhan token.",
     });
   }
   return false;
