@@ -30,6 +30,7 @@ import {
   pickBacktestTimeframe,
   resolveBacktestWindow,
   drainPendingLiveAlgoOrders,
+  noteLiveAlgoOrderResult,
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -91,6 +92,7 @@ async function flushLiveAlgoOrders() {
       try {
         const live = await placeDhanOrder(payload);
         const order = placeOrder({ ...payload, brokerId: "dhan", live });
+        noteLiveAlgoOrderResult(payload, live, order?.error);
         if (order?.error) {
           console.log(`Strategy live fill book: ${order.error}`);
         }
@@ -100,6 +102,7 @@ async function flushLiveAlgoOrders() {
           brokerId: "dhan",
           live: { orderId: `rej-algo-${Date.now()}`, status: "REJECTED" },
         });
+        noteLiveAlgoOrderResult(payload, { status: "REJECTED" }, error);
         console.log(`Strategy live order failed: ${error.message || error}`);
       }
     }

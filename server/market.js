@@ -13,6 +13,18 @@ import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOp
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
+import {
+  isNiftyVwapAlgo,
+  LiveTradingAdapter,
+  NiftyVwapStrategy,
+  noteBrokerRejection,
+  noteFeedReconnect,
+  niftyVwapConfig,
+  PaperTradingAdapter,
+  PositionManager,
+  runtimeState,
+  runNiftyVwapBacktest,
+} from "./niftyVwap/index.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -365,6 +377,129 @@ export function drainPendingLiveAlgoOrders() {
   return pendingLiveAlgoOrders.splice(0, pendingLiveAlgoOrders.length);
 }
 
+export function queueLiveAlgoOrder(payload) {
+  const strategy = String(payload?.strategy || "");
+  const side = payload?.side === "SELL" ? "SELL" : "BUY";
+  if (
+    strategy &&
+    pendingLiveAlgoOrders.some((row) => row.strategy === strategy && (row.side === "SELL" ? "SELL" : "BUY") === side)
+  ) {
+    return { ok: true, queued: true, status: "PENDING", duplicate: true };
+  }
+  pendingLiveAlgoOrders.push({ ...payload, brokerId: "dhan" });
+  return { ok: true, queued: true, status: "PENDING" };
+}
+
+export function noteLiveAlgoOrderResult(payload, live, error) {
+  const name = String(payload?.strategy || "");
+  if (!name) return;
+  const algo = (state.algos || []).find((item) => item.name === name && isNiftyVwapAlgo(item));
+  if (!algo) return;
+  const status = String(live?.status || "").toUpperCase();
+  if (error || status === "REJECTED" || status === "CANCELLED") {
+    noteBrokerRejection(algo);
+  }
+}
+
+function upsertOptionBar(list, barTime, ltp) {
+  const bars = Array.isArray(list) ? list : [];
+  if (!(ltp > 0) || !barTime) return bars;
+  const last = bars[bars.length - 1];
+  if (last && Number(last.time) === Number(barTime)) {
+    last.close = ltp;
+    last.high = Math.max(Number(last.high), ltp);
+    last.low = Math.min(Number(last.low), ltp);
+    last.volume = Number(last.volume || 0) + 1;
+    return bars;
+  }
+  bars.push({ time: barTime, open: ltp, high: ltp, low: ltp, close: ltp, volume: 1 });
+  if (bars.length > 90) bars.splice(0, bars.length - 90);
+  return bars;
+}
+
+function optionPremium(symbol, strike, option) {
+  const pack = chainForSymbol(symbol);
+  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+  const ltp = option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);
+  return ltp > 0 ? round2(ltp) : 0;
+}
+
+function positionsForNiftyVwap(algo, mode) {
+  const vs = runtimeState(algo);
+  const mine = (row) => {
+    if (row.strategy === algo.name) return true;
+    if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
+    return false;
+  };
+  const rows = state.positions || [];
+  if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
+  return rows.filter((row) => !isPaperRow(row) && mine(row));
+}
+
+let lastNiftyVwapFeed = true;
+
+function noteNiftyVwapFeed(feedLive) {
+  if (feedLive && lastNiftyVwapFeed === false) {
+    for (const algo of state.algos || []) {
+      if (isNiftyVwapAlgo(algo) && algo.enabled) noteFeedReconnect(algo);
+    }
+  }
+  lastNiftyVwapFeed = Boolean(feedLive);
+}
+
+function tickNiftyVwapAlgo(algo, mode, feedLive) {
+  const now = Date.now();
+  const session = nseMarketSession();
+  const config = niftyVwapConfig(algo);
+  const vs = runtimeState(algo);
+  const positions = positionsForNiftyVwap(algo, mode);
+  const open = PositionManager.openFor(positions, algo.name, vs);
+  if (mode === "live" && !session.open && !open) return;
+  const futuresBars = getCandles("5m");
+  const lastBar = futuresBars[futuresBars.length - 1];
+  const barTime = lastBar ? Number(lastBar.time) : 0;
+  const und = getUnderlying("NIFTY");
+  const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
+  const atm = atmStrike(spot, und.step);
+  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
+  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : atm;
+  if (vs.ceStrike !== ceStrike) {
+    vs.ceBars = [];
+    vs.ceStrike = ceStrike;
+  }
+  if (vs.peStrike !== peStrike) {
+    vs.peBars = [];
+    vs.peStrike = peStrike;
+  }
+  const ceLtp = optionPremium("NIFTY", ceStrike, "CE");
+  const peLtp = optionPremium("NIFTY", peStrike, "PE");
+  vs.ceBars = upsertOptionBar(vs.ceBars, barTime, ceLtp);
+  vs.peBars = upsertOptionBar(vs.peBars, barTime, peLtp);
+  const pack = chainForSymbol("NIFTY");
+  const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+  const adapter =
+    mode === "live"
+      ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
+      : PaperTradingAdapter({ placeOrder, squareOff });
+  NiftyVwapStrategy.tick({
+    algo,
+    config,
+    now,
+    feedLive: Boolean(feedLive),
+    minutesToClose: session.open ? undefined : 0,
+    futuresBars,
+    ceBars: vs.ceBars,
+    peBars: vs.peBars,
+    spot,
+    step: und.step,
+    expiry,
+    ceLtp,
+    peLtp,
+    positions,
+    adapter,
+  });
+}
+
 function algoOrderFields(algo, side, trade) {
   return {
     symbol: trade.symbol,
@@ -383,6 +518,39 @@ function algoOrderFields(algo, side, trade) {
 }
 
 export function resolveAlgoTrade(algo) {
+  if (isNiftyVwapAlgo(algo)) {
+    const symbol = "NIFTY";
+    const und = getUnderlying(symbol);
+    const pack = chainForSymbol(symbol);
+    const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
+    const vs = algo.vwapState || {};
+    const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
+    const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
+    const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+    const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+    const ceLtp = Number(row?.callLtp);
+    const peLtp = Number(row?.putLtp);
+    const liveChain = pack?.meta?.source === "dhan";
+    const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
+    let hint = "";
+    if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
+    else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
+    else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
+    else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+    return {
+      kind: "option",
+      symbol: contract,
+      option: option || "CE",
+      strike,
+      expiry,
+      ltp: premium > 0 ? round2(premium) : 0,
+      label: expiry ? `${contract} · ${expiry}` : contract,
+      source: pack?.meta?.source || "",
+      ready: liveChain && (ceLtp > 0 || peLtp > 0),
+      hint,
+    };
+  }
   const symbol = algo.symbol || "NIFTY";
   const instrument = algo.instrument === "option" ? "option" : "future";
   if (instrument !== "option") {
@@ -713,6 +881,11 @@ export function toggleAlgo(id) {
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = "WAIT";
+    if (isNiftyVwapAlgo(algo)) {
+      const vs = runtimeState(algo);
+      vs.inFlight = false;
+      vs.exitQueued = false;
+    }
   }
   if (algo.runMode === "paper") {
     algo.brokerId = "paper";
@@ -793,8 +966,12 @@ export function backtestAlgo(id, options = {}) {
   if (!algo) return { error: "Strategy not found" };
   const window = resolveBacktestWindow(options);
   if (window.error) return { error: window.error };
-  const wantedTf = pickBacktestTimeframe(algo.timeframe, window.days);
-  let candles = usableCandles(options.candles, window.fromMs, window.toMs);
+  const niftyVwap = isNiftyVwapAlgo(algo);
+  const maxVwapDays = 25;
+  const vwapFrom = niftyVwap && window.days > maxVwapDays ? shiftYmd(window.to, -(maxVwapDays - 1)) : window.from;
+  const vwapFromMs = Date.parse(`${vwapFrom}T09:15:00+05:30`);
+  const wantedTf = niftyVwap ? "5m" : pickBacktestTimeframe(algo.timeframe, window.days);
+  let candles = usableCandles(options.candles, niftyVwap ? vwapFromMs : window.fromMs, window.toMs);
   let sample = false;
   let source = "dhan";
   if (candles.length < 40) {
@@ -803,7 +980,7 @@ export function backtestAlgo(id, options = {}) {
         (item) => item.name === algo.symbol || item.symbol === algo.symbol || String(item.symbol).startsWith(algo.symbol || "NIFTY"),
       ) || state.indices[0];
     candles = generateRangeCandles({
-      from: window.from,
+      from: niftyVwap ? vwapFrom : window.from,
       to: window.to,
       timeframe: wantedTf,
       startPrice: Number(index?.price || 24580),
@@ -815,14 +992,17 @@ export function backtestAlgo(id, options = {}) {
   if (candles.length < 32) {
     return { error: "Not enough bars in that date range" };
   }
-  const usedTf = inferTimeframe(candles, wantedTf);
+  const usedTf = niftyVwap ? "5m" : inferTimeframe(candles, wantedTf);
   const result = {
-    ...runBacktest({ ...algo, timeframe: usedTf }, candles),
+    ...(niftyVwap
+      ? runNiftyVwapBacktest({ ...algo, vwapState: undefined }, candles)
+      : runBacktest({ ...algo, timeframe: usedTf }, candles)),
     sample,
     source,
     range: window.range,
-    from: window.from,
+    from: niftyVwap ? vwapFrom : window.from,
     to: window.to,
+    truncated: niftyVwap && window.days > maxVwapDays ? `5m replay last ${maxVwapDays} days` : "",
   };
   result.timeframe = usedTf;
   algo.lastBacktest = result;
@@ -841,10 +1021,16 @@ export function backtestAlgo(id, options = {}) {
 }
 
 function runPaperAlgos() {
-  if (!state.dhanFeed.live) return;
+  const feedLive = Boolean(state.dhanFeed.live);
+  noteNiftyVwapFeed(feedLive);
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "paper") continue;
+    if (isNiftyVwapAlgo(algo)) {
+      tickNiftyVwapAlgo(algo, "paper", feedLive);
+      continue;
+    }
+    if (!feedLive) continue;
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false);
     if (pack.candles.length < 32) continue;
@@ -879,11 +1065,16 @@ function runPaperAlgos() {
 }
 
 function runLiveAlgos() {
-  if (!state.dhanFeed.live) return;
-  if (!nseMarketSession().open) return;
+  const feedLive = Boolean(state.dhanFeed.live);
+  const sessionOpen = nseMarketSession().open;
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;
+    if (isNiftyVwapAlgo(algo)) {
+      tickNiftyVwapAlgo(algo, "live", feedLive);
+      continue;
+    }
+    if (!feedLive || !sessionOpen) continue;
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false);
     if (pack.candles.length < 32) continue;

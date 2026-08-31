@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action";
+  kind?: "indicator" | "price-action" | "nifty-vwap";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;

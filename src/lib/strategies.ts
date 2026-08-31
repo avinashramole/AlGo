@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap";
 export type ConditionOp = "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -30,6 +30,14 @@ export type AlgoStrategy = {
   timeframe?: string;
   slPct?: number;
   targetPct?: number;
+  initialSlPct?: number;
+  trailingActivationPct?: number;
+  trailingStepPct?: number;
+  vwapExitCandles?: number;
+  maxPositions?: number;
+  intradayOnly?: boolean;
+  eodSquareOffMinutes?: number;
+  strategyType?: string;
   indicator?: string;
   period?: number;
   fast?: number;
@@ -161,12 +169,19 @@ export function strikeOffsetLabel(offset?: number) {
   return OPTION_OFFSETS.find((row) => row.id === n)?.label || "ATM";
 }
 
+export function isNiftyVwapKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return algo?.kind === "nifty-vwap" || algo?.strategyType === "NIFTY_VWAP_ATM" || algo?.indicator === "NIFTY_VWAP_ATM";
+}
+
 export function contractLabel(algo: {
+  kind?: string;
+  strategyType?: string;
   symbol?: string;
   instrument?: string;
   optionType?: string;
   strikeOffset?: number;
 }) {
+  if (isNiftyVwapKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
     return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
@@ -274,7 +289,49 @@ export function defaultConditions(kind: StrategyKind, indicator?: string, patter
   };
 }
 
-export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStrategy> => ({
+export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStrategy> => {
+  if (kind === "nifty-vwap") {
+    return {
+      name: "",
+      kind: "nifty-vwap",
+      tag: "NIFTY VWAP",
+      strategyType: "NIFTY_VWAP_ATM",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "5m",
+      slPct: 20,
+      initialSlPct: 20,
+      targetPct: 40,
+      trailingActivationPct: 10,
+      trailingStepPct: 3,
+      vwapExitCandles: 5,
+      maxPositions: 1,
+      intradayOnly: true,
+      eodSquareOffMinutes: 10,
+      indicator: "VWAP",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "ORB",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("indicator", "VWAP", "ORB"),
+      runMode: "paper",
+      brokerId: "paper",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  return {
   name: "",
   kind,
   tag: kind === "indicator" ? "Indicator" : "Price action",
@@ -304,7 +361,8 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   brokerId: "paper",
   enabled: false,
   status: "PAUSED",
-});
+  };
+};
 
 export function formatCondition(left?: string, op?: string, right?: string, value?: number) {
   const leftLabel = SOURCES.find((row) => row.id === left)?.label || "Price";
