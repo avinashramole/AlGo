@@ -1,3 +1,5 @@
+import { defaultNiftyVwapAlgo, isNiftyVwapAlgo, niftyVwapConfig, NIFTY_VWAP_KIND } from "./niftyVwap/config.js";
+
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
   { id: "BANKNIFTY", lot: 30 },
@@ -175,6 +177,7 @@ export function strikeOffsetLabel(offset) {
 }
 
 export function contractLabel(algo) {
+  if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
     return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
@@ -189,6 +192,14 @@ export function summarizeAlgo(algo) {
   const lots = algo.lots || 1;
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
   const contract = contractLabel(algo);
+  if (isNiftyVwapAlgo(algo)) {
+    const sl = algo.initialSlPct || 20;
+    const tgt = algo.targetPct || 40;
+    const trail = algo.trailingActivationPct || 10;
+    const step = algo.trailingStepPct || 3;
+    const exitN = algo.vwapExitCandles || 5;
+    return `NIFTY VWAP ATM · 5m options · first futures close vs VWAP · ATM premium above option VWAP · SL ${sl}% / TGT ${tgt}% · trail ${trail}% / ${step}% · VWAP exit ${exitN} · ${size}`;
+  }
   if (algo.kind === "price-action") {
     const pattern = algo.pattern || "ORB";
     return `Price action · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · ${pattern} · ${tf} · ${size}`;
@@ -197,6 +208,51 @@ export function summarizeAlgo(algo) {
 }
 
 export function normalizeAlgo(input = {}, existing = {}) {
+  const merged = { ...existing, ...input };
+  const keepNiftyVwap = isNiftyVwapAlgo(merged) && input.kind !== "indicator" && input.kind !== "price-action";
+  if (keepNiftyVwap) {
+    const cfg = niftyVwapConfig(merged);
+    const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+      ? input.runMode
+      : ["live", "paper", "backtest"].includes(existing.runMode)
+        ? existing.runMode
+        : "paper";
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultNiftyVwapAlgo({
+        ...merged,
+        name: String(input.name || existing.name || "").trim() || "NIFTY VWAP ATM",
+        runMode,
+        lots: cfg.lots,
+        lotSize: cfg.lotSize,
+      }),
+      id: existing.id || `a${Date.now()}`,
+      kind: NIFTY_VWAP_KIND,
+      slPct: cfg.initialSlPct,
+      initialSlPct: cfg.initialSlPct,
+      targetPct: cfg.targetPct,
+      trailingActivationPct: cfg.trailingActivationPct,
+      trailingStepPct: cfg.trailingStepPct,
+      vwapExitCandles: cfg.vwapExitCandles,
+      eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
+      vwapState: existing.vwapState,
+      enabled: creating ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return next;
+  }
   const kind = input.kind === "price-action" ? "price-action" : "indicator";
   const symbol = SYMBOLS.some((row) => row.id === input.symbol) ? input.symbol : existing.symbol || "NIFTY";
   const indicator = INDICATORS.includes(input.indicator) ? input.indicator : existing.indicator || "VWAP";
@@ -324,6 +380,13 @@ export function seedAlgos() {
         lots: 1,
       },
       { id: "a3", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
+    ),
+    normalizeAlgo(
+      defaultNiftyVwapAlgo({
+        name: "NIFTY VWAP ATM",
+        runMode: "paper",
+      }),
+      { id: "a4", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
     ),
   ];
 }

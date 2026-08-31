@@ -84,7 +84,7 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
-    kind?: "indicator" | "price-action";
+    kind?: "indicator" | "price-action" | "nifty-vwap";
     symbol?: string;
     instrument?: "future" | "option";
     optionType?: "CE" | "PE";
@@ -104,6 +104,10 @@ export type Snapshot = {
     timeframe?: string;
     slPct?: number;
     targetPct?: number;
+    initialSlPct?: number;
+    trailingActivationPct?: number;
+    trailingStepPct?: number;
+    vwapExitCandles?: number;
     indicator?: string;
     period?: number;
     fast?: number;

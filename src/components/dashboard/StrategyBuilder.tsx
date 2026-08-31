@@ -17,6 +17,7 @@ import {
   lotForSymbol,
   RUN_MODES,
   OPTION_OFFSETS,
+  isNiftyVwapKind,
   type AlgoStrategy,
   type ConditionOp,
   type ConditionSource,
@@ -40,7 +41,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     if (algo) {
-      setForm({ ...emptyStrategy(algo.kind || "indicator"), ...algo });
+      const kind = (isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || "indicator") as StrategyKind;
+      setForm({ ...emptyStrategy(kind), ...algo, kind });
     } else {
       setForm({ ...emptyStrategy("indicator"), brokerId: data.activeBrokerId || "dhan" });
     }
@@ -53,7 +55,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
   const lotSize = lotForSymbol(form.symbol);
   const lots = form.lots || 1;
+  const vwap = isNiftyVwapKind(form);
   const preview = useMemo(() => {
+    if (isNiftyVwapKind(form)) {
+      return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
+    }
     const buy = formatCondition(form.buyLeft, form.buyOp, form.buyRight, form.buyValue);
     const sell = formatCondition(form.sellLeft, form.sellOp, form.sellRight, form.sellValue);
     return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
@@ -93,18 +99,35 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <TypeCard
             active={kind === "indicator"}
             title="Indicator based"
             text="RSI, EMA, VWAP with crossover, above, below, <, >"
-            onClick={() => set({ kind: "indicator", tag: "Indicator", ...defaultConditions("indicator", form.indicator, form.pattern) })}
+            onClick={() => set({ kind: "indicator", tag: "Indicator", ...emptyStrategy("indicator"), name: form.name, runMode: form.runMode, brokerId: form.brokerId, lots: form.lots })}
           />
           <TypeCard
             active={kind === "price-action"}
             title="Price action based"
             text="ORB, breakout, pin bar, engulfing"
-            onClick={() => set({ kind: "price-action", tag: "Price action", ...defaultConditions("price-action", form.indicator, form.pattern) })}
+            onClick={() => set({ kind: "price-action", tag: "Price action", ...emptyStrategy("price-action"), name: form.name, runMode: form.runMode, brokerId: form.brokerId, lots: form.lots })}
+          />
+          <TypeCard
+            active={kind === "nifty-vwap"}
+            title="NIFTY VWAP ATM"
+            text="5m futures VWAP + ATM CE/PE. SL 20% / target 40% / trail +10% then +3%"
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-vwap"),
+                name: form.name || "NIFTY VWAP ATM",
+                runMode: form.runMode || "paper",
+                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
+                lots: form.lots || 1,
+                lotSize,
+                qty: (form.lots || 1) * lotSize,
+                enabled: false,
+              })
+            }
           />
         </div>
 
@@ -125,6 +148,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ))}
         </div>
 
+        {vwap ? (
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
+            Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card.
+          </div>
+        ) : (
         <div className="mt-4 grid grid-cols-2 gap-2">
           <TypeCard
             active={(form.instrument || "future") === "future"}
@@ -139,8 +167,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             onClick={() => set({ instrument: "option", optionType: form.optionType || "CE", strikeOffset: form.strikeOffset || 0 })}
           />
         </div>
+        )}
 
-        {form.instrument === "option" ? (
+        {!vwap && form.instrument === "option" ? (
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold text-slate-500">Call or put</div>
@@ -192,6 +221,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             <select
               className={fieldClass}
               value={form.symbol || "NIFTY"}
+              disabled={vwap}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -208,10 +238,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Side
-            <select className={fieldClass} value={form.side || "BUY"} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+            <select className={fieldClass} value={form.side || "BUY"} disabled={vwap} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-              <option value="BOTH">BOTH</option>
+              {vwap ? null : (
+                <>
+                  <option value="SELL">SELL</option>
+                  <option value="BOTH">BOTH</option>
+                </>
+              )}
             </select>
           </label>
           <label className="text-xs font-semibold text-slate-500">
@@ -232,8 +266,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
-            <select className={fieldClass} value={form.timeframe || "5m"} onChange={(event) => set({ timeframe: event.target.value })}>
-              {TIMEFRAMES.map((row) => (
+            <select className={fieldClass} value={vwap ? "5m" : form.timeframe || "5m"} disabled={vwap} onChange={(event) => set({ timeframe: event.target.value })}>
+              {(vwap ? ["5m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>
@@ -260,7 +294,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
         </div>
 
-        {kind === "indicator" ? (
+        {vwap ? null : kind === "indicator" ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Indicator
@@ -328,6 +362,16 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         )}
 
+        {vwap ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <NumberField label="Initial stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+            <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+            <NumberField label="Trail activate %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
+            <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
+            <NumberField label="VWAP exit candles" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
+            <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+          </div>
+        ) : (
         <div className="mt-4 space-y-3">
           <ConditionRow
             label="BUY when"
@@ -361,10 +405,20 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           />
         </div>
 
+        )}
+
+        {vwap ? null : (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
           <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
         </div>
+        )}
+
+        {form.runMode === "live" ? (
+          <p className="mt-3 text-[11px] font-semibold text-amber-600">
+            Live Dhan stays off until you press Start live on the algo card. Saving this form does not place orders.
+          </p>
+        ) : null}
 
         {error ? <p className="mt-3 text-sm font-semibold text-down">{error}</p> : null}
 

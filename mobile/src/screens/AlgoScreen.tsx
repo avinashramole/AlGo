@@ -29,7 +29,11 @@ const RIGHTS = ["vwap", "ema_slow", "supertrend", "or_high", "or_low", "lookback
 type Draft = {
   id?: string;
   name: string;
-  kind: "indicator" | "price-action";
+  kind: "indicator" | "price-action" | "nifty-vwap";
+  initialSlPct?: string;
+  trailingActivationPct?: string;
+  trailingStepPct?: string;
+  vwapExitCandles?: string;
   symbol: string;
   instrument: "future" | "option";
   optionType: "CE" | "PE";
@@ -96,6 +100,10 @@ function blankDraft(): Draft {
     pattern: "ORB",
     slPct: "0.4",
     targetPct: "0.8",
+    initialSlPct: "20",
+    trailingActivationPct: "10",
+    trailingStepPct: "3",
+    vwapExitCandles: "5",
     buyLeft: "price",
     buyOp: "crosses_above",
     buyRight: "vwap",
@@ -140,7 +148,7 @@ export function AlgoScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [rangeDraft, setRangeDraft] = useState<RangeDraft | null>(null);
   const [rangeBusy, setRangeBusy] = useState(false);
-  const [filter, setFilter] = useState<"all" | "indicator" | "price-action">("all");
+  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap">("all");
 
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
@@ -160,8 +168,15 @@ export function AlgoScreen() {
       lots,
       lotSize,
       qty: lots * lotSize,
-      slPct: Number(draft.slPct),
+      slPct: Number(draft.kind === "nifty-vwap" ? draft.initialSlPct || draft.slPct : draft.slPct),
       targetPct: Number(draft.targetPct),
+      initialSlPct: Number(draft.initialSlPct || 20),
+      trailingActivationPct: Number(draft.trailingActivationPct || 10),
+      trailingStepPct: Number(draft.trailingStepPct || 3),
+      vwapExitCandles: Number(draft.vwapExitCandles || 5),
+      instrument: draft.kind === "nifty-vwap" ? "option" : draft.instrument,
+      timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.timeframe,
+      symbol: draft.kind === "nifty-vwap" ? "NIFTY" : draft.symbol,
       buyValue: Number(draft.buyValue),
       sellValue: Number(draft.sellValue),
       strikeOffset: Number(draft.strikeOffset),
@@ -185,6 +200,28 @@ export function AlgoScreen() {
         <View style={styles.chips}>
           <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator", ...defaultConditions("indicator", draft.indicator, draft.pattern) })} />
           <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action", ...defaultConditions("price-action", draft.indicator, draft.pattern) })} />
+          <Chip
+            label="NIFTY VWAP ATM"
+            on={draft.kind === "nifty-vwap"}
+            onPress={() =>
+              setDraft({
+                ...draft,
+                kind: "nifty-vwap",
+                symbol: "NIFTY",
+                instrument: "option",
+                optionType: "CE",
+                strikeOffset: "0",
+                side: "BUY",
+                timeframe: "5m",
+                slPct: "20",
+                targetPct: "40",
+                initialSlPct: "20",
+                trailingActivationPct: "10",
+                trailingStepPct: "3",
+                vwapExitCandles: "5",
+              })
+            }
+          />
         </View>
         <Text style={styles.muted}>Run mode</Text>
         <View style={styles.chips}>
@@ -205,12 +242,18 @@ export function AlgoScreen() {
             />
           ))}
         </View>
+        {draft.kind === "nifty-vwap" ? (
+          <Text style={styles.muted}>Contract locked: NIFTY ATM CE/PE on 5-minute candles.</Text>
+        ) : (
+          <>
         <Text style={styles.muted}>Contract</Text>
         <View style={styles.chips}>
           <Chip label="Future" on={draft.instrument === "future"} onPress={() => setDraft({ ...draft, instrument: "future" })} />
           <Chip label="Option CE/PE" on={draft.instrument === "option"} onPress={() => setDraft({ ...draft, instrument: "option" })} />
         </View>
-        {draft.instrument === "option" ? (
+          </>
+        )}
+        {draft.kind !== "nifty-vwap" && draft.instrument === "option" ? (
           <>
             <Text style={styles.muted}>Call or put</Text>
             <View style={styles.chips}>
@@ -234,7 +277,9 @@ export function AlgoScreen() {
             </Text>
           </>
         ) : null}
-        {draft.kind === "indicator" ? (
+        {draft.kind === "nifty-vwap" ? (
+          <Text style={styles.muted}>NIFTY 5m VWAP ATM. First futures close vs VWAP picks CE or PE. Saving does not start live trading.</Text>
+        ) : draft.kind === "indicator" ? (
           <>
             <Text style={styles.muted}>Indicator</Text>
             <View style={styles.chips}>
@@ -253,7 +298,9 @@ export function AlgoScreen() {
             </View>
           </>
         )}
-        <Text style={styles.muted}>BUY when</Text>
+        {draft.kind === "nifty-vwap" ? null : <Text style={styles.muted}>BUY when</Text>}
+        {draft.kind === "nifty-vwap" ? null : (
+        <>
         <View style={styles.chips}>
           {LEFTS.map((item) => (
             <Chip key={item} label={item} on={draft.buyLeft === item} onPress={() => setDraft({ ...draft, buyLeft: item })} />
@@ -287,9 +334,23 @@ export function AlgoScreen() {
           ))}
         </View>
         {draft.sellRight === "value" ? <Field label="Sell number" value={draft.sellValue} keyboard="numeric" onChange={(sellValue) => setDraft({ ...draft, sellValue })} /> : null}
+        </>
+        )}
         <Field label={`Lots (1 lot = ${lot} qty, order ${lots * lot})`} value={draft.lots} keyboard="numeric" onChange={(next) => setDraft({ ...draft, lots: next })} />
+        {draft.kind === "nifty-vwap" ? (
+          <>
+            <Field label="Initial stop %" value={draft.initialSlPct || "20"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
+            <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
+            <Field label="Trail activate %" value={draft.trailingActivationPct || "10"} keyboard="numeric" onChange={(trailingActivationPct) => setDraft({ ...draft, trailingActivationPct })} />
+            <Field label="Trail step %" value={draft.trailingStepPct || "3"} keyboard="numeric" onChange={(trailingStepPct) => setDraft({ ...draft, trailingStepPct })} />
+            <Field label="VWAP exit candles" value={draft.vwapExitCandles || "5"} keyboard="numeric" onChange={(vwapExitCandles) => setDraft({ ...draft, vwapExitCandles })} />
+          </>
+        ) : (
+          <>
         <Field label="Stop loss %" value={draft.slPct} keyboard="numeric" onChange={(slPct) => setDraft({ ...draft, slPct })} />
         <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
+          </>
+        )}
         <Pressable style={styles.cta} onPress={() => void save()}>
           <Text style={styles.ctaText}>{draft.id ? "Save changes" : "Add strategy"}</Text>
         </Pressable>
@@ -352,6 +413,7 @@ export function AlgoScreen() {
         <Chip label="All" on={filter === "all"} onPress={() => setFilter("all")} />
         <Chip label="Indicator" on={filter === "indicator"} onPress={() => setFilter("indicator")} />
         <Chip label="Price action" on={filter === "price-action"} onPress={() => setFilter("price-action")} />
+        <Chip label="NIFTY VWAP" on={filter === "nifty-vwap"} onPress={() => setFilter("nifty-vwap")} />
       </View>
       {rows.map((algo) => (
         <Card key={algo.id}>
@@ -393,7 +455,7 @@ export function AlgoScreen() {
                 setDraft({
                   id: algo.id,
                   name: algo.name,
-                  kind: algo.kind === "price-action" ? "price-action" : "indicator",
+                  kind: algo.kind === "nifty-vwap" ? "nifty-vwap" : algo.kind === "price-action" ? "price-action" : "indicator",
                   symbol: algo.symbol || "NIFTY",
                   instrument: algo.instrument === "option" ? "option" : "future",
                   optionType: algo.optionType === "PE" ? "PE" : "CE",
@@ -403,8 +465,12 @@ export function AlgoScreen() {
                   timeframe: algo.timeframe || "5m",
                   indicator: algo.indicator || "VWAP",
                   pattern: algo.pattern || "ORB",
-                  slPct: String(algo.slPct || 0.4),
-                  targetPct: String(algo.targetPct || 0.8),
+                  slPct: String(algo.kind === "nifty-vwap" ? algo.initialSlPct || algo.slPct || 20 : algo.slPct || 0.4),
+                  targetPct: String(algo.targetPct || (algo.kind === "nifty-vwap" ? 40 : 0.8)),
+                  initialSlPct: String(algo.initialSlPct || 20),
+                  trailingActivationPct: String(algo.trailingActivationPct || 10),
+                  trailingStepPct: String(algo.trailingStepPct || 3),
+                  vwapExitCandles: String(algo.vwapExitCandles || 5),
                   buyLeft: algo.buyLeft || "price",
                   buyOp: algo.buyOp || "crosses_above",
                   buyRight: algo.buyRight || "vwap",
