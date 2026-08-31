@@ -4,7 +4,7 @@ import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
 
 export function Brokers() {
-  const { data, connect, enableAuto, disconnect, activate } = useMarket();
+  const { data, connect, enableAuto, refreshToken, disconnect, activate } = useMarket();
   const brokers = data.brokers || [];
   const feed = data.dhanFeed;
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
@@ -80,6 +80,24 @@ export function Brokers() {
     }
   };
 
+  const changeTokenNow = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await refreshToken({
+        clientId: dhanClientId || feed?.clientId || "",
+        pin: dhanPin,
+        totpSecret: dhanTotp,
+      });
+      setDhanPin("");
+      setDhanTotp("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change token");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const connectDhanCard = async () => {
     setBusy(true);
     setError("");
@@ -118,11 +136,14 @@ export function Brokers() {
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          Dhan Access Tokens last <b>24 hours</b>. Paste a token once, or save PIN + TOTP secret so T2S generates a new
-          token and keeps LIVE after a VPS restart. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste
-          the <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
+          Dhan Access Tokens last <b>24 hours</b>. <b>PIN + TOTP is required on the server</b> to change the token.
+          Save them once (or set <code>DHAN_CLIENT_ID</code>, <code>DHAN_PIN</code>, <code>DHAN_TOTP_SECRET</code>). The
+          server then calls Dhan <b>generateAccessToken</b> at <b>8:00 AM IST</b> and replaces the live token. Use{" "}
+          <b>Change token now</b> for the same server-side call. A <b>429</b> is a rate limit, not an expired token.
+          Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the <b>secret key</b> from the QR, not the
+          6-digit code that changes every 30 seconds.
         </p>
-        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
           <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
           <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
@@ -134,7 +155,28 @@ export function Brokers() {
           <Mini
             label="Auto token"
             value={
-              feed?.autoMode === "generate" ? "PIN + TOTP" : feed?.autoMode === "renew" ? "renew 24h" : "off"
+              feed?.autoMode === "generate"
+                ? "PIN + TOTP · 8:00 AM"
+                : feed?.autoMode === "renew"
+                  ? "renew 8:00 AM"
+                  : "off"
+            }
+          />
+          <Mini
+            label="Renews"
+            value={
+              feed?.nextRenewAt
+                ? new Date(feed.nextRenewAt).toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    day: "2-digit",
+                    month: "short",
+                    hour12: true,
+                  })
+                : feed?.autoRenew
+                  ? "8:00 AM IST"
+                  : "—"
             }
           />
           <Mini
@@ -205,14 +247,24 @@ export function Brokers() {
             />
           </label>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void connectDhanAuto()}
-          className="mt-2 h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
-        >
-          {busy ? "Generating..." : feed?.live ? "Refresh token with PIN + TOTP" : "Generate token and keep LIVE"}
-        </button>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void connectDhanAuto()}
+            className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? "Working..." : "Save PIN + TOTP and generate"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void changeTokenNow()}
+            className="h-9 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold disabled:opacity-60"
+          >
+            {busy ? "Working..." : "Change token now"}
+          </button>
+        </div>
         {error && selected === null ? (
           <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>
         ) : null}

@@ -351,6 +351,7 @@ const state = {
     autoRenew: false,
     autoMode: "off",
     tokenExpiry: null,
+    nextRenewAt: null,
     autoStart: false,
   },
   liveCandles: [],
