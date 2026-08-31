@@ -1,5 +1,5 @@
 export type StrategyKind = "indicator" | "price-action" | "nifty-vwap";
-export type ConditionOp = "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
+export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
   | "vwap"
@@ -134,6 +134,8 @@ export const OPTION_OFFSETS = [
 ];
 
 export const OPERATORS: Array<{ id: ConditionOp; label: string }> = [
+  { id: "close_above", label: "Close above" },
+  { id: "close_below", label: "Close below" },
   { id: "crosses_above", label: "Crosses above" },
   { id: "crosses_below", label: "Crosses below" },
   { id: "above", label: "Above" },
@@ -279,11 +281,11 @@ export function defaultConditions(kind: StrategyKind, indicator?: string, patter
   }
   return {
     buyLeft: "price",
-    buyOp: "crosses_above",
+    buyOp: "close_above",
     buyRight: "vwap",
     buyValue: 0,
     sellLeft: "price",
-    sellOp: "crosses_below",
+    sellOp: "close_below",
     sellRight: "vwap",
     sellValue: 0,
   };

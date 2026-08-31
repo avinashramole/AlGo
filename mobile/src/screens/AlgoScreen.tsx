@@ -13,6 +13,8 @@ const SYMBOLS: Array<{ id: string; lot: number }> = [
 const INDICATORS = ["VWAP", "RSI", "EMA", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
 const OPERATORS = [
+  { id: "close_above", label: "Close above" },
+  { id: "close_below", label: "Close below" },
   { id: "crosses_above", label: "Crosses above" },
   { id: "crosses_below", label: "Crosses below" },
   { id: "above", label: "Above" },
@@ -82,7 +84,7 @@ function defaultConditions(kind: Draft["kind"], indicator: string, pattern: stri
   if (indicator === "SUPERTREND") {
     return { buyLeft: "price", buyOp: "crosses_above", buyRight: "supertrend", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "supertrend", sellValue: "0" };
   }
-  return { buyLeft: "price", buyOp: "crosses_above", buyRight: "vwap", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "vwap", sellValue: "0" };
+  return { buyLeft: "price", buyOp: "close_above", buyRight: "vwap", buyValue: "0", sellLeft: "price", sellOp: "close_below", sellRight: "vwap", sellValue: "0" };
 }
 
 function blankDraft(): Draft {
@@ -105,11 +107,11 @@ function blankDraft(): Draft {
     trailingStepPct: "3",
     vwapExitCandles: "5",
     buyLeft: "price",
-    buyOp: "crosses_above",
+    buyOp: "close_above",
     buyRight: "vwap",
     buyValue: "0",
     sellLeft: "price",
-    sellOp: "crosses_below",
+    sellOp: "close_below",
     sellRight: "vwap",
     sellValue: "0",
     runMode: "live",
@@ -472,11 +474,11 @@ export function AlgoScreen() {
                   trailingStepPct: String(algo.trailingStepPct || 3),
                   vwapExitCandles: String(algo.vwapExitCandles || 5),
                   buyLeft: algo.buyLeft || "price",
-                  buyOp: algo.buyOp || "crosses_above",
+                  buyOp: algo.buyOp || "close_above",
                   buyRight: algo.buyRight || "vwap",
                   buyValue: String(algo.buyValue || 0),
                   sellLeft: algo.sellLeft || "price",
-                  sellOp: algo.sellOp || "crosses_below",
+                  sellOp: algo.sellOp || "close_below",
                   sellRight: algo.sellRight || "vwap",
                   sellValue: String(algo.sellValue || 0),
                   runMode: algo.runMode === "paper" || algo.runMode === "backtest" ? algo.runMode : "live",

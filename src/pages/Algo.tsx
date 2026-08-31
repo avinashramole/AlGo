@@ -123,8 +123,8 @@ export function Algo() {
                 <div className="mt-2 space-y-1 text-[11px] font-semibold text-slate-500">
                   {kind === "nifty-vwap" ? (
                     <>
-                      <div>BUY CE: first 5m futures close above VWAP + ATM CE close above CE VWAP</div>
-                      <div>BUY PE: first 5m futures close below VWAP + ATM PE close above PE VWAP</div>
+                      <div>BUY when close above VWAP (CE) + ATM CE close above CE VWAP</div>
+                      <div>SELL / PE when close below VWAP + ATM PE close above PE VWAP</div>
                       <div>
                         SL {algo.initialSlPct || 20}% · Target {algo.targetPct || 40}% · trail {algo.trailingActivationPct || 10}% / {algo.trailingStepPct || 3}% · VWAP exit {algo.vwapExitCandles || 5}
                       </div>

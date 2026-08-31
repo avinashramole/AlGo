@@ -111,7 +111,21 @@ function readValue(src, sources, numberValue) {
   return Number(sources[src] ?? 0);
 }
 
+function isCloseOp(op) {
+  return op === "close_above" || op === "close_below";
+}
+
+function completedBarIndex(candles, i, timeframe, now = Date.now()) {
+  if (i < 0) return -1;
+  const barMs = barMinutes(timeframe) * 60_000;
+  const t = Number(candles[i]?.time);
+  if (Number.isFinite(t) && now < t + barMs) return i - 1;
+  return i;
+}
+
 function hit(op, left, right, prevLeft, prevRight) {
+  if (op === "close_above") return left > right;
+  if (op === "close_below") return left < right;
   if (op === "crosses_above") return prevLeft <= prevRight && left > right;
   if (op === "crosses_below") return prevLeft >= prevRight && left < right;
   if (op === "above" || op === "gt") return left > right;
@@ -123,9 +137,15 @@ function hit(op, left, right, prevLeft, prevRight) {
 }
 
 export function evaluateSignals(candles, i, algo) {
-  if (i < 2) return { buy: false, sell: false };
-  const now = sourcesAt(candles, i, algo);
-  const prev = sourcesAt(candles, i - 1, algo);
+  const buyOp = algo.buyOp || "crosses_above";
+  const sellOp = algo.sellOp || "crosses_below";
+  let idx = i;
+  if (isCloseOp(buyOp) || isCloseOp(sellOp)) {
+    idx = completedBarIndex(candles, i, algo.timeframe);
+  }
+  if (idx < 2) return { buy: false, sell: false };
+  const now = sourcesAt(candles, idx, algo);
+  const prev = sourcesAt(candles, idx - 1, algo);
   const buyLeft = readValue(algo.buyLeft || "price", now, algo.buyValue);
   const buyRight = readValue(algo.buyRight || "vwap", now, algo.buyValue);
   const sellLeft = readValue(algo.sellLeft || "price", now, algo.sellValue);
@@ -135,8 +155,8 @@ export function evaluateSignals(candles, i, algo) {
   const prevSellLeft = readValue(algo.sellLeft || "price", prev, algo.sellValue);
   const prevSellRight = readValue(algo.sellRight || "vwap", prev, algo.sellValue);
   return {
-    buy: hit(algo.buyOp || "crosses_above", buyLeft, buyRight, prevBuyLeft, prevBuyRight),
-    sell: hit(algo.sellOp || "crosses_below", sellLeft, sellRight, prevSellLeft, prevSellRight),
+    buy: hit(buyOp, buyLeft, buyRight, prevBuyLeft, prevBuyRight),
+    sell: hit(sellOp, sellLeft, sellRight, prevSellLeft, prevSellRight),
     price: now.price,
   };
 }

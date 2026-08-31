@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "test": "node --test dhanToken.test.js niftyVwap/niftyVwap.test.js"
+    "test": "node --test dhanToken.test.js backtest.test.js niftyVwap/niftyVwap.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

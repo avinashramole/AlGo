@@ -10,7 +10,7 @@ const SYMBOLS = [
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
 const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
-const OPERATORS = ["crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
+const OPERATORS = ["close_above", "close_below", "crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
 const SOURCES = [
   "price",
   "vwap",
@@ -27,6 +27,8 @@ const SOURCES = [
 ];
 
 const OP_LABEL = {
+  close_above: "close above",
+  close_below: "close below",
   crosses_above: "crosses above",
   crosses_below: "crosses below",
   above: "is above",
@@ -153,11 +155,11 @@ export function defaultConditions(kind, indicator, pattern) {
   }
   return {
     buyLeft: "price",
-    buyOp: "crosses_above",
+    buyOp: "close_above",
     buyRight: "vwap",
     buyValue: 0,
     sellLeft: "price",
-    sellOp: "crosses_below",
+    sellOp: "close_below",
     sellRight: "vwap",
     sellValue: 0,
   };

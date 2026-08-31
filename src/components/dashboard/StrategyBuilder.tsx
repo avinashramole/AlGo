@@ -363,20 +363,55 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         )}
 
         {vwap ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <NumberField label="Initial stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-            <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
-            <NumberField label="Trail activate %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
-            <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
-            <NumberField label="VWAP exit candles" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
-            <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+          <div className="mt-4 space-y-3">
+            <ConditionRow
+              label="BUY when"
+              left={form.buyLeft || "price"}
+              op={form.buyOp || "close_above"}
+              right={form.buyRight || "vwap"}
+              value={form.buyValue || 0}
+              onChange={(patch) =>
+                set({
+                  buyLeft: patch.left,
+                  buyOp: patch.op,
+                  buyRight: patch.right,
+                  buyValue: patch.value,
+                })
+              }
+            />
+            <ConditionRow
+              label="SELL when"
+              left={form.sellLeft || "price"}
+              op={form.sellOp || "close_below"}
+              right={form.sellRight || "vwap"}
+              value={form.sellValue || 0}
+              onChange={(patch) =>
+                set({
+                  sellLeft: patch.left,
+                  sellOp: patch.op,
+                  sellRight: patch.right,
+                  sellValue: patch.value,
+                })
+              }
+            />
+            <p className="text-[11px] font-semibold text-slate-400">
+              Close above / close below use the last completed 5m candle only. BUY CE when futures close above VWAP. BUY PE when futures close below VWAP. ATM option must also close above its own VWAP.
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <NumberField label="Initial stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+              <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+              <NumberField label="Trail activate %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
+              <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
+              <NumberField label="VWAP exit candles" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
+              <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+            </div>
           </div>
         ) : (
         <div className="mt-4 space-y-3">
           <ConditionRow
             label="BUY when"
             left={form.buyLeft || "price"}
-            op={form.buyOp || "crosses_above"}
+            op={form.buyOp || "close_above"}
             right={form.buyRight || "vwap"}
             value={form.buyValue || 0}
             onChange={(patch) =>
@@ -391,7 +426,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <ConditionRow
             label="SELL when"
             left={form.sellLeft || "price"}
-            op={form.sellOp || "crosses_below"}
+            op={form.sellOp || "close_below"}
             right={form.sellRight || "vwap"}
             value={form.sellValue || 0}
             onChange={(patch) =>
