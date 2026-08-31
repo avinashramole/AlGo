@@ -505,12 +505,14 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
   assert.equal(updated.initialSlPct, 18);
 });
 
-test("seed includes a paused paper NIFTY VWAP ATM algo", () => {
-  const seeded = seedAlgos().find((row) => isNiftyVwapAlgo(row));
-  assert.ok(seeded);
-  assert.equal(seeded.enabled, false);
-  assert.equal(seeded.runMode, "paper");
-  assert.equal(seeded.status, "PAUSED");
+test("seed includes only the paused paper NIFTY VWAP ATM algo", () => {
+  const seeded = seedAlgos();
+  assert.equal(seeded.length, 1);
+  assert.equal(seeded[0].name, "NIFTY VWAP ATM");
+  assert.equal(isNiftyVwapAlgo(seeded[0]), true);
+  assert.equal(seeded[0].enabled, false);
+  assert.equal(seeded[0].runMode, "paper");
+  assert.equal(seeded[0].status, "PAUSED");
 });
 
 test("paper/live/backtest share the same config and BUY-only option payload", () => {
