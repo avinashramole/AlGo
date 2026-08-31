@@ -449,9 +449,10 @@ test("broker order rejection does not open a position", () => {
 });
 
 test("new algos start paused — LIVE is not auto-enabled", () => {
-  const algo = defaultNiftyVwapAlgo({ runMode: "live" });
+  const algo = defaultNiftyVwapAlgo();
   assert.equal(algo.enabled, false);
   assert.equal(algo.runMode, "live");
+  assert.equal(algo.brokerId, "dhan");
   assert.notEqual(algo.status, "LIVE");
 });
 
@@ -505,14 +506,15 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
   assert.equal(updated.initialSlPct, 18);
 });
 
-test("seed includes only the paused paper NIFTY VWAP ATM algo", () => {
+test("seed includes only the paused live NIFTY VWAP ATM algo", () => {
   const seeded = seedAlgos();
   assert.equal(seeded.length, 1);
   assert.equal(seeded[0].name, "NIFTY VWAP ATM");
   assert.equal(isNiftyVwapAlgo(seeded[0]), true);
   assert.equal(seeded[0].enabled, false);
-  assert.equal(seeded[0].runMode, "paper");
+  assert.equal(seeded[0].runMode, "live");
   assert.equal(seeded[0].status, "PAUSED");
+  assert.equal(seeded[0].brokerId, "dhan");
 });
 
 test("paper/live/backtest share the same config and BUY-only option payload", () => {

@@ -112,7 +112,7 @@ function blankDraft(): Draft {
     sellOp: "crosses_below",
     sellRight: "vwap",
     sellValue: "0",
-    runMode: "paper",
+    runMode: "live",
   };
 }
 
@@ -479,7 +479,7 @@ export function AlgoScreen() {
                   sellOp: algo.sellOp || "crosses_below",
                   sellRight: algo.sellRight || "vwap",
                   sellValue: String(algo.sellValue || 0),
-                  runMode: algo.runMode === "live" || algo.runMode === "backtest" ? algo.runMode : "paper",
+                  runMode: algo.runMode === "paper" || algo.runMode === "backtest" ? algo.runMode : "live",
                 })
               }
             >

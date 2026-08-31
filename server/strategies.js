@@ -216,7 +216,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       ? input.runMode
       : ["live", "paper", "backtest"].includes(existing.runMode)
         ? existing.runMode
-        : "paper";
+        : "live";
     const creating = !existing.id;
     const next = {
       ...existing,
@@ -280,7 +280,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     ? input.runMode
     : ["live", "paper", "backtest"].includes(existing.runMode)
       ? existing.runMode
-      : "paper";
+        : "live";
   const instrument = (input.instrument || existing.instrument) === "option" ? "option" : "future";
   const optionType = (input.optionType || existing.optionType) === "PE" ? "PE" : "CE";
   const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
@@ -330,9 +330,9 @@ export function seedAlgos() {
     normalizeAlgo(
       defaultNiftyVwapAlgo({
         name: "NIFTY VWAP ATM",
-        runMode: "paper",
+        runMode: "live",
       }),
-      { id: "a4", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
+      { id: "a4", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
   ];
 }

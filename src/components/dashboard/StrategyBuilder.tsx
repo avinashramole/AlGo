@@ -44,7 +44,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const kind = (isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || "indicator") as StrategyKind;
       setForm({ ...emptyStrategy(kind), ...algo, kind });
     } else {
-      setForm({ ...emptyStrategy("indicator"), brokerId: data.activeBrokerId || "dhan" });
+      setForm({ ...emptyStrategy("indicator"), brokerId: data.activeBrokerId || "dhan", runMode: "live" });
     }
     setError("");
   }, [open, algo, data.activeBrokerId]);
@@ -120,8 +120,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               set({
                 ...emptyStrategy("nifty-vwap"),
                 name: form.name || "NIFTY VWAP ATM",
-                runMode: form.runMode || "paper",
-                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
+                runMode: form.runMode || "live",
+                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
                 lots: form.lots || 1,
                 lotSize,
                 qty: (form.lots || 1) * lotSize,
@@ -135,7 +135,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           {RUN_MODES.map((mode) => (
             <TypeCard
               key={mode.id}
-              active={(form.runMode || "paper") === mode.id}
+              active={(form.runMode || "live") === mode.id}
               title={mode.title}
               text={mode.text}
               onClick={() =>

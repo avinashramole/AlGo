@@ -183,8 +183,8 @@ export const initialAlgos: Algo[] = [
     pnl: 0,
     winRate: 0,
     enabled: false,
-    brokerId: "paper",
-    runMode: "paper",
+    brokerId: "dhan",
+    runMode: "live",
   },
 ];
 

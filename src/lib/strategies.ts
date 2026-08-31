@@ -325,8 +325,8 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       rangeMinutes: 15,
       lookback: 20,
       ...defaultConditions("indicator", "VWAP", "ORB"),
-      runMode: "paper",
-      brokerId: "paper",
+      runMode: "live",
+      brokerId: "dhan",
       enabled: false,
       status: "PAUSED",
     };
@@ -357,8 +357,8 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   rangeMinutes: 15,
   lookback: 20,
   ...defaultConditions(kind, "VWAP", "ORB"),
-  runMode: "paper",
-  brokerId: "paper",
+  runMode: "live",
+  brokerId: "dhan",
   enabled: false,
   status: "PAUSED",
   };
