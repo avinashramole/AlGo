@@ -5,7 +5,10 @@ import {
   isDhanAuthExpiredError,
   isDhanRateLimitError,
   jwtExpiryIso,
+  lastDailyResetAt,
   msUntilDailyRenewal,
+  msUntilTokenKeepAlive,
+  needsFreshAccessToken,
   nextDailyRenewalAt,
   parseDhanExpiry,
   requirePinTotp,
@@ -13,9 +16,9 @@ import {
   retryAfterMs,
 } from "./dhanToken.js";
 
-function fakeJwt(exp) {
+function fakeJwt(exp, iat) {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
-  const payload = Buffer.from(JSON.stringify({ exp })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(iat ? { exp, iat } : { exp })).toString("base64url");
   return `${header}.${payload}.sig`;
 }
 
@@ -83,4 +86,89 @@ test("nextDailyRenewalAt resets at 8:00 AM IST", () => {
   assert.equal(nextDailyRenewalAt(nineAm), nextEight);
   assert.equal(msUntilDailyRenewal(sevenAm), 60 * 60 * 1000);
   assert.equal(msUntilDailyRenewal(eightOhFive), 5_000);
+});
+
+test("lastDailyResetAt is today's 8:00 IST after the reset, yesterday's before", () => {
+  const eightAm = Date.parse("2026-08-21T02:30:00.000Z");
+  const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const prevEight = Date.parse("2026-08-20T02:30:00.000Z");
+  assert.equal(lastDailyResetAt(sevenAm), prevEight);
+  assert.equal(lastDailyResetAt(eightAm), eightAm);
+  assert.equal(lastDailyResetAt(nineAm), eightAm);
+});
+
+test("needsFreshAccessToken is true at 9:00 IST when the token was issued yesterday", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const yesterdayEight = Date.parse("2026-08-20T02:30:00.000Z");
+  const exp = Math.floor((nineAm + 20 * 3600 * 1000) / 1000);
+  const iat = Math.floor(yesterdayEight / 1000);
+  assert.equal(needsFreshAccessToken({ accessToken: fakeJwt(exp, iat) }, nineAm), true);
+});
+
+test("needsFreshAccessToken is true even if generatedAt was stamped later than JWT iat", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const yesterdayEight = Date.parse("2026-08-20T02:30:00.000Z");
+  const exp = Math.floor((nineAm + 20 * 3600 * 1000) / 1000);
+  const iat = Math.floor(yesterdayEight / 1000);
+  assert.equal(
+    needsFreshAccessToken(
+      { accessToken: fakeJwt(exp, iat), generatedAt: new Date(nineAm).toISOString() },
+      nineAm,
+    ),
+    true,
+  );
+});
+
+test("needsFreshAccessToken is false after today's 8:05 IST mint", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
+  const exp = Math.floor((eightOhFive + 24 * 3600 * 1000) / 1000);
+  const iat = Math.floor(eightOhFive / 1000);
+  assert.equal(
+    needsFreshAccessToken(
+      { accessToken: fakeJwt(exp, iat), generatedAt: new Date(eightOhFive).toISOString() },
+      nineAm,
+    ),
+    false,
+  );
+});
+
+test("needsFreshAccessToken is false before 8:00 IST if yesterday's token still has life", () => {
+  const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
+  const yesterdayNine = Date.parse("2026-08-20T03:30:00.000Z");
+  const exp = Math.floor((yesterdayNine + 24 * 3600 * 1000) / 1000);
+  const iat = Math.floor(yesterdayNine / 1000);
+  assert.equal(needsFreshAccessToken({ accessToken: fakeJwt(exp, iat) }, sevenAm), false);
+});
+
+test("needsFreshAccessToken is true with no token or under 20 minutes remaining", () => {
+  const now = Date.parse("2026-08-21T03:30:00.000Z");
+  assert.equal(needsFreshAccessToken({}, now), true);
+  const exp = Math.floor((now + 10 * 60 * 1000) / 1000);
+  assert.equal(needsFreshAccessToken({ accessToken: fakeJwt(exp) }, now), true);
+});
+
+test("msUntilTokenKeepAlive mints in 5s after 8:00 IST if token is from yesterday, else waits until tomorrow 8:00", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
+  const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
+  const tomorrowEight = Date.parse("2026-08-22T02:30:00.000Z");
+  const todayEight = Date.parse("2026-08-21T02:30:00.000Z");
+  const yesterdayEight = Date.parse("2026-08-20T02:30:00.000Z");
+  const staleExp = Math.floor((nineAm + 20 * 3600 * 1000) / 1000);
+  const staleIat = Math.floor(yesterdayEight / 1000);
+  const freshExp = Math.floor((eightOhFive + 24 * 3600 * 1000) / 1000);
+  const freshIat = Math.floor(eightOhFive / 1000);
+  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(staleExp, staleIat) }, nineAm), 5_000);
+  assert.equal(
+    msUntilTokenKeepAlive(
+      { accessToken: fakeJwt(freshExp, freshIat), generatedAt: new Date(eightOhFive).toISOString() },
+      eightOhFive,
+    ),
+    tomorrowEight - eightOhFive,
+  );
+  const yExp = Math.floor((Date.parse("2026-08-20T03:30:00.000Z") + 24 * 3600 * 1000) / 1000);
+  const yIat = Math.floor(Date.parse("2026-08-20T03:30:00.000Z") / 1000);
+  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(yExp, yIat) }, sevenAm), todayEight - sevenAm);
 });

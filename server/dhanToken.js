@@ -80,8 +80,51 @@ export function nextDailyRenewalAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IS
   return today + 24 * 60 * 60 * 1000;
 }
 
+export function lastDailyResetAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
+  const parts = kolkataParts(new Date(from));
+  const today = Date.parse(
+    `${parts.year}-${parts.month}-${parts.day}T${String(hour).padStart(2, "0")}:00:00+05:30`,
+  );
+  if (!Number.isFinite(today)) return from;
+  return from >= today ? today : today - 24 * 60 * 60 * 1000;
+}
+
+export function tokenGeneratedAtMs({ accessToken, expiryTime, generatedAt } = {}) {
+  const candidates = [];
+  const saved = Date.parse(generatedAt || "");
+  if (Number.isFinite(saved) && saved > 0) candidates.push(saved);
+  const iat = jwtIssuedAtMs(accessToken);
+  if (iat) candidates.push(iat);
+  if (candidates.length) return Math.min(...candidates);
+  const exp = Date.parse(resolveTokenExpiry({ accessToken, expiryTime }) || "");
+  if (Number.isFinite(exp)) return exp - 24 * 60 * 60 * 1000;
+  return 0;
+}
+
+export function needsFreshAccessToken(session = {}, from = Date.now()) {
+  const token = String(session.accessToken || "").trim();
+  if (!token) return true;
+  const expiry = Date.parse(resolveTokenExpiry(session) || "");
+  const remaining = Number.isFinite(expiry) ? expiry - from : NaN;
+  if (!Number.isFinite(remaining) || remaining < 20 * 60 * 1000) return true;
+  const generated = tokenGeneratedAtMs(session);
+  const reset = lastDailyResetAt(from);
+  return generated < reset;
+}
+
 export function msUntilDailyRenewal(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
   return Math.max(5_000, nextDailyRenewalAt(from, hour) - from);
+}
+
+export function msUntilTokenKeepAlive(session = {}, from = Date.now()) {
+  if (needsFreshAccessToken(session, from)) return 5_000;
+  const nextReset = lastDailyResetAt(from) + 24 * 60 * 60 * 1000;
+  let wait = Math.max(5_000, nextReset - from);
+  const expiry = Date.parse(resolveTokenExpiry(session) || "");
+  if (Number.isFinite(expiry)) {
+    wait = Math.min(wait, Math.max(5_000, expiry - from - 5 * 60 * 1000));
+  }
+  return wait;
 }
 
 export function dhanTokenStatus() {
@@ -91,11 +134,12 @@ export function dhanTokenStatus() {
     accessToken: session.accessToken,
     expiryTime: session.expiryTime,
   });
+  const nextMs = autoGenerate && needsFreshAccessToken(session) ? Date.now() : nextDailyRenewalAt();
   return {
     autoRenew: autoGenerate || Boolean(session.accessToken && session.source === "web"),
     autoMode: autoGenerate ? "generate" : session.source === "web" ? "renew" : "off",
     tokenExpiry: expiryTime || session.expiryTime || null,
-    nextRenewAt: new Date(nextDailyRenewalAt()).toISOString(),
+    nextRenewAt: new Date(nextMs).toISOString(),
     autoStart: session.autoStart !== false,
   };
 }
@@ -126,18 +170,28 @@ export function requirePinTotp({ clientId, pin, totpSecret } = {}) {
   return creds;
 }
 
-export function jwtExpiryIso(token) {
+export function jwtClaim(token, key) {
   try {
     const parts = String(token || "").split(".");
     if (parts.length < 2) return "";
     const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (parts[1].length % 4)) % 4);
     const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
-    const exp = Number(payload.exp);
-    if (!Number.isFinite(exp) || exp <= 0) return "";
-    return new Date(exp * 1000).toISOString();
+    const value = Number(payload[key]);
+    if (!Number.isFinite(value) || value <= 0) return "";
+    return new Date(value * 1000).toISOString();
   } catch {
     return "";
   }
+}
+
+export function jwtExpiryIso(token) {
+  return jwtClaim(token, "exp");
+}
+
+export function jwtIssuedAtMs(token) {
+  const iso = jwtClaim(token, "iat");
+  const ms = Date.parse(iso || "");
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 export function parseDhanExpiry(value) {
@@ -303,8 +357,9 @@ export async function generateDhanAccessToken({ clientId, pin, totpSecret } = {}
         pin: usePin,
         totpSecret: secret,
         expiryTime,
+        generatedAt: new Date().toISOString(),
         source: "totp",
-        autoStart: true,
+        autoStart: loadDhanSession().autoStart !== false,
       });
       console.log(`Dhan token generated · expires ${expiryTime}`);
       return { ...parsed, expiryTime, clientId: parsed.clientId || id };
@@ -350,8 +405,9 @@ export async function renewDhanAccessToken() {
     accessToken: parsed.accessToken,
     clientId: parsed.clientId || session.clientId,
     expiryTime,
+    generatedAt: new Date().toISOString(),
     source: session.source || "web",
-    autoStart: true,
+    autoStart: session.autoStart !== false,
   });
   console.log(`Dhan token renewed · expires ${expiryTime}`);
   return { ...parsed, expiryTime, clientId: parsed.clientId || session.clientId };
@@ -360,6 +416,7 @@ export async function renewDhanAccessToken() {
 export function persistPastedToken({ clientId, accessToken, expiryTime, tokenValidity }) {
   const session = loadDhanSession();
   const token = String(accessToken || "").trim();
+  const tokenChanged = token !== String(session.accessToken || "").trim();
   saveDhanSession({
     clientId: String(clientId || session.clientId || "").trim(),
     accessToken: token,
@@ -369,6 +426,7 @@ export function persistPastedToken({ clientId, accessToken, expiryTime, tokenVal
       tokenValidity,
       fallbackHours: 24,
     }),
+    generatedAt: tokenChanged ? new Date().toISOString() : session.generatedAt,
     source: session.pin && session.totpSecret ? session.source || "totp" : "web",
     autoStart: true,
   });

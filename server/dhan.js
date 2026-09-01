@@ -27,9 +27,10 @@ import {
   isDhanRateLimitError,
   loadDhanSession,
   markDhanAutoStart,
+  needsFreshAccessToken,
   requirePinTotp,
   persistPastedToken,
-  msUntilDailyRenewal,
+  msUntilTokenKeepAlive,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -1265,8 +1266,17 @@ export function stopDhanLive() {
 export async function rotateDhanAccessToken({ clientId, pin, totpSecret, reason = "api" } = {}) {
   const creds = requirePinTotp({ clientId, pin, totpSecret });
   const generated = await generateDhanAccessToken(creds);
-  const live = await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
   lastKeepAliveAt = Date.now();
+  const session = loadDhanSession();
+  const userAsked = reason === "save" || reason === "api" || reason === "auth";
+  if (session.autoStart === false && !userAsked) {
+    scheduleTokenKeepAlive();
+    console.log(
+      `Dhan access token generated automatically (${reason}) · live feed left off · expires ${generated.expiryTime}`,
+    );
+    return { rotated: true, live: false, expiryTime: generated.expiryTime, ...dhanTokenStatus() };
+  }
+  const live = await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
   console.log(`Dhan LIVE token changed with PIN + TOTP (${reason}) · expires ${generated.expiryTime}`);
   return { ...live, rotated: true, expiryTime: generated.expiryTime };
 }
@@ -1291,11 +1301,9 @@ function scheduleTokenKeepAlive() {
     clearTimeout(tokenTimer);
     tokenTimer = null;
   }
-  const remaining = tokenMsRemaining();
-  let wait = msUntilDailyRenewal();
-  if (Number.isFinite(remaining)) {
-    wait = Math.min(wait, Math.max(5_000, remaining - 5 * 60 * 1000));
-  }
+  const session = loadDhanSession();
+  if (!canAutoGenerate() && !session.accessToken) return;
+  const wait = msUntilTokenKeepAlive(session);
   tokenTimer = setTimeout(() => {
     void keepDhanTokenFresh("schedule");
   }, wait);
@@ -1319,6 +1327,10 @@ async function keepDhanTokenFresh(reason = "schedule") {
         await startDhanLive({ accessToken: session.accessToken, clientId: session.clientId });
         lastKeepAliveAt = Date.now();
         console.log(`Dhan LIVE restarted after ${reason} without minting a new token`);
+        return;
+      }
+      if (reason === "schedule" && tokenStillGood && canAutoGenerate() && !needsFreshAccessToken(session)) {
+        scheduleTokenKeepAlive();
         return;
       }
       await rotateDhanAccessToken({ reason });
@@ -1367,7 +1379,49 @@ export async function bootDhanFromEnv() {
   const session = loadDhanSession();
   const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || "").trim();
   const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
-  if (session.autoStart === false && !process.env.DHAN_ACCESS_TOKEN) return false;
+  if (session.autoStart === false && !process.env.DHAN_ACCESS_TOKEN) {
+    scheduleTokenKeepAlive();
+    return false;
+  }
+
+  const creds = {
+    clientId: id || session.clientId,
+    pin: session.pin,
+    totpSecret: session.totpSecret,
+  };
+  const sessionForFreshness = { ...session, accessToken: token, clientId: id };
+
+  if (canAutoGenerate() && needsFreshAccessToken(sessionForFreshness)) {
+    try {
+      await enableDhanAuto(creds);
+      console.log("Dhan access token generated automatically (PIN + TOTP)");
+      return true;
+    } catch (error) {
+      if (isDhanRateLimitError(error)) {
+        setDhanFeed({
+          live: false,
+          source: "idle",
+          error: `Dhan 429 rate limit while generating token. ${error.message}`,
+          ...dhanTokenStatus(),
+        });
+        tokenTimer = setTimeout(() => {
+          void keepDhanTokenFresh("retry");
+        }, Math.min(60_000, error.retryAfterMs || 30_000));
+        if (token && id) {
+          try {
+            await startDhanWithRetry(token, id);
+            return true;
+          } catch {
+            return false;
+          }
+        }
+        return false;
+      }
+      console.log(`Auto token generate failed: ${error.message || error}`);
+    }
+  } else if (canAutoGenerate()) {
+    console.log("Dhan access token already generated after today's 08:00 IST reset — next auto-generate is tomorrow 08:00 IST");
+  }
 
   if (token && id) {
     try {
@@ -1391,11 +1445,7 @@ export async function bootDhanFromEnv() {
   }
   if (canAutoGenerate()) {
     try {
-      await enableDhanAuto({
-        clientId: id || session.clientId,
-        pin: session.pin,
-        totpSecret: session.totpSecret,
-      });
+      await enableDhanAuto(creds);
       console.log("Dhan live feed started from PIN + TOTP");
       return true;
     } catch (error) {
@@ -1408,6 +1458,7 @@ export async function bootDhanFromEnv() {
           : `Auto token failed: ${error.message}`,
         ...dhanTokenStatus(),
       });
+      scheduleTokenKeepAlive();
       if (rate) {
         tokenTimer = setTimeout(() => {
           void keepDhanTokenFresh("retry");
@@ -1423,5 +1474,6 @@ export async function bootDhanFromEnv() {
       error: "Env token failed. PIN + TOTP is required on the server to change the Dhan token.",
     });
   }
+  scheduleTokenKeepAlive();
   return false;
 }
