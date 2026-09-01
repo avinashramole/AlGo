@@ -13,3 +13,7 @@ test("normalizeTotpSecret strips spaces and reads otpauth URLs", () => {
 test("totpCode matches RFC 6238 SHA-1 6-digit vector", () => {
   assert.equal(totpCode("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59_000), "287082");
 });
+
+test("totpCode rejects 0 1 8 9 which are not base32", () => {
+  assert.throws(() => totpCode("AAAA0BBB2CCC"), /invalid character/);
+});
