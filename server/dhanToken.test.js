@@ -58,6 +58,13 @@ test("dhanErrorFlags treats 805 / DH-904 / HTTP 429 as rate limit, not expiry", 
   assert.equal(dhanErrorFlags({ errorMessage: "Invalid TOTP" }, 400).invalidTotp, true);
   assert.equal(dhanErrorFlags({ errorMessage: "Invalid TOTP" }, 400).authExpired, false);
   assert.equal(dhanErrorFlags({ errorMessage: "Too many attempts. Please try again after sometime." }, 400).rateLimit, true);
+  assert.equal(
+    dhanErrorFlags(
+      { errorType: "HOLDING_ERROR", errorCode: "DH-1111", errorMessage: "No holdings available" },
+      500,
+    ).emptyCollection,
+    true,
+  );
 });
 
 test("isDhanRateLimitError does not trigger token renewal logic", () => {

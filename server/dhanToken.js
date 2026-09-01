@@ -273,7 +273,10 @@ export function dhanErrorFlags(json, status) {
       /token is expired|access token is invalid|invalid or expired|authentication failed|client id or user generated access token/i.test(
         blob,
       ));
-  return { rateLimit, authExpired, invalidTotp, tooManyAttempts, codes };
+  const emptyCollection =
+    codes.includes("DH-1111") ||
+    /holding_error|no holdings available|no position/i.test(blob);
+  return { rateLimit, authExpired, invalidTotp, tooManyAttempts, emptyCollection, codes };
 }
 
 export function retryAfterMs(res, fallback = 2000) {
@@ -299,6 +302,12 @@ export function isDhanInvalidTotpError(error) {
   if (!error) return false;
   if (error.invalidTotp) return true;
   return dhanErrorFlags(error.body, error.status).invalidTotp || /invalid totp/i.test(String(error.message || ""));
+}
+
+export function isDhanEmptyCollectionError(error) {
+  if (!error) return false;
+  if (error.emptyCollection) return true;
+  return dhanErrorFlags(error.body, error.status).emptyCollection;
 }
 
 async function readJson(res) {

@@ -24,6 +24,7 @@ import {
   dhanTokenStatus,
   generateDhanAccessToken,
   isDhanAuthExpiredError,
+  isDhanEmptyCollectionError,
   isDhanInvalidTotpError,
   isDhanRateLimitError,
   loadDhanSession,
@@ -300,6 +301,7 @@ async function readDhanJson(res) {
   } catch {
     json = { raw: text };
   }
+  if (dhanErrorFlags(json, res?.status).emptyCollection) return [];
   if (dhanFailed(json, res)) throwDhanError(json, res);
   return json;
 }
@@ -522,6 +524,7 @@ function mapDhanHoldings(raw) {
 }
 
 function handleDhanPollError(area, error) {
+  if (isDhanEmptyCollectionError(error)) return;
   if (isDhanRateLimitError(error)) {
     const wait = Math.min(30_000, error.retryAfterMs || 4000);
     quoteBackoffUntil = Math.max(quoteBackoffUntil, Date.now() + wait);
