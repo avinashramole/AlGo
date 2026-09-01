@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ipv4Request } from "./ipv4.js";
-import { totpCodes } from "./totp.js";
+import { normalizeTotpSecret, totpCodes } from "./totp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = path.join(__dirname, ".dhan-session.json");
@@ -21,6 +21,19 @@ function emptySession() {
   };
 }
 
+export function mergeDhanCredentials(session = {}, env = process.env) {
+  const next = { ...emptySession(), ...session };
+  const clientId = String(env.DHAN_CLIENT_ID || "").trim();
+  const pin = String(env.DHAN_PIN || "").trim();
+  const totp = normalizeTotpSecret(env.DHAN_TOTP_SECRET);
+  if (clientId) next.clientId = clientId;
+  if (pin) next.pin = pin;
+  if (totp) next.totpSecret = totp;
+  else next.totpSecret = normalizeTotpSecret(next.totpSecret);
+  if (!next.accessToken) next.accessToken = String(env.DHAN_ACCESS_TOKEN || "").trim();
+  return next;
+}
+
 export function loadDhanSession() {
   const session = emptySession();
   try {
@@ -29,11 +42,7 @@ export function loadDhanSession() {
   } catch {
     /* first run */
   }
-  if (!session.clientId) session.clientId = String(process.env.DHAN_CLIENT_ID || "").trim();
-  if (!session.accessToken) session.accessToken = String(process.env.DHAN_ACCESS_TOKEN || "").trim();
-  if (!session.pin) session.pin = String(process.env.DHAN_PIN || "").trim();
-  if (!session.totpSecret) session.totpSecret = String(process.env.DHAN_TOTP_SECRET || "").trim();
-  return session;
+  return mergeDhanCredentials(session);
 }
 
 export function saveDhanSession(patch = {}) {
@@ -154,7 +163,7 @@ export function requirePinTotp({ clientId, pin, totpSecret } = {}) {
   const creds = {
     clientId: String(clientId || session.clientId || "").trim(),
     pin: String(pin || session.pin || "").trim(),
-    totpSecret: String(totpSecret || session.totpSecret || "").trim(),
+    totpSecret: normalizeTotpSecret(totpSecret || session.totpSecret),
   };
   if (!creds.clientId) {
     throw Object.assign(new Error("Dhan Client ID is required on the server to change the access token."), { status: 400 });
@@ -237,21 +246,26 @@ function collectErrorCodes(json, status) {
 export function dhanErrorFlags(json, status) {
   const codes = collectErrorCodes(json, status).map((code) => String(code).toUpperCase());
   const blob = `${JSON.stringify(json || {})} ${status || ""}`;
+  const invalidTotp = /invalid totp|invalid pin/i.test(blob);
+  const tooManyAttempts = /too many attempts/i.test(blob);
   const rateLimit =
     codes.includes("429") ||
     codes.includes("DH-904") ||
     codes.includes("805") ||
+    tooManyAttempts ||
     /too many requests|rate limit/i.test(blob);
   const authExpired =
-    codes.includes("401") ||
-    codes.includes("DH-901") ||
-    codes.includes("807") ||
-    codes.includes("808") ||
-    codes.includes("809") ||
-    /token is expired|access token is invalid|invalid or expired|authentication failed|client id or user generated access token/i.test(
-      blob,
-    );
-  return { rateLimit, authExpired, codes };
+    !invalidTotp &&
+    !rateLimit &&
+    (codes.includes("401") ||
+      codes.includes("DH-901") ||
+      codes.includes("807") ||
+      codes.includes("808") ||
+      codes.includes("809") ||
+      /token is expired|access token is invalid|invalid or expired|authentication failed|client id or user generated access token/i.test(
+        blob,
+      ));
+  return { rateLimit, authExpired, invalidTotp, tooManyAttempts, codes };
 }
 
 export function retryAfterMs(res, fallback = 2000) {
@@ -271,6 +285,12 @@ export function isDhanAuthExpiredError(error) {
   if (!error) return false;
   if (error.authExpired || error.status === 401) return true;
   return dhanErrorFlags(error.body, error.status).authExpired;
+}
+
+export function isDhanInvalidTotpError(error) {
+  if (!error) return false;
+  if (error.invalidTotp) return true;
+  return dhanErrorFlags(error.body, error.status).invalidTotp || /invalid totp/i.test(String(error.message || ""));
 }
 
 async function readJson(res) {
@@ -296,7 +316,7 @@ function tokenFrom(json) {
 
 function throwAuth(json, text, fallback, status) {
   const flags = dhanErrorFlags(json, status);
-  const message =
+  let message =
     json?.errorMessage ||
     json?.error_message ||
     json?.message ||
@@ -306,18 +326,25 @@ function throwAuth(json, text, fallback, status) {
       : "") ||
     (typeof text === "string" && text.length < 180 ? text : "") ||
     fallback;
+  if (flags.invalidTotp) {
+    message =
+      "Invalid TOTP: use the Dhan PIN and the Setup TOTP secret from web.dhan.co (not the 6-digit code that changes). Also check `timedatectl` — a wrong VPS clock breaks TOTP.";
+  }
   const error = new Error(String(message || fallback));
-  error.status = flags.rateLimit ? 429 : flags.authExpired ? 401 : status || 400;
+  error.status = flags.rateLimit ? 429 : flags.invalidTotp ? 400 : flags.authExpired ? 401 : status || 400;
   error.body = json;
   error.rateLimit = flags.rateLimit;
   error.authExpired = flags.authExpired;
+  error.invalidTotp = flags.invalidTotp;
+  error.tooManyAttempts = flags.tooManyAttempts;
+  if (flags.tooManyAttempts) error.retryAfterMs = 30 * 60 * 1000;
   throw error;
 }
 
 export async function generateDhanAccessToken({ clientId, pin, totpSecret } = {}) {
   const id = String(clientId || loadDhanSession().clientId || "").trim();
   const usePin = String(pin || loadDhanSession().pin || "").trim();
-  const secret = String(totpSecret || loadDhanSession().totpSecret || "").trim();
+  const secret = normalizeTotpSecret(totpSecret || loadDhanSession().totpSecret);
   if (!id) throw Object.assign(new Error("Dhan Client ID is required."), { status: 400 });
   if (!/^\d{4,6}$/.test(usePin)) {
     throw Object.assign(new Error("Dhan PIN must be the 4–6 digit PIN from the Dhan app, not the TOTP code."), {

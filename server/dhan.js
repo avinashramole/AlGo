@@ -24,6 +24,7 @@ import {
   dhanTokenStatus,
   generateDhanAccessToken,
   isDhanAuthExpiredError,
+  isDhanInvalidTotpError,
   isDhanRateLimitError,
   loadDhanSession,
   markDhanAutoStart,
@@ -69,6 +70,7 @@ let futureInstruments = [];
 let lastTickAt = 0;
 let keepAlivePromise = null;
 let lastKeepAliveAt = 0;
+let credentialsBlockedUntil = 0;
 let quoteBackoffUntil = 0;
 let chainBusy = false;
 let requestSlot = Promise.resolve();
@@ -1303,12 +1305,31 @@ function scheduleTokenKeepAlive() {
   }
   const session = loadDhanSession();
   if (!canAutoGenerate() && !session.accessToken) return;
-  const wait = msUntilTokenKeepAlive(session);
+  let wait = msUntilTokenKeepAlive(session);
+  if (Date.now() < credentialsBlockedUntil) {
+    wait = Math.max(wait, credentialsBlockedUntil - Date.now());
+  }
   tokenTimer = setTimeout(() => {
     void keepDhanTokenFresh("schedule");
   }, wait);
   const fireAt = new Date(Date.now() + wait).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   console.log(`Dhan token auto-renew at ${fireAt} · daily reset 8:00 AM IST`);
+}
+
+function blockBadTotp(error) {
+  credentialsBlockedUntil = Date.now() + 6 * 60 * 60 * 1000;
+  const when = new Date(credentialsBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  const message =
+    error?.message ||
+    "Invalid TOTP: PIN or Setup TOTP secret is wrong, or VPS clock is off. Fix /opt/t2s/.env, then systemctl restart t2s.";
+  console.log(`Dhan ${message} · not retrying until ${when}`);
+  setDhanFeed({
+    live: false,
+    source: "idle",
+    error: message,
+    ...dhanTokenStatus(),
+  });
+  scheduleTokenKeepAlive();
 }
 
 async function keepDhanTokenFresh(reason = "schedule") {
@@ -1335,8 +1356,14 @@ async function keepDhanTokenFresh(reason = "schedule") {
       }
       await rotateDhanAccessToken({ reason });
     } catch (error) {
+      if (isDhanInvalidTotpError(error)) {
+        blockBadTotp(error);
+        return;
+      }
       if (isDhanRateLimitError(error)) {
-        const wait = Math.min(5 * 60 * 1000, error.retryAfterMs || 30_000);
+        const wait = error.tooManyAttempts
+          ? error.retryAfterMs || 30 * 60 * 1000
+          : Math.min(5 * 60 * 1000, error.retryAfterMs || 30_000);
         console.log(`Dhan token keep-alive 429 · retry in ${wait}ms`);
         setDhanFeed({
           error: `Dhan 429 rate limit during token refresh. Retrying in ${Math.round(wait / 1000)}s — existing token was not discarded.`,
@@ -1391,22 +1418,30 @@ export async function bootDhanFromEnv() {
   };
   const sessionForFreshness = { ...session, accessToken: token, clientId: id };
 
+  let totpRejected = false;
+
   if (canAutoGenerate() && needsFreshAccessToken(sessionForFreshness)) {
     try {
       await enableDhanAuto(creds);
       console.log("Dhan access token generated automatically (PIN + TOTP)");
       return true;
     } catch (error) {
-      if (isDhanRateLimitError(error)) {
+      if (isDhanInvalidTotpError(error)) {
+        totpRejected = true;
+        blockBadTotp(error);
+      } else if (isDhanRateLimitError(error)) {
         setDhanFeed({
           live: false,
           source: "idle",
           error: `Dhan 429 rate limit while generating token. ${error.message}`,
           ...dhanTokenStatus(),
         });
-        tokenTimer = setTimeout(() => {
-          void keepDhanTokenFresh("retry");
-        }, Math.min(60_000, error.retryAfterMs || 30_000));
+        tokenTimer = setTimeout(
+          () => {
+            void keepDhanTokenFresh("retry");
+          },
+          error.tooManyAttempts ? error.retryAfterMs || 30 * 60 * 1000 : Math.min(60_000, error.retryAfterMs || 30_000),
+        );
         if (token && id) {
           try {
             await startDhanWithRetry(token, id);
@@ -1416,14 +1451,15 @@ export async function bootDhanFromEnv() {
           }
         }
         return false;
+      } else {
+        console.log(`Auto token generate failed: ${error.message || error}`);
       }
-      console.log(`Auto token generate failed: ${error.message || error}`);
     }
   } else if (canAutoGenerate()) {
     console.log("Dhan access token already generated after today's 08:00 IST reset — next auto-generate is tomorrow 08:00 IST");
   }
 
-  if (token && id) {
+  if (token && id && !totpRejected) {
     try {
       await startDhanWithRetry(token, id);
       return true;
@@ -1443,12 +1479,16 @@ export async function bootDhanFromEnv() {
       console.log(`Saved Dhan token failed: ${error.message || error}`);
     }
   }
-  if (canAutoGenerate()) {
+  if (canAutoGenerate() && !totpRejected) {
     try {
       await enableDhanAuto(creds);
       console.log("Dhan live feed started from PIN + TOTP");
       return true;
     } catch (error) {
+      if (isDhanInvalidTotpError(error)) {
+        blockBadTotp(error);
+        return false;
+      }
       const rate = isDhanRateLimitError(error);
       setDhanFeed({
         live: false,
@@ -1467,6 +1507,7 @@ export async function bootDhanFromEnv() {
       return false;
     }
   }
+  if (totpRejected) return false;
   if (process.env.DHAN_ACCESS_TOKEN) {
     setDhanFeed({
       live: false,

@@ -2,10 +2,21 @@ import crypto from "node:crypto";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+export function normalizeTotpSecret(raw) {
+  let value = String(raw || "").trim();
+  const fromUrl = value.match(/[?&]secret=([^&]+)/i);
+  if (fromUrl) {
+    try {
+      value = decodeURIComponent(fromUrl[1]);
+    } catch {
+      value = fromUrl[1];
+    }
+  }
+  return value.replace(/[\s=-]+/g, "").toUpperCase();
+}
+
 function base32Decode(input) {
-  const clean = String(input || "")
-    .toUpperCase()
-    .replace(/[\s=-]+/g, "");
+  const clean = normalizeTotpSecret(input);
   let bits = "";
   for (const ch of clean) {
     const val = ALPHABET.indexOf(ch);

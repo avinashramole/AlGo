@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   dhanErrorFlags,
   isDhanAuthExpiredError,
+  isDhanInvalidTotpError,
   isDhanRateLimitError,
   jwtExpiryIso,
   lastDailyResetAt,
+  mergeDhanCredentials,
   msUntilDailyRenewal,
   msUntilTokenKeepAlive,
   needsFreshAccessToken,
@@ -53,6 +55,9 @@ test("dhanErrorFlags treats 805 / DH-904 / HTTP 429 as rate limit, not expiry", 
   assert.equal(dhanErrorFlags({ errorCode: "DH-904", errorMessage: "Rate Limit" }, 400).rateLimit, true);
   assert.equal(dhanErrorFlags({ errorCode: "DH-901", errorMessage: "invalid or expired" }, 401).authExpired, true);
   assert.equal(dhanErrorFlags({ errorCode: "DH-901", errorMessage: "invalid or expired" }, 401).rateLimit, false);
+  assert.equal(dhanErrorFlags({ errorMessage: "Invalid TOTP" }, 400).invalidTotp, true);
+  assert.equal(dhanErrorFlags({ errorMessage: "Invalid TOTP" }, 400).authExpired, false);
+  assert.equal(dhanErrorFlags({ errorMessage: "Too many attempts. Please try again after sometime." }, 400).rateLimit, true);
 });
 
 test("isDhanRateLimitError does not trigger token renewal logic", () => {
@@ -73,6 +78,23 @@ test("retryAfterMs reads seconds or milliseconds", () => {
 
 test("requirePinTotp demands PIN + TOTP on the server", () => {
   assert.throws(() => requirePinTotp({ clientId: "1100000001", pin: "", totpSecret: "" }), /PIN \+ TOTP is required/);
+});
+
+test("mergeDhanCredentials lets .env PIN and TOTP override a stale session file", () => {
+  const merged = mergeDhanCredentials(
+    { clientId: "old-id", pin: "1111", totpSecret: "OLDSECRETOLDSECRET", accessToken: "session-token" },
+    { DHAN_CLIENT_ID: "env-id", DHAN_PIN: "9999", DHAN_TOTP_SECRET: "jbsw y3dp ehpk 3pxp", DHAN_ACCESS_TOKEN: "env-token" },
+  );
+  assert.equal(merged.clientId, "env-id");
+  assert.equal(merged.pin, "9999");
+  assert.equal(merged.totpSecret, "JBSWY3DPEHPK3PXP");
+  assert.equal(merged.accessToken, "session-token");
+});
+
+test("isDhanInvalidTotpError is not treated as an expired access token", () => {
+  const error = Object.assign(new Error("Invalid TOTP"), { invalidTotp: true, status: 400 });
+  assert.equal(isDhanInvalidTotpError(error), true);
+  assert.equal(isDhanAuthExpiredError(error), false);
 });
 
 test("nextDailyRenewalAt resets at 8:00 AM IST", () => {
