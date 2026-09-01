@@ -28,6 +28,8 @@ const OPERATORS = [
 const LEFTS = ["price", "vwap", "ema_fast", "ema_slow", "rsi", "macd", "supertrend", "or_high", "or_low"];
 const RIGHTS = ["vwap", "ema_slow", "supertrend", "or_high", "or_low", "lookback_high", "lookback_low", "value"];
 
+type CondRow = { left: string; op: string; right: string; value: string };
+
 type Draft = {
   id?: string;
   name: string;
@@ -55,6 +57,10 @@ type Draft = {
   sellOp: string;
   sellRight: string;
   sellValue: string;
+  buyJoin: "and" | "or";
+  sellJoin: "and" | "or";
+  buyRows: CondRow[];
+  sellRows: CondRow[];
   runMode: "live" | "paper" | "backtest";
 };
 
@@ -63,28 +69,31 @@ function lotFor(symbol: string) {
 }
 
 function defaultConditions(kind: Draft["kind"], indicator: string, pattern: string) {
+  let flat = { buyLeft: "price", buyOp: "close_above", buyRight: "vwap", buyValue: "0", sellLeft: "price", sellOp: "close_below", sellRight: "vwap", sellValue: "0" };
   if (kind === "price-action") {
     if (pattern === "BREAKOUT") {
-      return { buyLeft: "price", buyOp: "crosses_above", buyRight: "lookback_high", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "lookback_low", sellValue: "0" };
+      flat = { buyLeft: "price", buyOp: "crosses_above", buyRight: "lookback_high", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "lookback_low", sellValue: "0" };
+    } else if (pattern === "SR_BOUNCE") {
+      flat = { buyLeft: "price", buyOp: "above", buyRight: "lookback_low", buyValue: "0", sellLeft: "price", sellOp: "below", sellRight: "lookback_high", sellValue: "0" };
+    } else {
+      flat = { buyLeft: "price", buyOp: "crosses_above", buyRight: "or_high", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "or_low", sellValue: "0" };
     }
-    if (pattern === "SR_BOUNCE") {
-      return { buyLeft: "price", buyOp: "above", buyRight: "lookback_low", buyValue: "0", sellLeft: "price", sellOp: "below", sellRight: "lookback_high", sellValue: "0" };
-    }
-    return { buyLeft: "price", buyOp: "crosses_above", buyRight: "or_high", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "or_low", sellValue: "0" };
+  } else if (indicator === "RSI") {
+    flat = { buyLeft: "rsi", buyOp: "lt", buyRight: "value", buyValue: "30", sellLeft: "rsi", sellOp: "gt", sellRight: "value", sellValue: "70" };
+  } else if (indicator === "EMA") {
+    flat = { buyLeft: "ema_fast", buyOp: "crosses_above", buyRight: "ema_slow", buyValue: "0", sellLeft: "ema_fast", sellOp: "crosses_below", sellRight: "ema_slow", sellValue: "0" };
+  } else if (indicator === "MACD") {
+    flat = { buyLeft: "macd", buyOp: "crosses_above", buyRight: "value", buyValue: "0", sellLeft: "macd", sellOp: "crosses_below", sellRight: "value", sellValue: "0" };
+  } else if (indicator === "SUPERTREND") {
+    flat = { buyLeft: "price", buyOp: "crosses_above", buyRight: "supertrend", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "supertrend", sellValue: "0" };
   }
-  if (indicator === "RSI") {
-    return { buyLeft: "rsi", buyOp: "lt", buyRight: "value", buyValue: "30", sellLeft: "rsi", sellOp: "gt", sellRight: "value", sellValue: "70" };
-  }
-  if (indicator === "EMA") {
-    return { buyLeft: "ema_fast", buyOp: "crosses_above", buyRight: "ema_slow", buyValue: "0", sellLeft: "ema_fast", sellOp: "crosses_below", sellRight: "ema_slow", sellValue: "0" };
-  }
-  if (indicator === "MACD") {
-    return { buyLeft: "macd", buyOp: "crosses_above", buyRight: "value", buyValue: "0", sellLeft: "macd", sellOp: "crosses_below", sellRight: "value", sellValue: "0" };
-  }
-  if (indicator === "SUPERTREND") {
-    return { buyLeft: "price", buyOp: "crosses_above", buyRight: "supertrend", buyValue: "0", sellLeft: "price", sellOp: "crosses_below", sellRight: "supertrend", sellValue: "0" };
-  }
-  return { buyLeft: "price", buyOp: "close_above", buyRight: "vwap", buyValue: "0", sellLeft: "price", sellOp: "close_below", sellRight: "vwap", sellValue: "0" };
+  return {
+    ...flat,
+    buyJoin: "and" as const,
+    sellJoin: "and" as const,
+    buyRows: [{ left: flat.buyLeft, op: flat.buyOp, right: flat.buyRight, value: flat.buyValue }],
+    sellRows: [{ left: flat.sellLeft, op: flat.sellOp, right: flat.sellRight, value: flat.sellValue }],
+  };
 }
 
 function blankDraft(): Draft {
@@ -114,6 +123,10 @@ function blankDraft(): Draft {
     sellOp: "close_below",
     sellRight: "vwap",
     sellValue: "0",
+    buyJoin: "and",
+    sellJoin: "and",
+    buyRows: [{ left: "price", op: "close_above", right: "vwap", value: "0" }],
+    sellRows: [{ left: "price", op: "close_below", right: "vwap", value: "0" }],
     runMode: "live",
   };
 }
@@ -179,8 +192,26 @@ export function AlgoScreen() {
       instrument: draft.kind === "nifty-vwap" ? "option" : draft.instrument,
       timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.timeframe,
       symbol: draft.kind === "nifty-vwap" ? "NIFTY" : draft.symbol,
-      buyValue: Number(draft.buyValue),
-      sellValue: Number(draft.sellValue),
+      buyValue: Number(draft.buyRows[0]?.value || draft.buyValue),
+      sellValue: Number(draft.sellRows[0]?.value || draft.sellValue),
+      buyConditions: {
+        join: draft.buyJoin,
+        rows: (draft.buyRows.length ? draft.buyRows : [{ left: draft.buyLeft, op: draft.buyOp, right: draft.buyRight, value: draft.buyValue }]).map((row) => ({
+          left: row.left,
+          op: row.op,
+          right: row.right,
+          value: Number(row.value) || 0,
+        })),
+      },
+      sellConditions: {
+        join: draft.sellJoin,
+        rows: (draft.sellRows.length ? draft.sellRows : [{ left: draft.sellLeft, op: draft.sellOp, right: draft.sellRight, value: draft.sellValue }]).map((row) => ({
+          left: row.left,
+          op: row.op,
+          right: row.right,
+          value: Number(row.value) || 0,
+        })),
+      },
       strikeOffset: Number(draft.strikeOffset),
     });
     setDraft(null);
@@ -300,42 +331,84 @@ export function AlgoScreen() {
             </View>
           </>
         )}
-        {draft.kind === "nifty-vwap" ? null : <Text style={styles.muted}>BUY when</Text>}
         {draft.kind === "nifty-vwap" ? null : (
         <>
+        <Text style={styles.muted}>BUY when · {draft.buyJoin.toUpperCase()}</Text>
         <View style={styles.chips}>
-          {LEFTS.map((item) => (
-            <Chip key={item} label={item} on={draft.buyLeft === item} onPress={() => setDraft({ ...draft, buyLeft: item })} />
-          ))}
+          <Chip label="AND" on={draft.buyJoin === "and"} onPress={() => setDraft({ ...draft, buyJoin: "and" })} />
+          <Chip label="OR" on={draft.buyJoin === "or"} onPress={() => setDraft({ ...draft, buyJoin: "or" })} />
         </View>
+        {(draft.buyRows.length ? draft.buyRows : [{ left: draft.buyLeft, op: draft.buyOp, right: draft.buyRight, value: draft.buyValue }]).map((row, index) => (
+          <View key={`buy-${index}`}>
+            <Text style={styles.muted}>{index === 0 ? "BUY row" : draft.buyJoin.toUpperCase()}</Text>
+            <View style={styles.chips}>
+              {LEFTS.map((item) => (
+                <Chip key={`bl-${index}-${item}`} label={item} on={row.left === item} onPress={() => setDraft({ ...draft, buyRows: draft.buyRows.map((r, i) => (i === index ? { ...r, left: item } : r)) })} />
+              ))}
+            </View>
+            <View style={styles.chips}>
+              {OPERATORS.map((item) => (
+                <Chip key={`bo-${index}-${item.id}`} label={item.label} on={row.op === item.id} onPress={() => setDraft({ ...draft, buyRows: draft.buyRows.map((r, i) => (i === index ? { ...r, op: item.id } : r)) })} />
+              ))}
+            </View>
+            <View style={styles.chips}>
+              {RIGHTS.map((item) => (
+                <Chip key={`br-${index}-${item}`} label={item} on={row.right === item} onPress={() => setDraft({ ...draft, buyRows: draft.buyRows.map((r, i) => (i === index ? { ...r, right: item } : r)) })} />
+              ))}
+            </View>
+            {row.right === "value" ? (
+              <Field label="Buy number" value={row.value} keyboard="numeric" onChange={(value) => setDraft({ ...draft, buyRows: draft.buyRows.map((r, i) => (i === index ? { ...r, value } : r)) })} />
+            ) : null}
+            {draft.buyRows.length > 1 ? (
+              <Pressable style={styles.ghost} onPress={() => setDraft({ ...draft, buyRows: draft.buyRows.filter((_, i) => i !== index) })}>
+                <Text style={styles.ghostText}>Remove BUY row</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+        {draft.buyRows.length < 5 ? (
+          <Pressable style={styles.ghost} onPress={() => setDraft({ ...draft, buyRows: [...draft.buyRows, { left: "price", op: "close_above", right: "vwap", value: "0" }] })}>
+            <Text style={styles.ghostText}>+ Add BUY condition</Text>
+          </Pressable>
+        ) : null}
+        <Text style={styles.muted}>SELL when · {draft.sellJoin.toUpperCase()}</Text>
         <View style={styles.chips}>
-          {OPERATORS.map((item) => (
-            <Chip key={item.id} label={item.label} on={draft.buyOp === item.id} onPress={() => setDraft({ ...draft, buyOp: item.id })} />
-          ))}
+          <Chip label="AND" on={draft.sellJoin === "and"} onPress={() => setDraft({ ...draft, sellJoin: "and" })} />
+          <Chip label="OR" on={draft.sellJoin === "or"} onPress={() => setDraft({ ...draft, sellJoin: "or" })} />
         </View>
-        <View style={styles.chips}>
-          {RIGHTS.map((item) => (
-            <Chip key={item} label={item} on={draft.buyRight === item} onPress={() => setDraft({ ...draft, buyRight: item })} />
-          ))}
-        </View>
-        {draft.buyRight === "value" ? <Field label="Buy number" value={draft.buyValue} keyboard="numeric" onChange={(buyValue) => setDraft({ ...draft, buyValue })} /> : null}
-        <Text style={styles.muted}>SELL when</Text>
-        <View style={styles.chips}>
-          {LEFTS.map((item) => (
-            <Chip key={`sl-${item}`} label={item} on={draft.sellLeft === item} onPress={() => setDraft({ ...draft, sellLeft: item })} />
-          ))}
-        </View>
-        <View style={styles.chips}>
-          {OPERATORS.map((item) => (
-            <Chip key={`s-${item.id}`} label={item.label} on={draft.sellOp === item.id} onPress={() => setDraft({ ...draft, sellOp: item.id })} />
-          ))}
-        </View>
-        <View style={styles.chips}>
-          {RIGHTS.map((item) => (
-            <Chip key={`sr-${item}`} label={item} on={draft.sellRight === item} onPress={() => setDraft({ ...draft, sellRight: item })} />
-          ))}
-        </View>
-        {draft.sellRight === "value" ? <Field label="Sell number" value={draft.sellValue} keyboard="numeric" onChange={(sellValue) => setDraft({ ...draft, sellValue })} /> : null}
+        {(draft.sellRows.length ? draft.sellRows : [{ left: draft.sellLeft, op: draft.sellOp, right: draft.sellRight, value: draft.sellValue }]).map((row, index) => (
+          <View key={`sell-${index}`}>
+            <Text style={styles.muted}>{index === 0 ? "SELL row" : draft.sellJoin.toUpperCase()}</Text>
+            <View style={styles.chips}>
+              {LEFTS.map((item) => (
+                <Chip key={`sl-${index}-${item}`} label={item} on={row.left === item} onPress={() => setDraft({ ...draft, sellRows: draft.sellRows.map((r, i) => (i === index ? { ...r, left: item } : r)) })} />
+              ))}
+            </View>
+            <View style={styles.chips}>
+              {OPERATORS.map((item) => (
+                <Chip key={`so-${index}-${item.id}`} label={item.label} on={row.op === item.id} onPress={() => setDraft({ ...draft, sellRows: draft.sellRows.map((r, i) => (i === index ? { ...r, op: item.id } : r)) })} />
+              ))}
+            </View>
+            <View style={styles.chips}>
+              {RIGHTS.map((item) => (
+                <Chip key={`sr-${index}-${item}`} label={item} on={row.right === item} onPress={() => setDraft({ ...draft, sellRows: draft.sellRows.map((r, i) => (i === index ? { ...r, right: item } : r)) })} />
+              ))}
+            </View>
+            {row.right === "value" ? (
+              <Field label="Sell number" value={row.value} keyboard="numeric" onChange={(value) => setDraft({ ...draft, sellRows: draft.sellRows.map((r, i) => (i === index ? { ...r, value } : r)) })} />
+            ) : null}
+            {draft.sellRows.length > 1 ? (
+              <Pressable style={styles.ghost} onPress={() => setDraft({ ...draft, sellRows: draft.sellRows.filter((_, i) => i !== index) })}>
+                <Text style={styles.ghostText}>Remove SELL row</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+        {draft.sellRows.length < 5 ? (
+          <Pressable style={styles.ghost} onPress={() => setDraft({ ...draft, sellRows: [...draft.sellRows, { left: "price", op: "close_below", right: "vwap", value: "0" }] })}>
+            <Text style={styles.ghostText}>+ Add SELL condition</Text>
+          </Pressable>
+        ) : null}
         </>
         )}
         <Field label={`Lots (1 lot = ${lot} qty, order ${lots * lot})`} value={draft.lots} keyboard="numeric" onChange={(next) => setDraft({ ...draft, lots: next })} />
@@ -481,6 +554,16 @@ export function AlgoScreen() {
                   sellOp: algo.sellOp || "close_below",
                   sellRight: algo.sellRight || "vwap",
                   sellValue: String(algo.sellValue || 0),
+                  buyJoin: algo.buyConditions?.join === "or" ? "or" : "and",
+                  sellJoin: algo.sellConditions?.join === "or" ? "or" : "and",
+                  buyRows: (algo.buyConditions?.rows?.length
+                    ? algo.buyConditions.rows
+                    : [{ left: algo.buyLeft || "price", op: algo.buyOp || "close_above", right: algo.buyRight || "vwap", value: algo.buyValue || 0 }]
+                  ).map((row) => ({ left: String(row.left), op: String(row.op), right: String(row.right), value: String(row.value ?? 0) })),
+                  sellRows: (algo.sellConditions?.rows?.length
+                    ? algo.sellConditions.rows
+                    : [{ left: algo.sellLeft || "price", op: algo.sellOp || "close_below", right: algo.sellRight || "vwap", value: algo.sellValue || 0 }]
+                  ).map((row) => ({ left: String(row.left), op: String(row.op), right: String(row.right), value: String(row.value ?? 0) })),
                   runMode: algo.runMode === "paper" || algo.runMode === "backtest" ? algo.runMode : "live",
                 })
               }

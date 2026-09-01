@@ -180,6 +180,8 @@ export type Snapshot = {
     sellOp?: string;
     sellRight?: string;
     sellValue?: number;
+    buyConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
+    sellConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
     summary?: string;
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {

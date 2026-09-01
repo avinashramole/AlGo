@@ -54,6 +54,87 @@ test("close below VWAP is a SELL on a completed bar", () => {
   }
 });
 
+test("AND requires every BUY condition", () => {
+  const candles = [bar(0, 100), bar(1, 101), bar(2, 140)];
+  const nowComplete = T0 + 3 * BAR;
+  const orig = Date.now;
+  Date.now = () => nowComplete;
+  try {
+    const both = evaluateSignals(candles, 2, {
+      timeframe: "5m",
+      buyConditions: {
+        join: "and",
+        rows: [
+          { left: "price", op: "gt", right: "value", value: 50 },
+          { left: "price", op: "lt", right: "value", value: 200 },
+        ],
+      },
+      sellConditions: { join: "and", rows: [{ left: "price", op: "lt", right: "value", value: 0 }] },
+    });
+    assert.equal(both.buy, true);
+    const miss = evaluateSignals(candles, 2, {
+      timeframe: "5m",
+      buyConditions: {
+        join: "and",
+        rows: [
+          { left: "price", op: "gt", right: "value", value: 50 },
+          { left: "price", op: "gt", right: "value", value: 150 },
+        ],
+      },
+      sellConditions: { join: "and", rows: [{ left: "price", op: "lt", right: "value", value: 0 }] },
+    });
+    assert.equal(miss.buy, false);
+  } finally {
+    Date.now = orig;
+  }
+});
+
+test("OR fires when any BUY condition is true", () => {
+  const candles = [bar(0, 100), bar(1, 101), bar(2, 90)];
+  const nowComplete = T0 + 3 * BAR;
+  const orig = Date.now;
+  Date.now = () => nowComplete;
+  try {
+    const signal = evaluateSignals(candles, 2, {
+      timeframe: "5m",
+      buyConditions: {
+        join: "or",
+        rows: [
+          { left: "price", op: "gt", right: "value", value: 150 },
+          { left: "price", op: "lt", right: "value", value: 100 },
+        ],
+      },
+      sellConditions: { join: "and", rows: [{ left: "price", op: "gt", right: "value", value: 999 }] },
+    });
+    assert.equal(signal.buy, true);
+  } finally {
+    Date.now = orig;
+  }
+});
+
+test("close_above in an AND group still ignores the forming bar", () => {
+  const candles = [bar(0, 140), bar(1, 138), bar(2, 200, { high: 202, low: 198, volume: 10 })];
+  const forming = T0 + 2 * BAR + 30_000;
+  const orig = Date.now;
+  Date.now = () => forming;
+  try {
+    const signal = evaluateSignals(candles, 2, {
+      timeframe: "5m",
+      buyConditions: {
+        join: "and",
+        rows: [
+          { left: "price", op: "close_above", right: "vwap" },
+          { left: "price", op: "gt", right: "value", value: 50 },
+        ],
+      },
+      sellConditions: { join: "and", rows: [{ left: "price", op: "lt", right: "value", value: 0 }] },
+    });
+    assert.equal(signal.buy, false);
+  } finally {
+    Date.now = orig;
+  }
+});
+
 test("close above ignores the still-forming bar", () => {
   const candles = [bar(0, 140), bar(1, 138), bar(2, 200, { high: 202, low: 198, volume: 10 })];
   const forming = T0 + 2 * BAR + 30_000;

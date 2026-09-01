@@ -68,6 +68,60 @@ function pick(list, value, fallback) {
   return list.includes(value) ? value : fallback;
 }
 
+const MAX_CONDITION_ROWS = 5;
+
+export function conditionRowFrom(input = {}, fallback = {}) {
+  return {
+    left: pick(SOURCES, input.left, fallback.left || "price"),
+    op: pick(OPERATORS, input.op, fallback.op || "close_above"),
+    right: pick(SOURCES, input.right, fallback.right || "vwap"),
+    value: num(input.value, fallback.value ?? 0),
+  };
+}
+
+export function conditionGroupFrom(group, fallbackRow) {
+  const join = group?.join === "or" ? "or" : "and";
+  const raw = Array.isArray(group?.rows) ? group.rows : [];
+  const fallback = conditionRowFrom(fallbackRow, { left: "price", op: "close_above", right: "vwap", value: 0 });
+  const rows = (raw.length ? raw : [fallback]).slice(0, MAX_CONDITION_ROWS).map((row) => conditionRowFrom(row, fallback));
+  return { join, rows: rows.length ? rows : [fallback] };
+}
+
+export function groupsFromFlat(flat = {}) {
+  return {
+    buyConditions: conditionGroupFrom(undefined, {
+      left: flat.buyLeft || "price",
+      op: flat.buyOp || "close_above",
+      right: flat.buyRight || "vwap",
+      value: flat.buyValue || 0,
+    }),
+    sellConditions: conditionGroupFrom(undefined, {
+      left: flat.sellLeft || "price",
+      op: flat.sellOp || "close_below",
+      right: flat.sellRight || "vwap",
+      value: flat.sellValue || 0,
+    }),
+  };
+}
+
+export function flatFromGroup(group, side) {
+  const row = group?.rows?.[0] || {};
+  if (side === "buy") {
+    return {
+      buyLeft: row.left || "price",
+      buyOp: row.op || "close_above",
+      buyRight: row.right || "vwap",
+      buyValue: row.value || 0,
+    };
+  }
+  return {
+    sellLeft: row.left || "price",
+    sellOp: row.op || "close_below",
+    sellRight: row.right || "vwap",
+    sellValue: row.value || 0,
+  };
+}
+
 export function defaultConditions(kind, indicator, pattern) {
   if (kind === "price-action") {
     if (pattern === "BREAKOUT") {
@@ -172,6 +226,12 @@ export function formatCondition(left, op, right, value) {
   return `${leftLabel} ${opLabel} ${rightLabel}`;
 }
 
+export function formatConditionGroup(group, fallbackRow) {
+  const next = conditionGroupFrom(group, fallbackRow);
+  const parts = next.rows.map((row) => formatCondition(row.left, row.op, row.right, row.value));
+  return parts.join(next.join === "or" ? " OR " : " AND ");
+}
+
 export function strikeOffsetLabel(offset) {
   const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
   if (n === 0) return "ATM";
@@ -204,9 +264,24 @@ export function summarizeAlgo(algo) {
   }
   if (algo.kind === "price-action") {
     const pattern = algo.pattern || "ORB";
-    return `Price action · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · ${pattern} · ${tf} · ${size}`;
+    return `Price action · ${contract} · Buy when ${formatConditionGroup(algo.buyConditions, {
+      left: algo.buyLeft,
+      op: algo.buyOp,
+      right: algo.buyRight,
+      value: algo.buyValue,
+    })} · ${pattern} · ${tf} · ${size}`;
   }
-  return `Indicator · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · Sell when ${formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)} · ${tf} · ${size}`;
+  return `Indicator · ${contract} · Buy when ${formatConditionGroup(algo.buyConditions, {
+    left: algo.buyLeft,
+    op: algo.buyOp,
+    right: algo.buyRight,
+    value: algo.buyValue,
+  })} · Sell when ${formatConditionGroup(algo.sellConditions, {
+    left: algo.sellLeft,
+    op: algo.sellOp,
+    right: algo.sellRight,
+    value: algo.sellValue,
+  })} · ${tf} · ${size}`;
 }
 
 export function normalizeAlgo(input = {}, existing = {}) {
@@ -262,19 +337,52 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const side = ["BUY", "SELL", "BOTH"].includes(input.side) ? input.side : existing.side || "BUY";
   const timeframe = TIMEFRAMES.includes(input.timeframe) ? input.timeframe : existing.timeframe || "5m";
   const defaults = defaultConditions(kind, indicator, pattern);
-  const hasBuy = Boolean(input.buyOp || existing.buyOp);
-  const conditions = hasBuy
-    ? {
-        buyLeft: pick(SOURCES, input.buyLeft || existing.buyLeft, defaults.buyLeft),
-        buyOp: pick(OPERATORS, input.buyOp || existing.buyOp, defaults.buyOp),
-        buyRight: pick(SOURCES, input.buyRight || existing.buyRight, defaults.buyRight),
-        buyValue: num(input.buyValue, existing.buyValue ?? defaults.buyValue),
-        sellLeft: pick(SOURCES, input.sellLeft || existing.sellLeft, defaults.sellLeft),
-        sellOp: pick(OPERATORS, input.sellOp || existing.sellOp, defaults.sellOp),
-        sellRight: pick(SOURCES, input.sellRight || existing.sellRight, defaults.sellRight),
-        sellValue: num(input.sellValue, existing.sellValue ?? defaults.sellValue),
-      }
-    : defaults;
+  const hasBuy = Boolean(
+    input.buyOp ||
+      existing.buyOp ||
+      input.buyConditions?.rows?.length ||
+      existing.buyConditions?.rows?.length,
+  );
+  const hasSell = Boolean(
+    input.sellOp ||
+      existing.sellOp ||
+      input.sellConditions?.rows?.length ||
+      existing.sellConditions?.rows?.length,
+  );
+  const buyFallback = {
+    left: pick(SOURCES, input.buyLeft || existing.buyLeft, defaults.buyLeft),
+    op: pick(OPERATORS, input.buyOp || existing.buyOp, defaults.buyOp),
+    right: pick(SOURCES, input.buyRight || existing.buyRight, defaults.buyRight),
+    value: num(input.buyValue, existing.buyValue ?? defaults.buyValue),
+  };
+  const sellFallback = {
+    left: pick(SOURCES, input.sellLeft || existing.sellLeft, defaults.sellLeft),
+    op: pick(OPERATORS, input.sellOp || existing.sellOp, defaults.sellOp),
+    right: pick(SOURCES, input.sellRight || existing.sellRight, defaults.sellRight),
+    value: num(input.sellValue, existing.sellValue ?? defaults.sellValue),
+  };
+  const buyConditions = hasBuy
+    ? conditionGroupFrom(input.buyConditions || existing.buyConditions, buyFallback)
+    : conditionGroupFrom(undefined, {
+        left: defaults.buyLeft,
+        op: defaults.buyOp,
+        right: defaults.buyRight,
+        value: defaults.buyValue,
+      });
+  const sellConditions = hasSell
+    ? conditionGroupFrom(input.sellConditions || existing.sellConditions, sellFallback)
+    : conditionGroupFrom(undefined, {
+        left: defaults.sellLeft,
+        op: defaults.sellOp,
+        right: defaults.sellRight,
+        value: defaults.sellValue,
+      });
+  const conditions = {
+    ...flatFromGroup(buyConditions, "buy"),
+    ...flatFromGroup(sellConditions, "sell"),
+    buyConditions,
+    sellConditions,
+  };
   const lots = Math.max(1, Math.round(num(input.lots, existing.lots || 1)));
   const lotSize = lotFor(symbol);
   const name = String(input.name || existing.name || "").trim() || (kind === "indicator" ? `${indicator} ${symbol}` : `${pattern} ${symbol}`);

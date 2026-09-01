@@ -5,7 +5,7 @@ import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatInr } from "../lib/format";
-import { formatCondition, contractLabel, lotForSymbol, isNiftyVwapKind, type AlgoStrategy } from "../lib/strategies";
+import { formatConditionGroup, contractLabel, lotForSymbol, isNiftyVwapKind, type AlgoStrategy } from "../lib/strategies";
 
 function backtestRangeLabel(row?: AlgoStrategy["lastBacktest"]) {
   if (!row) return "";
@@ -131,8 +131,24 @@ export function Algo() {
                     </>
                   ) : (
                     <>
-                  <div>BUY when {formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)}</div>
-                  <div>SELL when {formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)}</div>
+                  <div>
+                    BUY when{" "}
+                    {formatConditionGroup(algo.buyConditions, {
+                      left: algo.buyLeft,
+                      op: algo.buyOp,
+                      right: algo.buyRight,
+                      value: algo.buyValue,
+                    })}
+                  </div>
+                  <div>
+                    SELL when{" "}
+                    {formatConditionGroup(algo.sellConditions, {
+                      left: algo.sellLeft,
+                      op: algo.sellOp,
+                      right: algo.sellRight,
+                      value: algo.sellValue,
+                    })}
+                  </div>
                     </>
                   )}
                   {algo.instrument === "option" ? (

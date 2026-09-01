@@ -11,7 +11,9 @@ import {
   TIMEFRAMES,
   defaultConditions,
   emptyStrategy,
-  formatCondition,
+  formatConditionGroup,
+  groupsFromFlat,
+  MAX_CONDITION_ROWS,
   contractLabel,
   strikeOffsetLabel,
   lotForSymbol,
@@ -19,7 +21,9 @@ import {
   OPTION_OFFSETS,
   isNiftyVwapKind,
   type AlgoStrategy,
+  type ConditionJoin,
   type ConditionOp,
+  type ConditionRow,
   type ConditionSource,
   type StrategyKind,
 } from "../../lib/strategies";
@@ -42,7 +46,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (!open) return;
     if (algo) {
       const kind = (isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || "indicator") as StrategyKind;
-      setForm({ ...emptyStrategy(kind), ...algo, kind });
+      const synthesized = groupsFromFlat(algo);
+      setForm({
+        ...emptyStrategy(kind),
+        ...algo,
+        kind,
+        buyConditions: algo.buyConditions?.rows?.length ? algo.buyConditions : synthesized.buyConditions,
+        sellConditions: algo.sellConditions?.rows?.length ? algo.sellConditions : synthesized.sellConditions,
+      });
     } else {
       setForm({ ...emptyStrategy("indicator"), brokerId: data.activeBrokerId || "dhan", runMode: "live" });
     }
@@ -60,8 +71,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
     }
-    const buy = formatCondition(form.buyLeft, form.buyOp, form.buyRight, form.buyValue);
-    const sell = formatCondition(form.sellLeft, form.sellOp, form.sellRight, form.sellValue);
+    const buy = formatConditionGroup(form.buyConditions, {
+      left: form.buyLeft,
+      op: form.buyOp,
+      right: form.buyRight,
+      value: form.buyValue,
+    });
+    const sell = formatConditionGroup(form.sellConditions, {
+      left: form.sellLeft,
+      op: form.sellOp,
+      right: form.sellRight,
+      value: form.sellValue,
+    });
     return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
   }, [form, lotSize, lots]);
 
@@ -303,7 +324,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 value={form.indicator || "VWAP"}
                 onChange={(event) => {
                   const indicator = event.target.value;
-                  set({ indicator, ...defaultConditions("indicator", indicator, form.pattern) });
+                  const next = defaultConditions("indicator", indicator, form.pattern);
+                  set({ indicator, ...next, ...groupsFromFlat(next) });
                 }}
               >
                 {INDICATORS.map((row) => (
@@ -336,7 +358,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 value={form.pattern || "ORB"}
                 onChange={(event) => {
                   const pattern = event.target.value;
-                  set({ pattern, ...defaultConditions("price-action", form.indicator, pattern) });
+                  const next = defaultConditions("price-action", form.indicator, pattern);
+                  set({ pattern, ...next, ...groupsFromFlat(next) });
                 }}
               >
                 {PATTERNS.map((row) => (
@@ -364,36 +387,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {vwap ? (
           <div className="mt-4 space-y-3">
-            <ConditionRow
-              label="BUY when"
-              left={form.buyLeft || "price"}
-              op={form.buyOp || "close_above"}
-              right={form.buyRight || "vwap"}
-              value={form.buyValue || 0}
-              onChange={(patch) =>
-                set({
-                  buyLeft: patch.left,
-                  buyOp: patch.op,
-                  buyRight: patch.right,
-                  buyValue: patch.value,
-                })
-              }
-            />
-            <ConditionRow
-              label="SELL when"
-              left={form.sellLeft || "price"}
-              op={form.sellOp || "close_below"}
-              right={form.sellRight || "vwap"}
-              value={form.sellValue || 0}
-              onChange={(patch) =>
-                set({
-                  sellLeft: patch.left,
-                  sellOp: patch.op,
-                  sellRight: patch.right,
-                  sellValue: patch.value,
-                })
-              }
-            />
             <p className="text-[11px] font-semibold text-slate-400">
               Close above / close below use the last completed 5m candle only. BUY CE when futures close above VWAP. BUY PE when futures close below VWAP. ATM option must also close above its own VWAP.
             </p>
@@ -408,36 +401,41 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : (
         <div className="mt-4 space-y-3">
-          <ConditionRow
+          <ConditionGroupEditor
             label="BUY when"
-            left={form.buyLeft || "price"}
-            op={form.buyOp || "close_above"}
-            right={form.buyRight || "vwap"}
-            value={form.buyValue || 0}
-            onChange={(patch) =>
+            group={
+              form.buyConditions ||
+              groupsFromFlat(form).buyConditions
+            }
+            onChange={(buyConditions) =>
               set({
-                buyLeft: patch.left,
-                buyOp: patch.op,
-                buyRight: patch.right,
-                buyValue: patch.value,
+                buyConditions,
+                buyLeft: buyConditions.rows[0]?.left,
+                buyOp: buyConditions.rows[0]?.op,
+                buyRight: buyConditions.rows[0]?.right,
+                buyValue: buyConditions.rows[0]?.value,
               })
             }
           />
-          <ConditionRow
+          <ConditionGroupEditor
             label="SELL when"
-            left={form.sellLeft || "price"}
-            op={form.sellOp || "close_below"}
-            right={form.sellRight || "vwap"}
-            value={form.sellValue || 0}
-            onChange={(patch) =>
+            group={
+              form.sellConditions ||
+              groupsFromFlat(form).sellConditions
+            }
+            onChange={(sellConditions) =>
               set({
-                sellLeft: patch.left,
-                sellOp: patch.op,
-                sellRight: patch.right,
-                sellValue: patch.value,
+                sellConditions,
+                sellLeft: sellConditions.rows[0]?.left,
+                sellOp: sellConditions.rows[0]?.op,
+                sellRight: sellConditions.rows[0]?.right,
+                sellValue: sellConditions.rows[0]?.value,
               })
             }
           />
+          <p className="text-[11px] font-semibold text-slate-400">
+            Add extra rows for multiple conditions. AND means every row must be true. OR means any one row can fire. Close above / close below use the last completed candle only.
+          </p>
         </div>
 
         )}
@@ -475,13 +473,84 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   );
 }
 
-function ConditionRow({
+function ConditionGroupEditor({
+  label,
+  group,
+  onChange,
+}: {
+  label: string;
+  group: { join?: ConditionJoin; rows?: ConditionRow[] };
+  onChange: (next: { join: ConditionJoin; rows: ConditionRow[] }) => void;
+}) {
+  const join: ConditionJoin = group.join === "or" ? "or" : "and";
+  const rows =
+    group.rows?.length
+      ? group.rows
+      : [{ left: "price" as const, op: "close_above" as const, right: "vwap" as const, value: 0 }];
+
+  const updateRow = (index: number, patch: ConditionRow) => {
+    const next = rows.map((row, i) => (i === index ? patch : row));
+    onChange({ join, rows: next });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+        <div className="flex gap-1">
+          {(["and", "or"] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChange({ join: id, rows })}
+              className={cn(
+                "h-7 rounded-md px-2 text-[10px] font-bold uppercase",
+                join === id ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--bg)] text-slate-500",
+              )}
+            >
+              {id}
+            </button>
+          ))}
+        </div>
+      </div>
+      {rows.map((row, index) => (
+        <ConditionRowFields
+          key={`${label}-${index}`}
+          label={index === 0 ? label : join === "or" ? "OR" : "AND"}
+          left={row.left}
+          op={row.op}
+          right={row.right}
+          value={row.value || 0}
+          onRemove={rows.length > 1 ? () => onChange({ join, rows: rows.filter((_, i) => i !== index) }) : undefined}
+          onChange={(patch) => updateRow(index, patch)}
+        />
+      ))}
+      {rows.length < MAX_CONDITION_ROWS ? (
+        <button
+          type="button"
+          onClick={() =>
+            onChange({
+              join,
+              rows: [...rows, { left: "price", op: "close_above", right: "vwap", value: 0 }],
+            })
+          }
+          className="h-8 rounded-lg border border-dashed border-[var(--border)] px-3 text-[11px] font-semibold text-slate-500"
+        >
+          + Add condition
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ConditionRowFields({
   label,
   left,
   op,
   right,
   value,
   onChange,
+  onRemove,
 }: {
   label: string;
   left: ConditionSource;
@@ -489,10 +558,18 @@ function ConditionRow({
   right: ConditionSource;
   value: number;
   onChange: (next: { left: ConditionSource; op: ConditionOp; right: ConditionSource; value: number }) => void;
+  onRemove?: () => void;
 }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+        {onRemove ? (
+          <button type="button" onClick={onRemove} className="text-[10px] font-bold uppercase text-slate-400">
+            Remove
+          </button>
+        ) : null}
+      </div>
       <div className="grid gap-2 md:grid-cols-4">
         <select
           className={fieldClass}
