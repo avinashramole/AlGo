@@ -248,7 +248,7 @@ export function Brokers() {
           </label>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Use the Dhan app PIN and the long Setup TOTP secret from web.dhan.co — not the 6-digit code that changes every 30 seconds. Invalid TOTP usually means the secret/PIN is wrong, or the VPS clock is off.
+          Save writes <code>/opt/t2s/.env</code> and <code>tokan.env</code>. Do not rely on the hosting file manager for hidden <code>.env</code> files — they often do not save. Use the Dhan PIN and the long Setup TOTP secret from web.dhan.co, not the 6-digit code.
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <button

@@ -8,6 +8,11 @@ dist
 tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo
 .env
+.env.save
+.env.save.*
+tokan.env
+token.env
+dhan.env
 server/.env
 server/.dhan-session.json
 server/data/users.json

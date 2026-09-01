@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { upsertDhanEnv } from "./env.js";
 import { ipv4Request } from "./ipv4.js";
 import { normalizeTotpSecret, totpCodes } from "./totp.js";
 
@@ -52,6 +53,13 @@ export function saveDhanSession(patch = {}) {
     fs.chmodSync(SESSION_FILE, 0o600);
   } catch {
     /* windows */
+  }
+  if (patch.clientId || patch.pin || patch.totpSecret) {
+    upsertDhanEnv({
+      clientId: next.clientId,
+      pin: next.pin,
+      totpSecret: next.totpSecret,
+    });
   }
   return next;
 }
