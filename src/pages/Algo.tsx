@@ -5,7 +5,7 @@ import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatInr } from "../lib/format";
-import { formatConditionGroup, contractLabel, lotForSymbol, isNiftyVwapKind, type AlgoStrategy } from "../lib/strategies";
+import { formatConditionGroup, contractLabel, lotForSymbol, isNiftyVwapKind, isNiftyVwapReversalKind, isNiftyOptionEngineKind, type AlgoStrategy } from "../lib/strategies";
 
 function backtestRangeLabel(row?: AlgoStrategy["lastBacktest"]) {
   if (!row) return "";
@@ -18,7 +18,7 @@ function backtestRangeLabel(row?: AlgoStrategy["lastBacktest"]) {
 
 export function Algo() {
   const { data, toggle, routeAlgo, removeAlgo, backtest } = useMarket();
-  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap">("all");
+  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal">("all");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AlgoStrategy | null>(null);
   const [busyId, setBusyId] = useState("");
@@ -30,6 +30,7 @@ export function Algo() {
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
     if (filter === "nifty-vwap") return isNiftyVwapKind(algo);
+    if (filter === "nifty-vwap-reversal") return isNiftyVwapReversalKind(algo);
     return (algo.kind || (algo.tag === "Price action" ? "price-action" : "indicator")) === filter;
   });
 
@@ -69,6 +70,7 @@ export function Algo() {
             ["indicator", "Indicator based"],
             ["price-action", "Price action based"],
             ["nifty-vwap", "NIFTY VWAP ATM"],
+            ["nifty-vwap-reversal", "15m VWAP reversal"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -87,7 +89,11 @@ export function Algo() {
       {rows.length ? (
         <div className="grid gap-3 lg:grid-cols-3">
           {rows.map((algo) => {
-            const kind = isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || (algo.tag === "Price action" ? "price-action" : "indicator");
+            const kind = isNiftyVwapReversalKind(algo)
+              ? "nifty-vwap-reversal"
+              : isNiftyVwapKind(algo)
+                ? "nifty-vwap"
+                : algo.kind || (algo.tag === "Price action" ? "price-action" : "indicator");
             return (
               <section key={algo.id} className="card p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -111,7 +117,15 @@ export function Algo() {
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Badge>{kind === "nifty-vwap" ? "NIFTY VWAP" : kind === "indicator" ? "Indicator" : "Price action"}</Badge>
+                  <Badge>
+                    {kind === "nifty-vwap-reversal"
+                      ? "15m VWAP"
+                      : kind === "nifty-vwap"
+                        ? "NIFTY VWAP"
+                        : kind === "indicator"
+                          ? "Indicator"
+                          : "Price action"}
+                  </Badge>
                   <Badge>{algo.runMode === "live" ? "Live Dhan" : algo.runMode === "backtest" ? "Backtest" : "Paper"}</Badge>
                   <Badge>{algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`}</Badge>
                   <Badge>
@@ -121,7 +135,13 @@ export function Algo() {
                   <Badge>{algo.side || "BUY"}</Badge>
                 </div>
                 <div className="mt-2 space-y-1 text-[11px] font-semibold text-slate-500">
-                  {kind === "nifty-vwap" ? (
+                  {kind === "nifty-vwap-reversal" ? (
+                    <>
+                      <div>BUY ATM CE when 15m NIFTY future opens below VWAP and closes above VWAP</div>
+                      <div>BUY ATM PE when 15m NIFTY future opens above VWAP and closes below VWAP</div>
+                      <div>Entry after 15m close · SL {algo.initialSlPct || 15}% · Target {algo.targetPct || 30}%</div>
+                    </>
+                  ) : kind === "nifty-vwap" ? (
                     <>
                       <div>BUY when close above VWAP (CE) + ATM CE close above CE VWAP</div>
                       <div>SELL / PE when close below VWAP + ATM PE close above PE VWAP</div>
@@ -240,7 +260,7 @@ export function Algo() {
                   </button>
                 </div>
                 <div className="mt-2 text-[11px] text-slate-400">
-                  Broker {brokerName(data.brokers, algo.brokerId)} · SL {isNiftyVwapKind(algo) ? algo.initialSlPct || 20 : algo.slPct || 0.4}% · Target {algo.targetPct || (isNiftyVwapKind(algo) ? 40 : 0.8)}%
+                  Broker {brokerName(data.brokers, algo.brokerId)} · SL {isNiftyOptionEngineKind(algo) ? algo.initialSlPct || (isNiftyVwapReversalKind(algo) ? 15 : 20) : algo.slPct || 0.4}% · Target {algo.targetPct || (isNiftyVwapReversalKind(algo) ? 30 : isNiftyVwapKind(algo) ? 40 : 0.8)}%
                 </div>
                 {rangeId === algo.id ? (
                   <BacktestRangeInline

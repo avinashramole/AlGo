@@ -3,10 +3,11 @@ import test from "node:test";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
-import { VwapSignalEngine, completedCandles, firstFuturesBias, sessionVwap } from "./VwapSignalEngine.js";
 import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
-import { defaultNiftyVwapAlgo, isNiftyVwapAlgo, niftyVwapConfig } from "./config.js";
+import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
+import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionVwap } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
+import { runtimeState } from "./PositionManager.js";
 import { runNiftyVwapBacktest } from "./BacktestAdapter.js";
 import { PaperTradingAdapter } from "./PaperTradingAdapter.js";
 import { LiveTradingAdapter } from "./LiveTradingAdapter.js";
@@ -506,15 +507,22 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
   assert.equal(updated.initialSlPct, 18);
 });
 
-test("seed includes only the paused live NIFTY VWAP ATM algo", () => {
+test("seed includes paused NIFTY VWAP ATM and 15m reversal algos", () => {
   const seeded = seedAlgos();
-  assert.equal(seeded.length, 1);
+  assert.equal(seeded.length, 2);
   assert.equal(seeded[0].name, "NIFTY VWAP ATM");
   assert.equal(isNiftyVwapAlgo(seeded[0]), true);
   assert.equal(seeded[0].enabled, false);
   assert.equal(seeded[0].runMode, "live");
   assert.equal(seeded[0].status, "PAUSED");
   assert.equal(seeded[0].brokerId, "dhan");
+  assert.equal(seeded[1].name, "NIFTY 15m VWAP reversal");
+  assert.equal(isNiftyVwapReversalAlgo(seeded[1]), true);
+  assert.equal(seeded[1].enabled, false);
+  assert.equal(seeded[1].timeframe, "15m");
+  assert.equal(seeded[1].initialSlPct, 15);
+  assert.equal(seeded[1].targetPct, 30);
+  assert.equal(seeded[1].status, "PAUSED");
 });
 
 test("paper/live/backtest share the same config and BUY-only option payload", () => {
@@ -537,4 +545,140 @@ test("config stays 5m / 20 / 40 / 10 / 3 / 5 / max 1", () => {
   assert.equal(cfg.trailingStepPct, 3);
   assert.equal(cfg.vwapExitCandles, 5);
   assert.equal(cfg.maxPositions, 1);
+});
+
+const BAR15 = 15 * 60 * 1000;
+
+function bar15(i, open, close, extras = {}) {
+  return {
+    time: T0 + i * BAR15,
+    open,
+    high: extras.high ?? Math.max(open, close) + 5,
+    low: extras.low ?? Math.min(open, close) - 5,
+    close,
+    volume: extras.volume ?? 1000,
+  };
+}
+
+test("15m reversal: open below VWAP and close above is BUY CE after the candle closes", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const reversal = lastBarVwapReversal(futuresBars);
+  assert.equal(reversal.buyCe, true);
+  assert.equal(reversal.buyPe, false);
+  const forming = T0 + BAR15 + BAR15 - 1000;
+  const formingSignal = VwapSignalEngine.evaluateReversal({ futuresBars, now: forming, barMs: BAR15 });
+  assert.equal(formingSignal.buyCe, false);
+  const done = T0 + 2 * BAR15;
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars, now: done, barMs: BAR15 });
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev CE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: done,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].side, "BUY");
+});
+
+test("15m reversal: open above VWAP and close below is BUY PE after the candle closes", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24540, 24480, { high: 24550, low: 24470 })];
+  const done = T0 + 2 * BAR15;
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars, now: done, barMs: BAR15 });
+  assert.equal(signal.buyPe, true);
+  assert.equal(signal.buyCe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev PE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: done,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars,
+    spot: 24480,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 90,
+    peLtp: 110,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "PE");
+});
+
+test("15m reversal uses 15% stop and 30% target and does not trail", () => {
+  const cfg = niftyVwapReversalConfig({});
+  assert.equal(cfg.timeframe, "15m");
+  assert.equal(cfg.initialSlPct, 15);
+  assert.equal(cfg.targetPct, 30);
+  assert.equal(cfg.useTrail, false);
+  assert.equal(cfg.useVwapExit, false);
+  assert.equal(TrailingStopManager.initialStop(100, 15), 85);
+  assert.equal(TrailingStopManager.targetPrice(100, 30), 130);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev SL" });
+  const book = bookAdapter();
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const now = T0 + 2 * BAR15;
+  NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars,
+    spot: 24540,
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(book.positions[0].avg, 100);
+  const hold = NiftyVwapStrategy.tick({
+    algo,
+    now: now + BAR15,
+    feedLive: true,
+    minutesToClose: 100,
+    futuresBars: [...futuresBars, bar15(2, 24540, 24560, { high: 24570, low: 24530 })],
+    ceLtp: 125,
+    peLtp: 80,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hold.action, "hold");
+  assert.equal(runtimeState(algo).stopPrice, 85);
+  const sl = NiftyVwapStrategy.tick({
+    algo,
+    now: now + 2 * BAR15,
+    feedLive: true,
+    minutesToClose: 80,
+    futuresBars: [...futuresBars, bar15(2, 24540, 24560, { high: 24570, low: 24530 })],
+    ceLtp: 84,
+    peLtp: 80,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(sl.action, "exit");
+  assert.equal(sl.reason, "sl");
+});
+
+test("normalizeAlgo keeps 15m reversal paused and never auto-enables LIVE", () => {
+  const created = normalizeAlgo(defaultNiftyVwapReversalAlgo({ name: "Desk Reversal", runMode: "live" }));
+  assert.equal(isNiftyVwapReversalAlgo(created), true);
+  assert.equal(created.enabled, false);
+  assert.notEqual(created.status, "LIVE");
+  assert.equal(created.timeframe, "15m");
+  assert.equal(created.initialSlPct, 15);
+  assert.equal(created.targetPct, 30);
 });

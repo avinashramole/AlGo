@@ -20,6 +20,8 @@ import {
   RUN_MODES,
   OPTION_OFFSETS,
   isNiftyVwapKind,
+  isNiftyVwapReversalKind,
+  isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
   type ConditionOp,
@@ -45,7 +47,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     if (algo) {
-      const kind = (isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || "indicator") as StrategyKind;
+      const kind = (
+        isNiftyVwapReversalKind(algo) ? "nifty-vwap-reversal" : isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || "indicator"
+      ) as StrategyKind;
       const synthesized = groupsFromFlat(algo);
       setForm({
         ...emptyStrategy(kind),
@@ -67,7 +71,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const lotSize = lotForSymbol(form.symbol);
   const lots = form.lots || 1;
   const vwap = isNiftyVwapKind(form);
+  const reversal = isNiftyVwapReversalKind(form);
+  const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
+    if (isNiftyVwapReversalKind(form)) {
+      return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 15m VWAP reversal · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
+    }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
     }
@@ -120,7 +129,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <TypeCard
             active={kind === "indicator"}
             title="Indicator based"
@@ -150,6 +159,23 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               })
             }
           />
+          <TypeCard
+            active={kind === "nifty-vwap-reversal"}
+            title="NIFTY 15m VWAP reversal"
+            text="15m futures: open below VWAP + close above → ATM CE. Open above + close below → ATM PE. SL 15% / target 30%"
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-vwap-reversal"),
+                name: form.name || "NIFTY 15m VWAP reversal",
+                runMode: form.runMode || "live",
+                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
+                lots: form.lots || 1,
+                lotSize,
+                qty: (form.lots || 1) * lotSize,
+                enabled: false,
+              })
+            }
+          />
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -169,9 +195,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ))}
         </div>
 
-        {vwap ? (
+        {engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
-            Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card.
+            {reversal
+              ? "Locked to NIFTY ATM options on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY ATM CE. Open above VWAP and close below → BUY ATM PE. Saving does not start trading — use Start paper or Start live on the algo card."
+              : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -190,7 +218,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {!vwap && form.instrument === "option" ? (
+        {!engine && form.instrument === "option" ? (
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold text-slate-500">Call or put</div>
@@ -242,7 +270,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             <select
               className={fieldClass}
               value={form.symbol || "NIFTY"}
-              disabled={vwap}
+              disabled={engine}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -259,9 +287,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Side
-            <select className={fieldClass} value={form.side || "BUY"} disabled={vwap} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+            <select className={fieldClass} value={form.side || "BUY"} disabled={engine} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
-              {vwap ? null : (
+              {engine ? null : (
                 <>
                   <option value="SELL">SELL</option>
                   <option value="BOTH">BOTH</option>
@@ -287,8 +315,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
-            <select className={fieldClass} value={vwap ? "5m" : form.timeframe || "5m"} disabled={vwap} onChange={(event) => set({ timeframe: event.target.value })}>
-              {(vwap ? ["5m"] : TIMEFRAMES).map((row) => (
+            <select className={fieldClass} value={reversal ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine} onChange={(event) => set({ timeframe: event.target.value })}>
+              {(reversal ? ["15m"] : vwap ? ["5m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>
@@ -315,7 +343,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
         </div>
 
-        {vwap ? null : kind === "indicator" ? (
+        {engine ? null : kind === "indicator" ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Indicator
@@ -399,6 +427,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>
+        ) : reversal ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-[11px] font-semibold text-slate-400">
+              Entry only after the 15-minute NIFTY futures candle closes. OPEN below VWAP and CLOSE above VWAP buys ATM CE. OPEN above VWAP and CLOSE below VWAP buys ATM PE. Option stop 15% / target 30%. One position. Square-off before 15:30.
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+              <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
+              <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+            </div>
+          </div>
         ) : (
         <div className="mt-4 space-y-3">
           <ConditionGroupEditor
@@ -440,7 +479,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         )}
 
-        {vwap ? null : (
+        {engine ? null : (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
           <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />

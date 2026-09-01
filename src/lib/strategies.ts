@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -189,6 +189,18 @@ export function isNiftyVwapKind(algo?: { kind?: string; strategyType?: string; i
   return algo?.kind === "nifty-vwap" || algo?.strategyType === "NIFTY_VWAP_ATM" || algo?.indicator === "NIFTY_VWAP_ATM";
 }
 
+export function isNiftyVwapReversalKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return (
+    algo?.kind === "nifty-vwap-reversal" ||
+    algo?.strategyType === "NIFTY_VWAP_REVERSAL_15M" ||
+    algo?.indicator === "NIFTY_VWAP_REVERSAL"
+  );
+}
+
+export function isNiftyOptionEngineKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo);
+}
+
 export function contractLabel(algo: {
   kind?: string;
   strategyType?: string;
@@ -197,7 +209,7 @@ export function contractLabel(algo: {
   optionType?: string;
   strikeOffset?: number;
 }) {
-  if (isNiftyVwapKind(algo)) return "NIFTY ATM CE/PE";
+  if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
     return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
@@ -331,6 +343,48 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       intradayOnly: true,
       eodSquareOffMinutes: 10,
       indicator: "VWAP",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "ORB",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("indicator", "VWAP", "ORB"),
+      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
+      runMode: "live",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "nifty-vwap-reversal") {
+    return {
+      name: "NIFTY 15m VWAP reversal",
+      kind: "nifty-vwap-reversal",
+      tag: "15m VWAP",
+      strategyType: "NIFTY_VWAP_REVERSAL_15M",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "15m",
+      slPct: 15,
+      initialSlPct: 15,
+      targetPct: 30,
+      trailingActivationPct: 10,
+      trailingStepPct: 3,
+      vwapExitCandles: 5,
+      maxPositions: 1,
+      intradayOnly: true,
+      eodSquareOffMinutes: 10,
+      indicator: "NIFTY_VWAP_REVERSAL",
       period: 14,
       fast: 9,
       slow: 21,

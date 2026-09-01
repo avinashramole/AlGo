@@ -1,4 +1,4 @@
-export { DEFAULT_NIFTY_VWAP_CONFIG, NIFTY_VWAP_KIND, NIFTY_VWAP_TYPE, defaultNiftyVwapAlgo, isNiftyVwapAlgo, niftyVwapConfig } from "./config.js";
+export { DEFAULT_NIFTY_VWAP_CONFIG, DEFAULT_NIFTY_VWAP_REVERSAL_CONFIG, NIFTY_VWAP_KIND, NIFTY_VWAP_TYPE, NIFTY_VWAP_REVERSAL_KIND, NIFTY_VWAP_REVERSAL_TYPE, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, isNiftyOptionEngineAlgo, niftyVwapConfig, niftyVwapReversalConfig, optionEngineConfig } from "./config.js";
 export { VwapSignalEngine } from "./VwapSignalEngine.js";
 export { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 export { TrailingStopManager } from "./TrailingStopManager.js";

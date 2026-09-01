@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action" | "nifty-vwap";
+  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
@@ -179,6 +179,31 @@ export const initialAlgos: Algo[] = [
     slPct: 20,
     targetPct: 40,
     summary: "NIFTY VWAP ATM · 5m options · SL 20% / TGT 40%",
+    status: "PAUSED",
+    pnl: 0,
+    winRate: 0,
+    enabled: false,
+    brokerId: "dhan",
+    runMode: "live",
+  },
+  {
+    id: "a5",
+    name: "NIFTY 15m VWAP reversal",
+    tag: "15m VWAP",
+    kind: "nifty-vwap-reversal",
+    symbol: "NIFTY",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    indicator: "NIFTY_VWAP_REVERSAL",
+    timeframe: "15m",
+    side: "BUY",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    slPct: 15,
+    targetPct: 30,
+    summary: "NIFTY 15m VWAP reversal · ATM options · SL 15% / TGT 30%",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,
