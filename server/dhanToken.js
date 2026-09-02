@@ -144,6 +144,48 @@ export function msUntilTokenKeepAlive(session = {}, from = Date.now()) {
   return wait;
 }
 
+const TOKEN_STILL_GOOD_MS = 20 * 60 * 1000;
+
+/**
+ * Decide whether keep-alive should mint a new Dhan token or reuse the current JWT.
+ * After today's 8:00 IST reset, mint always wins when PIN+TOTP exist — even if the
+ * leftover JWT still has more than 20 minutes of life. Boot/retry used to skip mint
+ * in that case and then debounce the 8:00 job.
+ */
+export function keepAlivePlan({
+  reason = "schedule",
+  canAutoGenerate = false,
+  needsFresh = false,
+  remainingMs = NaN,
+  blockedUntil = 0,
+  generateBackoffUntil = 0,
+  now = Date.now(),
+} = {}) {
+  if (blockedUntil && now < blockedUntil) {
+    return { action: "wait", because: "totp-blocked" };
+  }
+  if (generateBackoffUntil && now < generateBackoffUntil) {
+    return { action: "wait", because: "generate-429" };
+  }
+  if (canAutoGenerate && needsFresh) {
+    return { action: "mint", because: "daily-reset" };
+  }
+  const tokenStillGood = Number.isFinite(remainingMs) && remainingMs > TOKEN_STILL_GOOD_MS;
+  if (tokenStillGood && (reason === "retry" || reason === "boot")) {
+    return { action: "reuse", because: "jwt-still-valid" };
+  }
+  if (tokenStillGood && (reason === "schedule" || reason === "watchdog")) {
+    return { action: "wait", because: "already-fresh" };
+  }
+  if (canAutoGenerate) {
+    return { action: "mint", because: "expiry" };
+  }
+  if (tokenStillGood) {
+    return { action: "reuse", because: "no-pin-totp" };
+  }
+  return { action: "fail", because: "expired-no-creds" };
+}
+
 export function dhanTokenStatus() {
   const session = loadDhanSession();
   const autoGenerate = Boolean(session.pin && session.totpSecret && session.clientId);
@@ -151,13 +193,15 @@ export function dhanTokenStatus() {
     accessToken: session.accessToken,
     expiryTime: session.expiryTime,
   });
-  const nextMs = autoGenerate && needsFreshAccessToken(session) ? Date.now() : nextDailyRenewalAt();
+  const staleAfterReset = autoGenerate && needsFreshAccessToken(session);
+  const nextMs = staleAfterReset ? Date.now() : nextDailyRenewalAt();
   return {
     autoRenew: autoGenerate || Boolean(session.accessToken && session.source === "web"),
     autoMode: autoGenerate ? "generate" : session.source === "web" ? "renew" : "off",
     tokenExpiry: expiryTime || session.expiryTime || null,
     nextRenewAt: new Date(nextMs).toISOString(),
     autoStart: session.autoStart !== false,
+    needsFresh: staleAfterReset,
   };
 }
 

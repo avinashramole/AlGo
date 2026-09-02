@@ -7,6 +7,7 @@ import {
   isDhanRateLimitError,
   jwtExpiryIso,
   lastDailyResetAt,
+  keepAlivePlan,
   mergeDhanCredentials,
   msUntilDailyRenewal,
   msUntilTokenKeepAlive,
@@ -200,4 +201,104 @@ test("msUntilTokenKeepAlive mints in 5s after 8:00 IST if token is from yesterda
   const yExp = Math.floor((Date.parse("2026-08-20T03:30:00.000Z") + 24 * 3600 * 1000) / 1000);
   const yIat = Math.floor(Date.parse("2026-08-20T03:30:00.000Z") / 1000);
   assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(yExp, yIat) }, sevenAm), todayEight - sevenAm);
+});
+
+test("keepAlivePlan mints after 8:00 IST even when boot/retry still sees a long-lived JWT", () => {
+  const remaining = 12 * 60 * 60 * 1000;
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "boot",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+    }),
+    { action: "mint", because: "daily-reset" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "retry",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+    }),
+    { action: "mint", because: "daily-reset" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "watchdog",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+    }),
+    { action: "mint", because: "daily-reset" },
+  );
+});
+
+test("keepAlivePlan reuses a still-valid JWT on boot only if today's 8:00 mint already ran", () => {
+  const remaining = 12 * 60 * 60 * 1000;
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "boot",
+      canAutoGenerate: true,
+      needsFresh: false,
+      remainingMs: remaining,
+    }),
+    { action: "reuse", because: "jwt-still-valid" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "schedule",
+      canAutoGenerate: true,
+      needsFresh: false,
+      remainingMs: remaining,
+    }),
+    { action: "wait", because: "already-fresh" },
+  );
+});
+
+test("keepAlivePlan waits through Invalid TOTP block and generate 429 backoff", () => {
+  const now = Date.parse("2026-08-21T03:30:00.000Z");
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "watchdog",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: 12 * 60 * 60 * 1000,
+      blockedUntil: now + 6 * 60 * 60 * 1000,
+      now,
+    }),
+    { action: "wait", because: "totp-blocked" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "retry",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: 12 * 60 * 60 * 1000,
+      generateBackoffUntil: now + 30 * 60 * 1000,
+      now,
+    }),
+    { action: "wait", because: "generate-429" },
+  );
+});
+
+test("keepAlivePlan mints when PIN+TOTP exist and JWT life is under 20 minutes", () => {
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "schedule",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: 10 * 60 * 1000,
+    }),
+    { action: "mint", because: "daily-reset" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "schedule",
+      canAutoGenerate: false,
+      needsFresh: false,
+      remainingMs: 10 * 60 * 1000,
+    }),
+    { action: "fail", because: "expired-no-creds" },
+  );
 });

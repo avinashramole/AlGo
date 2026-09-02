@@ -353,6 +353,7 @@ const state = {
     tokenExpiry: null,
     nextRenewAt: null,
     autoStart: false,
+    needsFresh: false,
   },
   liveCandles: [],
 };

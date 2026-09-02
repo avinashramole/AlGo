@@ -241,6 +241,8 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    autoMode?: string;
+    needsFresh?: boolean;
   };
   futures?: Array<{
     root: string;
