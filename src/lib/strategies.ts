@@ -209,6 +209,7 @@ export function contractLabel(algo: {
   optionType?: string;
   strikeOffset?: number;
 }) {
+  if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {

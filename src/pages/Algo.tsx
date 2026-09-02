@@ -137,9 +137,9 @@ export function Algo() {
                 <div className="mt-2 space-y-1 text-[11px] font-semibold text-slate-500">
                   {kind === "nifty-vwap-reversal" ? (
                     <>
-                      <div>BUY ATM CE when 15m NIFTY future opens below VWAP and closes above VWAP</div>
-                      <div>BUY ATM PE when 15m NIFTY future opens above VWAP and closes below VWAP</div>
-                      <div>Entry after 15m close · SL {algo.initialSlPct || 15}% · Target {algo.targetPct || 30}%</div>
+                      <div>BUY weekly ATM CE when 15m NIFTY future opens below VWAP and closes above VWAP</div>
+                      <div>BUY weekly ATM PE when 15m NIFTY future opens above VWAP and closes below VWAP</div>
+                      <div>Weekly expiry only (skip monthly) · Entry after 15m close · SL {algo.initialSlPct || 15}% · Target {algo.targetPct || 30}%</div>
                     </>
                   ) : kind === "nifty-vwap" ? (
                     <>

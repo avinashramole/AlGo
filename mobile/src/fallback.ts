@@ -22,7 +22,7 @@ export const fallbackSnapshot: Snapshot = {
   ],
   algos: [
     { id: "a4", name: "NIFTY VWAP ATM", tag: "NIFTY VWAP", kind: "nifty-vwap", symbol: "NIFTY", instrument: "option", optionType: "CE", indicator: "VWAP", lots: 1, lotSize: 65, qty: 65, timeframe: "5m", slPct: 20, targetPct: 40, summary: "NIFTY VWAP ATM · 5m options · SL 20% / TGT 40%", status: "PAUSED", pnl: 0, winRate: 0, enabled: false, brokerId: "dhan", runMode: "live" },
-    { id: "a5", name: "NIFTY 15m VWAP reversal", tag: "15m VWAP", kind: "nifty-vwap-reversal", symbol: "NIFTY", instrument: "option", optionType: "CE", indicator: "NIFTY_VWAP_REVERSAL", lots: 1, lotSize: 65, qty: 65, timeframe: "15m", slPct: 15, targetPct: 30, summary: "NIFTY 15m VWAP reversal · ATM options · SL 15% / TGT 30%", status: "PAUSED", pnl: 0, winRate: 0, enabled: false, brokerId: "dhan", runMode: "live" },
+    { id: "a5", name: "NIFTY 15m VWAP reversal", tag: "15m VWAP", kind: "nifty-vwap-reversal", symbol: "NIFTY", instrument: "option", optionType: "CE", indicator: "NIFTY_VWAP_REVERSAL", lots: 1, lotSize: 65, qty: 65, timeframe: "15m", slPct: 15, targetPct: 30, summary: "NIFTY 15m VWAP reversal · weekly ATM options · SL 15% / TGT 30%", status: "PAUSED", pnl: 0, winRate: 0, enabled: false, brokerId: "dhan", runMode: "live" },
   ],
   positions: [
     { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },

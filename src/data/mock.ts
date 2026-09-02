@@ -203,7 +203,7 @@ export const initialAlgos: Algo[] = [
     qty: 65,
     slPct: 15,
     targetPct: 30,
-    summary: "NIFTY 15m VWAP reversal · ATM options · SL 15% / TGT 30%",
+    summary: "NIFTY 15m VWAP reversal · weekly ATM options · SL 15% / TGT 30%",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

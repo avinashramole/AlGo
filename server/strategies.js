@@ -239,7 +239,8 @@ export function strikeOffsetLabel(offset) {
 }
 
 export function contractLabel(algo) {
-  if (isNiftyVwapAlgo(algo) || isNiftyVwapReversalAlgo(algo)) return "NIFTY ATM CE/PE";
+  if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
+  if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
     return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
@@ -257,7 +258,7 @@ export function summarizeAlgo(algo) {
   if (isNiftyVwapReversalAlgo(algo)) {
     const sl = algo.initialSlPct || 15;
     const tgt = algo.targetPct || 30;
-    return `NIFTY 15m VWAP reversal · ATM options · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · ${size}`;
+    return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

@@ -75,7 +75,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
     if (isNiftyVwapReversalKind(form)) {
-      return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 15m VWAP reversal · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
+      return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 15m VWAP reversal · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -162,7 +162,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "nifty-vwap-reversal"}
             title="NIFTY 15m VWAP reversal"
-            text="15m futures: open below VWAP + close above → ATM CE. Open above + close below → ATM PE. SL 15% / target 30%"
+            text="15m futures: open below VWAP + close above → weekly ATM CE. Open above + close below → weekly ATM PE. Never monthly. SL 15% / target 30%"
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-vwap-reversal"),
@@ -198,7 +198,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         {engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
             {reversal
-              ? "Locked to NIFTY ATM options on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY ATM CE. Open above VWAP and close below → BUY ATM PE. Saving does not start trading — use Start paper or Start live on the algo card."
+              ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. Saving does not start trading — use Start paper or Start live on the algo card."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
@@ -430,7 +430,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : reversal ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              Entry only after the 15-minute NIFTY futures candle closes. OPEN below VWAP and CLOSE above VWAP buys ATM CE. OPEN above VWAP and CLOSE below VWAP buys ATM PE. Option stop 15% / target 30%. One position. Square-off before 15:30.
+              Entry only after the 15-minute NIFTY futures candle closes. OPEN below VWAP and CLOSE above VWAP buys weekly ATM CE. OPEN above VWAP and CLOSE below VWAP buys weekly ATM PE. Never monthly. Option stop 15% / target 30%. One position. Square-off before 15:30.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />

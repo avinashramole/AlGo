@@ -626,6 +626,7 @@ test("15m reversal uses 15% stop and 30% target and does not trail", () => {
   assert.equal(cfg.targetPct, 30);
   assert.equal(cfg.useTrail, false);
   assert.equal(cfg.useVwapExit, false);
+  assert.equal(cfg.expiryKind, "weekly");
   assert.equal(TrailingStopManager.initialStop(100, 15), 85);
   assert.equal(TrailingStopManager.targetPrice(100, 30), 130);
   const algo = defaultNiftyVwapReversalAlgo({ name: "Rev SL" });
@@ -681,4 +682,5 @@ test("normalizeAlgo keeps 15m reversal paused and never auto-enables LIVE", () =
   assert.equal(created.timeframe, "15m");
   assert.equal(created.initialSlPct, 15);
   assert.equal(created.targetPct, 30);
+  assert.equal(niftyVwapReversalConfig(created).expiryKind, "weekly");
 });

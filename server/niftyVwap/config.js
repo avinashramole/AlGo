@@ -39,6 +39,7 @@ export const DEFAULT_NIFTY_VWAP_REVERSAL_CONFIG = {
   signalMode: "reversal",
   useTrail: false,
   useVwapExit: false,
+  expiryKind: "weekly",
 };
 
 export function isNiftyVwapAlgo(algo = {}) {
@@ -114,6 +115,7 @@ export function niftyVwapReversalConfig(algo = {}) {
     signalMode: "reversal",
     useTrail: false,
     useVwapExit: false,
+    expiryKind: "weekly",
   };
 }
 
@@ -189,6 +191,7 @@ export function defaultNiftyVwapReversalAlgo(patch = {}) {
     maxPositions: 1,
     intradayOnly: true,
     eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+    expiryKind: "weekly",
     indicator: "NIFTY_VWAP_REVERSAL",
     buyLeft: "price",
     buyOp: "close_above",

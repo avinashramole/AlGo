@@ -301,7 +301,7 @@ export function AlgoScreen() {
         {isEngineKind(draft.kind) ? (
           <Text style={styles.muted}>
             {draft.kind === "nifty-vwap-reversal"
-              ? "Contract locked: NIFTY ATM CE/PE on 15-minute candles."
+              ? "Contract locked: NIFTY weekly ATM CE/PE on 15-minute candles. Never monthly."
               : "Contract locked: NIFTY ATM CE/PE on 5-minute candles."}
           </Text>
         ) : (
@@ -338,7 +338,7 @@ export function AlgoScreen() {
           </>
         ) : null}
         {draft.kind === "nifty-vwap-reversal" ? (
-          <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY ATM CE. Open above and close below → BUY ATM PE. After candle close. Saving does not start live.</Text>
+          <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. Saving does not start live.</Text>
         ) : draft.kind === "nifty-vwap" ? (
           <Text style={styles.muted}>NIFTY 5m VWAP ATM. First futures close vs VWAP picks CE or PE. Saving does not start live trading.</Text>
         ) : draft.kind === "indicator" ? (
