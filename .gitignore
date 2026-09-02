@@ -15,6 +15,7 @@ token.env
 dhan.env
 server/.env
 server/.dhan-session.json
+server/.dhan-backoff.json
 server/data/users.json
 server/data/gmail.json
 *.zip

@@ -64,6 +64,40 @@ export function saveDhanSession(patch = {}) {
   return next;
 }
 
+const BACKOFF_FILE = path.join(__dirname, ".dhan-backoff.json");
+
+export function loadTokenBackoff() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(BACKOFF_FILE, "utf8"));
+    return {
+      generateBackoffUntil: Math.max(0, Number(raw.generateBackoffUntil) || 0),
+      credentialsBlockedUntil: Math.max(0, Number(raw.credentialsBlockedUntil) || 0),
+    };
+  } catch {
+    return { generateBackoffUntil: 0, credentialsBlockedUntil: 0 };
+  }
+}
+
+export function saveTokenBackoff(patch = {}) {
+  const prev = loadTokenBackoff();
+  const next = {
+    generateBackoffUntil:
+      patch.generateBackoffUntil === undefined
+        ? prev.generateBackoffUntil
+        : Math.max(0, Number(patch.generateBackoffUntil) || 0),
+    credentialsBlockedUntil:
+      patch.credentialsBlockedUntil === undefined
+        ? prev.credentialsBlockedUntil
+        : Math.max(0, Number(patch.credentialsBlockedUntil) || 0),
+  };
+  fs.writeFileSync(BACKOFF_FILE, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  return next;
+}
+
+export function clearTokenBackoff() {
+  return saveTokenBackoff({ generateBackoffUntil: 0, credentialsBlockedUntil: 0 });
+}
+
 export const TOKEN_RENEW_HOUR_IST = 8;
 const RENEW_GRACE_MS = 15 * 60 * 1000;
 
@@ -298,7 +332,6 @@ function collectErrorCodes(json, status) {
 export function dhanErrorFlags(json, status) {
   const codes = collectErrorCodes(json, status).map((code) => String(code).toUpperCase());
   const blob = `${JSON.stringify(json || {})} ${status || ""}`;
-  const invalidTotp = /invalid totp|invalid pin/i.test(blob);
   const tooManyAttempts = /too many attempts/i.test(blob);
   const rateLimit =
     codes.includes("429") ||
@@ -306,6 +339,7 @@ export function dhanErrorFlags(json, status) {
     codes.includes("805") ||
     tooManyAttempts ||
     /too many requests|rate limit/i.test(blob);
+  const invalidTotp = !rateLimit && /invalid totp|invalid pin/i.test(blob);
   const authExpired =
     !invalidTotp &&
     !rateLimit &&
