@@ -35,6 +35,8 @@ import {
   persistPastedToken,
   resetDhanAccessToken,
   TOTP_BLOCK_MS,
+  TOKEN_RENEW_HOUR_IST,
+  nextDailyRenewalAt,
   msUntilTokenKeepAlive,
   resolveTokenExpiry,
   retryAfterMs,
@@ -1357,6 +1359,10 @@ function ensureTokenWatchdog() {
   }, 60_000);
 }
 
+function istStamp(ms) {
+  return new Date(ms).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
 function scheduleTokenKeepAlive() {
   if (tokenTimer) {
     clearTimeout(tokenTimer);
@@ -1364,6 +1370,9 @@ function scheduleTokenKeepAlive() {
   }
   const session = loadDhanSession();
   if (!canAutoGenerate() && !session.accessToken) {
+    console.log(
+      `Dhan daily token reset is set: ${String(TOKEN_RENEW_HOUR_IST).padStart(2, "0")}:00 AM IST · next 8:00 AM IST ${istStamp(nextDailyRenewalAt())} · PIN + TOTP not saved, so auto-mint is off`,
+    );
     ensureTokenWatchdog();
     return;
   }
@@ -1377,8 +1386,11 @@ function scheduleTokenKeepAlive() {
   tokenTimer = setTimeout(() => {
     void keepDhanTokenFresh("schedule");
   }, wait);
-  const fireAt = new Date(Date.now() + wait).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  console.log(`Dhan token auto-renew at ${fireAt} · daily reset 8:00 AM IST`);
+  const fireAt = istStamp(Date.now() + wait);
+  const nextEight = istStamp(nextDailyRenewalAt());
+  console.log(
+    `Dhan daily token reset is set: ${String(TOKEN_RENEW_HOUR_IST).padStart(2, "0")}:00 AM IST · next 8:00 AM IST ${nextEight} · next try ${fireAt}`,
+  );
   ensureTokenWatchdog();
 }
 
@@ -1494,6 +1506,9 @@ async function startDhanWithRetry(token, id, attempts = 4) {
 }
 
 export async function bootDhanFromEnv() {
+  console.log(
+    `Dhan daily token reset is set: ${String(TOKEN_RENEW_HOUR_IST).padStart(2, "0")}:00 AM IST · next 8:00 AM IST ${istStamp(nextDailyRenewalAt())}`,
+  );
   const persisted = loadTokenBackoff();
   keepAliveBackoffUntil = Math.max(keepAliveBackoffUntil, persisted.generateBackoffUntil);
   credentialsBlockedUntil = Math.max(credentialsBlockedUntil, persisted.credentialsBlockedUntil);
