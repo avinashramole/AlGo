@@ -233,6 +233,33 @@ test("effectiveTokenBackoff drops yesterday's TOTP/429 cooldown after today's 8:
   );
 });
 
+test("effectiveTokenBackoff caps leftover 6-hour Invalid TOTP blocks to 30 minutes", () => {
+  const eightOhOne = Date.parse("2026-08-21T02:31:00.000Z");
+  const twoPm = eightOhOne + 6 * 60 * 60 * 1000;
+  const elevenAm = Date.parse("2026-08-21T05:30:00.000Z");
+  assert.deepEqual(
+    effectiveTokenBackoff(
+      {
+        savedAt: new Date(eightOhOne).toISOString(),
+        credentialsBlockedUntil: twoPm,
+      },
+      elevenAm,
+    ),
+    { generateBackoffUntil: 0, credentialsBlockedUntil: 0 },
+  );
+  const eightEleven = eightOhOne + 10 * 60 * 1000;
+  assert.deepEqual(
+    effectiveTokenBackoff(
+      {
+        savedAt: new Date(eightOhOne).toISOString(),
+        credentialsBlockedUntil: twoPm,
+      },
+      eightEleven,
+    ),
+    { generateBackoffUntil: 0, credentialsBlockedUntil: eightOhOne + 30 * 60 * 1000 },
+  );
+});
+
 test("needsFreshAccessToken is true even if generatedAt was stamped later than JWT iat", () => {
   const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
   const yesterdayEight = Date.parse("2026-08-20T02:30:00.000Z");

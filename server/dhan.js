@@ -34,6 +34,7 @@ import {
   needsFreshAccessToken,
   persistPastedToken,
   resetDhanAccessToken,
+  TOTP_BLOCK_MS,
   msUntilTokenKeepAlive,
   resolveTokenExpiry,
   retryAfterMs,
@@ -1382,13 +1383,13 @@ function scheduleTokenKeepAlive() {
 }
 
 function blockBadTotp(error) {
-  credentialsBlockedUntil = Date.now() + 30 * 60 * 1000;
+  credentialsBlockedUntil = Date.now() + TOTP_BLOCK_MS;
   saveTokenBackoff({ credentialsBlockedUntil });
   const when = new Date(credentialsBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   const message =
     error?.message ||
-    "Invalid TOTP: PIN or Setup TOTP secret is wrong, or VPS clock is off. Fix /opt/t2s/.env, then systemctl restart t2s.";
-  console.log(`Dhan ${message} · not retrying until ${when}`);
+    "Invalid TOTP: PIN or Setup TOTP secret is wrong, or VPS clock is off. Fix them on Brokers, then click Reset token now. Do not restart t2s.";
+  console.log(`Dhan ${message} · auto-retry after ${when}. Click Reset token now after fixing PIN + TOTP.`);
   setDhanFeed({
     live: false,
     source: "idle",
@@ -1509,11 +1510,13 @@ export async function bootDhanFromEnv() {
   if (pausedUntil > Date.now()) {
     const when = new Date(pausedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     const why = Date.now() < credentialsBlockedUntil ? "Invalid TOTP cooldown" : "Dhan 429 cooldown";
-    console.log(`Dhan token generate paused until ${when} (${why}). Do not restart t2s to retry.`);
+    console.log(
+      `Dhan token generate paused until ${when} (${why}). Do not restart t2s. Fix PIN + Setup TOTP secret, then click Reset token now.`,
+    );
     setDhanFeed({
       live: false,
       source: "idle",
-      error: `Dhan token generate paused until ${when} (${why}). Wait, then click Reset token now once.`,
+      error: `Dhan token generate paused until ${when} (${why}). Do not wait — fix PIN + Setup TOTP secret, then click Reset token now once.`,
       ...dhanTokenStatus(),
     });
     if (token && id && Date.now() >= credentialsBlockedUntil) {

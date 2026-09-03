@@ -98,19 +98,29 @@ function readTokenBackoffFile() {
   }
 }
 
+export const TOTP_BLOCK_MS = 30 * 60 * 1000;
+const OLD_TOTP_BLOCK_MS = 6 * 60 * 60 * 1000;
+
 /** Cooldowns saved before today's 8:00 IST reset must not block today's mint. */
 export function effectiveTokenBackoff(raw = {}, from = Date.now()) {
   const reset = lastDailyResetAt(from);
   const savedAt = Date.parse(raw.savedAt || "") || 0;
   let generateBackoffUntil = Math.max(0, Number(raw.generateBackoffUntil) || 0);
   let credentialsBlockedUntil = Math.max(0, Number(raw.credentialsBlockedUntil) || 0);
+  const totpRemaining = credentialsBlockedUntil ? credentialsBlockedUntil - from : 0;
   const startedAt =
     savedAt ||
-    (credentialsBlockedUntil ? credentialsBlockedUntil - 6 * 60 * 60 * 1000 : 0) ||
+    (credentialsBlockedUntil
+      ? credentialsBlockedUntil - (totpRemaining > TOTP_BLOCK_MS ? OLD_TOTP_BLOCK_MS : TOTP_BLOCK_MS)
+      : 0) ||
     (generateBackoffUntil ? generateBackoffUntil - 30 * 60 * 1000 : 0);
   if (startedAt && startedAt < reset) {
     generateBackoffUntil = 0;
     credentialsBlockedUntil = 0;
+  }
+  // Old builds blocked Invalid TOTP for 6 hours (8:00 → 2:00). Cap to 30 minutes.
+  if (credentialsBlockedUntil && startedAt) {
+    credentialsBlockedUntil = Math.min(credentialsBlockedUntil, startedAt + TOTP_BLOCK_MS);
   }
   if (generateBackoffUntil && generateBackoffUntil <= from) generateBackoffUntil = 0;
   if (credentialsBlockedUntil && credentialsBlockedUntil <= from) credentialsBlockedUntil = 0;
