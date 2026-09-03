@@ -547,11 +547,18 @@ export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
 }
 
-export function enableDhanAuto(payload: { clientId: string; pin: string; totpSecret: string }) {
+export function enableDhanAuto(payload: {
+  clientId?: string;
+  loginId?: string;
+  pin?: string;
+  password?: string;
+  totpSecret?: string;
+}) {
   return request<{
     ok: boolean;
     live?: boolean;
     rotated?: boolean;
+    method?: string;
     error?: string;
     tokenHint?: string;
     autoMode?: string;
@@ -561,18 +568,27 @@ export function enableDhanAuto(payload: { clientId: string; pin: string; totpSec
   }>("/brokers/dhan/auto", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function refreshDhanToken(payload: { clientId?: string; pin?: string; totpSecret?: string } = {}) {
+export function refreshDhanToken(
+  payload: {
+    clientId?: string;
+    loginId?: string;
+    pin?: string;
+    password?: string;
+    totpSecret?: string;
+  } = {},
+) {
   return request<{
     ok: boolean;
     live?: boolean;
     rotated?: boolean;
+    method?: string;
     error?: string;
     tokenHint?: string;
     autoMode?: string;
     tokenExpiry?: string;
     nextRenewAt?: string;
     snapshot?: Snapshot;
-  }>("/brokers/dhan/refresh", { method: "POST", body: JSON.stringify(payload) });
+  }>("/brokers/dhan/reset", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {

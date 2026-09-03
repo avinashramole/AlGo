@@ -22,17 +22,40 @@ function emptySession() {
   };
 }
 
+/** Dhan token APIs take the 4–6 digit PIN, never the web.dhan.co password. */
+export function asDhanPin(value) {
+  const raw = String(value || "").trim();
+  return /^\d{4,6}$/.test(raw) ? raw : "";
+}
+
 export function mergeDhanCredentials(session = {}, env = process.env) {
   const next = { ...emptySession(), ...session };
-  const clientId = String(env.DHAN_CLIENT_ID || "").trim();
-  const pin = String(env.DHAN_PIN || "").trim();
+  const clientId = String(env.DHAN_CLIENT_ID || env.DHAN_LOGIN_ID || "").trim();
+  const pin = asDhanPin(env.DHAN_PIN) || asDhanPin(env.DHAN_PASSWORD);
   const totp = normalizeTotpSecret(env.DHAN_TOTP_SECRET);
   if (clientId) next.clientId = clientId;
   if (pin) next.pin = pin;
+  next.pin = asDhanPin(next.pin);
   if (totp) next.totpSecret = totp;
   else next.totpSecret = normalizeTotpSecret(next.totpSecret);
   if (!next.accessToken) next.accessToken = String(env.DHAN_ACCESS_TOKEN || "").trim();
   return next;
+}
+
+export function resolveDhanLogin(input = {}, env = process.env, session) {
+  const current = session || loadDhanSession();
+  const clientId = String(
+    input.clientId || input.loginId || current.clientId || env.DHAN_CLIENT_ID || env.DHAN_LOGIN_ID || "",
+  ).trim();
+  const offered = String(input.pin || input.password || "").trim();
+  const offeredPin = asDhanPin(offered);
+  const savedPin = asDhanPin(current.pin) || asDhanPin(env.DHAN_PIN) || asDhanPin(env.DHAN_PASSWORD);
+  return {
+    clientId,
+    pin: offeredPin || savedPin,
+    totpSecret: normalizeTotpSecret(input.totpSecret || input.totp || current.totpSecret),
+    websitePassword: Boolean(offered && !offeredPin),
+  };
 }
 
 export function loadDhanSession() {
@@ -266,17 +289,22 @@ export function canAutoGenerate() {
   return Boolean(session.clientId && session.pin && session.totpSecret);
 }
 
-export function requirePinTotp({ clientId, pin, totpSecret } = {}) {
-  const session = loadDhanSession();
-  const creds = {
-    clientId: String(clientId || session.clientId || "").trim(),
-    pin: String(pin || session.pin || "").trim(),
-    totpSecret: normalizeTotpSecret(totpSecret || session.totpSecret),
-  };
+export function requirePinTotp({ clientId, loginId, pin, password, totpSecret } = {}) {
+  const creds = resolveDhanLogin({ clientId, loginId, pin, password, totpSecret });
   if (!creds.clientId) {
-    throw Object.assign(new Error("Dhan Client ID is required on the server to change the access token."), { status: 400 });
+    throw Object.assign(new Error("Dhan login ID (Client ID) is required on the server to change the access token."), {
+      status: 400,
+    });
   }
-  if (!/^\d{4,6}$/.test(creds.pin) || creds.totpSecret.length < 10) {
+  if (creds.websitePassword && !creds.pin) {
+    throw Object.assign(
+      new Error(
+        "Dhan token reset does not use the website login password. Use login ID (Client ID) plus the 4–6 digit Dhan PIN and Setup TOTP secret.",
+      ),
+      { status: 400 },
+    );
+  }
+  if (!creds.pin || creds.totpSecret.length < 10) {
     throw Object.assign(
       new Error(
         "PIN + TOTP is required on the server to change the Dhan token. Save them on Brokers, or set DHAN_CLIENT_ID, DHAN_PIN, and DHAN_TOTP_SECRET.",
@@ -284,7 +312,7 @@ export function requirePinTotp({ clientId, pin, totpSecret } = {}) {
       { status: 400 },
     );
   }
-  return creds;
+  return { clientId: creds.clientId, pin: creds.pin, totpSecret: creds.totpSecret };
 }
 
 export function jwtClaim(token, key) {
@@ -421,14 +449,20 @@ async function readJson(res) {
   return { json, text };
 }
 
-function tokenFrom(json) {
-  const data = json?.data && typeof json.data === "object" ? json.data : json || {};
+export function parseDhanTokenPayload(json) {
+  const data = json?.data && typeof json.data === "object" && !Array.isArray(json.data) ? json.data : json || {};
   return {
-    accessToken: String(data.accessToken || data.access_token || json?.accessToken || "").trim(),
-    clientId: String(data.dhanClientId || data.clientId || "").trim(),
-    expiryTime: String(data.expiryTime || data.expiry_time || "").trim(),
-    name: String(data.dhanClientName || "").trim(),
+    accessToken: String(
+      data.accessToken || data.access_token || data.token || json?.accessToken || json?.token || "",
+    ).trim(),
+    clientId: String(data.dhanClientId || data.clientId || json?.dhanClientId || json?.clientId || "").trim(),
+    expiryTime: String(data.expiryTime || data.expiry_time || json?.expiryTime || "").trim(),
+    name: String(data.dhanClientName || json?.dhanClientName || "").trim(),
   };
+}
+
+function tokenFrom(json) {
+  return parseDhanTokenPayload(json);
 }
 
 function throwAuth(json, text, fallback, status) {
@@ -458,12 +492,21 @@ function throwAuth(json, text, fallback, status) {
   throw error;
 }
 
-export async function generateDhanAccessToken({ clientId, pin, totpSecret } = {}) {
-  const id = String(clientId || loadDhanSession().clientId || "").trim();
-  const usePin = String(pin || loadDhanSession().pin || "").trim();
-  const secret = normalizeTotpSecret(totpSecret || loadDhanSession().totpSecret);
-  if (!id) throw Object.assign(new Error("Dhan Client ID is required."), { status: 400 });
-  if (!/^\d{4,6}$/.test(usePin)) {
+export async function generateDhanAccessToken({ clientId, loginId, pin, password, totpSecret } = {}) {
+  const creds = resolveDhanLogin({ clientId, loginId, pin, password, totpSecret });
+  const id = creds.clientId;
+  const usePin = creds.pin;
+  const secret = creds.totpSecret;
+  if (!id) throw Object.assign(new Error("Dhan login ID (Client ID) is required."), { status: 400 });
+  if (creds.websitePassword && !usePin) {
+    throw Object.assign(
+      new Error(
+        "Dhan token reset does not use the website login password. Use the 4–6 digit Dhan PIN, not the web.dhan.co password.",
+      ),
+      { status: 400 },
+    );
+  }
+  if (!usePin) {
     throw Object.assign(new Error("Dhan PIN must be the 4–6 digit PIN from the Dhan app, not the TOTP code."), {
       status: 400,
     });
@@ -555,6 +598,51 @@ export async function renewDhanAccessToken() {
   });
   console.log(`Dhan token renewed · expires ${expiryTime}`);
   return { ...parsed, expiryTime, clientId: parsed.clientId || session.clientId };
+}
+
+/**
+ * Token reset: call Dhan GET /v2/RenewToken with the current JWT when it still
+ * looks alive, then fall back to PIN + TOTP generateAccessToken.
+ * Login ID = Client ID. Password = 4–6 digit PIN (not the website password).
+ */
+export async function resetDhanAccessToken(input = {}, deps = {}) {
+  const renew = deps.renew || renewDhanAccessToken;
+  const generate = deps.generate || generateDhanAccessToken;
+  const session = deps.session || loadDhanSession();
+  const env = deps.env || process.env;
+  const creds = resolveDhanLogin(input, env, session);
+
+  if (creds.websitePassword && !creds.pin) {
+    throw Object.assign(
+      new Error(
+        "Dhan token reset does not use the website login password. Use login ID (Client ID) plus the 4–6 digit Dhan PIN and Setup TOTP secret.",
+      ),
+      { status: 400 },
+    );
+  }
+
+  const expiry = Date.parse(resolveTokenExpiry(session) || "");
+  const tokenLooksAlive =
+    Boolean(session.accessToken && (creds.clientId || session.clientId)) &&
+    Number.isFinite(expiry) &&
+    expiry > Date.now();
+
+  if (tokenLooksAlive) {
+    try {
+      const renewed = await renew();
+      return { ...renewed, method: "renew" };
+    } catch (error) {
+      if (isDhanRateLimitError(error)) throw error;
+      console.log(`Dhan RenewToken failed (${error.message || error}); generating with PIN + TOTP`);
+    }
+  }
+
+  const generated = await generate({
+    clientId: creds.clientId,
+    pin: creds.pin,
+    totpSecret: creds.totpSecret,
+  });
+  return { ...generated, method: "generate" };
 }
 
 export function persistPastedToken({ clientId, accessToken, expiryTime, tokenValidity }) {

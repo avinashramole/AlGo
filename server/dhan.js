@@ -23,7 +23,6 @@ import {
   clearTokenBackoff,
   dhanErrorFlags,
   dhanTokenStatus,
-  generateDhanAccessToken,
   isDhanAuthExpiredError,
   isDhanEmptyCollectionError,
   isDhanInvalidTotpError,
@@ -33,8 +32,8 @@ import {
   loadTokenBackoff,
   markDhanAutoStart,
   needsFreshAccessToken,
-  requirePinTotp,
   persistPastedToken,
+  resetDhanAccessToken,
   msUntilTokenKeepAlive,
   resolveTokenExpiry,
   retryAfterMs,
@@ -1276,44 +1275,51 @@ export function stopDhanLive() {
   scheduleTokenKeepAlive();
 }
 
-export async function rotateDhanAccessToken({ clientId, pin, totpSecret, reason = "api" } = {}) {
+export async function rotateDhanAccessToken({
+  clientId,
+  loginId,
+  pin,
+  password,
+  totpSecret,
+  reason = "api",
+} = {}) {
   const userAsked = reason === "save" || reason === "api";
   if (Date.now() < keepAliveBackoffUntil && !userAsked) {
     const when = new Date(keepAliveBackoffUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     throw Object.assign(
-      new Error(`Dhan 429 cooldown until ${when}. Wait, then click Change token now once. Do not restart t2s.`),
+      new Error(`Dhan 429 cooldown until ${when}. Wait, then click Reset token now once. Do not restart t2s.`),
       { status: 429, rateLimit: true },
     );
   }
   if (Date.now() < credentialsBlockedUntil && !userAsked) {
     const when = new Date(credentialsBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     throw Object.assign(
-      new Error(`Invalid TOTP cooldown until ${when}. Fix PIN / Setup TOTP secret, then click Change token now.`),
+      new Error(`Invalid TOTP cooldown until ${when}. Fix PIN / Setup TOTP secret, then click Reset token now.`),
       { status: 400, invalidTotp: true },
     );
   }
-  const creds = requirePinTotp({ clientId, pin, totpSecret });
-  const generated = await generateDhanAccessToken(creds);
+  const generated = await resetDhanAccessToken({ clientId, loginId, pin, password, totpSecret });
   lastKeepAliveAt = Date.now();
   keepAliveBackoffUntil = 0;
   credentialsBlockedUntil = 0;
   clearTokenBackoff();
   const session = loadDhanSession();
   const askedLive = reason === "save" || reason === "api" || reason === "auth";
+  const how = generated.method === "renew" ? "RenewToken" : "PIN + TOTP";
   if (session.autoStart === false && !askedLive) {
     scheduleTokenKeepAlive();
     console.log(
-      `Dhan access token generated automatically (${reason}) · live feed left off · expires ${generated.expiryTime}`,
+      `Dhan access token ${how} automatically (${reason}) · live feed left off · expires ${generated.expiryTime}`,
     );
-    return { rotated: true, live: false, expiryTime: generated.expiryTime, ...dhanTokenStatus() };
+    return { rotated: true, live: false, expiryTime: generated.expiryTime, method: generated.method, ...dhanTokenStatus() };
   }
   const live = await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
-  console.log(`Dhan LIVE token changed with PIN + TOTP (${reason}) · expires ${generated.expiryTime}`);
-  return { ...live, rotated: true, expiryTime: generated.expiryTime };
+  console.log(`Dhan LIVE token changed with ${how} (${reason}) · expires ${generated.expiryTime}`);
+  return { ...live, rotated: true, expiryTime: generated.expiryTime, method: generated.method };
 }
 
-export async function enableDhanAuto({ clientId, pin, totpSecret }) {
-  return rotateDhanAccessToken({ clientId, pin, totpSecret, reason: "save" });
+export async function enableDhanAuto({ clientId, loginId, pin, password, totpSecret } = {}) {
+  return rotateDhanAccessToken({ clientId, loginId, pin, password, totpSecret, reason: "save" });
 }
 
 function tokenMsRemaining() {
@@ -1507,7 +1513,7 @@ export async function bootDhanFromEnv() {
     setDhanFeed({
       live: false,
       source: "idle",
-      error: `Dhan token generate paused until ${when} (${why}). Wait, then click Change token now once.`,
+      error: `Dhan token generate paused until ${when} (${why}). Wait, then click Reset token now once.`,
       ...dhanTokenStatus(),
     });
     if (token && id && Date.now() >= credentialsBlockedUntil) {

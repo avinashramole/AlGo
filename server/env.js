@@ -92,8 +92,12 @@ function serializeEnvMap(map) {
 
 export function upsertDhanEnv(patch = {}, { root = REPO_ROOT, env = process.env } = {}) {
   const updates = {};
-  if (patch.DHAN_CLIENT_ID || patch.clientId) updates.DHAN_CLIENT_ID = String(patch.DHAN_CLIENT_ID || patch.clientId || "").trim();
-  if (patch.DHAN_PIN || patch.pin) updates.DHAN_PIN = String(patch.DHAN_PIN || patch.pin || "").trim();
+  if (patch.DHAN_CLIENT_ID || patch.clientId || patch.loginId) {
+    updates.DHAN_CLIENT_ID = String(patch.DHAN_CLIENT_ID || patch.clientId || patch.loginId || "").trim();
+  }
+  const pin = String(patch.DHAN_PIN || patch.pin || "").trim();
+  const passwordPin = /^\d{4,6}$/.test(String(patch.password || "").trim()) ? String(patch.password).trim() : "";
+  if (pin || passwordPin) updates.DHAN_PIN = pin || passwordPin;
   if (patch.DHAN_TOTP_SECRET || patch.totpSecret) {
     updates.DHAN_TOTP_SECRET = String(patch.DHAN_TOTP_SECRET || patch.totpSecret || "").trim();
   }

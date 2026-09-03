@@ -218,12 +218,20 @@ app.get("/api/brokers", (_req, res) => {
   res.json(publicBrokers());
 });
 
+function dhanLoginFromBody(body = {}) {
+  return {
+    clientId: body.clientId || body.loginId,
+    loginId: body.loginId || body.clientId,
+    pin: body.pin || body.password,
+    password: body.password || body.pin,
+    totpSecret: body.totpSecret || body.totp,
+  };
+}
+
 app.post("/api/brokers/dhan/auto", async (req, res) => {
   try {
     const result = await enableDhanAuto({
-      clientId: req.body?.clientId,
-      pin: req.body?.pin,
-      totpSecret: req.body?.totpSecret || req.body?.totp,
+      ...dhanLoginFromBody(req.body),
     });
     res.json({
       ok: true,
@@ -241,18 +249,17 @@ app.post("/api/brokers/dhan/auto", async (req, res) => {
   }
 });
 
-app.post("/api/brokers/dhan/refresh", async (req, res) => {
+async function handleDhanTokenReset(req, res) {
   try {
     const result = await rotateDhanAccessToken({
-      clientId: req.body?.clientId,
-      pin: req.body?.pin,
-      totpSecret: req.body?.totpSecret || req.body?.totp,
+      ...dhanLoginFromBody(req.body),
       reason: "api",
     });
     res.json({
       ok: true,
       live: true,
       rotated: true,
+      method: result.method || "generate",
       tokenHint: result.tokenHint,
       autoMode: result.autoMode,
       tokenExpiry: result.tokenExpiry,
@@ -261,9 +268,12 @@ app.post("/api/brokers/dhan/refresh", async (req, res) => {
       snapshot: snapshot(),
     });
   } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not change Dhan token" });
+    res.status(error.status || 400).json({ error: error.message || "Could not reset Dhan token" });
   }
-});
+}
+
+app.post("/api/brokers/dhan/refresh", handleDhanTokenReset);
+app.post("/api/brokers/dhan/reset", handleDhanTokenReset);
 
 app.post("/api/brokers/:id/connect", async (req, res) => {
   try {

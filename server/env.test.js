@@ -45,3 +45,14 @@ test("upsertDhanEnv writes .env and tokan.env without dropping other keys", () =
   assert.equal(env.DHAN_PIN, "2468");
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("upsertDhanEnv maps loginId and a 4–6 digit password onto Client ID + PIN", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-env-"));
+  const env = {};
+  upsertDhanEnv({ loginId: "1000561739", password: "1357", totpSecret: "JBSWY3DPEHPK3PXP" }, { root, env });
+  const text = fs.readFileSync(path.join(root, ".env"), "utf8");
+  assert.match(text, /DHAN_CLIENT_ID=1000561739/);
+  assert.match(text, /DHAN_PIN=1357/);
+  assert.doesNotMatch(text, /DHAN_PASSWORD=/);
+  fs.rmSync(root, { recursive: true, force: true });
+});

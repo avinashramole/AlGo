@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  asDhanPin,
   dhanErrorFlags,
   isDhanAuthExpiredError,
   isDhanInvalidTotpError,
@@ -15,7 +16,10 @@ import {
   needsFreshAccessToken,
   nextDailyRenewalAt,
   parseDhanExpiry,
+  parseDhanTokenPayload,
   requirePinTotp,
+  resetDhanAccessToken,
+  resolveDhanLogin,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -90,6 +94,55 @@ test("retryAfterMs reads seconds or milliseconds", () => {
 
 test("requirePinTotp demands PIN + TOTP on the server", () => {
   assert.throws(() => requirePinTotp({ clientId: "1100000001", pin: "", totpSecret: "" }), /PIN \+ TOTP is required/);
+});
+
+test("asDhanPin only accepts a 4–6 digit PIN", () => {
+  assert.equal(asDhanPin("1234"), "1234");
+  assert.equal(asDhanPin("123456"), "123456");
+  assert.equal(asDhanPin("MyWebsitePass"), "");
+  assert.equal(asDhanPin("12"), "");
+});
+
+test("resolveDhanLogin maps loginId + PIN-password to Client ID + PIN", () => {
+  const creds = resolveDhanLogin(
+    { loginId: "1000561739", password: "1234", totpSecret: "jbsw y3dp ehpk 3pxp" },
+    {},
+    { clientId: "", pin: "", totpSecret: "", accessToken: "" },
+  );
+  assert.equal(creds.clientId, "1000561739");
+  assert.equal(creds.pin, "1234");
+  assert.equal(creds.totpSecret, "JBSWY3DPEHPK3PXP");
+  assert.equal(creds.websitePassword, false);
+});
+
+test("resolveDhanLogin ignores a website password and keeps a saved PIN", () => {
+  const creds = resolveDhanLogin(
+    { loginId: "1000561739", password: "MyWebPass" },
+    {},
+    { clientId: "old", pin: "2468", totpSecret: "", accessToken: "" },
+  );
+  assert.equal(creds.clientId, "1000561739");
+  assert.equal(creds.pin, "2468");
+  assert.equal(creds.websitePassword, true);
+});
+
+test("mergeDhanCredentials accepts DHAN_LOGIN_ID and a 4–6 digit DHAN_PASSWORD", () => {
+  const merged = mergeDhanCredentials(
+    { clientId: "old-id", pin: "1111", totpSecret: "", accessToken: "" },
+    { DHAN_LOGIN_ID: "1000561739", DHAN_PASSWORD: "9999" },
+  );
+  assert.equal(merged.clientId, "1000561739");
+  assert.equal(merged.pin, "9999");
+});
+
+test("mergeDhanCredentials ignores a website-style DHAN_PASSWORD", () => {
+  const merged = mergeDhanCredentials({ pin: "2468" }, { DHAN_PASSWORD: "MyWebPass!" });
+  assert.equal(merged.pin, "2468");
+});
+
+test("parseDhanTokenPayload reads token as well as accessToken", () => {
+  assert.equal(parseDhanTokenPayload({ token: "abc", dhanClientId: "1000561739" }).accessToken, "abc");
+  assert.equal(parseDhanTokenPayload({ data: { access_token: "xyz" } }).accessToken, "xyz");
 });
 
 test("mergeDhanCredentials lets .env PIN and TOTP override a stale session file", () => {
@@ -344,5 +397,109 @@ test("keepAlivePlan mints when PIN+TOTP exist and JWT life is under 20 minutes",
       remainingMs: 10 * 60 * 1000,
     }),
     { action: "fail", because: "expired-no-creds" },
+  );
+});
+
+test("resetDhanAccessToken calls RenewToken first when a JWT still looks alive", async () => {
+  let generated = false;
+  const result = await resetDhanAccessToken(
+    { loginId: "1000561739", password: "1234", totpSecret: "JBSWY3DPEHPK3PXP" },
+    {
+      session: {
+        clientId: "1000561739",
+        accessToken: "old-token",
+        expiryTime: new Date(Date.now() + 3600_000).toISOString(),
+      },
+      env: {},
+      renew: async () => ({ accessToken: "renewed", expiryTime: "x", clientId: "1000561739" }),
+      generate: async () => {
+        generated = true;
+        throw new Error("should not generate");
+      },
+    },
+  );
+  assert.equal(generated, false);
+  assert.equal(result.method, "renew");
+  assert.equal(result.accessToken, "renewed");
+});
+
+test("resetDhanAccessToken falls back to PIN + TOTP generate after RenewToken expiry", async () => {
+  const result = await resetDhanAccessToken(
+    { loginId: "1000561739", password: "1234", totpSecret: "JBSWY3DPEHPK3PXP" },
+    {
+      session: {
+        clientId: "1000561739",
+        accessToken: "old-token",
+        expiryTime: new Date(Date.now() + 3600_000).toISOString(),
+      },
+      env: {},
+      renew: async () => {
+        throw Object.assign(new Error("token is expired"), { status: 401, authExpired: true });
+      },
+      generate: async ({ pin, clientId }) => {
+        assert.equal(pin, "1234");
+        assert.equal(clientId, "1000561739");
+        return { accessToken: "minted", expiryTime: "x", clientId };
+      },
+    },
+  );
+  assert.equal(result.method, "generate");
+  assert.equal(result.accessToken, "minted");
+});
+
+test("resetDhanAccessToken does not mint after RenewToken 429", async () => {
+  await assert.rejects(
+    () =>
+      resetDhanAccessToken(
+        { clientId: "1000561739", pin: "1234", totpSecret: "JBSWY3DPEHPK3PXP" },
+        {
+          session: {
+            clientId: "1000561739",
+            accessToken: "old-token",
+            expiryTime: new Date(Date.now() + 3600_000).toISOString(),
+          },
+          env: {},
+          renew: async () => {
+            throw Object.assign(new Error("Dhan 429"), { status: 429, rateLimit: true });
+          },
+          generate: async () => {
+            throw new Error("should not generate");
+          },
+        },
+      ),
+    /429/,
+  );
+});
+
+test("resetDhanAccessToken skips RenewToken when the JWT is already expired locally", async () => {
+  let renewed = false;
+  const result = await resetDhanAccessToken(
+    { clientId: "1000561739", pin: "1234", totpSecret: "JBSWY3DPEHPK3PXP" },
+    {
+      session: {
+        clientId: "1000561739",
+        accessToken: "old-token",
+        expiryTime: new Date(Date.now() - 1000).toISOString(),
+      },
+      env: {},
+      renew: async () => {
+        renewed = true;
+        return { accessToken: "nope" };
+      },
+      generate: async () => ({ accessToken: "minted", expiryTime: "x", clientId: "1000561739" }),
+    },
+  );
+  assert.equal(renewed, false);
+  assert.equal(result.method, "generate");
+});
+
+test("resetDhanAccessToken rejects a website password when no PIN is saved", async () => {
+  await assert.rejects(
+    () =>
+      resetDhanAccessToken(
+        { loginId: "1000561739", password: "MyWebsitePass" },
+        { session: { clientId: "", accessToken: "", pin: "", totpSecret: "" }, env: {} },
+      ),
+    /does not use the website login password/,
   );
 });
