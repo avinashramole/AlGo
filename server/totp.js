@@ -2,10 +2,32 @@ import crypto from "node:crypto";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+export function normalizeTotpSecret(raw) {
+  let value = String(raw || "").trim();
+  const fromUrl = value.match(/[?&]secret=([^&]+)/i);
+  if (fromUrl) {
+    try {
+      value = decodeURIComponent(fromUrl[1]);
+    } catch {
+      value = fromUrl[1];
+    }
+  }
+  return value.replace(/[\s=-]+/g, "").toUpperCase();
+}
+
+export function invalidTotpChars(secret) {
+  const clean = normalizeTotpSecret(secret);
+  return [...clean].filter((ch) => !ALPHABET.includes(ch));
+}
+
 function base32Decode(input) {
-  const clean = String(input || "")
-    .toUpperCase()
-    .replace(/[\s=-]+/g, "");
+  const clean = normalizeTotpSecret(input);
+  const bad = invalidTotpChars(clean);
+  if (bad.length) {
+    throw new Error(
+      `Invalid TOTP: secret has invalid character(s): ${[...new Set(bad)].join(" ")}. Setup TOTP keys use A–Z and 2–7 only (not 0, 1, 8, or 9). Copy the key again from web.dhan.co.`,
+    );
+  }
   let bits = "";
   for (const ch of clean) {
     const val = ALPHABET.indexOf(ch);

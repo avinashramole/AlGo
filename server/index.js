@@ -1,3 +1,4 @@
+import { loadDotEnvFiles } from "./env.js";
 import { thisComputerPublicIpv4 } from "./ipv4.js";
 import cors from "cors";
 import express from "express";
@@ -5,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -34,33 +35,7 @@ import {
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-function loadEnv() {
-  for (const file of [path.join(__dirname, ".env"), path.join(__dirname, "..", ".env")]) {
-    try {
-      const text = fs.readFileSync(file, "utf8");
-      for (const line of text.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const eq = trimmed.indexOf("=");
-        if (eq < 1) continue;
-        const key = trimmed.slice(0, eq).trim();
-        let value = trimmed.slice(eq + 1).trim();
-        if (
-          (value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))
-        ) {
-          value = value.slice(1, -1);
-        }
-        if (!process.env[key]) process.env[key] = value;
-      }
-    } catch {
-      /* no env file */
-    }
-  }
-}
-
-loadEnv();
+loadDotEnvFiles();
 
 const app = express();
 const port = Number(process.env.PORT) || 4000;
@@ -243,19 +218,29 @@ app.get("/api/brokers", (_req, res) => {
   res.json(publicBrokers());
 });
 
+function dhanLoginFromBody(body = {}) {
+  return {
+    clientId: body.clientId || body.loginId,
+    loginId: body.loginId || body.clientId,
+    pin: body.pin || body.password,
+    password: body.password || body.pin,
+    totpSecret: body.totpSecret || body.totp,
+  };
+}
+
 app.post("/api/brokers/dhan/auto", async (req, res) => {
   try {
     const result = await enableDhanAuto({
-      clientId: req.body?.clientId,
-      pin: req.body?.pin,
-      totpSecret: req.body?.totpSecret || req.body?.totp,
+      ...dhanLoginFromBody(req.body),
     });
     res.json({
       ok: true,
       live: true,
+      rotated: true,
       tokenHint: result.tokenHint,
       autoMode: result.autoMode,
       tokenExpiry: result.tokenExpiry,
+      nextRenewAt: result.nextRenewAt,
       account: publicBrokers().brokers.find((item) => item.id === "dhan"),
       snapshot: snapshot(),
     });
@@ -263,6 +248,32 @@ app.post("/api/brokers/dhan/auto", async (req, res) => {
     res.status(error.status || 400).json({ error: error.message || "Could not generate Dhan token" });
   }
 });
+
+async function handleDhanTokenReset(req, res) {
+  try {
+    const result = await rotateDhanAccessToken({
+      ...dhanLoginFromBody(req.body),
+      reason: "api",
+    });
+    res.json({
+      ok: true,
+      live: true,
+      rotated: true,
+      method: result.method || "generate",
+      tokenHint: result.tokenHint,
+      autoMode: result.autoMode,
+      tokenExpiry: result.tokenExpiry,
+      nextRenewAt: result.nextRenewAt,
+      account: publicBrokers().brokers.find((item) => item.id === "dhan"),
+      snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not reset Dhan token" });
+  }
+}
+
+app.post("/api/brokers/dhan/refresh", handleDhanTokenReset);
+app.post("/api/brokers/dhan/reset", handleDhanTokenReset);
 
 app.post("/api/brokers/:id/connect", async (req, res) => {
   try {
@@ -641,7 +652,9 @@ app.listen(port, "0.0.0.0", async () => {
     console.log(
       `Dhan scrip master ready · ${futs.length} front-month futures · ${catalog.counts.futures} FUTIDX · ${catalog.counts.options} OPTIDX`,
     );
-    await selectOptionDesk({ symbol: "NIFTY" }).catch(() => undefined);
+    if (!isDhanLive()) {
+      await selectOptionDesk({ symbol: "NIFTY" }).catch(() => undefined);
+    }
   } catch (error) {
     console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }

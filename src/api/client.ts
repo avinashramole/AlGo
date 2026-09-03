@@ -144,7 +144,7 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
-    kind?: "indicator" | "price-action" | "nifty-vwap";
+    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
     symbol?: string;
     instrument?: "future" | "option";
     optionType?: "CE" | "PE";
@@ -180,6 +180,8 @@ export type Snapshot = {
     sellOp?: string;
     sellRight?: string;
     sellValue?: number;
+    buyConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
+    sellConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
     summary?: string;
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {
@@ -296,7 +298,10 @@ export type Snapshot = {
     autoRenew?: boolean;
     autoMode?: string;
     tokenExpiry?: string | null;
+    nextRenewAt?: string | null;
     autoStart?: boolean;
+    needsFresh?: boolean;
+    renewalBlockedUntil?: string | null;
   };
   futures?: Array<{
     root: string;
@@ -542,16 +547,48 @@ export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
 }
 
-export function enableDhanAuto(payload: { clientId: string; pin: string; totpSecret: string }) {
+export function enableDhanAuto(payload: {
+  clientId?: string;
+  loginId?: string;
+  pin?: string;
+  password?: string;
+  totpSecret?: string;
+}) {
   return request<{
     ok: boolean;
     live?: boolean;
+    rotated?: boolean;
+    method?: string;
     error?: string;
     tokenHint?: string;
     autoMode?: string;
     tokenExpiry?: string;
+    nextRenewAt?: string;
     snapshot?: Snapshot;
   }>("/brokers/dhan/auto", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function refreshDhanToken(
+  payload: {
+    clientId?: string;
+    loginId?: string;
+    pin?: string;
+    password?: string;
+    totpSecret?: string;
+  } = {},
+) {
+  return request<{
+    ok: boolean;
+    live?: boolean;
+    rotated?: boolean;
+    method?: string;
+    error?: string;
+    tokenHint?: string;
+    autoMode?: string;
+    tokenExpiry?: string;
+    nextRenewAt?: string;
+    snapshot?: Snapshot;
+  }>("/brokers/dhan/reset", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {

@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action" | "nifty-vwap";
+  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
@@ -54,6 +54,10 @@ export type Algo = {
   sellRight?: string;
   sellValue?: number;
   summary?: string;
+  runMode?: "live" | "paper" | "backtest";
+  instrument?: "future" | "option";
+  optionType?: "CE" | "PE";
+  strikeOffset?: number;
   status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
   pnl: number;
   winRate: number;
@@ -158,81 +162,54 @@ export const optionChain: OptionRow[] = [
 
 export const initialAlgos: Algo[] = [
   {
-    id: "a1",
-    name: "VWAP Depth",
-    tag: "Indicator",
-    kind: "indicator",
+    id: "a4",
+    name: "NIFTY VWAP ATM",
+    tag: "NIFTY VWAP",
+    kind: "nifty-vwap",
     symbol: "NIFTY",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
     indicator: "VWAP",
     timeframe: "5m",
     side: "BUY",
     lots: 1,
     lotSize: 65,
     qty: 65,
-    buyLeft: "price",
-    buyOp: "crosses_above",
-    buyRight: "vwap",
-    sellLeft: "price",
-    sellOp: "crosses_below",
-    sellRight: "vwap",
-    summary: "Indicator · NIFTY · Buy when Price crosses above VWAP · 1 lot × 65 = 65 qty",
-    status: "LIVE",
-    pnl: 2840.5,
-    winRate: 68,
-    enabled: true,
+    slPct: 20,
+    targetPct: 40,
+    summary: "NIFTY VWAP ATM · 5m options · SL 20% / TGT 40%",
+    status: "PAUSED",
+    pnl: 0,
+    winRate: 0,
+    enabled: false,
     brokerId: "dhan",
+    runMode: "live",
   },
   {
-    id: "a2",
-    name: "Momentum Rider",
-    tag: "Indicator",
-    kind: "indicator",
-    symbol: "FINNIFTY",
-    indicator: "RSI",
-    timeframe: "5m",
-    side: "BOTH",
-    lots: 1,
-    lotSize: 60,
-    qty: 60,
-    buyLeft: "rsi",
-    buyOp: "lt",
-    buyRight: "value",
-    buyValue: 32,
-    sellLeft: "rsi",
-    sellOp: "gt",
-    sellRight: "value",
-    sellValue: 68,
-    summary: "Indicator · FINNIFTY · Buy when RSI < 32 · Sell when RSI > 68 · 1 lot × 60 = 60 qty",
-    status: "LIVE",
-    pnl: 1960.25,
-    winRate: 61,
-    enabled: true,
-    brokerId: "dhan",
-  },
-  {
-    id: "a3",
-    name: "ORB Breakout",
-    tag: "Price action",
-    kind: "price-action",
+    id: "a5",
+    name: "NIFTY 15m VWAP reversal",
+    tag: "15m VWAP",
+    kind: "nifty-vwap-reversal",
     symbol: "NIFTY",
-    pattern: "ORB",
-    timeframe: "5m",
-    side: "BOTH",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    indicator: "NIFTY_VWAP_REVERSAL",
+    timeframe: "15m",
+    side: "BUY",
     lots: 1,
     lotSize: 65,
     qty: 65,
-    buyLeft: "price",
-    buyOp: "crosses_above",
-    buyRight: "or_high",
-    sellLeft: "price",
-    sellOp: "crosses_below",
-    sellRight: "or_low",
-    summary: "Price action · NIFTY · Buy when Price crosses above OR high · 1 lot × 65 = 65 qty",
+    slPct: 15,
+    targetPct: 30,
+    summary: "NIFTY 15m VWAP reversal · weekly ATM options · SL 15% / TGT 30%",
     status: "PAUSED",
-    pnl: -412.0,
-    winRate: 54,
+    pnl: 0,
+    winRate: 0,
     enabled: false,
     brokerId: "dhan",
+    runMode: "live",
   },
 ];
 

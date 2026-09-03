@@ -1,5 +1,5 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap";
-export type ConditionOp = "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
+export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
   | "vwap"
@@ -13,6 +13,18 @@ export type ConditionSource =
   | "lookback_high"
   | "lookback_low"
   | "value";
+
+export type ConditionJoin = "and" | "or";
+export type ConditionRow = {
+  left: ConditionSource;
+  op: ConditionOp;
+  right: ConditionSource;
+  value?: number;
+};
+export type ConditionGroup = {
+  join?: ConditionJoin;
+  rows?: ConditionRow[];
+};
 
 export type AlgoStrategy = {
   id: string;
@@ -56,6 +68,8 @@ export type AlgoStrategy = {
   sellOp?: ConditionOp;
   sellRight?: ConditionSource;
   sellValue?: number;
+  buyConditions?: ConditionGroup;
+  sellConditions?: ConditionGroup;
   summary?: string;
   runMode?: "live" | "paper" | "backtest";
   lastBacktest?: {
@@ -134,6 +148,8 @@ export const OPTION_OFFSETS = [
 ];
 
 export const OPERATORS: Array<{ id: ConditionOp; label: string }> = [
+  { id: "close_above", label: "Close above" },
+  { id: "close_below", label: "Close below" },
   { id: "crosses_above", label: "Crosses above" },
   { id: "crosses_below", label: "Crosses below" },
   { id: "above", label: "Above" },
@@ -173,6 +189,18 @@ export function isNiftyVwapKind(algo?: { kind?: string; strategyType?: string; i
   return algo?.kind === "nifty-vwap" || algo?.strategyType === "NIFTY_VWAP_ATM" || algo?.indicator === "NIFTY_VWAP_ATM";
 }
 
+export function isNiftyVwapReversalKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return (
+    algo?.kind === "nifty-vwap-reversal" ||
+    algo?.strategyType === "NIFTY_VWAP_REVERSAL_15M" ||
+    algo?.indicator === "NIFTY_VWAP_REVERSAL"
+  );
+}
+
+export function isNiftyOptionEngineKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo);
+}
+
 export function contractLabel(algo: {
   kind?: string;
   strategyType?: string;
@@ -181,7 +209,8 @@ export function contractLabel(algo: {
   optionType?: string;
   strikeOffset?: number;
 }) {
-  if (isNiftyVwapKind(algo)) return "NIFTY ATM CE/PE";
+  if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
+  if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
     return `${symbol} ${algo.optionType === "PE" ? "PE" : "CE"} ${strikeOffsetLabel(algo.strikeOffset)}`;
@@ -279,11 +308,11 @@ export function defaultConditions(kind: StrategyKind, indicator?: string, patter
   }
   return {
     buyLeft: "price",
-    buyOp: "crosses_above",
+    buyOp: "close_above",
     buyRight: "vwap",
     buyValue: 0,
     sellLeft: "price",
-    sellOp: "crosses_below",
+    sellOp: "close_below",
     sellRight: "vwap",
     sellValue: 0,
   };
@@ -325,48 +354,169 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       rangeMinutes: 15,
       lookback: 20,
       ...defaultConditions("indicator", "VWAP", "ORB"),
-      runMode: "paper",
-      brokerId: "paper",
+      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
+      runMode: "live",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "nifty-vwap-reversal") {
+    return {
+      name: "NIFTY 15m VWAP reversal",
+      kind: "nifty-vwap-reversal",
+      tag: "15m VWAP",
+      strategyType: "NIFTY_VWAP_REVERSAL_15M",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "15m",
+      slPct: 15,
+      initialSlPct: 15,
+      targetPct: 30,
+      trailingActivationPct: 10,
+      trailingStepPct: 3,
+      vwapExitCandles: 5,
+      maxPositions: 1,
+      intradayOnly: true,
+      eodSquareOffMinutes: 10,
+      indicator: "NIFTY_VWAP_REVERSAL",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "ORB",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("indicator", "VWAP", "ORB"),
+      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
+      runMode: "live",
+      brokerId: "dhan",
       enabled: false,
       status: "PAUSED",
     };
   }
   return {
-  name: "",
-  kind,
-  tag: kind === "indicator" ? "Indicator" : "Price action",
-  symbol: "NIFTY",
-  instrument: "future",
-  optionType: "CE",
-  strikeOffset: 0,
-  side: "BUY",
-  lots: 1,
-  lotSize: 65,
-  qty: 65,
-  timeframe: "5m",
-  slPct: 0.4,
-  targetPct: 0.8,
-  indicator: "VWAP",
-  period: 14,
-  fast: 9,
-  slow: 21,
-  rsiBuy: 30,
-  rsiSell: 70,
-  multiplier: 3,
-  pattern: "ORB",
-  rangeMinutes: 15,
-  lookback: 20,
-  ...defaultConditions(kind, "VWAP", "ORB"),
-  runMode: "paper",
-  brokerId: "paper",
-  enabled: false,
-  status: "PAUSED",
+    name: "",
+    kind,
+    tag: kind === "indicator" ? "Indicator" : "Price action",
+    symbol: "NIFTY",
+    instrument: "future",
+    optionType: "CE",
+    strikeOffset: 0,
+    side: "BUY",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    timeframe: "5m",
+    slPct: 0.4,
+    targetPct: 0.8,
+    indicator: "VWAP",
+    period: 14,
+    fast: 9,
+    slow: 21,
+    rsiBuy: 30,
+    rsiSell: 70,
+    multiplier: 3,
+    pattern: "ORB",
+    rangeMinutes: 15,
+    lookback: 20,
+    ...defaultConditions(kind, "VWAP", "ORB"),
+    ...groupsFromFlat(defaultConditions(kind, "VWAP", "ORB")),
+    runMode: "live",
+    brokerId: "dhan",
+    enabled: false,
+    status: "PAUSED",
   };
 };
+
+export const MAX_CONDITION_ROWS = 5;
+
+export function conditionRowFrom(
+  input: { left?: string; op?: string; right?: string; value?: number } | undefined,
+  fallback: ConditionRow,
+): ConditionRow {
+  const left = SOURCES.some((row) => row.id === input?.left) ? (input?.left as ConditionSource) : fallback.left;
+  const op = OPERATORS.some((row) => row.id === input?.op) ? (input?.op as ConditionOp) : fallback.op;
+  const right = SOURCES.some((row) => row.id === input?.right) ? (input?.right as ConditionSource) : fallback.right;
+  const value = Number.isFinite(Number(input?.value)) ? Number(input?.value) : Number(fallback.value) || 0;
+  return { left, op, right, value };
+}
+
+export function conditionGroupFrom(
+  group: { join?: string; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> } | undefined,
+  fallback: ConditionRow,
+): { join: ConditionJoin; rows: ConditionRow[] } {
+  const join: ConditionJoin = group?.join === "or" ? "or" : "and";
+  const raw = Array.isArray(group?.rows) ? group.rows : [];
+  const rows = (raw.length ? raw : [fallback]).slice(0, MAX_CONDITION_ROWS).map((row) => conditionRowFrom(row, fallback));
+  return { join, rows: rows.length ? rows : [fallback] };
+}
+
+export function groupsFromFlat(flat: {
+  buyLeft?: string;
+  buyOp?: string;
+  buyRight?: string;
+  buyValue?: number;
+  sellLeft?: string;
+  sellOp?: string;
+  sellRight?: string;
+  sellValue?: number;
+}) {
+  const buy = conditionGroupFrom(
+    undefined,
+    conditionRowFrom(
+      { left: flat.buyLeft, op: flat.buyOp, right: flat.buyRight, value: flat.buyValue },
+      { left: "price", op: "close_above", right: "vwap", value: 0 },
+    ),
+  );
+  const sell = conditionGroupFrom(
+    undefined,
+    conditionRowFrom(
+      { left: flat.sellLeft, op: flat.sellOp, right: flat.sellRight, value: flat.sellValue },
+      { left: "price", op: "close_below", right: "vwap", value: 0 },
+    ),
+  );
+  return { buyConditions: buy, sellConditions: sell };
+}
+
+export function flatFromGroup(group: { rows: ConditionRow[] } | undefined, side: "buy" | "sell") {
+  const row = group?.rows?.[0];
+  if (side === "buy") {
+    return {
+      buyLeft: row?.left || "price",
+      buyOp: row?.op || "close_above",
+      buyRight: row?.right || "vwap",
+      buyValue: row?.value || 0,
+    };
+  }
+  return {
+    sellLeft: row?.left || "price",
+    sellOp: row?.op || "close_below",
+    sellRight: row?.right || "vwap",
+    sellValue: row?.value || 0,
+  };
+}
 
 export function formatCondition(left?: string, op?: string, right?: string, value?: number) {
   const leftLabel = SOURCES.find((row) => row.id === left)?.label || "Price";
   const opLabel = OPERATORS.find((row) => row.id === op)?.label || ">";
   const rightLabel = right === "value" ? String(value ?? 0) : SOURCES.find((row) => row.id === right)?.label || "value";
   return `${leftLabel} ${opLabel} ${rightLabel}`;
+}
+
+export function formatConditionGroup(
+  group?: { join?: string; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> },
+  fallback?: { left?: string; op?: string; right?: string; value?: number },
+) {
+  const next = conditionGroupFrom(group, conditionRowFrom(fallback, { left: "price", op: "close_above", right: "vwap", value: 0 }));
+  const parts = next.rows.map((row) => formatCondition(row.left, row.op, row.right, row.value));
+  return parts.join(next.join === "or" ? " OR " : " AND ");
 }

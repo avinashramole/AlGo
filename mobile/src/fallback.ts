@@ -21,9 +21,8 @@ export const fallbackSnapshot: Snapshot = {
     { strike: 24600, callLtp: 88.2, callChg: 4.1, putLtp: 104.55, putChg: -5.6 },
   ],
   algos: [
-    { id: "a1", name: "VWAP Depth", tag: "Indicator", kind: "indicator", symbol: "NIFTY", indicator: "VWAP", lots: 1, lotSize: 65, qty: 65, buyOp: "crosses_above", buyLeft: "price", buyRight: "vwap", summary: "Indicator · NIFTY · Price crosses above VWAP · 1 lot × 65", status: "LIVE", pnl: 2840.5, winRate: 68, enabled: true, brokerId: "dhan" },
-    { id: "a2", name: "Momentum Rider", tag: "Indicator", kind: "indicator", symbol: "FINNIFTY", indicator: "RSI", lots: 1, lotSize: 60, qty: 60, buyOp: "lt", buyLeft: "rsi", buyRight: "value", buyValue: 32, sellOp: "gt", sellValue: 68, summary: "Indicator · FINNIFTY RSI < 32 / > 68 · 1 lot × 60", status: "LIVE", pnl: 1960.25, winRate: 61, enabled: true, brokerId: "dhan" },
-    { id: "a3", name: "ORB Breakout", tag: "Price action", kind: "price-action", symbol: "NIFTY", pattern: "ORB", lots: 1, lotSize: 65, qty: 65, buyOp: "crosses_above", buyRight: "or_high", summary: "Price action · NIFTY Price crosses above OR high · 1 lot × 65", status: "PAUSED", pnl: -412, winRate: 54, enabled: false, brokerId: "dhan" },
+    { id: "a4", name: "NIFTY VWAP ATM", tag: "NIFTY VWAP", kind: "nifty-vwap", symbol: "NIFTY", instrument: "option", optionType: "CE", indicator: "VWAP", lots: 1, lotSize: 65, qty: 65, timeframe: "5m", slPct: 20, targetPct: 40, summary: "NIFTY VWAP ATM · 5m options · SL 20% / TGT 40%", status: "PAUSED", pnl: 0, winRate: 0, enabled: false, brokerId: "dhan", runMode: "live" },
+    { id: "a5", name: "NIFTY 15m VWAP reversal", tag: "15m VWAP", kind: "nifty-vwap-reversal", symbol: "NIFTY", instrument: "option", optionType: "CE", indicator: "NIFTY_VWAP_REVERSAL", lots: 1, lotSize: 65, qty: 65, timeframe: "15m", slPct: 15, targetPct: 30, summary: "NIFTY 15m VWAP reversal · weekly ATM options · SL 15% / TGT 30%", status: "PAUSED", pnl: 0, winRate: 0, enabled: false, brokerId: "dhan", runMode: "live" },
   ],
   positions: [
     { id: "p1", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },

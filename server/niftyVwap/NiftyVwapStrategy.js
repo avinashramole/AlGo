@@ -1,4 +1,4 @@
-import { niftyVwapConfig } from "./config.js";
+import { optionEngineConfig } from "./config.js";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { PositionManager, runtimeState, resetSession } from "./PositionManager.js";
 import { RiskManager } from "./RiskManager.js";
@@ -31,15 +31,18 @@ export const NiftyVwapStrategy = {
   manageOpen({ algo, config, signal, open, mark, now, minutesToClose, adapter }) {
     const state = runtimeState(algo);
     if (!(mark > 0) || !(state.fillPrice > 0)) return { action: "hold" };
-    const nextStop = TrailingStopManager.nextStop({
-      entry: state.fillPrice,
-      mark,
-      prevStop: state.stopPrice,
-      initialSlPct: config.initialSlPct,
-      activationPct: config.trailingActivationPct,
-      stepPct: config.trailingStepPct,
-    });
-    if (nextStop > Number(state.stopPrice || 0)) {
+    const nextStop =
+      config.useTrail === false
+        ? Number(state.stopPrice || TrailingStopManager.initialStop(state.fillPrice, config.initialSlPct))
+        : TrailingStopManager.nextStop({
+            entry: state.fillPrice,
+            mark,
+            prevStop: state.stopPrice,
+            initialSlPct: config.initialSlPct,
+            activationPct: config.trailingActivationPct,
+            stepPct: config.trailingStepPct,
+          });
+    if (config.useTrail !== false && nextStop > Number(state.stopPrice || 0)) {
       state.stopPrice = nextStop;
       if (TrailingStopManager.profitPct(state.fillPrice, mark) >= config.trailingActivationPct) {
         state.trailActive = true;
@@ -51,7 +54,7 @@ export const NiftyVwapStrategy = {
     let reason = "";
     if (TrailingStopManager.hitStop(mark, state.stopPrice)) reason = "sl";
     else if (TrailingStopManager.hitTarget(mark, state.targetPrice)) reason = "target";
-    else if (against >= config.vwapExitCandles) reason = "vwap-exit";
+    else if (config.useVwapExit !== false && against >= config.vwapExitCandles) reason = "vwap-exit";
     else if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) reason = "eod";
     if (!reason) return { action: "hold", stop: state.stopPrice };
     const closed = adapter.exit({ ...open, ltp: mark });
@@ -142,7 +145,7 @@ export const NiftyVwapStrategy = {
   tick(input = {}) {
     const algo = input.algo;
     if (!algo) return { action: "skip", reason: "no-algo" };
-    const config = input.config || niftyVwapConfig(algo);
+    const config = input.config || optionEngineConfig(algo);
     const now = Number(input.now) || Date.now();
     const state = runtimeState(algo);
     resetSession(state, sessionKeyIST(now));
@@ -155,12 +158,21 @@ export const NiftyVwapStrategy = {
       return { action: "feed-down" };
     }
 
-    const signal = VwapSignalEngine.evaluate({
-      futuresBars: input.futuresBars || [],
-      ceBars: input.ceBars || [],
-      peBars: input.peBars || [],
-      now,
-    });
+    const barMs = (Number(config.barMinutes) || 5) * 60 * 1000;
+    const signal =
+      config.signalMode === "reversal"
+        ? VwapSignalEngine.evaluateReversal({
+            futuresBars: input.futuresBars || [],
+            now,
+            barMs,
+          })
+        : VwapSignalEngine.evaluate({
+            futuresBars: input.futuresBars || [],
+            ceBars: input.ceBars || [],
+            peBars: input.peBars || [],
+            now,
+            barMs,
+          });
     if (signal.barTime) state.lastProcessedBarTime = signal.barTime;
 
     const open = PositionManager.openFor(input.positions, algo.name, state);

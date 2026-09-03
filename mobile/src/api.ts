@@ -84,7 +84,7 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
-    kind?: "indicator" | "price-action" | "nifty-vwap";
+    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
     symbol?: string;
     instrument?: "future" | "option";
     optionType?: "CE" | "PE";
@@ -101,6 +101,8 @@ export type Snapshot = {
     sellOp?: string;
     sellRight?: string;
     sellValue?: number;
+    buyConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
+    sellConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
     timeframe?: string;
     slPct?: number;
     targetPct?: number;
@@ -239,6 +241,8 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    autoMode?: string;
+    needsFresh?: boolean;
   };
   futures?: Array<{
     root: string;

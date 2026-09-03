@@ -78,7 +78,7 @@ export function TickerStrip() {
                   onClick={() => void tradeFuture(item, "BUY")}
                   className="h-10 flex-1 rounded-md bg-emerald-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
-                  {busy === `${root}-BUY` ? "..." : `BUY ${root} FUT`}
+                  {busy === `${root}-BUY` ? "..." : "BUY"}
                 </button>
                 <button
                   type="button"

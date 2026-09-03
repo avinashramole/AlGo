@@ -71,6 +71,19 @@ export function optionCloseAboveVwap(optionBars = []) {
   return vwap > 0 && close > vwap;
 }
 
+export function lastBarVwapReversal(completedSessionBars = []) {
+  if (!completedSessionBars.length) {
+    return { buyCe: false, buyPe: false, open: 0, close: 0, vwap: 0, bar: null };
+  }
+  const last = completedSessionBars[completedSessionBars.length - 1];
+  const vwap = sessionVwap(completedSessionBars);
+  const open = Number(last.open);
+  const close = Number(last.close);
+  const buyCe = vwap > 0 && open < vwap && close > vwap;
+  const buyPe = vwap > 0 && open > vwap && close < vwap;
+  return { buyCe, buyPe, open, close, vwap, bar: last };
+}
+
 export const VwapSignalEngine = {
   sessionKeyIST,
   sessionBars,
@@ -79,10 +92,11 @@ export const VwapSignalEngine = {
   consecutiveAgainstVwap,
   firstFuturesBias,
   optionCloseAboveVwap,
-  evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now() } = {}) {
-    const futCompleted = completedCandles(sessionBars(futuresBars, now), now);
-    const ceCompleted = completedCandles(sessionBars(ceBars, now), now);
-    const peCompleted = completedCandles(sessionBars(peBars, now), now);
+  lastBarVwapReversal,
+  evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
+    const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);
+    const ceCompleted = completedCandles(sessionBars(ceBars, now), now, barMs);
+    const peCompleted = completedCandles(sessionBars(peBars, now), now, barMs);
     const bias = firstFuturesBias(futCompleted);
     const futVwap = sessionVwap(futCompleted);
     const lastFut = futCompleted[futCompleted.length - 1] || null;
@@ -99,6 +113,26 @@ export const VwapSignalEngine = {
       againstCount: lastFut ? consecutiveAgainstVwap(futCompleted, bias.side || "CE") : 0,
       againstCe: consecutiveAgainstVwap(futCompleted, "CE"),
       againstPe: consecutiveAgainstVwap(futCompleted, "PE"),
+    };
+  },
+  evaluateReversal({ futuresBars = [], now = Date.now(), barMs = 15 * 60 * 1000 } = {}) {
+    const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);
+    const lastFut = futCompleted[futCompleted.length - 1] || null;
+    const reversal = lastBarVwapReversal(futCompleted);
+    return {
+      ready: Boolean(lastFut && reversal.vwap > 0),
+      barTime: lastFut ? Number(lastFut.time) : 0,
+      futuresClose: lastFut ? Number(lastFut.close) : 0,
+      futuresOpen: lastFut ? Number(lastFut.open) : 0,
+      futuresVwap: reversal.vwap,
+      bias: reversal.buyCe ? "CE" : reversal.buyPe ? "PE" : "",
+      buyCe: reversal.buyCe,
+      buyPe: reversal.buyPe,
+      ceAboveVwap: false,
+      peAboveVwap: false,
+      againstCount: 0,
+      againstCe: 0,
+      againstPe: 0,
     };
   },
 };
