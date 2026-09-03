@@ -8,6 +8,7 @@ import {
   jwtExpiryIso,
   lastDailyResetAt,
   keepAlivePlan,
+  effectiveTokenBackoff,
   mergeDhanCredentials,
   msUntilDailyRenewal,
   msUntilTokenKeepAlive,
@@ -115,10 +116,10 @@ test("nextDailyRenewalAt resets at 8:00 AM IST", () => {
   const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
   const nextEight = Date.parse("2026-08-22T02:30:00.000Z");
   assert.equal(nextDailyRenewalAt(sevenAm), eightAm);
-  assert.equal(nextDailyRenewalAt(eightOhFive), eightAm);
+  assert.equal(nextDailyRenewalAt(eightOhFive), nextEight);
   assert.equal(nextDailyRenewalAt(nineAm), nextEight);
   assert.equal(msUntilDailyRenewal(sevenAm), 60 * 60 * 1000);
-  assert.equal(msUntilDailyRenewal(eightOhFive), 5_000);
+  assert.equal(msUntilDailyRenewal(eightOhFive), nextEight - eightOhFive);
 });
 
 test("lastDailyResetAt is today's 8:00 IST after the reset, yesterday's before", () => {
@@ -137,6 +138,46 @@ test("needsFreshAccessToken is true at 9:00 IST when the token was issued yester
   const exp = Math.floor((nineAm + 20 * 3600 * 1000) / 1000);
   const iat = Math.floor(yesterdayEight / 1000);
   assert.equal(needsFreshAccessToken({ accessToken: fakeJwt(exp, iat) }, nineAm), true);
+});
+
+test("needsFreshAccessToken is true if generatedAt was stamped after 8:00 but JWT life started yesterday", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const exp = Math.floor((nineAm + 16 * 3600 * 1000) / 1000);
+  assert.equal(
+    needsFreshAccessToken(
+      { accessToken: fakeJwt(exp), generatedAt: new Date(nineAm).toISOString() },
+      nineAm,
+    ),
+    true,
+  );
+});
+
+test("effectiveTokenBackoff drops yesterday's TOTP/429 cooldown after today's 8:00 IST", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const yesterdayEvening = Date.parse("2026-08-20T14:00:00.000Z");
+  assert.deepEqual(
+    effectiveTokenBackoff(
+      {
+        savedAt: new Date(yesterdayEvening).toISOString(),
+        credentialsBlockedUntil: yesterdayEvening + 6 * 60 * 60 * 1000,
+        generateBackoffUntil: yesterdayEvening + 30 * 60 * 1000,
+      },
+      nineAm,
+    ),
+    { generateBackoffUntil: 0, credentialsBlockedUntil: 0 },
+  );
+  const eightOhOne = Date.parse("2026-08-21T02:31:00.000Z");
+  const until = eightOhOne + 30 * 60 * 1000;
+  assert.deepEqual(
+    effectiveTokenBackoff(
+      {
+        savedAt: new Date(eightOhOne).toISOString(),
+        generateBackoffUntil: until,
+      },
+      eightOhOne + 60_000,
+    ),
+    { generateBackoffUntil: until, credentialsBlockedUntil: 0 },
+  );
 });
 
 test("needsFreshAccessToken is true even if generatedAt was stamped later than JWT iat", () => {

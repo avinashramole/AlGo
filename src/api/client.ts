@@ -301,6 +301,7 @@ export type Snapshot = {
     nextRenewAt?: string | null;
     autoStart?: boolean;
     needsFresh?: boolean;
+    renewalBlockedUntil?: string | null;
   };
   futures?: Array<{
     root: string;

@@ -217,7 +217,11 @@ export function Brokers() {
         {feed?.autoMode === "generate" && feed?.needsFresh ? (
           <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             Token is from before <b>8:00 AM IST</b> today. Auto-renew should run now. Click <b>Change token now</b> if
-            it is still stuck, then check VPS logs for <code>Dhan token auto-renew</code>.
+            it is still stuck
+            {feed?.renewalBlockedUntil
+              ? ` (cooldown until ${new Date(feed.renewalBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })})`
+              : ""}
+            , then check VPS logs for <code>Dhan token auto-renew</code>.
           </div>
         ) : null}
         <div className="mt-3 grid gap-2 sm:grid-cols-3">

@@ -1277,17 +1277,18 @@ export function stopDhanLive() {
 }
 
 export async function rotateDhanAccessToken({ clientId, pin, totpSecret, reason = "api" } = {}) {
-  if (Date.now() < keepAliveBackoffUntil) {
+  const userAsked = reason === "save" || reason === "api";
+  if (Date.now() < keepAliveBackoffUntil && !userAsked) {
     const when = new Date(keepAliveBackoffUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     throw Object.assign(
       new Error(`Dhan 429 cooldown until ${when}. Wait, then click Change token now once. Do not restart t2s.`),
       { status: 429, rateLimit: true },
     );
   }
-  if (Date.now() < credentialsBlockedUntil) {
+  if (Date.now() < credentialsBlockedUntil && !userAsked) {
     const when = new Date(credentialsBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     throw Object.assign(
-      new Error(`Invalid TOTP cooldown until ${when}. Fix PIN / Setup TOTP secret, then wait.`),
+      new Error(`Invalid TOTP cooldown until ${when}. Fix PIN / Setup TOTP secret, then click Change token now.`),
       { status: 400, invalidTotp: true },
     );
   }
@@ -1298,8 +1299,8 @@ export async function rotateDhanAccessToken({ clientId, pin, totpSecret, reason 
   credentialsBlockedUntil = 0;
   clearTokenBackoff();
   const session = loadDhanSession();
-  const userAsked = reason === "save" || reason === "api" || reason === "auth";
-  if (session.autoStart === false && !userAsked) {
+  const askedLive = reason === "save" || reason === "api" || reason === "auth";
+  if (session.autoStart === false && !askedLive) {
     scheduleTokenKeepAlive();
     console.log(
       `Dhan access token generated automatically (${reason}) · live feed left off · expires ${generated.expiryTime}`,
@@ -1375,7 +1376,7 @@ function scheduleTokenKeepAlive() {
 }
 
 function blockBadTotp(error) {
-  credentialsBlockedUntil = Date.now() + 6 * 60 * 60 * 1000;
+  credentialsBlockedUntil = Date.now() + 30 * 60 * 1000;
   saveTokenBackoff({ credentialsBlockedUntil });
   const when = new Date(credentialsBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   const message =
@@ -1533,7 +1534,7 @@ export async function bootDhanFromEnv() {
 
   if (canAutoGenerate() && needsFreshAccessToken(sessionForFreshness)) {
     try {
-      await enableDhanAuto(creds);
+      await rotateDhanAccessToken({ ...creds, reason: "boot" });
       console.log("Dhan access token generated automatically (PIN + TOTP)");
       return true;
     } catch (error) {
@@ -1594,7 +1595,7 @@ export async function bootDhanFromEnv() {
   }
   if (canAutoGenerate() && !totpRejected) {
     try {
-      await enableDhanAuto(creds);
+      await rotateDhanAccessToken({ ...creds, reason: "boot" });
       console.log("Dhan live feed started from PIN + TOTP");
       return true;
     } catch (error) {

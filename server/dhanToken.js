@@ -66,29 +66,50 @@ export function saveDhanSession(patch = {}) {
 
 const BACKOFF_FILE = path.join(__dirname, ".dhan-backoff.json");
 
-export function loadTokenBackoff() {
+function readTokenBackoffFile() {
   try {
     const raw = JSON.parse(fs.readFileSync(BACKOFF_FILE, "utf8"));
-    return {
-      generateBackoffUntil: Math.max(0, Number(raw.generateBackoffUntil) || 0),
-      credentialsBlockedUntil: Math.max(0, Number(raw.credentialsBlockedUntil) || 0),
-    };
+    return raw && typeof raw === "object" ? raw : {};
   } catch {
-    return { generateBackoffUntil: 0, credentialsBlockedUntil: 0 };
+    return {};
   }
 }
 
+/** Cooldowns saved before today's 8:00 IST reset must not block today's mint. */
+export function effectiveTokenBackoff(raw = {}, from = Date.now()) {
+  const reset = lastDailyResetAt(from);
+  const savedAt = Date.parse(raw.savedAt || "") || 0;
+  let generateBackoffUntil = Math.max(0, Number(raw.generateBackoffUntil) || 0);
+  let credentialsBlockedUntil = Math.max(0, Number(raw.credentialsBlockedUntil) || 0);
+  const startedAt =
+    savedAt ||
+    (credentialsBlockedUntil ? credentialsBlockedUntil - 6 * 60 * 60 * 1000 : 0) ||
+    (generateBackoffUntil ? generateBackoffUntil - 30 * 60 * 1000 : 0);
+  if (startedAt && startedAt < reset) {
+    generateBackoffUntil = 0;
+    credentialsBlockedUntil = 0;
+  }
+  if (generateBackoffUntil && generateBackoffUntil <= from) generateBackoffUntil = 0;
+  if (credentialsBlockedUntil && credentialsBlockedUntil <= from) credentialsBlockedUntil = 0;
+  return { generateBackoffUntil, credentialsBlockedUntil };
+}
+
+export function loadTokenBackoff(from = Date.now()) {
+  return effectiveTokenBackoff(readTokenBackoffFile(), from);
+}
+
 export function saveTokenBackoff(patch = {}) {
-  const prev = loadTokenBackoff();
+  const prev = readTokenBackoffFile();
   const next = {
     generateBackoffUntil:
       patch.generateBackoffUntil === undefined
-        ? prev.generateBackoffUntil
+        ? Math.max(0, Number(prev.generateBackoffUntil) || 0)
         : Math.max(0, Number(patch.generateBackoffUntil) || 0),
     credentialsBlockedUntil:
       patch.credentialsBlockedUntil === undefined
-        ? prev.credentialsBlockedUntil
+        ? Math.max(0, Number(prev.credentialsBlockedUntil) || 0)
         : Math.max(0, Number(patch.credentialsBlockedUntil) || 0),
+    savedAt: new Date().toISOString(),
   };
   fs.writeFileSync(BACKOFF_FILE, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   return next;
@@ -99,7 +120,6 @@ export function clearTokenBackoff() {
 }
 
 export const TOKEN_RENEW_HOUR_IST = 8;
-const RENEW_GRACE_MS = 15 * 60 * 1000;
 
 function kolkataParts(date) {
   return Object.fromEntries(
@@ -127,7 +147,6 @@ export function nextDailyRenewalAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IS
   );
   if (!Number.isFinite(today)) return from + 24 * 60 * 60 * 1000;
   if (from < today) return today;
-  if (from - today < RENEW_GRACE_MS) return today;
   return today + 24 * 60 * 60 * 1000;
 }
 
@@ -146,9 +165,9 @@ export function tokenGeneratedAtMs({ accessToken, expiryTime, generatedAt } = {}
   if (Number.isFinite(saved) && saved > 0) candidates.push(saved);
   const iat = jwtIssuedAtMs(accessToken);
   if (iat) candidates.push(iat);
-  if (candidates.length) return Math.min(...candidates);
   const exp = Date.parse(resolveTokenExpiry({ accessToken, expiryTime }) || "");
-  if (Number.isFinite(exp)) return exp - 24 * 60 * 60 * 1000;
+  if (Number.isFinite(exp)) candidates.push(exp - 24 * 60 * 60 * 1000);
+  if (candidates.length) return Math.min(...candidates);
   return 0;
 }
 
@@ -228,6 +247,8 @@ export function dhanTokenStatus() {
     expiryTime: session.expiryTime,
   });
   const staleAfterReset = autoGenerate && needsFreshAccessToken(session);
+  const backoff = loadTokenBackoff();
+  const blockedUntil = Math.max(backoff.generateBackoffUntil, backoff.credentialsBlockedUntil);
   const nextMs = staleAfterReset ? Date.now() : nextDailyRenewalAt();
   return {
     autoRenew: autoGenerate || Boolean(session.accessToken && session.source === "web"),
@@ -236,6 +257,7 @@ export function dhanTokenStatus() {
     nextRenewAt: new Date(nextMs).toISOString(),
     autoStart: session.autoStart !== false,
     needsFresh: staleAfterReset,
+    renewalBlockedUntil: blockedUntil > Date.now() ? new Date(blockedUntil).toISOString() : null,
   };
 }
 
