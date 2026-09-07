@@ -28,6 +28,8 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function Tabs() {
+  const { user } = useAuth();
+  const admin = user?.role === "admin";
   return (
     <Tab.Navigator
       screenOptions={{
@@ -38,11 +40,12 @@ function Tabs() {
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Markets" component={MarketsScreen} />
-      <Tab.Screen name="Chain" component={OptionsScreen} />
-      <Tab.Screen name="Signals" component={SignalsScreen} />
-      <Tab.Screen name="Algo" component={AlgoScreen} />
-      <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+      {admin ? <Tab.Screen name="Markets" component={MarketsScreen} /> : null}
+      {admin ? <Tab.Screen name="Chain" component={OptionsScreen} /> : null}
+      {admin ? <Tab.Screen name="Signals" component={SignalsScreen} /> : null}
+      {admin ? <Tab.Screen name="Algo" component={AlgoScreen} /> : null}
+      {admin ? <Tab.Screen name="Portfolio" component={PortfolioScreen} /> : null}
+      {!admin ? <Tab.Screen name="Profile" component={ProfileScreen} /> : null}
     </Tab.Navigator>
   );
 }
@@ -63,14 +66,18 @@ function Root() {
       {user ? (
         <>
           <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
-          <Stack.Screen name="Options" component={OptionsScreen} />
-          <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: "Order Book" }} />
-          <Stack.Screen name="Positions" component={PositionsScreen} />
-          <Stack.Screen name="Report" component={ReportScreen} />
-          <Stack.Screen name="Brokers" component={BrokersScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
+          {user?.role === "admin" ? (
+            <>
+              <Stack.Screen name="Options" component={OptionsScreen} />
+              <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: "Order Book" }} />
+              <Stack.Screen name="Positions" component={PositionsScreen} />
+              <Stack.Screen name="Report" component={ReportScreen} />
+              <Stack.Screen name="Brokers" component={BrokersScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="Trade" component={TradeScreen} options={{ title: "Review Trade" }} />
+            </>
+          ) : null}
           <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen name="Trade" component={TradeScreen} options={{ title: "Review Trade" }} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

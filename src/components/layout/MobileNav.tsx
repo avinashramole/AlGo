@@ -22,35 +22,42 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { isAdminUser } from "../../lib/roles";
 import { cn } from "../../lib/format";
 
-const primary: Array<{ to: string; label: string; icon: LucideIcon }> = [
+const primary: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/options", label: "Chain", icon: Layers },
-  { to: "/orders", label: "Orders", icon: ClipboardList },
-  { to: "/positions", label: "Book", icon: BookOpen },
+  { to: "/options", label: "Chain", icon: Layers, admin: true },
+  { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },
+  { to: "/positions", label: "Book", icon: BookOpen, admin: true },
 ];
 
-const moreItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
-  { to: "/markets", label: "Markets", icon: BarChart3 },
-  { to: "/signals", label: "Signals", icon: Zap },
-  { to: "/algo", label: "Algo", icon: Cpu },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { to: "/brokers", label: "Brokers", icon: Building2 },
-  { to: "/analytics", label: "Analytics", icon: PieChart },
-  { to: "/notifications", label: "Alerts", icon: Bell },
-  { to: "/chat", label: "Chat", icon: MessageSquare },
+const moreItems: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean }> = [
+  { to: "/markets", label: "Markets", icon: BarChart3, admin: true },
+  { to: "/signals", label: "Signals", icon: Zap, admin: true },
+  { to: "/algo", label: "Algo", icon: Cpu, admin: true },
+  { to: "/reports", label: "Reports", icon: FileText, admin: true },
+  { to: "/portfolio", label: "Portfolio", icon: Briefcase, admin: true },
+  { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
+  { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
+  { to: "/users", label: "Users", icon: User, admin: true },
+  { to: "/notifications", label: "Alerts", icon: Bell, admin: true },
+  { to: "/chat", label: "Chat", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/settings", label: "Settings", icon: Settings, admin: true },
 ];
 
 export function MobileNav() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
+  const admin = isAdminUser(user);
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreActive = moreItems.some((item) => item.to === location.pathname);
+  const visiblePrimary = (admin ? primary : [{ to: "/", label: "Home", icon: Home }, { to: "/profile", label: "Profile", icon: User }]) as typeof primary;
+  const visibleMore = moreItems.filter((item) => admin || !item.admin);
+  const moreActive = visibleMore.some((item) => item.to === location.pathname);
 
   useEffect(() => {
     setMoreOpen(false);
@@ -69,7 +76,7 @@ export function MobileNav() {
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {moreItems.map((item) => (
+              {visibleMore.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -97,8 +104,8 @@ export function MobileNav() {
         </div>
       ) : null}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] md:hidden">
-        <div className="grid grid-cols-5">
-          {primary.map((item) => (
+        <div className={admin ? "grid grid-cols-5" : "grid grid-cols-2"}>
+          {visiblePrimary.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -114,17 +121,19 @@ export function MobileNav() {
               {item.label}
             </NavLink>
           ))}
-          <button
-            type="button"
-            onClick={() => setMoreOpen((value) => !value)}
-            className={cn(
-              "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold",
-              moreOpen || moreActive ? "text-brand-500" : "text-slate-400",
-            )}
-          >
-            <Menu size={18} />
-            More
-          </button>
+          {admin ? (
+            <button
+              type="button"
+              onClick={() => setMoreOpen((value) => !value)}
+              className={cn(
+                "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold",
+                moreOpen || moreActive ? "text-brand-500" : "text-slate-400",
+              )}
+            >
+              <Menu size={18} />
+              More
+            </button>
+          ) : null}
         </div>
       </nav>
     </>

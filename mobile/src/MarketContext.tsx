@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Alert } from "react-native";
 import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
+import { useAuth } from "./AuthContext";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -23,6 +24,8 @@ type MarketContextValue = {
 const MarketContext = createContext<MarketContextValue | null>(null);
 
 export function MarketProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const admin = user?.role === "admin";
   const [data, setData] = useState<Snapshot>(fallbackSnapshot);
   const [live, setLive] = useState(false);
 
@@ -37,12 +40,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!admin) {
+      setLive(false);
+      return;
+    }
     void refresh();
     const id = setInterval(() => {
       void refresh();
     }, 2500);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [admin, refresh]);
 
   const value = useMemo(
     () => ({

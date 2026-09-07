@@ -37,7 +37,7 @@ function socialHint(provider: SocialProvider) {
 }
 
 export function Login() {
-  const { login, requestOtp, verifyOtp, signup, resetPassword } = useAuth();
+  const { login, requestOtp, verifyOtp, signup, resetPassword, startGoogleLogin } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState<"signin" | "signup" | "reset">("signin");
   const [name, setName] = useState("");
@@ -48,7 +48,11 @@ export function Login() {
   const [sentTo, setSentTo] = useState("");
   const [hint, setHint] = useState("");
   const [devOtp, setDevOtp] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => {
+    const googleError = sessionStorage.getItem("t2s-google-error") || "";
+    if (googleError) sessionStorage.removeItem("t2s-google-error");
+    return googleError;
+  });
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(() => localStorage.getItem("t2s-remember") !== "0");
 
@@ -97,6 +101,17 @@ export function Login() {
       setError(err instanceof Error ? err.message : "Could not send code");
       return false;
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const onGoogle = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await startGoogleLogin();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google login failed");
       setLoading(false);
     }
   };
@@ -331,9 +346,9 @@ export function Login() {
                   <span>or</span>
                 </div>
                 <div className="t2s-alt">
-                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login", "google")}>
+                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onGoogle()}>
                     <GoogleIcon />
-                    Login with Google
+                    Continue with Google
                   </button>
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
                     <Shield size={18} />

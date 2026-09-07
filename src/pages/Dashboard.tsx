@@ -7,6 +7,7 @@ import { OptionChain } from "../components/dashboard/OptionChain";
 import { Positions } from "../components/dashboard/Positions";
 import { PriceChart } from "../components/dashboard/PriceChart";
 import { RecentSignals } from "../components/dashboard/RecentSignals";
+import { RegisteredUsersCard } from "../components/dashboard/RegisteredUsersCard";
 import { SentimentGauge } from "../components/dashboard/SentimentGauge";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { FuturesTape } from "../components/dashboard/FuturesTape";
@@ -34,7 +35,10 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <ActiveAlgos />
         <Positions />
-        <RecentSignals />
+        <div className="space-y-3">
+          <RegisteredUsersCard />
+          <RecentSignals />
+        </div>
       </div>
       <TradeModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
     </div>

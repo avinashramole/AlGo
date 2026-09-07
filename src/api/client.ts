@@ -1,8 +1,17 @@
 const API = "/api";
 
+function authHeaders(): HeadersInit {
+  const token =
+    (typeof localStorage !== "undefined" && localStorage.getItem("t2s-token")) ||
+    (typeof sessionStorage !== "undefined" && sessionStorage.getItem("t2s-token")) ||
+    "";
+  if (!token || token === "t2s-offline-token") return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers || {}) },
     ...init,
   });
   const text = await response.text();
@@ -396,6 +405,11 @@ export type AuthUser = {
   email: string;
   mobile?: string;
   desk: string;
+  role?: "admin" | "user";
+  authProvider?: string;
+  createdAt?: string;
+  lastLoginAt?: string;
+  registered?: boolean;
   hasPassword?: boolean;
   thumbEnabled?: boolean;
 };
@@ -474,6 +488,19 @@ export function loginThumb(thumbToken: string) {
     method: "POST",
     body: JSON.stringify({ thumbToken }),
   });
+}
+
+export function googleAuthStatus() {
+  return request<{ configured: boolean; redirectUri?: string }>("/auth/google/status");
+}
+
+export function googleAuthStartUrl() {
+  const next = encodeURIComponent(window.location.origin);
+  return `/api/auth/google?next=${next}`;
+}
+
+export function listUsers() {
+  return request<{ users: AuthUser[] }>("/users");
 }
 
 export function getMe(token: string) {

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { connectGmail, completeSignup, enableThumb, gmailStatus, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -90,6 +90,38 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "t2s-api", time: new Date().toISOString() });
 });
 
+app.get("/api/auth/google/status", (req, res) => {
+  const configured = googleOAuthConfigured();
+  res.json({ configured, redirectUri: configured ? googleRedirectUri(process.env, req) : "" });
+});
+
+app.get("/api/auth/google", (req, res) => {
+  try {
+    const next = Array.isArray(req.query.next) ? req.query.next[0] : req.query.next;
+    res.redirect(googleAuthorizeUrl({ next, req }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Google login is not configured" });
+  }
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  const payload = decodeOAuthPayload(req.query.state);
+  const next = safeFrontendOrigin(payload.next || decodeOAuthState(req.query.state) || process.env.PUBLIC_URL);
+  try {
+    if (req.query.error) {
+      throw Object.assign(new Error("Google login was cancelled."), { status: 401 });
+    }
+    const result = await loginWithGoogleCode({
+      code: Array.isArray(req.query.code) ? req.query.code[0] : req.query.code,
+      redirectUri: payload.redirectUri,
+    });
+    await notifyLogin(result.user);
+    res.redirect(`${next}/login?google_token=${encodeURIComponent(result.token)}`);
+  } catch (error) {
+    res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
+  }
+});
+
 app.post("/api/login", async (req, res) => {
   try {
     const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
@@ -97,19 +129,6 @@ app.post("/api/login", async (req, res) => {
     res.json({ ...result, mail });
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Login failed" });
-  }
-});
-
-app.get("/api/auth/gmail", (_req, res) => {
-  res.json(gmailStatus());
-});
-
-app.post("/api/auth/gmail", async (req, res) => {
-  try {
-    const result = await connectGmail({ email: req.body?.email, appPassword: req.body?.appPassword || req.body?.password });
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Gmail connect failed" });
   }
 });
 
@@ -193,6 +212,29 @@ function readToken(req) {
   return String(req.body?.token || req.query?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
 }
 
+function deskGuard(req, res, next) {
+  const pathname = String(req.originalUrl || req.url || "").split("?")[0];
+  if (!pathname.startsWith("/api")) {
+    next();
+    return;
+  }
+  const user = sessionUser(readToken(req));
+  req.authUser = user;
+  if (pathname === "/api/me") {
+    next();
+    return;
+  }
+  if (!user) {
+    res.status(401).json({ error: "Sign in first." });
+    return;
+  }
+  if (user.role !== "admin") {
+    res.status(403).json({ error: "Admin only." });
+    return;
+  }
+  next();
+}
+
 app.get("/api/me", (req, res) => {
   const user = sessionUser(readToken(req));
   if (!user) {
@@ -207,6 +249,25 @@ app.post("/api/me", (req, res) => {
     res.json(updateProfile(readToken(req), req.body || {}));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not update profile" });
+  }
+});
+
+app.use(deskGuard);
+
+app.get("/api/users", (_req, res) => {
+  res.json({ users: listPublicUsers() });
+});
+
+app.get("/api/auth/gmail", (_req, res) => {
+  res.json(gmailStatus());
+});
+
+app.post("/api/auth/gmail", async (req, res) => {
+  try {
+    const result = await connectGmail({ email: req.body?.email, appPassword: req.body?.appPassword || req.body?.password });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Gmail connect failed" });
   }
 });
 

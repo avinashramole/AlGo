@@ -1,4 +1,4 @@
-import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
+import { Bell, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
@@ -6,11 +6,13 @@ import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
+import { isAdminUser } from "../../lib/roles";
 import { cn, formatIstClock, formatMobile, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
+  const admin = isAdminUser(user);
   const { live, data } = useMarket();
   const [now, setNow] = useState(() => new Date());
   const [open, setOpen] = useState(false);
@@ -46,14 +48,20 @@ export function Header() {
         <BrandMark variant="horizontal" size="md" theme={theme} />
       </Link>
       <div className="relative mx-auto hidden w-full max-w-xl md:block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-        <input
-          className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
-          placeholder="Search NIFTY, BANKNIFTY, Strategy, Order..."
-        />
+        {admin ? (
+          <>
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
+              placeholder="Search NIFTY, BANKNIFTY, Strategy, Order..."
+            />
+          </>
+        ) : (
+          <div className="text-sm font-semibold text-slate-400">Member portal</div>
+        )}
       </div>
       <div className="ml-auto flex min-w-0 items-center gap-1.5 md:gap-3">
-        <BrokerSwitch />
+        {admin ? <BrokerSwitch /> : null}
         <div
           className={cn(
             "flex max-w-[28vw] shrink items-center gap-1.5 overflow-hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:max-w-[42vw] md:max-w-none md:gap-2 md:px-3 md:py-1.5 md:text-xs",
@@ -71,12 +79,21 @@ export function Header() {
           </span>
           {dhanLive && lastTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
-        <Link to="/notifications" className="icon-btn hidden md:flex" title="Notifications">
-          <Bell size={17} />
-        </Link>
-        <Link to="/chat" className="icon-btn hidden md:flex" title="Chat">
-          <MessageSquare size={17} />
-        </Link>
+        {admin ? (
+          <Link to="/users" className="icon-btn hidden md:flex" title="Users">
+            <Users size={17} />
+          </Link>
+        ) : null}
+        {admin ? (
+          <Link to="/notifications" className="icon-btn hidden md:flex" title="Notifications">
+            <Bell size={17} />
+          </Link>
+        ) : null}
+        {admin ? (
+          <Link to="/chat" className="icon-btn hidden md:flex" title="Chat">
+            <MessageSquare size={17} />
+          </Link>
+        ) : null}
         <button type="button" onClick={toggleTheme} className="icon-btn hidden md:flex" title="Theme">
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
@@ -87,7 +104,9 @@ export function Header() {
             </div>
             <div className="hidden text-left lg:block">
               <div className="text-xs font-bold leading-tight">{user?.name || "Trader"}</div>
-              <div className="text-[10px] font-semibold text-slate-400">{user?.email || formatMobile(user?.mobile)}</div>
+              <div className="text-[10px] font-semibold text-slate-400">
+                {admin ? "Admin" : "Member"} · {user?.email || formatMobile(user?.mobile)}
+              </div>
             </div>
           </button>
           {open ? (
