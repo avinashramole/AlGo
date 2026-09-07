@@ -17,6 +17,8 @@ export function MemberPlansScreen() {
 
   useEffect(() => {
     load();
+    const id = setInterval(load, 8000);
+    return () => clearInterval(id);
   }, [load]);
 
   const addBalance = async () => {

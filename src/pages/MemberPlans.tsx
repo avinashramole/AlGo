@@ -31,6 +31,10 @@ export function MemberPlans() {
 
   useEffect(() => {
     void load();
+    const id = window.setInterval(() => {
+      void load();
+    }, 8000);
+    return () => window.clearInterval(id);
   }, [load]);
 
   const pickBroker = async (brokerId: string) => {
@@ -46,11 +50,11 @@ export function MemberPlans() {
     }
   };
 
-  const addBalance = async () => {
+  const addBalance = async (channel: "gpay" | "phonepe") => {
     setBusy("topup");
     setError("");
     try {
-      const result = await startWalletTopup(Number(amount), "gpay");
+      const result = await startWalletTopup(Number(amount), channel);
       setCheckout(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add balance");
@@ -119,14 +123,33 @@ export function MemberPlans() {
           <button
             type="button"
             disabled={busy === "topup" || !desk.payments.ready}
-            onClick={() => void addBalance()}
+            onClick={() => void addBalance("gpay")}
             className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
           >
-            {busy === "topup" ? "Opening..." : "Add balance"}
+            {busy === "topup" ? "Opening..." : "Add via GPay"}
+          </button>
+          <button
+            type="button"
+            disabled={busy === "topup" || !desk.payments.ready}
+            onClick={() => void addBalance("phonepe")}
+            className="h-10 rounded-xl bg-[#5f259f] px-4 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Add via PhonePe
           </button>
         </div>
         {!desk.payments.ready ? (
           <p className="mt-2 text-xs font-semibold text-amber-700">Admin has not set a GPay / PhonePe mobile yet.</p>
+        ) : null}
+        {desk.topups.length ? (
+          <div className="mt-4 space-y-1">
+            <div className="text-[11px] font-bold uppercase text-slate-400">Recent top-ups</div>
+            {desk.topups.slice(0, 5).map((row) => (
+              <div key={row.id} className="flex justify-between text-xs">
+                <span className="font-semibold">{formatInr(row.amount)}</span>
+                <span className="uppercase text-slate-500">{row.status}</span>
+              </div>
+            ))}
+          </div>
         ) : null}
       </section>
 
