@@ -10,6 +10,7 @@ import {
   enableDhanAuto,
   getSnapshot,
   placeOrder,
+  refreshDhanToken,
   selectOptionChain,
   squareOff,
   toggleAlgo,
@@ -118,7 +119,20 @@ type MarketContextValue = {
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
-  enableAuto: (payload: { clientId: string; pin: string; totpSecret: string }) => Promise<void>;
+  enableAuto: (payload: {
+    clientId?: string;
+    loginId?: string;
+    pin?: string;
+    password?: string;
+    totpSecret?: string;
+  }) => Promise<void>;
+  refreshToken: (payload?: {
+    clientId?: string;
+    loginId?: string;
+    pin?: string;
+    password?: string;
+    totpSecret?: string;
+  }) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
   activate: (id: string) => Promise<void>;
   routeAlgo: (id: string, brokerId: string) => Promise<void>;
@@ -186,8 +200,19 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },
-      enableAuto: async (payload: { clientId: string; pin: string; totpSecret: string }) => {
+      enableAuto: async (payload: {
+        clientId?: string;
+        loginId?: string;
+        pin?: string;
+        password?: string;
+        totpSecret?: string;
+      }) => {
         const result = await enableDhanAuto(payload);
+        if (result.snapshot) setData(result.snapshot);
+        else await refresh();
+      },
+      refreshToken: async (payload = {}) => {
+        const result = await refreshDhanToken(payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();
       },

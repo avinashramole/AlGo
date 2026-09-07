@@ -4,7 +4,7 @@ import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
 
 export function Brokers() {
-  const { data, connect, enableAuto, disconnect, activate } = useMarket();
+  const { data, connect, enableAuto, refreshToken, disconnect, activate } = useMarket();
   const brokers = data.brokers || [];
   const feed = data.dhanFeed;
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
@@ -67,14 +67,36 @@ export function Brokers() {
     setError("");
     try {
       await enableAuto({
+        loginId: dhanClientId || feed?.clientId || "",
         clientId: dhanClientId || feed?.clientId || "",
         pin: dhanPin,
+        password: dhanPin,
         totpSecret: dhanTotp,
       });
       setDhanPin("");
       setDhanTotp("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate token");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeTokenNow = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await refreshToken({
+        loginId: dhanClientId || feed?.clientId || "",
+        clientId: dhanClientId || feed?.clientId || "",
+        pin: dhanPin,
+        password: dhanPin,
+        totpSecret: dhanTotp,
+      });
+      setDhanPin("");
+      setDhanTotp("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset token");
     } finally {
       setBusy(false);
     }
@@ -118,11 +140,15 @@ export function Brokers() {
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          Dhan Access Tokens last <b>24 hours</b>. Paste a token once, or save PIN + TOTP secret so T2S generates a new
-          token and keeps LIVE after a VPS restart. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste
-          the <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
+          Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
+          <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
+          no password token API). <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
+          then <b>generateAccessToken</b> with PIN + TOTP if that token is already dead. Save PIN + TOTP once (or set{" "}
+          <code>DHAN_CLIENT_ID</code>, <code>DHAN_PIN</code>, <code>DHAN_TOTP_SECRET</code>). A <b>429</b> is a rate
+          limit, not an expired token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the{" "}
+          <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
         </p>
-        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
           <Mini label="Token" value={feed?.tokenHint || "not set"} />
           <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
           <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
@@ -134,7 +160,30 @@ export function Brokers() {
           <Mini
             label="Auto token"
             value={
-              feed?.autoMode === "generate" ? "PIN + TOTP" : feed?.autoMode === "renew" ? "renew 24h" : "off"
+              feed?.autoMode === "generate"
+                ? "PIN + TOTP · 8:00 AM"
+                : feed?.autoMode === "renew"
+                  ? "renew 8:00 AM"
+                  : "off"
+            }
+          />
+          <Mini
+            label="Renews"
+            value={
+              feed?.needsFresh
+                ? "now · overdue"
+                : feed?.nextRenewAt
+                  ? new Date(feed.nextRenewAt).toLocaleString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      day: "2-digit",
+                      month: "short",
+                      hour12: true,
+                    })
+                  : feed?.autoRenew
+                    ? "8:00 AM IST"
+                    : "—"
             }
           />
           <Mini
@@ -170,19 +219,29 @@ export function Brokers() {
           </div>
         ) : null}
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}
+        {feed?.autoMode === "generate" && feed?.needsFresh ? (
+          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            Token is from before <b>8:00 AM IST</b> today. Auto-renew should run now. Click <b>Reset token now</b> if
+            it is still stuck
+            {feed?.renewalBlockedUntil
+              ? ` (cooldown until ${new Date(feed.renewalBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })})`
+              : ""}
+            , then check VPS logs for <code>Dhan token auto-renew</code>.
+          </div>
+        ) : null}
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <label className="block text-xs font-semibold">
-            Client ID
+            Login ID (Client ID)
             <input
               className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
               value={dhanClientId}
               onChange={(event) => setDhanClientId(event.target.value)}
-              placeholder={feed?.clientId || "Client ID"}
+              placeholder={feed?.clientId || "Dhan login / Client ID"}
               autoComplete="off"
             />
           </label>
           <label className="block text-xs font-semibold">
-            Dhan PIN
+            PIN (not website password)
             <input
               type="password"
               inputMode="numeric"
@@ -205,14 +264,27 @@ export function Brokers() {
             />
           </label>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void connectDhanAuto()}
-          className="mt-2 h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
-        >
-          {busy ? "Generating..." : feed?.live ? "Refresh token with PIN + TOTP" : "Generate token and keep LIVE"}
-        </button>
+        <p className="mt-2 text-[11px] leading-snug text-slate-500">
+          Save writes <code>/opt/t2s/.env</code> and <code>tokan.env</code>. Do not rely on the hosting file manager for hidden <code>.env</code> files — they often do not save. Use the Dhan PIN and the long Setup TOTP secret from web.dhan.co, not the 6-digit code.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void connectDhanAuto()}
+            className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? "Working..." : "Save PIN + TOTP and generate"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void changeTokenNow()}
+            className="h-9 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold disabled:opacity-60"
+          >
+            {busy ? "Working..." : "Reset token now"}
+          </button>
+        </div>
         {error && selected === null ? (
           <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>
         ) : null}
@@ -274,12 +346,12 @@ export function Brokers() {
             {broker.id === "dhan" && !broker.liveFeed ? (
               <div className="mt-3 space-y-2">
                 <label className="block text-xs font-semibold">
-                  Client ID
+                  Login ID (Client ID)
                   <input
                     className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
                     value={dhanClientId}
                     onChange={(event) => setDhanClientId(event.target.value)}
-                    placeholder="Paste Client ID from web.dhan.co"
+                    placeholder="Dhan login / Client ID from web.dhan.co"
                     autoComplete="off"
                   />
                 </label>

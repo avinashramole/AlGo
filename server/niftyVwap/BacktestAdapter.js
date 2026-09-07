@@ -1,4 +1,4 @@
-import { niftyVwapConfig } from "./config.js";
+import { optionEngineConfig } from "./config.js";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { sessionKeyIST, sessionVwap } from "./VwapSignalEngine.js";
 import { NiftyVwapStrategy } from "./NiftyVwapStrategy.js";
@@ -70,8 +70,37 @@ function replayFillBook() {
   };
 }
 
+function groupBars(candles = [], barMs) {
+  const ms = Number(barMs) || 5 * 60 * 1000;
+  const map = new Map();
+  for (const bar of candles) {
+    const t = Number(bar.time);
+    if (!Number.isFinite(t)) continue;
+    const bucket = Math.floor(t / ms) * ms;
+    const prev = map.get(bucket);
+    if (!prev) {
+      map.set(bucket, {
+        time: bucket,
+        open: Number(bar.open),
+        high: Number(bar.high),
+        low: Number(bar.low),
+        close: Number(bar.close),
+        volume: Number(bar.volume || 0),
+      });
+    } else {
+      prev.high = Math.max(prev.high, Number(bar.high));
+      prev.low = Math.min(prev.low, Number(bar.low));
+      prev.close = Number(bar.close);
+      prev.volume += Number(bar.volume || 0);
+    }
+  }
+  return [...map.values()].sort((a, b) => a.time - b.time);
+}
+
 export function runNiftyVwapBacktest(algo, candles = []) {
-  const cfg = niftyVwapConfig(algo);
+  const cfg = optionEngineConfig(algo);
+  const barMs = cfg.barMinutes * 60 * 1000;
+  const series = cfg.barMinutes === 5 ? candles : groupBars(candles, barMs);
   const book = replayFillBook();
   const adapter = {
     mode: "backtest",
@@ -82,7 +111,7 @@ export function runNiftyVwapBacktest(algo, candles = []) {
   const peBars = [];
   const days = new Map();
 
-  for (const bar of candles) {
+  for (const bar of series) {
     const day = sessionKeyIST(bar.time);
     if (!days.has(day)) days.set(day, []);
     days.get(day).push(bar);
@@ -138,8 +167,8 @@ export function runNiftyVwapBacktest(algo, candles = []) {
   const pnl = trades.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   return {
     ranAt: new Date().toISOString(),
-    timeframe: "5m",
-    bars: candles.length,
+    timeframe: cfg.timeframe,
+    bars: series.length,
     trades: trades.length,
     wins,
     losses: trades.length - wins,

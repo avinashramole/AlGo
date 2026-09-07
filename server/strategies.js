@@ -1,4 +1,4 @@
-import { defaultNiftyVwapAlgo, isNiftyVwapAlgo, niftyVwapConfig, NIFTY_VWAP_KIND } from "./niftyVwap/config.js";
+import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
@@ -10,7 +10,7 @@ const SYMBOLS = [
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
 const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
-const OPERATORS = ["crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
+const OPERATORS = ["close_above", "close_below", "crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
 const SOURCES = [
   "price",
   "vwap",
@@ -27,6 +27,8 @@ const SOURCES = [
 ];
 
 const OP_LABEL = {
+  close_above: "close above",
+  close_below: "close below",
   crosses_above: "crosses above",
   crosses_below: "crosses below",
   above: "is above",
@@ -64,6 +66,60 @@ export function lotFor(symbol) {
 
 function pick(list, value, fallback) {
   return list.includes(value) ? value : fallback;
+}
+
+const MAX_CONDITION_ROWS = 5;
+
+export function conditionRowFrom(input = {}, fallback = {}) {
+  return {
+    left: pick(SOURCES, input.left, fallback.left || "price"),
+    op: pick(OPERATORS, input.op, fallback.op || "close_above"),
+    right: pick(SOURCES, input.right, fallback.right || "vwap"),
+    value: num(input.value, fallback.value ?? 0),
+  };
+}
+
+export function conditionGroupFrom(group, fallbackRow) {
+  const join = group?.join === "or" ? "or" : "and";
+  const raw = Array.isArray(group?.rows) ? group.rows : [];
+  const fallback = conditionRowFrom(fallbackRow, { left: "price", op: "close_above", right: "vwap", value: 0 });
+  const rows = (raw.length ? raw : [fallback]).slice(0, MAX_CONDITION_ROWS).map((row) => conditionRowFrom(row, fallback));
+  return { join, rows: rows.length ? rows : [fallback] };
+}
+
+export function groupsFromFlat(flat = {}) {
+  return {
+    buyConditions: conditionGroupFrom(undefined, {
+      left: flat.buyLeft || "price",
+      op: flat.buyOp || "close_above",
+      right: flat.buyRight || "vwap",
+      value: flat.buyValue || 0,
+    }),
+    sellConditions: conditionGroupFrom(undefined, {
+      left: flat.sellLeft || "price",
+      op: flat.sellOp || "close_below",
+      right: flat.sellRight || "vwap",
+      value: flat.sellValue || 0,
+    }),
+  };
+}
+
+export function flatFromGroup(group, side) {
+  const row = group?.rows?.[0] || {};
+  if (side === "buy") {
+    return {
+      buyLeft: row.left || "price",
+      buyOp: row.op || "close_above",
+      buyRight: row.right || "vwap",
+      buyValue: row.value || 0,
+    };
+  }
+  return {
+    sellLeft: row.left || "price",
+    sellOp: row.op || "close_below",
+    sellRight: row.right || "vwap",
+    sellValue: row.value || 0,
+  };
 }
 
 export function defaultConditions(kind, indicator, pattern) {
@@ -153,11 +209,11 @@ export function defaultConditions(kind, indicator, pattern) {
   }
   return {
     buyLeft: "price",
-    buyOp: "crosses_above",
+    buyOp: "close_above",
     buyRight: "vwap",
     buyValue: 0,
     sellLeft: "price",
-    sellOp: "crosses_below",
+    sellOp: "close_below",
     sellRight: "vwap",
     sellValue: 0,
   };
@@ -170,6 +226,12 @@ export function formatCondition(left, op, right, value) {
   return `${leftLabel} ${opLabel} ${rightLabel}`;
 }
 
+export function formatConditionGroup(group, fallbackRow) {
+  const next = conditionGroupFrom(group, fallbackRow);
+  const parts = next.rows.map((row) => formatCondition(row.left, row.op, row.right, row.value));
+  return parts.join(next.join === "or" ? " OR " : " AND ");
+}
+
 export function strikeOffsetLabel(offset) {
   const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
   if (n === 0) return "ATM";
@@ -177,6 +239,7 @@ export function strikeOffsetLabel(offset) {
 }
 
 export function contractLabel(algo) {
+  if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
@@ -192,6 +255,11 @@ export function summarizeAlgo(algo) {
   const lots = algo.lots || 1;
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
   const contract = contractLabel(algo);
+  if (isNiftyVwapReversalAlgo(algo)) {
+    const sl = algo.initialSlPct || 15;
+    const tgt = algo.targetPct || 30;
+    return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · ${size}`;
+  }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
     const tgt = algo.targetPct || 40;
@@ -202,21 +270,85 @@ export function summarizeAlgo(algo) {
   }
   if (algo.kind === "price-action") {
     const pattern = algo.pattern || "ORB";
-    return `Price action · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · ${pattern} · ${tf} · ${size}`;
+    return `Price action · ${contract} · Buy when ${formatConditionGroup(algo.buyConditions, {
+      left: algo.buyLeft,
+      op: algo.buyOp,
+      right: algo.buyRight,
+      value: algo.buyValue,
+    })} · ${pattern} · ${tf} · ${size}`;
   }
-  return `Indicator · ${contract} · Buy when ${formatCondition(algo.buyLeft, algo.buyOp, algo.buyRight, algo.buyValue)} · Sell when ${formatCondition(algo.sellLeft, algo.sellOp, algo.sellRight, algo.sellValue)} · ${tf} · ${size}`;
+  return `Indicator · ${contract} · Buy when ${formatConditionGroup(algo.buyConditions, {
+    left: algo.buyLeft,
+    op: algo.buyOp,
+    right: algo.buyRight,
+    value: algo.buyValue,
+  })} · Sell when ${formatConditionGroup(algo.sellConditions, {
+    left: algo.sellLeft,
+    op: algo.sellOp,
+    right: algo.sellRight,
+    value: algo.sellValue,
+  })} · ${tf} · ${size}`;
 }
 
 export function normalizeAlgo(input = {}, existing = {}) {
   const merged = { ...existing, ...input };
-  const keepNiftyVwap = isNiftyVwapAlgo(merged) && input.kind !== "indicator" && input.kind !== "price-action";
+  const keepReversal =
+    isNiftyVwapReversalAlgo(merged) &&
+    input.kind !== "indicator" &&
+    input.kind !== "price-action" &&
+    input.kind !== "nifty-vwap";
+  if (keepReversal) {
+    const cfg = niftyVwapReversalConfig(merged);
+    const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+      ? input.runMode
+      : ["live", "paper", "backtest"].includes(existing.runMode)
+        ? existing.runMode
+        : "live";
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultNiftyVwapReversalAlgo({
+        ...merged,
+        name: String(input.name || existing.name || "").trim() || "NIFTY 15m VWAP reversal",
+        runMode,
+        lots: cfg.lots,
+        lotSize: cfg.lotSize,
+      }),
+      id: existing.id || `a${Date.now()}`,
+      kind: NIFTY_VWAP_REVERSAL_KIND,
+      slPct: cfg.initialSlPct,
+      initialSlPct: cfg.initialSlPct,
+      targetPct: cfg.targetPct,
+      eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
+      vwapState: existing.vwapState,
+      enabled: creating ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return next;
+  }
+  const keepNiftyVwap =
+    isNiftyVwapAlgo(merged) &&
+    input.kind !== "indicator" &&
+    input.kind !== "price-action" &&
+    input.kind !== "nifty-vwap-reversal";
   if (keepNiftyVwap) {
     const cfg = niftyVwapConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
       ? input.runMode
       : ["live", "paper", "backtest"].includes(existing.runMode)
         ? existing.runMode
-        : "paper";
+        : "live";
     const creating = !existing.id;
     const next = {
       ...existing,
@@ -260,19 +392,52 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const side = ["BUY", "SELL", "BOTH"].includes(input.side) ? input.side : existing.side || "BUY";
   const timeframe = TIMEFRAMES.includes(input.timeframe) ? input.timeframe : existing.timeframe || "5m";
   const defaults = defaultConditions(kind, indicator, pattern);
-  const hasBuy = Boolean(input.buyOp || existing.buyOp);
-  const conditions = hasBuy
-    ? {
-        buyLeft: pick(SOURCES, input.buyLeft || existing.buyLeft, defaults.buyLeft),
-        buyOp: pick(OPERATORS, input.buyOp || existing.buyOp, defaults.buyOp),
-        buyRight: pick(SOURCES, input.buyRight || existing.buyRight, defaults.buyRight),
-        buyValue: num(input.buyValue, existing.buyValue ?? defaults.buyValue),
-        sellLeft: pick(SOURCES, input.sellLeft || existing.sellLeft, defaults.sellLeft),
-        sellOp: pick(OPERATORS, input.sellOp || existing.sellOp, defaults.sellOp),
-        sellRight: pick(SOURCES, input.sellRight || existing.sellRight, defaults.sellRight),
-        sellValue: num(input.sellValue, existing.sellValue ?? defaults.sellValue),
-      }
-    : defaults;
+  const hasBuy = Boolean(
+    input.buyOp ||
+      existing.buyOp ||
+      input.buyConditions?.rows?.length ||
+      existing.buyConditions?.rows?.length,
+  );
+  const hasSell = Boolean(
+    input.sellOp ||
+      existing.sellOp ||
+      input.sellConditions?.rows?.length ||
+      existing.sellConditions?.rows?.length,
+  );
+  const buyFallback = {
+    left: pick(SOURCES, input.buyLeft || existing.buyLeft, defaults.buyLeft),
+    op: pick(OPERATORS, input.buyOp || existing.buyOp, defaults.buyOp),
+    right: pick(SOURCES, input.buyRight || existing.buyRight, defaults.buyRight),
+    value: num(input.buyValue, existing.buyValue ?? defaults.buyValue),
+  };
+  const sellFallback = {
+    left: pick(SOURCES, input.sellLeft || existing.sellLeft, defaults.sellLeft),
+    op: pick(OPERATORS, input.sellOp || existing.sellOp, defaults.sellOp),
+    right: pick(SOURCES, input.sellRight || existing.sellRight, defaults.sellRight),
+    value: num(input.sellValue, existing.sellValue ?? defaults.sellValue),
+  };
+  const buyConditions = hasBuy
+    ? conditionGroupFrom(input.buyConditions || existing.buyConditions, buyFallback)
+    : conditionGroupFrom(undefined, {
+        left: defaults.buyLeft,
+        op: defaults.buyOp,
+        right: defaults.buyRight,
+        value: defaults.buyValue,
+      });
+  const sellConditions = hasSell
+    ? conditionGroupFrom(input.sellConditions || existing.sellConditions, sellFallback)
+    : conditionGroupFrom(undefined, {
+        left: defaults.sellLeft,
+        op: defaults.sellOp,
+        right: defaults.sellRight,
+        value: defaults.sellValue,
+      });
+  const conditions = {
+    ...flatFromGroup(buyConditions, "buy"),
+    ...flatFromGroup(sellConditions, "sell"),
+    buyConditions,
+    sellConditions,
+  };
   const lots = Math.max(1, Math.round(num(input.lots, existing.lots || 1)));
   const lotSize = lotFor(symbol);
   const name = String(input.name || existing.name || "").trim() || (kind === "indicator" ? `${indicator} ${symbol}` : `${pattern} ${symbol}`);
@@ -280,7 +445,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     ? input.runMode
     : ["live", "paper", "backtest"].includes(existing.runMode)
       ? existing.runMode
-      : "paper";
+        : "live";
   const instrument = (input.instrument || existing.instrument) === "option" ? "option" : "future";
   const optionType = (input.optionType || existing.optionType) === "PE" ? "PE" : "CE";
   const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
@@ -328,65 +493,18 @@ export function normalizeAlgo(input = {}, existing = {}) {
 export function seedAlgos() {
   return [
     normalizeAlgo(
-      {
-        name: "VWAP Depth",
-        kind: "indicator",
-        symbol: "NIFTY",
-        indicator: "VWAP",
-        timeframe: "5m",
-        side: "BUY",
-        lots: 1,
-        slPct: 0.35,
-        targetPct: 0.8,
-        buyLeft: "price",
-        buyOp: "crosses_above",
-        buyRight: "vwap",
-        sellLeft: "price",
-        sellOp: "crosses_below",
-        sellRight: "vwap",
-      },
-      { id: "a1", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
-    ),
-    normalizeAlgo(
-      {
-        name: "Momentum Rider",
-        kind: "indicator",
-        symbol: "FINNIFTY",
-        indicator: "RSI",
-        period: 14,
-        timeframe: "5m",
-        side: "BOTH",
-        lots: 1,
-        buyLeft: "rsi",
-        buyOp: "lt",
-        buyRight: "value",
-        buyValue: 32,
-        sellLeft: "rsi",
-        sellOp: "gt",
-        sellRight: "value",
-        sellValue: 68,
-      },
-      { id: "a2", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
-    ),
-    normalizeAlgo(
-      {
-        name: "ORB Breakout",
-        kind: "price-action",
-        symbol: "NIFTY",
-        pattern: "ORB",
-        rangeMinutes: 15,
-        timeframe: "5m",
-        side: "BOTH",
-        lots: 1,
-      },
-      { id: "a3", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
-    ),
-    normalizeAlgo(
       defaultNiftyVwapAlgo({
         name: "NIFTY VWAP ATM",
-        runMode: "paper",
+        runMode: "live",
       }),
-      { id: "a4", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
+      { id: "a4", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
+    ),
+    normalizeAlgo(
+      defaultNiftyVwapReversalAlgo({
+        name: "NIFTY 15m VWAP reversal",
+        runMode: "live",
+      }),
+      { id: "a5", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
   ];
 }

@@ -90,6 +90,39 @@ export function dropExpired(dates) {
     .sort();
 }
 
+export function weekdayNameIST(ymd) {
+  const date = normalizeExpiry(ymd);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "";
+  const probe = new Date(`${date}T12:00:00+05:30`);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(probe);
+}
+
+export function isLastWeekdayOfMonth(ymd, weekday) {
+  const date = normalizeExpiry(ymd);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const [year, month] = date.split("-").map(Number);
+  return lastWeekdayOfMonth(year, month, weekday) === date;
+}
+
+/** NIFTY weekly = Tuesday. Monthly is the last Tuesday of the month — skip that one. */
+export function isWeeklyOptionExpiry(ymd, symbol = "NIFTY") {
+  const und = getUnderlying(symbol);
+  const date = normalizeExpiry(ymd);
+  if (weekdayNameIST(date) !== und.expiryWeekday) return false;
+  return !isLastWeekdayOfMonth(date, und.expiryWeekday);
+}
+
+export function nearestWeeklyExpiry(dates, symbol = "NIFTY") {
+  const und = getUnderlying(symbol);
+  const listed = dropExpired(dates && dates.length ? dates : upcomingExpiries(symbol, 12));
+  const weekly = listed.filter((date) => isWeeklyOptionExpiry(date, symbol));
+  if (weekly.length) return weekly[0];
+  const generated = upcomingExpiries(symbol, 12).filter((date) => isWeeklyOptionExpiry(date, symbol));
+  if (generated.length) return generated[0];
+  const sameWeekday = listed.filter((date) => weekdayNameIST(date) === und.expiryWeekday);
+  return sameWeekday[0] || listed[0] || "";
+}
+
 function lastWeekdayOfMonth(year, month, weekday) {
   const lastDay = new Date(Date.UTC(year, month, 0, 6, 30)).getUTCDate();
   for (let day = lastDay; day >= 1; day -= 1) {

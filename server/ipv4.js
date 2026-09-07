@@ -55,6 +55,7 @@ export async function ipv4Request(url, { method = "GET", headers = {}, body, tim
           resolve({
             ok: res.statusCode >= 200 && res.statusCode < 300,
             status: res.statusCode || 0,
+            headers: res.headers || {},
             text: async () => text,
           });
         });

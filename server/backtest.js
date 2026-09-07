@@ -111,7 +111,21 @@ function readValue(src, sources, numberValue) {
   return Number(sources[src] ?? 0);
 }
 
+function isCloseOp(op) {
+  return op === "close_above" || op === "close_below";
+}
+
+function completedBarIndex(candles, i, timeframe, now = Date.now()) {
+  if (i < 0) return -1;
+  const barMs = barMinutes(timeframe) * 60_000;
+  const t = Number(candles[i]?.time);
+  if (Number.isFinite(t) && now < t + barMs) return i - 1;
+  return i;
+}
+
 function hit(op, left, right, prevLeft, prevRight) {
+  if (op === "close_above") return left > right;
+  if (op === "close_below") return left < right;
   if (op === "crosses_above") return prevLeft <= prevRight && left > right;
   if (op === "crosses_below") return prevLeft >= prevRight && left < right;
   if (op === "above" || op === "gt") return left > right;
@@ -122,21 +136,49 @@ function hit(op, left, right, prevLeft, prevRight) {
   return false;
 }
 
+function evaluateRow(candles, idx, algo, row) {
+  const now = sourcesAt(candles, idx, algo);
+  const prev = sourcesAt(candles, idx - 1, algo);
+  const left = readValue(row.left || "price", now, row.value);
+  const right = readValue(row.right || "vwap", now, row.value);
+  const prevLeft = readValue(row.left || "price", prev, row.value);
+  const prevRight = readValue(row.right || "vwap", prev, row.value);
+  return hit(row.op || "crosses_above", left, right, prevLeft, prevRight);
+}
+
+function evaluateGroup(candles, idx, algo, group) {
+  const hits = group.rows.map((row) => evaluateRow(candles, idx, algo, row));
+  return group.join === "or" ? hits.some(Boolean) : hits.every(Boolean);
+}
+
+function groupFromAlgo(algo, side) {
+  const fallback =
+    side === "buy"
+      ? { left: algo.buyLeft || "price", op: algo.buyOp || "crosses_above", right: algo.buyRight || "vwap", value: algo.buyValue }
+      : { left: algo.sellLeft || "price", op: algo.sellOp || "crosses_below", right: algo.sellRight || "vwap", value: algo.sellValue };
+  const group = side === "buy" ? algo.buyConditions : algo.sellConditions;
+  const join = group?.join === "or" ? "or" : "and";
+  const raw = Array.isArray(group?.rows) ? group.rows : [];
+  const rows = (raw.length ? raw : [fallback]).slice(0, 5).map((row) => ({
+    left: row.left || fallback.left,
+    op: row.op || fallback.op,
+    right: row.right || fallback.right,
+    value: row.value ?? fallback.value,
+  }));
+  return { join, rows };
+}
+
 export function evaluateSignals(candles, i, algo) {
-  if (i < 2) return { buy: false, sell: false };
-  const now = sourcesAt(candles, i, algo);
-  const prev = sourcesAt(candles, i - 1, algo);
-  const buyLeft = readValue(algo.buyLeft || "price", now, algo.buyValue);
-  const buyRight = readValue(algo.buyRight || "vwap", now, algo.buyValue);
-  const sellLeft = readValue(algo.sellLeft || "price", now, algo.sellValue);
-  const sellRight = readValue(algo.sellRight || "vwap", now, algo.sellValue);
-  const prevBuyLeft = readValue(algo.buyLeft || "price", prev, algo.buyValue);
-  const prevBuyRight = readValue(algo.buyRight || "vwap", prev, algo.buyValue);
-  const prevSellLeft = readValue(algo.sellLeft || "price", prev, algo.sellValue);
-  const prevSellRight = readValue(algo.sellRight || "vwap", prev, algo.sellValue);
+  const buyGroup = groupFromAlgo(algo, "buy");
+  const sellGroup = groupFromAlgo(algo, "sell");
+  const closeOps = [...buyGroup.rows, ...sellGroup.rows].some((row) => isCloseOp(row.op));
+  let idx = i;
+  if (closeOps) idx = completedBarIndex(candles, i, algo.timeframe);
+  if (idx < 2) return { buy: false, sell: false };
+  const now = sourcesAt(candles, idx, algo);
   return {
-    buy: hit(algo.buyOp || "crosses_above", buyLeft, buyRight, prevBuyLeft, prevBuyRight),
-    sell: hit(algo.sellOp || "crosses_below", sellLeft, sellRight, prevSellLeft, prevSellRight),
+    buy: evaluateGroup(candles, idx, algo, buyGroup),
+    sell: evaluateGroup(candles, idx, algo, sellGroup),
     price: now.price,
   };
 }

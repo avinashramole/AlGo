@@ -4,7 +4,9 @@ import {
   atmStrike,
   buildSyntheticChain,
   chainStats,
+  dropExpired,
   getUnderlying,
+  nearestWeeklyExpiry,
   normalizeExpiry,
   upcomingExpiries,
   withExpiryLabels,
@@ -14,12 +16,13 @@ import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import {
-  isNiftyVwapAlgo,
+  isNiftyOptionEngineAlgo,
+  isNiftyVwapReversalAlgo,
   LiveTradingAdapter,
   NiftyVwapStrategy,
   noteBrokerRejection,
   noteFeedReconnect,
-  niftyVwapConfig,
+  optionEngineConfig,
   PaperTradingAdapter,
   PositionManager,
   runtimeState,
@@ -351,7 +354,9 @@ const state = {
     autoRenew: false,
     autoMode: "off",
     tokenExpiry: null,
+    nextRenewAt: null,
     autoStart: false,
+    needsFresh: false,
   },
   liveCandles: [],
 };
@@ -393,7 +398,7 @@ export function queueLiveAlgoOrder(payload) {
 export function noteLiveAlgoOrderResult(payload, live, error) {
   const name = String(payload?.strategy || "");
   if (!name) return;
-  const algo = (state.algos || []).find((item) => item.name === name && isNiftyVwapAlgo(item));
+  const algo = (state.algos || []).find((item) => item.name === name && isNiftyOptionEngineAlgo(item));
   if (!algo) return;
   const status = String(live?.status || "").toUpperCase();
   if (error || status === "REJECTED" || status === "CANCELLED") {
@@ -417,11 +422,38 @@ function upsertOptionBar(list, barTime, ltp) {
   return bars;
 }
 
-function optionPremium(symbol, strike, option) {
+function optionPremium(symbol, strike, option, expiry) {
   const pack = chainForSymbol(symbol);
+  if (expiry && pack?.meta?.expiry && normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)) {
+    return 0;
+  }
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
   const ltp = option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);
   return ltp > 0 ? round2(ltp) : 0;
+}
+
+function niftyListedExpiries(pack) {
+  const listed = dropExpired(pack?.meta?.expiries || []);
+  if (listed.length) return listed;
+  return upcomingExpiries("NIFTY", 12);
+}
+
+function expiryForNiftyVwap(algo, pack) {
+  const listed = niftyListedExpiries(pack);
+  if (isNiftyVwapReversalAlgo(algo)) {
+    return nearestWeeklyExpiry(listed, "NIFTY") || listed[0] || "";
+  }
+  return pack?.meta?.expiry || listed[0] || "";
+}
+
+function preferWeeklyDeskForReversal() {
+  const running = (state.algos || []).some((algo) => isNiftyVwapReversalAlgo(algo) && algo.enabled);
+  if (!running) return;
+  if (String(state.optionMeta?.symbol || "").toUpperCase() !== "NIFTY") return;
+  const weekly = nearestWeeklyExpiry(niftyListedExpiries({ meta: state.optionMeta }), "NIFTY");
+  if (weekly && normalizeExpiry(state.optionMeta.expiry) !== weekly) {
+    state.optionMeta = { ...state.optionMeta, expiry: weekly };
+  }
 }
 
 function positionsForNiftyVwap(algo, mode) {
@@ -441,7 +473,7 @@ let lastNiftyVwapFeed = true;
 function noteNiftyVwapFeed(feedLive) {
   if (feedLive && lastNiftyVwapFeed === false) {
     for (const algo of state.algos || []) {
-      if (isNiftyVwapAlgo(algo) && algo.enabled) noteFeedReconnect(algo);
+      if (isNiftyOptionEngineAlgo(algo) && algo.enabled) noteFeedReconnect(algo);
     }
   }
   lastNiftyVwapFeed = Boolean(feedLive);
@@ -450,15 +482,18 @@ function noteNiftyVwapFeed(feedLive) {
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const now = Date.now();
   const session = nseMarketSession();
-  const config = niftyVwapConfig(algo);
+  const config = optionEngineConfig(algo);
   const vs = runtimeState(algo);
   const positions = positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   if (mode === "live" && !session.open && !open) return;
-  const futuresBars = getCandles("5m");
+  if (isNiftyVwapReversalAlgo(algo)) preferWeeklyDeskForReversal();
+  const futuresBars = getCandles(config.timeframe || "5m");
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
   const und = getUnderlying("NIFTY");
+  const pack = chainForSymbol("NIFTY");
+  const expiry = expiryForNiftyVwap(algo, pack);
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
@@ -471,12 +506,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     vs.peBars = [];
     vs.peStrike = peStrike;
   }
-  const ceLtp = optionPremium("NIFTY", ceStrike, "CE");
-  const peLtp = optionPremium("NIFTY", peStrike, "PE");
+  const ceLtp = optionPremium("NIFTY", ceStrike, "CE", expiry);
+  const peLtp = optionPremium("NIFTY", peStrike, "PE", expiry);
   vs.ceBars = upsertOptionBar(vs.ceBars, barTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, barTime, peLtp);
-  const pack = chainForSymbol("NIFTY");
-  const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
@@ -518,7 +551,7 @@ function algoOrderFields(algo, side, trade) {
 }
 
 export function resolveAlgoTrade(algo) {
-  if (isNiftyVwapAlgo(algo)) {
+  if (isNiftyOptionEngineAlgo(algo)) {
     const symbol = "NIFTY";
     const und = getUnderlying(symbol);
     const pack = chainForSymbol(symbol);
@@ -526,7 +559,9 @@ export function resolveAlgoTrade(algo) {
     const vs = algo.vwapState || {};
     const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
     const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
-    const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+    const expiry = isNiftyVwapReversalAlgo(algo)
+      ? nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
+      : pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
     const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
     const ceLtp = Number(row?.callLtp);
     const peLtp = Number(row?.putLtp);
@@ -535,19 +570,26 @@ export function resolveAlgoTrade(algo) {
     const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
-    else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
+    else if (isNiftyVwapReversalAlgo(algo) && expiry && pack?.meta?.expiry && normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)) {
+      hint = `Waiting for weekly ${expiry} chain (not monthly)`;
+    } else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
     else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
     else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+    const weeklyReady =
+      !isNiftyVwapReversalAlgo(algo) ||
+      !expiry ||
+      !pack?.meta?.expiry ||
+      normalizeExpiry(pack.meta.expiry) === normalizeExpiry(expiry);
     return {
       kind: "option",
       symbol: contract,
       option: option || "CE",
       strike,
       expiry,
-      ltp: premium > 0 ? round2(premium) : 0,
+      ltp: premium > 0 && weeklyReady ? round2(premium) : 0,
       label: expiry ? `${contract} · ${expiry}` : contract,
       source: pack?.meta?.source || "",
-      ready: liveChain && (ceLtp > 0 || peLtp > 0),
+      ready: liveChain && weeklyReady && (ceLtp > 0 || peLtp > 0),
       hint,
     };
   }
@@ -881,7 +923,7 @@ export function toggleAlgo(id) {
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = "WAIT";
-    if (isNiftyVwapAlgo(algo)) {
+    if (isNiftyOptionEngineAlgo(algo)) {
       const vs = runtimeState(algo);
       vs.inFlight = false;
       vs.exitQueued = false;
@@ -966,11 +1008,12 @@ export function backtestAlgo(id, options = {}) {
   if (!algo) return { error: "Strategy not found" };
   const window = resolveBacktestWindow(options);
   if (window.error) return { error: window.error };
-  const niftyVwap = isNiftyVwapAlgo(algo);
-  const maxVwapDays = 25;
+  const niftyVwap = isNiftyOptionEngineAlgo(algo);
+  const cfg = niftyVwap ? optionEngineConfig(algo) : null;
+  const maxVwapDays = cfg?.barMinutes >= 15 ? 60 : 25;
   const vwapFrom = niftyVwap && window.days > maxVwapDays ? shiftYmd(window.to, -(maxVwapDays - 1)) : window.from;
   const vwapFromMs = Date.parse(`${vwapFrom}T09:15:00+05:30`);
-  const wantedTf = niftyVwap ? "5m" : pickBacktestTimeframe(algo.timeframe, window.days);
+  const wantedTf = niftyVwap ? cfg.timeframe : pickBacktestTimeframe(algo.timeframe, window.days);
   let candles = usableCandles(options.candles, niftyVwap ? vwapFromMs : window.fromMs, window.toMs);
   let sample = false;
   let source = "dhan";
@@ -992,7 +1035,7 @@ export function backtestAlgo(id, options = {}) {
   if (candles.length < 32) {
     return { error: "Not enough bars in that date range" };
   }
-  const usedTf = niftyVwap ? "5m" : inferTimeframe(candles, wantedTf);
+  const usedTf = niftyVwap ? cfg.timeframe : inferTimeframe(candles, wantedTf);
   const result = {
     ...(niftyVwap
       ? runNiftyVwapBacktest({ ...algo, vwapState: undefined }, candles)
@@ -1002,7 +1045,7 @@ export function backtestAlgo(id, options = {}) {
     range: window.range,
     from: niftyVwap ? vwapFrom : window.from,
     to: window.to,
-    truncated: niftyVwap && window.days > maxVwapDays ? `5m replay last ${maxVwapDays} days` : "",
+    truncated: niftyVwap && window.days > maxVwapDays ? `${cfg.timeframe} replay last ${maxVwapDays} days` : "",
   };
   result.timeframe = usedTf;
   algo.lastBacktest = result;
@@ -1026,7 +1069,7 @@ function runPaperAlgos() {
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "paper") continue;
-    if (isNiftyVwapAlgo(algo)) {
+    if (isNiftyOptionEngineAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "paper", feedLive);
       continue;
     }
@@ -1070,7 +1113,7 @@ function runLiveAlgos() {
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;
-    if (isNiftyVwapAlgo(algo)) {
+    if (isNiftyOptionEngineAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "live", feedLive);
       continue;
     }
@@ -1429,7 +1472,7 @@ function updateLiveCandle(price) {
       close: price,
       volume: 0,
     });
-    if (state.liveCandles.length > 120) state.liveCandles.shift();
+    if (state.liveCandles.length > 400) state.liveCandles.shift();
     return;
   }
   last.close = price;

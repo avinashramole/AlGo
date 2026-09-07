@@ -82,7 +82,7 @@ export function HomeScreen() {
                 {showDeriv ? (
                   <View style={styles.deskRow}>
                     <Pressable style={styles.buy} onPress={() => void tradeFuture(item, "BUY")}>
-                      <Text style={styles.ctaText}>BUY FUT</Text>
+                      <Text style={styles.ctaText}>BUY</Text>
                     </Pressable>
                     <Pressable style={styles.sell} onPress={() => void tradeFuture(item, "SELL")}>
                       <Text style={styles.ctaText}>SELL</Text>
