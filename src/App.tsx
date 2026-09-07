@@ -19,6 +19,7 @@ import { Reports } from "./pages/Reports";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
 import { Signals } from "./pages/Signals";
+import { Subscriptions } from "./pages/Subscriptions";
 import { UserHome } from "./pages/UserHome";
 import { Users } from "./pages/Users";
 
@@ -54,6 +55,7 @@ export default function App() {
       >
         <Route index element={<RoleHome />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="subscriptions" element={<Subscriptions />} />
         <Route path="markets" element={<AdminOnly><Markets /></AdminOnly>} />
         <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
         <Route path="signals" element={<AdminOnly><Signals /></AdminOnly>} />

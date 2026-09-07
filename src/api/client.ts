@@ -503,6 +503,78 @@ export function listUsers() {
   return request<{ users: AuthUser[] }>("/users");
 }
 
+export type CatalogStrategy = {
+  id: string;
+  name: string;
+  tag?: string;
+  kind?: string;
+  summary?: string;
+  symbol?: string;
+  timeframe?: string;
+  enrollFee: number;
+};
+
+export type PaymentPublic = {
+  ready: boolean;
+  mobile?: string;
+  mobileMasked?: string;
+  upiId?: string;
+  amount: number;
+  payeeName?: string;
+};
+
+export type Enrollment = {
+  id: string;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  strategyId: string;
+  strategyName: string;
+  amount: number;
+  channel?: string;
+  status: "pending" | "paid" | string;
+  payeeMobile?: string;
+  createdAt?: string;
+  paidAt?: string;
+};
+
+export type UpiLinks = {
+  upi: string;
+  gpay: string;
+  phonepe: string;
+  qr?: string;
+};
+
+export function strategyCatalog() {
+  return request<{ strategies: CatalogStrategy[]; payments: PaymentPublic }>("/strategies/catalog");
+}
+
+export function listEnrollments() {
+  return request<{ enrollments: Enrollment[] }>("/subscriptions");
+}
+
+export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe") {
+  return request<{ enrollment: Enrollment; payments: PaymentPublic; links: UpiLinks | null; already?: boolean }>(
+    "/subscriptions/enroll",
+    { method: "POST", body: JSON.stringify({ strategyId, channel }) },
+  );
+}
+
+export function confirmEnrollmentPaid(id: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/paid`, { method: "POST" });
+}
+
+export function getPaymentSettings() {
+  return request<{ payments: { mobile: string; upiId: string; amount: number; payeeName: string } }>("/payments");
+}
+
+export function savePaymentSettings(payload: { mobile: string; upiId?: string; amount: number; payeeName?: string }) {
+  return request<{ ok: boolean; payments: { mobile: string; upiId: string; amount: number; payeeName: string } }>("/payments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getMe(token: string) {
   return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
 }

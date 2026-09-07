@@ -381,6 +381,54 @@ export function getMe(token: string) {
   return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
 }
 
+export type CatalogStrategy = {
+  id: string;
+  name: string;
+  tag?: string;
+  summary?: string;
+  symbol?: string;
+  timeframe?: string;
+  enrollFee: number;
+};
+
+export type PaymentPublic = {
+  ready: boolean;
+  mobile?: string;
+  mobileMasked?: string;
+  upiId?: string;
+  amount: number;
+  payeeName?: string;
+};
+
+export type Enrollment = {
+  id: string;
+  strategyId: string;
+  strategyName: string;
+  amount: number;
+  status: string;
+};
+
+export type UpiLinks = { upi: string; gpay: string; phonepe: string; qr?: string };
+
+export function strategyCatalog() {
+  return request<{ strategies: CatalogStrategy[]; payments: PaymentPublic }>("/strategies/catalog");
+}
+
+export function listEnrollments() {
+  return request<{ enrollments: Enrollment[] }>("/subscriptions");
+}
+
+export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe") {
+  return request<{ enrollment: Enrollment; payments: PaymentPublic; links: UpiLinks | null }>(
+    "/subscriptions/enroll",
+    { method: "POST", body: JSON.stringify({ strategyId, channel }) },
+  );
+}
+
+export function confirmEnrollmentPaid(id: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/paid`, { method: "POST" });
+}
+
 export function updateProfile(token: string, payload: { name: string; email?: string; mobile?: string }) {
   return request<{ ok: boolean; user: AuthUser }>("/me", {
     method: "POST",

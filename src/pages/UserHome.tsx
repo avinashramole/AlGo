@@ -1,4 +1,4 @@
-import { Bell, LineChart, Shield, UserRound } from "lucide-react";
+import { Bell, LineChart, Shield, UserRound, CreditCard } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -18,6 +18,16 @@ export function UserHome() {
         </div>
       </section>
       <div className="grid gap-3 sm:grid-cols-2">
+        <article className="card p-5">
+          <CreditCard size={18} className="text-brand-500" />
+          <h2 className="mt-3 text-sm font-bold">Subscriptions</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            See admin strategies and enroll with GPay or PhonePe. Money goes to the desk mobile number.
+          </p>
+          <Link to="/subscriptions" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+            View plans
+          </Link>
+        </article>
         <article className="card p-5">
           <LineChart size={18} className="text-brand-500" />
           <h2 className="mt-3 text-sm font-bold">Daily trades</h2>

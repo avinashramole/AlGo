@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -20,6 +21,8 @@ import {
   dropBrokerPositions,
   getCandles,
   getOptionMeta,
+  getAlgo,
+  listAlgos,
   placeOrder,
   snapshot,
   squareOff,
@@ -27,7 +30,6 @@ import {
   toggleAlgo,
   updateAlgo,
   backtestAlgo,
-  getAlgo,
   pickBacktestTimeframe,
   resolveBacktestWindow,
   drainPendingLiveAlgoOrders,
@@ -220,7 +222,7 @@ function deskGuard(req, res, next) {
   }
   const user = sessionUser(readToken(req));
   req.authUser = user;
-  if (pathname === "/api/me") {
+  if (pathname === "/api/me" || pathname === "/api/strategies/catalog" || pathname.startsWith("/api/subscriptions")) {
     next();
     return;
   }
@@ -252,10 +254,61 @@ app.post("/api/me", (req, res) => {
   }
 });
 
+app.get("/api/strategies/catalog", (req, res) => {
+  const user = sessionUser(readToken(req));
+  if (!user) {
+    res.status(401).json({ error: "Sign in first." });
+    return;
+  }
+  res.json(listCatalog(listAlgos(), listPublicUsers()));
+});
+
+app.get("/api/subscriptions", (req, res) => {
+  const user = sessionUser(readToken(req));
+  if (!user) {
+    res.status(401).json({ error: "Sign in first." });
+    return;
+  }
+  res.json({ enrollments: listEnrollments({ userId: user.id, admin: user.role === "admin" }) });
+});
+
+app.post("/api/subscriptions/enroll", (req, res) => {
+  try {
+    const user = sessionUser(readToken(req));
+    if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+    const algo = getAlgo(req.body?.strategyId);
+    res.status(201).json(enrollStrategy({ user, algo, channel: req.body?.channel, admins: listPublicUsers() }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not enroll" });
+  }
+});
+
+app.post("/api/subscriptions/:id/paid", (req, res) => {
+  try {
+    const user = sessionUser(readToken(req));
+    if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+    res.json({ enrollment: markEnrollmentPaid({ user, enrollmentId: req.params.id }) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not confirm payment" });
+  }
+});
+
 app.use(deskGuard);
 
 app.get("/api/users", (_req, res) => {
   res.json({ users: listPublicUsers() });
+});
+
+app.get("/api/payments", (_req, res) => {
+  res.json({ payments: getPaymentSettings() });
+});
+
+app.post("/api/payments", (req, res) => {
+  try {
+    res.json({ ok: true, payments: savePaymentSettings(req.body || {}) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save payment settings" });
+  }
 });
 
 app.get("/api/auth/gmail", (_req, res) => {

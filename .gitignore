@@ -18,4 +18,6 @@ server/.dhan-session.json
 server/.dhan-backoff.json
 server/data/users.json
 server/data/gmail.json
+server/data/payments.json
+server/data/enrollments.json
 *.zip

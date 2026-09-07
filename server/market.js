@@ -982,6 +982,10 @@ export function getAlgo(id) {
   return algo ? clone(algo) : null;
 }
 
+export function listAlgos() {
+  return (state.algos || []).map((row) => clone(row));
+}
+
 function usableCandles(rows, fromMs, toMs) {
   return (Array.isArray(rows) ? rows : [])
     .map((row) => ({
