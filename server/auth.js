@@ -142,6 +142,12 @@ export function resolveUserRole(user, env = process.env) {
   return "user";
 }
 
+function isRegisteredUser(user) {
+  if (!user) return false;
+  if (user.id === "avinash" || user.id === "segin") return false;
+  return Boolean(user.email || user.mobile || user.googleId);
+}
+
 function publicUser(user) {
   return {
     id: user.id,
@@ -152,6 +158,8 @@ function publicUser(user) {
     role: resolveUserRole(user),
     authProvider: user.authProvider || (user.googleId ? "google" : user.password ? "password" : ""),
     createdAt: user.createdAt || "",
+    lastLoginAt: user.lastLoginAt || "",
+    registered: isRegisteredUser(user),
     hasPassword: Boolean(user.password),
     thumbEnabled: Boolean(user.thumbHash),
   };
@@ -191,6 +199,7 @@ function loadUsers() {
       googleId: row.googleId ? String(row.googleId) : undefined,
       authProvider: row.authProvider ? String(row.authProvider) : undefined,
       createdAt: row.createdAt ? String(row.createdAt) : undefined,
+      lastLoginAt: row.lastLoginAt ? String(row.lastLoginAt) : undefined,
       password: row.password ? String(row.password) : undefined,
       thumbHash: row.thumbHash ? String(row.thumbHash) : undefined,
     };
@@ -220,6 +229,7 @@ function saveUsers(users) {
     ...(row.googleId ? { googleId: row.googleId } : {}),
     ...(row.authProvider ? { authProvider: row.authProvider } : {}),
     ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+    ...(row.lastLoginAt ? { lastLoginAt: row.lastLoginAt } : {}),
     ...(row.password ? { password: row.password } : {}),
     ...(row.thumbHash ? { thumbHash: row.thumbHash } : {}),
   }));
@@ -245,6 +255,10 @@ export function findUser(identifier) {
 
 function issueSession(user) {
   const token = `t2s-${crypto.randomBytes(18).toString("hex")}`;
+  const at = new Date().toISOString();
+  user.lastLoginAt = at;
+  user.createdAt = user.createdAt || at;
+  persist();
   sessions.set(token, { userId: user.id, email: user.email, mobile: user.mobile, at: now() });
   return { token, user: publicUser(user) };
 }
@@ -569,9 +583,15 @@ export function updateProfile(sessionToken, { name, email, mobile } = {}) {
 }
 
 export function listPublicUsers() {
+  store = loadUsers();
   return store.users
     .map((row) => publicUser(row))
-    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")) || a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      if (Boolean(a.registered) !== Boolean(b.registered)) return a.registered ? -1 : 1;
+      const byLogin = String(b.lastLoginAt || b.createdAt || "").localeCompare(String(a.lastLoginAt || a.createdAt || ""));
+      if (byLogin) return byLogin;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
 }
 
 export function googleOAuthConfigured(env = process.env) {

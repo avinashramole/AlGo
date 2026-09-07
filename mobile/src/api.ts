@@ -291,6 +291,8 @@ export type AuthUser = {
   role?: "admin" | "user";
   authProvider?: string;
   createdAt?: string;
+  lastLoginAt?: string;
+  registered?: boolean;
   hasPassword?: boolean;
   thumbEnabled?: boolean;
 };

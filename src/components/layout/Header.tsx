@@ -1,4 +1,4 @@
-import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
+import { Bell, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
@@ -79,6 +79,11 @@ export function Header() {
           </span>
           {dhanLive && lastTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
+        {admin ? (
+          <Link to="/users" className="icon-btn hidden md:flex" title="Users">
+            <Users size={17} />
+          </Link>
+        ) : null}
         {admin ? (
           <Link to="/notifications" className="icon-btn hidden md:flex" title="Notifications">
             <Bell size={17} />

@@ -16,6 +16,7 @@ const {
   googleOAuthConfigured,
   googleRedirectUri,
   loginWithGoogleCode,
+  listPublicUsers,
   resolveUserRole,
   safeFrontendOrigin,
   upsertGoogleUser,
@@ -137,4 +138,16 @@ test("loginWithGoogleCode provisions a Gmail member from Google profile", async 
   assert.equal(result.user.name, "OAuth Member");
   assert.equal(result.user.authProvider, "google");
   assert.match(result.token, /^t2s-/);
+});
+
+test("listPublicUsers includes registered Gmail members for admin", () => {
+  const email = `listed-${Date.now()}@gmail.com`;
+  upsertGoogleUser({ email, name: "Listed Member", googleId: "gid-listed" });
+  const users = listPublicUsers();
+  const member = users.find((row) => row.email === email);
+  assert.equal(member?.name, "Listed Member");
+  assert.equal(member?.role, "user");
+  assert.equal(member?.registered, true);
+  assert.equal(member?.authProvider, "google");
+  assert.ok(users.some((row) => row.id === "avinash" && row.role === "admin"));
 });
