@@ -11,6 +11,7 @@ import {
   signup as signupApi,
   updateProfile as updateProfileApi,
   verifyOtp as verifyOtpApi,
+  setApiToken,
   type AuthUser,
   type OtpPurpose,
   type OtpRequestResult,
@@ -43,6 +44,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function persist(user: AuthUser, token: string) {
+  setApiToken(token);
   await AsyncStorage.multiSet([
     ["t2s-user", JSON.stringify(user)],
     ["t2s-token", token],
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (raw) setUser(JSON.parse(raw) as AuthUser);
         setHasThumb(Boolean(thumb));
         if (token && token !== "t2s-offline-token") {
+          setApiToken(token);
           try {
             const row = await getMe(token);
             await AsyncStorage.setItem("t2s-user", JSON.stringify(row.user));
@@ -81,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isDemo =
           (identifier.trim().toLowerCase() === "demo@t2s.app" || identifier.trim().toLowerCase() === "demo") &&
           password === "demo123";
-        const demoUser = { name: "Avinash", email: "demo@t2s.app", mobile: "", desk: "Index Options" };
+        const demoUser = { name: "Avinash", email: "demo@t2s.app", mobile: "", desk: "Index Options", role: "admin" as const };
         try {
           const result = await loginRequest(identifier, password);
           await persist(result.user, result.token);
@@ -143,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(result.user);
       },
       logout: async () => {
+        setApiToken("");
         await AsyncStorage.multiRemove(["t2s-user", "t2s-token"]);
         setUser(null);
       },

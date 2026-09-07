@@ -11,6 +11,22 @@ export function HomeScreen() {
   const { user } = useAuth();
   const { data, live, order } = useMarket();
   const signal = data.featuredSignal;
+  if (user?.role !== "admin") {
+    return (
+      <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+        <BrandMark variant="horizontal" />
+        <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
+        <Text style={styles.muted}>Member dashboard. Daily trades will appear here later.</Text>
+        <Card>
+          <Text style={styles.price}>{user?.email || "Gmail account"}</Text>
+          <Text style={styles.tiny}>Role: member</Text>
+        </Card>
+        <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Profile")}>
+          <Text style={{ color: colors.brand, fontWeight: "800" }}>Open profile</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
     const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
     try {

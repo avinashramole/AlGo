@@ -19,6 +19,7 @@ import {
   type PlaceOrderResult,
   type Snapshot,
 } from "../api/client";
+import { useAuth } from "./AuthContext";
 import {
   dnaScores,
   fiiDii,
@@ -133,6 +134,8 @@ type MarketContextValue = {
 const MarketContext = createContext<MarketContextValue | null>(null);
 
 export function MarketProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const admin = user?.role === "admin";
   const [data, setData] = useState<Snapshot>(fallback);
   const [live, setLive] = useState(false);
 
@@ -147,12 +150,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!admin) {
+      setLive(false);
+      return;
+    }
     void refresh();
     const id = window.setInterval(() => {
       void refresh();
     }, 2000);
     return () => window.clearInterval(id);
-  }, [refresh]);
+  }, [admin, refresh]);
 
   const value = useMemo(
     () => ({

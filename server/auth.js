@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const USERS_FILE = path.join(__dirname, "data", "users.json");
+const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
 const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
@@ -19,6 +19,7 @@ const SEED_USERS = [
     mobile: "",
     desk: "Index Options",
     password: "demo123",
+    role: "admin",
   },
   {
     id: "segin",
@@ -26,8 +27,11 @@ const SEED_USERS = [
     email: "",
     mobile: "",
     desk: "Index Options",
+    role: "admin",
   },
 ];
+
+const DEFAULT_ADMIN_EMAILS = ["demo@t2s.app", "avinash.ramole86@gmail.com"];
 
 const otps = new Map();
 const sessions = new Map();
@@ -122,6 +126,22 @@ function checkPassword(password, stored) {
   }
 }
 
+export function adminEmailsFromEnv(env = process.env) {
+  const extra = String(env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((value) => normalizeEmail(value))
+    .filter(Boolean);
+  return new Set([...DEFAULT_ADMIN_EMAILS, ...extra]);
+}
+
+export function resolveUserRole(user, env = process.env) {
+  if (!user) return "user";
+  if (user.id === "avinash" || user.id === "segin") return "admin";
+  if (user.role === "admin" || user.role === "user") return user.role;
+  if (user.email && adminEmailsFromEnv(env).has(normalizeEmail(user.email))) return "admin";
+  return "user";
+}
+
 function publicUser(user) {
   return {
     id: user.id,
@@ -129,6 +149,9 @@ function publicUser(user) {
     email: user.email || "",
     mobile: user.mobile || "",
     desk: user.desk || "Index Options",
+    role: resolveUserRole(user),
+    authProvider: user.authProvider || (user.googleId ? "google" : user.password ? "password" : ""),
+    createdAt: user.createdAt || "",
     hasPassword: Boolean(user.password),
     thumbEnabled: Boolean(user.thumbHash),
   };
@@ -164,6 +187,10 @@ function loadUsers() {
       email: normalizeEmail(row.email),
       mobile: normalizeMobile(row.mobile),
       desk: String(row.desk || "Index Options"),
+      role: row.role === "admin" ? "admin" : row.role === "user" ? "user" : undefined,
+      googleId: row.googleId ? String(row.googleId) : undefined,
+      authProvider: row.authProvider ? String(row.authProvider) : undefined,
+      createdAt: row.createdAt ? String(row.createdAt) : undefined,
       password: row.password ? String(row.password) : undefined,
       thumbHash: row.thumbHash ? String(row.thumbHash) : undefined,
     };
@@ -189,6 +216,10 @@ function saveUsers(users) {
     email: row.email || "",
     mobile: row.mobile || "",
     desk: row.desk,
+    role: resolveUserRole(row),
+    ...(row.googleId ? { googleId: row.googleId } : {}),
+    ...(row.authProvider ? { authProvider: row.authProvider } : {}),
+    ...(row.createdAt ? { createdAt: row.createdAt } : {}),
     ...(row.password ? { password: row.password } : {}),
     ...(row.thumbHash ? { thumbHash: row.thumbHash } : {}),
   }));
@@ -480,8 +511,11 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
   user.name = displayName;
   user.desk = user.desk || "Index Options";
   user.password = hashPassword(password);
+  user.createdAt = user.createdAt || new Date().toISOString();
+  user.authProvider = user.authProvider || "password";
   if (wanted === "gmail") user.email = target;
   else user.mobile = target;
+  if (!user.role) user.role = resolveUserRole(user);
   persist();
   return issueSession(user);
 }
@@ -532,4 +566,156 @@ export function updateProfile(sessionToken, { name, email, mobile } = {}) {
   user.mobile = nextMobile;
   persist();
   return { ok: true, user: publicUser(user) };
+}
+
+export function listPublicUsers() {
+  return store.users
+    .map((row) => publicUser(row))
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")) || a.name.localeCompare(b.name));
+}
+
+export function googleOAuthConfigured(env = process.env) {
+  return Boolean(String(env.GOOGLE_CLIENT_ID || "").trim() && String(env.GOOGLE_CLIENT_SECRET || "").trim());
+}
+
+export function googleRedirectUri(env = process.env, req) {
+  const explicit = String(env.GOOGLE_REDIRECT_URI || "").trim();
+  if (explicit) return explicit;
+  if (req) {
+    const proto = String(req.headers?.["x-forwarded-proto"] || req.protocol || "http")
+      .split(",")[0]
+      .trim();
+    const host = String(req.headers?.["x-forwarded-host"] || req.headers?.host || "")
+      .split(",")[0]
+      .trim();
+    if (host) return `${proto === "https" ? "https" : "http"}://${host}/api/auth/google/callback`;
+  }
+  const publicUrl = String(env.PUBLIC_URL || "http://localhost:4000").replace(/\/$/, "");
+  return `${publicUrl}/api/auth/google/callback`;
+}
+
+export function encodeOAuthState(next, extra = {}) {
+  return Buffer.from(JSON.stringify({ next: String(next || ""), ...extra })).toString("base64url");
+}
+
+export function decodeOAuthPayload(state) {
+  try {
+    const row = JSON.parse(Buffer.from(String(state || ""), "base64url").toString("utf8"));
+    return row && typeof row === "object" ? row : {};
+  } catch {
+    return {};
+  }
+}
+
+export function decodeOAuthState(state) {
+  return String(decodeOAuthPayload(state).next || "");
+}
+
+export function safeFrontendOrigin(next, env = process.env) {
+  const publicUrl = String(env.PUBLIC_URL || "").replace(/\/$/, "");
+  const fallback = publicUrl || "http://localhost:5173";
+  try {
+    const url = new URL(String(next || ""));
+    if (url.protocol !== "http:" && url.protocol !== "https:") return fallback;
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return url.origin;
+    if (url.hostname === "trade2smart.com" || url.hostname.endsWith(".trade2smart.com")) return url.origin;
+    if (publicUrl) {
+      const allowed = new URL(publicUrl);
+      if (url.hostname === allowed.hostname) return url.origin;
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
+  const clientId = String(env.GOOGLE_CLIENT_ID || "").trim();
+  if (!clientId || !String(env.GOOGLE_CLIENT_SECRET || "").trim()) {
+    throw fail("Google login is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.", 503);
+  }
+  const redirectUri = googleRedirectUri(env, req);
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: "openid email profile",
+    access_type: "online",
+    prompt: "select_account",
+    state: encodeOAuthState(next, { redirectUri }),
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+export function upsertGoogleUser({ email, name, googleId, env = process.env } = {}) {
+  const normalized = normalizeEmail(email);
+  if (!normalized.includes("@")) throw fail("Google did not return an email.", 401);
+  if (!isGmail(normalized) && !adminEmailsFromEnv(env).has(normalized)) {
+    throw fail("Use a Gmail address to continue with Google.", 401);
+  }
+  let user = store.byEmail.get(normalized);
+  if (!user) {
+    user = {
+      id: `u${crypto.randomBytes(6).toString("hex")}`,
+      name: String(name || "").trim() || normalized.split("@")[0],
+      email: normalized,
+      mobile: "",
+      desk: "Index Options",
+      googleId: googleId ? String(googleId) : undefined,
+      authProvider: "google",
+      createdAt: new Date().toISOString(),
+    };
+    store.users.push(user);
+  } else {
+    if (googleId) user.googleId = user.googleId || String(googleId);
+    user.authProvider = user.authProvider || "google";
+    user.createdAt = user.createdAt || new Date().toISOString();
+    const nextName = String(name || "").trim();
+    if (nextName && (!user.name || user.name === "Trader")) user.name = nextName;
+  }
+  user.email = normalized;
+  if (!user.role) user.role = resolveUserRole(user, env);
+  persist();
+  return issueSession(user);
+}
+
+export async function loginWithGoogleCode({ code, fetchImpl = fetch, env = process.env, redirectUri } = {}) {
+  const clientId = String(env.GOOGLE_CLIENT_ID || "").trim();
+  const clientSecret = String(env.GOOGLE_CLIENT_SECRET || "").trim();
+  const redirect = String(redirectUri || googleRedirectUri(env)).trim();
+  if (!clientId || !clientSecret) {
+    throw fail("Google login is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.", 503);
+  }
+  if (!String(code || "").trim()) throw fail("Google login was cancelled.", 401);
+  const tokenRes = await fetchImpl("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({
+      code: String(code),
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirect,
+      grant_type: "authorization_code",
+    }).toString(),
+  });
+  const tokenJson = await tokenRes.json().catch(() => ({}));
+  if (!tokenRes.ok || !tokenJson.access_token) {
+    throw fail(tokenJson.error_description || "Google login failed. Try again.", 401);
+  }
+  const userRes = await fetchImpl("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${tokenJson.access_token}`, Accept: "application/json" },
+  });
+  const profile = await userRes.json().catch(() => ({}));
+  if (!userRes.ok || !profile.email) {
+    throw fail("Google did not return an email. Allow email access and try again.", 401);
+  }
+  if (profile.email_verified === false) {
+    throw fail("Verify your Gmail address with Google first.", 401);
+  }
+  return upsertGoogleUser({
+    email: profile.email,
+    name: profile.name,
+    googleId: profile.sub,
+    env,
+  });
 }

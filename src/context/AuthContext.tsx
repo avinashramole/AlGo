@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import {
   enableThumb as enableThumbApi,
   getMe,
+  googleAuthStatus,
   login as loginRequest,
   loginThumb as loginThumbApi,
   requestOtp as requestOtpApi,
@@ -30,6 +31,7 @@ type AuthContextValue = {
   verifyOtp: (identifier: string, otp: string, remember?: boolean) => Promise<void>;
   signup: (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }, remember?: boolean) => Promise<void>;
   resetPassword: (payload: { identifier: string; otp: string; password: string }, remember?: boolean) => Promise<void>;
+  startGoogleLogin: () => Promise<void>;
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
   updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
@@ -139,6 +141,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleToken = params.get("google_token");
+    const googleError = params.get("google_error");
+    if (googleError) {
+      sessionStorage.setItem("t2s-google-error", googleError);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (googleToken) {
+      persist({ name: "Google user", email: "", desk: "Index Options", role: "user" }, googleToken, true);
+      void getMe(googleToken)
+        .then((row) => {
+          persist(row.user, googleToken, true);
+          setUser(row.user);
+          window.history.replaceState({}, "", "/");
+        })
+        .catch(() => undefined);
+      return;
+    }
     const token = readToken();
     if (!token || token === "t2s-offline-token") return;
     void getMe(token)
@@ -154,7 +174,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       hasThumb,
       login: async (identifier: string, password: string, remember = true) => {
-        const demoUser = { name: "Avinash", email: "demo@t2s.app", mobile: "", desk: "Index Options" };
+        const demoUser = {
+          name: "Avinash",
+          email: "demo@t2s.app",
+          mobile: "",
+          desk: "Index Options",
+          role: "admin" as const,
+        };
         const isDemo =
           (identifier.trim().toLowerCase() === "demo@t2s.app" || identifier.trim().toLowerCase() === "demo") &&
           password === "demo123";
@@ -184,6 +210,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await resetPasswordApi(payload);
         persist(result.user, result.token, remember);
         setUser(result.user);
+      },
+      startGoogleLogin: async () => {
+        const status = await googleAuthStatus();
+        if (!status.configured) {
+          throw new Error(
+            "Google login is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the VPS, then restart t2s.",
+          );
+        }
+        window.location.href = `/api/auth/google?next=${encodeURIComponent(window.location.origin)}`;
       },
       enableThumb: async () => {
         const token = readToken();

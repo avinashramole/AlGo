@@ -15,31 +15,38 @@ import {
   Settings,
   Sun,
   User,
+  Users,
   Zap,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
+import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { isAdminUser } from "../../lib/roles";
 import { cn } from "../../lib/format";
 
-const items: Array<{ to: string; label: string; icon: LucideIcon }> = [
+const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/markets", label: "Markets", icon: BarChart3 },
-  { to: "/options", label: "Chain", icon: Layers },
-  { to: "/signals", label: "Signals", icon: Zap },
-  { to: "/algo", label: "Algo", icon: Cpu },
-  { to: "/orders", label: "Orders", icon: ClipboardList },
-  { to: "/positions", label: "Positions", icon: BookOpen },
-  { to: "/reports", label: "Reports", icon: FileText },
-  { to: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { to: "/brokers", label: "Brokers", icon: Building2 },
-  { to: "/analytics", label: "Analytics", icon: PieChart },
+  { to: "/markets", label: "Markets", icon: BarChart3, admin: true },
+  { to: "/options", label: "Chain", icon: Layers, admin: true },
+  { to: "/signals", label: "Signals", icon: Zap, admin: true },
+  { to: "/algo", label: "Algo", icon: Cpu, admin: true },
+  { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },
+  { to: "/positions", label: "Positions", icon: BookOpen, admin: true },
+  { to: "/reports", label: "Reports", icon: FileText, admin: true },
+  { to: "/portfolio", label: "Portfolio", icon: Briefcase, admin: true },
+  { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
+  { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
+  { to: "/users", label: "Users", icon: Users, admin: true },
   { to: "/profile", label: "Profile", icon: User },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/settings", label: "Settings", icon: Settings, admin: true },
 ];
 
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
+  const admin = isAdminUser(user);
+  const visible = items.filter((item) => admin || !item.admin);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[68px] flex-col items-center border-r border-[var(--border)] bg-[var(--card)] py-3 md:flex">
@@ -47,7 +54,7 @@ export function Sidebar() {
         <BrandMark variant="emblem" size="md" />
       </NavLink>
       <nav className="flex flex-1 flex-col gap-1">
-        {items.map((item) => (
+        {visible.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

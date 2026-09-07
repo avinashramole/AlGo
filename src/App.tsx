@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { useAuth } from "./context/AuthContext";
+import { isAdminUser } from "./lib/roles";
 import { Algo } from "./pages/Algo";
 import { Analytics } from "./pages/Analytics";
 import { Brokers } from "./pages/Brokers";
@@ -18,11 +19,24 @@ import { Reports } from "./pages/Reports";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
 import { Signals } from "./pages/Signals";
+import { UserHome } from "./pages/UserHome";
+import { Users } from "./pages/Users";
 
 function Guard({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   return children;
+}
+
+function AdminOnly({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (!isAdminUser(user)) return <Navigate to="/" replace />;
+  return children;
+}
+
+function RoleHome() {
+  const { user } = useAuth();
+  return isAdminUser(user) ? <Dashboard /> : <UserHome />;
 }
 
 export default function App() {
@@ -38,21 +52,22 @@ export default function App() {
           </Guard>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="markets" element={<Markets />} />
-        <Route path="options" element={<Options />} />
-        <Route path="signals" element={<Signals />} />
-        <Route path="algo" element={<Algo />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="positions" element={<PositionsDesk />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="portfolio" element={<Portfolio />} />
-        <Route path="brokers" element={<Brokers />} />
-        <Route path="analytics" element={<Analytics />} />
+        <Route index element={<RoleHome />} />
         <Route path="profile" element={<Profile />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="chat" element={<Chat />} />
+        <Route path="markets" element={<AdminOnly><Markets /></AdminOnly>} />
+        <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
+        <Route path="signals" element={<AdminOnly><Signals /></AdminOnly>} />
+        <Route path="algo" element={<AdminOnly><Algo /></AdminOnly>} />
+        <Route path="orders" element={<AdminOnly><Orders /></AdminOnly>} />
+        <Route path="positions" element={<AdminOnly><PositionsDesk /></AdminOnly>} />
+        <Route path="reports" element={<AdminOnly><Reports /></AdminOnly>} />
+        <Route path="portfolio" element={<AdminOnly><Portfolio /></AdminOnly>} />
+        <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
+        <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
+        <Route path="users" element={<AdminOnly><Users /></AdminOnly>} />
+        <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
+        <Route path="notifications" element={<AdminOnly><Notifications /></AdminOnly>} />
+        <Route path="chat" element={<AdminOnly><Chat /></AdminOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

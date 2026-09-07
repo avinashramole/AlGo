@@ -256,7 +256,16 @@ export function LoginScreen() {
             <>
               <Text style={styles.or}>or continue with</Text>
               <View style={styles.social}>
-                <Pressable style={styles.socialBtn} onPress={() => void onSocial("google")} disabled={busy}>
+                <Pressable
+                  style={styles.socialBtn}
+                  onPress={() =>
+                    Alert.alert(
+                      "Google login",
+                      "Continue with Google on the Trade2Smart website. This app still accepts Gmail + password or OTP.",
+                    )
+                  }
+                  disabled={busy}
+                >
                   <Text style={styles.socialText}>Google</Text>
                 </Pressable>
                 <Pressable style={styles.socialBtn} onPress={() => void onSocial("microsoft")} disabled={busy}>

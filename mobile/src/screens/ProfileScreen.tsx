@@ -40,6 +40,7 @@ export function ProfileScreen() {
       <Card>
         <Row label="Name" value={user?.name || "—"} />
         <Row label="Email" value={user?.email || "Not added"} />
+        <Row label="Role" value={user?.role === "admin" ? "Admin" : "Member"} />
         <Row label="Mobile no" value={formatMobile(user?.mobile)} />
       </Card>
       <Text style={styles.edit}>Edit profile</Text>

@@ -1,0 +1,53 @@
+import { Bell, LineChart, Shield, UserRound } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+export function UserHome() {
+  const { user } = useAuth();
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4">
+      <section className="card p-6">
+        <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
+        <h1 className="mt-1 text-2xl font-extrabold">Welcome, {user?.name || "trader"}</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Signed in with {user?.email || "your account"}. Daily trades and more member tools will show here next.
+        </p>
+        <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500 dark:bg-slate-800">
+          {user?.role || "user"}
+        </div>
+      </section>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <article className="card p-5">
+          <LineChart size={18} className="text-brand-500" />
+          <h2 className="mt-3 text-sm font-bold">Daily trades</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Coming soon. You will see your own trades here once that API is enabled.
+          </p>
+        </article>
+        <article className="card p-5">
+          <Bell size={18} className="text-brand-500" />
+          <h2 className="mt-3 text-sm font-bold">Updates</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Desk alerts for members will land here. Admin trading tools stay on the admin portal.
+          </p>
+        </article>
+        <article className="card p-5">
+          <UserRound size={18} className="text-brand-500" />
+          <h2 className="mt-3 text-sm font-bold">Your profile</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Name, Gmail, and mobile for this account.</p>
+          <Link to="/profile" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+            Open profile
+          </Link>
+        </article>
+        <article className="card p-5">
+          <Shield size={18} className="text-brand-500" />
+          <h2 className="mt-3 text-sm font-bold">Admin desk</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Brokers, algos, live orders, and settings are only for admin users.
+          </p>
+        </article>
+      </div>
+    </div>
+  );
+}

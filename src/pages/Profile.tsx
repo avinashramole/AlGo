@@ -40,12 +40,13 @@ export function Profile() {
           </div>
           <div>
             <div className="text-lg font-extrabold">{user?.name || "Trader"}</div>
-            <div className="text-sm text-slate-400">{user?.desk || "Index Options"}</div>
+            <div className="text-sm text-slate-400">{user?.role === "admin" ? "Admin" : "Member"} · {user?.desk || "Index Options"}</div>
           </div>
         </div>
         <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
           <Row label="Name" value={user?.name || "—"} />
           <Row label="Email" value={user?.email || "Not added"} />
+          <Row label="Role" value={user?.role === "admin" ? "Admin" : "Member"} />
           <Row label="Mobile no" value={formatMobile(user?.mobile)} />
         </dl>
       </section>

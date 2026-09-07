@@ -9,9 +9,19 @@ export function apiBase() {
   return "http://localhost:4000";
 }
 
+let sessionToken = "";
+
+export function setApiToken(token: string) {
+  sessionToken = token && token !== "t2s-offline-token" ? token : "";
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase()}/api${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      ...(init?.headers || {}),
+    },
     ...init,
   });
   const text = await response.text();
@@ -278,6 +288,9 @@ export type AuthUser = {
   email: string;
   mobile?: string;
   desk: string;
+  role?: "admin" | "user";
+  authProvider?: string;
+  createdAt?: string;
   hasPassword?: boolean;
   thumbEnabled?: boolean;
 };
