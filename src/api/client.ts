@@ -575,6 +575,100 @@ export function savePaymentSettings(payload: { mobile: string; upiId?: string; a
   });
 }
 
+export type MemberBrokerChoice = {
+  id: string;
+  name: string;
+  vendor?: string;
+  color?: string;
+  segments?: string[];
+  virtual?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  mode?: string;
+  note?: string;
+};
+
+export type MemberWallet = {
+  balance: number;
+  mtm: number;
+  equity: number;
+  updatedAt?: string;
+};
+
+export type MemberPlanRow = {
+  strategyId: string;
+  strategyName: string;
+  status: string;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  netPnl: number;
+  openPositions: number;
+  trades: number;
+};
+
+export type WalletTopup = {
+  id: string;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  amount: number;
+  channel?: string;
+  status: "pending" | "paid" | string;
+  createdAt?: string;
+  paidAt?: string;
+};
+
+export type MemberPosition = {
+  id: string;
+  symbol: string;
+  type: "BUY" | "SELL" | string;
+  qty: number;
+  avg: number;
+  ltp: number;
+  pnl: number;
+  brokerId?: string;
+  strategy?: string;
+};
+
+export type MemberDesk = {
+  wallet: MemberWallet;
+  brokerId: string;
+  brokers: MemberBrokerChoice[];
+  plans: MemberPlanRow[];
+  report: DeskReport;
+  positions: MemberPosition[];
+  topups: WalletTopup[];
+  payments: PaymentPublic;
+};
+
+export function getMemberDesk() {
+  return request<MemberDesk>("/member/desk");
+}
+
+export function selectMemberBroker(brokerId: string) {
+  return request<{ brokerId: string; brokers: MemberBrokerChoice[] }>("/member/broker", {
+    method: "POST",
+    body: JSON.stringify({ brokerId }),
+  });
+}
+
+export function startWalletTopup(amount: number, channel: "gpay" | "phonepe") {
+  return request<{ topup: WalletTopup; payments: PaymentPublic; links: UpiLinks | null }>("/member/wallet/topup", {
+    method: "POST",
+    body: JSON.stringify({ amount, channel }),
+  });
+}
+
+export function confirmWalletTopup(id: string) {
+  return request<{ topup: WalletTopup; wallet: { balance: number; updatedAt?: string } }>(`/member/wallet/topup/${id}/paid`, {
+    method: "POST",
+  });
+}
+
+export function listWalletTopups() {
+  return request<{ topups: WalletTopup[] }>("/member/topups");
+}
+
 export function getMe(token: string) {
   return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
 }

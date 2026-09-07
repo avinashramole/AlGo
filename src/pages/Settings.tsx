@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, savePaymentSettings, type Enrollment } from "../api/client";
+import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, type Enrollment, type WalletTopup } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
@@ -20,6 +20,7 @@ export function Settings() {
   const [payNote, setPayNote] = useState("");
   const [payBusy, setPayBusy] = useState(false);
   const [enrolls, setEnrolls] = useState<Enrollment[]>([]);
+  const [topups, setTopups] = useState<WalletTopup[]>([]);
   const rows = [
     ["Desk", user?.desk || "Index Options"],
     ["Gmail mail", mailConnected ? `Sending · ${mailFrom}` : "Not connected — codes and login mail stay off"],
@@ -49,6 +50,9 @@ export function Settings() {
       .catch(() => undefined);
     void listEnrollments()
       .then((row) => setEnrolls(row.enrollments || []))
+      .catch(() => undefined);
+    void listWalletTopups()
+      .then((row) => setTopups(row.topups || []))
       .catch(() => undefined);
   }, []);
 
@@ -153,6 +157,18 @@ export function Settings() {
               <div key={row.id} className="flex justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
                 <span className="font-semibold">{row.userName || row.userEmail}</span>
                 <span className="text-slate-500">{row.strategyName}</span>
+                <span className="uppercase">{row.status}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {topups.length ? (
+          <div className="mt-4 overflow-x-auto">
+            <div className="mb-2 text-xs font-bold uppercase text-slate-400">Wallet top-ups</div>
+            {topups.slice(0, 12).map((row) => (
+              <div key={row.id} className="flex justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
+                <span className="font-semibold">{row.userName || row.userEmail}</span>
+                <span className="text-slate-500">₹{row.amount}</span>
                 <span className="uppercase">{row.status}</span>
               </div>
             ))}

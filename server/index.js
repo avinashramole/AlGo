@@ -9,6 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBroker
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -23,6 +24,7 @@ import {
   getOptionMeta,
   getAlgo,
   listAlgos,
+  quoteSymbol,
   placeOrder,
   snapshot,
   squareOff,
@@ -222,7 +224,12 @@ function deskGuard(req, res, next) {
   }
   const user = sessionUser(readToken(req));
   req.authUser = user;
-  if (pathname === "/api/me" || pathname === "/api/strategies/catalog" || pathname.startsWith("/api/subscriptions")) {
+  if (
+    pathname === "/api/me" ||
+    pathname === "/api/strategies/catalog" ||
+    pathname.startsWith("/api/subscriptions") ||
+    pathname.startsWith("/api/member")
+  ) {
     next();
     return;
   }
@@ -287,9 +294,74 @@ app.post("/api/subscriptions/:id/paid", (req, res) => {
   try {
     const user = sessionUser(readToken(req));
     if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
-    res.json({ enrollment: markEnrollmentPaid({ user, enrollmentId: req.params.id }) });
+    const enrollment = markEnrollmentPaid({ user, enrollmentId: req.params.id });
+    if (enrollment.status === "paid") ensurePlanLedger({ user, algo: getAlgo(enrollment.strategyId) });
+    res.json({ enrollment });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not confirm payment" });
+  }
+});
+
+function memberAuth(req) {
+  const user = sessionUser(readToken(req));
+  if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+  return user;
+}
+
+app.get("/api/member/desk", (req, res) => {
+  try {
+    const user = memberAuth(req);
+    res.json(
+      getMemberDesk({
+        user,
+        enrollments: listEnrollments({ userId: user.id, admin: false }),
+        algos: listAlgos(),
+        quote: quoteSymbol,
+        admins: listPublicUsers(),
+      }),
+    );
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
+  }
+});
+
+app.post("/api/member/broker", (req, res) => {
+  try {
+    res.json(selectMemberBroker({ user: memberAuth(req), brokerId: req.body?.brokerId }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not select broker" });
+  }
+});
+
+app.get("/api/member/topups", (req, res) => {
+  try {
+    const user = memberAuth(req);
+    res.json({ topups: listTopups({ userId: user.id, admin: user.role === "admin" }) });
+  } catch (error) {
+    res.status(error.status || 401).json({ error: error.message || "Sign in first." });
+  }
+});
+
+app.post("/api/member/wallet/topup", (req, res) => {
+  try {
+    res.status(201).json(
+      startWalletTopup({
+        user: memberAuth(req),
+        amount: req.body?.amount,
+        channel: req.body?.channel,
+        admins: listPublicUsers(),
+      }),
+    );
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start top-up" });
+  }
+});
+
+app.post("/api/member/wallet/topup/:id/paid", (req, res) => {
+  try {
+    res.json(markTopupPaid({ user: memberAuth(req), topupId: req.params.id }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not confirm top-up" });
   }
 });
 

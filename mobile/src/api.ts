@@ -429,6 +429,47 @@ export function confirmEnrollmentPaid(id: string) {
   return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/paid`, { method: "POST" });
 }
 
+export type MemberBrokerChoice = {
+  id: string;
+  name: string;
+  virtual?: boolean;
+  selected?: boolean;
+};
+
+export type MemberDesk = {
+  wallet: { balance: number; mtm: number; equity: number };
+  brokerId: string;
+  brokers: MemberBrokerChoice[];
+  plans: Array<{ strategyId: string; strategyName: string; realizedPnl: number; unrealizedPnl: number; netPnl: number }>;
+  report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };
+  positions: Array<{ id: string; symbol: string; pnl: number; strategy?: string; ltp: number; qty: number }>;
+  payments: PaymentPublic;
+};
+
+export function getMemberDesk() {
+  return request<MemberDesk>("/member/desk");
+}
+
+export function selectMemberBroker(brokerId: string) {
+  return request<{ brokerId: string; brokers: MemberBrokerChoice[] }>("/member/broker", {
+    method: "POST",
+    body: JSON.stringify({ brokerId }),
+  });
+}
+
+export function startWalletTopup(amount: number, channel: "gpay" | "phonepe") {
+  return request<{ topup: { id: string; amount: number }; payments: PaymentPublic; links: UpiLinks | null }>("/member/wallet/topup", {
+    method: "POST",
+    body: JSON.stringify({ amount, channel }),
+  });
+}
+
+export function confirmWalletTopup(id: string) {
+  return request<{ topup: { id: string; status: string }; wallet: { balance: number } }>(`/member/wallet/topup/${id}/paid`, {
+    method: "POST",
+  });
+}
+
 export function updateProfile(token: string, payload: { name: string; email?: string; mobile?: string }) {
   return request<{ ok: boolean; user: AuthUser }>("/me", {
     method: "POST",

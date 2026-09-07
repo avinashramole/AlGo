@@ -16,13 +16,16 @@ export function HomeScreen() {
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <BrandMark variant="horizontal" />
         <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
-        <Text style={styles.muted}>Member dashboard. Daily trades will appear here later.</Text>
+        <Text style={styles.muted}>Member dashboard. Open Report for MTM, wallet add, and broker selection.</Text>
         <Card>
           <Text style={styles.price}>{user?.email || "Gmail account"}</Text>
           <Text style={styles.tiny}>Role: member</Text>
         </Card>
         <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Plans")}>
           <Text style={{ color: colors.brand, fontWeight: "800" }}>View subscriptions</Text>
+        </Pressable>
+        <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Report")}>
+          <Text style={{ color: colors.brand, fontWeight: "800" }}>Plan report · MTM</Text>
         </Pressable>
         <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Profile")}>
           <Text style={{ color: colors.brand, fontWeight: "800" }}>Open profile</Text>

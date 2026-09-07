@@ -20,4 +20,5 @@ server/data/users.json
 server/data/gmail.json
 server/data/payments.json
 server/data/enrollments.json
+server/data/member-desk.json
 *.zip

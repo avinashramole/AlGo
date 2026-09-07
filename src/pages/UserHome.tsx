@@ -1,4 +1,4 @@
-import { Bell, LineChart, Shield, UserRound, CreditCard } from "lucide-react";
+import { Bell, Shield, UserRound, CreditCard, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -11,7 +11,7 @@ export function UserHome() {
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
         <h1 className="mt-1 text-2xl font-extrabold">Welcome, {user?.name || "trader"}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Signed in with {user?.email || "your account"}. Daily trades and more member tools will show here next.
+          Signed in with {user?.email || "your account"}. Open My plan for MTM, add wallet balance, and pick a broker.
         </p>
         <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500 dark:bg-slate-800">
           {user?.role || "user"}
@@ -29,11 +29,14 @@ export function UserHome() {
           </Link>
         </article>
         <article className="card p-5">
-          <LineChart size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Daily trades</h2>
+          <Wallet size={18} className="text-brand-500" />
+          <h2 className="mt-3 text-sm font-bold">Plan report · MTM</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Coming soon. You will see your own trades here once that API is enabled.
+            Realized P&L and open MTM for enrolled strategies, plus wallet add and broker selection.
           </p>
+          <Link to="/plans" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+            Open my plan
+          </Link>
         </article>
         <article className="card p-5">
           <Bell size={18} className="text-brand-500" />

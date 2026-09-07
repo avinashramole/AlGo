@@ -26,6 +26,7 @@ export const adminNav = [
 export const userNav = [
   { to: "/", label: "Home" },
   { to: "/subscriptions", label: "Subscriptions" },
+  { to: "/plans", label: "My plan" },
   { to: "/profile", label: "Profile" },
 ] as const;
 

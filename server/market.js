@@ -804,6 +804,10 @@ export function tickMarket() {
   runPaperAlgos();
 }
 
+export function quoteSymbol(symbol) {
+  return liveLtpForSymbol(symbol);
+}
+
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
   const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\s+(\d{3,6})\s*(CE|PE)\b/);
