@@ -446,6 +446,21 @@ export type MemberDesk = {
   payments: PaymentPublic;
 };
 
+export type MemberIndexQuote = {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePct: number;
+  future?: number;
+  futureExpiry?: string;
+  lot?: number;
+};
+
+export function getMemberQuotes() {
+  return request<{ indices: MemberIndexQuote[] }>("/member/quotes");
+}
+
 export function getMemberDesk() {
   return request<MemberDesk>("/member/desk");
 }

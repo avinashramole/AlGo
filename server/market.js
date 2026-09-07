@@ -906,6 +906,27 @@ export function snapshot() {
   };
 }
 
+export function memberIndexQuote(row) {
+  if (!row?.symbol || row.symbol === "INDIA VIX") return null;
+  return {
+    symbol: row.symbol,
+    name: row.name || row.symbol,
+    price: Number(row.price) || 0,
+    change: Number(row.change) || 0,
+    changePct: Number(row.changePct) || 0,
+    spark: Array.isArray(row.spark) ? row.spark.slice(-8) : [],
+    future: Number(row.future) > 0 ? Number(row.future) : Number(row.price) || 0,
+    futureExpiry: row.futureExpiry || "",
+    lot: Number(row.lot) || 0,
+  };
+}
+
+export function memberQuotes() {
+  return {
+    indices: publicIndices(state.indices).map(memberIndexQuote).filter(Boolean),
+  };
+}
+
 export function toggleAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;

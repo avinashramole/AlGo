@@ -1,22 +1,46 @@
+import { useEffect, useState } from "react";
 import { Bell, Shield, UserRound, CreditCard, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
+import { getMemberQuotes, type MemberIndexQuote } from "../api/client";
+import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
 import { useAuth } from "../context/AuthContext";
 
 export function UserHome() {
   const { user } = useAuth();
+  const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void getMemberQuotes()
+        .then((row) => {
+          if (alive) setIndices(row.indices || []);
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const id = window.setInterval(load, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="space-y-4">
       <section className="card p-6">
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
         <h1 className="mt-1 text-2xl font-extrabold">Welcome, {user?.name || "trader"}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Signed in with {user?.email || "your account"}. Open My plan for MTM, add wallet balance, and pick a broker.
+          Signed in with {user?.email || "your account"}. Index cards show price and future only — no VWAP. Open My plan for MTM, add wallet balance, and pick a broker.
         </p>
         <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500 dark:bg-slate-800">
           {user?.role || "user"}
         </div>
       </section>
+
+      <MemberIndexBoard indices={indices} />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <article className="card p-5">
           <CreditCard size={18} className="text-brand-500" />

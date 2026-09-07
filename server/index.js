@@ -24,6 +24,7 @@ import {
   getOptionMeta,
   getAlgo,
   listAlgos,
+  memberQuotes,
   quoteSymbol,
   placeOrder,
   snapshot,
@@ -307,6 +308,15 @@ function memberAuth(req) {
   if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
   return user;
 }
+
+app.get("/api/member/quotes", (req, res) => {
+  try {
+    memberAuth(req);
+    res.json(memberQuotes());
+  } catch (error) {
+    res.status(error.status || 401).json({ error: error.message || "Sign in first." });
+  }
+});
 
 app.get("/api/member/desk", (req, res) => {
   try {

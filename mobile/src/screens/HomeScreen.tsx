@@ -1,10 +1,73 @@
+import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
+import { getMemberQuotes, type MemberIndexQuote } from "../api";
 import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
 import { colors, formatInr, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
+
+function MemberHome() {
+  const navigation = useNavigation<any>();
+  const { user } = useAuth();
+  const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
+
+  useEffect(() => {
+    const load = () => {
+      void getMemberQuotes()
+        .then((row) => setIndices(row.indices || []))
+        .catch(() => undefined);
+    };
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+      <BrandMark variant="horizontal" />
+      <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
+      <Text style={styles.muted}>Price and future only. VWAP is hidden on the member dashboard.</Text>
+      {indices.map((item) => {
+        const up = item.change >= 0;
+        return (
+          <Card key={item.symbol}>
+            <Text style={styles.muted}>{item.symbol}</Text>
+            <Text style={styles.price}>{formatNumber(item.price)}</Text>
+            <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
+              {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
+            </Text>
+            <View style={styles.deskRow}>
+              <View>
+                <Text style={styles.tiny}>FUTURE</Text>
+                <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                <Text style={styles.tiny}>{item.futureExpiry || ""}</Text>
+              </View>
+              <View>
+                <Text style={styles.tiny}>LOT</Text>
+                <Text style={styles.deskVal}>{item.lot ? `1 lot = ${item.lot}` : "—"}</Text>
+              </View>
+            </View>
+          </Card>
+        );
+      })}
+      <Card>
+        <Text style={styles.price}>{user?.email || "Gmail account"}</Text>
+        <Text style={styles.tiny}>Role: member</Text>
+      </Card>
+      <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Plans")}>
+        <Text style={{ color: colors.brand, fontWeight: "800" }}>View subscriptions</Text>
+      </Pressable>
+      <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Report")}>
+        <Text style={{ color: colors.brand, fontWeight: "800" }}>Plan report · MTM</Text>
+      </Pressable>
+      <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Profile")}>
+        <Text style={{ color: colors.brand, fontWeight: "800" }}>Open profile</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -12,26 +75,7 @@ export function HomeScreen() {
   const { data, live, order } = useMarket();
   const signal = data.featuredSignal;
   if (user?.role !== "admin") {
-    return (
-      <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-        <BrandMark variant="horizontal" />
-        <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
-        <Text style={styles.muted}>Member dashboard. Open Report for MTM, wallet add, and broker selection.</Text>
-        <Card>
-          <Text style={styles.price}>{user?.email || "Gmail account"}</Text>
-          <Text style={styles.tiny}>Role: member</Text>
-        </Card>
-        <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Plans")}>
-          <Text style={{ color: colors.brand, fontWeight: "800" }}>View subscriptions</Text>
-        </Pressable>
-        <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Report")}>
-          <Text style={{ color: colors.brand, fontWeight: "800" }}>Plan report · MTM</Text>
-        </Pressable>
-        <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Profile")}>
-          <Text style={{ color: colors.brand, fontWeight: "800" }}>Open profile</Text>
-        </Pressable>
-      </ScrollView>
-    );
+    return <MemberHome />;
   }
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
     const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
