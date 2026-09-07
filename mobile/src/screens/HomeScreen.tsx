@@ -4,7 +4,7 @@ import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
-import { colors, formatInr, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
+import { colors, formatInr, formatNumber, formatPct, isNseSessionOpen } from "../theme";
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
@@ -84,20 +84,8 @@ export function HomeScreen() {
                       <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
                     </View>
                     <View>
-                      <Text style={styles.tiny}>VWAP</Text>
-                      <Text
-                        style={[
-                          styles.deskVal,
-                          {
-                            color: vwapColor(
-                              item.futureVwap || item.vwap || item.future || item.price,
-                              item.future || item.price,
-                            ),
-                          },
-                        ]}
-                      >
-                        {formatNumber(item.futureVwap || item.vwap || item.price)}
-                      </Text>
+                      <Text style={styles.tiny}>LOT</Text>
+                      <Text style={styles.deskVal}>{item.lot ? `1 = ${item.lot}` : "—"}</Text>
                     </View>
                   </View>
                 ) : null}
