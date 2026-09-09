@@ -36,7 +36,7 @@ export function RegisteredUsersCard() {
           <p className="mt-1 text-xs text-slate-500">Gmail OAuth and Create Account members.</p>
         </div>
         <Link to="/users" className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-semibold leading-9 text-white">
-          User list
+          All clients
         </Link>
       </div>
       {error ? <p className="mt-3 text-xs text-down">{error}</p> : null}

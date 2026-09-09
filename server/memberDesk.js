@@ -42,10 +42,20 @@ function persist() {
   writeStore(store);
 }
 
+const SIZING_KINDS = ["multiplier", "lots", "fixed"];
+const TRADE_MODES = ["paper", "real"];
+
 function emptyDesk(userId) {
   return {
     userId,
     brokerId: "paper",
+    group: "ALL",
+    sizingKind: "multiplier",
+    sizingValue: 1,
+    tradeMode: "paper",
+    copy: false,
+    staticIp: "",
+    accountId: "",
     wallet: { balance: 0, updatedAt: new Date().toISOString() },
     topups: [],
     positions: [],
@@ -53,6 +63,95 @@ function emptyDesk(userId) {
     orders: [],
     seededPlans: [],
   };
+}
+
+export function isStaticIp(value) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.toLowerCase() === "default") return true;
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(raw)) {
+    return raw.split(".").every((part) => {
+      const n = Number(part);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  }
+  if (raw.includes(":") && /^[0-9a-fA-F:]+$/.test(raw) && raw.length <= 45) return true;
+  return false;
+}
+
+export function normalizeClientSettings(desk = {}) {
+  const sizingKind = SIZING_KINDS.includes(desk.sizingKind) ? desk.sizingKind : "multiplier";
+  const rawSize = Number(desk.sizingValue);
+  const sizingValue = Number.isFinite(rawSize) ? Math.min(100, Math.max(0.1, rawSize)) : 1;
+  const tradeMode = desk.tradeMode === "real" ? "real" : "paper";
+  const brokerId = catalog.some((row) => row.id === desk.brokerId) ? desk.brokerId : "paper";
+  return {
+    group: String(desk.group || "ALL").trim() || "ALL",
+    sizingKind,
+    sizingValue,
+    tradeMode,
+    copy: Boolean(desk.copy),
+    staticIp: String(desk.staticIp || "").trim(),
+    accountId: String(desk.accountId || "").trim(),
+    brokerId,
+    margin: round2(desk.wallet?.balance || 0),
+  };
+}
+
+export function peekClientSettings(userId) {
+  const desk = store[userId];
+  if (!desk) return normalizeClientSettings({ brokerId: "paper", wallet: { balance: 0 } });
+  return normalizeClientSettings(desk);
+}
+
+export function saveClientSettings(userId, patch = {}) {
+  if (!userId) throw fail("Client required.");
+  const desk = loadDesk(userId);
+  if (patch.group != null) desk.group = String(patch.group || "ALL").trim() || "ALL";
+  if (patch.sizingKind != null) {
+    const kind = String(patch.sizingKind || "").trim().toLowerCase();
+    if (!SIZING_KINDS.includes(kind)) throw fail("Order sizing must be Multiplier, Lots, or Fixed.");
+    desk.sizingKind = kind;
+  }
+  if (patch.sizingValue != null) {
+    const n = Number(patch.sizingValue);
+    if (!Number.isFinite(n) || n < 0.1 || n > 100) throw fail("Order size must be between 0.1 and 100.");
+    desk.sizingValue = n;
+  }
+  if (patch.tradeMode != null) {
+    const mode = String(patch.tradeMode || "").trim().toLowerCase();
+    if (!TRADE_MODES.includes(mode)) throw fail("Mode must be PAPER or REAL.");
+    desk.tradeMode = mode;
+  }
+  if (patch.copy != null) desk.copy = Boolean(patch.copy);
+  if (patch.staticIp != null) {
+    const ip = String(patch.staticIp || "").trim();
+    if (!isStaticIp(ip)) throw fail("Enter an IPv4 or IPv6 address, or leave Default.");
+    desk.staticIp = ip.toLowerCase() === "default" ? "" : ip;
+  }
+  if (patch.accountId != null) desk.accountId = String(patch.accountId || "").trim();
+  if (patch.brokerId != null) {
+    const id = String(patch.brokerId || "").trim().toLowerCase();
+    if (!catalog.some((row) => row.id === id)) throw fail("Unknown broker.");
+    desk.brokerId = id;
+  }
+  persist();
+  return normalizeClientSettings(desk);
+}
+
+export function listClientGroups() {
+  const groups = new Set(["ALL"]);
+  for (const desk of Object.values(store)) {
+    const name = String(desk?.group || "").trim();
+    if (name) groups.add(name);
+  }
+  return [...groups];
+}
+
+export function removeDesk(userId) {
+  if (!userId || !store[userId]) return false;
+  delete store[userId];
+  persist();
+  return true;
 }
 
 function loadDesk(userId) {

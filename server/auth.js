@@ -627,6 +627,51 @@ export function listPublicUsers() {
     });
 }
 
+export function getPublicUser(id) {
+  store = loadUsers();
+  const user = store.byId.get(String(id || "").trim());
+  return user ? publicUser(user) : null;
+}
+
+export function adminUpdateUser(id, patch = {}) {
+  store = loadUsers();
+  const user = store.byId.get(String(id || "").trim());
+  if (!user) throw fail("Client not found.", 404);
+  if (patch.name != null) {
+    const name = String(patch.name || "").trim();
+    if (name.length < 2) throw fail("Enter the client name.");
+    user.name = name;
+  }
+  if (patch.mobile != null) {
+    const mobile = normalizeMobile(patch.mobile);
+    if (mobile && !isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile, or leave it blank.");
+    if (mobile) {
+      const taken = store.byMobile.get(mobile);
+      if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+    }
+    user.mobile = mobile;
+  }
+  persist();
+  return publicUser(user);
+}
+
+export function deleteRegisteredUser(id, { actorId } = {}) {
+  store = loadUsers();
+  const userId = String(id || "").trim();
+  const user = store.byId.get(userId);
+  if (!user) throw fail("Client not found.", 404);
+  if (userId === actorId) throw fail("You cannot delete the signed-in account.");
+  if (userId === "avinash" || userId === "segin") throw fail("The desk admin accounts cannot be deleted.");
+  if (resolveUserRole(user) === "admin") throw fail("Delete a member from All clients, not an admin.");
+  store.users = store.users.filter((row) => row.id !== userId);
+  persist();
+  for (const [token, session] of [...sessions.entries()]) {
+    if (session.userId === userId) sessions.delete(token);
+  }
+  persistSessions();
+  return { ok: true, id: userId };
+}
+
 export function googleOAuthConfigured(env = process.env) {
   return Boolean(String(env.GOOGLE_CLIENT_ID || "").trim() && String(env.GOOGLE_CLIENT_SECRET || "").trim());
 }

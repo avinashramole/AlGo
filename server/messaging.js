@@ -189,8 +189,8 @@ export function upsertMessagingContact(patch = {}) {
   const telegramId = String(patch.telegramId || "").trim();
   if (!mobile && !telegramId) throw fail("Add a WhatsApp mobile or a Telegram chat id.");
   const now = new Date().toISOString();
-  const id = String(patch.id || "").trim() || `c${crypto.randomBytes(6).toString("hex")}`;
-  let row = store.contacts.find((item) => item.id === id);
+  const id = String(patch.id || patch.userId || "").trim() || `c${crypto.randomBytes(6).toString("hex")}`;
+  let row = store.contacts.find((item) => item.id === id || (patch.userId && item.userId === patch.userId));
   if (!row) {
     row = { id, createdAt: now, source: "manual" };
     store.contacts.push(row);
@@ -199,9 +199,29 @@ export function upsertMessagingContact(patch = {}) {
   row.mobile = mobile;
   row.telegramId = telegramId;
   row.broker = String(patch.broker || "T2S").trim() || "T2S";
+  if (patch.userId) row.userId = String(patch.userId);
   row.updatedAt = now;
   persist();
   return asConversation(row);
+}
+
+export function messagingHandleForUser(userId) {
+  const id = String(userId || "").trim();
+  const row = store.contacts.find((item) => item.id === id || item.userId === id);
+  return {
+    telegramId: String(row?.telegramId || "").trim(),
+    mobile: String(row?.mobile || "").trim(),
+  };
+}
+
+export function removeMessagingUser(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return false;
+  const before = store.contacts.length;
+  store.contacts = store.contacts.filter((item) => item.id !== id && item.userId !== id);
+  delete store.threads[id];
+  persist();
+  return store.contacts.length !== before;
 }
 
 function findContact(id, users = []) {

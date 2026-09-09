@@ -503,6 +503,44 @@ export function listUsers() {
   return request<{ users: AuthUser[] }>("/users");
 }
 
+export type ClientRow = {
+  id: string;
+  name: string;
+  email?: string;
+  mobile?: string;
+  telegramId?: string;
+  group: string;
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+  linked: boolean;
+  sizingKind: "multiplier" | "lots" | "fixed";
+  sizingValue: number;
+  tradeMode: "paper" | "real";
+  copy: boolean;
+  staticIp?: string;
+  status: "LIVE" | "PAPER ONLY";
+  margin: number;
+  createdAt?: string;
+  lastLoginAt?: string;
+};
+
+export function listClients() {
+  return request<{ clients: ClientRow[]; groups: string[]; live: number; paper: number }>("/clients");
+}
+
+export function saveClient(id: string, payload: Partial<ClientRow> & { name?: string; mobile?: string; telegramId?: string }) {
+  return request<{ client: ClientRow }>(`/clients/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteClient(id: string) {
+  return request<{ ok: boolean; id: string }>(`/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export type CatalogStrategy = {
   id: string;
   name: string;

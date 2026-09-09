@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Settings as Gear, MessageSquare, Search, Send, UserPlus, Users } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import {
   addMessagingContact,
   broadcastMessaging,
@@ -15,6 +16,7 @@ import { cn, formatMobile } from "../lib/format";
 type SendVia = "both" | "whatsapp" | "telegram";
 
 export function Chat() {
+  const [params] = useSearchParams();
   const [sendVia, setSendVia] = useState<SendVia>("both");
   const [whatsappReady, setWhatsappReady] = useState(false);
   const [telegramReady, setTelegramReady] = useState(false);
@@ -41,6 +43,11 @@ export function Chat() {
   useEffect(() => {
     void load().catch((err) => setNote(err instanceof Error ? err.message : "Could not load messages"));
   }, [load]);
+
+  useEffect(() => {
+    const client = String(params.get("client") || "").trim();
+    if (client) setSelectedId(client);
+  }, [params]);
 
   const selected = conversations.find((row) => row.id === selectedId) || null;
 
