@@ -1,7 +1,7 @@
-import { MessageSquare, Pencil, RefreshCw, Search, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { MessageSquare, Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users as UsersIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { deleteClient, listClients, saveClient, type ClientRow } from "../api/client";
+import { createClient, deleteClient, listClients, saveClient, type ClientRow } from "../api/client";
 import { cn, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
@@ -16,6 +16,7 @@ export function Users() {
   const [savingId, setSavingId] = useState("");
   const [edit, setEdit] = useState<ClientRow | null>(null);
   const [groupFor, setGroupFor] = useState<ClientRow | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -87,15 +88,25 @@ export function Users() {
             Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={busy}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60"
-        >
-          <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={busy}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
+            Refresh
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+            onClick={() => setShowAdd(true)}
+          >
+            <Plus size={16} />
+            Add client
+          </button>
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Clients" value={clients.length} />
@@ -135,6 +146,9 @@ export function Users() {
                   <td className="px-4 py-3 align-middle">
                     <div className="font-semibold">{row.name}</div>
                     <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{row.group || "ALL"}</div>
+                    {row.subscriptionUntil ? (
+                      <div className="text-[10px] text-slate-500">Valid {row.subscriptionUntil}</div>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 align-middle">
                     <BrokerCell row={row} />
@@ -231,6 +245,15 @@ export function Users() {
         ) : null}
       </section>
 
+      {showAdd ? (
+        <AddClientModal
+          onClose={() => setShowAdd(false)}
+          onSaved={(client) => {
+            setClients((current) => [...current, client].sort((a, b) => a.name.localeCompare(b.name)));
+            setShowAdd(false);
+          }}
+        />
+      ) : null}
       {edit ? (
         <EditModal
           row={edit}
@@ -341,6 +364,155 @@ function ActionBtn({ children, onClick }: { children: ReactNode; onClick: () => 
     </button>
   );
 }
+
+function defaultUntil() {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (client: ClientRow) => void }) {
+  const [copy, setCopy] = useState(true);
+  const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [accountId, setAccountId] = useState("master");
+  const [brokerId, setBrokerId] = useState("dhan");
+  const [sizingKind, setSizingKind] = useState<SizingKind>("multiplier");
+  const [sizingValue, setSizingValue] = useState("1");
+  const [tradeMode, setTradeMode] = useState<TradeMode>("paper");
+  const [subscriptionMode, setSubscriptionMode] = useState<NonNullable<ClientRow["subscriptionMode"]>>("copy");
+  const [subscriptionUntil, setSubscriptionUntil] = useState(defaultUntil);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await createClient({
+        name,
+        mobile,
+        email,
+        accountId,
+        brokerId,
+        sizingKind,
+        sizingValue: Number(sizingValue),
+        tradeMode,
+        copy,
+        subscriptionMode,
+        subscriptionUntil,
+      });
+      onSaved(result.client);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create client");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-3 md:items-center">
+      <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/15 text-brand-500">
+              <UserPlus size={18} />
+            </span>
+            <div>
+              <h2 className="text-base font-bold">Add client account</h2>
+              <p className="text-xs text-slate-400">Connect and configure a new trading account</p>
+            </div>
+          </div>
+          <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <form onSubmit={(event) => void onSubmit(event)} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
+            <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold">Copy trading</div>
+                <div className="text-xs text-slate-400">{copy ? "ON · Master orders will be copied" : "OFF · This client will not copy desk orders"}</div>
+              </div>
+              <CopySwitch on={copy} onChange={setCopy} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Client name">
+                <input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Ramesh Kumar" />
+              </Field>
+              <Field label="Mobile">
+                <input className={inputClass} value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="9xxxxxxxxx" />
+                <span className="font-normal text-[11px] text-slate-500">Client portal login number · initial password 1234</span>
+              </Field>
+              <Field label="Email">
+                <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="client@email.com" />
+              </Field>
+              <Field label="Broker client ID">
+                <input className={inputClass} value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="master" />
+              </Field>
+              <Field label="Broker">
+                <select className={inputClass} value={brokerId} onChange={(event) => setBrokerId(event.target.value)}>
+                  <option value="dhan">DHAN</option>
+                  <option value="zerodha">ZERODHA</option>
+                  <option value="kotak">KOTAK</option>
+                  <option value="fyers">FYERS</option>
+                  <option value="paper">PAPER</option>
+                </select>
+              </Field>
+              <Field label="Order sizing method">
+                <select className={inputClass} value={sizingKind} onChange={(event) => setSizingKind(event.target.value as SizingKind)}>
+                  <option value="multiplier">Master quantity multiplier</option>
+                  <option value="lots">Fixed lots</option>
+                  <option value="fixed">Fixed quantity</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="Order multiplier">
+              <input className={inputClass} type="number" min={0.1} max={100} step={0.1} value={sizingValue} onChange={(event) => setSizingValue(event.target.value)} />
+            </Field>
+            <Field label="Order mode">
+              <select className={inputClass} value={tradeMode} onChange={(event) => setTradeMode(event.target.value as TradeMode)}>
+                <option value="paper">Paper</option>
+                <option value="real">Real</option>
+              </select>
+              <span className="font-normal text-[11px] text-slate-500">Add a broker before enabling real orders. This does not start Dhan LIVE on the desk.</span>
+            </Field>
+            <Field label="Subscription mode">
+              <select
+                className={inputClass}
+                value={subscriptionMode}
+                onChange={(event) => setSubscriptionMode(event.target.value as NonNullable<ClientRow["subscriptionMode"]>)}
+              >
+                <option value="copy">Copy Master only</option>
+                <option value="strategy">Mapped strategies only</option>
+                <option value="both">Copy Master + strategies</option>
+              </select>
+              <span className="font-normal text-[11px] text-slate-500">Choose whether this client receives mapped strategy orders, manual Copy Master orders, or both.</span>
+            </Field>
+            <Field label="Subscription valid through">
+              <input className={inputClass} type="date" value={subscriptionUntil} onChange={(event) => setSubscriptionUntil(event.target.value)} />
+            </Field>
+            {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
+            <button type="button" className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" disabled={busy} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
+              <Plus size={16} />
+              {busy ? "Creating..." : "Create client"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
 
 function EditModal({
   row,

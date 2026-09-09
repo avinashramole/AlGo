@@ -1,5 +1,5 @@
 import { catalog } from "./brokers.js";
-import { adminUpdateUser, deleteRegisteredUser, getPublicUser } from "./auth.js";
+import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser } from "./auth.js";
 import { listClientGroups, peekClientSettings, removeDesk, saveClientSettings } from "./memberDesk.js";
 import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
 
@@ -42,6 +42,8 @@ function asClient(user, desk, handle = {}) {
     copy: desk.copy,
     staticIp: desk.staticIp,
     status: desk.tradeMode === "real" ? "LIVE" : "PAPER ONLY",
+    subscriptionMode: desk.subscriptionMode,
+    subscriptionUntil: desk.subscriptionUntil,
     margin: desk.margin,
     createdAt: user.createdAt || "",
     lastLoginAt: user.lastLoginAt || "",
@@ -63,6 +65,42 @@ export function clientStatus(users = []) {
     live: clients.filter((row) => row.status === "LIVE").length,
     paper: clients.filter((row) => row.status !== "LIVE").length,
   };
+}
+
+export function createClient(patch = {}) {
+  const brokerId = String(patch.brokerId || "dhan").trim().toLowerCase() || "dhan";
+  const tradeMode = String(patch.tradeMode || "paper").trim().toLowerCase() === "real" ? "real" : "paper";
+  if (tradeMode === "real" && (brokerId === "paper" || !brokerId)) {
+    throw fail("Add a broker before enabling real orders. New clients stay PAPER.");
+  }
+  const user = adminCreateMember({
+    name: patch.name,
+    mobile: patch.mobile,
+    email: patch.email,
+  });
+  saveClientSettings(user.id, {
+    copy: patch.copy == null ? true : Boolean(patch.copy),
+    brokerId,
+    accountId: patch.accountId,
+    sizingKind: patch.sizingKind || "multiplier",
+    sizingValue: patch.sizingValue == null ? 1 : patch.sizingValue,
+    tradeMode,
+    subscriptionMode: patch.subscriptionMode || "copy",
+    subscriptionUntil: patch.subscriptionUntil,
+    group: patch.group || "ALL",
+  });
+  const mobile = String(user.mobile || "").trim();
+  if (mobile) {
+    upsertMessagingContact({
+      id: user.id,
+      userId: user.id,
+      name: user.name,
+      mobile,
+      telegramId: String(patch.telegramId || "").trim(),
+      broker: brokerLabel(peekClientSettings(user.id).brokerId),
+    });
+  }
+  return asClient(user, peekClientSettings(user.id), messagingHandleForUser(user.id));
 }
 
 export function saveClient(userId, patch = {}) {

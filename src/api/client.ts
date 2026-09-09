@@ -521,6 +521,8 @@ export type ClientRow = {
   copy: boolean;
   staticIp?: string;
   status: "LIVE" | "PAPER ONLY";
+  subscriptionMode?: "copy" | "strategy" | "both";
+  subscriptionUntil?: string;
   margin: number;
   createdAt?: string;
   lastLoginAt?: string;
@@ -528,6 +530,27 @@ export type ClientRow = {
 
 export function listClients() {
   return request<{ clients: ClientRow[]; groups: string[]; live: number; paper: number }>("/clients");
+}
+
+export function createClient(payload: {
+  name: string;
+  mobile: string;
+  email?: string;
+  brokerId?: string;
+  accountId?: string;
+  sizingKind?: ClientRow["sizingKind"];
+  sizingValue?: number;
+  tradeMode?: ClientRow["tradeMode"];
+  copy?: boolean;
+  subscriptionMode?: ClientRow["subscriptionMode"];
+  subscriptionUntil?: string;
+  group?: string;
+  telegramId?: string;
+}) {
+  return request<{ client: ClientRow }>("/clients", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function saveClient(id: string, payload: Partial<ClientRow> & { name?: string; mobile?: string; telegramId?: string }) {

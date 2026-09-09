@@ -672,6 +672,35 @@ export function deleteRegisteredUser(id, { actorId } = {}) {
   return { ok: true, id: userId };
 }
 
+export const INITIAL_CLIENT_PASSWORD = "1234";
+
+export function adminCreateMember(patch = {}) {
+  store = loadUsers();
+  const name = String(patch.name || "").trim();
+  if (name.length < 2) throw fail("Enter the client name.");
+  const mobile = normalizeMobile(patch.mobile);
+  if (!isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile. That number is the client portal login.");
+  const email = normalizeEmail(patch.email);
+  if (email && !email.includes("@")) throw fail("Enter a valid email, or leave it blank.");
+  if (email && store.byEmail.get(email)) throw fail("That email is already on another account.");
+  if (store.byMobile.get(mobile)) throw fail("That mobile is already on another account.");
+  const nowIso = new Date().toISOString();
+  const user = {
+    id: `u${crypto.randomBytes(6).toString("hex")}`,
+    name,
+    email,
+    mobile,
+    desk: "Index Options",
+    role: "user",
+    authProvider: "password",
+    createdAt: nowIso,
+    password: hashPassword(INITIAL_CLIENT_PASSWORD),
+  };
+  store.users.push(user);
+  persist();
+  return publicUser(user);
+}
+
 export function googleOAuthConfigured(env = process.env) {
   return Boolean(String(env.GOOGLE_CLIENT_ID || "").trim() && String(env.GOOGLE_CLIENT_SECRET || "").trim());
 }

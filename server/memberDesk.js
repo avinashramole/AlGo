@@ -44,6 +44,7 @@ function persist() {
 
 const SIZING_KINDS = ["multiplier", "lots", "fixed"];
 const TRADE_MODES = ["paper", "real"];
+const SUBSCRIPTION_MODES = ["copy", "strategy", "both"];
 
 function emptyDesk(userId) {
   return {
@@ -56,6 +57,8 @@ function emptyDesk(userId) {
     copy: false,
     staticIp: "",
     accountId: "",
+    subscriptionMode: "copy",
+    subscriptionUntil: "",
     wallet: { balance: 0, updatedAt: new Date().toISOString() },
     topups: [],
     positions: [],
@@ -84,6 +87,7 @@ export function normalizeClientSettings(desk = {}) {
   const sizingValue = Number.isFinite(rawSize) ? Math.min(100, Math.max(0.1, rawSize)) : 1;
   const tradeMode = desk.tradeMode === "real" ? "real" : "paper";
   const brokerId = catalog.some((row) => row.id === desk.brokerId) ? desk.brokerId : "paper";
+  const subscriptionMode = SUBSCRIPTION_MODES.includes(desk.subscriptionMode) ? desk.subscriptionMode : "copy";
   return {
     group: String(desk.group || "ALL").trim() || "ALL",
     sizingKind,
@@ -93,6 +97,8 @@ export function normalizeClientSettings(desk = {}) {
     staticIp: String(desk.staticIp || "").trim(),
     accountId: String(desk.accountId || "").trim(),
     brokerId,
+    subscriptionMode,
+    subscriptionUntil: String(desk.subscriptionUntil || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
   };
 }
@@ -133,6 +139,16 @@ export function saveClientSettings(userId, patch = {}) {
     const id = String(patch.brokerId || "").trim().toLowerCase();
     if (!catalog.some((row) => row.id === id)) throw fail("Unknown broker.");
     desk.brokerId = id;
+  }
+  if (patch.subscriptionMode != null) {
+    const mode = String(patch.subscriptionMode || "").trim().toLowerCase();
+    if (!SUBSCRIPTION_MODES.includes(mode)) throw fail("Subscription must be Copy Master, mapped strategies, or both.");
+    desk.subscriptionMode = mode;
+  }
+  if (patch.subscriptionUntil != null) {
+    const until = String(patch.subscriptionUntil || "").trim();
+    if (until && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw fail("Use a valid through date (YYYY-MM-DD).");
+    desk.subscriptionUntil = until;
   }
   persist();
   return normalizeClientSettings(desk);

@@ -9,7 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBroker
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
-import { clientStatus, deleteClient, saveClient } from "./clients.js";
+import { clientStatus, createClient, deleteClient, saveClient } from "./clients.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -396,6 +396,14 @@ app.get("/api/users", (_req, res) => {
 
 app.get("/api/clients", (_req, res) => {
   res.json(clientStatus(listPublicUsers()));
+});
+
+app.post("/api/clients", (req, res) => {
+  try {
+    res.status(201).json({ client: createClient(req.body || {}) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not create client" });
+  }
 });
 
 app.post("/api/clients/:id", (req, res) => {

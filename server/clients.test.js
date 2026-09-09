@@ -37,9 +37,9 @@ fs.writeFileSync(
   )}\n`,
 );
 
-const { listPublicUsers } = await import("./auth.js");
+const { listPublicUsers, loginWithPassword } = await import("./auth.js");
 const { saveClientSettings } = await import("./memberDesk.js");
-const { clientStatus, deleteClient, listClients, saveClient } = await import("./clients.js");
+const { clientStatus, createClient, deleteClient, listClients, saveClient } = await import("./clients.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
   const rows = listClients(listPublicUsers());
@@ -87,9 +87,43 @@ test("clientStatus counts LIVE vs paper", () => {
   assert.equal(status.groups.includes("NIFTY"), true);
 });
 
+test("createClient provisions a member who signs in with mobile and 1234", () => {
+  const row = createClient({
+    name: "Ramesh Kumar",
+    mobile: "9123456789",
+    email: "ramesh@gmail.com",
+    brokerId: "dhan",
+    accountId: "master",
+    copy: true,
+    sizingKind: "multiplier",
+    sizingValue: 1,
+    tradeMode: "paper",
+    subscriptionMode: "copy",
+    subscriptionUntil: "2026-10-09",
+  });
+  assert.equal(row.name, "Ramesh Kumar");
+  assert.equal(row.copy, true);
+  assert.equal(row.tradeMode, "paper");
+  assert.equal(row.status, "PAPER ONLY");
+  assert.equal(row.accountId, "master");
+  assert.equal(row.subscriptionMode, "copy");
+  assert.equal(row.subscriptionUntil, "2026-10-09");
+  const session = loginWithPassword("9123456789", "1234");
+  assert.equal(session.user.role, "user");
+  assert.equal(session.user.mobile, "9123456789");
+  assert.equal(process.env.DHAN_LIVE, undefined);
+});
+
+test("createClient refuses REAL when no broker is linked", () => {
+  assert.throws(
+    () => createClient({ name: "No Broker", mobile: "9000000001", brokerId: "paper", tradeMode: "real" }),
+    /broker/,
+  );
+});
+
 test("deleteClient removes a member and refuses the desk admin", () => {
   assert.throws(() => deleteClient("avinash", { actorId: "segin" }), /admin/);
   const gone = deleteClient("u-arpit", { actorId: "avinash" });
   assert.equal(gone.ok, true);
-  assert.equal(listClients(listPublicUsers()).length, 0);
+  assert.equal(listClients(listPublicUsers()).some((row) => row.id === "u-arpit"), false);
 });
