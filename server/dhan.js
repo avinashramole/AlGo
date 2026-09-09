@@ -496,6 +496,7 @@ function mapDhanPositions(raw) {
       const pnl = Number(row.unrealizedProfit || 0);
       const dir = type === "BUY" ? 1 : -1;
       const implied = qty ? avg + pnl / (qty * dir) : avg;
+      const parsed = parseOptionContract(row.tradingSymbol || "");
       return {
         id: `dhan-pos-${row.securityId}-${row.productType || "MIS"}`,
         symbol: row.tradingSymbol || String(row.securityId),
@@ -506,6 +507,8 @@ function mapDhanPositions(raw) {
         pnl: Number(pnl.toFixed(2)),
         product: row.productType || "MIS",
         strategy: "",
+        option: parsed?.option || "",
+        strike: parsed?.strike || 0,
         securityId: String(row.securityId || ""),
         brokerId: "dhan",
         live: true,

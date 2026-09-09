@@ -8,6 +8,7 @@ import {
   getUnderlying,
   nearestWeeklyExpiry,
   normalizeExpiry,
+  isWeeklyOptionExpiry,
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
@@ -27,6 +28,7 @@ import {
   PositionManager,
   runtimeState,
   runNiftyVwapBacktest,
+  VwapSignalEngine,
 } from "./niftyVwap/index.js";
 
 function clone(value) {
@@ -385,11 +387,24 @@ export function drainPendingLiveAlgoOrders() {
 export function queueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = payload?.side === "SELL" ? "SELL" : "BUY";
-  if (
-    strategy &&
-    pendingLiveAlgoOrders.some((row) => row.strategy === strategy && (row.side === "SELL" ? "SELL" : "BUY") === side)
-  ) {
+  const samePending = pendingLiveAlgoOrders.some((row) => {
+    const rowSide = row.side === "SELL" ? "SELL" : "BUY";
+    if (rowSide !== side) return false;
+    if (strategy && row.strategy === strategy) return true;
+    if (payload?.symbol && row.symbol && row.symbol === payload.symbol) return true;
+    const left = PositionManager.niftyOptionLeg(payload);
+    const right = PositionManager.niftyOptionLeg(row);
+    return Boolean(left && right && left.strike === right.strike && left.option === right.option);
+  });
+  if (samePending) {
     return { ok: true, queued: true, status: "PENDING", duplicate: true };
+  }
+  if (side === "BUY") {
+    const openNifty = (state.positions || []).some((row) => !isPaperRow(row) && PositionManager.isOpenNiftyOption(row));
+    const pendingBuy = pendingLiveAlgoOrders.some((row) => (row.side === "SELL" ? "SELL" : "BUY") === "BUY");
+    if (openNifty || pendingBuy) {
+      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId: "dhan" });
   return { ok: true, queued: true, status: "PENDING" };
@@ -461,6 +476,7 @@ function positionsForNiftyVwap(algo, mode) {
   const mine = (row) => {
     if (row.strategy === algo.name) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
+    if (PositionManager.isOpenNiftyOption(row)) return true;
     return false;
   };
   const rows = state.positions || [];
@@ -488,12 +504,18 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const open = PositionManager.openFor(positions, algo.name, vs);
   if (mode === "live" && !session.open && !open) return;
   if (isNiftyVwapReversalAlgo(algo)) preferWeeklyDeskForReversal();
-  const futuresBars = getCandles(config.timeframe || "5m");
+  const futuresBars = feedLive ? getCandles(config.timeframe || "5m") : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
   const und = getUnderlying("NIFTY");
   const pack = chainForSymbol("NIFTY");
   const expiry = expiryForNiftyVwap(algo, pack);
+  if (isNiftyVwapReversalAlgo(algo) && expiry && !isWeeklyOptionExpiry(expiry, "NIFTY") && !open) {
+    if (!positions.some((row) => PositionManager.isOpenNiftyOption(row))) {
+      algo.lastSignal = "WAIT WEEKLY EXPIRY";
+      return;
+    }
+  }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
@@ -1253,6 +1275,9 @@ export function placeOrder(payload) {
       pnl: 0,
       product: order.product,
       strategy: order.strategy,
+      option: payload.option || PositionManager.niftyOptionLeg(payload)?.option || "",
+      strike: payload.strike || PositionManager.niftyOptionLeg(payload)?.strike || 0,
+      expiry: payload.expiry || "",
       brokerId,
       openedAt: order.createdAt,
       sim: !isPaper,
@@ -1369,7 +1394,24 @@ export function dropBrokerPositions(brokerId) {
 }
 
 export function replaceDhanBook(rows) {
-  const incoming = Array.isArray(rows) ? rows : [];
+  const incoming = (Array.isArray(rows) ? rows : []).map((row) => {
+    const leg = PositionManager.niftyOptionLeg(row);
+    const next = {
+      ...row,
+      option: row.option || leg?.option || "",
+      strike: row.strike || leg?.strike || 0,
+    };
+    if (next.strategy) return next;
+    for (const algo of state.algos || []) {
+      if (!isNiftyOptionEngineAlgo(algo) || !algo.enabled) continue;
+      const vs = runtimeState(algo);
+      if (PositionManager.openFor([next], algo.name, vs)) {
+        next.strategy = algo.name;
+        break;
+      }
+    }
+    return next;
+  });
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
   state.positions = [...incoming, ...others];
 }
@@ -1646,22 +1688,9 @@ export function applyLiveQuotes(quotes) {
 export function getCandles(tf = "5m") {
   if (state.dhanFeed.live) {
     if (!state.liveCandles.length) return [];
-    const step = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" ? 60 : 5;
-    if (step <= 1) return clone(state.liveCandles);
-    const grouped = [];
-    for (let i = 0; i < state.liveCandles.length; i += step) {
-      const slice = state.liveCandles.slice(i, i + step);
-      if (!slice.length) continue;
-      grouped.push({
-        time: slice[0].time,
-        open: slice[0].open,
-        high: Math.max(...slice.map((row) => row.high)),
-        low: Math.min(...slice.map((row) => row.low)),
-        close: slice[slice.length - 1].close,
-        volume: slice.reduce((sum, row) => sum + row.volume, 0),
-      });
-    }
-    return grouped;
+    const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+    if (minutes <= 1) return clone(state.liveCandles);
+    return VwapSignalEngine.aggregateSessionBars(state.liveCandles, minutes);
   }
   const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
   return generateCandles(count, 24420, tf.length * 17);

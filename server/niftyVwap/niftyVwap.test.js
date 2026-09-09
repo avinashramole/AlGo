@@ -5,9 +5,10 @@ import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
 import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
 import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
-import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionVwap } from "./VwapSignalEngine.js";
+import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap, nextCandleEntryWindow } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
-import { runtimeState } from "./PositionManager.js";
+import { runtimeState, PositionManager } from "./PositionManager.js";
+import { parseOptionContract } from "../frontFutures.js";
 import { runNiftyVwapBacktest } from "./BacktestAdapter.js";
 import { PaperTradingAdapter } from "./PaperTradingAdapter.js";
 import { LiveTradingAdapter } from "./LiveTradingAdapter.js";
@@ -572,6 +573,8 @@ test("15m reversal: open below VWAP and close above is BUY CE after the candle c
   const signal = VwapSignalEngine.evaluateReversal({ futuresBars, now: done, barMs: BAR15 });
   assert.equal(signal.buyCe, true);
   assert.equal(signal.buyPe, false);
+  assert.equal(signal.previewFilled, true);
+  assert.equal(signal.inNewCandle, true);
   const algo = defaultNiftyVwapReversalAlgo({ name: "Rev CE" });
   const book = bookAdapter();
   const tick = NiftyVwapStrategy.tick({
@@ -591,6 +594,7 @@ test("15m reversal: open below VWAP and close above is BUY CE after the candle c
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "CE");
   assert.equal(book.places[0].side, "BUY");
+  assert.equal(book.places[0].qty, 65);
 });
 
 test("15m reversal: open above VWAP and close below is BUY PE after the candle closes", () => {
@@ -617,6 +621,188 @@ test("15m reversal: open above VWAP and close below is BUY PE after the candle c
   });
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "PE");
+  assert.equal(book.places[0].qty, 65);
+});
+
+test("15m reversal ignores the forming preview candle and buys only at the next 15m open", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const preview = T0 + BAR15 + BAR15 - 1;
+  const book = bookAdapter();
+  const previewTick = NiftyVwapStrategy.tick({
+    algo: defaultNiftyVwapReversalAlgo({ name: "Rev Preview" }),
+    now: preview,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(previewTick.action, "wait");
+  assert.equal(book.places.length, 0);
+  const window = nextCandleEntryWindow(T0 + BAR15, T0 + 2 * BAR15, BAR15);
+  assert.equal(window.inNewCandle, true);
+  assert.equal(window.missedOpen, false);
+});
+
+test("15m reversal does not chase after the next candle has already closed", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const late = T0 + 3 * BAR15;
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars, now: late, barMs: BAR15 });
+  assert.equal(signal.previewFilled, true);
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.missedOpen, true);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Missed Open" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: late,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "wait");
+  assert.equal(tick.reason, "missed-open");
+  assert.equal(book.places.length, 0);
+});
+
+test("15m IST slots start at 09:15 / 09:30, not clock minutes divisible by 15", () => {
+  const slot0915 = Date.parse("2026-08-21T03:45:00.000Z");
+  const slot0930 = Date.parse("2026-08-21T04:00:00.000Z");
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:47:00.000Z"), 15), slot0915);
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T04:00:00.000Z"), 15), slot0930);
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T04:14:00.000Z"), 15), slot0930);
+});
+
+test("aggregateSessionBars drops the forming 15m IST bucket before it closes", () => {
+  const t0 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 0; i < 20; i++) {
+    ones.push({ time: t0 + i * 60_000, open: 100, high: 101, low: 99, close: 100.5, volume: 1 });
+  }
+  const at0929 = Date.parse("2026-08-21T03:59:00.000Z");
+  const forming = aggregateSessionBars(ones, 15, at0929);
+  assert.equal(forming.length, 0);
+  const at0930 = Date.parse("2026-08-21T04:00:00.000Z");
+  const closed = aggregateSessionBars(ones, 15, at0930);
+  assert.equal(closed.length, 1);
+  assert.equal(closed[0].time, t0);
+  assert.equal(closed[0].open, 100);
+});
+
+test("15m VWAP reversal does not punch when last closed 15m did not cross VWAP", () => {
+  const futuresBars = [
+    bar15(0, 24500, 24500, { high: 24500, low: 24500 }),
+    bar15(1, 24510, 24520, { high: 24530, low: 24500 }),
+    bar15(2, 24520, 24530, { high: 24540, low: 24510 }),
+    bar15(3, 24530, 24540, { high: 24550, low: 24520 }),
+  ];
+  const now = T0 + 4 * BAR15;
+  const reversal = lastBarVwapReversal(futuresBars);
+  assert.equal(reversal.buyCe, false);
+  assert.equal(reversal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Wait" });
+  const book = bookAdapter();
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 200,
+    peLtp: 190,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(result.action, "wait");
+  assert.equal(result.reason, "no-reversal");
+  assert.equal(book.places.length, 0);
+  assert.match(algo.lastSignal, /WAIT 15m/);
+});
+
+test("misaligned 1m groups do not punch; only an IST 15m VWAP cross does", () => {
+  const t0 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 2; i < 17; i++) {
+    const below = i < 15;
+    const px = below ? 24400 : 24600;
+    ones.push({ time: t0 + i * 60_000, open: px, high: px + 2, low: px - 2, close: px, volume: 100 });
+  }
+  const naive = {
+    time: ones[0].time,
+    open: ones[0].open,
+    close: ones[ones.length - 1].close,
+  };
+  assert.equal(naive.open < 24500 && naive.close > 24500, true);
+  const now = Date.parse("2026-08-21T04:02:00.000Z");
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars: ones, now, barMs: BAR15 });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev No False Punch" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars: ones,
+    spot: 24600,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "wait");
+  assert.equal(book.places.length, 0);
+});
+
+test("IST-aggregated 1m bars still BUY CE after the 15m close when open is below VWAP and close is above", () => {
+  const t0 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 0; i < 15; i++) {
+    const open = 24480 + i * 4;
+    const close = open + 4;
+    ones.push({ time: t0 + i * 60_000, open, high: close + 2, low: open - 2, close, volume: 100 });
+  }
+  const now = Date.parse("2026-08-21T04:00:00.000Z");
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars: ones, now, barMs: BAR15 });
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev 1m CE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars: ones,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].qty, 65);
 });
 
 test("15m reversal uses 15% stop and 30% target and does not trail", () => {
@@ -683,4 +869,90 @@ test("normalizeAlgo keeps 15m reversal paused and never auto-enables LIVE", () =
   assert.equal(created.initialSlPct, 15);
   assert.equal(created.targetPct, 30);
   assert.equal(niftyVwapReversalConfig(created).expiryKind, "weekly");
+});
+
+test("parseOptionContract reads Dhan hyphen symbols and skips BANKNIFTY", () => {
+  assert.deepEqual(parseOptionContract("NIFTY 24500 CE"), { root: "NIFTY", strike: 24500, option: "CE" });
+  assert.deepEqual(parseOptionContract("NIFTY-SEP2026-24500-CE"), { root: "NIFTY", strike: 24500, option: "CE" });
+  assert.deepEqual(parseOptionContract("NIFTY 16 SEP 24500 PE"), { root: "NIFTY", strike: 24500, option: "PE" });
+  assert.equal(parseOptionContract("BANKNIFTY 52000 CE").root, "BANKNIFTY");
+  assert.equal(PositionManager.isOpenNiftyOption({ symbol: "NIFTY-SEP2026-24500-CE", qty: 65, type: "BUY" }), true);
+  assert.equal(PositionManager.isOpenNiftyOption({ symbol: "BANKNIFTY 52000 CE", qty: 65, type: "BUY" }), false);
+});
+
+test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const now = T0 + 2 * BAR15;
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Second Lot" });
+  const book = bookAdapter();
+  const blocked = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: [
+      {
+        id: "dhan-pos-1",
+        symbol: "NIFTY-SEP2026-24500-CE",
+        type: "BUY",
+        qty: 65,
+        avg: 98,
+        ltp: 100,
+        strategy: "",
+        brokerId: "dhan",
+        live: true,
+      },
+    ],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.equal(blocked.reason, "already-open");
+  assert.match(algo.lastSignal, /HOLD 1 LOT/);
+});
+
+test("in-flight timeout does not punch a second lot while a NIFTY option is still open", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Timeout" });
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    inFlight: true,
+    lastEntryBarTime: T0 + BAR15,
+    lastEntryAt: T0,
+    lockedStrike: 24500,
+    lockedOption: "CE",
+    lockedSymbol: "NIFTY 24500 CE",
+    fillPrice: 0,
+  };
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 2 * BAR15 + 180_000,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: [
+      {
+        symbol: "NIFTY-SEP2026-24500-CE",
+        type: "BUY",
+        qty: 65,
+        avg: 100,
+        ltp: 102,
+        strategy: "",
+      },
+    ],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.ok(tick.action === "hold" || tick.reason === "already-open");
 });

@@ -75,7 +75,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
     if (isNiftyVwapReversalKind(form)) {
-      return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 15m VWAP reversal · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
+      return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · last closed 15m vs VWAP · BUY at next 15m open · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;

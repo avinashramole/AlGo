@@ -1,4 +1,7 @@
 const BAR_MS = 5 * 60 * 1000;
+const NSE_OPEN_MINUTES = 9 * 60 + 15;
+const NSE_CLOSE_MINUTES = 15 * 60 + 30;
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 export function sessionKeyIST(ms) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -7,6 +10,91 @@ export function sessionKeyIST(ms) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(ms));
+}
+
+export function istWallTime(ms) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(new Date(ms))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  };
+}
+
+export function istWallToUtcMs(wall) {
+  return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second || 0) - IST_OFFSET_MS;
+}
+
+export function sessionBarOpenMs(ms, barMinutes = 5) {
+  const step = Math.max(1, Number(barMinutes) || 5);
+  const wall = istWallTime(ms);
+  const minutes = wall.hour * 60 + wall.minute;
+  if (minutes < NSE_OPEN_MINUTES || minutes >= NSE_CLOSE_MINUTES) return null;
+  const elapsed = minutes - NSE_OPEN_MINUTES;
+  const openMin = NSE_OPEN_MINUTES + Math.floor(elapsed / step) * step;
+  return istWallToUtcMs({
+    year: wall.year,
+    month: wall.month,
+    day: wall.day,
+    hour: Math.floor(openMin / 60),
+    minute: openMin % 60,
+    second: 0,
+  });
+}
+
+export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.now()) {
+  const step = Math.max(1, Number(barMinutes) || 5);
+  const barMs = step * 60 * 1000;
+  const buckets = new Map();
+  for (const row of Array.isArray(candles) ? candles : []) {
+    const openMs = sessionBarOpenMs(row.time, step);
+    if (openMs == null) continue;
+    const open = Number(row.open);
+    const high = Number(row.high);
+    const low = Number(row.low);
+    const close = Number(row.close);
+    const volume = Number(row.volume) > 0 ? Number(row.volume) : 1;
+    if (!(close > 0) && !(open > 0)) continue;
+    const prev = buckets.get(openMs);
+    if (!prev) {
+      buckets.set(openMs, {
+        time: openMs,
+        open: open > 0 ? open : close,
+        high: high > 0 ? high : Math.max(open, close),
+        low: low > 0 ? low : Math.min(open || close, close),
+        close: close > 0 ? close : open,
+        volume,
+        samples: 1,
+      });
+      continue;
+    }
+    prev.high = Math.max(prev.high, high > 0 ? high : prev.high);
+    prev.low = Math.min(prev.low, low > 0 ? low : prev.low);
+    prev.close = close > 0 ? close : prev.close;
+    prev.volume += volume;
+    prev.samples += 1;
+  }
+  return [...buckets.values()]
+    .sort((a, b) => a.time - b.time)
+    .filter((bar) => now >= bar.time + barMs)
+    .map(({ samples: _samples, ...bar }) => bar);
 }
 
 export function sessionBars(candles = [], atMs) {
@@ -73,7 +161,7 @@ export function optionCloseAboveVwap(optionBars = []) {
 
 export function lastBarVwapReversal(completedSessionBars = []) {
   if (!completedSessionBars.length) {
-    return { buyCe: false, buyPe: false, open: 0, close: 0, vwap: 0, bar: null };
+    return { buyCe: false, buyPe: false, open: 0, close: 0, vwap: 0, bar: null, fullFill: false };
   }
   const last = completedSessionBars[completedSessionBars.length - 1];
   const vwap = sessionVwap(completedSessionBars);
@@ -81,11 +169,29 @@ export function lastBarVwapReversal(completedSessionBars = []) {
   const close = Number(last.close);
   const buyCe = vwap > 0 && open < vwap && close > vwap;
   const buyPe = vwap > 0 && open > vwap && close < vwap;
-  return { buyCe, buyPe, open, close, vwap, bar: last };
+  return { buyCe, buyPe, open, close, vwap, bar: last, fullFill: buyCe || buyPe };
+}
+
+export function nextCandleEntryWindow(previewTime, now, barMs) {
+  const t = Number(previewTime);
+  const ms = Number(barMs) || 15 * 60 * 1000;
+  const n = Number(now);
+  if (!(t > 0) || !(ms > 0) || !(n > 0)) {
+    return { nextOpen: 0, inNewCandle: false, missedOpen: false };
+  }
+  const nextOpen = t + ms;
+  return {
+    nextOpen,
+    inNewCandle: n >= nextOpen && n < nextOpen + ms,
+    missedOpen: n >= nextOpen + ms,
+  };
 }
 
 export const VwapSignalEngine = {
   sessionKeyIST,
+  istWallTime,
+  sessionBarOpenMs,
+  aggregateSessionBars,
   sessionBars,
   completedCandles,
   sessionVwap,
@@ -93,6 +199,7 @@ export const VwapSignalEngine = {
   firstFuturesBias,
   optionCloseAboveVwap,
   lastBarVwapReversal,
+  nextCandleEntryWindow,
   evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
     const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);
     const ceCompleted = completedCandles(sessionBars(ceBars, now), now, barMs);
@@ -116,18 +223,25 @@ export const VwapSignalEngine = {
     };
   },
   evaluateReversal({ futuresBars = [], now = Date.now(), barMs = 15 * 60 * 1000 } = {}) {
-    const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);
+    const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 15);
+    const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now);
     const lastFut = futCompleted[futCompleted.length - 1] || null;
     const reversal = lastBarVwapReversal(futCompleted);
+    const window = nextCandleEntryWindow(lastFut ? Number(lastFut.time) : 0, now, barMs);
+    const fullCe = Boolean(reversal.buyCe);
+    const fullPe = Boolean(reversal.buyPe);
     return {
       ready: Boolean(lastFut && reversal.vwap > 0),
       barTime: lastFut ? Number(lastFut.time) : 0,
       futuresClose: lastFut ? Number(lastFut.close) : 0,
       futuresOpen: lastFut ? Number(lastFut.open) : 0,
       futuresVwap: reversal.vwap,
-      bias: reversal.buyCe ? "CE" : reversal.buyPe ? "PE" : "",
-      buyCe: reversal.buyCe,
-      buyPe: reversal.buyPe,
+      bias: fullCe ? "CE" : fullPe ? "PE" : "",
+      buyCe: fullCe && window.inNewCandle,
+      buyPe: fullPe && window.inNewCandle,
+      previewFilled: fullCe || fullPe,
+      inNewCandle: window.inNewCandle,
+      missedOpen: window.missedOpen,
       ceAboveVwap: false,
       peAboveVwap: false,
       againstCount: 0,
