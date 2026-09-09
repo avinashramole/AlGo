@@ -149,12 +149,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.history.replaceState({}, "", window.location.pathname);
     }
     if (googleToken) {
-      persist({ name: "Google user", email: "", desk: "Index Options", role: "user" }, googleToken, true);
+      const pending = { name: "Google user", email: "", desk: "Index Options", role: "user" as const };
+      persist(pending, googleToken, true);
+      setUser(pending);
+      window.history.replaceState({}, "", "/");
       void getMe(googleToken)
         .then((row) => {
           persist(row.user, googleToken, true);
           setUser(row.user);
-          window.history.replaceState({}, "", "/");
         })
         .catch(() => undefined);
       return;
@@ -166,7 +168,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistUser(row.user);
         setUser(row.user);
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : "";
+        if (!/sign in first/i.test(message)) return;
+        localStorage.removeItem("t2s-token");
+        localStorage.removeItem("t2s-user");
+        sessionStorage.removeItem("t2s-token");
+        sessionStorage.removeItem("t2s-user");
+        setUser(null);
+      });
   }, []);
 
   const value = useMemo(

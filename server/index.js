@@ -121,7 +121,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       redirectUri: payload.redirectUri,
     });
     await notifyLogin(result.user);
-    res.redirect(`${next}/login?google_token=${encodeURIComponent(result.token)}`);
+    res.redirect(`${next}/?google_token=${encodeURIComponent(result.token)}`);
   } catch (error) {
     res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
   }

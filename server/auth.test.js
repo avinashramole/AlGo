@@ -4,8 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-const usersFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "t2s-auth-")), "users.json");
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-auth-"));
+const usersFile = path.join(dir, "users.json");
+const sessionsFile = path.join(dir, "sessions.json");
 process.env.T2S_USERS_FILE = usersFile;
+process.env.T2S_SESSIONS_FILE = sessionsFile;
 
 const {
   adminEmailsFromEnv,
@@ -19,6 +22,7 @@ const {
   listPublicUsers,
   resolveUserRole,
   safeFrontendOrigin,
+  sessionUser,
   upsertGoogleUser,
 } = await import("./auth.js");
 
@@ -54,6 +58,7 @@ test("googleAuthorizeUrl requires client id and secret", () => {
   assert.match(url, /accounts\.google\.com\/o\/oauth2\/v2\/auth/);
   assert.match(url, /client_id=cid/);
   assert.match(url, /scope=openid/);
+  assert.equal(new URL(url).searchParams.get("prompt"), null);
   const state = new URL(url).searchParams.get("state");
   assert.equal(decodeOAuthPayload(state).redirectUri, "http://localhost:4000/api/auth/google/callback");
 });
@@ -150,4 +155,15 @@ test("listPublicUsers includes registered Gmail members for admin", () => {
   assert.equal(member?.registered, true);
   assert.equal(member?.authProvider, "google");
   assert.ok(users.some((row) => row.id === "avinash" && row.role === "admin"));
+});
+
+test("sign-in session is saved so a restart does not ask to sign in again", () => {
+  const result = upsertGoogleUser({
+    email: `session-${Date.now()}@gmail.com`,
+    name: "Stay In",
+    googleId: "gid-session",
+  });
+  const saved = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
+  assert.equal(saved[result.token].userId, result.user.id);
+  assert.equal(sessionUser(result.token).id, result.user.id);
 });

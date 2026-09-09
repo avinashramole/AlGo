@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
+const SESSIONS_FILE = process.env.T2S_SESSIONS_FILE || path.join(__dirname, "data", "sessions.json");
 const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
@@ -34,7 +35,38 @@ const SEED_USERS = [
 const DEFAULT_ADMIN_EMAILS = ["demo@t2s.app", "avinash.ramole86@gmail.com"];
 
 const otps = new Map();
-const sessions = new Map();
+const sessions = loadSessions();
+
+function loadSessions() {
+  try {
+    const row = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
+    const map = new Map();
+    if (!row || typeof row !== "object" || Array.isArray(row)) return map;
+    for (const [token, value] of Object.entries(row)) {
+      if (!token || !value || typeof value !== "object") continue;
+      const userId = String(value.userId || "").trim();
+      if (!userId) continue;
+      map.set(token, {
+        userId,
+        email: String(value.email || ""),
+        mobile: String(value.mobile || ""),
+        at: Number(value.at) || Date.now(),
+      });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function persistSessions() {
+  try {
+    fs.mkdirSync(path.dirname(SESSIONS_FILE), { recursive: true });
+    fs.writeFileSync(SESSIONS_FILE, `${JSON.stringify(Object.fromEntries(sessions), null, 2)}\n`);
+  } catch (error) {
+    console.log(`Could not save sign-in sessions: ${error.message || error}`);
+  }
+}
 
 function now() {
   return Date.now();
@@ -260,6 +292,7 @@ function issueSession(user) {
   user.createdAt = user.createdAt || at;
   persist();
   sessions.set(token, { userId: user.id, email: user.email, mobile: user.mobile, at: now() });
+  persistSessions();
   return { token, user: publicUser(user) };
 }
 
@@ -661,7 +694,7 @@ export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
     response_type: "code",
     scope: "openid email profile",
     access_type: "online",
-    prompt: "select_account",
+    include_granted_scopes: "true",
     state: encodeOAuthState(next, { redirectUri }),
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

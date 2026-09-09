@@ -22,4 +22,5 @@ server/data/payments.json
 server/data/enrollments.json
 server/data/member-desk.json
 server/data/algos.json
+server/data/sessions.json
 *.zip
