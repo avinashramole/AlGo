@@ -400,7 +400,6 @@ export function Login() {
                 </>
               )}
             </button>
-            {page === "signin" ? <p className="t2s-demo">Demo: demo@t2s.app / demo123</p> : null}
           </div>
         </section>
       </div>
