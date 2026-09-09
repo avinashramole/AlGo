@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
+  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
@@ -204,6 +204,31 @@ export const initialAlgos: Algo[] = [
     slPct: 15,
     targetPct: 30,
     summary: "NIFTY 15m VWAP reversal · last closed 15m · BUY at next open · weekly ATM · SL 15% / TGT 30%",
+    status: "PAUSED",
+    pnl: 0,
+    winRate: 0,
+    enabled: false,
+    brokerId: "dhan",
+    runMode: "live",
+  },
+  {
+    id: "a6",
+    name: "NIFTY 15m VWAP hedge",
+    tag: "15m hedge",
+    kind: "nifty-vwap-hedge",
+    symbol: "NIFTY",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    indicator: "NIFTY_VWAP_HEDGE",
+    timeframe: "15m",
+    side: "BUY",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    slPct: 0,
+    targetPct: 40,
+    summary: "NIFTY 15m VWAP hedge · weekly ATM · 1 lot + 2 opposite · +40% / −20% / +5% account",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

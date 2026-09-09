@@ -1,4 +1,5 @@
 import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
@@ -239,6 +240,7 @@ export function strikeOffsetLabel(offset) {
 }
 
 export function contractLabel(algo) {
+  if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -255,6 +257,9 @@ export function summarizeAlgo(algo) {
   const lots = algo.lots || 1;
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
   const contract = contractLabel(algo);
+  if (isNiftyVwapHedgeAlgo(algo)) {
+    return `NIFTY 15m VWAP hedge · weekly ATM · open below VWAP + close above → BUY 1 lot CE · open above VWAP + close below → BUY 1 lot PE · primary +40% · −20% buys 2 lots opposite once · +5% account P&L exits all · ${size}`;
+  }
   if (isNiftyVwapReversalAlgo(algo)) {
     const sl = algo.initialSlPct || 15;
     const tgt = algo.targetPct || 30;
@@ -292,11 +297,57 @@ export function summarizeAlgo(algo) {
 
 export function normalizeAlgo(input = {}, existing = {}) {
   const merged = { ...existing, ...input };
+  const keepHedge =
+    isNiftyVwapHedgeAlgo(merged) &&
+    input.kind !== "indicator" &&
+    input.kind !== "price-action" &&
+    input.kind !== "nifty-vwap" &&
+    input.kind !== "nifty-vwap-reversal";
+  if (keepHedge) {
+    const cfg = niftyVwapHedgeConfig(merged);
+    const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+      ? input.runMode
+      : ["live", "paper", "backtest"].includes(existing.runMode)
+        ? existing.runMode
+        : "live";
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultNiftyVwapHedgeAlgo({
+        ...merged,
+        name: String(input.name || existing.name || "").trim() || "NIFTY 15m VWAP hedge",
+        runMode,
+        lots: cfg.lots,
+        lotSize: cfg.lotSize,
+      }),
+      id: existing.id || `a${Date.now()}`,
+      kind: NIFTY_VWAP_HEDGE_KIND,
+      slPct: 0,
+      initialSlPct: 0,
+      targetPct: cfg.primaryTargetPct,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
+      hedgeState: existing.hedgeState,
+      enabled: creating ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return next;
+  }
   const keepReversal =
     isNiftyVwapReversalAlgo(merged) &&
     input.kind !== "indicator" &&
     input.kind !== "price-action" &&
-    input.kind !== "nifty-vwap";
+    input.kind !== "nifty-vwap" &&
+    input.kind !== "nifty-vwap-hedge";
   if (keepReversal) {
     const cfg = niftyVwapReversalConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -341,7 +392,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     isNiftyVwapAlgo(merged) &&
     input.kind !== "indicator" &&
     input.kind !== "price-action" &&
-    input.kind !== "nifty-vwap-reversal";
+    input.kind !== "nifty-vwap-reversal" &&
+    input.kind !== "nifty-vwap-hedge";
   if (keepNiftyVwap) {
     const cfg = niftyVwapConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -505,6 +557,13 @@ export function seedAlgos() {
         runMode: "live",
       }),
       { id: "a5", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
+    ),
+    normalizeAlgo(
+      defaultNiftyVwapHedgeAlgo({
+        name: "NIFTY 15m VWAP hedge",
+        runMode: "live",
+      }),
+      { id: "a6", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
   ];
 }

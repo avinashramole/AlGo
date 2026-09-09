@@ -510,7 +510,7 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
 
 test("seed includes paused NIFTY VWAP ATM and 15m reversal algos", () => {
   const seeded = seedAlgos();
-  assert.equal(seeded.length, 2);
+  assert.equal(seeded.length, 3);
   assert.equal(seeded[0].name, "NIFTY VWAP ATM");
   assert.equal(isNiftyVwapAlgo(seeded[0]), true);
   assert.equal(seeded[0].enabled, false);
@@ -524,6 +524,9 @@ test("seed includes paused NIFTY VWAP ATM and 15m reversal algos", () => {
   assert.equal(seeded[1].initialSlPct, 15);
   assert.equal(seeded[1].targetPct, 30);
   assert.equal(seeded[1].status, "PAUSED");
+  assert.equal(seeded[2].name, "NIFTY 15m VWAP hedge");
+  assert.equal(seeded[2].enabled, false);
+  assert.equal(seeded[2].status, "PAUSED");
 });
 
 test("paper/live/backtest share the same config and BUY-only option payload", () => {

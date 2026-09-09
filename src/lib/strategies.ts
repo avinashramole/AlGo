@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -47,6 +47,10 @@ export type AlgoStrategy = {
   trailingStepPct?: number;
   vwapExitCandles?: number;
   maxPositions?: number;
+  primaryTargetPct?: number;
+  hedgeTriggerPct?: number;
+  accountProfitPct?: number;
+  hedgeLots?: number;
   intradayOnly?: boolean;
   eodSquareOffMinutes?: number;
   strategyType?: string;
@@ -197,8 +201,16 @@ export function isNiftyVwapReversalKind(algo?: { kind?: string; strategyType?: s
   );
 }
 
+export function isNiftyVwapHedgeKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return (
+    algo?.kind === "nifty-vwap-hedge" ||
+    algo?.strategyType === "NIFTY_VWAP_HEDGE_15M" ||
+    algo?.indicator === "NIFTY_VWAP_HEDGE"
+  );
+}
+
 export function isNiftyOptionEngineKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
-  return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo);
+  return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo);
 }
 
 export function contractLabel(algo: {
@@ -209,6 +221,7 @@ export function contractLabel(algo: {
   optionType?: string;
   strikeOffset?: number;
 }) {
+  if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -386,6 +399,51 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       intradayOnly: true,
       eodSquareOffMinutes: 10,
       indicator: "NIFTY_VWAP_REVERSAL",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "ORB",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("indicator", "VWAP", "ORB"),
+      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
+      runMode: "live",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "nifty-vwap-hedge") {
+    return {
+      name: "NIFTY 15m VWAP hedge",
+      kind: "nifty-vwap-hedge",
+      tag: "15m hedge",
+      strategyType: "NIFTY_VWAP_HEDGE_15M",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "15m",
+      slPct: 0,
+      initialSlPct: 0,
+      targetPct: 40,
+      primaryTargetPct: 40,
+      hedgeTriggerPct: 20,
+      accountProfitPct: 5,
+      trailingActivationPct: 10,
+      trailingStepPct: 3,
+      vwapExitCandles: 5,
+      maxPositions: 2,
+      intradayOnly: false,
+      eodSquareOffMinutes: 0,
+      indicator: "NIFTY_VWAP_HEDGE",
       period: 14,
       fast: 9,
       slow: 21,
