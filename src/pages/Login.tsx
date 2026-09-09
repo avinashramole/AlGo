@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   Award,
   BarChart3,
@@ -49,14 +49,28 @@ export function Login() {
   const [hint, setHint] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [error, setError] = useState(() => {
-    const googleError = sessionStorage.getItem("t2s-google-error") || "";
-    if (googleError) sessionStorage.removeItem("t2s-google-error");
-    return googleError;
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("google_error");
+      if (fromUrl) return fromUrl;
+      return sessionStorage.getItem("t2s-google-error") || "";
+    } catch {
+      return "";
+    }
   });
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(() => localStorage.getItem("t2s-remember") !== "0");
 
   const channel = channelOf(identifier);
+
+  useEffect(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("google_error");
+      if (fromUrl && fromUrl !== error) setError(fromUrl);
+      if (error) sessionStorage.removeItem("t2s-google-error");
+    } catch {
+      /* ignore */
+    }
+  }, [error]);
 
   const resetNotice = () => {
     setError("");
@@ -162,7 +176,7 @@ export function Login() {
       setLoading(true);
       try {
         await signup({ name, identifier, otp: code, password, channel }, remember);
-        navigate("/");
+        navigate("/", { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Sign up failed");
       } finally {
@@ -175,7 +189,7 @@ export function Login() {
       setLoading(true);
       try {
         await verifyOtp(identifier, code, remember);
-        navigate("/");
+        navigate("/", { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not verify code");
       } finally {
@@ -192,7 +206,7 @@ export function Login() {
     setLoading(true);
     try {
       await login(identifier || "demo@t2s.app", password, remember);
-      navigate("/");
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {

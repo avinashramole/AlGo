@@ -631,19 +631,41 @@ export function googleOAuthConfigured(env = process.env) {
   return Boolean(String(env.GOOGLE_CLIENT_ID || "").trim() && String(env.GOOGLE_CLIENT_SECRET || "").trim());
 }
 
+function firstHeader(value) {
+  return String(value || "")
+    .split(",")[0]
+    .trim();
+}
+
+function publicSiteHost(host) {
+  const bare = String(host || "")
+    .toLowerCase()
+    .replace(/:(80|443)$/, "");
+  if (bare === "www.trade2smart.com") return "trade2smart.com";
+  return bare;
+}
+
+function requestHost(req) {
+  return publicSiteHost(firstHeader(req?.headers?.["x-forwarded-host"] || req?.headers?.host));
+}
+
+function requestProto(req, host) {
+  if (host === "trade2smart.com" || host.endsWith(".trade2smart.com")) return "https";
+  const forwarded = firstHeader(req?.headers?.["x-forwarded-proto"]).toLowerCase();
+  if (forwarded === "https" || forwarded === "http") return forwarded;
+  return firstHeader(req?.protocol) === "https" ? "https" : "http";
+}
+
 export function googleRedirectUri(env = process.env, req) {
   const explicit = String(env.GOOGLE_REDIRECT_URI || "").trim();
   if (explicit) return explicit;
   if (req) {
-    const proto = String(req.headers?.["x-forwarded-proto"] || req.protocol || "http")
-      .split(",")[0]
-      .trim();
-    const host = String(req.headers?.["x-forwarded-host"] || req.headers?.host || "")
-      .split(",")[0]
-      .trim();
-    if (host) return `${proto === "https" ? "https" : "http"}://${host}/api/auth/google/callback`;
+    const host = requestHost(req);
+    if (host) return `${requestProto(req, host)}://${host}/api/auth/google/callback`;
   }
-  const publicUrl = String(env.PUBLIC_URL || "http://localhost:4000").replace(/\/$/, "");
+  const publicUrl = String(env.PUBLIC_URL || env.FRONTEND_ORIGIN || "http://localhost:4000")
+    .trim()
+    .replace(/\/+$/, "");
   return `${publicUrl}/api/auth/google/callback`;
 }
 
@@ -753,7 +775,11 @@ export async function loginWithGoogleCode({ code, fetchImpl = fetch, env = proce
   });
   const tokenJson = await tokenRes.json().catch(() => ({}));
   if (!tokenRes.ok || !tokenJson.access_token) {
-    throw fail(tokenJson.error_description || "Google login failed. Try again.", 401);
+    const detail = String(tokenJson.error_description || tokenJson.error || "").trim();
+    if (/redirect_uri/i.test(detail) || tokenJson.error === "redirect_uri_mismatch") {
+      throw fail(`Google redirect URI mismatch. Authorized URI must be exactly ${redirect}`, 401);
+    }
+    throw fail(detail || "Google login failed. Try again.", 401);
   }
   const userRes = await fetchImpl("https://www.googleapis.com/oauth2/v3/userinfo", {
     headers: { Authorization: `Bearer ${tokenJson.access_token}`, Accept: "application/json" },

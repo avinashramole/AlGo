@@ -153,10 +153,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     const googleError = params.get("google_error");
     if (googleError) {
-      sessionStorage.setItem("t2s-google-error", googleError);
-    }
-    if (params.has("google_token") || params.has("google_error")) {
-      window.history.replaceState({}, "", window.location.pathname === "/login" ? "/" : window.location.pathname || "/");
+      try {
+        sessionStorage.setItem("t2s-google-error", googleError);
+      } catch {
+        /* ignore */
+      }
     }
     const token = readToken();
     if (!token || token === "t2s-offline-token") return;

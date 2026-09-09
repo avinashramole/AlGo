@@ -79,6 +79,29 @@ test("googleOAuthConfigured and redirect URI", () => {
   );
 });
 
+test("google redirect URI prefers env over request host", () => {
+  const uri = googleRedirectUri(
+    { GOOGLE_REDIRECT_URI: "https://trade2smart.com/api/auth/google/callback" },
+    { headers: { host: "localhost:4000" }, protocol: "http" },
+  );
+  assert.equal(uri, "https://trade2smart.com/api/auth/google/callback");
+});
+
+test("google redirect URI uses https for the public site even without x-forwarded-proto", () => {
+  const uri = googleRedirectUri({}, { headers: { host: "trade2smart.com" }, protocol: "http" });
+  assert.equal(uri, "https://trade2smart.com/api/auth/google/callback");
+  const viaHttpForward = googleRedirectUri(
+    {},
+    { headers: { host: "trade2smart.com", "x-forwarded-proto": "http" }, protocol: "http" },
+  );
+  assert.equal(viaHttpForward, "https://trade2smart.com/api/auth/google/callback");
+});
+
+test("google redirect URI canonicalizes www to the live site host", () => {
+  const uri = googleRedirectUri({}, { headers: { host: "www.trade2smart.com" }, protocol: "http" });
+  assert.equal(uri, "https://trade2smart.com/api/auth/google/callback");
+});
+
 test("OAuth state round-trips and blocks open redirects", () => {
   const state = encodeOAuthState("http://localhost:5173", { redirectUri: "http://localhost:4000/api/auth/google/callback" });
   assert.equal(decodeOAuthState(state), "http://localhost:5173");
@@ -112,6 +135,31 @@ test("upsertGoogleUser rejects non-Gmail accounts", () => {
   assert.throws(
     () => upsertGoogleUser({ email: "person@outlook.com", name: "Other", googleId: "gid-ms" }),
     /Gmail address/,
+  );
+});
+
+test("loginWithGoogleCode surfaces redirect URI mismatch", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("oauth2.googleapis.com/token")) {
+      return {
+        ok: false,
+        json: async () => ({ error: "redirect_uri_mismatch", error_description: "Bad redirect" }),
+      };
+    }
+    return { ok: false, json: async () => ({}) };
+  };
+  await assert.rejects(
+    () =>
+      loginWithGoogleCode({
+        code: "auth-code",
+        fetchImpl,
+        env: {
+          GOOGLE_CLIENT_ID: "cid",
+          GOOGLE_CLIENT_SECRET: "sec",
+          GOOGLE_REDIRECT_URI: "https://trade2smart.com/api/auth/google/callback",
+        },
+      }),
+    /Authorized URI must be exactly https:\/\/trade2smart.com\/api\/auth\/google\/callback/,
   );
 });
 

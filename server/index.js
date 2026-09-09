@@ -44,6 +44,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
 
 const app = express();
+app.set("trust proxy", 1);
 const port = Number(process.env.PORT) || 4000;
 const PREVIEW_ORDER_ERROR =
   "Chrome is fine, but this address is a Cursor preview (agent.cvm.dev), not your PC. In the Chrome address bar type exactly http://localhost:5173 and press Enter. Keep npm start running. Do not add another IP.";
@@ -109,20 +110,30 @@ app.get("/api/auth/google", (req, res) => {
   }
 });
 
+function queryValue(value) {
+  return Array.isArray(value) ? String(value[0] || "") : String(value || "");
+}
+
 app.get("/api/auth/google/callback", async (req, res) => {
-  const payload = decodeOAuthPayload(req.query.state);
-  const next = safeFrontendOrigin(payload.next || decodeOAuthState(req.query.state) || process.env.PUBLIC_URL);
+  const state = queryValue(req.query.state);
+  const payload = decodeOAuthPayload(state);
+  const next = safeFrontendOrigin(payload.next || decodeOAuthState(state) || process.env.PUBLIC_URL);
   try {
     if (req.query.error) {
       throw Object.assign(new Error("Google login was cancelled."), { status: 401 });
     }
     const result = await loginWithGoogleCode({
-      code: Array.isArray(req.query.code) ? req.query.code[0] : req.query.code,
-      redirectUri: payload.redirectUri,
+      code: queryValue(req.query.code),
+      redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
     });
-    await notifyLogin(result.user);
+    try {
+      await notifyLogin(result.user);
+    } catch (mailError) {
+      console.error("[auth] Google login mail failed:", mailError?.message || mailError);
+    }
     res.redirect(`${next}/login?google_token=${encodeURIComponent(result.token)}`);
   } catch (error) {
+    console.error("[auth] Google callback failed:", error?.message || error);
     res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
   }
 });
@@ -219,7 +230,7 @@ function readToken(req) {
 
 function deskGuard(req, res, next) {
   const pathname = String(req.originalUrl || req.url || "").split("?")[0];
-  if (!pathname.startsWith("/api")) {
+  if (!pathname.startsWith("/api") || pathname.startsWith("/api/auth/google")) {
     next();
     return;
   }
@@ -837,6 +848,11 @@ if (serveWebsite) {
 
 app.listen(port, "0.0.0.0", async () => {
   console.log(`T2S API running on http://localhost:${port}`);
+  if (googleOAuthConfigured()) {
+    console.log(`Google login ready. Callback ${googleRedirectUri(process.env)}`);
+  } else {
+    console.log("Google login off. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env");
+  }
   console.log("T2S Dhan orders: send-through (not blocked locally)");
   if (serveWebsite) {
     console.log(`Website is served from this same port. Open http://THIS-SERVER:${port}`);
