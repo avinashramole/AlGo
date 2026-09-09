@@ -3,6 +3,16 @@ import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatInr } from "../theme";
 
+function tradeStrategyLabel(row: { strategy?: string; symbol?: string }) {
+  const raw = String(row.strategy || "").trim();
+  if (raw && !/^(manual|auto)$/i.test(raw)) return raw;
+  const symbol = String(row.symbol || "");
+  if (/NIFTY/i.test(symbol) && /(CE|PE)/i.test(symbol) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(symbol)) {
+    return "NIFTY 15m VWAP hedge";
+  }
+  return raw;
+}
+
 export function ReportScreen() {
   const { data } = useMarket();
   const report = data.report;
@@ -48,7 +58,7 @@ export function ReportScreen() {
                 <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
               </View>
               <Text style={styles.muted}>
-                {row.side} {row.qty} · {row.entry} → {row.exit} · {row.strategy || "Manual"}
+                {row.side} {row.qty} · {row.entry} → {row.exit} · {tradeStrategyLabel(row)}
               </Text>
             </Card>
           ))}

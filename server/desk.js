@@ -1,3 +1,5 @@
+import { resolveOrderStrategy } from "./orderStrategy.js";
+
 function round2(value) {
   return Number((Number(value) || 0).toFixed(2));
 }
@@ -301,8 +303,13 @@ export function buildReport(state) {
   const byStrategy = {};
   const bySymbol = {};
   for (const row of closed) {
+    const name = resolveOrderStrategy(row, {
+      algos: state.algos || [],
+      positions: state.positions || [],
+      previous: state.orders || [],
+    });
     pushGroup(byBroker, row.brokerId || "dhan", { id: row.brokerId || "dhan", pnl: row.pnl });
-    pushGroup(byStrategy, row.strategy || "Manual", { name: row.strategy || "Manual", pnl: row.pnl });
+    if (name) pushGroup(byStrategy, name, { name, pnl: row.pnl });
     pushGroup(bySymbol, row.symbol, { symbol: row.symbol, pnl: row.pnl });
   }
   for (const row of positions) {

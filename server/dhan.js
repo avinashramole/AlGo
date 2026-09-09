@@ -466,7 +466,7 @@ function mapDhanOrders(raw) {
     EXPIRED: "CANCELLED",
   };
   return asList(raw).map((row) => {
-    const correlationId = String(row.correlationId || row.CorrelationId || "");
+    const correlationId = String(row.correlationId || row.CorrelationId || row.correlationID || row.corrId || "");
     return {
     id: String(row.orderId || row.dhanOrderId || `dhan-${row.securityId}`),
     symbol: row.tradingSymbol || String(row.securityId || ""),

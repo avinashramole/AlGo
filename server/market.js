@@ -15,7 +15,7 @@ import {
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
-import { resolveOrderStrategy } from "./orderStrategy.js";
+import { realStrategyName, rememberOrderStrategy, resolveOrderStrategy } from "./orderStrategy.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -441,12 +441,19 @@ export function queueLiveAlgoOrder(payload) {
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
-  const name = String(payload?.strategy || "");
+  const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
   const algo = (state.algos || []).find(
     (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isNiftyVwapHedgeAlgo(item)),
   );
   if (!algo) return;
+  rememberOrderStrategy(
+    { id: live?.orderId, securityId: live?.securityId || payload?.securityId, strategy: name },
+    name,
+  );
+  if (isNiftyVwapHedgeAlgo(algo) && live?.orderId) {
+    hedgeState(algo).lastOrderId = String(live.orderId);
+  }
   const status = String(live?.status || "").toUpperCase();
   if (error || status === "REJECTED" || status === "CANCELLED") {
     if (isNiftyVwapHedgeAlgo(algo)) noteHedgeBrokerRejection(algo);
@@ -523,9 +530,12 @@ function positionsForNiftyVwap(algo, mode) {
 function positionsForHedge(algo, mode) {
   const rows = state.positions || [];
   const mine = (row) => {
-    if (row.strategy === algo.name) return true;
+    const tagged = realStrategyName(row.strategy);
+    if (tagged && tagged !== algo.name) return false;
+    if (tagged === algo.name) return true;
     const hs = algo.hedgeState || {};
-    if (hs.inFlight && PositionManager.isOpenNiftyOption(row) && !row.strategy) return true;
+    const active = hs.inFlight || (hs.phase && hs.phase !== "IDLE") || hs.primarySide;
+    if (active && PositionManager.isOpenNiftyOption(row) && !tagged) return true;
     return false;
   };
   if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
@@ -630,15 +640,25 @@ function cancelPendingForStrategy(strategy) {
   return { ok: true };
 }
 
-function hedgeAdapter(mode) {
+function hedgeAdapter(mode, algo) {
   const base =
     mode === "live"
       ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
       : PaperTradingAdapter({ placeOrder, squareOff });
+  const withName = (payload = {}) => ({
+    ...payload,
+    strategy: realStrategyName(payload.strategy) || algo.name || "NIFTY 15m VWAP hedge",
+  });
   return {
     ...base,
+    place(payload) {
+      return base.place(withName(payload));
+    },
+    exit(position) {
+      return base.exit(withName(position));
+    },
     cancelPending({ strategy } = {}) {
-      return cancelPendingForStrategy(strategy);
+      return cancelPendingForStrategy(strategy || algo.name);
     },
   };
 }
@@ -687,7 +707,7 @@ function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
     requireSecurityId: liveChain,
     ceSecurityId: ceId,
     peSecurityId: peId,
-    adapter: hedgeAdapter(mode),
+    adapter: hedgeAdapter(mode, algo),
   });
 }
 
@@ -1390,7 +1410,17 @@ export function placeOrder(payload) {
   }
   if (live?.orderId) {
     const existing = state.orders.find((row) => String(row.id) === String(live.orderId));
-    if (existing) return existing;
+    if (existing) {
+      const name = resolveOrderStrategy(
+        { ...existing, ...payload, id: existing.id },
+        { previous: state.orders || [], algos: state.algos || [], positions: state.positions || [] },
+      );
+      if (name) {
+        existing.strategy = name;
+        rememberOrderStrategy(existing, name);
+      }
+      return existing;
+    }
   }
   const type = String(payload.type || "MARKET").toUpperCase();
   const qty = Number(payload.qty) || 65;
@@ -1411,7 +1441,11 @@ export function placeOrder(payload) {
     type,
     status,
     price: price || Number(payload.price) || 0,
-    strategy: String(payload.strategy || ""),
+    strategy:
+      resolveOrderStrategy(
+        { ...payload, strategy: payload.strategy, securityId: payload.securityId, symbol: payload.symbol, side: payload.side },
+        { previous: state.orders || [], algos: state.algos || [], positions: state.positions || [] },
+      ) || realStrategyName(payload.strategy),
     brokerId,
     brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
     live: Boolean(live),
@@ -1450,12 +1484,14 @@ export function placeOrder(payload) {
       paper: isPaper,
     });
   }
+  if (order.strategy) rememberOrderStrategy(order, order.strategy);
+  const strategyNote = order.strategy ? ` · ${order.strategy}` : "";
   state.notifications.unshift(
     live
-      ? `Dhan ${order.status}: ${order.side} ${order.symbol} · ${order.strategy || "Manual"}`
+      ? `Dhan ${order.status}: ${order.side} ${order.symbol}${strategyNote}`
       : demoDhan
-        ? `Desk demo ${order.status}: ${order.side} ${order.symbol} · ${order.strategy || "Manual"} (not sent to Dhan)`
-        : `${account.name} ${order.status}: ${order.side} ${order.symbol} · ${order.strategy || "Manual"}`,
+        ? `Desk demo ${order.status}: ${order.side} ${order.symbol}${strategyNote} (not sent to Dhan)`
+        : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
   );
   if (isPaper) markPaperToMarket();
   return order;
@@ -1494,7 +1530,12 @@ export function squareOff(id) {
     type: "MARKET",
     status: "FILLED",
     price: exit,
-    strategy: pos.strategy || "",
+    strategy:
+      resolveOrderStrategy(pos, {
+        previous: state.orders || [],
+        algos: state.algos || [],
+        positions: state.positions || [],
+      }) || realStrategyName(pos.strategy),
     brokerId: account.id,
     brokerName: account.name,
     sim: !pos.paper,
@@ -1503,6 +1544,7 @@ export function squareOff(id) {
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
+  if (order.strategy) rememberOrderStrategy(order, order.strategy);
   if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
   state.closedTrades.unshift({
     id: `t${Date.now()}`,
@@ -1513,7 +1555,7 @@ export function squareOff(id) {
     exit,
     pnl,
     product: pos.product || "MIS",
-    strategy: pos.strategy || "",
+    strategy: order.strategy,
     brokerId: account.id,
     closedAt: order.createdAt,
     sim: !pos.paper,
@@ -1575,22 +1617,19 @@ export function replaceDhanBook(rows) {
       option: row.option || leg?.option || "",
       strike: row.strike || leg?.strike || 0,
     };
-    if (next.strategy) return next;
+    next.strategy = resolveOrderStrategy(next, {
+      previous: [...(state.positions || []), ...(state.orders || [])],
+      algos: state.algos || [],
+      positions: state.positions || [],
+    });
     for (const algo of state.algos || []) {
-      if (isNiftyVwapHedgeAlgo(algo) && algo.enabled) {
-        const hs = algo.hedgeState || {};
-        if (hs.inFlight && PositionManager.isOpenNiftyOption(next)) {
-          next.strategy = algo.name;
-          next.role = hs.pendingRole || next.role || "primary";
-          break;
-        }
-      }
-      if (!isNiftyOptionEngineAlgo(algo) || !algo.enabled) continue;
-      const vs = runtimeState(algo);
-      if (PositionManager.openFor([next], algo.name, vs)) {
-        next.strategy = algo.name;
-        break;
-      }
+      if (!isNiftyVwapHedgeAlgo(algo) || next.strategy !== algo.name) continue;
+      const hs = algo.hedgeState || {};
+      if (next.role) break;
+      if (hs.pendingRole) next.role = hs.pendingRole;
+      else if (hs.hedgeSide && next.option === hs.hedgeSide) next.role = "hedge";
+      else if (hs.primarySide && next.option === hs.primarySide) next.role = "primary";
+      break;
     }
     return next;
   });

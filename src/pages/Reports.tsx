@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { SideBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatInr, formatIst, formatNumber, liveBookCopy } from "../lib/format";
+import { cn, formatInr, formatIst, formatNumber, liveBookCopy, deskStrategyName } from "../lib/format";
 
 export function Reports() {
   const { data } = useMarket();
@@ -142,7 +142,7 @@ export function Reports() {
                 <td className="px-4 py-3 text-right">{formatNumber(row.entry)}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.exit)}</td>
                 <td className={cn("px-4 py-3 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</td>
-                <td className="px-4 py-3 font-semibold">{row.strategy || "Manual"}</td>
+                <td className="px-4 py-3 font-semibold">{deskStrategyName(row.strategy, row, data.algos)}</td>
                 <td className="px-4 py-3">{brokerName(data.brokers, row.brokerId)}</td>
               </tr>
             ))}
