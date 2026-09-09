@@ -387,11 +387,24 @@ export function drainPendingLiveAlgoOrders() {
 export function queueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = payload?.side === "SELL" ? "SELL" : "BUY";
-  if (
-    strategy &&
-    pendingLiveAlgoOrders.some((row) => row.strategy === strategy && (row.side === "SELL" ? "SELL" : "BUY") === side)
-  ) {
+  const samePending = pendingLiveAlgoOrders.some((row) => {
+    const rowSide = row.side === "SELL" ? "SELL" : "BUY";
+    if (rowSide !== side) return false;
+    if (strategy && row.strategy === strategy) return true;
+    if (payload?.symbol && row.symbol && row.symbol === payload.symbol) return true;
+    const left = PositionManager.niftyOptionLeg(payload);
+    const right = PositionManager.niftyOptionLeg(row);
+    return Boolean(left && right && left.strike === right.strike && left.option === right.option);
+  });
+  if (samePending) {
     return { ok: true, queued: true, status: "PENDING", duplicate: true };
+  }
+  if (side === "BUY") {
+    const openNifty = (state.positions || []).some((row) => !isPaperRow(row) && PositionManager.isOpenNiftyOption(row));
+    const pendingBuy = pendingLiveAlgoOrders.some((row) => (row.side === "SELL" ? "SELL" : "BUY") === "BUY");
+    if (openNifty || pendingBuy) {
+      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId: "dhan" });
   return { ok: true, queued: true, status: "PENDING" };
@@ -463,6 +476,7 @@ function positionsForNiftyVwap(algo, mode) {
   const mine = (row) => {
     if (row.strategy === algo.name) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
+    if (PositionManager.isOpenNiftyOption(row)) return true;
     return false;
   };
   const rows = state.positions || [];
@@ -497,8 +511,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const pack = chainForSymbol("NIFTY");
   const expiry = expiryForNiftyVwap(algo, pack);
   if (isNiftyVwapReversalAlgo(algo) && expiry && !isWeeklyOptionExpiry(expiry, "NIFTY") && !open) {
-    algo.lastSignal = "WAIT WEEKLY EXPIRY";
-    return;
+    if (!positions.some((row) => PositionManager.isOpenNiftyOption(row))) {
+      algo.lastSignal = "WAIT WEEKLY EXPIRY";
+      return;
+    }
   }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
@@ -1259,6 +1275,9 @@ export function placeOrder(payload) {
       pnl: 0,
       product: order.product,
       strategy: order.strategy,
+      option: payload.option || PositionManager.niftyOptionLeg(payload)?.option || "",
+      strike: payload.strike || PositionManager.niftyOptionLeg(payload)?.strike || 0,
+      expiry: payload.expiry || "",
       brokerId,
       openedAt: order.createdAt,
       sim: !isPaper,
@@ -1375,7 +1394,24 @@ export function dropBrokerPositions(brokerId) {
 }
 
 export function replaceDhanBook(rows) {
-  const incoming = Array.isArray(rows) ? rows : [];
+  const incoming = (Array.isArray(rows) ? rows : []).map((row) => {
+    const leg = PositionManager.niftyOptionLeg(row);
+    const next = {
+      ...row,
+      option: row.option || leg?.option || "",
+      strike: row.strike || leg?.strike || 0,
+    };
+    if (next.strategy) return next;
+    for (const algo of state.algos || []) {
+      if (!isNiftyOptionEngineAlgo(algo) || !algo.enabled) continue;
+      const vs = runtimeState(algo);
+      if (PositionManager.openFor([next], algo.name, vs)) {
+        next.strategy = algo.name;
+        break;
+      }
+    }
+    return next;
+  });
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
   state.positions = [...incoming, ...others];
 }

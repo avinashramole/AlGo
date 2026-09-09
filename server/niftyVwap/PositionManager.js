@@ -1,3 +1,28 @@
+import { parseOptionContract } from "../frontFutures.js";
+
+export function niftyOptionLeg(row = {}) {
+  const option = row.option === "PE" || row.option === "CE" ? row.option : "";
+  const strike = Number(row.strike);
+  if (option && strike > 0) {
+    const parsed = parseOptionContract(row.symbol);
+    if (parsed && parsed.root !== "NIFTY") return null;
+    return { root: parsed?.root || "NIFTY", strike, option };
+  }
+  const parsed = parseOptionContract(row.symbol);
+  if (parsed?.root !== "NIFTY") return null;
+  return parsed;
+}
+
+export function isOpenNiftyOption(row) {
+  if (!row || !(Number(row.qty) > 0)) return false;
+  if (String(row.type || "BUY").toUpperCase() === "CLOSED") return false;
+  return Boolean(niftyOptionLeg(row));
+}
+
+function legsMatch(left, right) {
+  return Boolean(left && right && Number(left.strike) === Number(right.strike) && left.option === right.option);
+}
+
 export function runtimeState(algo) {
   if (!algo.vwapState || typeof algo.vwapState !== "object") {
     algo.vwapState = {
@@ -51,20 +76,26 @@ export function resetSession(state, sessionDate) {
 export const PositionManager = {
   runtimeState,
   resetSession,
+  niftyOptionLeg,
+  isOpenNiftyOption,
   openFor(positions = [], strategyName, state) {
     const rows = (positions || []).filter(
       (row) => Number(row.qty) > 0 && String(row.type || "BUY").toUpperCase() !== "CLOSED",
     );
-    const byName = rows.find((row) => row.strategy === strategyName);
+    const byName = rows.find((row) => strategyName && row.strategy === strategyName);
     if (byName) return byName;
-    if (state?.lockedSymbol) {
-      return (
-        rows.find(
-          (row) =>
-            row.symbol === state.lockedSymbol ||
-            (Number(row.strike) === Number(state.lockedStrike) && row.option === state.lockedOption),
-        ) || null
-      );
+    const lockedLeg = niftyOptionLeg({
+      symbol: state?.lockedSymbol,
+      strike: state?.lockedStrike,
+      option: state?.lockedOption,
+    });
+    const byLock = rows.find((row) => {
+      if (state?.lockedSymbol && row.symbol === state.lockedSymbol) return true;
+      return legsMatch(niftyOptionLeg(row), lockedLeg);
+    });
+    if (byLock) return byLock;
+    if (state?.inFlight || state?.fillPrice) {
+      return rows.find((row) => isOpenNiftyOption(row) && (!row.strategy || row.strategy === strategyName)) || null;
     }
     return null;
   },

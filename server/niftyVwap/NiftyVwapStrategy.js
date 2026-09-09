@@ -194,6 +194,7 @@ export const NiftyVwapStrategy = {
     const open = PositionManager.openFor(input.positions, algo.name, state);
     if (open) {
       if (!state.fillPrice) {
+        const leg = PositionManager.niftyOptionLeg(open) || {};
         PositionManager.markFill(
           state,
           Number(open.avg || open.ltp),
@@ -201,13 +202,14 @@ export const NiftyVwapStrategy = {
           TrailingStopManager.targetPrice(Number(open.avg || open.ltp), config.targetPct),
         );
         PositionManager.lockContract(state, {
-          strike: open.strike,
-          option: open.option,
+          strike: open.strike || leg.strike,
+          option: open.option || leg.option,
           symbol: open.symbol,
         });
       }
+      const leg = PositionManager.niftyOptionLeg(open);
       const mark = Number(
-        open.option === "PE" ? input.peLtp || open.ltp : input.ceLtp || open.ltp || open.avg,
+        (leg?.option || open.option) === "PE" ? input.peLtp || open.ltp : input.ceLtp || open.ltp || open.avg,
       );
       return this.manageOpen({
         algo,
@@ -221,14 +223,19 @@ export const NiftyVwapStrategy = {
       });
     }
 
+    if (!open && (input.positions || []).some((row) => PositionManager.isOpenNiftyOption(row))) {
+      algo.lastSignal = "HOLD 1 LOT";
+      return { action: "skip", reason: "already-open" };
+    }
+
     if (state.inFlight && !open) {
-      if (state.lastEntryAt && now - state.lastEntryAt > 120_000) {
-        state.inFlight = false;
-        if (!state.fillPrice) PositionManager.clearOpen(state);
-        algo.lastSignal = "ORDER TIMEOUT";
-      } else {
+      const timedOut = state.lastEntryAt && now - state.lastEntryAt > 120_000;
+      if (!timedOut || RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime)) {
         return { action: "skip", reason: "in-flight" };
       }
+      state.inFlight = false;
+      if (!state.fillPrice) PositionManager.clearOpen(state);
+      algo.lastSignal = "ORDER TIMEOUT";
     }
 
     if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) {

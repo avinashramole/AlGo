@@ -7,7 +7,8 @@ import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./Nif
 import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
 import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
-import { runtimeState } from "./PositionManager.js";
+import { runtimeState, PositionManager } from "./PositionManager.js";
+import { parseOptionContract } from "../frontFutures.js";
 import { runNiftyVwapBacktest } from "./BacktestAdapter.js";
 import { PaperTradingAdapter } from "./PaperTradingAdapter.js";
 import { LiveTradingAdapter } from "./LiveTradingAdapter.js";
@@ -813,4 +814,90 @@ test("normalizeAlgo keeps 15m reversal paused and never auto-enables LIVE", () =
   assert.equal(created.initialSlPct, 15);
   assert.equal(created.targetPct, 30);
   assert.equal(niftyVwapReversalConfig(created).expiryKind, "weekly");
+});
+
+test("parseOptionContract reads Dhan hyphen symbols and skips BANKNIFTY", () => {
+  assert.deepEqual(parseOptionContract("NIFTY 24500 CE"), { root: "NIFTY", strike: 24500, option: "CE" });
+  assert.deepEqual(parseOptionContract("NIFTY-SEP2026-24500-CE"), { root: "NIFTY", strike: 24500, option: "CE" });
+  assert.deepEqual(parseOptionContract("NIFTY 16 SEP 24500 PE"), { root: "NIFTY", strike: 24500, option: "PE" });
+  assert.equal(parseOptionContract("BANKNIFTY 52000 CE").root, "BANKNIFTY");
+  assert.equal(PositionManager.isOpenNiftyOption({ symbol: "NIFTY-SEP2026-24500-CE", qty: 65, type: "BUY" }), true);
+  assert.equal(PositionManager.isOpenNiftyOption({ symbol: "BANKNIFTY 52000 CE", qty: 65, type: "BUY" }), false);
+});
+
+test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const now = T0 + 2 * BAR15;
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Second Lot" });
+  const book = bookAdapter();
+  const blocked = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: [
+      {
+        id: "dhan-pos-1",
+        symbol: "NIFTY-SEP2026-24500-CE",
+        type: "BUY",
+        qty: 65,
+        avg: 98,
+        ltp: 100,
+        strategy: "",
+        brokerId: "dhan",
+        live: true,
+      },
+    ],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.equal(blocked.reason, "already-open");
+  assert.match(algo.lastSignal, /HOLD 1 LOT/);
+});
+
+test("in-flight timeout does not punch a second lot while a NIFTY option is still open", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Timeout" });
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    inFlight: true,
+    lastEntryBarTime: T0 + BAR15,
+    lastEntryAt: T0,
+    lockedStrike: 24500,
+    lockedOption: "CE",
+    lockedSymbol: "NIFTY 24500 CE",
+    fillPrice: 0,
+  };
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 2 * BAR15 + 180_000,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: [
+      {
+        symbol: "NIFTY-SEP2026-24500-CE",
+        type: "BUY",
+        qty: 65,
+        avg: 100,
+        ltp: 102,
+        strategy: "",
+      },
+    ],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.ok(tick.action === "hold" || tick.reason === "already-open");
 });

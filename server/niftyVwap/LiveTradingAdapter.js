@@ -3,13 +3,13 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
     mode: "live",
     place(payload) {
       if (typeof queueLiveOrder !== "function") return { error: "Live queue missing" };
-      queueLiveOrder({
+      const queued = queueLiveOrder({
         ...payload,
         brokerId: "dhan",
         type: "MARKET",
         product: "MIS",
       });
-      return { ok: true, queued: true, status: "PENDING" };
+      return queued && typeof queued === "object" ? { ok: true, queued: true, status: "PENDING", ...queued } : { ok: true, queued: true, status: "PENDING" };
     },
     exit(position) {
       if ((position?.paper || position?.brokerId === "paper") && position?.id && typeof squareOff === "function") {
