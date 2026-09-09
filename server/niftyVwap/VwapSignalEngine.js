@@ -161,7 +161,7 @@ export function optionCloseAboveVwap(optionBars = []) {
 
 export function lastBarVwapReversal(completedSessionBars = []) {
   if (!completedSessionBars.length) {
-    return { buyCe: false, buyPe: false, open: 0, close: 0, vwap: 0, bar: null };
+    return { buyCe: false, buyPe: false, open: 0, close: 0, vwap: 0, bar: null, fullFill: false };
   }
   const last = completedSessionBars[completedSessionBars.length - 1];
   const vwap = sessionVwap(completedSessionBars);
@@ -169,7 +169,22 @@ export function lastBarVwapReversal(completedSessionBars = []) {
   const close = Number(last.close);
   const buyCe = vwap > 0 && open < vwap && close > vwap;
   const buyPe = vwap > 0 && open > vwap && close < vwap;
-  return { buyCe, buyPe, open, close, vwap, bar: last };
+  return { buyCe, buyPe, open, close, vwap, bar: last, fullFill: buyCe || buyPe };
+}
+
+export function nextCandleEntryWindow(previewTime, now, barMs) {
+  const t = Number(previewTime);
+  const ms = Number(barMs) || 15 * 60 * 1000;
+  const n = Number(now);
+  if (!(t > 0) || !(ms > 0) || !(n > 0)) {
+    return { nextOpen: 0, inNewCandle: false, missedOpen: false };
+  }
+  const nextOpen = t + ms;
+  return {
+    nextOpen,
+    inNewCandle: n >= nextOpen && n < nextOpen + ms,
+    missedOpen: n >= nextOpen + ms,
+  };
 }
 
 export const VwapSignalEngine = {
@@ -184,6 +199,7 @@ export const VwapSignalEngine = {
   firstFuturesBias,
   optionCloseAboveVwap,
   lastBarVwapReversal,
+  nextCandleEntryWindow,
   evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
     const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);
     const ceCompleted = completedCandles(sessionBars(ceBars, now), now, barMs);
@@ -211,15 +227,21 @@ export const VwapSignalEngine = {
     const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now);
     const lastFut = futCompleted[futCompleted.length - 1] || null;
     const reversal = lastBarVwapReversal(futCompleted);
+    const window = nextCandleEntryWindow(lastFut ? Number(lastFut.time) : 0, now, barMs);
+    const fullCe = Boolean(reversal.buyCe);
+    const fullPe = Boolean(reversal.buyPe);
     return {
       ready: Boolean(lastFut && reversal.vwap > 0),
       barTime: lastFut ? Number(lastFut.time) : 0,
       futuresClose: lastFut ? Number(lastFut.close) : 0,
       futuresOpen: lastFut ? Number(lastFut.open) : 0,
       futuresVwap: reversal.vwap,
-      bias: reversal.buyCe ? "CE" : reversal.buyPe ? "PE" : "",
-      buyCe: reversal.buyCe,
-      buyPe: reversal.buyPe,
+      bias: fullCe ? "CE" : fullPe ? "PE" : "",
+      buyCe: fullCe && window.inNewCandle,
+      buyPe: fullPe && window.inNewCandle,
+      previewFilled: fullCe || fullPe,
+      inNewCandle: window.inNewCandle,
+      missedOpen: window.missedOpen,
       ceAboveVwap: false,
       peAboveVwap: false,
       againstCount: 0,

@@ -84,6 +84,14 @@ export const NiftyVwapStrategy = {
         const open = Number(signal.futuresOpen || 0).toFixed(2);
         const close = Number(signal.futuresClose || 0).toFixed(2);
         const vwap = Number(signal.futuresVwap || 0).toFixed(2);
+        if (signal.previewFilled && signal.missedOpen) {
+          algo.lastSignal = `SKIP OLD 15m O ${open} C ${close} VWAP ${vwap}`;
+          return { action: "wait", reason: "missed-open" };
+        }
+        if (signal.previewFilled && !signal.inNewCandle) {
+          algo.lastSignal = `WAIT NEXT ${config.barMinutes || 15}m OPEN O ${open} C ${close} VWAP ${vwap}`;
+          return { action: "wait", reason: "wait-next-open" };
+        }
         algo.lastSignal = `WAIT ${config.barMinutes || 15}m O ${open} C ${close} VWAP ${vwap}`;
         return { action: "wait", reason: "no-reversal" };
       }
