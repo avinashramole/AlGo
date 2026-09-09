@@ -17,6 +17,7 @@ import {
   setOptionDesk,
 } from "./market.js";
 import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { orderCorrelationId, strategyFromCorrelation } from "./orderStrategy.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
@@ -217,7 +218,7 @@ function withAmo(body) {
     ...body,
     afterMarketOrder: true,
     amoTime: "OPEN",
-    correlationId: `t2s${Date.now()}`.slice(0, 30),
+    correlationId: body.correlationId || `t2s${Date.now()}`.slice(0, 25),
   };
 }
 
@@ -464,7 +465,9 @@ function mapDhanOrders(raw) {
     PART_TRADED: "PARTIAL",
     EXPIRED: "CANCELLED",
   };
-  return asList(raw).map((row) => ({
+  return asList(raw).map((row) => {
+    const correlationId = String(row.correlationId || row.CorrelationId || "");
+    return {
     id: String(row.orderId || row.dhanOrderId || `dhan-${row.securityId}`),
     symbol: row.tradingSymbol || String(row.securityId || ""),
     side: String(row.transactionType || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
@@ -474,7 +477,8 @@ function mapDhanOrders(raw) {
     product: row.productType || "MIS",
     type: row.orderType || "MARKET",
     status: statusMap[row.orderStatus] || row.orderStatus || "PENDING",
-    strategy: "",
+    strategy: strategyFromCorrelation(correlationId),
+    correlationId,
     brokerId: "dhan",
     brokerName: "Dhan",
     securityId: String(row.securityId || ""),
@@ -482,7 +486,8 @@ function mapDhanOrders(raw) {
     sim: false,
     reason: row.omsErrorDescription || row.rejectedReason || "",
     createdAt: row.createTime || row.updateTime || new Date().toISOString(),
-  }));
+  };
+  });
 }
 
 function mapDhanPositions(raw) {
@@ -1097,7 +1102,7 @@ export async function placeDhanOrder(payload = {}) {
   const useAmo = payload.afterMarketOrder === true || payload.amo === true || !nseSessionOpen();
   let body = {
     dhanClientId: String(clientId),
-    correlationId: `t2s${Date.now()}`.slice(0, 30),
+    correlationId: orderCorrelationId(payload),
     transactionType: payload.side === "SELL" ? "SELL" : "BUY",
     exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
     productType: productType(payload.product),

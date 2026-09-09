@@ -15,7 +15,7 @@ import {
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
-import { evaluateSignals, runBacktest } from "./backtest.js";
+import { resolveOrderStrategy } from "./orderStrategy.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -1528,8 +1528,17 @@ export function squareOff(id) {
 
 export function replaceDhanOrders(rows) {
   const incoming = Array.isArray(rows) ? rows : [];
-  const others = state.orders.filter((row) => row.brokerId !== "dhan");
-  state.orders = [...incoming, ...others];
+  const previous = state.orders || [];
+  const tagged = incoming.map((row) => ({
+    ...row,
+    strategy: resolveOrderStrategy(row, {
+      previous,
+      algos: state.algos || [],
+      positions: state.positions || [],
+    }),
+  }));
+  const others = previous.filter((row) => row.brokerId !== "dhan");
+  state.orders = [...tagged, ...others];
 }
 
 export function assignAlgoBroker(id, brokerId) {

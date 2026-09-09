@@ -96,6 +96,7 @@ export function Orders() {
                   <td className="px-4 py-3 font-semibold">
                     {row.symbol}
                     <div className="text-[10px] font-medium uppercase text-slate-400">{row.product || "MIS"}</div>
+                    <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{row.strategy || "Manual"}</div>
                   </td>
                   <td className="px-4 py-3">
                     <SideBadge side={row.side} />
@@ -113,7 +114,7 @@ export function Orders() {
                       </div>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{row.strategy || "—"}</td>
+                  <td className="px-4 py-3 font-semibold">{row.strategy || "Manual"}</td>
                   <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>
                   <td className="px-4 py-3 text-right">
                     {row.status === "PENDING" || row.status === "PARTIAL" ? (
