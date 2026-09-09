@@ -5,7 +5,7 @@ import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
 import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
 import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
-import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionVwap } from "./VwapSignalEngine.js";
+import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 import { runtimeState } from "./PositionManager.js";
 import { runNiftyVwapBacktest } from "./BacktestAdapter.js";
@@ -591,6 +591,7 @@ test("15m reversal: open below VWAP and close above is BUY CE after the candle c
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "CE");
   assert.equal(book.places[0].side, "BUY");
+  assert.equal(book.places[0].qty, 65);
 });
 
 test("15m reversal: open above VWAP and close below is BUY PE after the candle closes", () => {
@@ -617,6 +618,135 @@ test("15m reversal: open above VWAP and close below is BUY PE after the candle c
   });
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "PE");
+  assert.equal(book.places[0].qty, 65);
+});
+
+test("15m IST slots start at 09:15 / 09:30, not clock minutes divisible by 15", () => {
+  const slot0915 = Date.parse("2026-08-21T03:45:00.000Z");
+  const slot0930 = Date.parse("2026-08-21T04:00:00.000Z");
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:47:00.000Z"), 15), slot0915);
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T04:00:00.000Z"), 15), slot0930);
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T04:14:00.000Z"), 15), slot0930);
+});
+
+test("aggregateSessionBars drops the forming 15m IST bucket before it closes", () => {
+  const t0 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 0; i < 20; i++) {
+    ones.push({ time: t0 + i * 60_000, open: 100, high: 101, low: 99, close: 100.5, volume: 1 });
+  }
+  const at0929 = Date.parse("2026-08-21T03:59:00.000Z");
+  const forming = aggregateSessionBars(ones, 15, at0929);
+  assert.equal(forming.length, 0);
+  const at0930 = Date.parse("2026-08-21T04:00:00.000Z");
+  const closed = aggregateSessionBars(ones, 15, at0930);
+  assert.equal(closed.length, 1);
+  assert.equal(closed[0].time, t0);
+  assert.equal(closed[0].open, 100);
+});
+
+test("15m VWAP reversal does not punch when last closed 15m did not cross VWAP", () => {
+  const futuresBars = [
+    bar15(0, 24500, 24500, { high: 24500, low: 24500 }),
+    bar15(1, 24510, 24520, { high: 24530, low: 24500 }),
+    bar15(2, 24520, 24530, { high: 24540, low: 24510 }),
+    bar15(3, 24530, 24540, { high: 24550, low: 24520 }),
+  ];
+  const now = T0 + 4 * BAR15;
+  const reversal = lastBarVwapReversal(futuresBars);
+  assert.equal(reversal.buyCe, false);
+  assert.equal(reversal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Wait" });
+  const book = bookAdapter();
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 200,
+    peLtp: 190,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(result.action, "wait");
+  assert.equal(result.reason, "no-reversal");
+  assert.equal(book.places.length, 0);
+  assert.match(algo.lastSignal, /WAIT 15m/);
+});
+
+test("misaligned 1m groups do not punch; only an IST 15m VWAP cross does", () => {
+  const t0 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 2; i < 17; i++) {
+    const below = i < 15;
+    const px = below ? 24400 : 24600;
+    ones.push({ time: t0 + i * 60_000, open: px, high: px + 2, low: px - 2, close: px, volume: 100 });
+  }
+  const naive = {
+    time: ones[0].time,
+    open: ones[0].open,
+    close: ones[ones.length - 1].close,
+  };
+  assert.equal(naive.open < 24500 && naive.close > 24500, true);
+  const now = Date.parse("2026-08-21T04:02:00.000Z");
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars: ones, now, barMs: BAR15 });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev No False Punch" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars: ones,
+    spot: 24600,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "wait");
+  assert.equal(book.places.length, 0);
+});
+
+test("IST-aggregated 1m bars still BUY CE after the 15m close when open is below VWAP and close is above", () => {
+  const t0 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 0; i < 15; i++) {
+    const open = 24480 + i * 4;
+    const close = open + 4;
+    ones.push({ time: t0 + i * 60_000, open, high: close + 2, low: open - 2, close, volume: 100 });
+  }
+  const now = Date.parse("2026-08-21T04:00:00.000Z");
+  const signal = VwapSignalEngine.evaluateReversal({ futuresBars: ones, now, barMs: BAR15 });
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.buyPe, false);
+  const algo = defaultNiftyVwapReversalAlgo({ name: "Rev 1m CE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 240,
+    futuresBars: ones,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 100,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].qty, 65);
 });
 
 test("15m reversal uses 15% stop and 30% target and does not trail", () => {

@@ -79,7 +79,16 @@ export const NiftyVwapStrategy = {
     const state = runtimeState(algo);
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
-    if (!signal.buyCe && !signal.buyPe) return { action: "wait" };
+    if (!signal.buyCe && !signal.buyPe) {
+      if (config.signalMode === "reversal") {
+        const open = Number(signal.futuresOpen || 0).toFixed(2);
+        const close = Number(signal.futuresClose || 0).toFixed(2);
+        const vwap = Number(signal.futuresVwap || 0).toFixed(2);
+        algo.lastSignal = `WAIT ${config.barMinutes || 15}m O ${open} C ${close} VWAP ${vwap}`;
+        return { action: "wait", reason: "no-reversal" };
+      }
+      return { action: "wait", reason: "no-signal" };
+    }
     if (RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime)) {
       return { action: "skip", reason: "duplicate-bar" };
     }
@@ -137,8 +146,15 @@ export const NiftyVwapStrategy = {
       TrailingStopManager.initialStop(fill, config.initialSlPct),
       TrailingStopManager.targetPrice(fill, config.targetPct),
     );
-    TradeLogger.record("entry", { symbol: pick.symbol, fill, strategy: algo.name });
-    algo.lastSignal = `BUY ${pick.option}`;
+    TradeLogger.record("entry", {
+      symbol: pick.symbol,
+      fill,
+      strategy: algo.name,
+      open: signal.futuresOpen,
+      close: signal.futuresClose,
+      vwap: signal.futuresVwap,
+    });
+    algo.lastSignal = `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },
 

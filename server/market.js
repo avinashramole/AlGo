@@ -8,6 +8,7 @@ import {
   getUnderlying,
   nearestWeeklyExpiry,
   normalizeExpiry,
+  isWeeklyOptionExpiry,
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
@@ -27,6 +28,7 @@ import {
   PositionManager,
   runtimeState,
   runNiftyVwapBacktest,
+  VwapSignalEngine,
 } from "./niftyVwap/index.js";
 
 function clone(value) {
@@ -488,12 +490,16 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const open = PositionManager.openFor(positions, algo.name, vs);
   if (mode === "live" && !session.open && !open) return;
   if (isNiftyVwapReversalAlgo(algo)) preferWeeklyDeskForReversal();
-  const futuresBars = getCandles(config.timeframe || "5m");
+  const futuresBars = feedLive ? getCandles(config.timeframe || "5m") : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
   const und = getUnderlying("NIFTY");
   const pack = chainForSymbol("NIFTY");
   const expiry = expiryForNiftyVwap(algo, pack);
+  if (isNiftyVwapReversalAlgo(algo) && expiry && !isWeeklyOptionExpiry(expiry, "NIFTY") && !open) {
+    algo.lastSignal = "WAIT WEEKLY EXPIRY";
+    return;
+  }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
@@ -1646,22 +1652,9 @@ export function applyLiveQuotes(quotes) {
 export function getCandles(tf = "5m") {
   if (state.dhanFeed.live) {
     if (!state.liveCandles.length) return [];
-    const step = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" ? 60 : 5;
-    if (step <= 1) return clone(state.liveCandles);
-    const grouped = [];
-    for (let i = 0; i < state.liveCandles.length; i += step) {
-      const slice = state.liveCandles.slice(i, i + step);
-      if (!slice.length) continue;
-      grouped.push({
-        time: slice[0].time,
-        open: slice[0].open,
-        high: Math.max(...slice.map((row) => row.high)),
-        low: Math.min(...slice.map((row) => row.low)),
-        close: slice[slice.length - 1].close,
-        volume: slice.reduce((sum, row) => sum + row.volume, 0),
-      });
-    }
-    return grouped;
+    const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+    if (minutes <= 1) return clone(state.liveCandles);
+    return VwapSignalEngine.aggregateSessionBars(state.liveCandles, minutes);
   }
   const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
   return generateCandles(count, 24420, tf.length * 17);
