@@ -37,6 +37,7 @@ import {
   resolveBacktestWindow,
   drainPendingLiveAlgoOrders,
   noteLiveAlgoOrderResult,
+  bookRejectedLiveOrder,
 } from "./market.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -77,12 +78,11 @@ async function flushLiveAlgoOrders() {
           console.log(`Strategy live fill book: ${order.error}`);
         }
       } catch (error) {
-        placeOrder({
-          ...payload,
-          brokerId: "dhan",
-          live: { orderId: `rej-algo-${Date.now()}`, status: "REJECTED" },
-        });
-        noteLiveAlgoOrderResult(payload, { status: "REJECTED" }, error);
+        const order = bookRejectedLiveOrder({ ...payload, brokerId: "dhan" }, error);
+        noteLiveAlgoOrderResult(payload, error.live || { status: "REJECTED" }, error);
+        if (order?.error) {
+          console.log(`Strategy live fill book: ${order.error}`);
+        }
         console.log(`Strategy live order failed: ${error.message || error}`);
       }
     }
@@ -696,6 +696,17 @@ app.post("/api/orders", async (req, res) => {
       snapshot: snapshot(),
     });
   } catch (error) {
+    const booked = brokerId === "dhan" ? bookRejectedLiveOrder({ ...body, brokerId }, error) : null;
+    if (booked && !booked.error) {
+      res.status(201).json({
+        ok: false,
+        live: true,
+        error: String(error.message || "Order failed"),
+        order: booked,
+        snapshot: snapshot(),
+      });
+      return;
+    }
     res.status(error.status || 400).json({
       ok: false,
       live: false,
@@ -770,6 +781,7 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
         product: pos.product || "MIS",
         type: "MARKET",
         securityId: pos.securityId,
+        strategy: pos.strategy,
         exchangeSegment: String(pos.symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
       res.json({ ok: true, live: true, snapshot: snapshot() });

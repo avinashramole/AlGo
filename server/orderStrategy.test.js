@@ -4,7 +4,9 @@ import {
   canonicalStrategyName,
   clearOrderStrategyMemory,
   orderCorrelationId,
+  rememberOrderStrategy,
   resolveOrderStrategy,
+  strategyForPlacedOrder,
   strategyFromCorrelation,
 } from "./orderStrategy.js";
 
@@ -111,4 +113,60 @@ test("display name is the actual algo name, not a shared label", () => {
   assert.equal(canonicalStrategyName("a5", algos), "NIFTY 15m VWAP reversal");
   assert.equal(canonicalStrategyName("NIFTY 15m VWAP hedge", algos), "NIFTY 15m VWAP hedge");
   assert.equal(canonicalStrategyName("NIFTY VWAP ATM", algos), "NIFTY VWAP ATM");
+});
+
+test("rejected Dhan row with hedge correlation shows that algo name", () => {
+  const name = resolveOrderStrategy(
+    {
+      id: "322260909265305",
+      symbol: "NIFTY-Sep2026-23550-CE",
+      status: "REJECTED",
+      strategy: "",
+      correlationId: "NIFTY-15m-VWAP-hedge",
+    },
+    { algos: [hedgeAlgo] },
+  );
+  assert.equal(name, "NIFTY 15m VWAP hedge");
+});
+
+test("rejected Dhan row keeps the strategy booked on the same order id", () => {
+  resolveOrderStrategy(
+    { id: "112111182198", symbol: "NIFTY-Sep2026-23550-CE", strategy: "NIFTY 15m VWAP hedge" },
+    { algos: [hedgeAlgo] },
+  );
+  const name = resolveOrderStrategy(
+    {
+      id: "112111182198",
+      symbol: "NIFTY-Sep2026-23550-CE",
+      status: "REJECTED",
+      strategy: "",
+      correlationId: "t2s1770000001",
+    },
+    { algos: [hedgeAlgo] },
+  );
+  assert.equal(name, "NIFTY 15m VWAP hedge");
+});
+
+test("remembers strategy by Dhan correlation when the poll row has no name", () => {
+  rememberOrderStrategy({ correlationId: "hedge-corr-9" }, "NIFTY 15m VWAP hedge");
+  const name = resolveOrderStrategy(
+    {
+      id: "dhan-reject-1",
+      symbol: "NIFTY-Sep2026-23550-CE",
+      status: "REJECTED",
+      strategy: "",
+      correlationId: "hedge-corr-9",
+    },
+    { algos: [hedgeAlgo] },
+  );
+  assert.equal(name, "NIFTY 15m VWAP hedge");
+});
+
+test("placed-order strategy stays the payload name and ignores Manual", () => {
+  assert.equal(
+    strategyForPlacedOrder({ strategy: "NIFTY 15m VWAP hedge" }, [hedgeAlgo]),
+    "NIFTY 15m VWAP hedge",
+  );
+  assert.equal(strategyForPlacedOrder({ strategy: "Manual" }, [hedgeAlgo]), "");
+  assert.equal(strategyForPlacedOrder({ strategy: "" }, [hedgeAlgo]), "");
 });

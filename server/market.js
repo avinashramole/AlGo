@@ -15,7 +15,7 @@ import {
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
-import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy } from "./orderStrategy.js";
+import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -1399,6 +1399,36 @@ function mapLiveStatus(status) {
   return raw || "PENDING";
 }
 
+function liveRejectReason(live, fallback) {
+  const raw = live?.raw && typeof live.raw === "object" ? live.raw : {};
+  const data = raw.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? raw.data : {};
+  const remarks = typeof raw.remarks === "string" ? raw.remarks : raw.remarks?.error_message || "";
+  const text =
+    live?.reason ||
+    raw.omsErrorDescription ||
+    raw.errorMessage ||
+    raw.error_message ||
+    data.errorMessage ||
+    data.error_message ||
+    remarks;
+  const clean = String(text || "").trim();
+  return clean || fallback;
+}
+
+export function bookRejectedLiveOrder(payload, error) {
+  const live = error?.live;
+  if (!live?.orderId) return null;
+  return placeOrder({
+    ...payload,
+    brokerId: payload.brokerId || "dhan",
+    live: {
+      ...live,
+      status: live.status || "REJECTED",
+      reason: live.reason || error?.message,
+    },
+  });
+}
+
 export function placeOrder(payload) {
   const brokers = publicBrokers();
   const requested = String(payload.brokerId || brokers.activeBrokerId || "dhan");
@@ -1412,17 +1442,29 @@ export function placeOrder(payload) {
   if (isPaper && !isDhanFeedLive()) {
     return { error: "Paper fills use live prices. Connect Dhan LIVE first." };
   }
+  const stampedStrategy = strategyForPlacedOrder(payload, state.algos || []);
+  const correlationId = String(payload.correlationId || live?.correlationId || "").trim();
   if (live?.orderId) {
     const existing = state.orders.find((row) => String(row.id) === String(live.orderId));
     if (existing) {
       const name = resolveOrderStrategy(
-        { ...existing, ...payload, id: existing.id },
+        {
+          ...existing,
+          ...payload,
+          id: existing.id,
+          strategy: stampedStrategy || payload.strategy || existing.strategy,
+          correlationId: correlationId || existing.correlationId,
+        },
         { previous: state.orders || [], algos: state.algos || [], positions: state.positions || [] },
       );
       if (name) {
         existing.strategy = name;
-        rememberOrderStrategy(existing, name);
+        rememberOrderStrategy({ ...existing, correlationId: correlationId || existing.correlationId }, name);
       }
+      if (correlationId) existing.correlationId = correlationId;
+      const status = mapLiveStatus(live.status);
+      if (status) existing.status = status;
+      if (live.reason || live.raw) existing.reason = liveRejectReason(live, existing.reason);
       return existing;
     }
   }
@@ -1447,9 +1489,18 @@ export function placeOrder(payload) {
     price: price || Number(payload.price) || 0,
     strategy:
       resolveOrderStrategy(
-        { ...payload, strategy: payload.strategy, securityId: payload.securityId, symbol: payload.symbol, side: payload.side },
+        {
+          ...payload,
+          id: live?.orderId,
+          strategy: stampedStrategy || payload.strategy,
+          securityId: payload.securityId || live?.securityId,
+          symbol: payload.symbol,
+          side: payload.side,
+          correlationId,
+        },
         { previous: state.orders || [], algos: state.algos || [], positions: state.positions || [] },
-      ) || realStrategyName(payload.strategy),
+      ) || stampedStrategy || realStrategyName(payload.strategy),
+    correlationId,
     brokerId,
     brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
     live: Boolean(live),
@@ -1457,7 +1508,7 @@ export function placeOrder(payload) {
     paper: isPaper,
     securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
     reason: live
-      ? `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`
+      ? liveRejectReason(live, `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`)
       : demoDhan
         ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
         : brokerId === "paper"

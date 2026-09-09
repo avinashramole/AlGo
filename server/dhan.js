@@ -15,9 +15,10 @@ import {
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
+  snapshot,
 } from "./market.js";
 import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
-import { orderCorrelationId, strategyFromCorrelation } from "./orderStrategy.js";
+import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
@@ -455,7 +456,7 @@ function asList(raw) {
   return [];
 }
 
-function mapDhanOrders(raw) {
+function mapDhanOrders(raw, algos = []) {
   const statusMap = {
     TRANSIT: "PENDING",
     PENDING: "PENDING",
@@ -477,7 +478,7 @@ function mapDhanOrders(raw) {
     product: row.productType || "MIS",
     type: row.orderType || "MARKET",
     status: statusMap[row.orderStatus] || row.orderStatus || "PENDING",
-    strategy: strategyFromCorrelation(correlationId),
+    strategy: strategyFromCorrelation(correlationId, algos),
     correlationId,
     brokerId: "dhan",
     brokerName: "Dhan",
@@ -579,7 +580,7 @@ async function pullAccount() {
       (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
     );
     replaceDhanBook([...positions, ...holdings]);
-    replaceDhanOrders(mapDhanOrders(ordersRaw));
+    replaceDhanOrders(mapDhanOrders(ordersRaw, snapshot().algos || []));
     setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
   } catch (error) {
     handleDhanPollError("positions", error);
@@ -1053,6 +1054,49 @@ function securityIdFromOpenChain(payload = {}) {
   return String((opt === "PE" ? row.putId : row.callId) || "");
 }
 
+function dhanOrderLiveFromBody(result, extra = {}) {
+  if (!result || typeof result !== "object") return extra.live || null;
+  const data = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data : {};
+  const orderId = String(
+    extra.orderId ||
+      result.orderId ||
+      result.order_id ||
+      result.dhanOrderId ||
+      data.orderId ||
+      data.order_id ||
+      data.dhanOrderId ||
+      extra.live?.orderId ||
+      "",
+  );
+  if (!orderId) return extra.live || null;
+  const status = String(
+    extra.status ||
+      result.orderStatus ||
+      result.order_status ||
+      data.orderStatus ||
+      data.order_status ||
+      extra.live?.status ||
+      extra.defaultStatus ||
+      "REJECTED",
+  );
+  return {
+    orderId,
+    status,
+    securityId: extra.securityId
+      ? String(extra.securityId)
+      : String(result.securityId || data.securityId || extra.live?.securityId || ""),
+    filledQty: Number(result.filledQty || data.filledQty || extra.live?.filledQty || 0),
+    afterMarketOrder: Boolean(extra.afterMarketOrder ?? extra.live?.afterMarketOrder),
+    correlationId: extra.correlationId || result.correlationId || data.correlationId || extra.live?.correlationId || "",
+    raw: result,
+  };
+}
+
+function attachPlaceLive(error, extra = {}) {
+  const live = dhanOrderLiveFromBody(error?.body, extra);
+  if (live) error.live = live;
+}
+
 export async function placeDhanOrder(payload = {}) {
   if (!accessToken || !clientId) {
     const error = new Error("Dhan live is off. Open Brokers and paste Client ID + Access Token.");
@@ -1100,9 +1144,19 @@ export async function placeDhanOrder(payload = {}) {
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
   const ip = await fetchDhanIp();
   const useAmo = payload.afterMarketOrder === true || payload.amo === true || !nseSessionOpen();
+  let algos = [];
+  try {
+    algos = snapshot().algos || [];
+  } catch {
+    algos = [];
+  }
+  const strategy = strategyForPlacedOrder(payload, algos);
+  const tagged = { ...payload, strategy };
+  const correlationId = orderCorrelationId(tagged);
+  if (strategy) rememberOrderStrategy({ correlationId, strategy }, strategy);
   let body = {
     dhanClientId: String(clientId),
-    correlationId: orderCorrelationId(payload),
+    correlationId,
     transactionType: payload.side === "SELL" ? "SELL" : "BUY",
     exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
     productType: productType(payload.product),
@@ -1116,6 +1170,12 @@ export async function placeDhanOrder(payload = {}) {
     afterMarketOrder: useAmo,
   };
   if (useAmo) body.amoTime = "OPEN";
+  const liveExtra = {
+    securityId,
+    afterMarketOrder: useAmo,
+    correlationId,
+    defaultStatus: "REJECTED",
+  };
 
   const submit = (orderBody) => {
     console.log(
@@ -1133,10 +1193,12 @@ export async function placeDhanOrder(payload = {}) {
       try {
         result = await submit(body);
       } catch (retryError) {
+        attachPlaceLive(retryError, { ...liveExtra, afterMarketOrder: true });
         retryError.message = formatPlaceError(retryError, ip, body);
         throw retryError;
       }
     } else {
+      attachPlaceLive(error, liveExtra);
       error.message = formatPlaceError(error, ip, body);
       throw error;
     }
@@ -1144,10 +1206,17 @@ export async function placeDhanOrder(payload = {}) {
   const data = result?.data && typeof result.data === "object" ? result.data : result || {};
   const orderId = String(data.orderId || data.order_id || result?.orderId || "");
   const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
+  const live = dhanOrderLiveFromBody(result, {
+    ...liveExtra,
+    orderId,
+    status: status || "TRANSIT",
+    defaultStatus: "TRANSIT",
+  });
   if (!orderId || status.toUpperCase() === "REJECTED") {
     const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
     error.status = 400;
     error.body = result;
+    if (live) error.live = live;
     error.message = formatPlaceError(error, ip, body);
     throw error;
   }
@@ -1162,6 +1231,7 @@ export async function placeDhanOrder(payload = {}) {
     securityId: String(securityId),
     filledQty: Number(data.filledQty || result?.filledQty || 0),
     afterMarketOrder: Boolean(body.afterMarketOrder),
+    correlationId,
     raw: result,
   };
 }

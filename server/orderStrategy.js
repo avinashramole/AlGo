@@ -12,6 +12,8 @@ export function rememberOrderStrategy(row = {}, name = "") {
   const label = realStrategyName(name || row.strategy);
   if (!label) return label;
   if (row.id) memory.set(`id:${row.id}`, label);
+  const corr = String(row.correlationId || "").trim();
+  if (corr && !/^t2s\d+$/i.test(corr)) memory.set(`corr:${corr}`, label);
   return label;
 }
 
@@ -21,6 +23,8 @@ export function clearOrderStrategyMemory() {
 
 function recallOrderStrategy(row = {}) {
   if (row.id && memory.has(`id:${row.id}`)) return memory.get(`id:${row.id}`);
+  const corr = String(row.correlationId || "").trim();
+  if (corr && memory.has(`corr:${corr}`)) return memory.get(`corr:${corr}`);
   return "";
 }
 
@@ -46,7 +50,9 @@ export function strategyFromCorrelation(value, algos = []) {
     const compact = hyphenName(name);
     return name === spaced || compact === raw || compact.slice(0, CORR_MAX) === raw || algo.id === raw;
   });
-  return canonicalStrategyName(match?.name || spaced, algos);
+  if (match?.name) return canonicalStrategyName(match.name, algos);
+  if (!(algos || []).length) return canonicalStrategyName(spaced, algos);
+  return "";
 }
 
 function isHedgeAlgo(algo = {}) {
@@ -162,6 +168,10 @@ export function resolveOrderStrategy(row = {}, { previous = [], algos = [], posi
     rememberOrderStrategy(row, name);
   }
   return name;
+}
+
+export function strategyForPlacedOrder(payload = {}, algos = []) {
+  return canonicalStrategyName(realStrategyName(payload.strategy), algos);
 }
 
 export function canonicalStrategyName(value, algos = []) {
