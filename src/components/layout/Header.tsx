@@ -90,7 +90,7 @@ export function Header() {
           </Link>
         ) : null}
         {admin ? (
-          <Link to="/chat" className="icon-btn hidden md:flex" title="Chat">
+          <Link to="/chat" className="icon-btn hidden md:flex" title="Messages">
             <MessageSquare size={17} />
           </Link>
         ) : null}

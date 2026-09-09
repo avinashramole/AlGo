@@ -756,6 +756,83 @@ export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
 }
 
+export type MessagingChannelStatus = {
+  kind: "whatsapp" | "telegram";
+  ready: boolean;
+  label: string;
+  hint?: string;
+};
+
+export type MessagingConversation = {
+  id: string;
+  name: string;
+  mobile?: string;
+  telegramId?: string;
+  broker?: string;
+  channels: Array<"whatsapp" | "telegram">;
+  preview?: string;
+  lastAt?: string;
+};
+
+export type MessagingMessage = {
+  id: string;
+  from: string;
+  text: string;
+  via?: string;
+  at?: string;
+  mine?: boolean;
+  status?: string;
+  error?: string;
+};
+
+export function getMessaging() {
+  return request<{
+    sendVia: "both" | "whatsapp" | "telegram";
+    whatsapp: MessagingChannelStatus;
+    telegram: MessagingChannelStatus;
+    conversations: MessagingConversation[];
+  }>("/messaging");
+}
+
+export function saveMessagingConfig(payload: {
+  sendVia?: "both" | "whatsapp" | "telegram";
+  whatsappToken?: string;
+  phoneNumberId?: string;
+  telegramToken?: string;
+}) {
+  return request<{
+    sendVia: "both" | "whatsapp" | "telegram";
+    whatsapp: MessagingChannelStatus;
+    telegram: MessagingChannelStatus;
+    conversations: MessagingConversation[];
+  }>("/messaging/config", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function addMessagingContact(payload: { name: string; mobile?: string; telegramId?: string; broker?: string }) {
+  return request<{ contact: MessagingConversation }>("/messaging/contacts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMessagingThread(id: string) {
+  return request<{ messages: MessagingMessage[] }>(`/messaging/thread/${encodeURIComponent(id)}`);
+}
+
+export function sendMessaging(payload: { contactId: string; text: string; via?: "both" | "whatsapp" | "telegram" }) {
+  return request<{ ok: boolean; message: MessagingMessage; warnings?: string[] }>("/messaging/send", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function broadcastMessaging(payload: { text: string; via?: "both" | "whatsapp" | "telegram" }) {
+  return request<{ ok: boolean; sent: number; failed: number; errors?: Array<{ name: string; error: string }> }>(
+    "/messaging/broadcast",
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
 export function enableDhanAuto(payload: {
   clientId?: string;
   loginId?: string;

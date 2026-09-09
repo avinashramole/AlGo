@@ -9,6 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBroker
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -820,6 +821,59 @@ app.post("/api/chat", (req, res) => {
     return;
   }
   res.json(addChat(text));
+});
+
+app.get("/api/messaging", (_req, res) => {
+  res.json(messagingStatus(listPublicUsers()));
+});
+
+app.post("/api/messaging/config", (req, res) => {
+  try {
+    res.json(saveMessagingConfig(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save messaging" });
+  }
+});
+
+app.post("/api/messaging/contacts", (req, res) => {
+  try {
+    res.status(201).json({ contact: upsertMessagingContact(req.body || {}) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save contact" });
+  }
+});
+
+app.get("/api/messaging/thread/:id", (req, res) => {
+  res.json({ messages: getThread(req.params.id) });
+});
+
+app.post("/api/messaging/send", async (req, res) => {
+  try {
+    res.json(
+      await sendMessaging({
+        contactId: req.body?.contactId,
+        text: req.body?.text,
+        via: req.body?.via,
+        users: listPublicUsers(),
+      }),
+    );
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Send failed" });
+  }
+});
+
+app.post("/api/messaging/broadcast", async (req, res) => {
+  try {
+    res.json(
+      await broadcastMessaging({
+        text: req.body?.text,
+        via: req.body?.via,
+        users: listPublicUsers(),
+      }),
+    );
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Broadcast failed" });
+  }
 });
 
 app.use("/api", (req, res) => {

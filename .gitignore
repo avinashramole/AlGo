@@ -23,4 +23,5 @@ server/data/enrollments.json
 server/data/member-desk.json
 server/data/algos.json
 server/data/sessions.json
+server/data/messaging.json
 *.zip
