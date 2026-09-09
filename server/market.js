@@ -15,7 +15,7 @@ import {
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { normalizeAlgo, seedAlgos } from "./strategies.js";
-import { realStrategyName, rememberOrderStrategy, resolveOrderStrategy } from "./orderStrategy.js";
+import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy } from "./orderStrategy.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -898,9 +898,11 @@ function isPaperRow(row) {
 function liveDesk() {
   const live = isDhanFeedLive();
   const keep = (row) => isPaperRow(row) || (Boolean(row?.live) && !row?.sim);
-  const orders = live ? state.orders.filter(keep) : state.orders;
-  const positions = live ? state.positions.filter(keep) : state.positions;
-  const closedTrades = live ? (state.closedTrades || []).filter(keep) : state.closedTrades || [];
+  const algos = state.algos || [];
+  const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });
+  const orders = (live ? state.orders.filter(keep) : state.orders).map(withActualName);
+  const positions = (live ? state.positions.filter(keep) : state.positions).map(withActualName);
+  const closedTrades = (live ? (state.closedTrades || []).filter(keep) : state.closedTrades || []).map(withActualName);
   return { live, orders, positions, closedTrades };
 }
 

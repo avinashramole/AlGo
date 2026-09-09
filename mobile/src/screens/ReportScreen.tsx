@@ -3,10 +3,16 @@ import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatInr } from "../theme";
 
-function tradeStrategyLabel(row: { strategy?: string }) {
+function tradeStrategyLabel(row: { strategy?: string }, algos: Array<{ id?: string; name?: string }> = []) {
   const raw = String(row.strategy || "").trim();
   if (!raw || /^(manual|auto)$/i.test(raw)) return "";
-  return raw;
+  const compact = raw.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9+-]/g, "").toLowerCase();
+  const match = algos.find((algo) => {
+    const name = String(algo.name || "").trim();
+    if (!name) return false;
+    return name === raw || name.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9+-]/g, "").toLowerCase() === compact || algo.id === raw;
+  });
+  return match?.name || raw;
 }
 
 export function ReportScreen() {
@@ -54,7 +60,7 @@ export function ReportScreen() {
                 <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
               </View>
               <Text style={styles.muted}>
-                {row.side} {row.qty} · {row.entry} → {row.exit} · {tradeStrategyLabel(row)}
+                {row.side} {row.qty} · {row.entry} → {row.exit} · {tradeStrategyLabel(row, data.algos || [])}
               </Text>
             </Card>
           ))}

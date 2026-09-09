@@ -86,7 +86,7 @@ export function PositionsDesk() {
                     <div className="text-[10px] font-medium uppercase text-slate-400">
                       {row.product || "MIS"} · {formatIst(row.openedAt)}
                     </div>
-                    <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{buySellByStrategy(row.type, row.strategy)}</div>
+                    <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{buySellByStrategy(row.type, row.strategy, data.algos)}</div>
                   </td>
                   <td className="px-4 py-3">
                     <SideBadge side={row.type} />
@@ -96,8 +96,8 @@ export function PositionsDesk() {
                   <td className="px-4 py-3 text-right">{formatNumber(row.ltp)}</td>
                   <td className={cn("px-4 py-3 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</td>
                   <td className="px-4 py-3">
-                    <div className="font-bold">{deskStrategyName(row.strategy) || "—"}</div>
-                    {deskStrategyName(row.strategy) ? (
+                    <div className="font-bold">{deskStrategyName(row.strategy, data.algos) || "—"}</div>
+                    {deskStrategyName(row.strategy, data.algos) ? (
                     <div className="text-[10px] font-medium text-slate-400">{row.type === "SELL" ? "Sold by this strategy" : "Bought by this strategy"}</div>
                     ) : null}
                   </td>

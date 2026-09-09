@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import {
+  canonicalStrategyName,
   clearOrderStrategyMemory,
   orderCorrelationId,
   resolveOrderStrategy,
@@ -98,4 +99,16 @@ test("remembered order id keeps NIFTY 15m VWAP hedge after Dhan strips the field
     { algos: [{ ...hedgeAlgo, enabled: false, hedgeState: { phase: "IDLE" } }] },
   );
   assert.equal(name, "NIFTY 15m VWAP hedge");
+});
+
+test("display name is the actual algo name, not a shared label", () => {
+  const algos = [
+    { id: "a4", name: "NIFTY VWAP ATM" },
+    { id: "a5", name: "NIFTY 15m VWAP reversal" },
+    { id: "a6", name: "NIFTY 15m VWAP hedge" },
+  ];
+  assert.equal(canonicalStrategyName("NIFTY-VWAP-ATM", algos), "NIFTY VWAP ATM");
+  assert.equal(canonicalStrategyName("a5", algos), "NIFTY 15m VWAP reversal");
+  assert.equal(canonicalStrategyName("NIFTY 15m VWAP hedge", algos), "NIFTY 15m VWAP hedge");
+  assert.equal(canonicalStrategyName("NIFTY VWAP ATM", algos), "NIFTY VWAP ATM");
 });

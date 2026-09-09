@@ -46,7 +46,7 @@ export function strategyFromCorrelation(value, algos = []) {
     const compact = hyphenName(name);
     return name === spaced || compact === raw || compact.slice(0, CORR_MAX) === raw || algo.id === raw;
   });
-  return realStrategyName(match?.name || spaced);
+  return canonicalStrategyName(match?.name || spaced, algos);
 }
 
 function isHedgeAlgo(algo = {}) {
@@ -157,6 +157,25 @@ export function resolveOrderStrategy(row = {}, { previous = [], algos = [], posi
   if (!name && !forPosition) {
     name = inferFromLastOrderId(row, algos) || inferPendingInFlight(row, algos);
   }
-  if (name) rememberOrderStrategy(row, name);
+  if (name) {
+    name = canonicalStrategyName(name, algos) || name;
+    rememberOrderStrategy(row, name);
+  }
   return name;
+}
+
+export function canonicalStrategyName(value, algos = []) {
+  const raw = realStrategyName(value);
+  if (!raw) return "";
+  const compact = hyphenName(raw).toLowerCase();
+  const match = (algos || []).find((algo) => {
+    const name = String(algo.name || "").trim();
+    if (!name) return false;
+    return (
+      name === raw ||
+      hyphenName(name).toLowerCase() === compact ||
+      String(algo.id || "") === raw
+    );
+  });
+  return match?.name || raw;
 }

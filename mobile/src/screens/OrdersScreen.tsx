@@ -3,10 +3,16 @@ import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatNumber } from "../theme";
 
-function strategyLabel(row: { strategy?: string }) {
+function strategyLabel(row: { strategy?: string }, algos: Array<{ id?: string; name?: string }> = []) {
   const raw = String(row.strategy || "").trim();
   if (!raw || /^(manual|auto)$/i.test(raw)) return "";
-  return raw;
+  const compact = raw.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9+-]/g, "").toLowerCase();
+  const match = algos.find((algo) => {
+    const name = String(algo.name || "").trim();
+    if (!name) return false;
+    return name === raw || name.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9+-]/g, "").toLowerCase() === compact || algo.id === raw;
+  });
+  return match?.name || raw;
 }
 
 export function OrdersScreen() {
@@ -26,7 +32,7 @@ export function OrdersScreen() {
             <Pill text={row.status} up={row.status === "FILLED"} />
           </View>
           <Text style={styles.strategy}>
-            {strategyLabel(row) ? `${row.side === "SELL" ? "SELL" : "BUY"} by ${strategyLabel(row)}` : row.side === "SELL" ? "SELL" : "BUY"}
+            {strategyLabel(row, data.algos || []) ? `${row.side === "SELL" ? "SELL" : "BUY"} by ${strategyLabel(row, data.algos || [])}` : row.side === "SELL" ? "SELL" : "BUY"}
           </Text>
           <Text style={styles.muted}>
             {row.side} · {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
