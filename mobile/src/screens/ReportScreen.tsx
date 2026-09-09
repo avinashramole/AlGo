@@ -3,13 +3,9 @@ import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatInr } from "../theme";
 
-function tradeStrategyLabel(row: { strategy?: string; symbol?: string }) {
+function tradeStrategyLabel(row: { strategy?: string }) {
   const raw = String(row.strategy || "").trim();
-  if (raw && !/^(manual|auto)$/i.test(raw)) return raw;
-  const symbol = String(row.symbol || "");
-  if (/NIFTY/i.test(symbol) && /(CE|PE)/i.test(symbol) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(symbol)) {
-    return "NIFTY 15m VWAP hedge";
-  }
+  if (!raw || /^(manual|auto)$/i.test(raw)) return "";
   return raw;
 }
 

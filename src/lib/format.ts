@@ -70,53 +70,15 @@ export function liveBookCopy(live?: boolean) {
     : "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
 }
 
-export function deskStrategyName(
-  strategy?: string,
-  row?: { symbol?: string; option?: string },
-  algos?: Array<{ name?: string; kind?: string; strategyType?: string; indicator?: string; enabled?: boolean; hedgeState?: { inFlight?: boolean; phase?: string; primarySide?: string; primaryEntryPrice?: number } }>,
-) {
-  const raw = String(strategy || "").trim();
-  if (raw && !/^(manual|auto)$/i.test(raw)) return raw;
-  const list = algos || [];
-  const hedge = list.find(
-    (algo) =>
-      algo.kind === "nifty-vwap-hedge" ||
-      algo.strategyType === "NIFTY_VWAP_HEDGE_15M" ||
-      algo.indicator === "NIFTY_VWAP_HEDGE" ||
-      algo.name === "NIFTY 15m VWAP hedge",
-  );
-  const symbol = String(row?.symbol || "");
-  const niftyOpt =
-    row?.option === "CE" ||
-    row?.option === "PE" ||
-    (/NIFTY/i.test(symbol) && /(CE|PE)/i.test(symbol) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(symbol));
-  if (niftyOpt && hedge) {
-    const hs = hedge.hedgeState || {};
-    const hedgeOn = Boolean(hedge.enabled || hs.inFlight || (hs.phase && hs.phase !== "IDLE") || hs.primarySide);
-    const otherLive = list.some(
-      (algo) =>
-        algo.enabled &&
-        algo !== hedge &&
-        (algo.kind === "nifty-vwap" ||
-          algo.kind === "nifty-vwap-reversal" ||
-          algo.strategyType === "NIFTY_VWAP_ATM" ||
-          algo.strategyType === "NIFTY_VWAP_REVERSAL_15M"),
-    );
-    if (hedgeOn || !otherLive) return hedge.name || "NIFTY 15m VWAP hedge";
-  }
-  const live = list.find((algo) => algo.enabled && algo.name);
-  if (niftyOpt) return live?.name || hedge?.name || "NIFTY 15m VWAP hedge";
-  return live?.name || "";
+export function deskStrategyName(strategy?: string) {
+  const name = String(strategy || "").trim();
+  if (!name || /^(manual|auto)$/i.test(name)) return "";
+  return name;
 }
 
-export function buySellByStrategy(
-  side?: string,
-  strategy?: string,
-  row?: { symbol?: string; option?: string },
-  algos?: Array<{ name?: string; kind?: string; strategyType?: string; indicator?: string; enabled?: boolean }>,
-) {
+export function buySellByStrategy(side?: string, strategy?: string) {
   const action = String(side || "").toUpperCase() === "SELL" ? "SELL" : "BUY";
-  const name = deskStrategyName(strategy, row, algos);
+  const name = deskStrategyName(strategy);
   return name ? `${action} by ${name}` : action;
 }
 

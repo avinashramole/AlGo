@@ -3,14 +3,10 @@ import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatNumber } from "../theme";
 
-function strategyLabel(row: { strategy?: string; symbol?: string }, algos: Array<{ name?: string; kind?: string; enabled?: boolean }> = []) {
+function strategyLabel(row: { strategy?: string }) {
   const raw = String(row.strategy || "").trim();
-  if (raw && !/^(manual|auto)$/i.test(raw)) return raw;
-  const symbol = String(row.symbol || "");
-  const niftyOpt = /NIFTY/i.test(symbol) && /(CE|PE)/i.test(symbol) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(symbol);
-  const hedge = algos.find((algo) => algo.kind === "nifty-vwap-hedge" || algo.name === "NIFTY 15m VWAP hedge");
-  if (niftyOpt) return hedge?.name || "NIFTY 15m VWAP hedge";
-  return hedge?.enabled ? hedge.name || "" : "";
+  if (!raw || /^(manual|auto)$/i.test(raw)) return "";
+  return raw;
 }
 
 export function OrdersScreen() {
@@ -30,7 +26,7 @@ export function OrdersScreen() {
             <Pill text={row.status} up={row.status === "FILLED"} />
           </View>
           <Text style={styles.strategy}>
-            {row.side === "SELL" ? "SELL" : "BUY"} by {strategyLabel(row, data.algos || [])}
+            {strategyLabel(row) ? `${row.side === "SELL" ? "SELL" : "BUY"} by ${strategyLabel(row)}` : row.side === "SELL" ? "SELL" : "BUY"}
           </Text>
           <Text style={styles.muted}>
             {row.side} · {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}

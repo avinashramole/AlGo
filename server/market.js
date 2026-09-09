@@ -535,8 +535,10 @@ function positionsForHedge(algo, mode) {
     if (tagged === algo.name) return true;
     const hs = algo.hedgeState || {};
     const active = hs.inFlight || (hs.phase && hs.phase !== "IDLE") || hs.primarySide;
-    if (active && PositionManager.isOpenNiftyOption(row) && !tagged) return true;
-    return false;
+    if (!active || tagged || !PositionManager.isOpenNiftyOption(row)) return false;
+    if (row.option && hs.hedgeSide && row.option === hs.hedgeSide) return true;
+    if (row.option && hs.primarySide && row.option === hs.primarySide) return true;
+    return !row.option;
   };
   if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
   return rows.filter((row) => !isPaperRow(row) && mine(row));
@@ -1618,9 +1620,11 @@ export function replaceDhanBook(rows) {
       strike: row.strike || leg?.strike || 0,
     };
     next.strategy = resolveOrderStrategy(next, {
-      previous: [...(state.positions || []), ...(state.orders || [])],
+      previous: state.positions || [],
       algos: state.algos || [],
       positions: state.positions || [],
+      orders: state.orders || [],
+      forPosition: true,
     });
     for (const algo of state.algos || []) {
       if (!isNiftyVwapHedgeAlgo(algo) || next.strategy !== algo.name) continue;

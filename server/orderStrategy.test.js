@@ -38,30 +38,52 @@ test("Dhan refresh keeps the local strategy name on the same order id", () => {
   assert.equal(name, "NIFTY 15m VWAP hedge");
 });
 
-test("blank Dhan order inherits strategy from a matching position", () => {
+test("open position can inherit the unique strategy that holds that contract", () => {
   const name = resolveOrderStrategy(
-    { id: "9", symbol: "NIFTY 24500 CE", strategy: "" },
-    { positions: [{ symbol: "NIFTY 24500 CE", strategy: "NIFTY VWAP ATM" }] },
+    { id: "pos-9", symbol: "NIFTY 24500 CE", strategy: "" },
+    {
+      forPosition: true,
+      orders: [{ symbol: "NIFTY 24500 CE", strategy: "NIFTY VWAP ATM" }],
+    },
   );
   assert.equal(name, "NIFTY VWAP ATM");
 });
 
-test("Manual and Auto are not kept as strategy names", () => {
-  const name = resolveOrderStrategy(
-    { id: "1", symbol: "NIFTY 24500 CE", strategy: "Manual" },
-    { algos: [hedgeAlgo] },
-  );
-  assert.equal(name, "NIFTY 15m VWAP hedge");
+test("Manual and Auto are not treated as a strategy name", () => {
+  assert.equal(resolveOrderStrategy({ id: "1", symbol: "NIFTY 24500 CE", strategy: "Manual" }), "");
+  assert.equal(resolveOrderStrategy({ id: "2", symbol: "NIFTY 24600 PE", strategy: "Auto" }), "");
+});
+
+test("each order keeps the strategy that placed it", () => {
   assert.equal(
-    resolveOrderStrategy({ id: "2", symbol: "NIFTY 24600 PE", strategy: "Auto" }, { algos: [hedgeAlgo] }),
+    resolveOrderStrategy({ id: "h1", symbol: "NIFTY 24500 CE", strategy: "NIFTY 15m VWAP hedge" }),
     "NIFTY 15m VWAP hedge",
+  );
+  assert.equal(
+    resolveOrderStrategy({ id: "r1", symbol: "NIFTY 24500 PE", strategy: "NIFTY 15m VWAP reversal" }),
+    "NIFTY 15m VWAP reversal",
+  );
+  assert.equal(
+    resolveOrderStrategy({ id: "a1", symbol: "NIFTY 24600 CE", strategy: "NIFTY VWAP ATM" }),
+    "NIFTY VWAP ATM",
   );
 });
 
-test("NIFTY option orders take the hedge algo name when that engine is running", () => {
+test("does not copy one strategy name onto every NIFTY order", () => {
   const name = resolveOrderStrategy(
-    { id: "dhan-88", symbol: "NIFTY-SEP2026-24500-CE", strategy: "", correlationId: "" },
-    { algos: [hedgeAlgo] },
+    { id: "new", symbol: "NIFTY 24500 CE", strategy: "", correlationId: "" },
+    {
+      previous: [{ id: "old", symbol: "NIFTY 24500 CE", side: "BUY", strategy: "NIFTY 15m VWAP hedge" }],
+      algos: [hedgeAlgo],
+    },
+  );
+  assert.equal(name, "");
+});
+
+test("pending in-flight order can take the one algo that is waiting on a fill", () => {
+  const name = resolveOrderStrategy(
+    { id: "dhan-88", symbol: "NIFTY-SEP2026-24500-CE", strategy: "", status: "PENDING" },
+    { algos: [{ ...hedgeAlgo, hedgeState: { ...hedgeAlgo.hedgeState, inFlight: true } }] },
   );
   assert.equal(name, "NIFTY 15m VWAP hedge");
 });

@@ -38,7 +38,7 @@ export function Orders() {
         <div>
           <h1 className="text-xl font-bold">Order Book</h1>
           <p className="text-sm text-slate-400">
-            {liveBookCopy(data.dhanFeed?.live)} Each row shows which strategy bought or sold.
+            {liveBookCopy(data.dhanFeed?.live)} Each order shows the strategy that placed it.
           </p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
@@ -99,11 +99,13 @@ export function Orders() {
                   </td>
                   <td className="px-4 py-3">
                     <SideBadge side={row.side} />
-                    <div className="mt-1 text-xs font-semibold text-[var(--text)]">{buySellByStrategy(row.side, row.strategy, row, data.algos)}</div>
+                    <div className="mt-1 text-xs font-semibold text-[var(--text)]">{buySellByStrategy(row.side, row.strategy)}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="font-bold">{deskStrategyName(row.strategy, row, data.algos)}</div>
+                    <div className="font-bold">{deskStrategyName(row.strategy) || "—"}</div>
+                    {deskStrategyName(row.strategy) ? (
                     <div className="text-[10px] font-medium text-slate-400">{row.side === "SELL" ? "Sold by this strategy" : "Bought by this strategy"}</div>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.filledQty || 0}/{row.qty}

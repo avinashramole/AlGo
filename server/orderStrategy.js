@@ -12,7 +12,6 @@ export function rememberOrderStrategy(row = {}, name = "") {
   const label = realStrategyName(name || row.strategy);
   if (!label) return label;
   if (row.id) memory.set(`id:${row.id}`, label);
-  if (row.securityId) memory.set(`sid:${row.securityId}`, label);
   return label;
 }
 
@@ -22,7 +21,6 @@ export function clearOrderStrategyMemory() {
 
 function recallOrderStrategy(row = {}) {
   if (row.id && memory.has(`id:${row.id}`)) return memory.get(`id:${row.id}`);
-  if (row.securityId && memory.has(`sid:${row.securityId}`)) return memory.get(`sid:${row.securityId}`);
   return "";
 }
 
@@ -46,12 +44,7 @@ export function strategyFromCorrelation(value, algos = []) {
   const match = (algos || []).find((algo) => {
     const name = String(algo.name || "");
     const compact = hyphenName(name);
-    return (
-      name === spaced ||
-      compact === raw ||
-      compact.slice(0, CORR_MAX) === raw ||
-      algo.id === raw
-    );
+    return name === spaced || compact === raw || compact.slice(0, CORR_MAX) === raw || algo.id === raw;
   });
   return realStrategyName(match?.name || spaced);
 }
@@ -85,67 +78,85 @@ export function looksLikeNiftyOption(row = {}) {
   return /NIFTY/i.test(text) && /(CE|PE)/i.test(text) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(text);
 }
 
-function hedgeActive(algo = {}) {
-  const hs = algo.hedgeState || {};
-  return Boolean(
-    algo.enabled ||
-      hs.inFlight ||
-      (hs.phase && hs.phase !== "IDLE") ||
-      hs.primarySide ||
-      Number(hs.primaryEntryPrice) > 0 ||
-      Number(hs.hedgeEntryPrice) > 0,
-  );
+function namedAlgo(algo) {
+  return realStrategyName(algo?.name);
 }
 
-function namedAlgo(algo, fallback) {
-  return realStrategyName(algo?.name) || fallback || "";
-}
-
-function inferAlgoStrategy(row = {}, algos = []) {
-  const list = algos || [];
-  for (const algo of list) {
-    if (algo.hedgeState?.lastOrderId && String(algo.hedgeState.lastOrderId) === String(row.id)) {
-      return namedAlgo(algo, "NIFTY 15m VWAP hedge");
-    }
-  }
-  const hedge = list.find(isHedgeAlgo);
-  const reversal = list.find(isReversalAlgo);
-  const atm = list.find(isAtmAlgo);
-  const nifty = looksLikeNiftyOption(row);
-  if (nifty) {
-    const otherLive = [reversal, atm].filter((algo) => algo?.enabled);
-    if (hedge && (hedgeActive(hedge) || !otherLive.length)) {
-      return namedAlgo(hedge, "NIFTY 15m VWAP hedge");
-    }
-    const liveNifty = [hedge, reversal, atm].filter((algo) => algo?.enabled);
-    if (liveNifty.length === 1) return namedAlgo(liveNifty[0]);
-  }
-  const running = list.filter((algo) => algo.enabled);
-  if (running.length === 1) return namedAlgo(running[0]);
-  const inflight = running.find((algo) => algo.hedgeState?.inFlight || algo.vwapState?.inFlight);
-  if (inflight) return namedAlgo(inflight);
-  return "";
+function isPendingRow(row = {}) {
+  return /PENDING|PARTIAL|TRANSIT/i.test(String(row.status || ""));
 }
 
 function keepStrategy(item) {
   return item && realStrategyName(item.strategy);
 }
 
-export function resolveOrderStrategy(row = {}, { previous = [], algos = [], positions = [] } = {}) {
+function uniqueStrategy(rows = []) {
+  const names = [...new Set((rows || []).map((row) => realStrategyName(row.strategy)).filter(Boolean))];
+  return names.length === 1 ? names[0] : "";
+}
+
+function sameContract(left = {}, right = {}) {
+  if (left.securityId && right.securityId && String(left.securityId) === String(right.securityId)) return true;
+  if (left.symbol && right.symbol && left.symbol === right.symbol) return true;
+  return false;
+}
+
+function inferFromLastOrderId(row = {}, algos = []) {
+  for (const algo of algos || []) {
+    if (algo.hedgeState?.lastOrderId && String(algo.hedgeState.lastOrderId) === String(row.id)) {
+      return namedAlgo(algo);
+    }
+  }
+  return "";
+}
+
+function inferPendingInFlight(row = {}, algos = []) {
+  if (!isPendingRow(row) || !looksLikeNiftyOption(row)) return "";
+  const inflight = (algos || []).filter((algo) => algo.hedgeState?.inFlight || algo.vwapState?.inFlight);
+  if (inflight.length !== 1) return "";
+  const algo = inflight[0];
+  const locked = algo.vwapState?.lockedSymbol;
+  if (locked && row.symbol && row.symbol !== locked) return "";
+  return namedAlgo(algo);
+}
+
+function ownerAlgoForOpenPosition(row = {}, algos = []) {
+  const owners = [];
+  for (const algo of algos || []) {
+    const hs = algo.hedgeState || {};
+    if (isHedgeAlgo(algo) && (hs.inFlight || (hs.phase && hs.phase !== "IDLE") || hs.primarySide)) {
+      if (!looksLikeNiftyOption(row)) continue;
+      if (row.option && hs.hedgeSide && row.option === hs.hedgeSide) owners.push(namedAlgo(algo));
+      else if (row.option && hs.primarySide && row.option === hs.primarySide) owners.push(namedAlgo(algo));
+      else if (!row.option) owners.push(namedAlgo(algo));
+      continue;
+    }
+    const vs = algo.vwapState || {};
+    if ((isReversalAlgo(algo) || isAtmAlgo(algo)) && (vs.inFlight || vs.lockedSymbol || vs.fillPrice)) {
+      if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) owners.push(namedAlgo(algo));
+      else if (vs.lockedOption && row.option === vs.lockedOption && looksLikeNiftyOption(row)) owners.push(namedAlgo(algo));
+    }
+  }
+  const names = [...new Set(owners.filter(Boolean))];
+  return names.length === 1 ? names[0] : "";
+}
+
+export function resolveOrderStrategy(row = {}, { previous = [], algos = [], positions = [], orders = [], forPosition = false } = {}) {
   const direct = realStrategyName(row.strategy);
   const fromCorr = strategyFromCorrelation(row.correlationId, algos);
   const remembered = recallOrderStrategy(row);
-  const prev =
-    (previous || []).find((item) => String(item.id) === String(row.id) && keepStrategy(item)) ||
-    (previous || []).find((item) => item.securityId && item.securityId === row.securityId && keepStrategy(item)) ||
-    (previous || []).find((item) => item.symbol && item.symbol === row.symbol && item.side === row.side && keepStrategy(item));
-  const pos = (positions || []).find(
-    (item) =>
-      keepStrategy(item) &&
-      ((item.securityId && item.securityId === row.securityId) || (item.symbol && item.symbol === row.symbol)),
-  );
-  const inferred = inferAlgoStrategy(row, algos);
-  const name = direct || fromCorr || remembered || realStrategyName(prev?.strategy) || realStrategyName(pos?.strategy) || inferred;
+  const prevSameId = (previous || []).find((item) => String(item.id) === String(row.id) && keepStrategy(item));
+  let name = direct || fromCorr || remembered || realStrategyName(prevSameId?.strategy);
+  if (!name && forPosition) {
+    name =
+      uniqueStrategy((orders || []).filter((item) => keepStrategy(item) && sameContract(item, row))) ||
+      uniqueStrategy((previous || []).filter((item) => keepStrategy(item) && sameContract(item, row))) ||
+      uniqueStrategy((positions || []).filter((item) => keepStrategy(item) && sameContract(item, row))) ||
+      ownerAlgoForOpenPosition(row, algos);
+  }
+  if (!name && !forPosition) {
+    name = inferFromLastOrderId(row, algos) || inferPendingInFlight(row, algos);
+  }
   if (name) rememberOrderStrategy(row, name);
   return name;
 }
