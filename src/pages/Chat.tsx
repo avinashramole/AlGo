@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Settings as Gear, MessageSquare, Plus, Search, Send, Users } from "lucide-react";
+import { Settings as Gear, MessageSquare, Search, Send, UserPlus, Users } from "lucide-react";
 import {
   addMessagingContact,
   broadcastMessaging,
@@ -134,7 +134,7 @@ export function Chat() {
             </div>
             <div className="flex gap-1">
               <button type="button" className="icon-btn" title="Add contact" onClick={() => setShowContact(true)}>
-                <Plus size={16} />
+                <UserPlus size={16} />
               </button>
               <button type="button" className="icon-btn" title="Configure" onClick={() => setShowConfig(true)}>
                 <Gear size={16} />
@@ -154,9 +154,11 @@ export function Chat() {
             <div className="mt-2 flex gap-1">
               <FilterChip on={channelFilter === "whatsapp"} onClick={() => setChannelFilter(channelFilter === "whatsapp" ? "all" : "whatsapp")}>
                 <WhatsAppIcon />
+                WhatsApp
               </FilterChip>
               <FilterChip on={channelFilter === "telegram"} onClick={() => setChannelFilter(channelFilter === "telegram" ? "all" : "telegram")}>
                 <TelegramIcon />
+                Telegram
               </FilterChip>
             </div>
           </div>
@@ -172,7 +174,7 @@ export function Chat() {
                     selectedId === row.id ? "bg-brand-50 dark:bg-brand-500/10" : "",
                   )}
                 >
-                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                  <span className={cn("mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white", avatarTone(row.name))}>
                     {(row.name || "?").slice(0, 1).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -206,7 +208,7 @@ export function Chat() {
                 <button type="button" className="text-sm font-semibold text-brand-500 md:hidden" onClick={() => setSelectedId("")}>
                   Back
                 </button>
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-bold dark:bg-slate-700">
+                <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white", avatarTone(selected.name))}>
                   {selected.name.slice(0, 1).toUpperCase()}
                 </span>
                 <div className="min-w-0">
@@ -539,7 +541,10 @@ function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => voi
     <button
       type="button"
       onClick={onClick}
-      className={cn("inline-flex h-8 w-8 items-center justify-center rounded-lg border", on ? "border-brand-500 bg-brand-50 dark:bg-brand-500/15" : "border-[var(--border)]")}
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold uppercase tracking-wide",
+        on ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-blue-200" : "border-[var(--border)] text-slate-400",
+      )}
     >
       {children}
     </button>
@@ -550,7 +555,33 @@ function formatWhen(value?: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
+function avatarTone(name?: string) {
+  const tones = [
+    "bg-sky-600",
+    "bg-violet-600",
+    "bg-emerald-600",
+    "bg-amber-600",
+    "bg-rose-600",
+    "bg-indigo-600",
+    "bg-teal-600",
+    "bg-orange-600",
+  ];
+  const text = String(name || "?");
+  let hash = 0;
+  for (const ch of text) hash = (hash + ch.charCodeAt(0)) % tones.length;
+  return tones[hash];
 }
 
 function WhatsAppIcon() {

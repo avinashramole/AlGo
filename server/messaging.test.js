@@ -47,9 +47,13 @@ test("saveMessagingConfig stores tokens without echoing the secret", () => {
 
 test("listConversations includes registered members and extra contacts", () => {
   upsertMessagingContact({ name: "Arpit", mobile: "9876543210", broker: "DHAN" });
-  const rows = listConversations([{ id: "u1", name: "Zeenat", mobile: "9123456789", desk: "Index Options" }]);
+  const rows = listConversations([
+    { id: "u1", name: "Zeenat", mobile: "9123456789", desk: "Index Options", role: "user" },
+    { id: "admin1", name: "Avinash", role: "admin" },
+  ]);
   assert.equal(rows.some((row) => row.name === "Arpit" && row.channels.includes("whatsapp")), true);
   assert.equal(rows.some((row) => row.name === "Zeenat"), true);
+  assert.equal(rows.some((row) => row.name === "Avinash"), false);
 });
 
 test("sendMessaging posts WhatsApp Cloud API text to the Indian mobile", async () => {

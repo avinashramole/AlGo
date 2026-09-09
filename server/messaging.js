@@ -131,7 +131,7 @@ function asConversation(contact) {
 
 function userContacts(users = []) {
   return (users || [])
-    .filter((row) => row && row.id)
+    .filter((row) => row && row.id && row.role !== "admin")
     .map((row) => {
       const extra = store.contacts.find((item) => item.userId === row.id || item.id === row.id);
       return {
