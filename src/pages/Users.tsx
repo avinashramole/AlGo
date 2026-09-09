@@ -430,7 +430,7 @@ function AddClientModal({
   const [notifyTelegram, setNotifyTelegram] = useState(false);
   const [telegramId, setTelegramId] = useState("");
   const [staticIp, setStaticIp] = useState("");
-  const [pickedGroups, setPickedGroups] = useState<string[]>(["DHAN TESTING"]);
+  const [pickedGroups, setPickedGroups] = useState<string[]>([]);
   const [segments, setSegments] = useState<string[]>(["All segments"]);
   const [brokerToken, setBrokerToken] = useState("");
   const [notes, setNotes] = useState("");
