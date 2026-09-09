@@ -136,30 +136,27 @@ async function verifyDeviceThumb() {
   }
 }
 
+function bootFromWindow() {
+  if (typeof window === "undefined") return readUser();
+  const googleToken = new URLSearchParams(window.location.search).get("google_token") || "";
+  if (!googleToken) return readUser();
+  const pending = { name: "Google user", email: "", desk: "Index Options", role: "user" as const };
+  persist(pending, googleToken, true);
+  return pending;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => readUser());
+  const [user, setUser] = useState<AuthUser | null>(() => bootFromWindow());
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const googleToken = params.get("google_token");
     const googleError = params.get("google_error");
     if (googleError) {
       sessionStorage.setItem("t2s-google-error", googleError);
-      window.history.replaceState({}, "", window.location.pathname);
     }
-    if (googleToken) {
-      const pending = { name: "Google user", email: "", desk: "Index Options", role: "user" as const };
-      persist(pending, googleToken, true);
-      setUser(pending);
-      window.history.replaceState({}, "", "/");
-      void getMe(googleToken)
-        .then((row) => {
-          persist(row.user, googleToken, true);
-          setUser(row.user);
-        })
-        .catch(() => undefined);
-      return;
+    if (params.has("google_token") || params.has("google_error")) {
+      window.history.replaceState({}, "", window.location.pathname === "/login" ? "/" : window.location.pathname || "/");
     }
     const token = readToken();
     if (!token || token === "t2s-offline-token") return;
@@ -168,15 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistUser(row.user);
         setUser(row.user);
       })
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : "";
-        if (!/sign in first/i.test(message)) return;
-        localStorage.removeItem("t2s-token");
-        localStorage.removeItem("t2s-user");
-        sessionStorage.removeItem("t2s-token");
-        sessionStorage.removeItem("t2s-user");
-        setUser(null);
-      });
+      .catch(() => undefined);
   }, []);
 
   const value = useMemo(

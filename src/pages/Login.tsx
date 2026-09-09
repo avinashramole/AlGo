@@ -141,7 +141,7 @@ export function Login() {
       setLoading(true);
       try {
         await resetPassword({ identifier, otp: code, password }, remember);
-        navigate("/");
+        navigate("/", { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not reset password");
       } finally {
@@ -255,7 +255,13 @@ export function Login() {
             <h2 className="t2s-login-title">{title}</h2>
             <p className="t2s-login-sub">{sub}</p>
 
-            <form onSubmit={onSubmit} autoComplete="on">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onSubmit(event);
+              }}
+              autoComplete="on"
+            >
               {page === "signup" ? (
                 <Field icon="user" label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" />
               ) : null}
