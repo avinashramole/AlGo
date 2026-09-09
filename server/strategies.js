@@ -1,5 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
 
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
@@ -566,6 +572,61 @@ export function seedAlgos() {
       { id: "a6", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
   ];
+}
+
+function uniqueIds(ids = []) {
+  return [...new Set((ids || []).map((id) => String(id || "").trim()).filter(Boolean))];
+}
+
+function pauseLiveAlgo(algo) {
+  if (!algo || algo.runMode !== "live") return algo;
+  return { ...algo, enabled: false, status: algo.status === "LIVE" ? "PAUSED" : algo.status || "PAUSED" };
+}
+
+function readAlgoFile() {
+  try {
+    const row = JSON.parse(fs.readFileSync(ALGOS_FILE, "utf8"));
+    return row && typeof row === "object" ? row : {};
+  } catch {
+    return {};
+  }
+}
+
+export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
+  const removedIds = uniqueIds(stored.removedIds);
+  const removed = new Set(removedIds);
+  const hasSaved = Array.isArray(stored.algos);
+  const algos = [];
+  const seen = new Set();
+  if (hasSaved) {
+    for (const row of stored.algos) {
+      const id = String(row?.id || "").trim();
+      if (!id || removed.has(id) || seen.has(id)) continue;
+      const next = pauseLiveAlgo(normalizeAlgo(row, { ...row, id }));
+      next.id = id;
+      algos.push(next);
+      seen.add(id);
+    }
+  }
+  for (const seed of catalog || []) {
+    const id = String(seed.id || "").trim();
+    if (!id || removed.has(id) || seen.has(id)) continue;
+    algos.push(seed);
+    seen.add(id);
+  }
+  return { algos, removedIds };
+}
+
+export function loadAlgoStore(catalog = seedAlgos()) {
+  return hydrateAlgos(readAlgoFile(), catalog);
+}
+
+export function saveAlgoStore(algos = [], removedIds = []) {
+  fs.mkdirSync(path.dirname(ALGOS_FILE), { recursive: true });
+  fs.writeFileSync(
+    ALGOS_FILE,
+    `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) }, null, 2)}\n`,
+  );
 }
 
 export const STRATEGY_META = { SYMBOLS, INDICATORS, PATTERNS, TIMEFRAMES, OPERATORS, SOURCES, OP_LABEL, SRC_LABEL };

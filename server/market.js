@@ -14,7 +14,7 @@ import {
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
-import { normalizeAlgo, seedAlgos } from "./strategies.js";
+import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import {
   isNiftyOptionEngineAlgo,
@@ -38,6 +38,17 @@ import {
   runNiftyVwapHedgeBacktest,
   hedgeState,
 } from "./niftyVwapHedge/index.js";
+
+const algoStore = loadAlgoStore();
+let removedAlgoIds = [...(algoStore.removedIds || [])];
+
+function persistAlgos() {
+  try {
+    saveAlgoStore(state.algos || [], removedAlgoIds);
+  } catch (error) {
+    console.log(`Could not save strategies: ${error.message || error}`);
+  }
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -279,7 +290,7 @@ const state = {
     lastAt: null,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
-  algos: seedAlgos(),
+  algos: algoStore.algos,
   positions: seedPositions(),
   signals: [
     { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
@@ -1159,6 +1170,7 @@ export function toggleAlgo(id) {
   } else {
     algo.status = algo.enabled ? "LIVE" : "PAUSED";
   }
+  persistAlgos();
   return clone(algo);
 }
 
@@ -1169,8 +1181,10 @@ export function createAlgo(payload) {
   algo.pnl = 0;
   algo.winRate = 0;
   if (algo.runMode === "paper" || algo.runMode === "backtest") algo.brokerId = "paper";
+  removedAlgoIds = removedAlgoIds.filter((item) => item !== String(algo.id));
   state.algos.unshift(algo);
   state.notifications.unshift(`Strategy added: ${algo.name} · ${algo.runMode || "live"}`);
+  persistAlgos();
   return clone(algo);
 }
 
@@ -1181,6 +1195,7 @@ export function updateAlgo(id, payload) {
   next.id = id;
   state.algos[index] = next;
   state.notifications.unshift(`Strategy updated: ${next.name}`);
+  persistAlgos();
   return clone(next);
 }
 
@@ -1188,7 +1203,9 @@ export function deleteAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Strategy not found" };
   state.algos = state.algos.filter((item) => item.id !== id);
+  removedAlgoIds = [...new Set([...removedAlgoIds, String(id)])];
   state.notifications.unshift(`Strategy deleted: ${algo.name}`);
+  persistAlgos();
   return { ok: true, id };
 }
 
@@ -1645,9 +1662,11 @@ export function assignAlgoBroker(id, brokerId) {
   if (!algo) return { error: "Algo not found" };
   if (algo.runMode === "paper" || algo.runMode === "backtest") {
     algo.brokerId = "paper";
+    persistAlgos();
     return clone(algo);
   }
   algo.brokerId = brokerId;
+  persistAlgos();
   return clone(algo);
 }
 
@@ -1662,6 +1681,7 @@ export function applyBrokerPositions(positions, brokerId) {
 export function dropBrokerPositions(brokerId) {
   state.positions = state.positions.filter((row) => row.brokerId !== brokerId);
   state.algos = state.algos.map((algo) => (algo.brokerId === brokerId ? { ...algo, brokerId: "dhan", enabled: false, status: "PAUSED" } : algo));
+  persistAlgos();
 }
 
 export function replaceDhanBook(rows) {
