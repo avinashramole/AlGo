@@ -70,6 +70,16 @@ export function liveBookCopy(live?: boolean) {
     : "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
 }
 
+export function deskStrategyName(strategy?: string) {
+  const name = String(strategy || "").trim();
+  return name || "Manual";
+}
+
+export function buySellByStrategy(side?: string, strategy?: string) {
+  const action = String(side || "").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  return `${action} by ${deskStrategyName(strategy)}`;
+}
+
 export function formatIst(iso?: string) {
   if (!iso) return "—";
   const date = new Date(iso);

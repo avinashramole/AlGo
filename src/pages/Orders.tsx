@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatIst, formatNumber, liveBookCopy } from "../lib/format";
+import { cn, formatIst, formatNumber, liveBookCopy, deskStrategyName, buySellByStrategy } from "../lib/format";
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "CANCELLED"] as const;
 
@@ -38,7 +38,7 @@ export function Orders() {
         <div>
           <h1 className="text-xl font-bold">Order Book</h1>
           <p className="text-sm text-slate-400">
-            {liveBookCopy(data.dhanFeed?.live)}
+            {liveBookCopy(data.dhanFeed?.live)} Each row shows which strategy bought or sold.
           </p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
@@ -79,12 +79,12 @@ export function Orders() {
               <tr>
                 <th className="px-4 py-3 font-semibold">Time</th>
                 <th className="px-4 py-3 font-semibold">Symbol</th>
-                <th className="px-4 py-3 font-semibold">Side</th>
+                <th className="px-4 py-3 font-semibold">Buy / Sell</th>
+                <th className="px-4 py-3 font-semibold">Strategy</th>
                 <th className="px-4 py-3 text-right font-semibold">Qty</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
                 <th className="px-4 py-3 text-right font-semibold">Price</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Strategy</th>
                 <th className="px-4 py-3 font-semibold">Broker</th>
                 <th className="px-4 py-3 text-right font-semibold">Action</th>
               </tr>
@@ -96,10 +96,14 @@ export function Orders() {
                   <td className="px-4 py-3 font-semibold">
                     {row.symbol}
                     <div className="text-[10px] font-medium uppercase text-slate-400">{row.product || "MIS"}</div>
-                    <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{row.strategy || "Manual"}</div>
                   </td>
                   <td className="px-4 py-3">
                     <SideBadge side={row.side} />
+                    <div className="mt-1 text-xs font-semibold text-[var(--text)]">{buySellByStrategy(row.side, row.strategy)}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-bold">{deskStrategyName(row.strategy)}</div>
+                    <div className="text-[10px] font-medium text-slate-400">{row.side === "SELL" ? "Sold by this strategy" : "Bought by this strategy"}</div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.filledQty || 0}/{row.qty}
@@ -114,7 +118,6 @@ export function Orders() {
                       </div>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 font-semibold">{row.strategy || "Manual"}</td>
                   <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>
                   <td className="px-4 py-3 text-right">
                     {row.status === "PENDING" || row.status === "PARTIAL" ? (

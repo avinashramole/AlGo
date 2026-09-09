@@ -1452,10 +1452,10 @@ export function placeOrder(payload) {
   }
   state.notifications.unshift(
     live
-      ? `Dhan ${order.status}: ${order.side} ${order.symbol}`
+      ? `Dhan ${order.status}: ${order.side} ${order.symbol} · ${order.strategy || "Manual"}`
       : demoDhan
-        ? `Desk demo ${order.status}: ${order.side} ${order.symbol} (not sent to Dhan)`
-        : `${account.name} ${order.status}: ${order.side} ${order.symbol}`,
+        ? `Desk demo ${order.status}: ${order.side} ${order.symbol} · ${order.strategy || "Manual"} (not sent to Dhan)`
+        : `${account.name} ${order.status}: ${order.side} ${order.symbol} · ${order.strategy || "Manual"}`,
   );
   if (isPaper) markPaperToMarket();
   return order;
