@@ -114,6 +114,46 @@ test("createClient provisions a member who signs in with mobile and 1234", () =>
   assert.equal(process.env.DHAN_LIVE, undefined);
 });
 
+test("createClient stores groups, notifications, mapped strategy and hides the access token", () => {
+  const row = createClient({
+    name: "Upstox Client",
+    mobile: "9876500123",
+    brokerId: "upstox",
+    accountId: "master",
+    tradeMode: "paper",
+    copy: true,
+    groups: ["UPSTOX TESTING", "F&O"],
+    mappedStrategy: "NIFTY VWAP ATM",
+    segments: ["All segments", "UPSTOX"],
+    notifications: { instantAlerts: true, eveningPnl: true, whatsapp: true, telegram: false },
+    notes: "Prefers evening report",
+    brokerToken: "upstox-secret-token-value",
+    subscriptionUntil: "2026-10-09",
+  });
+  assert.equal(row.brokerName, "UPSTOX");
+  assert.deepEqual(row.groups.slice(0, 2), ["UPSTOX TESTING", "F&O"]);
+  assert.equal(row.mappedStrategy, "NIFTY VWAP ATM");
+  assert.equal(row.notifications.eveningPnl, true);
+  assert.equal(row.tokenHint.includes("secret-token-value"), false);
+  assert.match(row.tokenHint, /•/);
+  assert.equal(row.notes, "Prefers evening report");
+});
+
+test("createClient refuses a broker IP already used on that broker", () => {
+  saveClient("u-arpit", { brokerId: "dhan", staticIp: "10.1.1.8" });
+  assert.throws(
+    () =>
+      createClient({
+        name: "IP Clash",
+        mobile: "9876500456",
+        brokerId: "dhan",
+        tradeMode: "paper",
+        staticIp: "10.1.1.8",
+      }),
+    /egress IP/,
+  );
+});
+
 test("createClient refuses REAL when no broker is linked", () => {
   assert.throws(
     () => createClient({ name: "No Broker", mobile: "9000000001", brokerId: "paper", tradeMode: "real" }),

@@ -1,6 +1,15 @@
 import { catalog } from "./brokers.js";
 import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser } from "./auth.js";
-import { listClientGroups, peekClientSettings, removeDesk, saveClientSettings } from "./memberDesk.js";
+import {
+  assignedEgressIps,
+  CLIENT_BROKERS,
+  defaultSubscriptionUntil,
+  knownEgressIps,
+  listClientGroups,
+  peekClientSettings,
+  removeDesk,
+  saveClientSettings,
+} from "./memberDesk.js";
 import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
 
 function fail(message, status = 400) {
@@ -9,21 +18,14 @@ function fail(message, status = 400) {
   return error;
 }
 
-const BROKER_LABEL = {
-  dhan: "DHAN",
-  zerodha: "ZERODHA",
-  kotak: "KOTAK",
-  fyers: "FYERS",
-  paper: "PAPER",
-};
-
 export function brokerLabel(id) {
-  return BROKER_LABEL[id] || String(id || "PAPER").toUpperCase();
+  const row = CLIENT_BROKERS.find((item) => item.id === id) || catalog.find((item) => item.id === id);
+  return String(row?.name || id || "PAPER").toUpperCase();
 }
 
 function asClient(user, desk, handle = {}) {
   const paper = !desk.brokerId || desk.brokerId === "paper";
-  const broker = catalog.find((row) => row.id === desk.brokerId) || catalog.find((row) => row.id === "paper");
+  const broker = CLIENT_BROKERS.find((row) => row.id === desk.brokerId) || catalog.find((row) => row.id === desk.brokerId);
   return {
     id: user.id,
     name: user.name,
@@ -31,6 +33,7 @@ function asClient(user, desk, handle = {}) {
     mobile: handle.mobile || user.mobile || "",
     telegramId: handle.telegramId || "",
     group: desk.group,
+    groups: desk.groups || [desk.group || "ALL"],
     brokerId: desk.brokerId,
     brokerName: brokerLabel(desk.brokerId),
     brokerColor: broker?.color || "#64748b",
@@ -44,9 +47,35 @@ function asClient(user, desk, handle = {}) {
     status: desk.tradeMode === "real" ? "LIVE" : "PAPER ONLY",
     subscriptionMode: desk.subscriptionMode,
     subscriptionUntil: desk.subscriptionUntil,
+    mappedStrategy: desk.mappedStrategy,
+    segments: desk.segments,
+    notifications: desk.notifications,
+    tokenHint: desk.tokenHint,
+    notes: desk.notes,
     margin: desk.margin,
     createdAt: user.createdAt || "",
     lastLoginAt: user.lastLoginAt || "",
+  };
+}
+
+function settingsPatch(patch = {}) {
+  return {
+    copy: patch.copy,
+    brokerId: patch.brokerId,
+    accountId: patch.accountId,
+    sizingKind: patch.sizingKind,
+    sizingValue: patch.sizingValue,
+    tradeMode: patch.tradeMode,
+    subscriptionMode: patch.subscriptionMode,
+    subscriptionUntil: patch.subscriptionUntil,
+    group: patch.group,
+    groups: patch.groups,
+    mappedStrategy: patch.mappedStrategy,
+    segments: patch.segments,
+    notifications: patch.notifications,
+    brokerToken: patch.brokerToken,
+    notes: patch.notes,
+    staticIp: patch.staticIp,
   };
 }
 
@@ -59,9 +88,17 @@ export function listClients(users = []) {
 
 export function clientStatus(users = []) {
   const clients = listClients(users);
+  const assignedIps = {};
+  for (const broker of CLIENT_BROKERS) {
+    assignedIps[broker.id] = assignedEgressIps(broker.id);
+  }
   return {
     clients,
     groups: listClientGroups(),
+    brokers: CLIENT_BROKERS,
+    assignedIps,
+    knownIps: knownEgressIps(),
+    defaultUntil: defaultSubscriptionUntil(),
     live: clients.filter((row) => row.status === "LIVE").length,
     paper: clients.filter((row) => row.status !== "LIVE").length,
   };
@@ -73,30 +110,34 @@ export function createClient(patch = {}) {
   if (tradeMode === "real" && (brokerId === "paper" || !brokerId)) {
     throw fail("Add a broker before enabling real orders. New clients stay PAPER.");
   }
+  if (tradeMode === "real" && !String(patch.brokerToken || "").trim()) {
+    throw fail("Paste the broker access token before enabling real orders.");
+  }
   const user = adminCreateMember({
     name: patch.name,
     mobile: patch.mobile,
     email: patch.email,
   });
   saveClientSettings(user.id, {
+    ...settingsPatch(patch),
     copy: patch.copy == null ? true : Boolean(patch.copy),
     brokerId,
-    accountId: patch.accountId,
     sizingKind: patch.sizingKind || "multiplier",
     sizingValue: patch.sizingValue == null ? 1 : patch.sizingValue,
     tradeMode,
     subscriptionMode: patch.subscriptionMode || "copy",
-    subscriptionUntil: patch.subscriptionUntil,
-    group: patch.group || "ALL",
+    subscriptionUntil: patch.subscriptionUntil || defaultSubscriptionUntil(),
+    groups: patch.groups || patch.group || "ALL",
   });
   const mobile = String(user.mobile || "").trim();
-  if (mobile) {
+  const telegramId = String(patch.telegramId || "").trim();
+  if (mobile || telegramId) {
     upsertMessagingContact({
       id: user.id,
       userId: user.id,
       name: user.name,
       mobile,
-      telegramId: String(patch.telegramId || "").trim(),
+      telegramId,
       broker: brokerLabel(peekClientSettings(user.id).brokerId),
     });
   }
@@ -113,7 +154,7 @@ export function saveClient(userId, patch = {}) {
       ...(patch.mobile != null ? { mobile: patch.mobile } : {}),
     });
   }
-  saveClientSettings(userId, patch);
+  saveClientSettings(userId, settingsPatch(patch));
   const next = getPublicUser(userId);
   const handle = messagingHandleForUser(userId);
   const telegramId = patch.telegramId != null ? String(patch.telegramId).trim() : handle.telegramId;

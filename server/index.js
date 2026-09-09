@@ -395,7 +395,10 @@ app.get("/api/users", (_req, res) => {
 });
 
 app.get("/api/clients", (_req, res) => {
-  res.json(clientStatus(listPublicUsers()));
+  res.json({
+    ...clientStatus(listPublicUsers()),
+    strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
+  });
 });
 
 app.post("/api/clients", (req, res) => {

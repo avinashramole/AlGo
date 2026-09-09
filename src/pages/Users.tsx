@@ -1,7 +1,7 @@
 import { MessageSquare, Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users as UsersIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { createClient, deleteClient, listClients, saveClient, type ClientRow } from "../api/client";
+import { createClient, deleteClient, listClients, saveClient, type ClientBroker, type ClientRow } from "../api/client";
 import { cn, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
@@ -10,6 +10,11 @@ type TradeMode = ClientRow["tradeMode"];
 export function Users() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [groups, setGroups] = useState<string[]>(["ALL"]);
+  const [brokers, setBrokers] = useState<ClientBroker[]>([]);
+  const [assignedIps, setAssignedIps] = useState<Record<string, string[]>>({});
+  const [knownIps, setKnownIps] = useState<string[]>([]);
+  const [strategies, setStrategies] = useState<Array<{ id: string; name: string }>>([]);
+  const [defaultUntil, setDefaultUntil] = useState(defaultUntilDate);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
@@ -24,6 +29,11 @@ export function Users() {
       const result = await listClients();
       setClients(result.clients || []);
       setGroups(result.groups?.length ? result.groups : ["ALL"]);
+      setBrokers(result.brokers || []);
+      setAssignedIps(result.assignedIps || {});
+      setKnownIps(result.knownIps || []);
+      setStrategies(result.strategies || []);
+      if (result.defaultUntil) setDefaultUntil(result.defaultUntil);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load clients");
@@ -247,10 +257,17 @@ export function Users() {
 
       {showAdd ? (
         <AddClientModal
+          brokers={brokers}
+          groups={groups}
+          assignedIps={assignedIps}
+          knownIps={knownIps}
+          strategies={strategies}
+          defaultUntil={defaultUntil}
           onClose={() => setShowAdd(false)}
           onSaved={(client) => {
             setClients((current) => [...current, client].sort((a, b) => a.name.localeCompare(b.name)));
             setShowAdd(false);
+            void load();
           }}
         />
       ) : null}
@@ -365,13 +382,36 @@ function ActionBtn({ children, onClick }: { children: ReactNode; onClick: () => 
   );
 }
 
-function defaultUntil() {
-  const date = new Date();
-  date.setMonth(date.getMonth() + 1);
-  return date.toISOString().slice(0, 10);
+function defaultUntilDate() {
+  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (client: ClientRow) => void }) {
+function AddClientModal({
+  brokers,
+  groups,
+  assignedIps,
+  knownIps,
+  strategies,
+  defaultUntil,
+  onClose,
+  onSaved,
+}: {
+  brokers: ClientBroker[];
+  groups: string[];
+  assignedIps: Record<string, string[]>;
+  knownIps: string[];
+  strategies: Array<{ id: string; name: string }>;
+  defaultUntil: string;
+  onClose: () => void;
+  onSaved: (client: ClientRow) => void;
+}) {
+  const catalog = brokers.length
+    ? brokers
+    : [
+        { id: "dhan", name: "DHAN", segments: ["All segments", "EQ", "F&O"] },
+        { id: "upstox", name: "UPSTOX", segments: ["All segments", "UPSTOX"] },
+        { id: "paper", name: "PAPER", segments: ["All segments"] },
+      ];
   const [copy, setCopy] = useState(true);
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
@@ -382,9 +422,32 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (c
   const [sizingValue, setSizingValue] = useState("1");
   const [tradeMode, setTradeMode] = useState<TradeMode>("paper");
   const [subscriptionMode, setSubscriptionMode] = useState<NonNullable<ClientRow["subscriptionMode"]>>("copy");
-  const [subscriptionUntil, setSubscriptionUntil] = useState(defaultUntil);
+  const [subscriptionUntil, setSubscriptionUntil] = useState(defaultUntil || defaultUntilDate());
+  const [mappedStrategy, setMappedStrategy] = useState("");
+  const [instantAlerts, setInstantAlerts] = useState(true);
+  const [eveningPnl, setEveningPnl] = useState(false);
+  const [notifyWhatsApp, setNotifyWhatsApp] = useState(true);
+  const [notifyTelegram, setNotifyTelegram] = useState(false);
+  const [telegramId, setTelegramId] = useState("");
+  const [staticIp, setStaticIp] = useState("");
+  const [pickedGroups, setPickedGroups] = useState<string[]>(["DHAN TESTING"]);
+  const [segments, setSegments] = useState<string[]>(["All segments"]);
+  const [brokerToken, setBrokerToken] = useState("");
+  const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const broker = catalog.find((row) => row.id === brokerId) || catalog[0];
+  const takenIps = assignedIps[brokerId] || [];
+  const ipChoices = knownIps.filter((ip) => !takenIps.includes(ip));
+  const groupChoices = [...new Set([...groups, ...pickedGroups])].filter((item) => item && item !== "ALL");
+  const segmentChoices = broker?.segments?.length ? broker.segments : ["All segments"];
+
+  const toggle = (list: string[], value: string, allLabel?: string) => {
+    if (allLabel && value === allLabel) return [allLabel];
+    const next = list.includes(value) ? list.filter((item) => item !== value) : [...list.filter((item) => item !== allLabel), value];
+    return next.length ? next : allLabel ? [allLabel] : [];
+  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -403,6 +466,19 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (c
         copy,
         subscriptionMode,
         subscriptionUntil,
+        mappedStrategy,
+        groups: pickedGroups,
+        segments,
+        notifications: {
+          instantAlerts,
+          eveningPnl,
+          whatsapp: notifyWhatsApp,
+          telegram: notifyTelegram,
+        },
+        telegramId,
+        brokerToken,
+        notes,
+        staticIp,
       });
       onSaved(result.client);
     } catch (err) {
@@ -450,16 +526,26 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (c
               <Field label="Email">
                 <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="client@email.com" />
               </Field>
-              <Field label="Broker client ID">
+              <Field label="Broker Client ID">
                 <input className={inputClass} value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="master" />
               </Field>
               <Field label="Broker">
-                <select className={inputClass} value={brokerId} onChange={(event) => setBrokerId(event.target.value)}>
-                  <option value="dhan">DHAN</option>
-                  <option value="zerodha">ZERODHA</option>
-                  <option value="kotak">KOTAK</option>
-                  <option value="fyers">FYERS</option>
-                  <option value="paper">PAPER</option>
+                <select
+                  className={inputClass}
+                  value={brokerId}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setBrokerId(next);
+                    const row = catalog.find((item) => item.id === next);
+                    setSegments(row?.segments?.includes("All segments") ? ["All segments"] : row?.segments?.slice(0, 1) || ["All segments"]);
+                    setStaticIp("");
+                  }}
+                >
+                  {catalog.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name}
+                    </option>
+                  ))}
                 </select>
               </Field>
               <Field label="Order sizing method">
@@ -478,7 +564,9 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (c
                 <option value="paper">Paper</option>
                 <option value="real">Real</option>
               </select>
-              <span className="font-normal text-[11px] text-slate-500">Add a broker before enabling real orders. This does not start Dhan LIVE on the desk.</span>
+              <span className="font-normal text-[11px] text-slate-500">
+                Real mode sends orders through the configured broker. This does not start Dhan LIVE on the desk.
+              </span>
             </Field>
             <Field label="Subscription mode">
               <select
@@ -490,10 +578,103 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (c
                 <option value="strategy">Mapped strategies only</option>
                 <option value="both">Copy Master + strategies</option>
               </select>
-              <span className="font-normal text-[11px] text-slate-500">Choose whether this client receives mapped strategy orders, manual Copy Master orders, or both.</span>
+              <span className="font-normal text-[11px] text-slate-500">
+                Choose whether this client receives mapped strategy orders, manual Copy Master orders, or both.
+              </span>
             </Field>
             <Field label="Subscription valid through">
               <input className={inputClass} type="date" value={subscriptionUntil} onChange={(event) => setSubscriptionUntil(event.target.value)} />
+              <span className="font-normal text-[11px] text-slate-500">
+                Copy execution automatically turns off after this date. New clients default to 30 days.
+              </span>
+            </Field>
+            <Field label="Mapped strategy">
+              <input
+                className={inputClass}
+                list="mapped-strategies"
+                value={mappedStrategy}
+                onChange={(event) => setMappedStrategy(event.target.value)}
+                placeholder="Optional strategy name"
+              />
+              <datalist id="mapped-strategies">
+                {strategies.map((row) => (
+                  <option key={row.id} value={row.name} />
+                ))}
+              </datalist>
+            </Field>
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Client notifications</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <CheckRow label="Instant trade alerts" checked={instantAlerts} onChange={setInstantAlerts} />
+                <CheckRow label="Evening P&L report" checked={eveningPnl} onChange={setEveningPnl} />
+                <CheckRow label="WhatsApp" checked={notifyWhatsApp} onChange={setNotifyWhatsApp} />
+                <CheckRow label="Telegram" checked={notifyTelegram} onChange={setNotifyTelegram} />
+              </div>
+            </div>
+            <Field label="Telegram Chat ID">
+              <input className={inputClass} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="e.g. 123456789" />
+              <span className="font-normal text-[11px] text-slate-500">
+                Filled automatically after the client starts your bot, or enter it manually.
+              </span>
+            </Field>
+            <Field label="Order egress IP">
+              <select className={inputClass} value={staticIp} onChange={(event) => setStaticIp(event.target.value)}>
+                <option value="">Default (server main IP)</option>
+                {ipChoices.map((ip) => (
+                  <option key={ip} value={ip}>
+                    {ip}
+                  </option>
+                ))}
+              </select>
+              <span className="font-normal text-[11px] text-slate-500">IPs already assigned to another account on this broker are hidden.</span>
+            </Field>
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Client groups</div>
+              <div className="flex flex-wrap gap-1.5">
+                {groupChoices.map((item) => (
+                  <Chip key={item} on={pickedGroups.includes(item)} onClick={() => setPickedGroups(toggle(pickedGroups, item))}>
+                    {item}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Allowed trading segments</div>
+              <div className="flex flex-wrap gap-1.5">
+                {segmentChoices.map((item) => (
+                  <Chip
+                    key={item}
+                    on={segments.includes(item)}
+                    onClick={() => setSegments(toggle(segments, item, "All segments"))}
+                  >
+                    {item}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{broker?.name || "Broker"} credentials</div>
+              <Field label="Access Token *">
+                <input
+                  className={inputClass}
+                  type="password"
+                  value={brokerToken}
+                  onChange={(event) => setBrokerToken(event.target.value)}
+                  placeholder="•••••"
+                  autoComplete="off"
+                />
+                <span className="font-normal text-[11px] text-slate-500">
+                  {brokerId === "upstox" ? "Upstox daily access token" : "Broker access token. Required for Real mode. This does not start Dhan LIVE."}
+                </span>
+              </Field>
+            </div>
+            <Field label="Internal notes">
+              <textarea
+                className="min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-sm"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Account notes, preferences or operational context"
+              />
             </Field>
             {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
           </div>
@@ -509,6 +690,30 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: (c
         </form>
       </div>
     </div>
+  );
+}
+
+function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide",
+        on ? "border-brand-500 bg-brand-500/15 text-brand-400" : "border-[var(--border)] text-slate-400",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      {label}
+    </label>
   );
 }
 
@@ -565,8 +770,12 @@ function EditModal({
           <select className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={brokerId} onChange={(event) => setBrokerId(event.target.value)}>
             <option value="paper">PAPER</option>
             <option value="dhan">DHAN</option>
+            <option value="upstox">UPSTOX</option>
             <option value="zerodha">ZERODHA</option>
             <option value="kotak">KOTAK</option>
+            <option value="angelone">ANGELONE</option>
+            <option value="aliceblue">ALICEBLUE</option>
+            <option value="sharekhan">SHAREKHAN</option>
             <option value="fyers">FYERS</option>
           </select>
         </Field>

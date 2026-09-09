@@ -503,6 +503,20 @@ export function listUsers() {
   return request<{ users: AuthUser[] }>("/users");
 }
 
+export type ClientNotifications = {
+  instantAlerts: boolean;
+  eveningPnl: boolean;
+  whatsapp: boolean;
+  telegram: boolean;
+};
+
+export type ClientBroker = {
+  id: string;
+  name: string;
+  color?: string;
+  segments: string[];
+};
+
 export type ClientRow = {
   id: string;
   name: string;
@@ -510,6 +524,7 @@ export type ClientRow = {
   mobile?: string;
   telegramId?: string;
   group: string;
+  groups?: string[];
   brokerId: string;
   brokerName: string;
   brokerColor?: string;
@@ -523,13 +538,28 @@ export type ClientRow = {
   status: "LIVE" | "PAPER ONLY";
   subscriptionMode?: "copy" | "strategy" | "both";
   subscriptionUntil?: string;
+  mappedStrategy?: string;
+  segments?: string[];
+  notifications?: ClientNotifications;
+  tokenHint?: string;
+  notes?: string;
   margin: number;
   createdAt?: string;
   lastLoginAt?: string;
 };
 
 export function listClients() {
-  return request<{ clients: ClientRow[]; groups: string[]; live: number; paper: number }>("/clients");
+  return request<{
+    clients: ClientRow[];
+    groups: string[];
+    brokers: ClientBroker[];
+    assignedIps: Record<string, string[]>;
+    knownIps: string[];
+    defaultUntil: string;
+    strategies: Array<{ id: string; name: string }>;
+    live: number;
+    paper: number;
+  }>("/clients");
 }
 
 export function createClient(payload: {
@@ -545,7 +575,14 @@ export function createClient(payload: {
   subscriptionMode?: ClientRow["subscriptionMode"];
   subscriptionUntil?: string;
   group?: string;
+  groups?: string[];
   telegramId?: string;
+  mappedStrategy?: string;
+  segments?: string[];
+  notifications?: Partial<ClientNotifications>;
+  brokerToken?: string;
+  notes?: string;
+  staticIp?: string;
 }) {
   return request<{ client: ClientRow }>("/clients", {
     method: "POST",
