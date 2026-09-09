@@ -42,10 +42,17 @@ export function istWallToUtcMs(wall) {
   return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second || 0) - IST_OFFSET_MS;
 }
 
-export function sessionBarOpenMs(ms, barMinutes = 5) {
+export function sessionBarOpenMs(ms, barMinutes = 5, opts = {}) {
   const step = Math.max(1, Number(barMinutes) || 5);
   const wall = istWallTime(ms);
-  const minutes = wall.hour * 60 + wall.minute;
+  let minutes = wall.hour * 60 + wall.minute;
+  const onSlotClose =
+    Boolean(opts.closeLabeled) &&
+    wall.second === 0 &&
+    minutes > NSE_OPEN_MINUTES &&
+    ((minutes === NSE_CLOSE_MINUTES && minutes - NSE_OPEN_MINUTES >= step) ||
+      ((minutes - NSE_OPEN_MINUTES) % step === 0 && minutes < NSE_CLOSE_MINUTES));
+  if (onSlotClose) minutes -= 1;
   if (minutes < NSE_OPEN_MINUTES || minutes >= NSE_CLOSE_MINUTES) return null;
   const elapsed = minutes - NSE_OPEN_MINUTES;
   const openMin = NSE_OPEN_MINUTES + Math.floor(elapsed / step) * step;
@@ -59,12 +66,31 @@ export function sessionBarOpenMs(ms, barMinutes = 5) {
   });
 }
 
+function medianPositive(values) {
+  const rows = (values || []).filter((n) => Number(n) > 0).sort((a, b) => a - b);
+  if (!rows.length) return 0;
+  return rows[Math.floor(rows.length / 2)];
+}
+
+export function looksLikeOneMinuteBars(candles = [], barMinutes = 5) {
+  const target = Math.max(1, Number(barMinutes) || 5) * 60 * 1000;
+  const deltas = [];
+  const rows = Array.isArray(candles) ? candles : [];
+  for (let i = 1; i < Math.min(rows.length, 48); i += 1) {
+    const delta = Number(rows[i]?.time) - Number(rows[i - 1]?.time);
+    if (delta > 0) deltas.push(delta);
+  }
+  const median = medianPositive(deltas);
+  return median > 0 && median < target / 2;
+}
+
 export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.now()) {
   const step = Math.max(1, Number(barMinutes) || 5);
   const barMs = step * 60 * 1000;
+  const closeLabeled = looksLikeOneMinuteBars(candles, step);
   const buckets = new Map();
   for (const row of Array.isArray(candles) ? candles : []) {
-    const openMs = sessionBarOpenMs(row.time, step);
+    const openMs = sessionBarOpenMs(row.time, step, { closeLabeled });
     if (openMs == null) continue;
     const open = Number(row.open);
     const high = Number(row.high);
@@ -199,6 +225,7 @@ export const VwapSignalEngine = {
   firstFuturesBias,
   optionCloseAboveVwap,
   lastBarVwapReversal,
+  looksLikeOneMinuteBars,
   nextCandleEntryWindow,
   evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
     const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);

@@ -192,6 +192,57 @@ test("duplicate 15m bar does not open a second primary", () => {
   assert.equal(book.places.length, 1);
 });
 
+test("PE buy is at the next minute after the 15m close, not 17 minutes later", () => {
+  const t0915 = Date.parse("2026-08-21T03:45:00.000Z");
+  const ones = [];
+  for (let i = 0; i <= 15; i += 1) {
+    const crossed = i === 15;
+    ones.push({
+      time: t0915 + i * 60_000,
+      open: 24540,
+      high: 24550,
+      low: crossed ? 24470 : 24530,
+      close: crossed ? 24480 : 24540,
+      volume: 1000,
+    });
+  }
+  const input = (algo, book, now) =>
+    NiftyVwapHedgeStrategy.tick({
+      algo,
+      now,
+      feedLive: true,
+      futuresBars: ones,
+      spot: 24480,
+      step: 50,
+      expiry: "2026-08-27",
+      ceLtp: 90,
+      peLtp: 100,
+      capital: 10_00_000,
+      positions: book.positions,
+      orders: [],
+      pending: [],
+      adapter: book.adapter,
+    });
+
+  const early = defaultNiftyVwapHedgeAlgo({ name: "Hedge 229" });
+  const earlyBook = bookAdapter();
+  const beforeClose = input(early, earlyBook, t0915 + 14 * 60_000 + 50_000);
+  assert.equal(beforeClose.action, "wait");
+  assert.equal(earlyBook.places.length, 0);
+
+  const onTime = defaultNiftyVwapHedgeAlgo({ name: "Hedge 231" });
+  const onTimeBook = bookAdapter();
+  const at231 = input(onTime, onTimeBook, t0915 + 16 * 60_000);
+  assert.equal(at231.action, "entry");
+  assert.equal(onTimeBook.places[0].option, "PE");
+
+  const late = defaultNiftyVwapHedgeAlgo({ name: "Hedge 247" });
+  const lateBook = bookAdapter();
+  const at247 = input(late, lateBook, t0915 + 32 * 60_000);
+  assert.equal(at247.reason, "missed-close");
+  assert.equal(lateBook.places.length, 0);
+});
+
 test("PE 15m open above VWAP and close below buys 1 lot after the candle closes", () => {
   const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge PE" });
   const book = bookAdapter();

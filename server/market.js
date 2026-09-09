@@ -684,7 +684,7 @@ function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
   const open = positions.some((row) => Number(row.qty) > 0);
   if (mode === "live" && !session.open && !open) return;
   preferWeeklyDeskForReversal();
-  const futuresBars = feedLive ? getCandles(config.timeframe || "15m") : [];
+  const futuresBars = feedLive ? getCandles("1m") : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const und = getUnderlying("NIFTY");
   const pack = chainForSymbol("NIFTY");

@@ -17,7 +17,7 @@ import {
   setOptionDesk,
   snapshot,
 } from "./market.js";
-import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
@@ -71,6 +71,7 @@ let clientId = "";
 let pollTimer = null;
 let accountTimer = null;
 let chainTimer = null;
+let candleTimer = null;
 let tokenTimer = null;
 let tokenWatchdogTimer = null;
 const persistedBackoff = loadTokenBackoff();
@@ -587,23 +588,45 @@ async function pullAccount() {
   }
 }
 
+function niftyChartTarget() {
+  const front = listFutures().find((row) => row.root === "NIFTY" && row.front && row.securityId);
+  if (front?.securityId) {
+    return {
+      securityId: String(front.securityId),
+      exchangeSegment: front.segment || "NSE_FNO",
+      instrument: "FUTIDX",
+    };
+  }
+  return { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" };
+}
+
 async function pullNiftyCandles() {
   if (!accessToken) return;
   if (Date.now() < quoteBackoffUntil) return;
   try {
     const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:15:00");
     const to = kolkataStamp(new Date());
-    const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
-      securityId: "13",
-      exchangeSegment: "IDX_I",
-      instrument: "INDEX",
-      interval: "1",
-      oi: false,
-      fromDate: from,
-      toDate: to,
-    });
-    const candles = mapChartCandles(payload);
-    if (candles.length) setLiveCandles(candles);
+    const targets = [niftyChartTarget(), { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" }];
+    for (const inst of targets) {
+      try {
+        const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
+          securityId: String(inst.securityId),
+          exchangeSegment: inst.exchangeSegment,
+          instrument: inst.instrument,
+          interval: "1",
+          oi: false,
+          fromDate: from,
+          toDate: to,
+        });
+        const candles = mapChartCandles(payload);
+        if (candles.length) {
+          setLiveCandles(candles);
+          return;
+        }
+      } catch {
+        /* try index fallback */
+      }
+    }
   } catch {
     /* quotes still drive the last bar */
   }
@@ -905,6 +928,9 @@ function startLiveLoop() {
   setTimeout(() => {
     void pullNiftyCandles();
   }, 1400);
+  candleTimer = setInterval(() => {
+    void pullNiftyCandles();
+  }, 15_000);
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 2500);
@@ -937,6 +963,10 @@ function stopLiveLoop(clearCreds) {
   if (chainTimer) {
     clearInterval(chainTimer);
     chainTimer = null;
+  }
+  if (candleTimer) {
+    clearInterval(candleTimer);
+    candleTimer = null;
   }
   stopSocket();
   if (clearCreds) {

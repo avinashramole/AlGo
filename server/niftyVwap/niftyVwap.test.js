@@ -686,6 +686,33 @@ test("15m IST slots start at 09:15 / 09:30, not clock minutes divisible by 15", 
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:47:00.000Z"), 15), slot0915);
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T04:00:00.000Z"), 15), slot0930);
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T04:14:00.000Z"), 15), slot0930);
+  assert.equal(
+    sessionBarOpenMs(Date.parse("2026-08-21T04:00:00.000Z"), 15, { closeLabeled: true }),
+    slot0915,
+  );
+});
+
+test("Dhan 1m close at 14:30 belongs to the 14:15-14:30 15m bar", () => {
+  const slot1415 = Date.parse("2026-08-21T08:45:00.000Z");
+  const close1430 = Date.parse("2026-08-21T09:00:00.000Z");
+  assert.equal(sessionBarOpenMs(close1430, 15, { closeLabeled: true }), slot1415);
+  const ones = [];
+  for (let i = 0; i <= 15; i += 1) {
+    ones.push({
+      time: slot1415 + i * 60_000,
+      open: 24500,
+      high: 24510,
+      low: 24490,
+      close: i === 15 ? 24480 : 24500,
+      volume: 1,
+    });
+  }
+  const forming = aggregateSessionBars(ones, 15, Date.parse("2026-08-21T08:59:00.000Z"));
+  assert.equal(forming.some((bar) => bar.time === slot1415), false);
+  const closed = aggregateSessionBars(ones, 15, Date.parse("2026-08-21T09:01:00.000Z"));
+  const last = closed[closed.length - 1];
+  assert.equal(last.time, slot1415);
+  assert.equal(last.close, 24480);
 });
 
 test("aggregateSessionBars drops the forming 15m IST bucket before it closes", () => {
@@ -741,7 +768,7 @@ test("misaligned 1m groups do not punch; only an IST 15m VWAP cross does", () =>
   const t0 = Date.parse("2026-08-21T03:45:00.000Z");
   const ones = [];
   for (let i = 2; i < 17; i++) {
-    const below = i < 15;
+    const below = i <= 15;
     const px = below ? 24400 : 24600;
     ones.push({ time: t0 + i * 60_000, open: px, high: px + 2, low: px - 2, close: px, volume: 100 });
   }

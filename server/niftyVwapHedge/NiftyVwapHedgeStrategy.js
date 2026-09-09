@@ -240,14 +240,19 @@ export const NiftyVwapHedgeStrategy = {
 
     const futCompleted = aggregateSessionBars(sessionBars(input.futuresBars || [], now), 15, now);
     const reversal = lastBarVwapReversal(futCompleted);
-    const preview = futCompleted[futCompleted.length - 1];
+    const preview = reversal.bar || futCompleted[futCompleted.length - 1];
     if (!preview || !(reversal.vwap > 0)) {
       algo.lastSignal = "WAIT 15m CLOSE";
       return { action: "wait", reason: "need-completed-bar" };
     }
-    if (now < Number(preview.time) + barMs) {
+    const closedAt = Number(preview.time) + barMs;
+    if (now < closedAt) {
       algo.lastSignal = "WAIT 15m CLOSE";
       return { action: "wait", reason: "forming-bar" };
+    }
+    if (now > closedAt + barMs) {
+      algo.lastSignal = `SKIP OLD 15m O ${reversal.open.toFixed(2)} C ${reversal.close.toFixed(2)} VWAP ${reversal.vwap.toFixed(2)}`;
+      return { action: "wait", reason: "missed-close" };
     }
     if (!reversal.buyCe && !reversal.buyPe) {
       algo.lastSignal = `WAIT 15m O ${reversal.open.toFixed(2)} C ${reversal.close.toFixed(2)} VWAP ${reversal.vwap.toFixed(2)}`;
