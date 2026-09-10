@@ -38,7 +38,7 @@ export function Orders() {
         <div>
           <h1 className="text-xl font-bold">Order Book</h1>
           <p className="text-sm text-slate-400">
-            {liveBookCopy(data.dhanFeed?.live)} Each order shows the strategy that placed it.
+            {liveBookCopy(data.dhanFeed?.live)} Price is the Dhan average fill, not the LTP at send.
           </p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
@@ -83,7 +83,7 @@ export function Orders() {
                 <th className="px-4 py-3 font-semibold">Strategy</th>
                 <th className="px-4 py-3 text-right font-semibold">Qty</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 text-right font-semibold">Price</th>
+                <th className="px-4 py-3 text-right font-semibold">Avg fill</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Broker</th>
                 <th className="px-4 py-3 text-right font-semibold">Action</th>

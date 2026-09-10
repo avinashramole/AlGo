@@ -18,6 +18,7 @@ import {
   snapshot,
 } from "./market.js";
 import { buildScripChain, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
@@ -474,8 +475,8 @@ function mapDhanOrders(raw, algos = []) {
     symbol: row.tradingSymbol || String(row.securityId || ""),
     side: String(row.transactionType || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
     qty: Number(row.quantity || 0),
-    filledQty: Number(row.filledQty || 0),
-    price: Number(row.price || row.tradedPrice || 0),
+    filledQty: dhanFilledQty(row),
+    price: dhanOrderFillPrice(row),
     product: row.productType || "MIS",
     type: row.orderType || "MARKET",
     status: statusMap[row.orderStatus] || row.orderStatus || "PENDING",
@@ -1130,7 +1131,8 @@ function dhanOrderLiveFromBody(result, extra = {}) {
     securityId: extra.securityId
       ? String(extra.securityId)
       : String(result.securityId || data.securityId || extra.live?.securityId || ""),
-    filledQty: Number(result.filledQty || data.filledQty || extra.live?.filledQty || 0),
+    filledQty: dhanFilledQty({ ...data, ...result, ...extra.live }),
+    price: dhanOrderFillPrice({ ...data, ...result, ...extra.live }),
     afterMarketOrder: Boolean(extra.afterMarketOrder ?? extra.live?.afterMarketOrder),
     correlationId: extra.correlationId || result.correlationId || data.correlationId || extra.live?.correlationId || "",
     raw: result,
@@ -1274,7 +1276,8 @@ export async function placeDhanOrder(payload = {}) {
     orderId,
     status: status || "TRANSIT",
     securityId: String(securityId),
-    filledQty: Number(data.filledQty || result?.filledQty || 0),
+    filledQty: dhanFilledQty({ ...data, ...result }),
+    price: dhanOrderFillPrice({ ...data, ...result }),
     afterMarketOrder: Boolean(body.afterMarketOrder),
     correlationId,
     raw: result,

@@ -43,6 +43,7 @@ import {
   loadHedgeDailyLiveArmedYmd,
   saveHedgeDailyLiveArmedYmd,
 } from "./niftyVwapHedge/dailyLive.js";
+import { dhanOrderFillPrice, mergeDhanOrderPrice, resolveLiveBookPrice } from "./dhanOrderPrice.js";
 
 const algoStore = loadAlgoStore();
 let removedAlgoIds = [...(algoStore.removedIds || [])];
@@ -1519,6 +1520,10 @@ export function placeOrder(payload) {
       if (correlationId) existing.correlationId = correlationId;
       const status = mapLiveStatus(live.status);
       if (status) existing.status = status;
+      const fill = dhanOrderFillPrice(live);
+      if (fill > 0) existing.price = fill;
+      const filledQty = Number(live.filledQty || 0);
+      if (filledQty > 0) existing.filledQty = filledQty;
       if (live.reason || live.raw) existing.reason = liveRejectReason(live, existing.reason);
       return existing;
     }
@@ -1526,8 +1531,15 @@ export function placeOrder(payload) {
   const type = String(payload.type || "MARKET").toUpperCase();
   const qty = Number(payload.qty) || 65;
   const demoDhan = brokerId === "dhan" && !live;
-  const livePrice = isPaper ? liveLtpForSymbol(payload.symbol) : 0;
-  const price = Number(livePrice || payload.price) || 0;
+  const ltp = liveLtpForSymbol(payload.symbol);
+  const price = resolveLiveBookPrice({
+    type,
+    payloadPrice: payload.price,
+    livePrice: dhanOrderFillPrice(live || {}),
+    isPaper,
+    isLive: Boolean(live),
+    ltp,
+  });
   if (isPaper && !(price > 0)) {
     return { error: "No live LTP for that contract yet. Wait for the Dhan feed." };
   }
@@ -1541,7 +1553,7 @@ export function placeOrder(payload) {
     product: payload.product || "MIS",
     type,
     status,
-    price: price || Number(payload.price) || 0,
+    price,
     strategy:
       resolveOrderStrategy(
         {
@@ -1681,14 +1693,22 @@ export function squareOff(id) {
 export function replaceDhanOrders(rows) {
   const incoming = Array.isArray(rows) ? rows : [];
   const previous = state.orders || [];
-  const tagged = incoming.map((row) => ({
-    ...row,
-    strategy: resolveOrderStrategy(row, {
-      previous,
-      algos: state.algos || [],
-      positions: state.positions || [],
-    }),
-  }));
+  const previousDhan = new Map(
+    previous.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]),
+  );
+  const tagged = incoming.map((row) => {
+    const existing = previousDhan.get(String(row.id));
+    return {
+      ...row,
+      price: mergeDhanOrderPrice(row, existing),
+      filledQty: Number(row.filledQty || existing?.filledQty || 0),
+      strategy: resolveOrderStrategy(row, {
+        previous,
+        algos: state.algos || [],
+        positions: state.positions || [],
+      }),
+    };
+  });
   const others = previous.filter((row) => row.brokerId !== "dhan");
   state.orders = [...tagged, ...others];
 }
