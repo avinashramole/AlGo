@@ -195,6 +195,13 @@ export function IpManagement() {
           </div>
           <button
             type="button"
+            onClick={() => document.getElementById("account-assignments")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="inline-flex h-9 items-center rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-semibold"
+          >
+            Account table
+          </button>
+          <button
+            type="button"
             onClick={() => void load()}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-semibold"
           >
@@ -232,22 +239,6 @@ export function IpManagement() {
         <StatCard icon={<Server size={22} />} label="SERVER DEFAULT" value={String(data.stats.serverDefault)} hint="Accounts without static IP" />
       </div>
 
-      <AccountAssignmentsTable
-        accounts={accounts}
-        manageIps={manageIps}
-        managingId={managingId}
-        onAssign={async (userId, address) => {
-          setManagingId(userId);
-          const account = accounts.find((row) => row.userId === userId);
-          const brokerId = account?.brokerId || undefined;
-          const ok = address
-            ? await run(() => assignStaticIp(address, { userId, brokerId }), `${account?.name || "Account"} assigned to ${address}`)
-            : await run(() => unassignStaticIp(userId), `${account?.name || "Account"} moved back to server default`);
-          setManagingId("");
-          return ok;
-        }}
-      />
-
       {busy && !data.ips.length ? <p className="text-sm text-slate-400">Loading IP inventory…</p> : null}
       {!busy && !cards.length ? (
         <section className="card p-6 text-sm text-slate-400">
@@ -271,6 +262,22 @@ export function IpManagement() {
           />
         ))}
       </div>
+
+      <AccountAssignmentsTable
+        accounts={accounts}
+        manageIps={manageIps}
+        managingId={managingId}
+        onAssign={async (userId, address) => {
+          setManagingId(userId);
+          const account = accounts.find((row) => row.userId === userId);
+          const brokerId = account?.brokerId || undefined;
+          const ok = address
+            ? await run(() => assignStaticIp(address, { userId, brokerId }), `${account?.name || "Account"} assigned to ${address}`)
+            : await run(() => unassignStaticIp(userId), `${account?.name || "Account"} moved back to server default`);
+          setManagingId("");
+          return ok;
+        }}
+      />
 
       {addOpen ? (
         <AddIpModal
@@ -343,11 +350,10 @@ function AccountAssignmentsTable({
   onAssign: (userId: string, address: string) => Promise<boolean | void>;
 }) {
   return (
-    <section className="card overflow-x-auto p-0">
-      <div className="border-b border-[var(--border)] px-4 py-3">
-        <h2 className="text-sm font-semibold">All account assignments</h2>
-        <p className="text-xs text-slate-400">Every member. Manage sets a static egress IP or Server default.</p>
-      </div>
+    <section id="account-assignments" className="relative mt-4 scroll-mt-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] pt-3">
+      <h2 className="absolute left-4 top-0 -translate-y-1/2 bg-[var(--bg)] px-2 text-[13px] font-semibold">
+        All account assignments
+      </h2>
       <div className="max-h-[min(32rem,70dvh)] overflow-auto">
         <table className="w-full min-w-[920px] text-left">
           <thead className="sticky top-0 z-10 bg-[var(--card)]">
