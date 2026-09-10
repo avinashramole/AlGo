@@ -59,6 +59,40 @@ function showLedger(ledger: PositionLedger, mode: ModeFilter) {
   return ledger.tradeMode === mode;
 }
 
+function asLiveLedgerPosition(row: {
+  id: string;
+  symbol: string;
+  type: "BUY" | "SELL";
+  qty: number;
+  avg: number;
+  ltp: number;
+  pnl: number;
+  product?: string;
+  strategy?: string;
+  brokerId?: string;
+}): LedgerPosition {
+  const type = row.type === "SELL" ? "SELL" : "BUY";
+  const qty = Math.abs(Number(row.qty) || 0);
+  const avg = Number(row.avg) || 0;
+  return {
+    id: String(row.id || ""),
+    symbol: String(row.symbol || ""),
+    product: String(row.product || "MIS").toUpperCase(),
+    type,
+    buyQty: type === "BUY" ? qty : 0,
+    buyPrice: type === "BUY" ? avg : 0,
+    sellQty: type === "SELL" ? qty : 0,
+    sellPrice: type === "SELL" ? avg : 0,
+    netQty: type === "SELL" ? -qty : qty,
+    ltp: Number(row.ltp) || avg,
+    realized: 0,
+    mtm: Number(row.pnl) || 0,
+    paper: row.brokerId === "paper",
+    segment: /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(row.symbol || "")) ? "crypto" : "indian",
+    strategy: String(row.strategy || ""),
+  };
+}
+
 export function PositionsDesk() {
   const { data, refresh, closePosition } = useMarket();
   const [desk, setDesk] = useState<PositionsDeskSnapshot>(emptyDesk);
@@ -66,6 +100,7 @@ export function PositionsDesk() {
   const [segment, setSegment] = useState<SegmentFilter>("all");
   const [busy, setBusy] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
 
   const loadDesk = useCallback(async () => {
@@ -75,12 +110,21 @@ export function PositionsDesk() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load position ledgers");
+    } finally {
+      setReady(true);
     }
   }, []);
 
   useEffect(() => {
     void loadDesk();
-  }, [loadDesk, data.positions, data.serverTime]);
+  }, [loadDesk]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void loadDesk();
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [loadDesk]);
 
   const onRefresh = async () => {
     setLoading(true);
@@ -92,9 +136,20 @@ export function PositionsDesk() {
     }
   };
 
+  const liveMaster = useMemo(() => (data.positions || []).map(asLiveLedgerPosition), [data.positions]);
+
   const ledgers = useMemo(() => {
     const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number }> = [];
-    const books = [desk.master, ...(desk.clients || [])].filter((item) => showLedger(item, mode));
+    const masterLedger: PositionLedger = liveMaster.length
+      ? {
+          ...desk.master,
+          positions: liveMaster,
+          mtm: liveMaster.reduce((sum, row) => sum + Number(row.mtm || 0), 0),
+          open: liveMaster.length,
+          tradeMode: liveMaster.some((row) => !row.paper) ? "real" : desk.master.tradeMode,
+        }
+      : desk.master;
+    const books = [masterLedger, ...(desk.clients || [])].filter((item) => showLedger(item, mode));
     for (const ledger of books) {
       const positions = filterRows(ledger, mode, segment);
       rows.push({
@@ -104,7 +159,7 @@ export function PositionsDesk() {
       });
     }
     return rows;
-  }, [desk, mode, segment]);
+  }, [desk, mode, segment, liveMaster]);
 
   const masterBlock = ledgers.find((row) => row.ledger.kind === "master");
   const clientBlocks = ledgers.filter((row) => row.ledger.kind === "client");
@@ -185,6 +240,8 @@ export function PositionsDesk() {
       </div>
 
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down dark:bg-rose-950/40">{error}</div> : null}
+
+      {!ready ? <div className="card px-4 py-8 text-center text-sm text-slate-400">Loading client books…</div> : null}
 
       {ledgers.map(({ ledger, positions, mtm }) => (
         <LedgerCard

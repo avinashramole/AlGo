@@ -1070,7 +1070,6 @@ function syncPaperLedger() {
 
 function markPaperToMarket() {
   state.positions = (state.positions || []).map((row) => {
-    if (!isPaperRow(row)) return row;
     const ltp = liveLtpForSymbol(row.symbol);
     if (!(ltp > 0)) return row;
     const dir = row.type === "BUY" ? 1 : -1;
@@ -2007,25 +2006,34 @@ export function applyLiveQuotes(quotes) {
     }
   }
 
-  if (!state.dhanFeed.live) {
-    state.positions = state.positions.map((row) => {
-      const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
-      if (equity) {
-        const ltp = round2(equity.ltp);
-        const dir = row.type === "BUY" ? 1 : -1;
-        return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-      }
-      const indexName = relatedIndex(row.symbol);
-      if (!indexName || !indexPrev[indexName]) return row;
-      const nextIndex = state.indices.find((item) => item.symbol === indexName);
-      if (!nextIndex) return row;
-      const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
-      if (!Number.isFinite(movePct) || movePct === 0) return row;
-      const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
+  state.positions = state.positions.map((row) => {
+    const match = quotes.find(
+      (quote) =>
+        (quote.symbol && quote.symbol === row.symbol) ||
+        (quote.securityId && row.securityId && String(quote.securityId) === String(row.securityId)),
+    );
+    if (match && Number(match.ltp) > 0) {
+      const ltp = round2(match.ltp);
       const dir = row.type === "BUY" ? 1 : -1;
       return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-    });
-  }
+    }
+    if (state.dhanFeed.live) return row;
+    const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
+    if (equity) {
+      const ltp = round2(equity.ltp);
+      const dir = row.type === "BUY" ? 1 : -1;
+      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+    }
+    const indexName = relatedIndex(row.symbol);
+    if (!indexName || !indexPrev[indexName]) return row;
+    const nextIndex = state.indices.find((item) => item.symbol === indexName);
+    if (!nextIndex) return row;
+    const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
+    if (!Number.isFinite(movePct) || movePct === 0) return row;
+    const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
+    const dir = row.type === "BUY" ? 1 : -1;
+    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+  });
 
   const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
   if (nifty && indexPrev["NIFTY 50"] && state.optionMeta?.source !== "dhan") {

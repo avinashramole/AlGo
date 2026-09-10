@@ -24,14 +24,20 @@ import { Subscriptions } from "./pages/Subscriptions";
 import { UserHome } from "./pages/UserHome";
 import { Users } from "./pages/Users";
 
+function PageLoading({ label }: { label: string }) {
+  return <div className="p-8 text-sm text-slate-400">{label}</div>;
+}
+
 function Guard({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
+  if (!ready) return <PageLoading label="Loading desk…" />;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
+  if (!ready) return <PageLoading label="Loading…" />;
   if (!isAdminUser(user)) return <Navigate to="/" replace />;
   return children;
 }

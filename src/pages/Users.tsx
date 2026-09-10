@@ -44,6 +44,11 @@ export function Users() {
 
   useEffect(() => {
     void load();
+    const onVis = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, [load]);
 
   const patchRow = async (id: string, payload: Parameters<typeof saveClient>[1]) => {
@@ -248,7 +253,9 @@ export function Users() {
             })}
           </tbody>
         </table>
-        {!filtered.length ? (
+        {busy && !clients.length ? (
+          <div className="px-4 py-8 text-center text-sm text-slate-400">Loading clients…</div>
+        ) : !filtered.length ? (
           <div className="px-4 py-8 text-center text-sm text-slate-400">
             No members yet. They appear here after Continue with Google or Create Account.
           </div>

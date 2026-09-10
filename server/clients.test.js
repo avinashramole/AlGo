@@ -186,6 +186,20 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(crypto.netQty, -1);
 });
 
+test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
+  const row = asLedgerPosition({
+    symbol: "NIFTY 23450 PE",
+    type: "BUY",
+    qty: 65,
+    avg: 96.71,
+    ltp: 90,
+    pnl: Number(((90 - 96.71) * 65).toFixed(2)),
+  });
+  assert.equal(row.buyPrice, 96.71);
+  assert.equal(row.ltp, 90);
+  assert.ok(row.mtm < 0);
+});
+
 test("deleteClient removes a member and refuses the desk admin", () => {
   assert.throws(() => deleteClient("avinash", { actorId: "segin" }), /admin/);
   const gone = deleteClient("u-arpit", { actorId: "avinash" });

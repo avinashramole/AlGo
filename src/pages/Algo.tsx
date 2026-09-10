@@ -426,6 +426,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   const [picked, setPicked] = useState<string[]>(algo.mappedClientIds || []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -434,6 +435,8 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load clients");
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -512,7 +515,11 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
                 </label>
               );
             })}
-            {!clients.length ? <p className="py-6 text-center text-sm text-slate-400">No clients yet. Add one on All clients first.</p> : null}
+            {!clients.length ? (
+              <p className="py-6 text-center text-sm text-slate-400">
+                {loaded ? "No clients yet. Add one on All clients first." : "Loading clients…"}
+              </p>
+            ) : null}
           </div>
           {error ? <p className="text-xs font-semibold text-down">{error}</p> : null}
         </div>

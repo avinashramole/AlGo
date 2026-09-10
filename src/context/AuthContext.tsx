@@ -26,6 +26,7 @@ type OtpPayload = {
 
 type AuthContextValue = {
   user: AuthUser | null;
+  ready: boolean;
   login: (identifier: string, password: string, remember?: boolean) => Promise<void>;
   requestOtp: (payload: OtpPayload) => Promise<OtpRequestResult>;
   verifyOtp: (identifier: string, otp: string, remember?: boolean) => Promise<void>;
@@ -148,6 +149,10 @@ function bootFromWindow() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => bootFromWindow());
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
+  const [ready, setReady] = useState(() => {
+    const token = readToken();
+    return !token || token === "t2s-offline-token";
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -160,18 +165,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     const token = readToken();
-    if (!token || token === "t2s-offline-token") return;
+    if (!token || token === "t2s-offline-token") {
+      setReady(true);
+      return;
+    }
     void getMe(token)
       .then((row) => {
         persistUser(row.user);
         setUser(row.user);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setReady(true));
   }, []);
 
   const value = useMemo(
     () => ({
       user,
+      ready,
       hasThumb,
       login: async (identifier: string, password: string, remember = true) => {
         const demoUser = {
@@ -252,7 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       },
     }),
-    [user, hasThumb],
+    [user, ready, hasThumb],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

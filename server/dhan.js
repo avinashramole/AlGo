@@ -9,6 +9,7 @@ import {
   currentOptionRows,
   getChainSpot,
   getOptionMeta,
+  quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
   restoreSimulatedDesk,
@@ -501,9 +502,11 @@ function mapDhanPositions(raw) {
       const qty = Math.abs(Number(row.netQty) || 0);
       const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
       const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
-      const pnl = Number(row.unrealizedProfit || 0);
       const dir = type === "BUY" ? 1 : -1;
-      const implied = qty ? avg + pnl / (qty * dir) : avg;
+      const liveLtp = quoteSymbol(row.tradingSymbol || String(row.securityId || ""));
+      const brokerPnl = Number(row.unrealizedProfit || 0);
+      const pnl = liveLtp > 0 && qty ? (liveLtp - avg) * qty * dir : brokerPnl;
+      const implied = qty ? avg + Number(pnl) / (qty * dir) : avg;
       const parsed = parseOptionContract(row.tradingSymbol || "");
       return {
         id: `dhan-pos-${row.securityId}-${row.productType || "MIS"}`,
