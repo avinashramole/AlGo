@@ -26,6 +26,7 @@ type OtpPayload = {
 
 type AuthContextValue = {
   user: AuthUser | null;
+  ready: boolean;
   login: (identifier: string, password: string, remember?: boolean) => Promise<void>;
   requestOtp: (payload: OtpPayload) => Promise<OtpRequestResult>;
   verifyOtp: (identifier: string, otp: string, remember?: boolean) => Promise<void>;
@@ -136,42 +137,52 @@ async function verifyDeviceThumb() {
   }
 }
 
+function bootFromWindow() {
+  if (typeof window === "undefined") return readUser();
+  const googleToken = new URLSearchParams(window.location.search).get("google_token") || "";
+  if (!googleToken) return readUser();
+  const pending = { name: "Google user", email: "", desk: "Index Options", role: "user" as const };
+  persist(pending, googleToken, true);
+  return pending;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => readUser());
+  const [user, setUser] = useState<AuthUser | null>(() => bootFromWindow());
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
+  const [ready, setReady] = useState(() => {
+    const token = readToken();
+    if (!token || token === "t2s-offline-token") return true;
+    return readUser()?.role === "admin";
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const googleToken = params.get("google_token");
     const googleError = params.get("google_error");
     if (googleError) {
-      sessionStorage.setItem("t2s-google-error", googleError);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    if (googleToken) {
-      persist({ name: "Google user", email: "", desk: "Index Options", role: "user" }, googleToken, true);
-      void getMe(googleToken)
-        .then((row) => {
-          persist(row.user, googleToken, true);
-          setUser(row.user);
-          window.history.replaceState({}, "", "/");
-        })
-        .catch(() => undefined);
-      return;
+      try {
+        sessionStorage.setItem("t2s-google-error", googleError);
+      } catch {
+        /* ignore */
+      }
     }
     const token = readToken();
-    if (!token || token === "t2s-offline-token") return;
+    if (!token || token === "t2s-offline-token") {
+      setReady(true);
+      return;
+    }
     void getMe(token)
       .then((row) => {
         persistUser(row.user);
         setUser(row.user);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setReady(true));
   }, []);
 
   const value = useMemo(
     () => ({
       user,
+      ready,
       hasThumb,
       login: async (identifier: string, password: string, remember = true) => {
         const demoUser = {
@@ -252,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       },
     }),
-    [user, hasThumb],
+    [user, ready, hasThumb],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

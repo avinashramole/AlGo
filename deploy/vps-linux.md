@@ -194,12 +194,64 @@ Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443
 
 ---
 
+## Cannot allocate memory (`-bash: fork: Cannot allocate memory`)
+
+The VPS RAM is full. `git` and `npm` cannot start until something is freed. Restarting `t2s` does **not** turn LIVE on.
+
+**If even `free -h` fails:** reboot from the hosting panel (Console / Restart), wait 1 minute, SSH again, then paste Block A then Block B.
+
+**Block A — free RAM and add 2G swap (one time)**
+
+```bash
+systemctl stop t2s
+killall -9 node 2>/dev/null
+sync
+echo 3 > /proc/sys/vm/drop_caches
+free -h
+swapon --show
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=2048
+  chmod 600 /swapfile
+  mkswap /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+swapon /swapfile
+free -h
+```
+
+You must see **Swap** with about **2.0Gi** before continuing.
+
+**Block B — deploy (skip npm install unless `node_modules` is missing)**
+
+```bash
+cd /opt/t2s
+git fetch origin cursor/nifty-vwap-hedge-1488
+git checkout cursor/nifty-vwap-hedge-1488
+git pull origin cursor/nifty-vwap-hedge-1488
+cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
+systemctl daemon-reload
+NODE_OPTIONS=--max-old-space-size=384 npm run build
+systemctl start t2s
+systemctl status t2s
+```
+
+Press `q` to leave status. LIVE stays off unless the 09:30 IST hedge clock arms it on a session day.
+
+If `npm run build` still dies, start the API anyway (server CE/PE preview still works; the card layout needs the build):
+
+```bash
+systemctl start t2s
+```
+
+---
+
 ## Later updates
 
 ```bash
 cd /opt/t2s
-git pull origin cursor/all-desk-checks-00e8
-npm run setup:vps
+git pull origin cursor/nifty-vwap-hedge-1488
 npm run build
 systemctl restart t2s
 ```
+
+Only run `npm run setup:vps` if `node_modules` is missing. It uses a lot of RAM.

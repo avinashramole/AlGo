@@ -21,6 +21,7 @@ import {
   OPTION_OFFSETS,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
+  isNiftyVwapHedgeKind,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
@@ -48,7 +49,13 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (!open) return;
     if (algo) {
       const kind = (
-        isNiftyVwapReversalKind(algo) ? "nifty-vwap-reversal" : isNiftyVwapKind(algo) ? "nifty-vwap" : algo.kind || "indicator"
+        isNiftyVwapHedgeKind(algo)
+          ? "nifty-vwap-hedge"
+          : isNiftyVwapReversalKind(algo)
+            ? "nifty-vwap-reversal"
+            : isNiftyVwapKind(algo)
+              ? "nifty-vwap"
+              : algo.kind || "indicator"
       ) as StrategyKind;
       const synthesized = groupsFromFlat(algo);
       setForm({
@@ -72,10 +79,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const lots = form.lots || 1;
   const vwap = isNiftyVwapKind(form);
   const reversal = isNiftyVwapReversalKind(form);
+  const hedge = isNiftyVwapHedgeKind(form);
   const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
+    if (isNiftyVwapHedgeKind(form)) {
+      return `NIFTY weekly ATM · 1 lot primary + 2 lots opposite once · last closed 15m vs VWAP · primary +40% · −20% hedge · +5% account exit · daily LIVE 09:30 IST`;
+    }
     if (isNiftyVwapReversalKind(form)) {
-      return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 15m VWAP reversal · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
+      return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · last closed 15m vs VWAP · BUY at next 15m open · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -176,6 +187,23 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               })
             }
           />
+          <TypeCard
+            active={kind === "nifty-vwap-hedge"}
+            title="NIFTY 15m VWAP hedge"
+            text="15m futures: open below VWAP + close above → 1 lot weekly ATM CE. Open above + close below → 1 lot PE. +40% books primary. −20% buys 2 lots opposite once. +5% account P&L exits all."
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-vwap-hedge"),
+                name: form.name || "NIFTY 15m VWAP hedge",
+                runMode: form.runMode || "live",
+                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
+                lots: 1,
+                lotSize,
+                qty: lotSize,
+                enabled: false,
+              })
+            }
+          />
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -197,7 +225,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
-            {reversal
+            {hedge
+              ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:30 IST on session days. Saving or restarting t2s does not start LIVE."
+              : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. Saving does not start trading — use Start paper or Start live on the algo card."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
@@ -303,20 +333,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               className={fieldClass}
               type="number"
               min={1}
-              value={lots}
+              value={hedge ? 1 : lots}
+              disabled={hedge}
               onChange={(event) => {
                 const nextLots = Math.max(1, Number(event.target.value) || 1);
                 set({ lots: nextLots, lotSize, qty: nextLots * lotSize });
               }}
             />
             <span className="mt-1 block font-medium text-slate-400">
-              1 lot = {lotSize} qty · order qty {lots * lotSize}
+              {hedge ? "Primary 1 lot (65) · hedge 2 lots (130) · max 3 lots" : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
-            <select className={fieldClass} value={reversal ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine} onChange={(event) => set({ timeframe: event.target.value })}>
-              {(reversal ? ["15m"] : vwap ? ["5m"] : TIMEFRAMES).map((row) => (
+            <select className={fieldClass} value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine} onChange={(event) => set({ timeframe: event.target.value })}>
+              {(reversal || hedge ? ["15m"] : vwap ? ["5m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>
@@ -438,6 +469,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>
+        ) : hedge ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-[11px] font-semibold text-slate-400">
+              Completed 15-minute NIFTY futures candle only. Open below VWAP and close above buys 1 lot weekly ATM CE. Open above VWAP and close below buys 1 lot weekly ATM PE. Primary target is fill × 1.40. There is no stop on the primary. At fill × 0.80 buy 2 lots of the opposite ATM weekly option once. Exit every open leg when realized + unrealized − charges reaches 5% of cycle starting capital.
+            </p>
+          </div>
         ) : (
         <div className="mt-4 space-y-3">
           <ConditionGroupEditor
@@ -488,7 +525,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {form.runMode === "live" ? (
           <p className="mt-3 text-[11px] font-semibold text-amber-600">
-            Live Dhan stays off until you press Start live on the algo card. Saving this form does not place orders.
+            {hedge
+              ? "NIFTY 15m VWAP hedge goes LIVE automatically at 09:30 IST on session days. Saving this form or restarting t2s does not start LIVE."
+              : "Live Dhan stays off until you press Start live on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}
 

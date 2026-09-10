@@ -70,6 +70,28 @@ export function liveBookCopy(live?: boolean) {
     : "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
 }
 
+export function deskStrategyName(strategy?: string, algos?: Array<{ id?: string; name?: string }>) {
+  const raw = String(strategy || "").trim();
+  if (!raw || /^(manual|auto)$/i.test(raw)) return "";
+  const compact = raw.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9+-]/g, "").toLowerCase();
+  const match = (algos || []).find((algo) => {
+    const name = String(algo.name || "").trim();
+    if (!name) return false;
+    return (
+      name === raw ||
+      name.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9+-]/g, "").toLowerCase() === compact ||
+      String(algo.id || "") === raw
+    );
+  });
+  return match?.name || raw;
+}
+
+export function buySellByStrategy(side?: string, strategy?: string, algos?: Array<{ id?: string; name?: string }>) {
+  const action = String(side || "").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  const name = deskStrategyName(strategy, algos);
+  return name ? `${action} by ${name}` : action;
+}
+
 export function formatIst(iso?: string) {
   if (!iso) return "—";
   const date = new Date(iso);

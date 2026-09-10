@@ -7,10 +7,12 @@ Type=simple
 WorkingDirectory=/opt/t2s
 Environment=NODE_ENV=production
 Environment=PORT=4000
+Environment=NODE_OPTIONS=--max-old-space-size=384
 EnvironmentFile=-/opt/t2s/.env
 ExecStart=/usr/bin/node server/index.js
 Restart=always
 RestartSec=3
+MemoryMax=700M
 
 [Install]
 WantedBy=multi-user.target

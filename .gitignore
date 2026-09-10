@@ -21,4 +21,8 @@ server/data/gmail.json
 server/data/payments.json
 server/data/enrollments.json
 server/data/member-desk.json
+server/data/algos.json
+server/data/sessions.json
+server/data/messaging.json
+server/data/hedge-daily-live.json
 *.zip

@@ -1,10 +1,19 @@
+import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { loadClientList } from "../../lib/clientsCache";
+import { PreviewDeskBanner } from "../../lib/deskHost";
+import { isAdminUser } from "../../lib/roles";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
-import { PreviewDeskBanner } from "../../lib/deskHost";
 
 export function AppShell() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (isAdminUser(user)) void loadClientList();
+  }, [user]);
+
   return (
     <div className="h-[100dvh] overflow-hidden bg-[var(--bg)]">
       <PreviewDeskBanner />

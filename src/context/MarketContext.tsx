@@ -8,6 +8,7 @@ import {
   deleteAlgo,
   disconnectBroker,
   enableDhanAuto,
+  getDeskMtm,
   getSnapshot,
   placeOrder,
   refreshDhanToken,
@@ -163,6 +164,23 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshMtm = useCallback(async () => {
+    try {
+      const mtm = await getDeskMtm();
+      setData((current) => {
+        const byId = new Map((mtm.positions || []).map((row) => [row.id, row]));
+        if (!byId.size) return current;
+        const positions = (current.positions || []).map((row) => {
+          const next = byId.get(row.id);
+          return next ? { ...row, ltp: next.ltp, pnl: next.pnl } : row;
+        });
+        return { ...current, positions };
+      });
+    } catch {
+      /* keep last snapshot */
+    }
+  }, []);
+
   useEffect(() => {
     if (!admin) {
       setLive(false);
@@ -174,6 +192,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     }, 2000);
     return () => window.clearInterval(id);
   }, [admin, refresh]);
+
+  const liveOpen = Boolean(data.dhanFeed?.live) && (data.positions || []).some((row) => row.live || row.brokerId === "dhan");
+  useEffect(() => {
+    if (!admin || !liveOpen) return;
+    void refreshMtm();
+    const id = window.setInterval(() => {
+      void refreshMtm();
+    }, 300);
+    return () => window.clearInterval(id);
+  }, [admin, liveOpen, refreshMtm]);
 
   const value = useMemo(
     () => ({
@@ -193,14 +221,19 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         if (isRemotePreviewHost()) {
           throw new Error(PREVIEW_DESK_MESSAGE);
         }
-        const result = await placeOrder(payload);
-        if (result.snapshot) setData(result.snapshot);
-        else await refresh();
-        const status = String(result.order?.status || "").toUpperCase();
-        if (result.error || result.ok === false || status === "REJECTED") {
-          throw new Error(result.error || result.order?.reason || "Dhan did not place this order.");
+        try {
+          const result = await placeOrder(payload);
+          if (result.snapshot) setData(result.snapshot);
+          else await refresh();
+          const status = String(result.order?.status || "").toUpperCase();
+          if (result.error || result.ok === false || status === "REJECTED") {
+            throw new Error(result.error || result.order?.reason || "Dhan did not place this order.");
+          }
+          return result;
+        } catch (err) {
+          await refresh();
+          throw err;
         }
-        return result;
       },
       connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
         const result = await connectBroker(id, payload);

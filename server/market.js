@@ -8,13 +8,15 @@ import {
   getUnderlying,
   nearestWeeklyExpiry,
   normalizeExpiry,
+  isWeeklyOptionExpiry,
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
-import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
-import { normalizeAlgo, seedAlgos } from "./strategies.js";
-import { evaluateSignals, runBacktest } from "./backtest.js";
+import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
+import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -27,7 +29,35 @@ import {
   PositionManager,
   runtimeState,
   runNiftyVwapBacktest,
+  VwapSignalEngine,
 } from "./niftyVwap/index.js";
+import {
+  isNiftyVwapHedgeAlgo,
+  niftyVwapHedgeConfig,
+  NiftyVwapHedgeStrategy,
+  noteHedgeBrokerRejection,
+  runNiftyVwapHedgeBacktest,
+  hedgeState,
+  hedgePreviewTrade,
+  hedgeReversalFromBars,
+} from "./niftyVwapHedge/index.js";
+import {
+  applyHedgeDailyLive,
+  loadHedgeDailyLiveArmedYmd,
+  saveHedgeDailyLiveArmedYmd,
+} from "./niftyVwapHedge/dailyLive.js";
+import { dhanOrderFillPrice, mergeDhanOrderPrice, resolveLiveBookPrice } from "./dhanOrderPrice.js";
+
+const algoStore = loadAlgoStore();
+let removedAlgoIds = [...(algoStore.removedIds || [])];
+
+function persistAlgos() {
+  try {
+    saveAlgoStore(state.algos || [], removedAlgoIds);
+  } catch (error) {
+    console.log(`Could not save strategies: ${error.message || error}`);
+  }
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -269,7 +299,7 @@ const state = {
     lastAt: null,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
-  algos: seedAlgos(),
+  algos: algoStore.algos,
   positions: seedPositions(),
   signals: [
     { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
@@ -382,27 +412,72 @@ export function drainPendingLiveAlgoOrders() {
   return pendingLiveAlgoOrders.splice(0, pendingLiveAlgoOrders.length);
 }
 
+function liveOrderSide(row) {
+  return row?.side === "SELL" ? "SELL" : "BUY";
+}
+
+function sameLiveContract(left, right) {
+  if (left?.symbol && right?.symbol && left.symbol === right.symbol) return true;
+  const a = PositionManager.niftyOptionLeg(left);
+  const b = PositionManager.niftyOptionLeg(right);
+  return Boolean(a && b && Number(a.strike) === Number(b.strike) && a.option === b.option);
+}
+
 export function queueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
-  const side = payload?.side === "SELL" ? "SELL" : "BUY";
-  if (
-    strategy &&
-    pendingLiveAlgoOrders.some((row) => row.strategy === strategy && (row.side === "SELL" ? "SELL" : "BUY") === side)
-  ) {
+  const side = liveOrderSide(payload);
+  const role = String(payload?.role || "");
+  const allowHedge = payload?.allowHedge === true && role === "hedge";
+  const sameContractPending = pendingLiveAlgoOrders.some(
+    (row) => liveOrderSide(row) === side && sameLiveContract(payload, row),
+  );
+  if (sameContractPending) {
     return { ok: true, queued: true, status: "PENDING", duplicate: true };
+  }
+  const sameStrategyRole = pendingLiveAlgoOrders.some((row) => {
+    if (!strategy || row.strategy !== strategy) return false;
+    if (liveOrderSide(row) !== side) return false;
+    return String(row.role || "") === role;
+  });
+  if (sameStrategyRole) {
+    return { ok: true, queued: true, status: "PENDING", duplicate: true };
+  }
+  if (side === "BUY" && allowHedge) {
+    const pendingStrategyBuy = pendingLiveAlgoOrders.some(
+      (row) => row.strategy === strategy && liveOrderSide(row) === "BUY",
+    );
+    if (pendingStrategyBuy) {
+      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    }
+  } else if (side === "BUY") {
+    const openNifty = (state.positions || []).some((row) => !isPaperRow(row) && PositionManager.isOpenNiftyOption(row));
+    const pendingBuy = pendingLiveAlgoOrders.some((row) => liveOrderSide(row) === "BUY");
+    if (openNifty || pendingBuy) {
+      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId: "dhan" });
   return { ok: true, queued: true, status: "PENDING" };
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
-  const name = String(payload?.strategy || "");
+  const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
-  const algo = (state.algos || []).find((item) => item.name === name && isNiftyOptionEngineAlgo(item));
+  const algo = (state.algos || []).find(
+    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isNiftyVwapHedgeAlgo(item)),
+  );
   if (!algo) return;
+  rememberOrderStrategy(
+    { id: live?.orderId, securityId: live?.securityId || payload?.securityId, strategy: name },
+    name,
+  );
+  if (isNiftyVwapHedgeAlgo(algo) && live?.orderId) {
+    hedgeState(algo).lastOrderId = String(live.orderId);
+  }
   const status = String(live?.status || "").toUpperCase();
   if (error || status === "REJECTED" || status === "CANCELLED") {
-    noteBrokerRejection(algo);
+    if (isNiftyVwapHedgeAlgo(algo)) noteHedgeBrokerRejection(algo);
+    else noteBrokerRejection(algo);
   }
 }
 
@@ -440,14 +515,16 @@ function niftyListedExpiries(pack) {
 
 function expiryForNiftyVwap(algo, pack) {
   const listed = niftyListedExpiries(pack);
-  if (isNiftyVwapReversalAlgo(algo)) {
+  if (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo)) {
     return nearestWeeklyExpiry(listed, "NIFTY") || listed[0] || "";
   }
   return pack?.meta?.expiry || listed[0] || "";
 }
 
 function preferWeeklyDeskForReversal() {
-  const running = (state.algos || []).some((algo) => isNiftyVwapReversalAlgo(algo) && algo.enabled);
+  const running = (state.algos || []).some(
+    (algo) => (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo)) && algo.enabled,
+  );
   if (!running) return;
   if (String(state.optionMeta?.symbol || "").toUpperCase() !== "NIFTY") return;
   const weekly = nearestWeeklyExpiry(niftyListedExpiries({ meta: state.optionMeta }), "NIFTY");
@@ -459,11 +536,30 @@ function preferWeeklyDeskForReversal() {
 function positionsForNiftyVwap(algo, mode) {
   const vs = runtimeState(algo);
   const mine = (row) => {
+    if (row.strategy && row.strategy !== algo.name) return false;
     if (row.strategy === algo.name) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
+    if (PositionManager.isOpenNiftyOption(row)) return true;
     return false;
   };
   const rows = state.positions || [];
+  if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
+  return rows.filter((row) => !isPaperRow(row) && mine(row));
+}
+
+function positionsForHedge(algo, mode) {
+  const rows = state.positions || [];
+  const mine = (row) => {
+    const tagged = realStrategyName(row.strategy);
+    if (tagged && tagged !== algo.name) return false;
+    if (tagged === algo.name) return true;
+    const hs = algo.hedgeState || {};
+    const active = hs.inFlight || (hs.phase && hs.phase !== "IDLE") || hs.primarySide;
+    if (!active || tagged || !PositionManager.isOpenNiftyOption(row)) return false;
+    if (row.option && hs.hedgeSide && row.option === hs.hedgeSide) return true;
+    if (row.option && hs.primarySide && row.option === hs.primarySide) return true;
+    return !row.option;
+  };
   if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
   return rows.filter((row) => !isPaperRow(row) && mine(row));
 }
@@ -488,12 +584,18 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const open = PositionManager.openFor(positions, algo.name, vs);
   if (mode === "live" && !session.open && !open) return;
   if (isNiftyVwapReversalAlgo(algo)) preferWeeklyDeskForReversal();
-  const futuresBars = getCandles(config.timeframe || "5m");
+  const futuresBars = feedLive ? getCandles(config.timeframe || "5m") : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
   const und = getUnderlying("NIFTY");
   const pack = chainForSymbol("NIFTY");
   const expiry = expiryForNiftyVwap(algo, pack);
+  if (isNiftyVwapReversalAlgo(algo) && expiry && !isWeeklyOptionExpiry(expiry, "NIFTY") && !open) {
+    if (!positions.some((row) => PositionManager.isOpenNiftyOption(row))) {
+      algo.lastSignal = "WAIT WEEKLY EXPIRY";
+      return;
+    }
+  }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
@@ -533,6 +635,106 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   });
 }
 
+function optionLegId(strike, option) {
+  const pack = chainForSymbol("NIFTY");
+  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+  if (!row) return "";
+  const id = option === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
+  return id ? String(id) : "";
+}
+
+function hedgeCapital(mode) {
+  if (mode === "paper") return PAPER_STARTING_FUNDS;
+  const dhan = publicBrokers().brokers.find((row) => row.id === "dhan");
+  const funds = Number(dhan?.funds);
+  return funds > 0 ? funds : PAPER_STARTING_FUNDS;
+}
+
+function cancelPendingForStrategy(strategy) {
+  for (let i = pendingLiveAlgoOrders.length - 1; i >= 0; i -= 1) {
+    if (pendingLiveAlgoOrders[i].strategy === strategy) pendingLiveAlgoOrders.splice(i, 1);
+  }
+  for (const row of state.orders || []) {
+    if (row.strategy === strategy && (row.status === "PENDING" || row.status === "PARTIAL")) {
+      cancelOrder(row.id);
+    }
+  }
+  return { ok: true };
+}
+
+function hedgeAdapter(mode, algo) {
+  const base =
+    mode === "live"
+      ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
+      : PaperTradingAdapter({ placeOrder, squareOff });
+  const withName = (payload = {}) => ({
+    ...payload,
+    strategy: realStrategyName(payload.strategy) || algo.name || "NIFTY 15m VWAP hedge",
+  });
+  return {
+    ...base,
+    place(payload) {
+      return base.place(withName(payload));
+    },
+    exit(position) {
+      return base.exit(withName(position));
+    },
+    cancelPending({ strategy } = {}) {
+      return cancelPendingForStrategy(strategy || algo.name);
+    },
+  };
+}
+
+function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
+  const now = Date.now();
+  const session = nseMarketSession();
+  const config = niftyVwapHedgeConfig(algo);
+  const positions = positionsForHedge(algo, mode);
+  const open = positions.some((row) => Number(row.qty) > 0);
+  if (mode === "live" && !session.open && !open) return;
+  preferWeeklyDeskForReversal();
+  const futuresBars = feedLive ? getCandles("1m") : [];
+  const lastBar = futuresBars[futuresBars.length - 1];
+  const und = getUnderlying("NIFTY");
+  const pack = chainForSymbol("NIFTY");
+  const expiry = expiryForNiftyVwap(algo, pack);
+  if (expiry && !isWeeklyOptionExpiry(expiry, "NIFTY") && !open) {
+    algo.lastSignal = "WAIT WEEKLY EXPIRY";
+    return;
+  }
+  const hs = hedgeState(algo);
+  const { reversal, bar } = hedgeReversalFromBars(futuresBars, now);
+  const spot = Number(reversal.close) || Number(bar?.close) || Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
+  const atm = Number(hs.primaryStrike) > 0 ? Number(hs.primaryStrike) : atmStrike(spot, und.step);
+  const ceLtp = optionPremium("NIFTY", atm, "CE", expiry);
+  const peLtp = optionPremium("NIFTY", atm, "PE", expiry);
+  const liveChain = pack?.meta?.source === "dhan";
+  const ceId = optionLegId(atm, "CE");
+  const peId = optionLegId(atm, "PE");
+  const pending = pendingLiveAlgoOrders.filter((row) => row.strategy === algo.name);
+  const orders = (state.orders || []).filter((row) => row.strategy === algo.name);
+  NiftyVwapHedgeStrategy.tick({
+    algo,
+    config,
+    now,
+    feedLive: Boolean(feedLive),
+    futuresBars,
+    spot,
+    step: und.step,
+    expiry,
+    ceLtp,
+    peLtp,
+    capital: hedgeCapital(mode),
+    positions,
+    orders,
+    pending,
+    requireSecurityId: liveChain,
+    ceSecurityId: ceId,
+    peSecurityId: peId,
+    adapter: hedgeAdapter(mode, algo),
+  });
+}
+
 function algoOrderFields(algo, side, trade) {
   return {
     symbol: trade.symbol,
@@ -550,18 +752,72 @@ function algoOrderFields(algo, side, trade) {
   };
 }
 
+function resolveHedgeAlgoTrade(algo) {
+  const symbol = "NIFTY";
+  const und = getUnderlying(symbol);
+  const pack = chainForSymbol(symbol);
+  const hs = algo.hedgeState || {};
+  const ones = getCandles("1m");
+  const { reversal } = hedgeReversalFromBars(ones.length ? ones : getCandles("15m"));
+  const preview = hedgePreviewTrade({
+    reversal,
+    primarySide: hs.primarySide,
+    primaryStrike: hs.primaryStrike,
+    step: und.step,
+  });
+  const strike =
+    Number(preview.strike) || atmStrike(Number(pack?.meta?.spot) || getChainSpot(symbol), und.step);
+  const option = preview.option === "PE" ? "PE" : preview.option === "CE" ? "CE" : "";
+  const expiry =
+    nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+  const ceLtp = Number(row?.callLtp);
+  const peLtp = Number(row?.putLtp);
+  const liveChain = pack?.meta?.source === "dhan";
+  const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : 0;
+  const contract = option ? `${symbol} ${strike} ${option}` : preview.label || `${symbol} weekly ATM CE/PE`;
+  const weeklyReady =
+    !expiry || !pack?.meta?.expiry || normalizeExpiry(pack.meta.expiry) === normalizeExpiry(expiry);
+  let hint = preview.reason;
+  if (!liveChain) hint = [preview.reason, `Open Options on ${symbol} for live ATM CE/PE`].filter(Boolean).join(" · ");
+  else if (expiry && pack?.meta?.expiry && normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)) {
+    hint = [preview.reason, `Waiting for weekly ${expiry} chain (not monthly)`].filter(Boolean).join(" · ");
+  } else if (!row && strike) hint = [preview.reason, `No ${strike} ATM on the ${symbol} tape yet`].filter(Boolean).join(" · ");
+  else if (option && !(premium > 0)) hint = [preview.reason, "Waiting for live ATM option LTP"].filter(Boolean).join(" · ");
+  return {
+    kind: "option",
+    symbol: contract,
+    option,
+    strike,
+    expiry,
+    ltp: premium > 0 && weeklyReady ? round2(premium) : 0,
+    label: expiry ? `${contract} · ${expiry}` : contract,
+    source: pack?.meta?.source || "",
+    ready: liveChain && weeklyReady && (option ? premium > 0 : ceLtp > 0 || peLtp > 0),
+    hint,
+  };
+}
+
 export function resolveAlgoTrade(algo) {
+  if (isNiftyVwapHedgeAlgo(algo)) return resolveHedgeAlgoTrade(algo);
   if (isNiftyOptionEngineAlgo(algo)) {
     const symbol = "NIFTY";
     const und = getUnderlying(symbol);
     const pack = chainForSymbol(symbol);
     const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
     const vs = algo.vwapState || {};
+    const hs = algo.hedgeState || {};
     const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
-    const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
-    const expiry = isNiftyVwapReversalAlgo(algo)
-      ? nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
-      : pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+    const option =
+      vs.lockedOption === "PE" || hs.primarySide === "PE"
+        ? "PE"
+        : vs.lockedOption === "CE" || hs.primarySide === "CE"
+          ? "CE"
+          : "";
+    const expiry =
+      isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo)
+        ? nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
+        : pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
     const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
     const ceLtp = Number(row?.callLtp);
     const peLtp = Number(row?.putLtp);
@@ -570,13 +826,18 @@ export function resolveAlgoTrade(algo) {
     const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
-    else if (isNiftyVwapReversalAlgo(algo) && expiry && pack?.meta?.expiry && normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)) {
+    else if (
+      (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo)) &&
+      expiry &&
+      pack?.meta?.expiry &&
+      normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)
+    ) {
       hint = `Waiting for weekly ${expiry} chain (not monthly)`;
     } else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
     else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
     else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
     const weeklyReady =
-      !isNiftyVwapReversalAlgo(algo) ||
+      (!isNiftyVwapReversalAlgo(algo) && !isNiftyVwapHedgeAlgo(algo)) ||
       !expiry ||
       !pack?.meta?.expiry ||
       normalizeExpiry(pack.meta.expiry) === normalizeExpiry(expiry);
@@ -706,9 +967,11 @@ function isPaperRow(row) {
 function liveDesk() {
   const live = isDhanFeedLive();
   const keep = (row) => isPaperRow(row) || (Boolean(row?.live) && !row?.sim);
-  const orders = live ? state.orders.filter(keep) : state.orders;
-  const positions = live ? state.positions.filter(keep) : state.positions;
-  const closedTrades = live ? (state.closedTrades || []).filter(keep) : state.closedTrades || [];
+  const algos = state.algos || [];
+  const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });
+  const orders = (live ? state.orders.filter(keep) : state.orders).map(withActualName);
+  const positions = (live ? state.positions.filter(keep) : state.positions).map(withActualName);
+  const closedTrades = (live ? (state.closedTrades || []).filter(keep) : state.closedTrades || []).map(withActualName);
   return { live, orders, positions, closedTrades };
 }
 
@@ -810,7 +1073,7 @@ export function quoteSymbol(symbol) {
 
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\s+(\d{3,6})\s*(CE|PE)\b/);
+  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
   const option = named || raw.match(/(\d{3,6})\s*(CE|PE)\b/);
   if (option) {
     const strike = Number(named ? named[2] : option[1]);
@@ -819,8 +1082,9 @@ function liveLtpForSymbol(symbol) {
     const row = rows.find((item) => Number(item.strike) === strike);
     if (row) {
       const ltp = opt === "PE" ? Number(row.putLtp) : Number(row.callLtp);
-      if (ltp > 0) return round2(ltp);
+      if (isSaneOptionLtp(ltp)) return round2(ltp);
     }
+    return 0;
   }
   const indexName = relatedIndex(symbol);
   const index = indexName
@@ -858,14 +1122,41 @@ function syncPaperLedger() {
 }
 
 function markPaperToMarket() {
-  state.positions = (state.positions || []).map((row) => {
-    if (!isPaperRow(row)) return row;
-    const ltp = liveLtpForSymbol(row.symbol);
-    if (!(ltp > 0)) return row;
-    const dir = row.type === "BUY" ? 1 : -1;
-    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-  });
+  state.positions = (state.positions || []).map((row) =>
+    markContractToMarket(row, preferMarkLtp(row, liveLtpForSymbol(row.symbol))),
+  );
   syncPaperLedger();
+}
+
+export function deskMtm() {
+  markPaperToMarket();
+  const { positions } = liveDesk();
+  return {
+    positions: (positions || []).map((row) => ({
+      id: row.id,
+      symbol: row.symbol,
+      ltp: Number(row.ltp) || 0,
+      pnl: Number(row.pnl) || 0,
+      strategy: row.strategy || "",
+    })),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+let onLiveBookChange = null;
+export function onDhanBookChanged(fn) {
+  onLiveBookChange = typeof fn === "function" ? fn : null;
+}
+
+export function livePositionQuoteTargets() {
+  return (state.positions || [])
+    .filter((row) => row.securityId && (row.live || row.brokerId === "dhan") && !isPaperRow(row))
+    .map((row) => ({
+      symbol: row.symbol,
+      segment: String(row.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+      securityId: Number(row.securityId) || row.securityId,
+      kind: isOptionContract(row.symbol, row.option) ? "option" : "future",
+    }));
 }
 
 export function snapshot() {
@@ -927,6 +1218,39 @@ export function memberQuotes() {
   };
 }
 
+export function armNiftyVwapHedgeDailyLive(now = new Date()) {
+  const lastArmedYmd = loadHedgeDailyLiveArmedYmd();
+  const result = applyHedgeDailyLive(state.algos, {
+    now,
+    feedLive: isDhanFeedLive(),
+    lastArmedYmd,
+  });
+  if (result.reason === "dhan-not-live") {
+    console.log("NIFTY 15m VWAP hedge 09:30 arm skipped — Dhan is not LIVE");
+    return result;
+  }
+  if (result.lastArmedYmd && result.lastArmedYmd !== lastArmedYmd) {
+    saveHedgeDailyLiveArmedYmd(result.lastArmedYmd);
+  }
+  if (!result.armedIds.length) return result;
+  state.algos = result.algos;
+  for (const id of result.armedIds) {
+    const algo = state.algos.find((row) => row.id === id);
+    if (!algo) continue;
+    algo.lastPaperAt = 0;
+    algo.lastLiveAt = 0;
+    algo.lastLiveSide = "";
+    algo.lastSignal = "WAIT";
+    const hs = hedgeState(algo);
+    hs.inFlight = false;
+    hs.pendingRole = "";
+  }
+  persistAlgos();
+  state.notifications.unshift(`NIFTY 15m VWAP hedge · daily LIVE 09:30 IST · ${result.armedIds.join(",")}`);
+  console.log(`NIFTY 15m VWAP hedge armed LIVE at 09:30 IST · ${result.armedIds.join(",")}`);
+  return result;
+}
+
 export function toggleAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;
@@ -953,6 +1277,11 @@ export function toggleAlgo(id) {
       vs.inFlight = false;
       vs.exitQueued = false;
     }
+    if (isNiftyVwapHedgeAlgo(algo)) {
+      const hs = hedgeState(algo);
+      hs.inFlight = false;
+      hs.pendingRole = "";
+    }
   }
   if (algo.runMode === "paper") {
     algo.brokerId = "paper";
@@ -960,6 +1289,7 @@ export function toggleAlgo(id) {
   } else {
     algo.status = algo.enabled ? "LIVE" : "PAUSED";
   }
+  persistAlgos();
   return clone(algo);
 }
 
@@ -970,8 +1300,10 @@ export function createAlgo(payload) {
   algo.pnl = 0;
   algo.winRate = 0;
   if (algo.runMode === "paper" || algo.runMode === "backtest") algo.brokerId = "paper";
+  removedAlgoIds = removedAlgoIds.filter((item) => item !== String(algo.id));
   state.algos.unshift(algo);
   state.notifications.unshift(`Strategy added: ${algo.name} · ${algo.runMode || "live"}`);
+  persistAlgos();
   return clone(algo);
 }
 
@@ -982,6 +1314,7 @@ export function updateAlgo(id, payload) {
   next.id = id;
   state.algos[index] = next;
   state.notifications.unshift(`Strategy updated: ${next.name}`);
+  persistAlgos();
   return clone(next);
 }
 
@@ -989,7 +1322,9 @@ export function deleteAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Strategy not found" };
   state.algos = state.algos.filter((item) => item.id !== id);
+  removedAlgoIds = [...new Set([...removedAlgoIds, String(id)])];
   state.notifications.unshift(`Strategy deleted: ${algo.name}`);
+  persistAlgos();
   return { ok: true, id };
 }
 
@@ -1037,8 +1372,9 @@ export function backtestAlgo(id, options = {}) {
   if (!algo) return { error: "Strategy not found" };
   const window = resolveBacktestWindow(options);
   if (window.error) return { error: window.error };
-  const niftyVwap = isNiftyOptionEngineAlgo(algo);
-  const cfg = niftyVwap ? optionEngineConfig(algo) : null;
+  const hedge = isNiftyVwapHedgeAlgo(algo);
+  const niftyVwap = isNiftyOptionEngineAlgo(algo) || hedge;
+  const cfg = hedge ? niftyVwapHedgeConfig(algo) : niftyVwap ? optionEngineConfig(algo) : null;
   const maxVwapDays = cfg?.barMinutes >= 15 ? 60 : 25;
   const vwapFrom = niftyVwap && window.days > maxVwapDays ? shiftYmd(window.to, -(maxVwapDays - 1)) : window.from;
   const vwapFromMs = Date.parse(`${vwapFrom}T09:15:00+05:30`);
@@ -1067,7 +1403,9 @@ export function backtestAlgo(id, options = {}) {
   const usedTf = niftyVwap ? cfg.timeframe : inferTimeframe(candles, wantedTf);
   const result = {
     ...(niftyVwap
-      ? runNiftyVwapBacktest({ ...algo, vwapState: undefined }, candles)
+      ? hedge
+        ? runNiftyVwapHedgeBacktest({ ...algo, hedgeState: undefined }, candles)
+        : runNiftyVwapBacktest({ ...algo, vwapState: undefined }, candles)
       : runBacktest({ ...algo, timeframe: usedTf }, candles)),
     sample,
     source,
@@ -1098,6 +1436,10 @@ function runPaperAlgos() {
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "paper") continue;
+    if (isNiftyVwapHedgeAlgo(algo)) {
+      tickNiftyVwapHedgeAlgo(algo, "paper", feedLive);
+      continue;
+    }
     if (isNiftyOptionEngineAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "paper", feedLive);
       continue;
@@ -1142,6 +1484,10 @@ function runLiveAlgos() {
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;
+    if (isNiftyVwapHedgeAlgo(algo)) {
+      tickNiftyVwapHedgeAlgo(algo, "live", feedLive);
+      continue;
+    }
     if (isNiftyOptionEngineAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "live", feedLive);
       continue;
@@ -1189,6 +1535,36 @@ function mapLiveStatus(status) {
   return raw || "PENDING";
 }
 
+function liveRejectReason(live, fallback) {
+  const raw = live?.raw && typeof live.raw === "object" ? live.raw : {};
+  const data = raw.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? raw.data : {};
+  const remarks = typeof raw.remarks === "string" ? raw.remarks : raw.remarks?.error_message || "";
+  const text =
+    live?.reason ||
+    raw.omsErrorDescription ||
+    raw.errorMessage ||
+    raw.error_message ||
+    data.errorMessage ||
+    data.error_message ||
+    remarks;
+  const clean = String(text || "").trim();
+  return clean || fallback;
+}
+
+export function bookRejectedLiveOrder(payload, error) {
+  const live = error?.live;
+  if (!live?.orderId) return null;
+  return placeOrder({
+    ...payload,
+    brokerId: payload.brokerId || "dhan",
+    live: {
+      ...live,
+      status: live.status || "REJECTED",
+      reason: live.reason || error?.message,
+    },
+  });
+}
+
 export function placeOrder(payload) {
   const brokers = publicBrokers();
   const requested = String(payload.brokerId || brokers.activeBrokerId || "dhan");
@@ -1202,15 +1578,48 @@ export function placeOrder(payload) {
   if (isPaper && !isDhanFeedLive()) {
     return { error: "Paper fills use live prices. Connect Dhan LIVE first." };
   }
+  const stampedStrategy = strategyForPlacedOrder(payload, state.algos || []);
+  const correlationId = String(payload.correlationId || live?.correlationId || "").trim();
   if (live?.orderId) {
     const existing = state.orders.find((row) => String(row.id) === String(live.orderId));
-    if (existing) return existing;
+    if (existing) {
+      const name = resolveOrderStrategy(
+        {
+          ...existing,
+          ...payload,
+          id: existing.id,
+          strategy: stampedStrategy || payload.strategy || existing.strategy,
+          correlationId: correlationId || existing.correlationId,
+        },
+        { previous: state.orders || [], algos: state.algos || [], positions: state.positions || [] },
+      );
+      if (name) {
+        existing.strategy = name;
+        rememberOrderStrategy({ ...existing, correlationId: correlationId || existing.correlationId }, name);
+      }
+      if (correlationId) existing.correlationId = correlationId;
+      const status = mapLiveStatus(live.status);
+      if (status) existing.status = status;
+      const fill = dhanOrderFillPrice(live);
+      if (fill > 0) existing.price = fill;
+      const filledQty = Number(live.filledQty || 0);
+      if (filledQty > 0) existing.filledQty = filledQty;
+      if (live.reason || live.raw) existing.reason = liveRejectReason(live, existing.reason);
+      return existing;
+    }
   }
   const type = String(payload.type || "MARKET").toUpperCase();
   const qty = Number(payload.qty) || 65;
   const demoDhan = brokerId === "dhan" && !live;
-  const livePrice = isPaper ? liveLtpForSymbol(payload.symbol) : 0;
-  const price = Number(livePrice || payload.price) || 0;
+  const ltp = liveLtpForSymbol(payload.symbol);
+  const price = resolveLiveBookPrice({
+    type,
+    payloadPrice: payload.price,
+    livePrice: dhanOrderFillPrice(live || {}),
+    isPaper,
+    isLive: Boolean(live),
+    ltp,
+  });
   if (isPaper && !(price > 0)) {
     return { error: "No live LTP for that contract yet. Wait for the Dhan feed." };
   }
@@ -1224,8 +1633,21 @@ export function placeOrder(payload) {
     product: payload.product || "MIS",
     type,
     status,
-    price: price || Number(payload.price) || 0,
-    strategy: String(payload.strategy || ""),
+    price,
+    strategy:
+      resolveOrderStrategy(
+        {
+          ...payload,
+          id: live?.orderId,
+          strategy: stampedStrategy || payload.strategy,
+          securityId: payload.securityId || live?.securityId,
+          symbol: payload.symbol,
+          side: payload.side,
+          correlationId,
+        },
+        { previous: state.orders || [], algos: state.algos || [], positions: state.positions || [] },
+      ) || stampedStrategy || realStrategyName(payload.strategy),
+    correlationId,
     brokerId,
     brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
     live: Boolean(live),
@@ -1233,7 +1655,7 @@ export function placeOrder(payload) {
     paper: isPaper,
     securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
     reason: live
-      ? `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`
+      ? liveRejectReason(live, `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`)
       : demoDhan
         ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
         : brokerId === "paper"
@@ -1253,6 +1675,10 @@ export function placeOrder(payload) {
       pnl: 0,
       product: order.product,
       strategy: order.strategy,
+      option: payload.option || PositionManager.niftyOptionLeg(payload)?.option || "",
+      strike: payload.strike || PositionManager.niftyOptionLeg(payload)?.strike || 0,
+      expiry: payload.expiry || "",
+      role: payload.role || "",
       brokerId,
       openedAt: order.createdAt,
       sim: !isPaper,
@@ -1260,12 +1686,14 @@ export function placeOrder(payload) {
       paper: isPaper,
     });
   }
+  if (order.strategy) rememberOrderStrategy(order, order.strategy);
+  const strategyNote = order.strategy ? ` · ${order.strategy}` : "";
   state.notifications.unshift(
     live
-      ? `Dhan ${order.status}: ${order.side} ${order.symbol}`
+      ? `Dhan ${order.status}: ${order.side} ${order.symbol}${strategyNote}`
       : demoDhan
-        ? `Desk demo ${order.status}: ${order.side} ${order.symbol} (not sent to Dhan)`
-        : `${account.name} ${order.status}: ${order.side} ${order.symbol}`,
+        ? `Desk demo ${order.status}: ${order.side} ${order.symbol}${strategyNote} (not sent to Dhan)`
+        : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
   );
   if (isPaper) markPaperToMarket();
   return order;
@@ -1304,7 +1732,12 @@ export function squareOff(id) {
     type: "MARKET",
     status: "FILLED",
     price: exit,
-    strategy: pos.strategy || "",
+    strategy:
+      resolveOrderStrategy(pos, {
+        previous: state.orders || [],
+        algos: state.algos || [],
+        positions: state.positions || [],
+      }) || realStrategyName(pos.strategy),
     brokerId: account.id,
     brokerName: account.name,
     sim: !pos.paper,
@@ -1313,6 +1746,7 @@ export function squareOff(id) {
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
+  if (order.strategy) rememberOrderStrategy(order, order.strategy);
   if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
   state.closedTrades.unshift({
     id: `t${Date.now()}`,
@@ -1323,7 +1757,7 @@ export function squareOff(id) {
     exit,
     pnl,
     product: pos.product || "MIS",
-    strategy: pos.strategy || "",
+    strategy: order.strategy,
     brokerId: account.id,
     closedAt: order.createdAt,
     sim: !pos.paper,
@@ -1338,8 +1772,25 @@ export function squareOff(id) {
 
 export function replaceDhanOrders(rows) {
   const incoming = Array.isArray(rows) ? rows : [];
-  const others = state.orders.filter((row) => row.brokerId !== "dhan");
-  state.orders = [...incoming, ...others];
+  const previous = state.orders || [];
+  const previousDhan = new Map(
+    previous.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]),
+  );
+  const tagged = incoming.map((row) => {
+    const existing = previousDhan.get(String(row.id));
+    return {
+      ...row,
+      price: mergeDhanOrderPrice(row, existing),
+      filledQty: Number(row.filledQty || existing?.filledQty || 0),
+      strategy: resolveOrderStrategy(row, {
+        previous,
+        algos: state.algos || [],
+        positions: state.positions || [],
+      }),
+    };
+  });
+  const others = previous.filter((row) => row.brokerId !== "dhan");
+  state.orders = [...tagged, ...others];
 }
 
 export function assignAlgoBroker(id, brokerId) {
@@ -1349,9 +1800,11 @@ export function assignAlgoBroker(id, brokerId) {
   if (!algo) return { error: "Algo not found" };
   if (algo.runMode === "paper" || algo.runMode === "backtest") {
     algo.brokerId = "paper";
+    persistAlgos();
     return clone(algo);
   }
   algo.brokerId = brokerId;
+  persistAlgos();
   return clone(algo);
 }
 
@@ -1366,12 +1819,48 @@ export function applyBrokerPositions(positions, brokerId) {
 export function dropBrokerPositions(brokerId) {
   state.positions = state.positions.filter((row) => row.brokerId !== brokerId);
   state.algos = state.algos.map((algo) => (algo.brokerId === brokerId ? { ...algo, brokerId: "dhan", enabled: false, status: "PAUSED" } : algo));
+  persistAlgos();
 }
 
 export function replaceDhanBook(rows) {
-  const incoming = Array.isArray(rows) ? rows : [];
+  const incoming = (Array.isArray(rows) ? rows : []).map((row) => {
+    const leg = PositionManager.niftyOptionLeg(row);
+    const next = {
+      ...row,
+      option: row.option || leg?.option || "",
+      strike: row.strike || leg?.strike || 0,
+    };
+    next.strategy = resolveOrderStrategy(next, {
+      previous: state.positions || [],
+      algos: state.algos || [],
+      positions: state.positions || [],
+      orders: state.orders || [],
+      forPosition: true,
+    });
+    for (const algo of state.algos || []) {
+      if (!isNiftyVwapHedgeAlgo(algo) || next.strategy !== algo.name) continue;
+      const hs = algo.hedgeState || {};
+      if (next.role) break;
+      if (hs.pendingRole) next.role = hs.pendingRole;
+      else if (hs.hedgeSide && next.option === hs.hedgeSide) next.role = "hedge";
+      else if (hs.primarySide && next.option === hs.primarySide) next.role = "primary";
+      break;
+    }
+    return next;
+  });
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
-  state.positions = [...incoming, ...others];
+  const previousDhan = new Map(state.positions.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]));
+  state.positions = [
+    ...incoming.map((row) => {
+      const prev = previousDhan.get(String(row.id));
+      if (prev?.ticked && isSaneOptionLtp(prev.ltp, row.avg)) {
+        return { ...row, ltp: prev.ltp, pnl: prev.pnl, ticked: true };
+      }
+      return row;
+    }),
+    ...others,
+  ];
+  if (typeof onLiveBookChange === "function") onLiveBookChange();
 }
 
 export function setLiveCandles(candles) {
@@ -1564,7 +2053,16 @@ export function applyLiveQuotes(quotes) {
       continue;
     }
     if (!Number.isFinite(ltp) || ltp <= 0) continue;
-    if (index) {
+    if (quote.kind === "option") {
+      const parsed = parseOptionContract(quote.symbol);
+      const chainRow = parsed
+        ? (state.optionChain || []).find((item) => Number(item.strike) === parsed.strike)
+        : null;
+      if (chainRow) {
+        if (parsed.option === "PE") chainRow.putLtp = round2(ltp);
+        else chainRow.callLtp = round2(ltp);
+      }
+    } else if (index) {
       const day = dayChange(index, quote, ltp);
       const vwap = Number(quote.vwap);
       index.price = round2(ltp);
@@ -1609,25 +2107,35 @@ export function applyLiveQuotes(quotes) {
     }
   }
 
-  if (!state.dhanFeed.live) {
-    state.positions = state.positions.map((row) => {
-      const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
-      if (equity) {
-        const ltp = round2(equity.ltp);
-        const dir = row.type === "BUY" ? 1 : -1;
-        return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-      }
-      const indexName = relatedIndex(row.symbol);
-      if (!indexName || !indexPrev[indexName]) return row;
-      const nextIndex = state.indices.find((item) => item.symbol === indexName);
-      if (!nextIndex) return row;
-      const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
-      if (!Number.isFinite(movePct) || movePct === 0) return row;
-      const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
+  state.positions = state.positions.map((row) => {
+    const match = quotes.find(
+      (quote) =>
+        (quote.symbol && quote.symbol === row.symbol) ||
+        (quote.securityId && row.securityId && String(quote.securityId) === String(row.securityId)),
+    );
+    if (match && Number(match.ltp) > 0) {
+      const ltp = round2(match.ltp);
+      if (isOptionContract(row.symbol, row.option) && !isSaneOptionLtp(ltp, row.avg)) return row;
+      const dir = row.type === "BUY" ? 1 : -1;
+      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir), ticked: true };
+    }
+    if (state.dhanFeed.live) return row;
+    const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
+    if (equity) {
+      const ltp = round2(equity.ltp);
       const dir = row.type === "BUY" ? 1 : -1;
       return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-    });
-  }
+    }
+    const indexName = relatedIndex(row.symbol);
+    if (!indexName || !indexPrev[indexName]) return row;
+    const nextIndex = state.indices.find((item) => item.symbol === indexName);
+    if (!nextIndex) return row;
+    const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
+    if (!Number.isFinite(movePct) || movePct === 0) return row;
+    const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
+    const dir = row.type === "BUY" ? 1 : -1;
+    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+  });
 
   const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
   if (nifty && indexPrev["NIFTY 50"] && state.optionMeta?.source !== "dhan") {
@@ -1646,22 +2154,9 @@ export function applyLiveQuotes(quotes) {
 export function getCandles(tf = "5m") {
   if (state.dhanFeed.live) {
     if (!state.liveCandles.length) return [];
-    const step = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" ? 60 : 5;
-    if (step <= 1) return clone(state.liveCandles);
-    const grouped = [];
-    for (let i = 0; i < state.liveCandles.length; i += step) {
-      const slice = state.liveCandles.slice(i, i + step);
-      if (!slice.length) continue;
-      grouped.push({
-        time: slice[0].time,
-        open: slice[0].open,
-        high: Math.max(...slice.map((row) => row.high)),
-        low: Math.min(...slice.map((row) => row.low)),
-        close: slice[slice.length - 1].close,
-        volume: slice.reduce((sum, row) => sum + row.volume, 0),
-      });
-    }
-    return grouped;
+    const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+    if (minutes <= 1) return clone(state.liveCandles);
+    return VwapSignalEngine.aggregateSessionBars(state.liveCandles, minutes);
   }
   const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
   return generateCandles(count, 24420, tf.length * 17);

@@ -42,10 +42,94 @@ function persist() {
   writeStore(store);
 }
 
+const SIZING_KINDS = ["multiplier", "lots", "fixed"];
+const TRADE_MODES = ["paper", "real"];
+const SUBSCRIPTION_MODES = ["copy", "strategy", "both"];
+
+export const DEFAULT_CLIENT_GROUPS = [
+  "ALICE TESTING",
+  "ANGEL TESTING",
+  "Cash Market",
+  "DHAN TESTING",
+  "F&O",
+  "KITE TESTING",
+  "KOTAK TESTING",
+  "SHAREKHAN TESTING",
+  "UPSTOX TESTING",
+];
+
+export const CLIENT_BROKERS = [
+  { id: "dhan", name: "DHAN", color: "#0f9d58", segments: ["All segments", "EQ", "F&O"] },
+  { id: "upstox", name: "UPSTOX", color: "#5b2d8e", segments: ["All segments", "UPSTOX"] },
+  { id: "zerodha", name: "ZERODHA", color: "#f6461a", segments: ["All segments", "EQ", "F&O"] },
+  { id: "kotak", name: "KOTAK", color: "#0033a0", segments: ["All segments", "EQ", "F&O"] },
+  { id: "angelone", name: "ANGELONE", color: "#c2410c", segments: ["All segments", "EQ", "F&O"] },
+  { id: "aliceblue", name: "ALICEBLUE", color: "#1d4ed8", segments: ["All segments", "EQ", "F&O"] },
+  { id: "sharekhan", name: "SHAREKHAN", color: "#0f766e", segments: ["All segments", "EQ", "F&O"] },
+  { id: "fyers", name: "FYERS", color: "#111827", segments: ["All segments", "EQ", "F&O"] },
+  { id: "paper", name: "PAPER", color: "#2f54eb", segments: ["All segments"] },
+];
+
+function knownBroker(id) {
+  return CLIENT_BROKERS.some((row) => row.id === id) || catalog.some((row) => row.id === id);
+}
+
+function maskSecret(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.length <= 8) return "••••";
+  return `${raw.slice(0, 2)}••••${raw.slice(-2)}`;
+}
+
+function asGroups(value, fallback = "ALL") {
+  const rows = Array.isArray(value)
+    ? value
+    : String(value || fallback)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+  const unique = [...new Set(rows.map((item) => String(item).trim()).filter(Boolean))];
+  return unique.length ? unique : fallback ? [fallback] : [];
+}
+
+function asSegments(value) {
+  const rows = Array.isArray(value) ? value : String(value || "All segments").split(",");
+  const unique = [...new Set(rows.map((item) => String(item).trim()).filter(Boolean))];
+  return unique.length ? unique : ["All segments"];
+}
+
+function asNotifications(value = {}) {
+  return {
+    instantAlerts: value.instantAlerts !== false,
+    eveningPnl: Boolean(value.eveningPnl),
+    whatsapp: value.whatsapp !== false,
+    telegram: Boolean(value.telegram),
+  };
+}
+
+export function defaultSubscriptionUntil(from = new Date()) {
+  return new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function emptyDesk(userId) {
   return {
     userId,
     brokerId: "paper",
+    group: "ALL",
+    groups: ["ALL"],
+    sizingKind: "multiplier",
+    sizingValue: 1,
+    tradeMode: "paper",
+    copy: false,
+    staticIp: "",
+    accountId: "",
+    subscriptionMode: "copy",
+    subscriptionUntil: "",
+    mappedStrategy: "",
+    segments: ["All segments"],
+    notifications: asNotifications(),
+    brokerToken: "",
+    notes: "",
     wallet: { balance: 0, updatedAt: new Date().toISOString() },
     topups: [],
     positions: [],
@@ -53,6 +137,172 @@ function emptyDesk(userId) {
     orders: [],
     seededPlans: [],
   };
+}
+
+export function isStaticIp(value) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.toLowerCase() === "default") return true;
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(raw)) {
+    return raw.split(".").every((part) => {
+      const n = Number(part);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  }
+  if (raw.includes(":") && /^[0-9a-fA-F:]+$/.test(raw) && raw.length <= 45) return true;
+  return false;
+}
+
+export function normalizeClientSettings(desk = {}) {
+  const sizingKind = SIZING_KINDS.includes(desk.sizingKind) ? desk.sizingKind : "multiplier";
+  const rawSize = Number(desk.sizingValue);
+  const sizingValue = Number.isFinite(rawSize) ? Math.min(100, Math.max(0.1, rawSize)) : 1;
+  const tradeMode = desk.tradeMode === "real" ? "real" : "paper";
+  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  const subscriptionMode = SUBSCRIPTION_MODES.includes(desk.subscriptionMode) ? desk.subscriptionMode : "copy";
+  const groups = asGroups(desk.groups || desk.group);
+  return {
+    group: groups[0] || "ALL",
+    groups,
+    sizingKind,
+    sizingValue,
+    tradeMode,
+    copy: Boolean(desk.copy),
+    staticIp: String(desk.staticIp || "").trim(),
+    accountId: String(desk.accountId || "").trim(),
+    brokerId,
+    subscriptionMode,
+    subscriptionUntil: String(desk.subscriptionUntil || "").trim(),
+    mappedStrategy: String(desk.mappedStrategy || "").trim(),
+    segments: asSegments(desk.segments),
+    notifications: asNotifications(desk.notifications),
+    tokenHint: maskSecret(desk.brokerToken),
+    notes: String(desk.notes || "").trim(),
+    margin: round2(desk.wallet?.balance || 0),
+  };
+}
+
+export function peekClientSettings(userId) {
+  const desk = store[userId];
+  if (!desk) return normalizeClientSettings({ brokerId: "paper", wallet: { balance: 0 } });
+  return normalizeClientSettings(desk);
+}
+
+export function peekClientBook(userId) {
+  const desk = store[userId];
+  if (!desk) {
+    return { positions: [], closedTrades: [], tradeMode: "paper", segments: ["All segments"], brokerId: "paper" };
+  }
+  return {
+    positions: Array.isArray(desk.positions) ? desk.positions : [],
+    closedTrades: Array.isArray(desk.closedTrades) ? desk.closedTrades : [],
+    tradeMode: desk.tradeMode === "real" ? "real" : "paper",
+    segments: asSegments(desk.segments),
+    brokerId: desk.brokerId || "paper",
+  };
+}
+
+export function saveClientSettings(userId, patch = {}) {
+  if (!userId) throw fail("Client required.");
+  const desk = loadDesk(userId);
+  if (patch.group != null || patch.groups != null) {
+    const groups = asGroups(patch.groups != null ? patch.groups : patch.group);
+    desk.groups = groups;
+    desk.group = groups[0] || "ALL";
+  }
+  if (patch.sizingKind != null) {
+    const kind = String(patch.sizingKind || "").trim().toLowerCase();
+    if (!SIZING_KINDS.includes(kind)) throw fail("Order sizing must be Multiplier, Lots, or Fixed.");
+    desk.sizingKind = kind;
+  }
+  if (patch.sizingValue != null) {
+    const n = Number(patch.sizingValue);
+    if (!Number.isFinite(n) || n < 0.1 || n > 100) throw fail("Order size must be between 0.1 and 100.");
+    desk.sizingValue = n;
+  }
+  if (patch.tradeMode != null) {
+    const mode = String(patch.tradeMode || "").trim().toLowerCase();
+    if (!TRADE_MODES.includes(mode)) throw fail("Mode must be PAPER or REAL.");
+    desk.tradeMode = mode;
+  }
+  if (patch.copy != null) desk.copy = Boolean(patch.copy);
+  if (patch.staticIp != null) {
+    const ip = String(patch.staticIp || "").trim();
+    if (!isStaticIp(ip)) throw fail("Enter an IPv4 or IPv6 address, or leave Default.");
+    const nextIp = ip.toLowerCase() === "default" ? "" : ip;
+    if (nextIp) {
+      const broker = String(patch.brokerId || desk.brokerId || "");
+      const taken = assignedEgressIps(broker, userId);
+      if (taken.includes(nextIp)) throw fail("That egress IP is already assigned to another account on this broker.");
+    }
+    desk.staticIp = nextIp;
+  }
+  if (patch.accountId != null) desk.accountId = String(patch.accountId || "").trim();
+  if (patch.brokerId != null) {
+    const id = String(patch.brokerId || "").trim().toLowerCase();
+    if (!knownBroker(id)) throw fail("Unknown broker.");
+    desk.brokerId = id;
+  }
+  if (patch.subscriptionMode != null) {
+    const mode = String(patch.subscriptionMode || "").trim().toLowerCase();
+    if (!SUBSCRIPTION_MODES.includes(mode)) throw fail("Subscription must be Copy Master, mapped strategies, or both.");
+    desk.subscriptionMode = mode;
+  }
+  if (patch.subscriptionUntil != null) {
+    const until = String(patch.subscriptionUntil || "").trim();
+    if (until && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw fail("Use a valid through date (YYYY-MM-DD).");
+    desk.subscriptionUntil = until;
+  }
+  if (patch.mappedStrategy != null) desk.mappedStrategy = String(patch.mappedStrategy || "").trim();
+  if (patch.segments != null) desk.segments = asSegments(patch.segments);
+  if (patch.notifications != null && typeof patch.notifications === "object") {
+    desk.notifications = asNotifications({ ...asNotifications(desk.notifications), ...patch.notifications });
+  }
+  if (patch.brokerToken != null && String(patch.brokerToken).trim()) {
+    desk.brokerToken = String(patch.brokerToken).trim();
+  }
+  if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
+  persist();
+  return normalizeClientSettings(desk);
+}
+
+export function assignedEgressIps(brokerId, exceptUserId = "") {
+  const broker = String(brokerId || "").trim();
+  const taken = [];
+  for (const [id, desk] of Object.entries(store)) {
+    if (id === exceptUserId) continue;
+    if (String(desk?.brokerId || "") !== broker) continue;
+    const ip = String(desk?.staticIp || "").trim();
+    if (ip) taken.push(ip);
+  }
+  return taken;
+}
+
+export function knownEgressIps(exceptUserId = "") {
+  const rows = [];
+  for (const [id, desk] of Object.entries(store)) {
+    if (id === exceptUserId) continue;
+    const ip = String(desk?.staticIp || "").trim();
+    if (ip && !rows.includes(ip)) rows.push(ip);
+  }
+  return rows;
+}
+
+export function listClientGroups() {
+  const groups = new Set(DEFAULT_CLIENT_GROUPS);
+  groups.add("ALL");
+  for (const desk of Object.values(store)) {
+    for (const name of asGroups(desk?.groups || desk?.group, "")) {
+      if (name) groups.add(name);
+    }
+  }
+  return [...groups];
+}
+
+export function removeDesk(userId) {
+  if (!userId || !store[userId]) return false;
+  delete store[userId];
+  persist();
+  return true;
 }
 
 function loadDesk(userId) {

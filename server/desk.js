@@ -1,3 +1,5 @@
+import { resolveOrderStrategy } from "./orderStrategy.js";
+
 function round2(value) {
   return Number((Number(value) || 0).toFixed(2));
 }
@@ -23,7 +25,7 @@ export function seedOrders() {
       product: "MIS",
       type: "MARKET",
       status: "FILLED",
-      strategy: "VWAP Depth",
+      strategy: "NIFTY VWAP ATM",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 16, 41),
@@ -38,7 +40,7 @@ export function seedOrders() {
       product: "MIS",
       type: "MARKET",
       status: "FILLED",
-      strategy: "Mean Revert",
+      strategy: "NIFTY 15m VWAP reversal",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 21, 2),
@@ -53,7 +55,7 @@ export function seedOrders() {
       product: "MIS",
       type: "LIMIT",
       status: "FILLED",
-      strategy: "ORB Breakout",
+      strategy: "NIFTY 15m VWAP hedge",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 12, 8),
@@ -68,7 +70,7 @@ export function seedOrders() {
       product: "MIS",
       type: "MARKET",
       status: "FILLED",
-      strategy: "Momentum Rider",
+      strategy: "NIFTY 15m VWAP reversal",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 16, 41),
@@ -83,7 +85,7 @@ export function seedOrders() {
       product: "MIS",
       type: "MARKET",
       status: "FILLED",
-      strategy: "VWAP Depth",
+      strategy: "NIFTY VWAP ATM",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 28, 14),
@@ -98,7 +100,7 @@ export function seedOrders() {
       product: "MIS",
       type: "MARKET",
       status: "FILLED",
-      strategy: "Mean Revert",
+      strategy: "NIFTY 15m VWAP reversal",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 8, 55),
@@ -113,7 +115,7 @@ export function seedOrders() {
       product: "MIS",
       type: "LIMIT",
       status: "PENDING",
-      strategy: "VWAP Depth",
+      strategy: "NIFTY VWAP ATM",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 10, 42, 18),
@@ -128,7 +130,7 @@ export function seedOrders() {
       product: "MIS",
       type: "MARKET",
       status: "REJECTED",
-      strategy: "Momentum Rider",
+      strategy: "NIFTY 15m VWAP hedge",
       brokerId: "dhan",
       brokerName: "Dhan",
       reason: "Insufficient margin",
@@ -144,7 +146,7 @@ export function seedOrders() {
       product: "MIS",
       type: "LIMIT",
       status: "CANCELLED",
-      strategy: "ORB Breakout",
+      strategy: "NIFTY 15m VWAP hedge",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 9, 44, 22),
@@ -159,7 +161,7 @@ export function seedOrders() {
       product: "MIS",
       type: "LIMIT",
       status: "PARTIAL",
-      strategy: "Momentum Rider",
+      strategy: "NIFTY 15m VWAP reversal",
       brokerId: "dhan",
       brokerName: "Dhan",
       createdAt: istIso(18, 11, 5, 11),
@@ -189,7 +191,7 @@ export function seedClosedTrades() {
       exit: 141.6,
       pnl: 1521.0,
       product: "MIS",
-      strategy: "VWAP Depth",
+      strategy: "NIFTY VWAP ATM",
       brokerId: "dhan",
       closedAt: istIso(18, 10, 5, 12),
     },
@@ -202,7 +204,7 @@ export function seedClosedTrades() {
       exit: 198.1,
       pnl: 369.0,
       product: "MIS",
-      strategy: "Mean Revert",
+      strategy: "NIFTY 15m VWAP reversal",
       brokerId: "dhan",
       closedAt: istIso(18, 10, 22, 40),
     },
@@ -215,7 +217,7 @@ export function seedClosedTrades() {
       exit: 48.1,
       pnl: -929.5,
       product: "MIS",
-      strategy: "ORB Breakout",
+      strategy: "NIFTY 15m VWAP hedge",
       brokerId: "dhan",
       closedAt: istIso(17, 14, 58, 3),
     },
@@ -228,7 +230,7 @@ export function seedClosedTrades() {
       exit: 104.5,
       pnl: 990.0,
       product: "MIS",
-      strategy: "Momentum Rider",
+      strategy: "NIFTY VWAP ATM",
       brokerId: "dhan",
       closedAt: istIso(17, 13, 12, 9),
     },
@@ -241,7 +243,7 @@ export function seedClosedTrades() {
       exit: 132.4,
       pnl: -472.0,
       product: "MIS",
-      strategy: "VWAP Depth",
+      strategy: "NIFTY VWAP ATM",
       brokerId: "dhan",
       closedAt: istIso(16, 15, 4, 51),
     },
@@ -250,12 +252,12 @@ export function seedClosedTrades() {
 
 export function enrichPositions(rows) {
   const meta = {
-    p1: { product: "MIS", strategy: "VWAP Depth", openedAt: istIso(18, 9, 16, 41) },
-    p2: { product: "MIS", strategy: "Mean Revert", openedAt: istIso(18, 9, 21, 2) },
-    p3: { product: "MIS", strategy: "ORB Breakout", openedAt: istIso(18, 9, 12, 8) },
-    p4: { product: "MIS", strategy: "Momentum Rider", openedAt: istIso(18, 9, 16, 41) },
-    p5: { product: "MIS", strategy: "VWAP Depth", openedAt: istIso(18, 9, 28, 14) },
-    p6: { product: "MIS", strategy: "Mean Revert", openedAt: istIso(18, 9, 8, 55) },
+    p1: { product: "MIS", strategy: "NIFTY VWAP ATM", openedAt: istIso(18, 9, 16, 41) },
+    p2: { product: "MIS", strategy: "NIFTY 15m VWAP reversal", openedAt: istIso(18, 9, 21, 2) },
+    p3: { product: "MIS", strategy: "NIFTY 15m VWAP hedge", openedAt: istIso(18, 9, 12, 8) },
+    p4: { product: "MIS", strategy: "NIFTY VWAP ATM", openedAt: istIso(18, 9, 16, 41) },
+    p5: { product: "MIS", strategy: "NIFTY 15m VWAP reversal", openedAt: istIso(18, 9, 28, 14) },
+    p6: { product: "MIS", strategy: "NIFTY 15m VWAP hedge", openedAt: istIso(18, 9, 8, 55) },
   };
   return rows.map((row) => ({
     product: "MIS",
@@ -301,8 +303,13 @@ export function buildReport(state) {
   const byStrategy = {};
   const bySymbol = {};
   for (const row of closed) {
+    const name = resolveOrderStrategy(row, {
+      algos: state.algos || [],
+      positions: state.positions || [],
+      previous: state.orders || [],
+    });
     pushGroup(byBroker, row.brokerId || "dhan", { id: row.brokerId || "dhan", pnl: row.pnl });
-    pushGroup(byStrategy, row.strategy || "Manual", { name: row.strategy || "Manual", pnl: row.pnl });
+    if (name) pushGroup(byStrategy, name, { name, pnl: row.pnl });
     pushGroup(bySymbol, row.symbol, { symbol: row.symbol, pnl: row.pnl });
   }
   for (const row of positions) {

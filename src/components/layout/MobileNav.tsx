@@ -46,7 +46,7 @@ const moreItems: Array<{ to: string; label: string; icon: LucideIcon; admin?: bo
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
   { to: "/users", label: "Users", icon: User, admin: true },
   { to: "/notifications", label: "Alerts", icon: Bell, admin: true },
-  { to: "/chat", label: "Chat", icon: MessageSquare, admin: true },
+  { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User },
   { to: "/settings", label: "Settings", icon: Settings, admin: true },
 ];

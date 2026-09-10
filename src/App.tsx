@@ -24,16 +24,22 @@ import { Subscriptions } from "./pages/Subscriptions";
 import { UserHome } from "./pages/UserHome";
 import { Users } from "./pages/Users";
 
+function PageLoading({ label }: { label: string }) {
+  return <div className="p-8 text-sm text-slate-400">{label}</div>;
+}
+
 function Guard({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
+  const { user, ready } = useAuth();
+  if (user) return children;
+  if (!ready) return <PageLoading label="Loading desk…" />;
+  return <Navigate to="/login" replace />;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  if (!isAdminUser(user)) return <Navigate to="/" replace />;
-  return children;
+  const { user, ready } = useAuth();
+  if (isAdminUser(user)) return children;
+  if (!ready) return <PageLoading label="Loading…" />;
+  return <Navigate to="/" replace />;
 }
 
 function RoleHome() {

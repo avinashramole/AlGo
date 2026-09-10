@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
+const SESSIONS_FILE = process.env.T2S_SESSIONS_FILE || path.join(__dirname, "data", "sessions.json");
 const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
@@ -34,7 +35,38 @@ const SEED_USERS = [
 const DEFAULT_ADMIN_EMAILS = ["demo@t2s.app", "avinash.ramole86@gmail.com"];
 
 const otps = new Map();
-const sessions = new Map();
+const sessions = loadSessions();
+
+function loadSessions() {
+  try {
+    const row = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
+    const map = new Map();
+    if (!row || typeof row !== "object" || Array.isArray(row)) return map;
+    for (const [token, value] of Object.entries(row)) {
+      if (!token || !value || typeof value !== "object") continue;
+      const userId = String(value.userId || "").trim();
+      if (!userId) continue;
+      map.set(token, {
+        userId,
+        email: String(value.email || ""),
+        mobile: String(value.mobile || ""),
+        at: Number(value.at) || Date.now(),
+      });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function persistSessions() {
+  try {
+    fs.mkdirSync(path.dirname(SESSIONS_FILE), { recursive: true });
+    fs.writeFileSync(SESSIONS_FILE, `${JSON.stringify(Object.fromEntries(sessions), null, 2)}\n`);
+  } catch (error) {
+    console.log(`Could not save sign-in sessions: ${error.message || error}`);
+  }
+}
 
 function now() {
   return Date.now();
@@ -260,6 +292,7 @@ function issueSession(user) {
   user.createdAt = user.createdAt || at;
   persist();
   sessions.set(token, { userId: user.id, email: user.email, mobile: user.mobile, at: now() });
+  persistSessions();
   return { token, user: publicUser(user) };
 }
 
@@ -594,23 +627,119 @@ export function listPublicUsers() {
     });
 }
 
+export function getPublicUser(id) {
+  store = loadUsers();
+  const user = store.byId.get(String(id || "").trim());
+  return user ? publicUser(user) : null;
+}
+
+export function adminUpdateUser(id, patch = {}) {
+  store = loadUsers();
+  const user = store.byId.get(String(id || "").trim());
+  if (!user) throw fail("Client not found.", 404);
+  if (patch.name != null) {
+    const name = String(patch.name || "").trim();
+    if (name.length < 2) throw fail("Enter the client name.");
+    user.name = name;
+  }
+  if (patch.mobile != null) {
+    const mobile = normalizeMobile(patch.mobile);
+    if (mobile && !isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile, or leave it blank.");
+    if (mobile) {
+      const taken = store.byMobile.get(mobile);
+      if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+    }
+    user.mobile = mobile;
+  }
+  persist();
+  return publicUser(user);
+}
+
+export function deleteRegisteredUser(id, { actorId } = {}) {
+  store = loadUsers();
+  const userId = String(id || "").trim();
+  const user = store.byId.get(userId);
+  if (!user) throw fail("Client not found.", 404);
+  if (userId === actorId) throw fail("You cannot delete the signed-in account.");
+  if (userId === "avinash" || userId === "segin") throw fail("The desk admin accounts cannot be deleted.");
+  if (resolveUserRole(user) === "admin") throw fail("Delete a member from All clients, not an admin.");
+  store.users = store.users.filter((row) => row.id !== userId);
+  persist();
+  for (const [token, session] of [...sessions.entries()]) {
+    if (session.userId === userId) sessions.delete(token);
+  }
+  persistSessions();
+  return { ok: true, id: userId };
+}
+
+export const INITIAL_CLIENT_PASSWORD = "1234";
+
+export function adminCreateMember(patch = {}) {
+  store = loadUsers();
+  const name = String(patch.name || "").trim();
+  if (name.length < 2) throw fail("Enter the client name.");
+  const mobile = normalizeMobile(patch.mobile);
+  if (!isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile. That number is the client portal login.");
+  const email = normalizeEmail(patch.email);
+  if (email && !email.includes("@")) throw fail("Enter a valid email, or leave it blank.");
+  if (email && store.byEmail.get(email)) throw fail("That email is already on another account.");
+  if (store.byMobile.get(mobile)) throw fail("That mobile is already on another account.");
+  const nowIso = new Date().toISOString();
+  const user = {
+    id: `u${crypto.randomBytes(6).toString("hex")}`,
+    name,
+    email,
+    mobile,
+    desk: "Index Options",
+    role: "user",
+    authProvider: "password",
+    createdAt: nowIso,
+    password: hashPassword(INITIAL_CLIENT_PASSWORD),
+  };
+  store.users.push(user);
+  persist();
+  return publicUser(user);
+}
+
 export function googleOAuthConfigured(env = process.env) {
   return Boolean(String(env.GOOGLE_CLIENT_ID || "").trim() && String(env.GOOGLE_CLIENT_SECRET || "").trim());
+}
+
+function firstHeader(value) {
+  return String(value || "")
+    .split(",")[0]
+    .trim();
+}
+
+function publicSiteHost(host) {
+  const bare = String(host || "")
+    .toLowerCase()
+    .replace(/:(80|443)$/, "");
+  if (bare === "www.trade2smart.com") return "trade2smart.com";
+  return bare;
+}
+
+function requestHost(req) {
+  return publicSiteHost(firstHeader(req?.headers?.["x-forwarded-host"] || req?.headers?.host));
+}
+
+function requestProto(req, host) {
+  if (host === "trade2smart.com" || host.endsWith(".trade2smart.com")) return "https";
+  const forwarded = firstHeader(req?.headers?.["x-forwarded-proto"]).toLowerCase();
+  if (forwarded === "https" || forwarded === "http") return forwarded;
+  return firstHeader(req?.protocol) === "https" ? "https" : "http";
 }
 
 export function googleRedirectUri(env = process.env, req) {
   const explicit = String(env.GOOGLE_REDIRECT_URI || "").trim();
   if (explicit) return explicit;
   if (req) {
-    const proto = String(req.headers?.["x-forwarded-proto"] || req.protocol || "http")
-      .split(",")[0]
-      .trim();
-    const host = String(req.headers?.["x-forwarded-host"] || req.headers?.host || "")
-      .split(",")[0]
-      .trim();
-    if (host) return `${proto === "https" ? "https" : "http"}://${host}/api/auth/google/callback`;
+    const host = requestHost(req);
+    if (host) return `${requestProto(req, host)}://${host}/api/auth/google/callback`;
   }
-  const publicUrl = String(env.PUBLIC_URL || "http://localhost:4000").replace(/\/$/, "");
+  const publicUrl = String(env.PUBLIC_URL || env.FRONTEND_ORIGIN || "http://localhost:4000")
+    .trim()
+    .replace(/\/+$/, "");
   return `${publicUrl}/api/auth/google/callback`;
 }
 
@@ -661,7 +790,7 @@ export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
     response_type: "code",
     scope: "openid email profile",
     access_type: "online",
-    prompt: "select_account",
+    include_granted_scopes: "true",
     state: encodeOAuthState(next, { redirectUri }),
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -720,7 +849,11 @@ export async function loginWithGoogleCode({ code, fetchImpl = fetch, env = proce
   });
   const tokenJson = await tokenRes.json().catch(() => ({}));
   if (!tokenRes.ok || !tokenJson.access_token) {
-    throw fail(tokenJson.error_description || "Google login failed. Try again.", 401);
+    const detail = String(tokenJson.error_description || tokenJson.error || "").trim();
+    if (/redirect_uri/i.test(detail) || tokenJson.error === "redirect_uri_mismatch") {
+      throw fail(`Google redirect URI mismatch. Authorized URI must be exactly ${redirect}`, 401);
+    }
+    throw fail(detail || "Google login failed. Try again.", 401);
   }
   const userRes = await fetchImpl("https://www.googleapis.com/oauth2/v3/userinfo", {
     headers: { Authorization: `Bearer ${tokenJson.access_token}`, Accept: "application/json" },

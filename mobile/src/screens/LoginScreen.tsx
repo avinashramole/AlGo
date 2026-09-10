@@ -298,7 +298,6 @@ export function LoginScreen() {
         </Pressable>
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         {devOtp ? <Text style={styles.dev}>Temporary code: {devOtp}</Text> : null}
-        {page === "signin" ? <Text style={styles.hint}>Demo: demo@t2s.app / demo123</Text> : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
