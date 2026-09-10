@@ -241,7 +241,7 @@ export function Login() {
       <PreviewDeskBanner />
       <div className="t2s-login-main">
         <aside className="t2s-login-hero">
-          <LoginWordmark />
+          <LoginHeroArt />
           <div className="t2s-hero-copy">
             <h1>
               Trade <span className="t2s-blue">Smarter.</span>
@@ -255,16 +255,12 @@ export function Login() {
             <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" tone="gold" />
             <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="blue" />
           </ul>
-          <LoginHeroArt />
         </aside>
 
         <section className="t2s-login-panel">
           <div className="t2s-login-card">
-            <div className="t2s-login-mobile-brand">
-              <LoginWordmark />
-            </div>
-            <div className="t2s-login-avatar" aria-hidden="true">
-              <User size={28} />
+            <div className="t2s-login-avatar">
+              <img src="/t2s-logo.png" alt="Trade 2 Smart" />
             </div>
             <h2 className="t2s-login-title">{title}</h2>
             <p className="t2s-login-sub">{sub}</p>
@@ -422,16 +418,6 @@ export function Login() {
           <span>Help</span>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function LoginWordmark() {
-  return (
-    <div className="t2s-wordmark" aria-label="Trade 2 Smart">
-      <span>Trade</span>
-      <span className="t2s-wordmark-gold">2</span>
-      <span>Smart</span>
     </div>
   );
 }

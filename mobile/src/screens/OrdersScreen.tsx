@@ -31,9 +31,7 @@ export function OrdersScreen() {
             <Text style={styles.symbol}>{row.symbol}</Text>
             <Pill text={row.status} up={row.status === "FILLED"} />
           </View>
-          <Text style={styles.strategy}>
-            {strategyLabel(row, data.algos || []) ? `${row.side === "SELL" ? "SELL" : "BUY"} by ${strategyLabel(row, data.algos || [])}` : row.side === "SELL" ? "SELL" : "BUY"}
-          </Text>
+          <Text style={styles.strategy}>{row.side === "SELL" ? "SELL" : "BUY"}</Text>
           <Text style={styles.muted}>
             {row.side} · {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
           </Text>
