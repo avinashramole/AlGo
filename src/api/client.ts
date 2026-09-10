@@ -222,7 +222,7 @@ export type Snapshot = {
     trade?: {
       kind?: "future" | "option";
       symbol?: string;
-      option?: "CE" | "PE";
+      option?: "CE" | "PE" | "";
       strike?: number;
       expiry?: string;
       ltp?: number;

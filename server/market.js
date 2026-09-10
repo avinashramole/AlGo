@@ -38,6 +38,8 @@ import {
   noteHedgeBrokerRejection,
   runNiftyVwapHedgeBacktest,
   hedgeState,
+  hedgePreviewTrade,
+  hedgeReversalFromBars,
 } from "./niftyVwapHedge/index.js";
 import {
   applyHedgeDailyLive,
@@ -700,8 +702,10 @@ function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
     algo.lastSignal = "WAIT WEEKLY EXPIRY";
     return;
   }
-  const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
-  const atm = atmStrike(spot, und.step);
+  const hs = hedgeState(algo);
+  const { reversal, bar } = hedgeReversalFromBars(futuresBars, now);
+  const spot = Number(reversal.close) || Number(bar?.close) || Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
+  const atm = Number(hs.primaryStrike) > 0 ? Number(hs.primaryStrike) : atmStrike(spot, und.step);
   const ceLtp = optionPremium("NIFTY", atm, "CE", expiry);
   const peLtp = optionPremium("NIFTY", atm, "PE", expiry);
   const liveChain = pack?.meta?.source === "dhan";
@@ -748,8 +752,55 @@ function algoOrderFields(algo, side, trade) {
   };
 }
 
+function resolveHedgeAlgoTrade(algo) {
+  const symbol = "NIFTY";
+  const und = getUnderlying(symbol);
+  const pack = chainForSymbol(symbol);
+  const hs = algo.hedgeState || {};
+  const ones = getCandles("1m");
+  const { reversal } = hedgeReversalFromBars(ones.length ? ones : getCandles("15m"));
+  const preview = hedgePreviewTrade({
+    reversal,
+    primarySide: hs.primarySide,
+    primaryStrike: hs.primaryStrike,
+    step: und.step,
+  });
+  const strike =
+    Number(preview.strike) || atmStrike(Number(pack?.meta?.spot) || getChainSpot(symbol), und.step);
+  const option = preview.option === "PE" ? "PE" : preview.option === "CE" ? "CE" : "";
+  const expiry =
+    nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+  const ceLtp = Number(row?.callLtp);
+  const peLtp = Number(row?.putLtp);
+  const liveChain = pack?.meta?.source === "dhan";
+  const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : 0;
+  const contract = option ? `${symbol} ${strike} ${option}` : preview.label || `${symbol} weekly ATM CE/PE`;
+  const weeklyReady =
+    !expiry || !pack?.meta?.expiry || normalizeExpiry(pack.meta.expiry) === normalizeExpiry(expiry);
+  let hint = preview.reason;
+  if (!liveChain) hint = [preview.reason, `Open Options on ${symbol} for live ATM CE/PE`].filter(Boolean).join(" · ");
+  else if (expiry && pack?.meta?.expiry && normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)) {
+    hint = [preview.reason, `Waiting for weekly ${expiry} chain (not monthly)`].filter(Boolean).join(" · ");
+  } else if (!row && strike) hint = [preview.reason, `No ${strike} ATM on the ${symbol} tape yet`].filter(Boolean).join(" · ");
+  else if (option && !(premium > 0)) hint = [preview.reason, "Waiting for live ATM option LTP"].filter(Boolean).join(" · ");
+  return {
+    kind: "option",
+    symbol: contract,
+    option,
+    strike,
+    expiry,
+    ltp: premium > 0 && weeklyReady ? round2(premium) : 0,
+    label: expiry ? `${contract} · ${expiry}` : contract,
+    source: pack?.meta?.source || "",
+    ready: liveChain && weeklyReady && (option ? premium > 0 : ceLtp > 0 || peLtp > 0),
+    hint,
+  };
+}
+
 export function resolveAlgoTrade(algo) {
-  if (isNiftyVwapHedgeAlgo(algo) || isNiftyOptionEngineAlgo(algo)) {
+  if (isNiftyVwapHedgeAlgo(algo)) return resolveHedgeAlgoTrade(algo);
+  if (isNiftyOptionEngineAlgo(algo)) {
     const symbol = "NIFTY";
     const und = getUnderlying(symbol);
     const pack = chainForSymbol(symbol);

@@ -1,6 +1,7 @@
 import { OptionStrikeSelector } from "../niftyVwap/OptionStrikeSelector.js";
 import { sessionBars, lastBarVwapReversal, aggregateSessionBars } from "../niftyVwap/VwapSignalEngine.js";
 import { niftyVwapHedgeConfig } from "./config.js";
+import { formatHedgeLevels, hedgePreviewTrade } from "./hedgePreview.js";
 import {
   PHASE,
   hedgeState,
@@ -45,17 +46,20 @@ function markCharges(state, lots, brokeragePerLot) {
   state.charges = round2(Number(state.charges || 0) + Number(lots) * Number(brokeragePerLot || 0));
 }
 
-function attachFill(state, role, fill, option) {
+function attachFill(state, role, fill, option, strike) {
+  const locked = Number(strike) > 0 ? Number(strike) : 0;
   if (role === "hedge") {
     state.hedgeEntered = true;
     state.hedgeEntryPrice = fill;
     state.hedgeSide = option;
+    if (locked) state.hedgeStrike = locked;
     state.phase = PHASE.MONITOR_COMBINED;
     state.inFlight = false;
     state.pendingRole = "";
     return;
   }
   state.primarySide = option;
+  if (locked) state.primaryStrike = locked;
   state.primaryEntryPrice = fill;
   state.primaryTargetPrice = round2(fill * 1.4);
   state.hedgeTriggerPrice = round2(fill * 0.8);
@@ -127,10 +131,16 @@ export const NiftyVwapHedgeStrategy = {
       const fill = fillPrice(newest, newest.avg);
       if (fill > 0 && state.pendingRole === "hedge" && !state.hedgeEntered) {
         markCharges(state, config.hedgeLots, config.brokeragePerLot);
-        attachFill(state, "hedge", fill, newest.option || (state.primarySide === "PE" ? "CE" : "PE"));
+        attachFill(
+          state,
+          "hedge",
+          fill,
+          newest.option || (state.primarySide === "PE" ? "CE" : "PE"),
+          newest.strike || state.hedgeStrike,
+        );
       } else if (fill > 0 && !state.primaryEntryPrice) {
         markCharges(state, config.lots, config.brokeragePerLot);
-        attachFill(state, "primary", fill, newest.option || state.primarySide || "CE");
+        attachFill(state, "primary", fill, newest.option || state.primarySide, newest.strike || state.primaryStrike);
         state.phase = PHASE.MONITOR_PRIMARY;
       } else {
         state.inFlight = false;
@@ -230,7 +240,9 @@ export const NiftyVwapHedgeStrategy = {
     }
 
     if (primaryPos) {
-      algo.lastSignal = `MONITOR ${state.primarySide} ${Number(primaryPos.ltp || 0).toFixed(2)} TGT ${state.primaryTargetPrice} HEDGE ${state.hedgeTriggerPrice}`;
+      const side = state.primarySide || primaryPos.option || "";
+      const strike = state.primaryStrike || primaryPos.strike || "";
+      algo.lastSignal = `MONITOR ${side}${strike ? ` ${strike}` : ""} ${Number(primaryPos.ltp || 0).toFixed(2)} TGT ${state.primaryTargetPrice} HEDGE ${state.hedgeTriggerPrice}`;
       return { action: "hold", reason: "primary" };
     }
 
@@ -241,8 +253,9 @@ export const NiftyVwapHedgeStrategy = {
     const futCompleted = aggregateSessionBars(sessionBars(input.futuresBars || [], now), 15, now);
     const reversal = lastBarVwapReversal(futCompleted);
     const preview = reversal.bar || futCompleted[futCompleted.length - 1];
+    const signal = hedgePreviewTrade({ reversal, step: Number(input.step || 50) });
     if (!preview || !(reversal.vwap > 0)) {
-      algo.lastSignal = "WAIT 15m CLOSE";
+      algo.lastSignal = signal.reason || "WAIT 15m CLOSE";
       return { action: "wait", reason: "need-completed-bar" };
     }
     const closedAt = Number(preview.time) + barMs;
@@ -251,11 +264,12 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "wait", reason: "forming-bar" };
     }
     if (now > closedAt + barMs) {
-      algo.lastSignal = `SKIP OLD 15m O ${reversal.open.toFixed(2)} C ${reversal.close.toFixed(2)} VWAP ${reversal.vwap.toFixed(2)}`;
+      const was = reversal.buyPe ? " (was PE)" : reversal.buyCe ? " (was CE)" : "";
+      algo.lastSignal = `SKIP OLD 15m ${formatHedgeLevels(reversal) || `${reversal.open.toFixed(2)} / ${reversal.close.toFixed(2)}`}${was}`;
       return { action: "wait", reason: "missed-close" };
     }
     if (!reversal.buyCe && !reversal.buyPe) {
-      algo.lastSignal = `WAIT 15m O ${reversal.open.toFixed(2)} C ${reversal.close.toFixed(2)} VWAP ${reversal.vwap.toFixed(2)}`;
+      algo.lastSignal = signal.reason;
       return { action: "wait", reason: "no-reversal" };
     }
     if (state.lastEntryBarTime && Number(state.lastEntryBarTime) === Number(preview.time)) {
@@ -274,7 +288,7 @@ export const NiftyVwapHedgeStrategy = {
       if (!sid) return { action: "wait", reason: "no-security-id" };
     }
     const pick = OptionStrikeSelector.select({
-      spot: Number(input.spot || reversal.close),
+      spot: Number(reversal.close || input.spot),
       step: Number(input.step || 50),
       option,
       symbol: "NIFTY",
@@ -287,6 +301,7 @@ export const NiftyVwapHedgeStrategy = {
     state.lastEntryBarTime = Number(preview.time);
     state.pendingRole = "primary";
     state.primarySide = option;
+    state.primaryStrike = pick.strike;
     const result = input.adapter.place({
       symbol: pick.symbol,
       side: "BUY",
@@ -320,7 +335,7 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "rejected", result };
     }
     if (result?.queued) {
-      algo.lastSignal = `BUY ${option} 1 LOT QUEUED`;
+      algo.lastSignal = `BUY ${option} ${pick.strike} 1 LOT QUEUED · ${formatHedgeLevels(reversal)}`;
       return { action: "queued", pick, result };
     }
     const fill = fillPrice(result, ltp);
@@ -329,9 +344,9 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "rejected", reason: "no-fill" };
     }
     markCharges(state, config.lots, config.brokeragePerLot);
-    attachFill(state, "primary", fill, option);
+    attachFill(state, "primary", fill, option, pick.strike);
     state.phase = PHASE.MONITOR_PRIMARY;
-    algo.lastSignal = `BUY ${option} 1 LOT @ ${fill} TGT ${state.primaryTargetPrice} HEDGE ${state.hedgeTriggerPrice}`;
+    algo.lastSignal = `BUY ${option} ${pick.strike} 1 LOT @ ${fill} · ${formatHedgeLevels(reversal)} TGT ${state.primaryTargetPrice} HEDGE ${state.hedgeTriggerPrice}`;
     return { action: "entry", pick, fill, result };
   },
 
@@ -344,10 +359,11 @@ export const NiftyVwapHedgeStrategy = {
       if (!sid) return { action: "wait", reason: "no-security-id" };
     }
     const pick = OptionStrikeSelector.select({
-      spot: Number(input.spot || 0),
+      spot: Number(state.primaryStrike || input.spot || 0),
       step: Number(input.step || 50),
       option,
       symbol: "NIFTY",
+      locked: Number(state.primaryStrike) > 0 ? { strike: Number(state.primaryStrike), option } : undefined,
     });
     if (!pick.strike) return { action: "wait", reason: "no-atm" };
     if (state.hedgeEntered) return { action: "skip", reason: "hedge-once" };
@@ -385,7 +401,7 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "rejected", result };
     }
     if (result?.queued) {
-      algo.lastSignal = `BUY ${option} 2 LOT HEDGE QUEUED`;
+      algo.lastSignal = `BUY ${option} ${pick.strike} 2 LOT HEDGE QUEUED`;
       return { action: "queued", pick, result, role: "hedge" };
     }
     const fill = fillPrice(result, ltp);
@@ -395,8 +411,8 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "rejected", reason: "no-fill" };
     }
     markCharges(state, config.hedgeLots, config.brokeragePerLot);
-    attachFill(state, "hedge", fill, option);
-    algo.lastSignal = `HEDGE BUY ${option} 2 LOT @ ${fill}`;
+    attachFill(state, "hedge", fill, option, pick.strike);
+    algo.lastSignal = `HEDGE BUY ${option} ${pick.strike} 2 LOT @ ${fill}`;
     return { action: "hedge", pick, fill, result };
   },
 };

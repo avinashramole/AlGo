@@ -4,6 +4,8 @@ import { NiftyVwapHedgeStrategy } from "./NiftyVwapHedgeStrategy.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig } from "./config.js";
 import { hedgeState, PHASE } from "./HedgeState.js";
 import { runNiftyVwapHedgeBacktest } from "./BacktestAdapter.js";
+import { hedgePreviewTrade } from "./hedgePreview.js";
+import { lastBarVwapReversal } from "../niftyVwap/VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 
 const T0 = Date.parse("2026-08-21T03:45:00.000Z");
@@ -302,3 +304,60 @@ test("hedge backtest runs without enabling LIVE", () => {
   assert.ok(Number.isFinite(result.pnl));
   assert.equal(algo.enabled, false);
 });
+
+test("preview and punch use 15m close ATM, not index spot", () => {
+  const peBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24540, 24480, { high: 24550, low: 24470 })];
+  const reversal = lastBarVwapReversal(peBars);
+  const preview = hedgePreviewTrade({ reversal });
+  assert.equal(reversal.buyPe, true);
+  assert.equal(preview.option, "PE");
+  assert.equal(preview.strike, 24500);
+  assert.match(preview.label, /NIFTY 24500 PE/);
+  assert.match(preview.reason, /BUY PE 24500/);
+
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge ATM Spot" });
+  const book = bookAdapter();
+  const entry = tick(algo, book, { futuresBars: peBars, spot: 23403, peLtp: 100, ceLtp: 90 });
+  assert.equal(entry.action, "entry");
+  assert.equal(book.places[0].option, "PE");
+  assert.equal(book.places[0].strike, 24500);
+  assert.match(algo.lastSignal, /BUY PE 24500/);
+});
+
+test("CE ATM also follows 15m close when index is 23403", () => {
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge CE ATM" });
+  const book = bookAdapter();
+  const entry = tick(algo, book, { spot: 23403 });
+  assert.equal(entry.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].strike, 24550);
+  assert.match(algo.lastSignal, /BUY CE 24550/);
+});
+
+test("close above VWAP without open below is not a CE punch", () => {
+  const bars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24540, 24580, { high: 24590, low: 24530 })];
+  const reversal = lastBarVwapReversal(bars);
+  assert.equal(reversal.buyCe, false);
+  assert.equal(reversal.buyPe, false);
+  const preview = hedgePreviewTrade({ reversal });
+  assert.equal(preview.option, "");
+  assert.match(preview.reason, /CE needs O<VWAP C>VWAP/);
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge No Cross" });
+  const book = bookAdapter();
+  const wait = tick(algo, book, { futuresBars: bars, spot: 24580 });
+  assert.equal(wait.reason, "no-reversal");
+  assert.equal(book.places.length, 0);
+});
+
+test("hedge opposite uses the primary 15m ATM strike", () => {
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge Same Strike" });
+  const book = bookAdapter();
+  tick(algo, book, { spot: 23403 });
+  assert.equal(book.places[0].strike, 24550);
+  book.positions[0].ltp = 80;
+  const hedge = tick(algo, book, { spot: 23403, ceLtp: 80, peLtp: 95 });
+  assert.equal(hedge.action, "hedge");
+  assert.equal(book.places[1].option, "PE");
+  assert.equal(book.places[1].strike, 24550);
+});
+

@@ -43,7 +43,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-vwap-hedge" as const,
       category: "SYSTEMATIC NIFTY HEDGE",
-      config: "Weekly ATM · 15m · +40% / −20% hedge · +5% account · daily LIVE 09:30 IST",
+      config: "15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · +40% / −20% hedge · +5% · daily LIVE 09:30 IST",
     };
   }
   if (isNiftyVwapReversalKind(algo)) {
@@ -316,7 +316,13 @@ function AlgoCard({
   const winRate = Number(algo.lastBacktest?.winRate ?? algo.winRate ?? 0);
   const drawdown = Number(algo.lastBacktest?.maxDrawdown || 0);
   const bookPnl = Number(algo.lastBacktest?.pnl ?? algo.pnl ?? 0);
-  const activity = algo.lastSignal && algo.enabled ? algo.lastSignal : "Waiting for the next signal";
+  const activity = isNiftyVwapHedgeKind(algo)
+    ? algo.enabled && algo.lastSignal
+      ? algo.lastSignal
+      : algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE"
+    : algo.lastSignal && algo.enabled
+      ? algo.lastSignal
+      : "Waiting for the next signal";
   const status = statusLabel(algo);
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
@@ -332,6 +338,9 @@ function AlgoCard({
             <div className="truncate text-base font-bold">{algo.name}</div>
             <div className="text-xs text-slate-400">{meta.config}</div>
             <div className="mt-1 text-[11px] text-slate-500">{contract}</div>
+            {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
+              <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
+            ) : null}
           </div>
         </div>
         <span
