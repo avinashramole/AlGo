@@ -13,6 +13,7 @@ import {
   withExpiryLabels,
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { isOptionContract, isSaneOptionLtp, markContractToMarket } from "./positionMark.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
@@ -1021,7 +1022,7 @@ export function quoteSymbol(symbol) {
 
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\s+(\d{3,6})\s*(CE|PE)\b/);
+  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
   const option = named || raw.match(/(\d{3,6})\s*(CE|PE)\b/);
   if (option) {
     const strike = Number(named ? named[2] : option[1]);
@@ -1030,8 +1031,9 @@ function liveLtpForSymbol(symbol) {
     const row = rows.find((item) => Number(item.strike) === strike);
     if (row) {
       const ltp = opt === "PE" ? Number(row.putLtp) : Number(row.callLtp);
-      if (ltp > 0) return round2(ltp);
+      if (isSaneOptionLtp(ltp)) return round2(ltp);
     }
+    return 0;
   }
   const indexName = relatedIndex(symbol);
   const index = indexName
@@ -1069,13 +1071,19 @@ function syncPaperLedger() {
 }
 
 function markPaperToMarket() {
-  state.positions = (state.positions || []).map((row) => {
-    const ltp = liveLtpForSymbol(row.symbol);
-    if (!(ltp > 0)) return row;
-    const dir = row.type === "BUY" ? 1 : -1;
-    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-  });
+  state.positions = (state.positions || []).map((row) => markContractToMarket(row, liveLtpForSymbol(row.symbol)));
   syncPaperLedger();
+}
+
+export function livePositionQuoteTargets() {
+  return (state.positions || [])
+    .filter((row) => row.securityId && (row.live || row.brokerId === "dhan") && !isPaperRow(row))
+    .map((row) => ({
+      symbol: row.symbol,
+      segment: String(row.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+      securityId: Number(row.securityId) || row.securityId,
+      kind: isOptionContract(row.symbol, row.option) ? "option" : "future",
+    }));
 }
 
 export function snapshot() {
@@ -2014,6 +2022,7 @@ export function applyLiveQuotes(quotes) {
     );
     if (match && Number(match.ltp) > 0) {
       const ltp = round2(match.ltp);
+      if (isOptionContract(row.symbol, row.option) && !isSaneOptionLtp(ltp, row.avg)) return row;
       const dir = row.type === "BUY" ? 1 : -1;
       return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
     }

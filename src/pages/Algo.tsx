@@ -288,7 +288,7 @@ function AlgoCard({
 }: {
   algo: AlgoStrategy;
   orders: Array<{ id: string }>;
-  positions: Array<{ type?: string; pnl?: number }>;
+  positions: Array<{ type?: string; pnl?: number; live?: boolean; brokerId?: string }>;
   busy: boolean;
   rangeOpen: boolean;
   rangeError: string;
@@ -304,6 +304,7 @@ function AlgoCard({
   const meta = kindMeta(algo);
   const liveMtm = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   const mapped = (algo.mappedClientIds || []).length;
+  const brokerMtm = positions.some((row) => row.live || row.brokerId === "dhan");
   const positionLabel = !positions.length
     ? "FLAT"
     : positions.every((row) => row.type === "SELL")
@@ -348,7 +349,7 @@ function AlgoCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${positions.length} open` : "No open position"} />
+        <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />
         <Metric label="Total orders" value={String(orders.length)} hint={orders.length ? "Desk orders" : "No orders"} />
         <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
         <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />

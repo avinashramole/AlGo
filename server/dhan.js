@@ -13,6 +13,7 @@ import {
   replaceDhanBook,
   replaceDhanOrders,
   restoreSimulatedDesk,
+  livePositionQuoteTargets,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
@@ -20,6 +21,7 @@ import {
 } from "./market.js";
 import { buildScripChain, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
+import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
@@ -118,7 +120,7 @@ function requestKind(path) {
 }
 
 function liveInstruments() {
-  return INSTRUMENTS.concat(futureInstruments);
+  return INSTRUMENTS.concat(futureInstruments, livePositionQuoteTargets());
 }
 
 function tokenHint(token) {
@@ -503,19 +505,37 @@ function mapDhanPositions(raw) {
       const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
       const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
       const dir = type === "BUY" ? 1 : -1;
-      const liveLtp = quoteSymbol(row.tradingSymbol || String(row.securityId || ""));
       const brokerPnl = Number(row.unrealizedProfit || 0);
-      const pnl = liveLtp > 0 && qty ? (liveLtp - avg) * qty * dir : brokerPnl;
-      const implied = qty ? avg + Number(pnl) / (qty * dir) : avg;
+      const brokerLtp = Number(row.lastTradedPrice || row.ltp || row.close || 0);
       const parsed = parseOptionContract(row.tradingSymbol || "");
+      const chainLtp = quoteSymbol(row.tradingSymbol || String(row.securityId || ""));
+      const option = Boolean(parsed?.option);
+      const ltp = option
+        ? isSaneOptionLtp(chainLtp, avg)
+          ? chainLtp
+          : isSaneOptionLtp(brokerLtp, avg)
+            ? brokerLtp
+            : avg
+        : chainLtp > 0
+          ? chainLtp
+          : brokerLtp || avg;
+      const pnl = option
+        ? isSaneOptionLtp(chainLtp, avg) && qty
+          ? (chainLtp - avg) * qty * dir
+          : brokerPnl
+        : chainLtp > 0 && qty
+          ? (chainLtp - avg) * qty * dir
+          : brokerPnl;
       return {
         id: `dhan-pos-${row.securityId}-${row.productType || "MIS"}`,
         symbol: row.tradingSymbol || String(row.securityId),
         type,
         qty,
         avg: Number(avg.toFixed(2)),
-        ltp: Number((Number.isFinite(implied) ? implied : avg).toFixed(2)),
-        pnl: Number(pnl.toFixed(2)),
+        ltp: Number((Number.isFinite(ltp) ? ltp : avg).toFixed(2)),
+        pnl: Number(Number(pnl).toFixed(2)),
+        brokerPnl: Number(Number(brokerPnl).toFixed(2)),
+        brokerLtp: Number((Number.isFinite(brokerLtp) ? brokerLtp : 0).toFixed(2)),
         product: row.productType || "MIS",
         strategy: "",
         option: parsed?.option || "",
