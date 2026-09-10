@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isOptionContract, isSaneOptionLtp, markContractToMarket } from "./positionMark.js";
+import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 
 test("Dhan expiry-style option symbols are options", () => {
   assert.equal(isOptionContract("NIFTY 10 SEP 23450 PE"), true);
@@ -38,4 +38,11 @@ test("sane option LTP marks (premium - avg) * qty", () => {
   );
   assert.equal(row.ltp, 91.48);
   assert.equal(row.pnl, Number(((91.48 - 96.71) * 65).toFixed(2)));
+});
+
+test("tick LTP is kept when the chain feed is missing", () => {
+  assert.equal(
+    preferMarkLtp({ symbol: "NIFTY 23450 PE", option: "PE", avg: 96.71, ltp: 91.48, ticked: true }, 0),
+    91.48,
+  );
 });

@@ -12,8 +12,8 @@ import {
   upcomingExpiries,
   withExpiryLabels,
 } from "./optionChain.js";
-import { listIndexContracts, optionCount, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
-import { isOptionContract, isSaneOptionLtp, markContractToMarket } from "./positionMark.js";
+import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
@@ -1071,8 +1071,30 @@ function syncPaperLedger() {
 }
 
 function markPaperToMarket() {
-  state.positions = (state.positions || []).map((row) => markContractToMarket(row, liveLtpForSymbol(row.symbol)));
+  state.positions = (state.positions || []).map((row) =>
+    markContractToMarket(row, preferMarkLtp(row, liveLtpForSymbol(row.symbol))),
+  );
   syncPaperLedger();
+}
+
+export function deskMtm() {
+  markPaperToMarket();
+  const { positions } = liveDesk();
+  return {
+    positions: (positions || []).map((row) => ({
+      id: row.id,
+      symbol: row.symbol,
+      ltp: Number(row.ltp) || 0,
+      pnl: Number(row.pnl) || 0,
+      strategy: row.strategy || "",
+    })),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+let onLiveBookChange = null;
+export function onDhanBookChanged(fn) {
+  onLiveBookChange = typeof fn === "function" ? fn : null;
 }
 
 export function livePositionQuoteTargets() {
@@ -1776,7 +1798,18 @@ export function replaceDhanBook(rows) {
     return next;
   });
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
-  state.positions = [...incoming, ...others];
+  const previousDhan = new Map(state.positions.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]));
+  state.positions = [
+    ...incoming.map((row) => {
+      const prev = previousDhan.get(String(row.id));
+      if (prev?.ticked && isSaneOptionLtp(prev.ltp, row.avg)) {
+        return { ...row, ltp: prev.ltp, pnl: prev.pnl, ticked: true };
+      }
+      return row;
+    }),
+    ...others,
+  ];
+  if (typeof onLiveBookChange === "function") onLiveBookChange();
 }
 
 export function setLiveCandles(candles) {
@@ -1969,7 +2002,16 @@ export function applyLiveQuotes(quotes) {
       continue;
     }
     if (!Number.isFinite(ltp) || ltp <= 0) continue;
-    if (index) {
+    if (quote.kind === "option") {
+      const parsed = parseOptionContract(quote.symbol);
+      const chainRow = parsed
+        ? (state.optionChain || []).find((item) => Number(item.strike) === parsed.strike)
+        : null;
+      if (chainRow) {
+        if (parsed.option === "PE") chainRow.putLtp = round2(ltp);
+        else chainRow.callLtp = round2(ltp);
+      }
+    } else if (index) {
       const day = dayChange(index, quote, ltp);
       const vwap = Number(quote.vwap);
       index.price = round2(ltp);
@@ -2024,7 +2066,7 @@ export function applyLiveQuotes(quotes) {
       const ltp = round2(match.ltp);
       if (isOptionContract(row.symbol, row.option) && !isSaneOptionLtp(ltp, row.avg)) return row;
       const dir = row.type === "BUY" ? 1 : -1;
-      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir), ticked: true };
     }
     if (state.dhanFeed.live) return row;
     const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");

@@ -244,6 +244,8 @@ export type Snapshot = {
     openedAt?: string;
     brokerId?: string;
     securityId?: string;
+    live?: boolean;
+    paper?: boolean;
   }>;
   orders: DeskOrder[];
   report?: DeskReport;
@@ -813,6 +815,13 @@ export function connectGmail(email: string, appPassword: string) {
 
 export function getSnapshot() {
   return request<Snapshot>("/snapshot");
+}
+
+export function getDeskMtm() {
+  return request<{
+    positions: Array<{ id: string; symbol: string; ltp: number; pnl: number; strategy?: string }>;
+    serverTime?: string;
+  }>("/mtm");
 }
 
 export function getContracts(symbol?: string, expiry?: string) {

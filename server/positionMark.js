@@ -16,6 +16,19 @@ export function isSaneOptionLtp(ltp, avg = 0) {
   return true;
 }
 
+export function preferMarkLtp(row = {}, feedLtp) {
+  const avg = Number(row.avg) || 0;
+  const tick = Number(row.ltp);
+  const feed = Number(feedLtp);
+  if (isOptionContract(row.symbol, row.option)) {
+    if (row.ticked && isSaneOptionLtp(tick, avg)) return tick;
+    if (isSaneOptionLtp(feed, avg)) return feed;
+    if (isSaneOptionLtp(tick, avg) && Math.abs(tick - avg) > 0.05) return tick;
+    return 0;
+  }
+  return feed > 0 ? feed : tick > 0 ? tick : 0;
+}
+
 export function markContractToMarket(row = {}, liveLtp) {
   const avg = Number(row.avg) || 0;
   const qty = Number(row.qty) || 0;

@@ -14,6 +14,7 @@ import {
   replaceDhanOrders,
   restoreSimulatedDesk,
   livePositionQuoteTargets,
+  onDhanBookChanged,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
@@ -121,6 +122,37 @@ function requestKind(path) {
 
 function liveInstruments() {
   return INSTRUMENTS.concat(futureInstruments, livePositionQuoteTargets());
+}
+
+function feedInstrumentList() {
+  const seen = new Set();
+  const list = [];
+  for (const row of liveInstruments()) {
+    const segment = usedFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
+    const securityId = String(row.securityId);
+    const key = `${segment}:${securityId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push({ ExchangeSegment: segment, SecurityId: securityId });
+  }
+  return list;
+}
+
+function subscribeFeedInstruments() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const list = feedInstrumentList();
+  if (!list.length) return;
+  try {
+    socket.send(
+      JSON.stringify({
+        RequestCode: 17,
+        InstrumentCount: list.length,
+        InstrumentList: list,
+      }),
+    );
+  } catch {
+    /* socket dropped */
+  }
 }
 
 function tokenHint(token) {
@@ -381,9 +413,9 @@ function flattenQuotes(payload) {
       const instrument =
         instruments.find(
           (row) =>
-            row.securityId === securityId &&
+            Number(row.securityId) === securityId &&
             (row.segment === segment || row.fallbackSegment === segment),
-        ) || instruments.find((row) => row.securityId === securityId);
+        ) || instruments.find((row) => Number(row.securityId) === securityId);
       if (!instrument) continue;
       const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
@@ -738,7 +770,7 @@ function parseFeedPackets(buffer) {
     const code = buffer.readUInt8(offset);
     const length = buffer.readUInt16LE(offset + 1);
     const securityId = buffer.readInt32LE(offset + 4);
-    const instrument = instruments.find((row) => row.securityId === securityId);
+    const instrument = instruments.find((row) => Number(row.securityId) === Number(securityId));
     const packetLen = Math.max(length >= 16 ? length : length + 8, 16);
     if (instrument && (code === 2 || code === 4 || code === 8)) {
       const ltp = buffer.readFloatLE(offset + 8);
@@ -747,6 +779,7 @@ function parseFeedPackets(buffer) {
           symbol: instrument.symbol,
           parent: instrument.parent || instrument.symbol,
           kind: instrument.kind,
+          securityId: instrument.securityId,
           ltp,
         };
         if (code === 4 && offset + 50 <= buffer.length) {
@@ -791,17 +824,7 @@ function startSocket() {
   }
 
   socket.on("open", () => {
-    const list = liveInstruments().map((row) => ({
-      ExchangeSegment: usedFallback && row.fallbackSegment ? row.fallbackSegment : row.segment,
-      SecurityId: String(row.securityId),
-    }));
-    socket.send(
-      JSON.stringify({
-        RequestCode: 17,
-        InstrumentCount: list.length,
-        InstrumentList: list,
-      }),
-    );
+    subscribeFeedInstruments();
     setDhanFeed({ live: true, source: "websocket", error: null });
   });
 
@@ -934,6 +957,7 @@ export async function selectOptionDesk({ symbol, expiry }) {
 
 function startLiveLoop() {
   stopLiveLoop(false);
+  onDhanBookChanged(subscribeFeedInstruments);
   void (async () => {
     try {
       futureInstruments = await resolveFrontFutures();

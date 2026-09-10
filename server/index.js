@@ -30,6 +30,7 @@ import {
   quoteSymbol,
   placeOrder,
   snapshot,
+  deskMtm,
   squareOff,
   tickMarket,
   toggleAlgo,
@@ -454,6 +455,10 @@ app.post("/api/auth/gmail", async (req, res) => {
 
 app.get("/api/snapshot", (_req, res) => {
   res.json(snapshot());
+});
+
+app.get("/api/mtm", (_req, res) => {
+  res.json(deskMtm());
 });
 
 app.get("/api/positions/desk", (_req, res) => {
