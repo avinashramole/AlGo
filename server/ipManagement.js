@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { getPublicUser } from "./auth.js";
-import { CLIENT_BROKERS, isStaticIp, listDeskRecords, saveClientSettings } from "./memberDesk.js";
+import { getPublicUser, listPublicUsers } from "./auth.js";
+import { CLIENT_BROKERS, isStaticIp, listDeskRecords, peekClientSettings, saveClientSettings } from "./memberDesk.js";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -113,6 +113,38 @@ function assignmentsFor(address) {
     .sort((a, b) => String(a.brokerName).localeCompare(String(b.brokerName)));
 }
 
+function accountKind(userId, name) {
+  const id = String(userId || "");
+  const label = String(name || "");
+  if (id === "master" || /master/i.test(id) || /master/i.test(label)) return "master";
+  return "child";
+}
+
+function accountStatus(desk) {
+  return desk.tradeMode === "real" || desk.copy ? "active" : "inactive";
+}
+
+function listAccountRows() {
+  return listPublicUsers()
+    .filter((user) => user && user.id && user.role !== "admin")
+    .map((user) => {
+      const desk = peekClientSettings(user.id);
+      const paper = !desk.brokerId || desk.brokerId === "paper";
+      const broker = paper ? null : brokerMeta(desk.brokerId);
+      return {
+        userId: user.id,
+        name: user.name || user.id,
+        kind: accountKind(user.id, user.name),
+        brokerId: paper ? "" : desk.brokerId,
+        brokerName: paper ? "" : broker.name,
+        brokerColor: paper ? "" : broker.color,
+        accountId: paper ? "" : desk.accountId || "",
+        staticIp: normalizeAddress(desk.staticIp),
+        status: accountStatus(desk),
+      };
+    });
+}
+
 function cardFor(row) {
   const assigned = assignmentsFor(row.address);
   const usedIds = [...new Set(assigned.map((item) => item.brokerId))];
@@ -158,6 +190,7 @@ export function ipManagementStatus() {
       serverDefault: withoutIp,
     },
     ips: cards,
+    accounts: listAccountRows(),
     unassigned: desks
       .filter((desk) => !normalizeAddress(desk.staticIp))
       .map((desk) => {

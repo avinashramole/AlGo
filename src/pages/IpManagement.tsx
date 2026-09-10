@@ -18,6 +18,7 @@ import {
   testStaticIp,
   unassignStaticIp,
   type ClientRow,
+  type EgressAccountRow,
   type EgressAssignment,
   type EgressIpCard,
   type IpManagementSnapshot,
@@ -28,8 +29,11 @@ const emptySnap: IpManagementSnapshot = {
   slots: [],
   stats: { ipv4: 0, ipv6: 0, healthy: 0, assignments: 0, brokersCovered: 0, serverDefault: 0 },
   ips: [],
+  accounts: [],
   unassigned: [],
 };
+
+const SERVER_DEFAULT = "";
 
 type FamilyFilter = "ipv4" | "ipv6";
 
@@ -78,12 +82,23 @@ export function IpManagement() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(true);
   const [testing, setTesting] = useState("");
+  const [managingId, setManagingId] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [manageFor, setManageFor] = useState<EgressIpCard | null>(null);
 
   const apply = (next: IpManagementSnapshot) => {
     setData(next);
     setManageFor((current) => (current ? next.ips.find((row) => row.address === current.address) || null : null));
+    if (next.accounts?.length) {
+      setClients((current) => {
+        if (!current.length) return current;
+        const byId = new Map(next.accounts.map((row) => [row.userId, row]));
+        return current.map((row) => {
+          const account = byId.get(row.id);
+          return account ? { ...row, staticIp: account.staticIp, accountId: account.accountId || row.accountId } : row;
+        });
+      });
+    }
   };
 
   const load = useCallback(async () => {
@@ -106,6 +121,13 @@ export function IpManagement() {
 
   const cards = useMemo(() => data.ips.filter((row) => row.family === family), [data.ips, family]);
   const addressCount = family === "ipv4" ? data.stats.ipv4 : data.stats.ipv6;
+  const manageIps = useMemo(() => {
+    const rows = data.ips.map((row) => row.address);
+    for (const account of data.accounts || []) {
+      if (account.staticIp && !rows.includes(account.staticIp)) rows.push(account.staticIp);
+    }
+    return rows;
+  }, [data.ips, data.accounts]);
 
   const run = async (work: () => Promise<IpManagementSnapshot>, okNote?: string) => {
     setError("");
@@ -206,6 +228,22 @@ export function IpManagement() {
         ))}
       </div>
 
+      <AccountAssignmentsTable
+        accounts={data.accounts || []}
+        manageIps={manageIps}
+        managingId={managingId}
+        onAssign={async (userId, address) => {
+          setManagingId(userId);
+          const account = (data.accounts || []).find((row) => row.userId === userId);
+          const brokerId = account?.brokerId || undefined;
+          const ok = address
+            ? await run(() => assignStaticIp(address, { userId, brokerId }), `${account?.name || "Account"} assigned to ${address}`)
+            : await run(() => unassignStaticIp(userId), `${account?.name || "Account"} moved back to server default`);
+          setManagingId("");
+          return ok;
+        }}
+      />
+
       {addOpen ? (
         <AddIpModal
           family={family}
@@ -229,6 +267,109 @@ export function IpManagement() {
         />
       ) : null}
     </div>
+  );
+}
+
+function accountStatusPill(status: EgressAccountRow["status"]) {
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        Active
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-500/35 bg-slate-500/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+      Inactive
+    </span>
+  );
+}
+
+function AccountAssignmentsTable({
+  accounts,
+  manageIps,
+  managingId,
+  onAssign,
+}: {
+  accounts: EgressAccountRow[];
+  manageIps: string[];
+  managingId: string;
+  onAssign: (userId: string, address: string) => Promise<boolean | void>;
+}) {
+  return (
+    <section className="card overflow-hidden">
+      <div className="border-b border-[var(--border)] px-4 py-3">
+        <h2 className="text-sm font-semibold">All account assignments</h2>
+      </div>
+      <div className="max-h-[28rem] overflow-auto">
+        <table className="min-w-[920px] w-full text-left">
+          <thead className="sticky top-0 z-10 bg-[var(--card)]">
+            <tr className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+              <th className="px-4 py-3 font-bold">Account</th>
+              <th className="px-4 py-3 font-bold">Broker</th>
+              <th className="px-4 py-3 font-bold">Client ID</th>
+              <th className="px-4 py-3 font-bold">Assigned IP</th>
+              <th className="px-4 py-3 font-bold">Status</th>
+              <th className="px-4 py-3 font-bold">Manage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.length ? (
+              accounts.map((row) => (
+                <tr key={row.userId} className="border-t border-[var(--border)]">
+                  <td className="px-4 py-3 align-middle">
+                    <div className="text-sm font-semibold">{row.name}</div>
+                    <div className="text-[11px] capitalize text-slate-500">{row.kind}</div>
+                  </td>
+                  <td className="px-4 py-3 align-middle">
+                    {row.brokerName ? (
+                      <BrokerChip name={row.brokerName} color={row.brokerColor} />
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                        <span className="h-3.5 w-3.5 rounded-[3px] border border-[var(--border)] bg-[var(--bg)]" />
+                        —
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-middle text-xs text-slate-400">{row.accountId || "—"}</td>
+                  <td className="px-4 py-3 align-middle text-xs">
+                    {row.staticIp ? (
+                      <span className="font-medium">{row.staticIp}</span>
+                    ) : (
+                      <span className="italic text-slate-500">Server default</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-middle">{accountStatusPill(row.status)}</td>
+                  <td className="px-4 py-3 align-middle">
+                    <select
+                      className="h-9 w-full min-w-[11rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold"
+                      value={row.staticIp || SERVER_DEFAULT}
+                      disabled={managingId === row.userId}
+                      onChange={(event) => void onAssign(row.userId, event.target.value)}
+                    >
+                      <option value={SERVER_DEFAULT}>Server default</option>
+                      {manageIps.map((address) => (
+                        <option key={address} value={address}>
+                          {address}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="px-4 py-8 text-center text-sm text-slate-500" colSpan={6}>
+                  No member accounts yet. New clients on All clients appear here with Server default until you assign a static IP.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

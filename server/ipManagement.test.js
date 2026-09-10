@@ -81,3 +81,25 @@ test("IPv6 inventory is counted separately from IPv4", () => {
   assert.equal(status.stats.ipv6, 1);
   assert.equal(status.ips.find((row) => row.address === "2001:db8::1").family, "ipv6");
 });
+
+test("accounts table lists every member with assigned IP or server default", () => {
+  addStaticIp({ address: "136.243.168.130", label: "Quantity" });
+  saveClientSettings("u-arpit", { brokerId: "sharekhan", accountId: "4212081", copy: true });
+  const assigned = assignStaticIp({ address: "136.243.168.130", userId: "u-arpit", brokerId: "sharekhan" });
+  const arpit = assigned.accounts.find((row) => row.userId === "u-arpit");
+  assert.equal(arpit.name, "ARPIT");
+  assert.equal(arpit.kind, "child");
+  assert.equal(arpit.brokerName, "SHAREKHAN");
+  assert.equal(arpit.accountId, "4212081");
+  assert.equal(arpit.staticIp, "136.243.168.130");
+  assert.equal(arpit.status, "active");
+  assert.equal(
+    assigned.accounts.some((row) => row.userId === "avinash"),
+    false,
+  );
+  const sunita = assigned.accounts.find((row) => row.userId === "u-sunita");
+  assert.equal(sunita.staticIp, "");
+  assert.equal(sunita.status, "inactive");
+  const freed = unassignStaticIp({ userId: "u-arpit" });
+  assert.equal(freed.accounts.find((row) => row.userId === "u-arpit").staticIp, "");
+});

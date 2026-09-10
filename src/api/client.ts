@@ -619,6 +619,18 @@ export type EgressAssignment = {
   accountId?: string;
 };
 
+export type EgressAccountRow = {
+  userId: string;
+  name: string;
+  kind: "master" | "child";
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+  staticIp: string;
+  status: "active" | "inactive";
+};
+
 export type EgressIpCard = {
   address: string;
   family: "ipv4" | "ipv6";
@@ -644,6 +656,7 @@ export type IpManagementSnapshot = {
     serverDefault: number;
   };
   ips: EgressIpCard[];
+  accounts: EgressAccountRow[];
   unassigned: EgressAssignment[];
   test?: { ok: boolean; seen?: string; error?: string };
 };
