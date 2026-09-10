@@ -113,11 +113,15 @@
 }
 
 .t2s-hero-art {
+  display: block;
   width: min(100%, 360px);
   height: auto;
   margin: 0 0 12px;
   object-fit: contain;
-  background: transparent;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .t2s-login-panel {
@@ -145,8 +149,10 @@
   margin: 0 auto 16px;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  background: transparent;
+  overflow: visible;
+  background: none;
+  border: 0;
+  box-shadow: none;
 }
 
 .t2s-login-avatar img {
@@ -154,7 +160,7 @@
   height: 100%;
   object-fit: contain;
   display: block;
-  background: transparent;
+  background: none;
 }
 
 .t2s-login-title {
