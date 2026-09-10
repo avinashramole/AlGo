@@ -250,25 +250,27 @@ free -h
 
 You must see **Swap** with about **2.0Gi** before continuing.
 
-**Block B — deploy IP management (skip npm install unless `node_modules` is missing)**
+**Block B — deploy IP management (keep the site running until the last line)**
 
-This branch already includes the NIFTY 15m VWAP hedge work. Restarting `t2s` does **not** turn LIVE on.
+Do **not** stop `t2s` first. Skip `npm run setup:vps`. Restarting `t2s` does **not** turn LIVE on.
 
 ```bash
 cd /opt/t2s
 git fetch origin cursor/ip-management-1488
 git checkout cursor/ip-management-1488
 git pull origin cursor/ip-management-1488
-cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
-systemctl daemon-reload
+git log -1 --oneline
 NODE_OPTIONS=--max-old-space-size=384 npm run build
-systemctl start t2s
-systemctl status t2s
+grep -l "All account assignments" dist/assets/*.js
+systemctl restart t2s
+sleep 2
+systemctl is-active t2s
+curl -sS -o /dev/null -w "app:%{http_code}\n" http://127.0.0.1:4000/
 ```
 
-Press `q` to leave status. LIVE stays off unless the 09:30 IST hedge clock arms it on a session day.
+`grep` must print a `dist/assets/index-….js` file. If it prints nothing, the table is not in the build — do not restart yet; send `free -h` and the npm error.
 
-After it is **active**, Chrome: **https://trade2smart.com/settings/ips** (admin). You should see IP cards and **All account assignments**.
+Press `q` only if you run `systemctl status`. After **active** and `app:200`, Chrome **https://trade2smart.com/settings/ips** and hard refresh (`Ctrl+Shift+R`). The table is under the four summary cards.
 
 If `npm run build` still dies, start the API anyway (server CE/PE preview still works; the card layout needs the build):
 
