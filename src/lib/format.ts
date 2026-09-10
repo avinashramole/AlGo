@@ -86,12 +86,6 @@ export function deskStrategyName(strategy?: string, algos?: Array<{ id?: string;
   return match?.name || raw;
 }
 
-export function buySellByStrategy(side?: string, strategy?: string, algos?: Array<{ id?: string; name?: string }>) {
-  const action = String(side || "").toUpperCase() === "SELL" ? "SELL" : "BUY";
-  const name = deskStrategyName(strategy, algos);
-  return name ? `${action} by ${name}` : action;
-}
-
 export function formatIst(iso?: string) {
   if (!iso) return "—";
   const date = new Date(iso);
