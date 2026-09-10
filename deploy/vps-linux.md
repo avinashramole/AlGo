@@ -221,13 +221,15 @@ free -h
 
 You must see **Swap** with about **2.0Gi** before continuing.
 
-**Block B — deploy (skip npm install unless `node_modules` is missing)**
+**Block B — deploy IP management (skip npm install unless `node_modules` is missing)**
+
+This branch already includes the NIFTY 15m VWAP hedge work. Restarting `t2s` does **not** turn LIVE on.
 
 ```bash
 cd /opt/t2s
-git fetch origin cursor/nifty-vwap-hedge-1488
-git checkout cursor/nifty-vwap-hedge-1488
-git pull origin cursor/nifty-vwap-hedge-1488
+git fetch origin cursor/ip-management-1488
+git checkout cursor/ip-management-1488
+git pull origin cursor/ip-management-1488
 cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
 systemctl daemon-reload
 NODE_OPTIONS=--max-old-space-size=384 npm run build
@@ -236,6 +238,8 @@ systemctl status t2s
 ```
 
 Press `q` to leave status. LIVE stays off unless the 09:30 IST hedge clock arms it on a session day.
+
+After it is **active**, Chrome: **https://trade2smart.com/settings/ips** (admin). You should see IP cards and **All account assignments**.
 
 If `npm run build` still dies, start the API anyway (server CE/PE preview still works; the card layout needs the build):
 
@@ -249,9 +253,11 @@ systemctl start t2s
 
 ```bash
 cd /opt/t2s
-git pull origin cursor/nifty-vwap-hedge-1488
-npm run build
+git fetch origin cursor/ip-management-1488
+git checkout cursor/ip-management-1488
+git pull origin cursor/ip-management-1488
+NODE_OPTIONS=--max-old-space-size=384 npm run build
 systemctl restart t2s
 ```
 
-Only run `npm run setup:vps` if `node_modules` is missing. It uses a lot of RAM.
+Only run `npm run setup:vps` if `node_modules` is missing. It uses a lot of RAM. Restart does **not** turn LIVE on.
