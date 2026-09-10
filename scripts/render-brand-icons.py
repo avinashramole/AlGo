@@ -2,6 +2,7 @@
 """Keep public/mobile brand PNGs in sync with the official T2S lockup."""
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
 
 from PIL import Image
@@ -11,12 +12,56 @@ PUBLIC = ROOT / "public"
 MOBILE = ROOT / "mobile" / "assets"
 SOURCE = PUBLIC / "t2s-logo.png"
 LIGHT = (255, 255, 255, 255)
+CANVAS = (244, 247, 251, 255)  # login page --bg #f4f7fb
 
 
 def load_source() -> Image.Image:
     if not SOURCE.exists():
         raise SystemExit(f"Missing official lockup: {SOURCE}")
-    return Image.open(SOURCE).convert("RGBA")
+    return knock_white(Image.open(SOURCE).convert("RGBA"))
+
+
+def knock_white(im: Image.Image, thresh: int = 12) -> Image.Image:
+    """Flood-fill near-white canvas connected to the border so the lockup sits on the page."""
+    im = im.copy()
+    pix = im.load()
+    w, h = im.size
+
+    def is_plate(x: int, y: int) -> bool:
+        r, g, b, a = pix[x, y]
+        if a == 0:
+            return False
+        return max(255 - r, 255 - g, 255 - b) <= thresh
+
+    seen = bytearray(w * h)
+    q: deque[tuple[int, int]] = deque()
+
+    def push(x: int, y: int) -> None:
+        i = y * w + x
+        if seen[i] or not is_plate(x, y):
+            return
+        seen[i] = 1
+        q.append((x, y))
+
+    for x in range(w):
+        push(x, 0)
+        push(x, h - 1)
+    for y in range(h):
+        push(0, y)
+        push(w - 1, y)
+
+    while q:
+        x, y = q.popleft()
+        pix[x, y] = (255, 255, 255, 0)
+        if x:
+            push(x - 1, y)
+        if x + 1 < w:
+            push(x + 1, y)
+        if y:
+            push(x, y - 1)
+        if y + 1 < h:
+            push(x, y + 1)
+    return im
 
 
 def fit(src: Image.Image, size: int, background: tuple[int, int, int, int] | None = None) -> Image.Image:
@@ -33,16 +78,13 @@ def fit(src: Image.Image, size: int, background: tuple[int, int, int, int] | Non
 
 def save(img: Image.Image, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if img.mode == "RGB":
-        img.save(path, "PNG", optimize=True)
-    else:
-        img.save(path, "PNG", optimize=True)
+    img.save(path, "PNG", optimize=True)
     print(path.relative_to(ROOT))
 
 
 def main() -> None:
     src = load_source()
-    logo = fit(src, 800, LIGHT)
+    logo = fit(src, 800)
     save(logo, PUBLIC / "t2s-logo.png")
     save(logo, MOBILE / "t2s-logo.png")
     save(fit(src, 32, LIGHT), PUBLIC / "favicon.png")
@@ -51,9 +93,9 @@ def main() -> None:
     save(icon, MOBILE / "icon.png")
     save(icon, MOBILE / "icon-light.png")
     save(icon, MOBILE / "splash-icon.png")
-    save(icon, MOBILE / "android-icon-foreground.png")
+    save(fit(src, 1024, CANVAS), MOBILE / "android-icon-foreground.png")
     save(fit(src, 48, LIGHT), MOBILE / "favicon.png")
-    save(Image.new("RGB", (1024, 1024), (255, 255, 255)), MOBILE / "android-icon-background.png")
+    save(Image.new("RGB", (1024, 1024), (244, 247, 251)), MOBILE / "android-icon-background.png")
     mono = fit(src, 1024, LIGHT).convert("L").convert("RGB")
     save(mono, MOBILE / "android-icon-monochrome.png")
 

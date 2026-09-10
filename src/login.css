@@ -117,9 +117,7 @@
   height: auto;
   margin: 0 0 12px;
   object-fit: contain;
-  background: #fff;
-  border-radius: 28px;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+  background: transparent;
 }
 
 .t2s-login-panel {
@@ -142,16 +140,13 @@
 
 .t2s-login-avatar {
   display: flex;
-  width: 148px;
-  height: 148px;
+  width: 168px;
+  height: 168px;
   margin: 0 auto 16px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 28px;
-  background: #fff;
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  background: transparent;
 }
 
 .t2s-login-avatar img {
@@ -159,6 +154,7 @@
   height: 100%;
   object-fit: contain;
   display: block;
+  background: transparent;
 }
 
 .t2s-login-title {
