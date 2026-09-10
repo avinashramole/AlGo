@@ -565,7 +565,7 @@ function AddClientModal({
                 <option value="real">Real</option>
               </select>
               <span className="font-normal text-[11px] text-slate-500">
-                Real mode sends orders through the configured broker. This does not start Dhan LIVE on the desk.
+                Add broker credentials below before enabling real orders. Real mode does not start Dhan LIVE on the desk.
               </span>
             </Field>
             <Field label="Subscription mode">

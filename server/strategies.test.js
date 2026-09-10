@@ -46,6 +46,19 @@ test("formatConditionGroup joins rows with AND or OR", () => {
   );
 });
 
+test("normalizeAlgo keeps mapped clients and mapping scope", () => {
+  const created = normalizeAlgo({ name: "Map Desk", kind: "nifty-vwap-hedge" });
+  assert.deepEqual(created.mappedClientIds, []);
+  assert.equal(created.mappingScope, "both");
+  const saved = normalizeAlgo(
+    { mappedClientIds: ["u-arpit", "u-ramesh"], mappingScope: "clients" },
+    created,
+  );
+  assert.deepEqual(saved.mappedClientIds, ["u-arpit", "u-ramesh"]);
+  assert.equal(saved.mappingScope, "clients");
+  assert.equal(saved.enabled, false);
+});
+
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
   assert.equal(next.algos.length, 3);

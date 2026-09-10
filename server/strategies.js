@@ -301,6 +301,21 @@ export function summarizeAlgo(algo) {
   })} · ${tf} · ${size}`;
 }
 
+function mappingIds(value) {
+  return [...new Set((Array.isArray(value) ? value : []).map((id) => String(id || "").trim()).filter(Boolean))];
+}
+
+function mappingFields(input = {}, existing = {}) {
+  const scopeRaw = input.mappingScope != null ? input.mappingScope : existing.mappingScope;
+  const mappingScope = ["master", "clients", "both"].includes(String(scopeRaw || "")) ? String(scopeRaw) : "both";
+  const mappedClientIds = mappingIds(input.mappedClientIds != null ? input.mappedClientIds : existing.mappedClientIds);
+  return { mappingScope, mappedClientIds };
+}
+
+function withMapping(next, input, existing) {
+  return { ...next, ...mappingFields(input, existing) };
+}
+
 export function normalizeAlgo(input = {}, existing = {}) {
   const merged = { ...existing, ...input };
   const keepHedge =
@@ -346,7 +361,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
     next.summary = summarizeAlgo(next);
-    return next;
+    return withMapping(next, input, existing);
   }
   const keepReversal =
     isNiftyVwapReversalAlgo(merged) &&
@@ -392,7 +407,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
     next.summary = summarizeAlgo(next);
-    return next;
+    return withMapping(next, input, existing);
   }
   const keepNiftyVwap =
     isNiftyVwapAlgo(merged) &&
@@ -441,7 +456,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
     next.summary = summarizeAlgo(next);
-    return next;
+    return withMapping(next, input, existing);
   }
   const kind = input.kind === "price-action" ? "price-action" : "indicator";
   const symbol = SYMBOLS.some((row) => row.id === input.symbol) ? input.symbol : existing.symbol || "NIFTY";
@@ -545,7 +560,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   };
   delete next.trade;
   next.summary = summarizeAlgo(next);
-  return next;
+  return withMapping(next, input, existing);
 }
 
 export function seedAlgos() {

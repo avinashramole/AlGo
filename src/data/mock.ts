@@ -55,6 +55,8 @@ export type Algo = {
   sellValue?: number;
   summary?: string;
   dailyLiveIst?: string;
+  mappingScope?: "master" | "clients" | "both";
+  mappedClientIds?: string[];
   runMode?: "live" | "paper" | "backtest";
   instrument?: "future" | "option";
   optionType?: "CE" | "PE";

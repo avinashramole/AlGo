@@ -76,6 +76,8 @@ export type AlgoStrategy = {
   sellConditions?: ConditionGroup;
   summary?: string;
   dailyLiveIst?: string;
+  mappingScope?: "master" | "clients" | "both";
+  mappedClientIds?: string[];
   runMode?: "live" | "paper" | "backtest";
   lastBacktest?: {
     ranAt?: string;
