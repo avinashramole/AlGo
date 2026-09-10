@@ -38,6 +38,11 @@ import {
   runNiftyVwapHedgeBacktest,
   hedgeState,
 } from "./niftyVwapHedge/index.js";
+import {
+  applyHedgeDailyLive,
+  loadHedgeDailyLiveArmedYmd,
+  saveHedgeDailyLiveArmedYmd,
+} from "./niftyVwapHedge/dailyLive.js";
 
 const algoStore = loadAlgoStore();
 let removedAlgoIds = [...(algoStore.removedIds || [])];
@@ -1130,6 +1135,39 @@ export function memberQuotes() {
   return {
     indices: publicIndices(state.indices).map(memberIndexQuote).filter(Boolean),
   };
+}
+
+export function armNiftyVwapHedgeDailyLive(now = new Date()) {
+  const lastArmedYmd = loadHedgeDailyLiveArmedYmd();
+  const result = applyHedgeDailyLive(state.algos, {
+    now,
+    feedLive: isDhanFeedLive(),
+    lastArmedYmd,
+  });
+  if (result.reason === "dhan-not-live") {
+    console.log("NIFTY 15m VWAP hedge 09:30 arm skipped — Dhan is not LIVE");
+    return result;
+  }
+  if (result.lastArmedYmd && result.lastArmedYmd !== lastArmedYmd) {
+    saveHedgeDailyLiveArmedYmd(result.lastArmedYmd);
+  }
+  if (!result.armedIds.length) return result;
+  state.algos = result.algos;
+  for (const id of result.armedIds) {
+    const algo = state.algos.find((row) => row.id === id);
+    if (!algo) continue;
+    algo.lastPaperAt = 0;
+    algo.lastLiveAt = 0;
+    algo.lastLiveSide = "";
+    algo.lastSignal = "WAIT";
+    const hs = hedgeState(algo);
+    hs.inFlight = false;
+    hs.pendingRole = "";
+  }
+  persistAlgos();
+  state.notifications.unshift(`NIFTY 15m VWAP hedge · daily LIVE 09:30 IST · ${result.armedIds.join(",")}`);
+  console.log(`NIFTY 15m VWAP hedge armed LIVE at 09:30 IST · ${result.armedIds.join(",")}`);
+  return result;
 }
 
 export function toggleAlgo(id) {

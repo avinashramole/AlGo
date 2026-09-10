@@ -980,6 +980,21 @@ export function isDhanLive() {
   return Boolean(accessToken);
 }
 
+export async function ensureDhanLiveFromSavedToken() {
+  if (isDhanLive()) return { live: true, started: false };
+  const session = loadDhanSession();
+  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || "").trim();
+  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
+  if (!token || !id) return { live: false, reason: "no-token" };
+  try {
+    await startDhanLive({ accessToken: token, clientId: id });
+    return { live: true, started: true };
+  } catch (error) {
+    console.log(`Hedge 09:30 Dhan start failed: ${error.message || error}`);
+    return { live: false, reason: error.message || "start-failed" };
+  }
+}
+
 export function getDhanCredentials() {
   return { clientId, tokenHint: tokenHint(accessToken) };
 }

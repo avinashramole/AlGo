@@ -359,7 +359,7 @@ export function AlgoScreen() {
           </>
         ) : null}
         {draft.kind === "nifty-vwap-hedge" ? (
-          <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY 1 lot weekly ATM CE. Open above and close below → BUY 1 lot PE. +40% books primary. −20% buys 2 lots opposite once. +5% account P&L exits all. Saving does not start live.</Text>
+          <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY 1 lot weekly ATM CE. Open above and close below → BUY 1 lot PE. +40% books primary. −20% buys 2 lots opposite once. +5% account P&L exits all. LIVE starts automatically at 09:30 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-vwap-reversal" ? (
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. Saving does not start live.</Text>
         ) : draft.kind === "nifty-vwap" ? (

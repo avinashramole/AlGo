@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { clientStatus, createClient, deleteClient, saveClient } from "./clients.js";
@@ -33,6 +33,7 @@ import {
   squareOff,
   tickMarket,
   toggleAlgo,
+  armNiftyVwapHedgeDailyLive,
   updateAlgo,
   backtestAlgo,
   pickBacktestTimeframe,
@@ -41,6 +42,7 @@ import {
   noteLiveAlgoOrderResult,
   bookRejectedLiveOrder,
 } from "./market.js";
+import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
@@ -968,4 +970,20 @@ app.listen(port, "0.0.0.0", async () => {
   } catch (error) {
     console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }
+  startHedgeDailyLiveScheduler({
+    arm: async () => {
+      if (!isDhanLive()) {
+        const dhan = await ensureDhanLiveFromSavedToken();
+        if (!dhan.live) {
+          console.log(`Hedge 09:30 LIVE arm waiting for Dhan (${dhan.reason || "not-live"})`);
+        }
+      }
+      let result = armNiftyVwapHedgeDailyLive();
+      if (result.reason === "dhan-not-live") {
+        const dhan = await ensureDhanLiveFromSavedToken();
+        if (dhan.live) result = armNiftyVwapHedgeDailyLive();
+      }
+      return result;
+    },
+  });
 });

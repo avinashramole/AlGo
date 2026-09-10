@@ -54,6 +54,7 @@ export type Algo = {
   sellRight?: string;
   sellValue?: number;
   summary?: string;
+  dailyLiveIst?: string;
   runMode?: "live" | "paper" | "backtest";
   instrument?: "future" | "option";
   optionType?: "CE" | "PE";
@@ -228,7 +229,8 @@ export const initialAlgos: Algo[] = [
     qty: 65,
     slPct: 0,
     targetPct: 40,
-    summary: "NIFTY 15m VWAP hedge · weekly ATM · 1 lot + 2 opposite · +40% / −20% / +5% account",
+    summary: "NIFTY 15m VWAP hedge · weekly ATM · 1 lot + 2 opposite · +40% / −20% / +5% account · daily LIVE 09:30 IST",
+    dailyLiveIst: "09:30",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

@@ -75,6 +75,7 @@ export type AlgoStrategy = {
   buyConditions?: ConditionGroup;
   sellConditions?: ConditionGroup;
   summary?: string;
+  dailyLiveIst?: string;
   runMode?: "live" | "paper" | "backtest";
   lastBacktest?: {
     ranAt?: string;
@@ -456,6 +457,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       ...defaultConditions("indicator", "VWAP", "ORB"),
       ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
       runMode: "live",
+      dailyLiveIst: "09:30",
       brokerId: "dhan",
       enabled: false,
       status: "PAUSED",

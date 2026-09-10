@@ -83,7 +83,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
     if (isNiftyVwapHedgeKind(form)) {
-      return `NIFTY weekly ATM · 1 lot primary + 2 lots opposite once · last closed 15m vs VWAP · primary +40% · −20% hedge · +5% account exit`;
+      return `NIFTY weekly ATM · 1 lot primary + 2 lots opposite once · last closed 15m vs VWAP · primary +40% · −20% hedge · +5% account exit · daily LIVE 09:30 IST`;
     }
     if (isNiftyVwapReversalKind(form)) {
       return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · last closed 15m vs VWAP · BUY at next 15m open · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}%`;
@@ -226,7 +226,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         {engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
             {hedge
-              ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. Saving does not start trading — use Start paper or Start live on the algo card."
+              ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:30 IST on session days. Saving or restarting t2s does not start LIVE."
               : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. Saving does not start trading — use Start paper or Start live on the algo card."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
@@ -525,7 +525,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {form.runMode === "live" ? (
           <p className="mt-3 text-[11px] font-semibold text-amber-600">
-            Live Dhan stays off until you press Start live on the algo card. Saving this form does not place orders.
+            {hedge
+              ? "NIFTY 15m VWAP hedge goes LIVE automatically at 09:30 IST on session days. Saving this form or restarting t2s does not start LIVE."
+              : "Live Dhan stays off until you press Start live on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}
 

@@ -131,6 +131,7 @@ export type Snapshot = {
     rangeMinutes?: number;
     lookback?: number;
     summary?: string;
+    dailyLiveIst?: string;
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {
       trades?: number;

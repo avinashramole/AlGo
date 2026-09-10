@@ -108,6 +108,17 @@ test("seed includes paused NIFTY 15m VWAP hedge", () => {
   assert.equal(seeded[2].status, "PAUSED");
 });
 
+test("no hedge entry before the 09:15-09:30 bar closes", () => {
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge 930" });
+  const book = bookAdapter();
+  const forming = tick(algo, book, {
+    now: T0 + BAR15 - 1000,
+    futuresBars: [bar15(0, 24480, 24540, { high: 24550, low: 24470 })],
+  });
+  assert.equal(forming.action, "wait");
+  assert.equal(book.places.length, 0);
+});
+
 test("CE 15m open below VWAP and close above buys 1 lot after the candle closes", () => {
   const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge CE" });
   const book = bookAdapter();

@@ -147,6 +147,7 @@ export function Algo() {
                       <div>BUY 1 lot weekly ATM CE when that candle opened below VWAP and closed above</div>
                       <div>BUY 1 lot weekly ATM PE when that candle opened above VWAP and closed below</div>
                       <div>Primary +40% books that option · no stop · −20% buys 2 lots opposite once · +5% account P&L exits all</div>
+                      <div>Goes LIVE automatically every NSE session day at 09:30 IST. Restart / deploy does not start LIVE.</div>
                     </>
                   ) : kind === "nifty-vwap-reversal" ? (
                     <>
@@ -276,7 +277,7 @@ export function Algo() {
                 <div className="mt-2 text-[11px] text-slate-400">
                   Broker {brokerName(data.brokers, algo.brokerId)}{" "}
                   {isNiftyVwapHedgeKind(algo)
-                    ? "· Primary +40% · −20% hedge 2 lots · +5% account exit · no SL"
+                    ? "· Daily LIVE 09:30 IST · Primary +40% · −20% hedge 2 lots · +5% account exit · no SL"
                     : `· SL ${isNiftyOptionEngineKind(algo) ? algo.initialSlPct || (isNiftyVwapReversalKind(algo) ? 15 : 20) : algo.slPct || 0.4}% · Target ${algo.targetPct || (isNiftyVwapReversalKind(algo) ? 30 : isNiftyVwapKind(algo) ? 40 : 0.8)}%`}
                 </div>
                 {rangeId === algo.id ? (
