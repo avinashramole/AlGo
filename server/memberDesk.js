@@ -187,6 +187,20 @@ export function peekClientSettings(userId) {
   return normalizeClientSettings(desk);
 }
 
+export function peekClientBook(userId) {
+  const desk = store[userId];
+  if (!desk) {
+    return { positions: [], closedTrades: [], tradeMode: "paper", segments: ["All segments"], brokerId: "paper" };
+  }
+  return {
+    positions: Array.isArray(desk.positions) ? desk.positions : [],
+    closedTrades: Array.isArray(desk.closedTrades) ? desk.closedTrades : [],
+    tradeMode: desk.tradeMode === "real" ? "real" : "paper",
+    segments: asSegments(desk.segments),
+    brokerId: desk.brokerId || "paper",
+  };
+}
+
 export function saveClientSettings(userId, patch = {}) {
   if (!userId) throw fail("Client required.");
   const desk = loadDesk(userId);

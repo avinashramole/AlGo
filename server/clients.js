@@ -6,6 +6,7 @@ import {
   defaultSubscriptionUntil,
   knownEgressIps,
   listClientGroups,
+  peekClientBook,
   peekClientSettings,
   removeDesk,
   saveClientSettings,
@@ -177,4 +178,82 @@ export function deleteClient(userId, { actorId } = {}) {
   removeDesk(userId);
   removeMessagingUser(userId);
   return result;
+}
+
+function round2(value) {
+  return Number((Number(value) || 0).toFixed(2));
+}
+
+export function isCryptoSymbol(symbol) {
+  return /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(symbol || ""));
+}
+
+export function asLedgerPosition(row = {}) {
+  const type = String(row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  const qty = Math.abs(Number(row.qty) || 0);
+  const avg = Number(row.avg) || 0;
+  const ltp = Number(row.ltp) || avg;
+  const marked = Number(row.pnl);
+  const mtm = Number.isFinite(marked) ? marked : (ltp - avg) * qty * (type === "SELL" ? -1 : 1);
+  return {
+    id: String(row.id || ""),
+    symbol: String(row.symbol || ""),
+    product: String(row.product || "MIS").toUpperCase(),
+    type,
+    buyQty: type === "BUY" ? qty : 0,
+    buyPrice: type === "BUY" ? avg : 0,
+    sellQty: type === "SELL" ? qty : 0,
+    sellPrice: type === "SELL" ? avg : 0,
+    netQty: type === "SELL" ? -qty : qty,
+    ltp,
+    realized: round2(row.realized),
+    mtm: round2(mtm),
+    paper: Boolean(row.paper || row.brokerId === "paper"),
+    segment: isCryptoSymbol(row.symbol) ? "crypto" : "indian",
+    strategy: String(row.strategy || ""),
+  };
+}
+
+function bookTotals(positions = [], closedTrades = []) {
+  const rows = positions || [];
+  return {
+    positions: rows,
+    mtm: round2(rows.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
+    realized: round2((closedTrades || []).reduce((sum, row) => sum + Number(row.pnl || 0), 0)),
+    open: rows.length,
+  };
+}
+
+export function listPositionDesk(users = [], masterPositions = [], masterClosed = []) {
+  const masterRows = (masterPositions || []).map(asLedgerPosition);
+  const master = {
+    id: "master",
+    name: "Master",
+    kind: "master",
+    title: "Master",
+    subtitle: "PRIMARY MASTER ACCOUNT",
+    tradeMode: masterRows.some((row) => !row.paper) ? "real" : "paper",
+    ...bookTotals(masterRows, masterClosed),
+  };
+  const clients = listClients(users).map((client) => {
+    const book = peekClientBook(client.id);
+    const positions = (book.positions || []).map(asLedgerPosition);
+    return {
+      id: client.id,
+      name: client.name,
+      kind: "client",
+      title: client.name,
+      subtitle: "CLIENT ACCOUNT",
+      tradeMode: client.tradeMode,
+      ...bookTotals(positions, book.closedTrades),
+    };
+  });
+  return {
+    master,
+    clients,
+    masterMtm: master.mtm,
+    clientMtm: round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
+    totalMtm: round2(master.mtm + clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
+    openPositions: master.open + clients.reduce((sum, row) => sum + Number(row.open || 0), 0),
+  };
 }

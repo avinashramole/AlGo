@@ -9,7 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBroker
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
-import { clientStatus, createClient, deleteClient, saveClient } from "./clients.js";
+import { clientStatus, createClient, deleteClient, listPositionDesk, saveClient } from "./clients.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -454,6 +454,11 @@ app.post("/api/auth/gmail", async (req, res) => {
 
 app.get("/api/snapshot", (_req, res) => {
   res.json(snapshot());
+});
+
+app.get("/api/positions/desk", (_req, res) => {
+  const snap = snapshot();
+  res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
 });
 
 app.get("/api/brokers", (_req, res) => {

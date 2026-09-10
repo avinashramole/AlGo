@@ -39,7 +39,7 @@ fs.writeFileSync(
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
 const { saveClientSettings } = await import("./memberDesk.js");
-const { clientStatus, createClient, deleteClient, listClients, saveClient } = await import("./clients.js");
+const { asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
   const rows = listClients(listPublicUsers());
@@ -159,6 +159,31 @@ test("createClient refuses REAL when no broker is linked", () => {
     () => createClient({ name: "No Broker", mobile: "9000000001", brokerId: "paper", tradeMode: "real" }),
     /broker/,
   );
+});
+
+test("position desk lists master first and a live ledger per member", () => {
+  saveClientSettings("u-arpit", { tradeMode: "paper" });
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [{ id: "m1", symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, avg: 100, ltp: 110, pnl: 650, product: "MIS", brokerId: "dhan" }],
+    [{ pnl: 200 }],
+  );
+  assert.equal(desk.master.title, "Master");
+  assert.equal(desk.master.subtitle, "PRIMARY MASTER ACCOUNT");
+  assert.equal(desk.master.open, 1);
+  assert.equal(desk.master.positions[0].buyQty, 65);
+  assert.equal(desk.master.positions[0].netQty, 65);
+  assert.equal(desk.master.positions[0].segment, "indian");
+  assert.equal(desk.clients.some((row) => row.name === "Avinash"), false);
+  const arpit = desk.clients.find((row) => row.id === "u-arpit");
+  assert.equal(arpit.subtitle, "CLIENT ACCOUNT");
+  assert.equal(arpit.open, 0);
+  assert.equal(desk.openPositions, 1);
+  assert.equal(desk.masterMtm, 650);
+  const crypto = asLedgerPosition({ symbol: "BTCUSDT", type: "SELL", qty: 1, avg: 100, ltp: 90, pnl: 10 });
+  assert.equal(crypto.segment, "crypto");
+  assert.equal(crypto.sellQty, 1);
+  assert.equal(crypto.netQty, -1);
 });
 
 test("deleteClient removes a member and refuses the desk admin", () => {

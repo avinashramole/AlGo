@@ -851,6 +851,50 @@ export function squareOff(id: string) {
   return request<{ snapshot: Snapshot }>(`/positions/${id}/squareoff`, { method: "POST" });
 }
 
+export type LedgerPosition = {
+  id: string;
+  symbol: string;
+  product: string;
+  type: "BUY" | "SELL";
+  buyQty: number;
+  buyPrice: number;
+  sellQty: number;
+  sellPrice: number;
+  netQty: number;
+  ltp: number;
+  realized: number;
+  mtm: number;
+  paper: boolean;
+  segment: "indian" | "crypto";
+  strategy?: string;
+};
+
+export type PositionLedger = {
+  id: string;
+  name: string;
+  kind: "master" | "client";
+  title: string;
+  subtitle: string;
+  tradeMode: "paper" | "real";
+  positions: LedgerPosition[];
+  mtm: number;
+  realized: number;
+  open: number;
+};
+
+export type PositionsDeskSnapshot = {
+  master: PositionLedger;
+  clients: PositionLedger[];
+  masterMtm: number;
+  clientMtm: number;
+  totalMtm: number;
+  openPositions: number;
+};
+
+export function getPositionsDesk() {
+  return request<PositionsDeskSnapshot>("/positions/desk");
+}
+
 export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
 }
