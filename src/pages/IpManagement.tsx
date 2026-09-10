@@ -74,6 +74,30 @@ function BrokerChip({ name, color, dim }: { name: string; color?: string; dim?: 
   );
 }
 
+function BrokerMark({ name, color }: { name: string; color?: string }) {
+  if (!name) {
+    return (
+      <span className="inline-flex items-center gap-2 text-xs text-slate-500">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg)] text-[10px] font-bold">
+          —
+        </span>
+        —
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-black text-white"
+        style={{ background: color || "#64748b" }}
+      >
+        {name.slice(0, 1)}
+      </span>
+      <span className="text-[11px] font-extrabold uppercase tracking-wide">{name}</span>
+    </span>
+  );
+}
+
 export function IpManagement() {
   const [data, setData] = useState<IpManagementSnapshot>(emptySnap);
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -299,14 +323,14 @@ function AccountAssignmentsTable({
   onAssign: (userId: string, address: string) => Promise<boolean | void>;
 }) {
   return (
-    <section className="card overflow-hidden">
-      <div className="border-b border-[var(--border)] px-4 py-3">
-        <h2 className="text-sm font-semibold">All account assignments</h2>
-      </div>
+    <section className="relative mt-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] pt-3">
+      <h2 className="absolute left-4 top-0 -translate-y-1/2 bg-[var(--bg)] px-2 text-[13px] font-semibold">
+        All account assignments
+      </h2>
       <div className="max-h-[28rem] overflow-auto">
         <table className="min-w-[920px] w-full text-left">
           <thead className="sticky top-0 z-10 bg-[var(--card)]">
-            <tr className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            <tr className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
               <th className="px-4 py-3 font-bold">Account</th>
               <th className="px-4 py-3 font-bold">Broker</th>
               <th className="px-4 py-3 font-bold">Client ID</th>
@@ -319,32 +343,25 @@ function AccountAssignmentsTable({
             {accounts.length ? (
               accounts.map((row) => (
                 <tr key={row.userId} className="border-t border-[var(--border)]">
-                  <td className="px-4 py-3 align-middle">
-                    <div className="text-sm font-semibold">{row.name}</div>
+                  <td className="px-4 py-2.5 align-middle">
+                    <div className="text-sm font-semibold leading-tight">{row.name}</div>
                     <div className="text-[11px] capitalize text-slate-500">{row.kind}</div>
                   </td>
-                  <td className="px-4 py-3 align-middle">
-                    {row.brokerName ? (
-                      <BrokerChip name={row.brokerName} color={row.brokerColor} />
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                        <span className="h-3.5 w-3.5 rounded-[3px] border border-[var(--border)] bg-[var(--bg)]" />
-                        —
-                      </span>
-                    )}
+                  <td className="px-4 py-2.5 align-middle">
+                    <BrokerMark name={row.brokerName} color={row.brokerColor} />
                   </td>
-                  <td className="px-4 py-3 align-middle text-xs text-slate-400">{row.accountId || "—"}</td>
-                  <td className="px-4 py-3 align-middle text-xs">
+                  <td className="px-4 py-2.5 align-middle text-xs text-slate-400">{row.accountId || "—"}</td>
+                  <td className="px-4 py-2.5 align-middle text-xs">
                     {row.staticIp ? (
                       <span className="font-medium">{row.staticIp}</span>
                     ) : (
                       <span className="italic text-slate-500">Server default</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 align-middle">{accountStatusPill(row.status)}</td>
-                  <td className="px-4 py-3 align-middle">
+                  <td className="px-4 py-2.5 align-middle">{accountStatusPill(row.status)}</td>
+                  <td className="px-4 py-2.5 align-middle">
                     <select
-                      className="h-9 w-full min-w-[11rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold"
+                      className="h-9 w-full min-w-[12rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 text-xs font-semibold"
                       value={row.staticIp || SERVER_DEFAULT}
                       disabled={managingId === row.userId}
                       onChange={(event) => void onAssign(row.userId, event.target.value)}
