@@ -10,6 +10,14 @@ import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSav
 import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { clientStatus, createClient, deleteClient, listPositionDesk, saveClient } from "./clients.js";
+import {
+  addStaticIp,
+  assignStaticIp,
+  ipManagementStatus,
+  removeStaticIp,
+  testStaticIp,
+  unassignStaticIp,
+} from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -425,6 +433,50 @@ app.delete("/api/clients/:id", (req, res) => {
     res.json(deleteClient(req.params.id, { actorId: req.authUser?.id }));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not delete client" });
+  }
+});
+
+app.get("/api/ips", (_req, res) => {
+  res.json(ipManagementStatus());
+});
+
+app.post("/api/ips", (req, res) => {
+  try {
+    res.status(201).json(addStaticIp(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not add static IP" });
+  }
+});
+
+app.delete("/api/ips/:address", (req, res) => {
+  try {
+    res.json(removeStaticIp(decodeURIComponent(req.params.address || "")));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not delete static IP" });
+  }
+});
+
+app.post("/api/ips/:address/test", async (req, res) => {
+  try {
+    res.json(await testStaticIp(decodeURIComponent(req.params.address || "")));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not test static IP" });
+  }
+});
+
+app.post("/api/ips/:address/assign", (req, res) => {
+  try {
+    res.json(assignStaticIp({ address: decodeURIComponent(req.params.address || ""), ...(req.body || {}) }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not assign static IP" });
+  }
+});
+
+app.post("/api/ips/unassign", (req, res) => {
+  try {
+    res.json(unassignStaticIp(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not unassign static IP" });
   }
 });
 

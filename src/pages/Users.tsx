@@ -105,7 +105,10 @@ export function Users() {
         <div>
           <h1 className="text-xl font-bold">All clients</h1>
           <p className="text-sm text-slate-400">
-            Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.
+            Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.{" "}
+            <Link to="/settings/ips" className="font-semibold text-brand-500">
+              IP management
+            </Link>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -638,7 +641,13 @@ function AddClientModal({
                   </option>
                 ))}
               </select>
-              <span className="font-normal text-[11px] text-slate-500">IPs already assigned to another account on this broker are hidden.</span>
+              <span className="font-normal text-[11px] text-slate-500">
+                IPs already assigned to another account on this broker are hidden. Add inventory on{" "}
+                <Link to="/settings/ips" className="font-semibold text-brand-500">
+                  IP management
+                </Link>
+                .
+              </span>
             </Field>
             <div>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Client groups</div>

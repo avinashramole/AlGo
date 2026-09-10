@@ -67,6 +67,13 @@ export const CLIENT_BROKERS = [
   { id: "aliceblue", name: "ALICEBLUE", color: "#1d4ed8", segments: ["All segments", "EQ", "F&O"] },
   { id: "sharekhan", name: "SHAREKHAN", color: "#0f766e", segments: ["All segments", "EQ", "F&O"] },
   { id: "fyers", name: "FYERS", color: "#111827", segments: ["All segments", "EQ", "F&O"] },
+  { id: "groww", name: "GROWW", color: "#00b386", segments: ["All segments", "EQ", "F&O"] },
+  { id: "incred", name: "INCRED", color: "#e11d48", segments: ["All segments", "EQ", "F&O"] },
+  { id: "motilal", name: "MOTILAL", color: "#1e3a8a", segments: ["All segments", "EQ", "F&O"] },
+  { id: "choice", name: "CHOICE", color: "#7c3aed", segments: ["All segments", "EQ", "F&O"] },
+  { id: "delta", name: "DELTA", color: "#0891b2", segments: ["All segments", "CRYPTO"] },
+  { id: "coindcx", name: "COINDCX", color: "#2563eb", segments: ["All segments", "CRYPTO"] },
+  { id: "binance", name: "BINANCE", color: "#f59e0b", segments: ["All segments", "CRYPTO"] },
   { id: "paper", name: "PAPER", color: "#2f54eb", segments: ["All segments"] },
 ];
 
@@ -298,6 +305,10 @@ export function listClientGroups() {
   return [...groups];
 }
 
+export function listDeskRecords() {
+  return Object.keys(store).map((id) => ({ userId: id, ...normalizeClientSettings(store[id] || emptyDesk(id)) }));
+}
+
 export function removeDesk(userId) {
   if (!userId || !store[userId]) return false;
   delete store[userId];
@@ -314,7 +325,7 @@ function loadDesk(userId) {
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
   desk.seededPlans = Array.isArray(desk.seededPlans) ? desk.seededPlans : [];
   if (!desk.wallet || typeof desk.wallet !== "object") desk.wallet = { balance: 0, updatedAt: new Date().toISOString() };
-  if (!catalog.some((row) => row.id === desk.brokerId)) desk.brokerId = "paper";
+  if (!knownBroker(desk.brokerId)) desk.brokerId = "paper";
   return desk;
 }
 

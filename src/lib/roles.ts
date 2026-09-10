@@ -19,6 +19,7 @@ export const adminNav = [
   { to: "/brokers", label: "Brokers" },
   { to: "/analytics", label: "Analytics" },
   { to: "/users", label: "Users" },
+  { to: "/settings/ips", label: "IP management" },
   { to: "/chat", label: "Messages" },
   { to: "/profile", label: "Profile" },
   { to: "/settings", label: "Settings" },

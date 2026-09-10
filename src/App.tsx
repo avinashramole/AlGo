@@ -18,6 +18,7 @@ import { PositionsDesk } from "./pages/PositionsDesk";
 import { Reports } from "./pages/Reports";
 import { Profile } from "./pages/Profile";
 import { Settings } from "./pages/Settings";
+import { IpManagement } from "./pages/IpManagement";
 import { Signals } from "./pages/Signals";
 import { MemberPlans } from "./pages/MemberPlans";
 import { Subscriptions } from "./pages/Subscriptions";
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
         <Route path="users" element={<AdminOnly><Users /></AdminOnly>} />
         <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
+        <Route path="settings/ips" element={<AdminOnly><IpManagement /></AdminOnly>} />
         <Route path="notifications" element={<AdminOnly><Notifications /></AdminOnly>} />
         <Route path="chat" element={<AdminOnly><Chat /></AdminOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -608,6 +608,73 @@ export function deleteClient(id: string) {
   return request<{ ok: boolean; id: string }>(`/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export type EgressBrokerSlot = { id: string; name: string; color?: string };
+
+export type EgressAssignment = {
+  userId: string;
+  name: string;
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+};
+
+export type EgressIpCard = {
+  address: string;
+  family: "ipv4" | "ipv6";
+  label: string;
+  status: "healthy" | "failed" | "untested";
+  lastTestAt?: string;
+  lastTestError?: string;
+  assignedCount: number;
+  slotsUsed: number;
+  slotsMax: number;
+  assigned: EgressAssignment[];
+  availableSlots: EgressBrokerSlot[];
+};
+
+export type IpManagementSnapshot = {
+  slots: EgressBrokerSlot[];
+  stats: {
+    ipv4: number;
+    ipv6: number;
+    healthy: number;
+    assignments: number;
+    brokersCovered: number;
+    serverDefault: number;
+  };
+  ips: EgressIpCard[];
+  unassigned: EgressAssignment[];
+  test?: { ok: boolean; seen?: string; error?: string };
+};
+
+export function listStaticIps() {
+  return request<IpManagementSnapshot>("/ips");
+}
+
+export function addStaticIp(payload: { address: string; label?: string }) {
+  return request<IpManagementSnapshot>("/ips", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteStaticIp(address: string) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}`, { method: "DELETE" });
+}
+
+export function testStaticIp(address: string) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}/test`, { method: "POST" });
+}
+
+export function assignStaticIp(address: string, payload: { userId: string; brokerId?: string }) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}/assign`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function unassignStaticIp(userId: string) {
+  return request<IpManagementSnapshot>("/ips/unassign", { method: "POST", body: JSON.stringify({ userId }) });
+}
+
 export type CatalogStrategy = {
   id: string;
   name: string;

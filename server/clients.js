@@ -11,6 +11,7 @@ import {
   removeDesk,
   saveClientSettings,
 } from "./memberDesk.js";
+import { inventoryAddresses } from "./ipManagement.js";
 import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
 
 function fail(message, status = 400) {
@@ -98,7 +99,7 @@ export function clientStatus(users = []) {
     groups: listClientGroups(),
     brokers: CLIENT_BROKERS,
     assignedIps,
-    knownIps: knownEgressIps(),
+    knownIps: [...new Set([...inventoryAddresses(), ...knownEgressIps()])],
     defaultUntil: defaultSubscriptionUntil(),
     live: clients.filter((row) => row.status === "LIVE").length,
     paper: clients.filter((row) => row.status !== "LIVE").length,

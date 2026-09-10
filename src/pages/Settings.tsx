@@ -76,6 +76,13 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-3">
       <h1 className="text-xl font-bold">Settings</h1>
+      <Link to="/settings/ips" className="card flex items-center justify-between px-4 py-3">
+        <div>
+          <div className="text-sm font-semibold">IP management</div>
+          <div className="text-xs text-slate-400">Broker-wise static egress allocation and account control</div>
+        </div>
+        <span className="text-sm font-semibold text-brand-500">Open →</span>
+      </Link>
       <Link to="/profile" className="card flex items-center justify-between px-4 py-3">
         <span className="text-sm font-semibold">User profile</span>
         <span className="text-sm font-semibold text-brand-500">Name, email, mobile →</span>
