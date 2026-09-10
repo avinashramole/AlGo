@@ -194,6 +194,35 @@ Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443
 
 ---
 
+## 502 Bad Gateway (nginx)
+
+Nginx is running. Node on **127.0.0.1:4000** is not. This happens if Block A stopped `t2s` and Block B did not finish (`npm run build` OOM). Restarting `t2s` does **not** turn LIVE on.
+
+**Bring the site back first. Do not paste Block A again** (Block A stops `t2s`).
+
+```bash
+swapon /swapfile 2>/dev/null
+sync
+echo 3 > /proc/sys/vm/drop_caches
+systemctl start t2s
+sleep 2
+systemctl is-active t2s
+curl -sS -o /dev/null -w "app:%{http_code}\n" http://127.0.0.1:4000/
+systemctl start nginx
+systemctl is-active nginx
+```
+
+You want `t2s` **active** and `app:200` (or `302`). Then Chrome: **https://trade2smart.com**
+
+If `systemctl start t2s` fails, paste this and send the last lines:
+
+```bash
+journalctl -u t2s -n 40 --no-pager
+free -h
+```
+
+---
+
 ## Cannot allocate memory (`-bash: fork: Cannot allocate memory`)
 
 The VPS RAM is full. `git` and `npm` cannot start until something is freed. Restarting `t2s` does **not** turn LIVE on.
