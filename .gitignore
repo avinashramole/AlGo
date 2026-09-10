@@ -25,4 +25,5 @@ server/data/algos.json
 server/data/sessions.json
 server/data/messaging.json
 server/data/hedge-daily-live.json
+server/data/egress-ips.json
 *.zip
