@@ -30,16 +30,16 @@ function PageLoading({ label }: { label: string }) {
 
 function Guard({ children }: { children: ReactNode }) {
   const { user, ready } = useAuth();
+  if (user) return children;
   if (!ready) return <PageLoading label="Loading desk…" />;
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
+  return <Navigate to="/login" replace />;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { user, ready } = useAuth();
+  if (isAdminUser(user)) return children;
   if (!ready) return <PageLoading label="Loading…" />;
-  if (!isAdminUser(user)) return <Navigate to="/" replace />;
-  return children;
+  return <Navigate to="/" replace />;
 }
 
 function RoleHome() {

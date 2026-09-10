@@ -551,18 +551,20 @@ export type ClientRow = {
   lastLoginAt?: string;
 };
 
+export type ClientsList = {
+  clients: ClientRow[];
+  groups: string[];
+  brokers: ClientBroker[];
+  assignedIps: Record<string, string[]>;
+  knownIps: string[];
+  defaultUntil: string;
+  strategies: Array<{ id: string; name: string }>;
+  live: number;
+  paper: number;
+};
+
 export function listClients() {
-  return request<{
-    clients: ClientRow[];
-    groups: string[];
-    brokers: ClientBroker[];
-    assignedIps: Record<string, string[]>;
-    knownIps: string[];
-    defaultUntil: string;
-    strategies: Array<{ id: string; name: string }>;
-    live: number;
-    paper: number;
-  }>("/clients");
+  return request<ClientsList>("/clients");
 }
 
 export function createClient(payload: {

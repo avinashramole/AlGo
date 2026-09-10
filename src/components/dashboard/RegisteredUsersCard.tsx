@@ -2,6 +2,7 @@ import { Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUsers, type AuthUser } from "../../api/client";
+import { loadClientList } from "../../lib/clientsCache";
 
 export function RegisteredUsersCard() {
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -15,6 +16,7 @@ export function RegisteredUsersCard() {
           setError("");
         })
         .catch((err) => setError(err instanceof Error ? err.message : "Could not load users"));
+      void loadClientList();
     };
     load();
     const id = window.setInterval(load, 8000);

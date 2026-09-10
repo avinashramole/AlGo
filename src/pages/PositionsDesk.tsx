@@ -241,7 +241,9 @@ export function PositionsDesk() {
 
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down dark:bg-rose-950/40">{error}</div> : null}
 
-      {!ready ? <div className="card px-4 py-8 text-center text-sm text-slate-400">Loading client books…</div> : null}
+      {!ready && !liveMaster.length ? (
+        <div className="card px-4 py-8 text-center text-sm text-slate-400">Loading client books…</div>
+      ) : null}
 
       {ledgers.map(({ ledger, positions, mtm }) => (
         <LedgerCard

@@ -1,6 +1,7 @@
 import { Activity, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { listClients, updateAlgo, type ClientRow } from "../api/client";
+import { updateAlgo, type ClientRow } from "../api/client";
+import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
@@ -421,16 +422,17 @@ function AlgoCard({
 
 function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClose: () => void; onSaved: () => void }) {
   const { refresh } = useMarket();
-  const [clients, setClients] = useState<ClientRow[]>([]);
+  const seeded = peekClientList();
+  const [clients, setClients] = useState<ClientRow[]>(seeded?.clients || []);
   const [scope, setScope] = useState<MappingScope>(algo.mappingScope || "both");
   const [picked, setPicked] = useState<string[]>(algo.mappedClientIds || []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(Boolean(seeded?.clients.length));
 
   const load = useCallback(async () => {
     try {
-      const result = await listClients();
+      const result = await loadClientList(true);
       setClients(result.clients || []);
       setError("");
     } catch (err) {

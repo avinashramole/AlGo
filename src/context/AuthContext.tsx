@@ -151,7 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
   const [ready, setReady] = useState(() => {
     const token = readToken();
-    return !token || token === "t2s-offline-token";
+    if (!token || token === "t2s-offline-token") return true;
+    return readUser()?.role === "admin";
   });
 
   useEffect(() => {

@@ -1,22 +1,24 @@
 import { MessageSquare, Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users as UsersIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { createClient, deleteClient, listClients, saveClient, type ClientBroker, type ClientRow } from "../api/client";
+import { Link, useLocation } from "react-router-dom";
+import { createClient, deleteClient, saveClient, type ClientBroker, type ClientRow } from "../api/client";
+import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { cn, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
 
 export function Users() {
-  const [clients, setClients] = useState<ClientRow[]>([]);
-  const [groups, setGroups] = useState<string[]>(["ALL"]);
-  const [brokers, setBrokers] = useState<ClientBroker[]>([]);
-  const [assignedIps, setAssignedIps] = useState<Record<string, string[]>>({});
-  const [knownIps, setKnownIps] = useState<string[]>([]);
-  const [strategies, setStrategies] = useState<Array<{ id: string; name: string }>>([]);
-  const [defaultUntil, setDefaultUntil] = useState(defaultUntilDate);
+  const seeded = peekClientList();
+  const [clients, setClients] = useState<ClientRow[]>(seeded?.clients || []);
+  const [groups, setGroups] = useState<string[]>(seeded?.groups?.length ? seeded.groups : ["ALL"]);
+  const [brokers, setBrokers] = useState<ClientBroker[]>(seeded?.brokers || []);
+  const [assignedIps, setAssignedIps] = useState<Record<string, string[]>>(seeded?.assignedIps || {});
+  const [knownIps, setKnownIps] = useState<string[]>(seeded?.knownIps || []);
+  const [strategies, setStrategies] = useState<Array<{ id: string; name: string }>>(seeded?.strategies || []);
+  const [defaultUntil, setDefaultUntil] = useState(seeded?.defaultUntil || defaultUntilDate);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(!seeded?.clients.length);
   const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState("");
   const [edit, setEdit] = useState<ClientRow | null>(null);
@@ -24,9 +26,10 @@ export function Users() {
   const [showAdd, setShowAdd] = useState(false);
 
   const load = useCallback(async () => {
-    setBusy(true);
+    const hadRows = Boolean(peekClientList()?.clients.length);
+    if (!hadRows) setBusy(true);
     try {
-      const result = await listClients();
+      const result = await loadClientList(true);
       setClients(result.clients || []);
       setGroups(result.groups?.length ? result.groups : ["ALL"]);
       setBrokers(result.brokers || []);
@@ -42,6 +45,8 @@ export function Users() {
     }
   }, []);
 
+  const location = useLocation();
+
   useEffect(() => {
     void load();
     const onVis = () => {
@@ -49,7 +54,7 @@ export function Users() {
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [load]);
+  }, [load, location.key]);
 
   const patchRow = async (id: string, payload: Parameters<typeof saveClient>[1]) => {
     setSavingId(id);
