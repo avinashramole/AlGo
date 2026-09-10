@@ -76,20 +76,24 @@ export function Orders() {
         {rows.length ? (
           <>
             <div className="divide-y divide-[var(--border)] md:hidden">
-              <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Buy / Sell</div>
               {rows.map((row) => {
                 const side = row.side === "SELL" ? "SELL" : "BUY";
                 const strategy = deskStrategyName(row.strategy, data.algos);
                 return (
                   <div key={row.id} className="px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 text-sm font-semibold">{row.symbol}</div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">{row.symbol}</div>
+                        {strategy ? <div className="text-[11px] text-slate-400">{strategy}</div> : null}
+                      </div>
                       <StatusBadge status={row.status} />
                     </div>
                     <div className="mt-2">
-                      <SideBadge side={side} />
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Buy / Sell</div>
+                      <div className="mt-1">
+                        <SideBadge side={side} />
+                      </div>
                     </div>
-                    {strategy ? <div className="mt-2 text-xs font-semibold">{strategy}</div> : null}
                     <div className="mt-1 text-[11px] text-slate-400">
                       {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
                     </div>
