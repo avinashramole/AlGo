@@ -125,24 +125,46 @@ function accountStatus(desk) {
 }
 
 function listAccountRows() {
-  return listPublicUsers()
-    .filter((user) => user && user.id && user.role !== "admin")
-    .map((user) => {
-      const desk = peekClientSettings(user.id);
-      const paper = !desk.brokerId || desk.brokerId === "paper";
-      const broker = paper ? null : brokerMeta(desk.brokerId);
-      return {
-        userId: user.id,
-        name: user.name || user.id,
-        kind: accountKind(user.id, user.name),
-        brokerId: paper ? "" : desk.brokerId,
-        brokerName: paper ? "" : broker.name,
-        brokerColor: paper ? "" : broker.color,
-        accountId: paper ? "" : desk.accountId || "",
-        staticIp: normalizeAddress(desk.staticIp),
-        status: accountStatus(desk),
-      };
+  const seen = new Set();
+  const rows = [];
+  for (const user of listPublicUsers()) {
+    if (!user?.id || user.role === "admin") continue;
+    seen.add(user.id);
+    const desk = peekClientSettings(user.id);
+    const paper = !desk.brokerId || desk.brokerId === "paper";
+    const broker = paper ? null : brokerMeta(desk.brokerId);
+    rows.push({
+      userId: user.id,
+      name: user.name || user.id,
+      kind: accountKind(user.id, user.name),
+      brokerId: paper ? "" : desk.brokerId,
+      brokerName: paper ? "" : broker.name,
+      brokerColor: paper ? "" : broker.color,
+      accountId: paper ? "" : desk.accountId || "",
+      staticIp: normalizeAddress(desk.staticIp),
+      status: accountStatus(desk),
     });
+  }
+  for (const desk of listDeskRecords()) {
+    if (seen.has(desk.userId)) continue;
+    const user = getPublicUser(desk.userId);
+    if (user?.role === "admin") continue;
+    const paper = !desk.brokerId || desk.brokerId === "paper";
+    const broker = paper ? null : brokerMeta(desk.brokerId);
+    const name = user?.name || desk.userId;
+    rows.push({
+      userId: desk.userId,
+      name,
+      kind: accountKind(desk.userId, name),
+      brokerId: paper ? "" : desk.brokerId,
+      brokerName: paper ? "" : broker.name,
+      brokerColor: paper ? "" : broker.color,
+      accountId: paper ? "" : desk.accountId || "",
+      staticIp: normalizeAddress(desk.staticIp),
+      status: accountStatus(desk),
+    });
+  }
+  return rows;
 }
 
 function cardFor(row) {
@@ -190,7 +212,13 @@ export function ipManagementStatus() {
       serverDefault: withoutIp,
     },
     ips: cards,
-    accounts: listAccountRows(),
+    accounts: (() => {
+      try {
+        return listAccountRows();
+      } catch {
+        return [];
+      }
+    })(),
     unassigned: desks
       .filter((desk) => !normalizeAddress(desk.staticIp))
       .map((desk) => {
