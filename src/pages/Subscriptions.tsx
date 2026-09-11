@@ -97,10 +97,6 @@ export function Subscriptions() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-extrabold">{row.name}</h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {[row.symbol, row.timeframe, row.tag].filter(Boolean).join(" · ") || "Desk strategy"}
-                  </p>
-                  {row.summary ? <p className="mt-2 text-sm text-slate-500">{row.summary}</p> : null}
                   <div className="mt-2 text-sm font-bold">{formatInr(row.enrollFee)}</div>
                 </div>
                 {current?.status === "paid" ? (

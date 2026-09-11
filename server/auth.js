@@ -7,7 +7,7 @@ import nodemailer from "nodemailer";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
 const SESSIONS_FILE = process.env.T2S_SESSIONS_FILE || path.join(__dirname, "data", "sessions.json");
-const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
+const GMAIL_FILE = process.env.T2S_GMAIL_FILE || path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
 const MAX_ATTEMPTS = 5;
@@ -323,8 +323,20 @@ function gmailReady() {
   return Boolean(gmailCreds.user && gmailCreds.pass);
 }
 
-function gmailTransport() {
+function allowOnScreenOtp() {
+  return process.env.T2S_SHOW_OTP === "1";
+}
+
+function gmailTransport(port = 465) {
   if (!gmailReady()) return null;
+  if (port === 587) {
+    return nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: { user: gmailCreds.user, pass: gmailCreds.pass },
+    });
+  }
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
@@ -363,18 +375,27 @@ export async function connectGmail({ email, appPassword } = {}) {
 }
 
 async function sendMail({ to, subject, text, html }) {
-  const transport = gmailTransport();
-  if (!transport) return { delivered: false, reason: "gmail-not-configured" };
-  await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
-  return { delivered: true };
+  if (!gmailReady()) return { delivered: false, reason: "gmail-not-configured" };
+  let lastError = null;
+  for (const port of [465, 587]) {
+    try {
+      const transport = gmailTransport(port);
+      if (!transport) return { delivered: false, reason: "gmail-not-configured" };
+      await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
+      return { delivered: true };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || fail("Could not send email.");
 }
 
 async function sendOtpMail(email, code, name) {
   return sendMail({
     to: email,
     subject: `${code} is your T2S login code`,
-    text: `Hi ${name || "there"},\n\nYour T2S Algo login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
-    html: `<p>Hi ${name || "there"},</p><p>Your T2S Algo login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
+    text: `Hi ${name || "there"},\n\nYour Trade 2 Smart login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
+    html: `<p>Hi ${name || "there"},</p><p>Your Trade 2 Smart login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
   });
 }
 
@@ -440,7 +461,9 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   }
   if (wanted === "gmail") {
     if (provider) assertEmailForProvider(target, provider);
-    else if (intent === "signup" && !isGmail(target)) {
+    else if (intent === "login" && !target.includes("@")) {
+      throw fail("Enter the email on your account. We will send a 6-digit login code there.");
+    } else if (intent === "signup" && !isGmail(target)) {
       throw fail("Use a Gmail address (you@gmail.com), or continue with Microsoft / Apple.");
     } else if (!target.includes("@")) {
       throw fail("Enter a valid email.");
@@ -451,11 +474,21 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   const displayName = String(name || existing?.name || "").trim();
   if (intent === "signup") {
     if (!displayName || displayName.length < 2) {
-      const error = fail("Enter your name, then send the code.");
+      const error = fail("Enter your user name.");
       error.needName = true;
       throw error;
     }
-    if (existing?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
+    const extraMobile = normalizeMobile(mobile);
+    if (!isMobile(extraMobile)) throw fail("Mobile no must be 10 digits.");
+    if (existing?.password || (existing && isRegisteredUser(existing))) {
+      throw fail("That email already has an account. Sign in instead.");
+    }
+    if (extraMobile) {
+      const mobileUser = findUser(extraMobile);
+      if (mobileUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+        throw fail("That mobile number already has an account. Sign in instead.");
+      }
+    }
   } else if (!existing) {
     throw fail("No account for that email / mobile. Sign up first.");
   }
@@ -478,14 +511,24 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   let delivered = false;
   try {
     if (wanted === "gmail") {
+      const mustEmail = intent === "login" && !allowOnScreenOtp();
+      if (!gmailReady() && mustEmail) {
+        otps.delete(key);
+        throw fail("Email login codes need Gmail connected in Settings (Google App Password).");
+      }
       delivered = (await sendOtpMail(target, code, displayName || existing?.name)).delivered;
+      if (!delivered && mustEmail) {
+        otps.delete(key);
+        throw fail("Could not email the login code. Check Gmail App Password in Settings.");
+      }
     } else {
       delivered = (await sendSms(target, code)).delivered;
     }
   } catch (err) {
+    otps.delete(key);
     throw fail(err.message || "Could not send the code.");
   }
-  const showCode = !delivered;
+  const showCode = !delivered && (allowOnScreenOtp() || intent !== "login");
   const to = wanted === "gmail" ? maskEmail(target) : maskMobile(target);
   if (showCode) console.log(`T2S OTP (${wanted} ${intent}) ${target}: ${code}`);
   return {
@@ -536,14 +579,32 @@ export function resetPassword({ email, mobile, identifier, otp, password } = {})
 }
 
 export function completeSignup({ name, email, mobile, identifier, otp, password, channel } = {}) {
-  const wanted = channel === "mobile" || isMobile(identifier || mobile) ? "mobile" : "gmail";
-  const target = wanted === "mobile" ? normalizeMobile(identifier || mobile || email) : normalizeEmail(identifier || email);
   const displayName = String(name || "").trim();
-  if (displayName.length < 2) throw fail("Enter a name.");
-  if (String(password || "").length < 6) throw fail("Password must be at least 6 characters.");
-  consumeOtp(wanted, target, otp, "signup");
-  let user = findUser(target);
-  if (user?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
+  if (displayName.length < 2) throw fail("Enter your user name.");
+  const nextEmail = normalizeEmail(email || (String(identifier || "").includes("@") ? identifier : ""));
+  const nextMobile = normalizeMobile(mobile || (isMobile(identifier) ? identifier : ""));
+  if (!nextEmail.includes("@")) throw fail("Enter your email id.");
+  if (!isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
+    throw fail("Use a Gmail address (you@gmail.com).");
+  }
+  if (!isMobile(nextMobile)) throw fail("Mobile no must be 10 digits.");
+  const pass = String(password || "");
+  const hasOtp = Boolean(String(otp || "").trim());
+  if (pass && pass.length < 6) throw fail("Password must be at least 6 characters.");
+  if (!hasOtp && !pass) throw fail("Create a password, or email a signup code first.");
+  if (hasOtp) {
+    const wanted = channel === "mobile" ? "mobile" : "gmail";
+    consumeOtp(wanted, wanted === "mobile" ? nextMobile : nextEmail, otp, "signup");
+  }
+  const emailUser = findUser(nextEmail);
+  const mobileUser = findUser(nextMobile);
+  if (emailUser?.password || (emailUser && isRegisteredUser(emailUser))) {
+    throw fail("That email already has an account. Sign in instead.");
+  }
+  if (mobileUser && mobileUser !== emailUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+    throw fail("That mobile number already has an account. Sign in instead.");
+  }
+  let user = emailUser && !isRegisteredUser(emailUser) ? emailUser : null;
   if (!user) {
     const pendingSegin = displayName.toLowerCase() === "segin" ? store.users.find((row) => row.id === "segin") : null;
     user = pendingSegin || {
@@ -557,11 +618,11 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
   }
   user.name = displayName;
   user.desk = user.desk || "Index Options";
-  user.password = hashPassword(password);
+  user.email = nextEmail;
+  user.mobile = nextMobile;
+  if (pass) user.password = hashPassword(pass);
   user.createdAt = user.createdAt || new Date().toISOString();
-  user.authProvider = user.authProvider || "password";
-  if (wanted === "gmail") user.email = target;
-  else user.mobile = target;
+  user.authProvider = pass ? "password" : user.authProvider || "email";
   if (!user.role) user.role = resolveUserRole(user);
   persist();
   return issueSession(user);
@@ -584,12 +645,14 @@ export function loginWithThumb(thumbToken) {
   return issueSession(user);
 }
 
-export function sessionUser(token) {
+export function sessionUser(token, { reload = false } = {}) {
+  if (reload) store = loadUsers();
   const user = userFromToken(token);
   return user ? publicUser(user) : null;
 }
 
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {
+  store = loadUsers();
   const user = userFromToken(sessionToken);
   if (!user) throw fail("Sign in first.", 401);
   const nextName = String(name ?? user.name ?? "").trim();
@@ -636,10 +699,10 @@ export function getPublicUser(id) {
 export function adminUpdateUser(id, patch = {}) {
   store = loadUsers();
   const user = store.byId.get(String(id || "").trim());
-  if (!user) throw fail("Client not found.", 404);
+  if (!user) throw fail("User not found.", 404);
   if (patch.name != null) {
     const name = String(patch.name || "").trim();
-    if (name.length < 2) throw fail("Enter the client name.");
+    if (name.length < 2) throw fail("Enter the name.");
     user.name = name;
   }
   if (patch.mobile != null) {

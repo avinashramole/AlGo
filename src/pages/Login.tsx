@@ -6,6 +6,8 @@ import {
   EyeOff,
   Headphones,
   Lock,
+  Mail,
+  Phone,
   Shield,
   ShieldCheck,
   User,
@@ -42,6 +44,7 @@ export function Login() {
   const [page, setPage] = useState<"signin" | "signup" | "reset">("signin");
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
@@ -80,6 +83,14 @@ export function Login() {
     setCode("");
     setPassword("");
     setConfirm("");
+    setMobile("");
+  };
+
+  const openSignup = () => {
+    setPage("signup");
+    resetNotice();
+    setName("");
+    setIdentifier("");
   };
 
   const applyOtpResult = (result: { to?: string; hint?: string; devOtp?: string }) => {
@@ -89,12 +100,25 @@ export function Login() {
   };
 
   const onSendCode = async (purpose: "signup" | "login" | "reset", provider?: SocialProvider) => {
-    if (!identifier.trim()) {
-      setError(provider ? socialHint(provider) : "Enter your email or username first.");
+    if (purpose === "signup") {
+      if (name.trim().length < 2) {
+        setError("Enter your user name.");
+        return false;
+      }
+      if (!looksLikeMobile(mobile)) {
+        setError("Mobile no must be 10 digits.");
+        return false;
+      }
+      if (!identifier.includes("@")) {
+        setError("Enter your email id.");
+        return false;
+      }
+    } else if (!identifier.trim()) {
+      setError(provider ? socialHint(provider) : purpose === "login" ? "Enter your email. We will send a 6-digit login code there." : "Enter your email or username first.");
       return false;
     }
-    if (purpose === "signup" && name.trim().length < 2) {
-      setError("Enter your name, then send the code.");
+    if (purpose === "login" && !identifier.includes("@")) {
+      setError("Enter the email on your account. We will send a 6-digit login code there.");
       return false;
     }
     setLoading(true);
@@ -105,7 +129,8 @@ export function Login() {
       const result = await requestOtp({
         identifier,
         name,
-        channel: provider ? "gmail" : channel,
+        mobile: purpose === "signup" ? mobile : undefined,
+        channel: purpose === "login" || purpose === "signup" || provider ? "gmail" : channel,
         purpose,
         provider,
       });
@@ -165,8 +190,40 @@ export function Login() {
     }
 
     if (page === "signup") {
-      if (!sentTo) {
-        await onSendCode("signup");
+      if (name.trim().length < 2) {
+        setError("Enter your user name.");
+        return;
+      }
+      if (!looksLikeMobile(mobile)) {
+        setError("Mobile no must be 10 digits.");
+        return;
+      }
+      if (!identifier.includes("@")) {
+        setError("Enter your email id.");
+        return;
+      }
+      if (sentTo) {
+        if (code.replace(/\D/g, "").length !== 6) {
+          setError("Enter the 6-digit email code.");
+          return;
+        }
+        if (password && password !== confirm) {
+          setError("Passwords do not match.");
+          return;
+        }
+        setLoading(true);
+        try {
+          await signup({ name, email: identifier, identifier, mobile, otp: code, password, channel: "gmail" }, remember);
+          navigate("/", { replace: true });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Sign up failed");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+      if (!password) {
+        setError("Create a password, or tap Email me a signup code.");
         return;
       }
       if (password !== confirm) {
@@ -175,7 +232,7 @@ export function Login() {
       }
       setLoading(true);
       try {
-        await signup({ name, identifier, otp: code, password, channel }, remember);
+        await signup({ name, email: identifier, identifier, mobile, password, channel: "gmail" }, remember);
         navigate("/", { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Sign up failed");
@@ -199,7 +256,7 @@ export function Login() {
     }
 
     if (!password) {
-      setError("Enter your password, or use Login with Google / Login with OTP.");
+      setError("Enter your password, or tap Email me a login code.");
       return;
     }
 
@@ -217,17 +274,17 @@ export function Login() {
   const title = page === "signup" ? "Create Account" : page === "reset" ? "Reset password" : "Welcome Back!";
   const sub =
     page === "signup"
-      ? "Create your Trade2Smart account"
+      ? ""
       : page === "reset"
         ? "Enter the code we sent, then choose a new password"
-        : "Login to continue to your account";
+        : sentTo
+          ? "Enter the 6-digit code we emailed you"
+          : "";
   const submitLabel =
     loading
       ? "Please wait..."
       : page === "signup"
-        ? sentTo
-          ? "Create Account"
-          : "Send code"
+        ? "Create Account"
         : page === "reset"
           ? sentTo
             ? "Reset password"
@@ -241,12 +298,12 @@ export function Login() {
       <PreviewDeskBanner />
       <div className="t2s-login-main">
         <aside className="t2s-login-hero">
-          <LoginWordmark />
+          <LoginHeroArt />
           <div className="t2s-hero-copy">
             <h1>
-              Trade <span className="t2s-blue">Smarter.</span>
+              Trade <span className="t2s-accent">Smarter.</span>
               <br />
-              Grow <span className="t2s-blue">Better.</span>
+              Grow <span className="t2s-accent">Better.</span>
             </h1>
             <p>Advanced Tools. Real-time Data. Smarter Decisions.</p>
           </div>
@@ -255,75 +312,106 @@ export function Login() {
             <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" tone="gold" />
             <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="blue" />
           </ul>
-          <LoginHeroArt />
         </aside>
 
         <section className="t2s-login-panel">
           <div className="t2s-login-card">
-            <div className="t2s-login-mobile-brand">
-              <LoginWordmark />
-            </div>
-            <div className="t2s-login-avatar" aria-hidden="true">
-              <User size={28} />
+            <div className="t2s-login-avatar">
+              <img src="/t2s-logo.png" alt="Trade 2 Smart" />
             </div>
             <h2 className="t2s-login-title">{title}</h2>
-            <p className="t2s-login-sub">{sub}</p>
+            {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
 
             <form
               onSubmit={(event) => {
                 event.preventDefault();
                 void onSubmit(event);
               }}
-              autoComplete="on"
+              autoComplete={page === "signup" ? "off" : "on"}
             >
               {page === "signup" ? (
-                <Field icon="user" label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" />
-              ) : null}
-              <Field
-                icon="user"
-                label="Email or Username"
-                value={identifier}
-                onChange={(value) => {
-                  setIdentifier(value);
-                  setSentTo("");
-                  setCode("");
-                }}
-                placeholder="Enter your email or username"
-                autoComplete="username"
-              />
-              {sentTo ? (
-                <Field
-                  icon="lock"
-                  label="6-digit code"
-                  value={code}
-                  onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="Enter 6-digit code"
-                  autoComplete="one-time-code"
-                />
-              ) : null}
-              {page === "signin" && !sentTo ? (
-                <Field
-                  icon="lock"
-                  label="Password"
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="Enter your password"
-                  secret
-                  autoComplete="current-password"
-                />
-              ) : null}
-              {page === "signup" && sentTo ? (
                 <>
-                  <Field icon="lock" label="Set password" value={password} onChange={setPassword} placeholder="Password" secret autoComplete="new-password" />
+                  <Field icon="user" label="User Name" value={name} onChange={setName} placeholder="User Name" autoComplete="off" name="t2s-signup-name" />
+                  <Field
+                    icon="phone"
+                    label="Mobile no *"
+                    value={mobile}
+                    onChange={(value) => setMobile(value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="10-digit mobile no"
+                    autoComplete="off"
+                    name="t2s-signup-mobile"
+                    maxLength={10}
+                  />
+                  <Field
+                    icon="mail"
+                    label="Email id"
+                    value={identifier}
+                    onChange={(value) => {
+                      setIdentifier(value);
+                      setSentTo("");
+                      setCode("");
+                    }}
+                    placeholder="Email id"
+                    autoComplete="off"
+                    name="t2s-signup-email"
+                    blockAutoFill
+                  />
+                  {sentTo ? (
+                    <Field
+                      icon="lock"
+                      label="6-digit email code"
+                      value={code}
+                      onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      autoComplete="one-time-code"
+                    />
+                  ) : null}
+                  <Field icon="lock" label="Create password" value={password} onChange={setPassword} placeholder="Create password" secret autoComplete="new-password" />
                   <Field icon="lock" label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
                 </>
-              ) : null}
-              {page === "reset" && sentTo ? (
+              ) : (
                 <>
-                  <Field icon="lock" label="New password" value={password} onChange={setPassword} placeholder="New password" secret autoComplete="new-password" />
-                  <Field icon="lock" label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
+                  <Field
+                    icon={page === "signin" ? "mail" : "user"}
+                    label={page === "signin" ? "Email" : "Email or Username"}
+                    value={identifier}
+                    onChange={(value) => {
+                      setIdentifier(value);
+                      setSentTo("");
+                      setCode("");
+                    }}
+                    placeholder="Enter your email"
+                    autoComplete="username"
+                  />
+                  {sentTo ? (
+                    <Field
+                      icon="lock"
+                      label="6-digit code"
+                      value={code}
+                      onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      autoComplete="one-time-code"
+                    />
+                  ) : null}
+                  {page === "signin" && !sentTo ? (
+                    <Field
+                      icon="lock"
+                      label="Password"
+                      value={password}
+                      onChange={setPassword}
+                      placeholder="Enter your password"
+                      secret
+                      autoComplete="current-password"
+                    />
+                  ) : null}
+                  {page === "reset" && sentTo ? (
+                    <>
+                      <Field icon="lock" label="New password" value={password} onChange={setPassword} placeholder="New password" secret autoComplete="new-password" />
+                      <Field icon="lock" label="Confirm password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" secret autoComplete="new-password" />
+                    </>
+                  ) : null}
                 </>
-              ) : null}
+              )}
 
               {page === "signin" && !sentTo ? (
                 <div className="t2s-row">
@@ -366,13 +454,27 @@ export function Login() {
                   <span>or</span>
                 </div>
                 <div className="t2s-alt">
+                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
+                    <Mail size={18} />
+                    Email me a login code
+                  </button>
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onGoogle()}>
                     <GoogleIcon />
                     Continue with Google
                   </button>
-                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
-                    <Shield size={18} />
-                    Login with OTP
+                </div>
+              </>
+            ) : null}
+
+            {page === "signup" ? (
+              <>
+                <div className="t2s-or" role="separator">
+                  <span>or</span>
+                </div>
+                <div className="t2s-alt">
+                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("signup")}>
+                    <Mail size={18} />
+                    {sentTo ? "Resend email signup code" : "Email me a signup code"}
                   </button>
                 </div>
               </>
@@ -382,7 +484,11 @@ export function Login() {
               type="button"
               className="t2s-switch"
               onClick={() => {
-                setPage(page === "signin" ? "signup" : "signin");
+                if (page === "signin") {
+                  openSignup();
+                  return;
+                }
+                setPage("signin");
                 resetNotice();
               }}
             >
@@ -413,7 +519,7 @@ export function Login() {
 
       <footer className="t2s-legal">
         <p>
-          © 2026 <b>Trade2Smart</b>. All rights reserved.
+          © 2026 <b>Trade<span className="t2s-accent">2</span>Smart</b>. All rights reserved.
         </p>
         <div className="t2s-legal-links">
           <span>Privacy Policy</span>
@@ -422,16 +528,6 @@ export function Login() {
           <span>Help</span>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function LoginWordmark() {
-  return (
-    <div className="t2s-wordmark" aria-label="Trade 2 Smart">
-      <span>Trade</span>
-      <span className="t2s-wordmark-gold">2</span>
-      <span>Smart</span>
     </div>
   );
 }
@@ -488,27 +584,47 @@ function Field({
   placeholder,
   secret,
   autoComplete,
+  name,
+  blockAutoFill,
+  required,
+  maxLength,
 }: {
-  icon: "user" | "lock";
+  icon: "user" | "lock" | "mail" | "phone";
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   secret?: boolean;
   autoComplete?: string;
+  name?: string;
+  blockAutoFill?: boolean;
+  required?: boolean;
+  maxLength?: number;
 }) {
   const [show, setShow] = useState(false);
+  const [locked, setLocked] = useState(Boolean(blockAutoFill));
+  const Icon = icon === "mail" ? Mail : icon === "phone" ? Phone : icon === "user" ? User : Lock;
   return (
     <label className="t2s-field">
       <span className="t2s-field-box">
-        {icon === "user" ? <User size={18} /> : <Lock size={18} />}
+        <Icon size={18} />
         <input
           className="t2s-input"
-          type={secret && !show ? "password" : "text"}
+          type={secret && !show ? "password" : icon === "phone" ? "tel" : "text"}
+          name={name}
           value={value}
           placeholder={placeholder || label}
-          autoComplete={autoComplete}
+          autoComplete={blockAutoFill ? "off" : autoComplete}
+          autoCorrect="off"
+          spellCheck={false}
+          readOnly={locked}
+          required={required}
+          maxLength={maxLength}
+          inputMode={icon === "phone" ? "numeric" : undefined}
+          data-1p-ignore={blockAutoFill || undefined}
+          data-lpignore={blockAutoFill ? "true" : undefined}
           aria-label={label}
+          onFocus={() => setLocked(false)}
           onChange={(event) => onChange(event.target.value)}
         />
         {secret ? (

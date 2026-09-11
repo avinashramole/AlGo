@@ -10,9 +10,14 @@ function authHeaders(): HeadersInit {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {};
   const response = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers || {}) },
-    ...init,
+    ...rest,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(extraHeaders || {}),
+    },
   });
   const text = await response.text();
   let body: { error?: string } = {};
@@ -402,6 +407,8 @@ export type BrokerAccount = {
   keyHint: string;
   liveFeed?: boolean;
   virtual?: boolean;
+  fields?: Array<{ id: string; label: string; placeholder?: string; secret?: boolean }>;
+  help?: string;
 };
 
 export type AuthUser = {
@@ -444,6 +451,7 @@ export type SocialProvider = "google" | "microsoft" | "apple";
 export function requestOtp(payload: {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
@@ -470,10 +478,12 @@ export function resetPassword(payload: { identifier: string; otp: string; passwo
 
 export function signup(payload: {
   name: string;
-  identifier: string;
-  otp: string;
-  password: string;
-  channel: "gmail" | "mobile";
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 }) {
   return request<{ token: string; user: AuthUser }>("/auth/signup", {
     method: "POST",
@@ -506,6 +516,13 @@ export function googleAuthStartUrl() {
 
 export function listUsers() {
   return request<{ users: AuthUser[] }>("/users");
+}
+
+export function saveUserContact(id: string, payload: { name?: string; mobile?: string }) {
+  return request<{ user: AuthUser }>(`/users/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export type ClientNotifications = {
@@ -608,14 +625,89 @@ export function deleteClient(id: string) {
   return request<{ ok: boolean; id: string }>(`/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export type EgressBrokerSlot = { id: string; name: string; color?: string };
+
+export type EgressAssignment = {
+  userId: string;
+  name: string;
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+};
+
+export type EgressAccountRow = {
+  userId: string;
+  name: string;
+  kind: "master" | "child";
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+  staticIp: string;
+  status: "active" | "inactive";
+};
+
+export type EgressIpCard = {
+  address: string;
+  family: "ipv4" | "ipv6";
+  label: string;
+  status: "healthy" | "failed" | "untested";
+  lastTestAt?: string;
+  lastTestError?: string;
+  assignedCount: number;
+  slotsUsed: number;
+  slotsMax: number;
+  assigned: EgressAssignment[];
+  availableSlots: EgressBrokerSlot[];
+};
+
+export type IpManagementSnapshot = {
+  slots: EgressBrokerSlot[];
+  stats: {
+    ipv4: number;
+    ipv6: number;
+    healthy: number;
+    assignments: number;
+    brokersCovered: number;
+    serverDefault: number;
+  };
+  ips: EgressIpCard[];
+  accounts: EgressAccountRow[];
+  unassigned: EgressAssignment[];
+  test?: { ok: boolean; seen?: string; error?: string };
+};
+
+export function listStaticIps() {
+  return request<IpManagementSnapshot>("/ips");
+}
+
+export function addStaticIp(payload: { address: string; label?: string }) {
+  return request<IpManagementSnapshot>("/ips", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteStaticIp(address: string) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}`, { method: "DELETE" });
+}
+
+export function testStaticIp(address: string) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}/test`, { method: "POST" });
+}
+
+export function assignStaticIp(address: string, payload: { userId: string; brokerId?: string }) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}/assign`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function unassignStaticIp(userId: string) {
+  return request<IpManagementSnapshot>("/ips/unassign", { method: "POST", body: JSON.stringify({ userId }) });
+}
+
 export type CatalogStrategy = {
   id: string;
   name: string;
-  tag?: string;
-  kind?: string;
-  summary?: string;
-  symbol?: string;
-  timeframe?: string;
   enrollFee: number;
 };
 
@@ -1033,7 +1125,10 @@ export function refreshDhanToken(
   }>("/brokers/dhan/reset", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {
+export function connectBroker(
+  id: string,
+  payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string; jwtToken?: string },
+) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
     method: "POST",
     body: JSON.stringify(payload),

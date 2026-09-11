@@ -5,17 +5,25 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
+import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
+import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { clientStatus, createClient, deleteClient, listPositionDesk, saveClient } from "./clients.js";
+import {
+  addStaticIp,
+  assignStaticIp,
+  ipManagementStatus,
+  removeStaticIp,
+  testStaticIp,
+  unassignStaticIp,
+} from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
-  applyBrokerPositions,
   applySyntheticOptionChain,
   assignAlgoBroker,
   cancelOrder,
@@ -69,22 +77,32 @@ setInterval(() => {
 
 let flushingLiveAlgos = false;
 
+async function sendLiveBrokerOrder(payload) {
+  const brokerId = String(payload.brokerId || "dhan");
+  if (brokerId === "dhan") {
+    if (!isDhanLive()) throw Object.assign(new Error("Dhan is not LIVE. Connect Access Token on Brokers."), { status: 400 });
+    return placeDhanOrder(payload);
+  }
+  return placeLiveBrokerOrder(brokerId, payload);
+}
+
 async function flushLiveAlgoOrders() {
-  if (flushingLiveAlgos || !isDhanLive()) return;
+  if (flushingLiveAlgos) return;
   const queued = drainPendingLiveAlgoOrders();
   if (!queued.length) return;
   flushingLiveAlgos = true;
   try {
     for (const payload of queued) {
+      const brokerId = String(payload.brokerId || "dhan");
       try {
-        const live = await placeDhanOrder(payload);
-        const order = placeOrder({ ...payload, brokerId: "dhan", live });
+        const live = await sendLiveBrokerOrder(payload);
+        const order = placeOrder({ ...payload, brokerId, live });
         noteLiveAlgoOrderResult(payload, live, order?.error);
         if (order?.error) {
           console.log(`Strategy live fill book: ${order.error}`);
         }
       } catch (error) {
-        const order = bookRejectedLiveOrder({ ...payload, brokerId: "dhan" }, error);
+        const order = bookRejectedLiveOrder({ ...payload, brokerId }, error);
         noteLiveAlgoOrderResult(payload, error.live || { status: "REJECTED" }, error);
         if (order?.error) {
           console.log(`Strategy live fill book: ${order.error}`);
@@ -262,7 +280,7 @@ function deskGuard(req, res, next) {
 }
 
 app.get("/api/me", (req, res) => {
-  const user = sessionUser(readToken(req));
+  const user = sessionUser(readToken(req), { reload: true });
   if (!user) {
     res.status(401).json({ error: "Sign in first." });
     return;
@@ -337,6 +355,7 @@ app.get("/api/member/quotes", (req, res) => {
 app.get("/api/member/desk", (req, res) => {
   try {
     const user = memberAuth(req);
+    const snap = snapshot();
     res.json(
       getMemberDesk({
         user,
@@ -344,6 +363,11 @@ app.get("/api/member/desk", (req, res) => {
         algos: listAlgos(),
         quote: quoteSymbol,
         admins: listPublicUsers(),
+        liveBook: {
+          positions: snap.positions || [],
+          orders: snap.orders || [],
+          closedTrades: snap.closedTrades || [],
+        },
       }),
     );
   } catch (error) {
@@ -397,6 +421,14 @@ app.get("/api/users", (_req, res) => {
   res.json({ users: listPublicUsers() });
 });
 
+app.post("/api/users/:id", (req, res) => {
+  try {
+    res.json({ user: adminUpdateUser(req.params.id, req.body || {}) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save user" });
+  }
+});
+
 app.get("/api/clients", (_req, res) => {
   res.json({
     ...clientStatus(listPublicUsers()),
@@ -428,13 +460,66 @@ app.delete("/api/clients/:id", (req, res) => {
   }
 });
 
+app.get("/api/ips", (_req, res) => {
+  res.json(ipManagementStatus());
+});
+
+app.post("/api/ips", (req, res) => {
+  try {
+    res.status(201).json(addStaticIp(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not add static IP" });
+  }
+});
+
+app.delete("/api/ips/:address", (req, res) => {
+  try {
+    res.json(removeStaticIp(decodeURIComponent(req.params.address || "")));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not delete static IP" });
+  }
+});
+
+app.post("/api/ips/:address/test", async (req, res) => {
+  try {
+    res.json(await testStaticIp(decodeURIComponent(req.params.address || "")));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not test static IP" });
+  }
+});
+
+app.post("/api/ips/:address/assign", (req, res) => {
+  try {
+    res.json(assignStaticIp({ address: decodeURIComponent(req.params.address || ""), ...(req.body || {}) }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not assign static IP" });
+  }
+});
+
+app.post("/api/ips/unassign", (req, res) => {
+  try {
+    res.json(unassignStaticIp(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not unassign static IP" });
+  }
+});
+
 app.get("/api/payments", (_req, res) => {
   res.json({ payments: getPaymentSettings() });
 });
 
 app.post("/api/payments", (req, res) => {
   try {
-    res.json({ ok: true, payments: savePaymentSettings(req.body || {}) });
+    const payments = savePaymentSettings(req.body || {});
+    const actor = req.authUser || sessionUser(readToken(req));
+    if (actor?.id && req.body?.mobile) {
+      try {
+        adminUpdateUser(actor.id, { mobile: req.body.mobile });
+      } catch {
+        // Payment number is saved even if the admin profile mobile is already taken.
+      }
+    }
+    res.json({ ok: true, payments });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not save payment settings" });
   }
@@ -544,13 +629,12 @@ app.post("/api/brokers/:id/connect", async (req, res) => {
       return;
     }
 
-    const result = connectBroker(req.params.id, req.body || {});
+    const result = await connectBroker(req.params.id, req.body || {});
     if (result.error) {
       res.status(400).json({ error: result.error });
       return;
     }
-    applyBrokerPositions(result.positions || [], req.params.id);
-    res.json({ ...result, snapshot: snapshot() });
+    res.json({ ...result, live: true, snapshot: snapshot() });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Dhan connect failed" });
   }
@@ -713,12 +797,12 @@ app.post("/api/orders", async (req, res) => {
   const body = req.body || {};
   const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
   try {
-    if (brokerId === "dhan" && isDhanLive()) {
+    if ((brokerId === "dhan" && isDhanLive()) || (brokerId !== "paper" && isLiveBrokerReady(brokerId))) {
       if (isPreviewRequest(req)) {
         res.status(400).json({ ok: false, live: false, error: PREVIEW_ORDER_ERROR });
         return;
       }
-      const live = await placeDhanOrder(body);
+      const live = await sendLiveBrokerOrder({ ...body, brokerId });
       let order = snapshot().orders.find((row) => String(row.id) === String(live.orderId));
       if (!order) {
         order = placeOrder({ ...body, brokerId, live });
@@ -745,9 +829,9 @@ app.post("/api/orders", async (req, res) => {
       ok: true,
       live: false,
       warning:
-        brokerId === "dhan"
-          ? "Order stayed on the T2S desk. Dhan is selected but not LIVE — paste Access Token on Brokers."
-          : undefined,
+        brokerId === "paper"
+          ? undefined
+          : `Order stayed on the T2S desk. ${brokerId} is not LIVE — connect it on Brokers first.`,
       order,
       snapshot: snapshot(),
     });

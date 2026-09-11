@@ -1,4 +1,4 @@
-import { getActiveBroker, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
+import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -14,7 +14,7 @@ import {
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
-import { buildReport, seedClosedTrades, seedOrders, seedPositions } from "./desk.js";
+import { buildReport } from "./desk.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import {
@@ -47,6 +47,14 @@ import {
   saveHedgeDailyLiveArmedYmd,
 } from "./niftyVwapHedge/dailyLive.js";
 import { dhanOrderFillPrice, mergeDhanOrderPrice, resolveLiveBookPrice } from "./dhanOrderPrice.js";
+import {
+  buildFeaturedSignal,
+  buildLiveDna,
+  buildLiveSignals,
+  emptyFiiDii,
+  indexWatchRows,
+  liveSentiment,
+} from "./liveSignals.js";
 
 const algoStore = loadAlgoStore();
 let removedAlgoIds = [...(algoStore.removedIds || [])];
@@ -300,14 +308,8 @@ const state = {
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
   algos: algoStore.algos,
-  positions: seedPositions(),
-  signals: [
-    { id: "s1", action: "BUY", symbol: "NIFTY 24500 CE", strategy: "VWAP Depth", time: "09:28:14", confidence: 91 },
-    { id: "s2", action: "SELL", symbol: "BANKNIFTY 52200 CE", strategy: "Mean Revert", time: "09:21:02", confidence: 77 },
-    { id: "s3", action: "BUY", symbol: "FINNIFTY 24900 CE", strategy: "Momentum Rider", time: "09:16:41", confidence: 84 },
-    { id: "s4", action: "BUY", symbol: "NIFTY 24600 CE", strategy: "ORB Breakout", time: "09:12:08", confidence: 72 },
-    { id: "s5", action: "SELL", symbol: "INDIA VIX FUT", strategy: "Vol Crush", time: "09:08:55", confidence: 69 },
-  ],
+  positions: [],
+  signals: [],
   watchlist: [
     { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12 },
     { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64 },
@@ -336,32 +338,23 @@ const state = {
   ],
   featuredSignal: {
     action: "BUY",
-    symbol: "NIFTY 24,500 CE",
-    strategy: "VWAP Depth",
-    expiry: "25 Aug",
-    confidence: 91,
-    risk: "LOW",
+    symbol: "",
+    strategy: "",
+    expiry: "—",
+    confidence: 0,
+    risk: "—",
     metrics: [
-      { label: "VWAP", value: 92 },
-      { label: "DEPTH", value: 99 },
-      { label: "OI", value: 84 },
-      { label: "VOLUME", value: 78 },
+      { label: "VWAP", value: 0 },
+      { label: "DEPTH", value: 0 },
+      { label: "OI", value: 0 },
+      { label: "VOLUME", value: 0 },
     ],
   },
-  sentiment: 91,
-  orders: seedOrders(),
-  closedTrades: seedClosedTrades(),
-  notifications: [
-    "VWAP Depth generated BUY on NIFTY 24500 CE",
-    "Momentum Rider filled FINNIFTY 24900 CE",
-    "ORB Breakout paused after 2 consecutive losses",
-    "FII net inflow crossed +1,500 Cr",
-  ],
-  chat: [
-    { from: "Risk", text: "VIX crushed 3%. Prefer defined-risk spreads.", mine: false },
-    { from: "Algo", text: "VWAP Depth confidence 91% on 24500 CE.", mine: false },
-    { from: "You", text: "Reviewing the ticket now.", mine: true },
-  ],
+  sentiment: 50,
+  orders: [],
+  closedTrades: [],
+  notifications: [],
+  chat: [],
   settings: {
     product: "MIS",
     confirmation: "Enabled",
@@ -456,7 +449,7 @@ export function queueLiveAlgoOrder(payload) {
       return { ok: true, queued: true, status: "PENDING", duplicate: true };
     }
   }
-  pendingLiveAlgoOrders.push({ ...payload, brokerId: "dhan" });
+  pendingLiveAlgoOrders.push({ ...payload, brokerId: payload.brokerId || "dhan" });
   return { ok: true, queued: true, status: "PENDING" };
 }
 
@@ -614,7 +607,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   vs.peBars = upsertOptionBar(vs.peBars, barTime, peLtp);
   const adapter =
     mode === "live"
-      ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) => queueLiveAlgoOrder({ ...payload, brokerId: algo.brokerId || "dhan" }),
+          squareOff,
+        })
       : PaperTradingAdapter({ placeOrder, squareOff });
   NiftyVwapStrategy.tick({
     algo,
@@ -665,7 +661,10 @@ function cancelPendingForStrategy(strategy) {
 function hedgeAdapter(mode, algo) {
   const base =
     mode === "live"
-      ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) => queueLiveAlgoOrder({ ...payload, brokerId: algo.brokerId || "dhan" }),
+          squareOff,
+        })
       : PaperTradingAdapter({ placeOrder, squareOff });
   const withName = (payload = {}) => ({
     ...payload,
@@ -966,12 +965,12 @@ function isPaperRow(row) {
 
 function liveDesk() {
   const live = isDhanFeedLive();
-  const keep = (row) => isPaperRow(row) || (Boolean(row?.live) && !row?.sim);
+  const keep = (row) => isPaperRow(row) || (!isSimRow(row) && row?.live !== false);
   const algos = state.algos || [];
   const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });
-  const orders = (live ? state.orders.filter(keep) : state.orders).map(withActualName);
-  const positions = (live ? state.positions.filter(keep) : state.positions).map(withActualName);
-  const closedTrades = (live ? (state.closedTrades || []).filter(keep) : state.closedTrades || []).map(withActualName);
+  const orders = (state.orders || []).filter(keep).map(withActualName);
+  const positions = (state.positions || []).filter(keep).map(withActualName);
+  const closedTrades = (state.closedTrades || []).filter(keep).map(withActualName);
   return { live, orders, positions, closedTrades };
 }
 
@@ -990,9 +989,11 @@ export function restoreSimulatedDesk() {
   state.algos = (state.algos || []).map((algo) =>
     algo.runMode === "paper" && algo.enabled ? { ...algo, enabled: false, status: "PAUSED" } : algo,
   );
-  state.orders = seedOrders();
-  state.positions = seedPositions();
-  state.closedTrades = seedClosedTrades();
+  state.orders = (state.orders || []).filter(isPaperRow);
+  state.positions = (state.positions || []).filter(isPaperRow);
+  state.closedTrades = (state.closedTrades || []).filter(isPaperRow);
+  state.signals = [];
+  state.notifications = [];
   applySyntheticOptionChain();
   syncPaperLedger();
 }
@@ -1173,8 +1174,19 @@ export function snapshot() {
   const { liveCandles: _liveCandles, closedTrades: _closedTrades, ...publicState } = clone(state);
   const liveState = { ...publicState, orders, positions, closedTrades };
   liveState.algos = (liveState.algos || []).map((algo) => ({ ...algo, trade: resolveAlgoTrade(algo) }));
+  const dnaScores = buildLiveDna({ indices: publicState.indices, optionChain: publicState.optionChain });
+  const signals = buildLiveSignals({ algos: liveState.algos, orders });
+  const watch = indexWatchRows(publicState.indices);
   return {
     ...liveState,
+    signals,
+    featuredSignal: buildFeaturedSignal(signals, publicState.optionMeta, dnaScores),
+    dnaScores,
+    fiiDii: emptyFiiDii(),
+    sentiment: liveSentiment(dnaScores),
+    notifications: (state.notifications || []).slice(0, 40),
+    watchlist: watch.map(({ volume: _volume, ...row }) => row),
+    marketWatch: watch,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
     report: buildReport(liveState),
@@ -1263,8 +1275,13 @@ export function toggleAlgo(id) {
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
   }
-  if (starting && algo.runMode === "live" && !isDhanFeedLive()) {
-    return { error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." };
+  if (starting && algo.runMode === "live") {
+    const brokerId = algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan";
+    const ready = brokerId === "dhan" ? isDhanFeedLive() : isLiveBrokerReady(brokerId);
+    if (!ready) {
+      const name = publicBrokers().brokers.find((row) => row.id === brokerId)?.name || brokerId;
+      return { error: `Start live needs ${name} LIVE — connect that broker on Brokers first.` };
+    }
   }
   algo.enabled = !algo.enabled;
   if (starting) {
@@ -1794,8 +1811,8 @@ export function replaceDhanOrders(rows) {
 }
 
 export function assignAlgoBroker(id, brokerId) {
-  const account = publicBrokers().brokers.find((item) => item.id === brokerId);
-  if (!account?.connected) return { error: "Connect this broker first" };
+  const wanted = String(brokerId || "").trim();
+  if (wanted !== "paper" && !isKnownLiveBroker(wanted)) return { error: "Unknown live broker" };
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Algo not found" };
   if (algo.runMode === "paper" || algo.runMode === "backtest") {
@@ -1803,7 +1820,7 @@ export function assignAlgoBroker(id, brokerId) {
     persistAlgos();
     return clone(algo);
   }
-  algo.brokerId = brokerId;
+  algo.brokerId = wanted || "dhan";
   persistAlgos();
   return clone(algo);
 }

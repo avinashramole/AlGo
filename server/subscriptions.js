@@ -130,11 +130,6 @@ export function catalogStrategy(algo, settings = payments) {
   return {
     id: algo.id,
     name: algo.name || "Strategy",
-    tag: algo.tag || "",
-    kind: algo.kind || "",
-    summary: algo.summary || "",
-    symbol: algo.symbol || "",
-    timeframe: algo.timeframe || "",
     enrollFee: Number.isFinite(fee) && fee > 0 ? Math.round(fee) : settings.amount,
   };
 }

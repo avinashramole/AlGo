@@ -67,6 +67,13 @@ export const CLIENT_BROKERS = [
   { id: "aliceblue", name: "ALICEBLUE", color: "#1d4ed8", segments: ["All segments", "EQ", "F&O"] },
   { id: "sharekhan", name: "SHAREKHAN", color: "#0f766e", segments: ["All segments", "EQ", "F&O"] },
   { id: "fyers", name: "FYERS", color: "#111827", segments: ["All segments", "EQ", "F&O"] },
+  { id: "groww", name: "GROWW", color: "#00b386", segments: ["All segments", "EQ", "F&O"] },
+  { id: "incred", name: "INCRED", color: "#e11d48", segments: ["All segments", "EQ", "F&O"] },
+  { id: "motilal", name: "MOTILAL", color: "#1e3a8a", segments: ["All segments", "EQ", "F&O"] },
+  { id: "choice", name: "CHOICE", color: "#7c3aed", segments: ["All segments", "EQ", "F&O"] },
+  { id: "delta", name: "DELTA", color: "#0891b2", segments: ["All segments", "CRYPTO"] },
+  { id: "coindcx", name: "COINDCX", color: "#2563eb", segments: ["All segments", "CRYPTO"] },
+  { id: "binance", name: "BINANCE", color: "#f59e0b", segments: ["All segments", "CRYPTO"] },
   { id: "paper", name: "PAPER", color: "#2f54eb", segments: ["All segments"] },
 ];
 
@@ -298,6 +305,10 @@ export function listClientGroups() {
   return [...groups];
 }
 
+export function listDeskRecords() {
+  return Object.keys(store).map((id) => ({ userId: id, ...normalizeClientSettings(store[id] || emptyDesk(id)) }));
+}
+
 export function removeDesk(userId) {
   if (!userId || !store[userId]) return false;
   delete store[userId];
@@ -314,7 +325,7 @@ function loadDesk(userId) {
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
   desk.seededPlans = Array.isArray(desk.seededPlans) ? desk.seededPlans : [];
   if (!desk.wallet || typeof desk.wallet !== "object") desk.wallet = { balance: 0, updatedAt: new Date().toISOString() };
-  if (!catalog.some((row) => row.id === desk.brokerId)) desk.brokerId = "paper";
+  if (!knownBroker(desk.brokerId)) desk.brokerId = "paper";
   return desk;
 }
 
@@ -333,90 +344,31 @@ export function memberBrokerCatalog(selectedId = "paper") {
   }));
 }
 
-function seedPlanBook(algo, brokerId) {
-  const name = algo?.name || "Strategy";
-  const reversal = /15m|reversal/i.test(name);
-  const openSymbol = reversal ? "NIFTY 24650 CE" : "NIFTY 24600 CE";
-  const closedSymbol = reversal ? "NIFTY 24550 PE" : "NIFTY 24500 CE";
-  const avg = reversal ? 62.4 : 74.1;
-  const ltp = round2(avg * 1.08);
-  const qty = 65;
-  const now = Date.now();
+export function ensurePlanLedger({ user } = {}) {
+  if (!user?.id) return null;
+  return loadDesk(user.id);
+}
+
+function sameStrategy(left, right) {
+  const a = String(left || "").trim().toLowerCase();
+  const b = String(right || "").trim().toLowerCase();
+  return Boolean(a && b && a === b);
+}
+
+function liveBookForPlans(liveBook, enrollments = []) {
+  const names = new Set(
+    (enrollments || [])
+      .filter((row) => row.status === "paid")
+      .map((row) => String(row.strategyName || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const match = (row) => names.has(String(row?.strategy || "").trim().toLowerCase());
+  if (!liveBook || !names.size) return { positions: [], orders: [], closedTrades: [] };
   return {
-    position: {
-      id: `mp${crypto.randomBytes(6).toString("hex")}`,
-      symbol: openSymbol,
-      type: "BUY",
-      qty,
-      avg,
-      ltp,
-      pnl: round2((ltp - avg) * qty),
-      brokerId,
-      strategy: name,
-      paper: true,
-      sim: true,
-    },
-    trade: {
-      id: `mt${crypto.randomBytes(6).toString("hex")}`,
-      symbol: closedSymbol,
-      side: "BUY",
-      qty,
-      entry: reversal ? 88 : 118.2,
-      exit: reversal ? 104.5 : 141.6,
-      pnl: reversal ? 1072.5 : 1521,
-      product: "MIS",
-      strategy: name,
-      brokerId,
-      closedAt: new Date(now - 36 * 3600 * 1000).toISOString(),
-      paper: true,
-      sim: true,
-    },
-    order: {
-      id: `mo${crypto.randomBytes(6).toString("hex")}`,
-      symbol: openSymbol,
-      side: "BUY",
-      qty,
-      filledQty: qty,
-      price: avg,
-      product: "MIS",
-      type: "MARKET",
-      status: "FILLED",
-      strategy: name,
-      brokerId,
-      createdAt: new Date(now - 2 * 3600 * 1000).toISOString(),
-      paper: true,
-      sim: true,
-    },
+    positions: (liveBook.positions || []).filter(match),
+    orders: (liveBook.orders || []).filter(match),
+    closedTrades: (liveBook.closedTrades || []).filter(match),
   };
-}
-
-export function ensurePlanLedger({ user, algo } = {}) {
-  if (!user?.id || !algo?.id) return null;
-  const desk = loadDesk(user.id);
-  if (desk.seededPlans.includes(algo.id)) return desk;
-  const book = seedPlanBook(algo, desk.brokerId);
-  desk.positions.unshift(book.position);
-  desk.closedTrades.unshift(book.trade);
-  desk.orders.unshift(book.order);
-  desk.seededPlans.push(algo.id);
-  persist();
-  return desk;
-}
-
-function syncPaidPlans(desk, enrollments = [], algos = []) {
-  const paid = (enrollments || []).filter((row) => row.status === "paid" && row.strategyId);
-  for (const row of paid) {
-    if (desk.seededPlans.includes(row.strategyId)) continue;
-    const algo = (algos || []).find((item) => item.id === row.strategyId) || {
-      id: row.strategyId,
-      name: row.strategyName,
-    };
-    const book = seedPlanBook(algo, desk.brokerId);
-    desk.positions.unshift(book.position);
-    desk.closedTrades.unshift(book.trade);
-    desk.orders.unshift(book.order);
-    desk.seededPlans.push(row.strategyId);
-  }
 }
 
 function markMtm(desk, quote) {
@@ -447,11 +399,11 @@ function publicTopup(row) {
   };
 }
 
-function planRows(desk, enrollments = []) {
+function planRows(book, enrollments = []) {
   const paid = (enrollments || []).filter((row) => row.status === "paid");
   return paid.map((row) => {
-    const open = desk.positions.filter((item) => item.strategy === row.strategyName);
-    const closed = desk.closedTrades.filter((item) => item.strategy === row.strategyName);
+    const open = (book.positions || []).filter((item) => sameStrategy(item.strategy, row.strategyName));
+    const closed = (book.closedTrades || []).filter((item) => sameStrategy(item.strategy, row.strategyName));
     const realizedPnl = round2(closed.reduce((sum, item) => sum + Number(item.pnl || 0), 0));
     const unrealizedPnl = round2(open.reduce((sum, item) => sum + Number(item.pnl || 0), 0));
     return {
@@ -467,16 +419,17 @@ function planRows(desk, enrollments = []) {
   });
 }
 
-export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [] } = {}) {
+export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
-  syncPaidPlans(desk, enrollments, algos);
-  markMtm(desk, quote);
-  persist();
+  const book = liveBookForPlans(liveBook, enrollments);
+  if (!book.positions.length && typeof quote === "function") {
+    markMtm(book, quote);
+  }
   const report = buildReport({
-    closedTrades: desk.closedTrades,
-    positions: desk.positions,
-    orders: desk.orders,
+    closedTrades: book.closedTrades,
+    positions: book.positions,
+    orders: book.orders,
   });
   const unrealized = Number(report.unrealizedPnl || 0);
   const balance = round2(desk.wallet.balance || 0);
@@ -489,9 +442,9 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     },
     brokerId: desk.brokerId,
     brokers: memberBrokerCatalog(desk.brokerId),
-    plans: planRows(desk, enrollments),
+    plans: planRows(book, enrollments),
     report,
-    positions: desk.positions,
+    positions: book.positions,
     topups: desk.topups.map(publicTopup),
     payments: publicPayments(admins),
   };

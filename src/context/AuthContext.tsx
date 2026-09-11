@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   enableThumb as enableThumbApi,
   getMe,
@@ -19,9 +19,20 @@ import {
 type OtpPayload = {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
+};
+
+type SignupPayload = {
+  name: string;
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 };
 
 type AuthContextValue = {
@@ -30,12 +41,14 @@ type AuthContextValue = {
   login: (identifier: string, password: string, remember?: boolean) => Promise<void>;
   requestOtp: (payload: OtpPayload) => Promise<OtpRequestResult>;
   verifyOtp: (identifier: string, otp: string, remember?: boolean) => Promise<void>;
-  signup: (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }, remember?: boolean) => Promise<void>;
+  signup: (payload: SignupPayload, remember?: boolean) => Promise<void>;
   resetPassword: (payload: { identifier: string; otp: string; password: string }, remember?: boolean) => Promise<void>;
   startGoogleLogin: () => Promise<void>;
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
   updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
+  applyUser: (next: AuthUser) => void;
+  refreshMe: () => Promise<void>;
   hasThumb: boolean;
   logout: () => void;
 };
@@ -155,6 +168,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return readUser()?.role === "admin";
   });
 
+  const applyUser = useCallback((next: AuthUser) => {
+    persistUser(next);
+    setUser(next);
+  }, []);
+
+  const refreshMe = useCallback(async () => {
+    const token = readToken();
+    if (!token || token === "t2s-offline-token") return;
+    const row = await getMe(token);
+    persistUser(row.user);
+    setUser(row.user);
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const googleError = params.get("google_error");
@@ -212,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persist(result.user, result.token, remember);
         setUser(result.user);
       },
-      signup: async (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }, remember = true) => {
+      signup: async (payload: SignupPayload, remember = true) => {
         const result = await signupApi(payload);
         persist(result.user, result.token, remember);
         setUser(result.user);
@@ -255,6 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistUser(result.user);
         setUser(result.user);
       },
+      applyUser,
+      refreshMe,
       logout: () => {
         localStorage.removeItem("t2s-token");
         localStorage.removeItem("t2s-user");
@@ -263,7 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       },
     }),
-    [user, ready, hasThumb],
+    [user, ready, hasThumb, applyUser, refreshMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

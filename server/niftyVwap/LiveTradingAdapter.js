@@ -5,7 +5,7 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
       if (typeof queueLiveOrder !== "function") return { error: "Live queue missing" };
       const queued = queueLiveOrder({
         ...payload,
-        brokerId: "dhan",
+        brokerId: payload.brokerId || "dhan",
         type: "MARKET",
         product: "MIS",
       });
@@ -27,7 +27,7 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
           product: "MIS",
           type: "MARKET",
           strategy: position.strategy,
-          brokerId: "dhan",
+          brokerId: position.brokerId || "dhan",
         });
         return { ok: true, queued: true };
       }

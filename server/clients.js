@@ -11,6 +11,7 @@ import {
   removeDesk,
   saveClientSettings,
 } from "./memberDesk.js";
+import { inventoryAddresses } from "./ipManagement.js";
 import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
 
 function fail(message, status = 400) {
@@ -31,7 +32,7 @@ function asClient(user, desk, handle = {}) {
     id: user.id,
     name: user.name,
     email: user.email || "",
-    mobile: handle.mobile || user.mobile || "",
+    mobile: user.mobile || handle.mobile || "",
     telegramId: handle.telegramId || "",
     group: desk.group,
     groups: desk.groups || [desk.group || "ALL"],
@@ -98,7 +99,7 @@ export function clientStatus(users = []) {
     groups: listClientGroups(),
     brokers: CLIENT_BROKERS,
     assignedIps,
-    knownIps: knownEgressIps(),
+    knownIps: [...new Set([...inventoryAddresses(), ...knownEgressIps()])],
     defaultUntil: defaultSubscriptionUntil(),
     live: clients.filter((row) => row.status === "LIVE").length,
     paper: clients.filter((row) => row.status !== "LIVE").length,

@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, type Enrollment, type WalletTopup } from "../api/client";
+import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, saveUserContact, type Enrollment, type WalletTopup } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
 export function Settings() {
-  const { user, logout } = useAuth();
+  const { user, applyUser, logout } = useAuth();
   const { data } = useMarket();
   const [mailConnected, setMailConnected] = useState(false);
   const [mailFrom, setMailFrom] = useState("");
@@ -76,6 +76,13 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-3">
       <h1 className="text-xl font-bold">Settings</h1>
+      <Link to="/settings/ips" className="card flex items-center justify-between px-4 py-3">
+        <div>
+          <div className="text-sm font-semibold">IP management</div>
+          <div className="text-xs text-slate-400">Broker-wise static egress allocation and account control</div>
+        </div>
+        <span className="text-sm font-semibold text-brand-500">Open →</span>
+      </Link>
       <Link to="/profile" className="card flex items-center justify-between px-4 py-3">
         <span className="text-sm font-semibold">User profile</span>
         <span className="text-sm font-semibold text-brand-500">Name, email, mobile →</span>
@@ -91,7 +98,7 @@ export function Settings() {
       <section className="card p-4">
         <div className="text-sm font-bold">Gmail mail</div>
         <p className="mt-1 text-xs text-slate-400">
-          After login, T2S emails the user Gmail a sign-in notice. Login codes use the same mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
+          After login, T2S emails the user a sign-in notice. Email login codes use this mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
         </p>
         <form onSubmit={onConnect} className="mt-3 grid gap-2 sm:grid-cols-2">
           <input
@@ -130,12 +137,20 @@ export function Settings() {
               amount: Number(payAmount),
               payeeName: payName,
             })
-              .then((row) => {
+              .then(async (row) => {
                 setPayMobile(row.payments.mobile);
                 setPayUpi(row.payments.upiId);
                 setPayAmount(String(row.payments.amount));
                 setPayName(row.payments.payeeName);
-                setPayNote("Payment number saved. Member enrollments will send money here.");
+                if (user?.id && row.payments.mobile) {
+                  try {
+                    const saved = await saveUserContact(user.id, { name: user.name, mobile: row.payments.mobile });
+                    applyUser(saved.user);
+                  } catch {
+                    // Payment number is already stored even if the profile mobile is taken.
+                  }
+                }
+                setPayNote("Payment number saved on the admin account. Member enrollments will send money here.");
               })
               .catch((err) => setPayNote(err instanceof Error ? err.message : "Could not save"))
               .finally(() => setPayBusy(false));

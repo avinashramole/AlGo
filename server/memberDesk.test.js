@@ -36,16 +36,40 @@ test("selectMemberBroker stores the chosen broker without secrets", () => {
   assert.equal(row.brokers.every((item) => item.clientId == null), true);
 });
 
-test("paid plan report includes MTM from the member paper book", () => {
+test("paid plan report uses the live desk book, not a seeded paper P&L", () => {
   ensurePlanLedger({ user, algo });
+  const empty = getMemberDesk({
+    user,
+    enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
+    algos: [algo],
+    quote: () => 0,
+  });
+  assert.equal(empty.plans[0].strategyName, "NIFTY VWAP ATM");
+  assert.equal(empty.report.unrealizedPnl, 0);
+  assert.equal(empty.positions.length, 0);
+
   const desk = getMemberDesk({
     user,
     enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
     algos: [algo],
-    quote: (symbol) => (String(symbol).includes("24600") ? 90 : 0),
+    liveBook: {
+      positions: [
+        {
+          id: "p-live",
+          symbol: "NIFTY 24600 CE",
+          type: "BUY",
+          qty: 65,
+          avg: 80,
+          ltp: 92,
+          pnl: 780,
+          strategy: "NIFTY VWAP ATM",
+        },
+      ],
+      orders: [],
+      closedTrades: [],
+    },
   });
-  assert.equal(desk.plans[0].strategyName, "NIFTY VWAP ATM");
-  assert.ok(desk.report.unrealizedPnl !== 0);
+  assert.equal(desk.plans[0].unrealizedPnl, 780);
   assert.ok(desk.positions.some((row) => row.symbol.includes("NIFTY")));
   assert.equal(desk.brokerId, "dhan");
 });

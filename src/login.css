@@ -1,11 +1,13 @@
 .t2s-login {
-  --bg: #f4f7fb;
+  --bg: #f5f6fa;
   --card: #ffffff;
   --border: #e2e8f0;
-  --text: #0f172a;
-  --muted: #64748b;
-  --blue: #2563eb;
-  --gold: #c9a227;
+  --text: #071833;
+  --muted: #5b6478;
+  --navy: #071833;
+  --blue: #0a2a6e;
+  --orange: #fd6b01;
+  --gold: #fd6b01;
   box-sizing: border-box;
   position: relative;
   overflow: auto;
@@ -15,7 +17,7 @@
   flex-direction: column;
   color-scheme: light;
   color: var(--text);
-  background: radial-gradient(1200px 480px at 18% 0%, #e8f1ff 0%, var(--bg) 55%);
+  background: radial-gradient(1100px 480px at 16% 0%, #fff1e6 0%, #eef2f8 42%, var(--bg) 70%);
   font-family: Inter, system-ui, sans-serif;
 }
 
@@ -43,32 +45,13 @@
   display: none;
 }
 
-.t2s-wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: #0f172a;
-  border: 1px solid var(--gold);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.t2s-wordmark-gold {
-  color: var(--gold);
-  padding: 0 3px;
-}
-
 .t2s-hero-copy h1 {
   margin: 22px 0 10px;
   font-size: 44px;
   line-height: 1.12;
   font-weight: 800;
   letter-spacing: -0.04em;
-  color: #0f172a;
+  color: var(--navy);
 }
 
 .t2s-hero-copy p {
@@ -81,6 +64,10 @@
 
 .t2s-blue {
   color: var(--blue);
+}
+
+.t2s-accent {
+  color: var(--orange);
 }
 
 .t2s-hero-points {
@@ -123,18 +110,24 @@
 
 .t2s-point-blue {
   color: var(--blue);
-  background: #dbeafe;
+  background: #e4eaf6;
 }
 
 .t2s-point-gold {
-  color: #b45309;
-  background: #fef3c7;
+  color: var(--orange);
+  background: #fff1e6;
 }
 
 .t2s-hero-art {
-  width: min(100%, 520px);
+  display: block;
+  width: min(100%, 360px);
   height: auto;
-  margin-top: 8px;
+  margin: 0 0 12px;
+  object-fit: contain;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .t2s-login-panel {
@@ -155,22 +148,25 @@
   text-align: center;
 }
 
-.t2s-login-mobile-brand {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 18px;
-}
-
 .t2s-login-avatar {
   display: flex;
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 12px;
+  width: 168px;
+  height: 168px;
+  margin: 0 auto 16px;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: #dbeafe;
-  color: #1d4ed8;
+  overflow: visible;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.t2s-login-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: none;
 }
 
 .t2s-login-title {
@@ -179,13 +175,18 @@
   line-height: 1.15;
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #0f172a;
+  color: var(--navy);
 }
 
 .t2s-login-sub {
   margin: 8px 0 22px;
   color: var(--muted);
   font-size: 14px;
+}
+
+.t2s-login-sub-empty {
+  min-height: 0;
+  margin: 8px 0 18px;
 }
 
 .t2s-field {
@@ -206,8 +207,8 @@
 }
 
 .t2s-field-box:focus-within {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(253, 107, 1, 0.16);
 }
 
 .t2s-field-box svg {
@@ -269,18 +270,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #334155;
+  color: var(--navy);
   cursor: pointer;
 }
 
 .t2s-check input {
-  accent-color: var(--blue);
+  accent-color: var(--orange);
 }
 
 .t2s-forgot {
   border: 0;
   background: transparent;
-  color: var(--blue);
+  color: var(--orange);
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -294,12 +295,12 @@
   justify-content: center;
   border: 0;
   border-radius: 10px;
-  background: var(--blue);
+  background: linear-gradient(180deg, #ff8618 0%, #fd6b01 48%, #e85d00 100%);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 10px 24px rgba(253, 107, 1, 0.32);
 }
 
 .t2s-submit:disabled {
@@ -343,7 +344,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #fff;
-  color: #0f172a;
+  color: var(--navy);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -372,7 +373,7 @@
 }
 
 .t2s-switch b {
-  color: var(--blue);
+  color: var(--orange);
   font-weight: 700;
 }
 
@@ -443,6 +444,11 @@
   margin: 0;
 }
 
+.t2s-legal b {
+  color: var(--navy);
+  font-weight: 800;
+}
+
 .t2s-legal-links {
   display: flex;
   flex-wrap: wrap;
@@ -473,10 +479,6 @@
   .t2s-login-panel {
     padding: 0;
     justify-content: flex-end;
-  }
-
-  .t2s-login-mobile-brand {
-    display: none;
   }
 
   .t2s-benefits {

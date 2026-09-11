@@ -162,10 +162,12 @@ export function HomeScreen() {
       </ScrollView>
       <Card>
         <Text style={styles.muted}>AI SIGNAL</Text>
-        <Pill text={signal.action} up={signal.action === "BUY"} />
-        <Text style={styles.heading}>{signal.symbol}</Text>
+        <Pill text={signal.symbol ? signal.action : "WAIT"} up={signal.action === "BUY"} />
+        <Text style={styles.heading}>{signal.symbol || "No live signal"}</Text>
         <Text style={styles.muted}>
-          {signal.strategy} · {signal.confidence}% confidence · Risk {signal.risk}
+          {signal.symbol
+            ? `${signal.strategy} · ${signal.confidence}% confidence · Risk ${signal.risk}`
+            : "Start an algo or wait for a Dhan fill"}
         </Text>
         <View style={styles.metrics}>
           {signal.metrics.map((item) => (

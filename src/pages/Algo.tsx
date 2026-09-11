@@ -5,6 +5,7 @@ import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
+import { brokerName, defaultBrokers } from "../lib/brokers";
 import { cn, formatInr, formatNumber } from "../lib/format";
 import {
   contractLabel,
@@ -337,6 +338,11 @@ function AlgoCard({
             <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{meta.category}</div>
             <div className="truncate text-base font-bold">{algo.name}</div>
             <div className="text-xs text-slate-400">{meta.config}</div>
+            {algo.runMode === "live" ? (
+              <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
+              </div>
+            ) : null}
             <div className="mt-1 text-[11px] text-slate-500">{contract}</div>
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>

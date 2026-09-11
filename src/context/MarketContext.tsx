@@ -24,13 +24,10 @@ import {
 import { useAuth } from "./AuthContext";
 import {
   dnaScores,
-  fiiDii,
   indices,
   initialAlgos,
   ohlc,
   optionChain,
-  positions,
-  recentSignals,
   watchlist,
   marketWatch,
 } from "../data/mock";
@@ -43,32 +40,32 @@ const fallback: Snapshot = {
   dnaScores,
   optionChain,
   algos: initialAlgos,
-  positions,
-  signals: recentSignals,
+  positions: [],
+  signals: [],
   watchlist,
-  fiiDii,
+  fiiDii: { fii: { buy: 0, sell: 0, net: 0 }, dii: { buy: 0, sell: 0, net: 0 } },
   marketWatch,
   featuredSignal: {
     action: "BUY",
-    symbol: "NIFTY 24,500 CE",
-    strategy: "VWAP Depth",
-    expiry: "25 Aug",
-    confidence: 91,
-    risk: "LOW",
+    symbol: "",
+    strategy: "",
+    expiry: "—",
+    confidence: 0,
+    risk: "—",
     metrics: [
-      { label: "VWAP", value: 92 },
-      { label: "DEPTH", value: 99 },
-      { label: "OI", value: 84 },
-      { label: "VOLUME", value: 78 },
+      { label: "VWAP", value: 0 },
+      { label: "DEPTH", value: 0 },
+      { label: "OI", value: 0 },
+      { label: "VOLUME", value: 0 },
     ],
   },
-  sentiment: 91,
+  sentiment: 50,
   orders: [],
   notifications: [],
   chat: [],
   settings: {},
-  totalPnl: positions.reduce((sum, row) => sum + row.pnl, 0),
-  pnlByBroker: { dhan: positions.reduce((sum, row) => sum + row.pnl, 0) },
+  totalPnl: 0,
+  pnlByBroker: {},
   brokers: defaultBrokers,
   activeBrokerId: "dhan",
   mainBrokerId: "dhan",
@@ -120,7 +117,10 @@ type MarketContextValue = {
   refresh: () => Promise<void>;
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
-  connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
+  connect: (
+    id: string,
+    payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
+  ) => Promise<void>;
   enableAuto: (payload: {
     clientId?: string;
     loginId?: string;
@@ -235,7 +235,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           throw err;
         }
       },
-      connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
+      connect: async (
+        id: string,
+        payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
+      ) => {
         const result = await connectBroker(id, payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();

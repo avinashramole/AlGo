@@ -16,13 +16,14 @@ export function setApiToken(token: string) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {};
   const response = await fetch(`${apiBase()}/api${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
       ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(init?.headers || {}),
+      ...(extraHeaders || {}),
     },
-    ...init,
   });
   const text = await response.text();
   let body: { error?: string } = {};
@@ -327,6 +328,7 @@ export type SocialProvider = "google" | "microsoft" | "apple";
 export function requestOtp(payload: {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
@@ -353,10 +355,12 @@ export function resetPassword(payload: { identifier: string; otp: string; passwo
 
 export function signup(payload: {
   name: string;
-  identifier: string;
-  otp: string;
-  password: string;
-  channel: "gmail" | "mobile";
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 }) {
   return request<{ token: string; user: AuthUser }>("/auth/signup", {
     method: "POST",
@@ -385,10 +389,6 @@ export function getMe(token: string) {
 export type CatalogStrategy = {
   id: string;
   name: string;
-  tag?: string;
-  summary?: string;
-  symbol?: string;
-  timeframe?: string;
   enrollFee: number;
 };
 

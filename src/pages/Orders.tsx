@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatIst, formatNumber, liveBookCopy, deskStrategyName, buySellByStrategy } from "../lib/format";
+import { cn, formatIst, formatNumber, liveBookCopy, deskStrategyName } from "../lib/format";
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "CANCELLED"] as const;
 
@@ -72,73 +72,112 @@ export function Orders() {
           </button>
         ))}
       </div>
-      <section className="card overflow-x-auto">
+      <section className="card overflow-hidden p-0">
         {rows.length ? (
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Time</th>
-                <th className="px-4 py-3 font-semibold">Symbol</th>
-                <th className="px-4 py-3 font-semibold">Buy / Sell</th>
-                <th className="px-4 py-3 font-semibold">Strategy</th>
-                <th className="px-4 py-3 text-right font-semibold">Qty</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 text-right font-semibold">Avg fill</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Broker</th>
-                <th className="px-4 py-3 text-right font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="soft-row">
-                  <td className="px-4 py-3 text-xs text-slate-500">{formatIst(row.createdAt)}</td>
-                  <td className="px-4 py-3 font-semibold">
-                    {row.symbol}
-                    <div className="text-[10px] font-medium uppercase text-slate-400">{row.product || "MIS"}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <SideBadge side={row.side} />
-                    <div className="mt-1 text-xs font-semibold text-[var(--text)]">{buySellByStrategy(row.side, row.strategy, data.algos)}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-bold">{deskStrategyName(row.strategy, data.algos) || "—"}</div>
-                    {deskStrategyName(row.strategy, data.algos) ? (
-                    <div className="text-[10px] font-medium text-slate-400">{row.side === "SELL" ? "Sold by this strategy" : "Bought by this strategy"}</div>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {row.filledQty || 0}/{row.qty}
-                  </td>
-                  <td className="px-4 py-3">{row.type || "MARKET"}</td>
-                  <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={row.status} />
-                    {row.reason ? (
-                      <div className={cn("mt-1 text-[10px]", row.status === "REJECTED" ? "text-down" : "text-slate-400")}>
-                        {row.reason}
+          <>
+            <div className="divide-y divide-[var(--border)] md:hidden">
+              {rows.map((row) => {
+                const side = row.side === "SELL" ? "SELL" : "BUY";
+                const strategy = deskStrategyName(row.strategy, data.algos);
+                return (
+                  <div key={row.id} className="px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">{row.symbol}</div>
+                        {strategy ? <div className="text-[11px] text-slate-400">{strategy}</div> : null}
                       </div>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>
-                  <td className="px-4 py-3 text-right">
+                      <StatusBadge status={row.status} />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Buy / Sell</div>
+                      <div className="mt-1">
+                        <SideBadge side={side} />
+                      </div>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
+                    </div>
                     {row.status === "PENDING" || row.status === "PARTIAL" ? (
                       <button
                         type="button"
                         disabled={busy === row.id}
                         onClick={() => void stop(row.id)}
-                        className="rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold text-down disabled:opacity-60 dark:border-rose-900"
+                        className="mt-2 rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold text-down disabled:opacity-60 dark:border-rose-900"
                       >
                         {busy === row.id ? "..." : "Cancel"}
                       </button>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[980px] text-left text-sm">
+                <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Time</th>
+                    <th className="px-4 py-3 font-semibold">Symbol</th>
+                    <th className="px-4 py-3 font-semibold">Buy / Sell</th>
+                    <th className="px-4 py-3 font-semibold">Strategy</th>
+                    <th className="px-4 py-3 text-right font-semibold">Qty</th>
+                    <th className="px-4 py-3 font-semibold">Type</th>
+                    <th className="px-4 py-3 text-right font-semibold">Avg fill</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Broker</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const side = row.side === "SELL" ? "SELL" : "BUY";
+                    return (
+                      <tr key={row.id} className="soft-row">
+                        <td className="px-4 py-3 text-xs text-slate-500">{formatIst(row.createdAt)}</td>
+                        <td className="px-4 py-3 font-semibold">
+                          {row.symbol}
+                          <div className="text-[10px] font-medium uppercase text-slate-400">{row.product || "MIS"}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <SideBadge side={side} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold">{deskStrategyName(row.strategy, data.algos) || "—"}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {row.filledQty || 0}/{row.qty}
+                        </td>
+                        <td className="px-4 py-3">{row.type || "MARKET"}</td>
+                        <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={row.status} />
+                          {row.reason ? (
+                            <div className={cn("mt-1 text-[10px]", row.status === "REJECTED" ? "text-down" : "text-slate-400")}>
+                              {row.reason}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {row.status === "PENDING" || row.status === "PARTIAL" ? (
+                            <button
+                              type="button"
+                              disabled={busy === row.id}
+                              onClick={() => void stop(row.id)}
+                              className="rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold text-down disabled:opacity-60 dark:border-rose-900"
+                            >
+                              {busy === row.id ? "..." : "Cancel"}
+                            </button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <div className="p-8 text-center text-sm text-slate-400">
             {data.dhanFeed?.live ? "No live Dhan or paper orders" : "No orders in this view"}

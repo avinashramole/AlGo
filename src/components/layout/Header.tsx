@@ -44,7 +44,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 md:h-16 md:gap-4 md:px-5">
-      <Link to="/" className="shrink-0" title="Trade 2 Smart">
+      <Link to="/" className="shrink-0 md:hidden" title="Trade 2 Smart">
         <BrandMark variant="horizontal" size="md" theme={theme} />
       </Link>
       <div className="relative mx-auto hidden w-full max-w-xl md:block">

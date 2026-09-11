@@ -21,9 +21,20 @@ import {
 type OtpPayload = {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
+};
+
+type SignupPayload = {
+  name: string;
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 };
 
 type AuthContextValue = {
@@ -33,7 +44,7 @@ type AuthContextValue = {
   login: (identifier: string, password: string) => Promise<void>;
   requestOtp: (payload: OtpPayload) => Promise<OtpRequestResult>;
   verifyOtp: (identifier: string, otp: string) => Promise<void>;
-  signup: (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }) => Promise<void>;
+  signup: (payload: SignupPayload) => Promise<void>;
   resetPassword: (payload: { identifier: string; otp: string; password: string }) => Promise<void>;
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
@@ -102,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await persist(result.user, result.token);
         setUser(result.user);
       },
-      signup: async (payload: { name: string; identifier: string; otp: string; password: string; channel: "gmail" | "mobile" }) => {
+      signup: async (payload: SignupPayload) => {
         const result = await signupApi(payload);
         await persist(result.user, result.token);
         setUser(result.user);
