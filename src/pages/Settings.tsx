@@ -98,7 +98,7 @@ export function Settings() {
       <section className="card p-4">
         <div className="text-sm font-bold">Gmail mail</div>
         <p className="mt-1 text-xs text-slate-400">
-          After login, T2S emails the user Gmail a sign-in notice. Login codes use the same mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
+          After login, T2S emails the user a sign-in notice. Email login codes use this mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
         </p>
         <form onSubmit={onConnect} className="mt-3 grid gap-2 sm:grid-cols-2">
           <input

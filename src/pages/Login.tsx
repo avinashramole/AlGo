@@ -6,6 +6,7 @@ import {
   EyeOff,
   Headphones,
   Lock,
+  Mail,
   Shield,
   ShieldCheck,
   User,
@@ -90,7 +91,11 @@ export function Login() {
 
   const onSendCode = async (purpose: "signup" | "login" | "reset", provider?: SocialProvider) => {
     if (!identifier.trim()) {
-      setError(provider ? socialHint(provider) : "Enter your email or username first.");
+      setError(provider ? socialHint(provider) : purpose === "login" ? "Enter your email. We will send a 6-digit login code there." : "Enter your email or username first.");
+      return false;
+    }
+    if (purpose === "login" && !identifier.includes("@")) {
+      setError("Enter the email on your account. We will send a 6-digit login code there.");
       return false;
     }
     if (purpose === "signup" && name.trim().length < 2) {
@@ -105,7 +110,7 @@ export function Login() {
       const result = await requestOtp({
         identifier,
         name,
-        channel: provider ? "gmail" : channel,
+        channel: purpose === "login" || provider ? "gmail" : channel,
         purpose,
         provider,
       });
@@ -199,7 +204,7 @@ export function Login() {
     }
 
     if (!password) {
-      setError("Enter your password, or use Login with Google / Login with OTP.");
+      setError("Enter your password, or tap Email me a login code.");
       return;
     }
 
@@ -284,7 +289,7 @@ export function Login() {
                   setSentTo("");
                   setCode("");
                 }}
-                placeholder="Enter your email or username"
+                placeholder="Enter your email"
                 autoComplete="username"
               />
               {sentTo ? (
@@ -367,8 +372,8 @@ export function Login() {
                     Continue with Google
                   </button>
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
-                    <Shield size={18} />
-                    Login with OTP
+                    <Mail size={18} />
+                    Email me a login code
                   </button>
                 </div>
               </>

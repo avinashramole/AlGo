@@ -7,7 +7,7 @@ import nodemailer from "nodemailer";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
 const SESSIONS_FILE = process.env.T2S_SESSIONS_FILE || path.join(__dirname, "data", "sessions.json");
-const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
+const GMAIL_FILE = process.env.T2S_GMAIL_FILE || path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
 const MAX_ATTEMPTS = 5;
@@ -323,8 +323,20 @@ function gmailReady() {
   return Boolean(gmailCreds.user && gmailCreds.pass);
 }
 
-function gmailTransport() {
+function allowOnScreenOtp() {
+  return process.env.T2S_SHOW_OTP === "1";
+}
+
+function gmailTransport(port = 465) {
   if (!gmailReady()) return null;
+  if (port === 587) {
+    return nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: { user: gmailCreds.user, pass: gmailCreds.pass },
+    });
+  }
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
@@ -363,18 +375,27 @@ export async function connectGmail({ email, appPassword } = {}) {
 }
 
 async function sendMail({ to, subject, text, html }) {
-  const transport = gmailTransport();
-  if (!transport) return { delivered: false, reason: "gmail-not-configured" };
-  await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
-  return { delivered: true };
+  if (!gmailReady()) return { delivered: false, reason: "gmail-not-configured" };
+  let lastError = null;
+  for (const port of [465, 587]) {
+    try {
+      const transport = gmailTransport(port);
+      if (!transport) return { delivered: false, reason: "gmail-not-configured" };
+      await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
+      return { delivered: true };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || fail("Could not send email.");
 }
 
 async function sendOtpMail(email, code, name) {
   return sendMail({
     to: email,
     subject: `${code} is your T2S login code`,
-    text: `Hi ${name || "there"},\n\nYour T2S Algo login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
-    html: `<p>Hi ${name || "there"},</p><p>Your T2S Algo login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
+    text: `Hi ${name || "there"},\n\nYour Trade 2 Smart login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
+    html: `<p>Hi ${name || "there"},</p><p>Your Trade 2 Smart login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
   });
 }
 
@@ -440,7 +461,9 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   }
   if (wanted === "gmail") {
     if (provider) assertEmailForProvider(target, provider);
-    else if (intent === "signup" && !isGmail(target)) {
+    else if (intent === "login" && !target.includes("@")) {
+      throw fail("Enter the email on your account. We will send a 6-digit login code there.");
+    } else if (intent === "signup" && !isGmail(target)) {
       throw fail("Use a Gmail address (you@gmail.com), or continue with Microsoft / Apple.");
     } else if (!target.includes("@")) {
       throw fail("Enter a valid email.");
@@ -478,14 +501,24 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   let delivered = false;
   try {
     if (wanted === "gmail") {
+      const mustEmail = intent === "login" && !allowOnScreenOtp();
+      if (!gmailReady() && mustEmail) {
+        otps.delete(key);
+        throw fail("Email login codes need Gmail connected in Settings (Google App Password).");
+      }
       delivered = (await sendOtpMail(target, code, displayName || existing?.name)).delivered;
+      if (!delivered && mustEmail) {
+        otps.delete(key);
+        throw fail("Could not email the login code. Check Gmail App Password in Settings.");
+      }
     } else {
       delivered = (await sendSms(target, code)).delivered;
     }
   } catch (err) {
+    otps.delete(key);
     throw fail(err.message || "Could not send the code.");
   }
-  const showCode = !delivered;
+  const showCode = !delivered && (allowOnScreenOtp() || intent !== "login");
   const to = wanted === "gmail" ? maskEmail(target) : maskMobile(target);
   if (showCode) console.log(`T2S OTP (${wanted} ${intent}) ${target}: ${code}`);
   return {

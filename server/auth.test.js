@@ -20,10 +20,12 @@ const {
   googleRedirectUri,
   loginWithGoogleCode,
   listPublicUsers,
+  requestOtp,
   resolveUserRole,
   safeFrontendOrigin,
   sessionUser,
   upsertGoogleUser,
+  verifyOtp,
 } = await import("./auth.js");
 
 test("resolveUserRole treats seed ids and admin emails as admin", () => {
@@ -214,4 +216,39 @@ test("sign-in session is saved so a restart does not ask to sign in again", () =
   const saved = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
   assert.equal(saved[result.token].userId, result.user.id);
   assert.equal(sessionUser(result.token).id, result.user.id);
+});
+
+test("login OTP for a member can be verified from the emailed code", async () => {
+  process.env.T2S_SHOW_OTP = "1";
+  const { user } = upsertGoogleUser({
+    email: "otp.member@gmail.com",
+    name: "OTP Member",
+    googleId: "gid-otp-member",
+  });
+  const sent = await requestOtp({ identifier: user.email, purpose: "login", channel: "gmail" });
+  assert.equal(sent.channel, "gmail");
+  assert.equal(sent.purpose, "login");
+  assert.match(String(sent.devOtp || ""), /^\d{6}$/);
+  const session = verifyOtp({ identifier: user.email, otp: sent.devOtp, purpose: "login" });
+  assert.equal(session.user.email, "otp.member@gmail.com");
+  assert.equal(session.user.role, "user");
+  assert.ok(session.token);
+});
+
+test("login OTP without Gmail connected does not leak the code", async () => {
+  const previous = process.env.T2S_SHOW_OTP;
+  process.env.T2S_SHOW_OTP = "";
+  try {
+    upsertGoogleUser({
+      email: "otp.noleak@gmail.com",
+      name: "No Leak",
+      googleId: "gid-otp-noleak",
+    });
+    await assert.rejects(
+      () => requestOtp({ identifier: "otp.noleak@gmail.com", purpose: "login", channel: "gmail" }),
+      /Gmail connected/,
+    );
+  } finally {
+    process.env.T2S_SHOW_OTP = previous;
+  }
 });

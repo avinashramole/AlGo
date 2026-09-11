@@ -52,7 +52,11 @@ export function LoginScreen() {
 
   const sendCode = async (purpose: "signup" | "login" | "reset", provider?: SocialProvider) => {
     if (!identifier.trim()) {
-      Alert.alert("Email", provider ? socialHint(provider) : "Enter your Gmail or mobile first.");
+      Alert.alert("Email", provider ? socialHint(provider) : purpose === "login" ? "Enter your email. We will send a 6-digit login code there." : "Enter your Gmail or mobile first.");
+      return false;
+    }
+    if (purpose === "login" && !identifier.includes("@")) {
+      Alert.alert("Email", "Enter the email on your account. We will send a 6-digit login code there.");
       return false;
     }
     if (purpose === "signup" && name.trim().length < 2) {
@@ -64,7 +68,7 @@ export function LoginScreen() {
       const result = await requestOtp({
         identifier,
         name,
-        channel: provider ? "gmail" : channel,
+        channel: purpose === "login" || provider ? "gmail" : channel,
         purpose,
         provider,
       });
@@ -135,7 +139,7 @@ export function LoginScreen() {
     }
 
     if (!password) {
-      Alert.alert("Password", "Enter your password, or continue with Google / Microsoft / Apple.");
+      Alert.alert("Password", "Enter your password, or tap Email me a login code.");
       return;
     }
 
@@ -240,6 +244,12 @@ export function LoginScreen() {
               />
               <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Confirm password" secret />
             </>
+          ) : null}
+
+          {page === "signin" && !sentTo ? (
+            <Pressable style={styles.ghost} onPress={() => void sendCode("login")} disabled={busy}>
+              <Text style={styles.ghostText}>Email me a login code</Text>
+            </Pressable>
           ) : null}
 
           {page === "signin" && !sentTo ? (
