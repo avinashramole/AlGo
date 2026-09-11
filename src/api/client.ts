@@ -691,11 +691,6 @@ export function unassignStaticIp(userId: string) {
 export type CatalogStrategy = {
   id: string;
   name: string;
-  tag?: string;
-  kind?: string;
-  summary?: string;
-  symbol?: string;
-  timeframe?: string;
   enrollFee: number;
 };
 

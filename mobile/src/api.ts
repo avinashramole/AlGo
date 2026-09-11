@@ -385,10 +385,6 @@ export function getMe(token: string) {
 export type CatalogStrategy = {
   id: string;
   name: string;
-  tag?: string;
-  summary?: string;
-  symbol?: string;
-  timeframe?: string;
   enrollFee: number;
 };
 
