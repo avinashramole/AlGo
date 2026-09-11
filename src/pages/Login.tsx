@@ -86,6 +86,13 @@ export function Login() {
     setMobile("");
   };
 
+  const openSignup = () => {
+    setPage("signup");
+    resetNotice();
+    setName("");
+    setIdentifier("");
+  };
+
   const applyOtpResult = (result: { to?: string; hint?: string; devOtp?: string }) => {
     setSentTo(result.to || identifier);
     setHint(result.hint || "Enter the 6-digit code we sent.");
@@ -320,12 +327,12 @@ export function Login() {
                 event.preventDefault();
                 void onSubmit(event);
               }}
-              autoComplete="on"
+              autoComplete={page === "signup" ? "off" : "on"}
             >
               {page === "signup" ? (
                 <>
-                  <Field icon="user" label="User Name" value={name} onChange={setName} placeholder="User Name" autoComplete="name" />
-                  <Field icon="phone" label="Mobile no" value={mobile} onChange={setMobile} placeholder="Mobile no" autoComplete="tel" />
+                  <Field icon="user" label="User Name" value={name} onChange={setName} placeholder="User Name" autoComplete="off" name="t2s-signup-name" />
+                  <Field icon="phone" label="Mobile no" value={mobile} onChange={setMobile} placeholder="Mobile no" autoComplete="off" name="t2s-signup-mobile" />
                   <Field
                     icon="mail"
                     label="Email id"
@@ -336,7 +343,9 @@ export function Login() {
                       setCode("");
                     }}
                     placeholder="Email id"
-                    autoComplete="email"
+                    autoComplete="off"
+                    name="t2s-signup-email"
+                    blockAutoFill
                   />
                   {sentTo ? (
                     <Field
@@ -466,7 +475,11 @@ export function Login() {
               type="button"
               className="t2s-switch"
               onClick={() => {
-                setPage(page === "signin" ? "signup" : "signin");
+                if (page === "signin") {
+                  openSignup();
+                  return;
+                }
+                setPage("signin");
                 resetNotice();
               }}
             >
@@ -562,6 +575,8 @@ function Field({
   placeholder,
   secret,
   autoComplete,
+  name,
+  blockAutoFill,
 }: {
   icon: "user" | "lock" | "mail" | "phone";
   label: string;
@@ -570,8 +585,11 @@ function Field({
   placeholder?: string;
   secret?: boolean;
   autoComplete?: string;
+  name?: string;
+  blockAutoFill?: boolean;
 }) {
   const [show, setShow] = useState(false);
+  const [locked, setLocked] = useState(Boolean(blockAutoFill));
   const Icon = icon === "mail" ? Mail : icon === "phone" ? Phone : icon === "user" ? User : Lock;
   return (
     <label className="t2s-field">
@@ -580,10 +598,17 @@ function Field({
         <input
           className="t2s-input"
           type={secret && !show ? "password" : icon === "phone" ? "tel" : "text"}
+          name={name}
           value={value}
           placeholder={placeholder || label}
-          autoComplete={autoComplete}
+          autoComplete={blockAutoFill ? "off" : autoComplete}
+          autoCorrect="off"
+          spellCheck={false}
+          readOnly={locked}
+          data-1p-ignore={blockAutoFill || undefined}
+          data-lpignore={blockAutoFill ? "true" : undefined}
           aria-label={label}
+          onFocus={() => setLocked(false)}
           onChange={(event) => onChange(event.target.value)}
         />
         {secret ? (

@@ -270,8 +270,9 @@ export function LoginScreen() {
                   setSentTo("");
                   setOtp("");
                 }}
-                placeholder="you@gmail.com"
+                placeholder="Email id"
                 autoCapitalize="none"
+                autoComplete="off"
               />
               {sentTo ? (
                 <Field
@@ -394,8 +395,13 @@ export function LoginScreen() {
         <Pressable
           style={styles.switch}
           onPress={() => {
-            setPage(page === "signin" ? "signup" : "signin");
+            const next = page === "signin" ? "signup" : "signin";
+            setPage(next);
             reset();
+            if (next === "signup") {
+              setName("");
+              setIdentifier("");
+            }
           }}
         >
           <Text style={styles.switchText}>
@@ -417,6 +423,7 @@ function Field({
   secret,
   autoCapitalize,
   keyboardType,
+  autoComplete,
 }: {
   label: string;
   value: string;
@@ -425,6 +432,7 @@ function Field({
   secret?: boolean;
   autoCapitalize?: "none" | "sentences";
   keyboardType?: "number-pad" | "default";
+  autoComplete?: "off" | "email" | "password" | "username";
 }) {
   return (
     <View style={styles.field}>
@@ -438,6 +446,9 @@ function Field({
         secureTextEntry={secret}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
+        autoComplete={autoComplete}
+        textContentType={autoComplete === "off" ? "none" : undefined}
+        importantForAutofill={autoComplete === "off" ? "no" : "auto"}
       />
     </View>
   );
