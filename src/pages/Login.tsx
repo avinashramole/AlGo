@@ -244,9 +244,9 @@ export function Login() {
           <LoginHeroArt />
           <div className="t2s-hero-copy">
             <h1>
-              Trade <span className="t2s-blue">Smarter.</span>
+              Trade <span className="t2s-accent">Smarter.</span>
               <br />
-              Grow <span className="t2s-blue">Better.</span>
+              Grow <span className="t2s-accent">Better.</span>
             </h1>
             <p>Advanced Tools. Real-time Data. Smarter Decisions.</p>
           </div>
@@ -409,7 +409,7 @@ export function Login() {
 
       <footer className="t2s-legal">
         <p>
-          © 2026 <b>Trade2Smart</b>. All rights reserved.
+          © 2026 <b>Trade<span className="t2s-accent">2</span>Smart</b>. All rights reserved.
         </p>
         <div className="t2s-legal-links">
           <span>Privacy Policy</span>
