@@ -27,6 +27,7 @@ export function LoginScreen() {
   const [page, setPage] = useState<"signin" | "signup" | "reset">("signin");
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [otp, setOtp] = useState("");
@@ -44,6 +45,7 @@ export function LoginScreen() {
     setDevOtp("");
     setPassword("");
     setConfirm("");
+    setMobile("");
   };
 
   const fail = (title: string, error: unknown) => {
@@ -51,7 +53,20 @@ export function LoginScreen() {
   };
 
   const sendCode = async (purpose: "signup" | "login" | "reset", provider?: SocialProvider) => {
-    if (!identifier.trim()) {
+    if (purpose === "signup") {
+      if (name.trim().length < 2) {
+        Alert.alert("User name", "Enter your user name.");
+        return false;
+      }
+      if (!looksLikeMobile(mobile)) {
+        Alert.alert("Mobile", "Enter a 10-digit mobile number.");
+        return false;
+      }
+      if (!identifier.includes("@")) {
+        Alert.alert("Email", "Enter your email id.");
+        return false;
+      }
+    } else if (!identifier.trim()) {
       Alert.alert("Email", provider ? socialHint(provider) : purpose === "login" ? "Enter your email. We will send a 6-digit login code there." : "Enter your Gmail or mobile first.");
       return false;
     }
@@ -59,16 +74,13 @@ export function LoginScreen() {
       Alert.alert("Email", "Enter the email on your account. We will send a 6-digit login code there.");
       return false;
     }
-    if (purpose === "signup" && name.trim().length < 2) {
-      Alert.alert("Name", "Enter your name, then send the code.");
-      return false;
-    }
     setBusy(true);
     try {
       const result = await requestOtp({
         identifier,
         name,
-        channel: purpose === "login" || provider ? "gmail" : channel,
+        mobile: purpose === "signup" ? mobile : undefined,
+        channel: purpose === "login" || purpose === "signup" || provider ? "gmail" : channel,
         purpose,
         provider,
       });
@@ -107,8 +119,39 @@ export function LoginScreen() {
     }
 
     if (page === "signup") {
-      if (!sentTo) {
-        await sendCode("signup");
+      if (name.trim().length < 2) {
+        Alert.alert("User name", "Enter your user name.");
+        return;
+      }
+      if (!looksLikeMobile(mobile)) {
+        Alert.alert("Mobile", "Enter a 10-digit mobile number.");
+        return;
+      }
+      if (!identifier.includes("@")) {
+        Alert.alert("Email", "Enter your email id.");
+        return;
+      }
+      if (sentTo) {
+        if (otp.replace(/\D/g, "").length !== 6) {
+          Alert.alert("Email code", "Enter the 6-digit email code.");
+          return;
+        }
+        if (password && password !== confirm) {
+          Alert.alert("Password", "Passwords do not match.");
+          return;
+        }
+        setBusy(true);
+        try {
+          await signup({ name, email: identifier, identifier, mobile, otp, password, channel: "gmail" });
+        } catch (error) {
+          fail("Sign up failed", error);
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+      if (!password) {
+        Alert.alert("Password", "Create a password, or tap Email me a signup code.");
         return;
       }
       if (password !== confirm) {
@@ -117,7 +160,7 @@ export function LoginScreen() {
       }
       setBusy(true);
       try {
-        await signup({ name, identifier, otp, password, channel });
+        await signup({ name, email: identifier, identifier, mobile, password, channel: "gmail" });
       } catch (error) {
         fail("Sign up failed", error);
       } finally {
@@ -181,9 +224,7 @@ export function LoginScreen() {
     busy
       ? "Please wait..."
       : page === "signup"
-        ? sentTo
-          ? "Create account"
-          : "Send code"
+        ? "Create account"
         : page === "reset"
           ? sentTo
             ? "Reset password"
@@ -204,49 +245,88 @@ export function LoginScreen() {
           </Text>
           <Text style={styles.sub}>
             {page === "signup"
-              ? "Create your Trade 2 Smart account"
+              ? "User name, mobile, email, then create a password or email a code"
               : page === "reset"
                 ? "Enter the code we sent, then choose a new password"
                 : sentTo
                   ? "Enter the 6-digit code we emailed you"
                   : "Admin and members: password or email login code"}
           </Text>
-          {page === "signup" ? <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" /> : null}
-          <Field
-            label={page === "signin" ? "Email" : "Gmail or mobile"}
-            value={identifier}
-            onChangeText={(value) => {
-              setIdentifier(value);
-              setSentTo("");
-              setOtp("");
-            }}
-            placeholder="Enter your email"
-            autoCapitalize="none"
-          />
-          {sentTo ? (
-            <Field
-              label="6-digit code"
-              value={otp}
-              onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              keyboardType="number-pad"
-            />
-          ) : null}
-          {page === "signin" && !sentTo ? (
-            <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secret />
-          ) : null}
-          {(page === "signup" || page === "reset") && sentTo ? (
+          {page === "signup" ? (
+            <>
+              <Field label="User Name" value={name} onChangeText={setName} placeholder="User name" />
+              <Field
+                label="Mobile no"
+                value={mobile}
+                onChangeText={setMobile}
+                placeholder="10-digit mobile number"
+                keyboardType="number-pad"
+              />
+              <Field
+                label="Email id"
+                value={identifier}
+                onChangeText={(value) => {
+                  setIdentifier(value);
+                  setSentTo("");
+                  setOtp("");
+                }}
+                placeholder="you@gmail.com"
+                autoCapitalize="none"
+              />
+              {sentTo ? (
+                <Field
+                  label="6-digit email code"
+                  value={otp}
+                  onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  keyboardType="number-pad"
+                />
+              ) : null}
+              <Field label="Create password" value={password} onChangeText={setPassword} placeholder="Create password (or email a code)" secret />
+              <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Re-enter password" secret />
+              {!sentTo ? (
+                <Pressable style={styles.ghost} onPress={() => void sendCode("signup")} disabled={busy}>
+                  <Text style={styles.ghostText}>Email me a signup code</Text>
+                </Pressable>
+              ) : (
+                <Pressable style={styles.ghost} onPress={() => void sendCode("signup")} disabled={busy}>
+                  <Text style={styles.ghostText}>Resend email signup code</Text>
+                </Pressable>
+              )}
+            </>
+          ) : (
             <>
               <Field
-                label={page === "reset" ? "New password" : "Set password (min 6)"}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                secret
+                label={page === "signin" ? "Email" : "Gmail or mobile"}
+                value={identifier}
+                onChangeText={(value) => {
+                  setIdentifier(value);
+                  setSentTo("");
+                  setOtp("");
+                }}
+                placeholder="Enter your email"
+                autoCapitalize="none"
               />
-              <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Confirm password" secret />
+              {sentTo ? (
+                <Field
+                  label="6-digit code"
+                  value={otp}
+                  onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  keyboardType="number-pad"
+                />
+              ) : null}
+              {page === "signin" && !sentTo ? (
+                <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secret />
+              ) : null}
+              {page === "reset" && sentTo ? (
+                <>
+                  <Field label="New password" value={password} onChangeText={setPassword} placeholder="Password" secret />
+                  <Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Confirm password" secret />
+                </>
+              ) : null}
             </>
-          ) : null}
+          )}
 
           {page === "signin" && !sentTo ? (
             <>

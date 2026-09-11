@@ -474,11 +474,21 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   const displayName = String(name || existing?.name || "").trim();
   if (intent === "signup") {
     if (!displayName || displayName.length < 2) {
-      const error = fail("Enter your name, then send the code.");
+      const error = fail("Enter your user name.");
       error.needName = true;
       throw error;
     }
-    if (existing?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
+    const extraMobile = normalizeMobile(mobile);
+    if (extraMobile && !isMobile(extraMobile)) throw fail("Enter a 10-digit mobile number.");
+    if (existing?.password || (existing && isRegisteredUser(existing))) {
+      throw fail("That email already has an account. Sign in instead.");
+    }
+    if (extraMobile) {
+      const mobileUser = findUser(extraMobile);
+      if (mobileUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+        throw fail("That mobile number already has an account. Sign in instead.");
+      }
+    }
   } else if (!existing) {
     throw fail("No account for that email / mobile. Sign up first.");
   }
@@ -569,14 +579,32 @@ export function resetPassword({ email, mobile, identifier, otp, password } = {})
 }
 
 export function completeSignup({ name, email, mobile, identifier, otp, password, channel } = {}) {
-  const wanted = channel === "mobile" || isMobile(identifier || mobile) ? "mobile" : "gmail";
-  const target = wanted === "mobile" ? normalizeMobile(identifier || mobile || email) : normalizeEmail(identifier || email);
   const displayName = String(name || "").trim();
-  if (displayName.length < 2) throw fail("Enter a name.");
-  if (String(password || "").length < 6) throw fail("Password must be at least 6 characters.");
-  consumeOtp(wanted, target, otp, "signup");
-  let user = findUser(target);
-  if (user?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
+  if (displayName.length < 2) throw fail("Enter your user name.");
+  const nextEmail = normalizeEmail(email || (String(identifier || "").includes("@") ? identifier : ""));
+  const nextMobile = normalizeMobile(mobile || (isMobile(identifier) ? identifier : ""));
+  if (!nextEmail.includes("@")) throw fail("Enter your email id.");
+  if (!isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
+    throw fail("Use a Gmail address (you@gmail.com).");
+  }
+  if (!isMobile(nextMobile)) throw fail("Enter a 10-digit mobile number.");
+  const pass = String(password || "");
+  const hasOtp = Boolean(String(otp || "").trim());
+  if (pass && pass.length < 6) throw fail("Password must be at least 6 characters.");
+  if (!hasOtp && !pass) throw fail("Create a password, or email a signup code first.");
+  if (hasOtp) {
+    const wanted = channel === "mobile" ? "mobile" : "gmail";
+    consumeOtp(wanted, wanted === "mobile" ? nextMobile : nextEmail, otp, "signup");
+  }
+  const emailUser = findUser(nextEmail);
+  const mobileUser = findUser(nextMobile);
+  if (emailUser?.password || (emailUser && isRegisteredUser(emailUser))) {
+    throw fail("That email already has an account. Sign in instead.");
+  }
+  if (mobileUser && mobileUser !== emailUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+    throw fail("That mobile number already has an account. Sign in instead.");
+  }
+  let user = emailUser && !isRegisteredUser(emailUser) ? emailUser : null;
   if (!user) {
     const pendingSegin = displayName.toLowerCase() === "segin" ? store.users.find((row) => row.id === "segin") : null;
     user = pendingSegin || {
@@ -590,11 +618,11 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
   }
   user.name = displayName;
   user.desk = user.desk || "Index Options";
-  user.password = hashPassword(password);
+  user.email = nextEmail;
+  user.mobile = nextMobile;
+  if (pass) user.password = hashPassword(pass);
   user.createdAt = user.createdAt || new Date().toISOString();
-  user.authProvider = user.authProvider || "password";
-  if (wanted === "gmail") user.email = target;
-  else user.mobile = target;
+  user.authProvider = pass ? "password" : user.authProvider || "email";
   if (!user.role) user.role = resolveUserRole(user);
   persist();
   return issueSession(user);

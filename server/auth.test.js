@@ -258,11 +258,13 @@ test("member can sign in with password and with email OTP", async () => {
   const created = completeSignup({
     identifier: email,
     name: "Both Member",
+    mobile: "9876501234",
     otp: signup.devOtp,
     password: "member123",
     channel: "gmail",
   });
   assert.equal(created.user.role, "user");
+  assert.equal(created.user.mobile, "9876501234");
   const passwordSession = loginWithPassword(email, "member123");
   assert.equal(passwordSession.user.email, email);
   assert.equal(passwordSession.user.role, "user");
@@ -270,6 +272,65 @@ test("member can sign in with password and with email OTP", async () => {
   const otpSession = verifyOtp({ identifier: email, otp: sent.devOtp, purpose: "login" });
   assert.equal(otpSession.user.email, email);
   assert.equal(otpSession.user.role, "user");
+});
+
+test("create account with user name, mobile, email, and password does not need OTP", () => {
+  const email = `signup.pass.${Date.now()}@gmail.com`;
+  const created = completeSignup({
+    name: "Pass Member",
+    email,
+    mobile: "9876502222",
+    password: "create123",
+  });
+  assert.equal(created.user.name, "Pass Member");
+  assert.equal(created.user.email, email);
+  assert.equal(created.user.mobile, "9876502222");
+  assert.equal(created.user.role, "user");
+  const session = loginWithPassword(email, "create123");
+  assert.equal(session.user.id, created.user.id);
+});
+
+test("create account with email signup code and no password can log in by email OTP", async () => {
+  process.env.T2S_SHOW_OTP = "1";
+  const email = `signup.otp.${Date.now()}@gmail.com`;
+  const sent = await requestOtp({
+    identifier: email,
+    name: "Otp Member",
+    mobile: "9876503333",
+    purpose: "signup",
+    channel: "gmail",
+  });
+  const created = completeSignup({
+    name: "Otp Member",
+    email,
+    mobile: "9876503333",
+    otp: sent.devOtp,
+  });
+  assert.equal(created.user.email, email);
+  assert.equal(created.user.hasPassword, false);
+  assert.throws(() => loginWithPassword(email, "nope"), /password/);
+  const login = await requestOtp({ identifier: email, purpose: "login", channel: "gmail" });
+  const session = verifyOtp({ identifier: email, otp: login.devOtp, purpose: "login" });
+  assert.equal(session.user.email, email);
+});
+
+test("create account rejects a duplicate mobile number", () => {
+  completeSignup({
+    name: "First Mobile",
+    email: `signup.dup1.${Date.now()}@gmail.com`,
+    mobile: "9876504444",
+    password: "create123",
+  });
+  assert.throws(
+    () =>
+      completeSignup({
+        name: "Second Mobile",
+        email: `signup.dup2.${Date.now()}@gmail.com`,
+        mobile: "9876504444",
+        password: "create123",
+      }),
+    /mobile number already/,
+  );
 });
 
 test("login OTP without Gmail connected does not leak the code", async () => {

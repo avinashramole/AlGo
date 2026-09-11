@@ -327,6 +327,7 @@ export type SocialProvider = "google" | "microsoft" | "apple";
 export function requestOtp(payload: {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
@@ -353,10 +354,12 @@ export function resetPassword(payload: { identifier: string; otp: string; passwo
 
 export function signup(payload: {
   name: string;
-  identifier: string;
-  otp: string;
-  password: string;
-  channel: "gmail" | "mobile";
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 }) {
   return request<{ token: string; user: AuthUser }>("/auth/signup", {
     method: "POST",
