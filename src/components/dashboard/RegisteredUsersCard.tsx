@@ -46,7 +46,7 @@ export function RegisteredUsersCard() {
         {latest.map((row) => (
           <li key={row.id || row.email} className="flex items-center justify-between gap-2 text-sm">
             <span className="truncate font-semibold">{row.name}</span>
-            <span className="truncate text-xs text-slate-400">{row.email || row.mobile || "Member"}</span>
+            <span className="truncate text-xs text-slate-400">{row.mobile || row.email || "Member"}</span>
           </li>
         ))}
         {!latest.length && !error ? <li className="text-sm text-slate-400">No members registered yet.</li> : null}

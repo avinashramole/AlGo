@@ -1,7 +1,16 @@
 import { MessageSquare, Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users as UsersIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { createClient, deleteClient, saveClient, type ClientBroker, type ClientRow } from "../api/client";
+import {
+  createClient,
+  deleteClient,
+  listUsers,
+  saveClient,
+  saveUserContact,
+  type AuthUser,
+  type ClientBroker,
+  type ClientRow,
+} from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { cn, formatMobile, formatNumber } from "../lib/format";
 
@@ -24,18 +33,20 @@ export function Users() {
   const [edit, setEdit] = useState<ClientRow | null>(null);
   const [groupFor, setGroupFor] = useState<ClientRow | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [admins, setAdmins] = useState<AuthUser[]>([]);
 
   const load = useCallback(async () => {
     const hadRows = Boolean(peekClientList()?.clients.length);
     if (!hadRows) setBusy(true);
     try {
-      const result = await loadClientList(true);
+      const [result, users] = await Promise.all([loadClientList(true), listUsers().catch(() => ({ users: [] }))]);
       setClients(result.clients || []);
       setGroups(result.groups?.length ? result.groups : ["ALL"]);
       setBrokers(result.brokers || []);
       setAssignedIps(result.assignedIps || {});
       setKnownIps(result.knownIps || []);
       setStrategies(result.strategies || []);
+      setAdmins((users.users || []).filter((row) => row.role === "admin"));
       if (result.defaultUntil) setDefaultUntil(result.defaultUntil);
       setError("");
     } catch (err) {
@@ -147,10 +158,38 @@ export function Users() {
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down dark:bg-rose-950/40">{error}</div> : null}
       <section className="card overflow-x-auto p-0">
+        <div className="px-4 pt-4 text-sm font-bold">Desk admins</div>
+        <p className="px-4 pt-1 text-xs text-slate-400">Save each admin 10-digit mobile. This stays on the user record after refresh.</p>
+        <table className="mt-2 w-full min-w-[720px] text-left text-sm">
+          <thead className="border-y border-[var(--border)] text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Mobile no</th>
+              <th className="px-4 py-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {admins.map((row) => (
+              <AdminMobileRow
+                key={row.id || row.email}
+                row={row}
+                locked={savingId === row.id}
+                onSaved={(user) => setAdmins((current) => current.map((item) => (item.id === user.id ? user : item)))}
+                onError={setError}
+                onBusy={setSavingId}
+              />
+            ))}
+          </tbody>
+        </table>
+        {!admins.length ? <div className="px-4 py-6 text-sm text-slate-400">No admin accounts loaded.</div> : null}
+      </section>
+      <section className="card overflow-x-auto p-0">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="border-b border-[var(--border)] text-[10px] font-bold uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">Client</th>
+              <th className="px-4 py-3">Mobile no</th>
               <th className="px-4 py-3">Broker account</th>
               <th className="px-4 py-3">Order sizing</th>
               <th className="px-4 py-3">Mode</th>
@@ -173,6 +212,7 @@ export function Users() {
                       <div className="text-[10px] text-slate-500">Valid {row.subscriptionUntil}</div>
                     ) : null}
                   </td>
+                  <td className="px-4 py-3 align-middle text-sm font-semibold">{formatMobile(row.mobile)}</td>
                   <td className="px-4 py-3 align-middle">
                     <BrokerCell row={row} />
                   </td>
@@ -310,6 +350,76 @@ export function Users() {
         />
       ) : null}
     </div>
+  );
+}
+
+function AdminMobileRow({
+  row,
+  locked,
+  onSaved,
+  onError,
+  onBusy,
+}: {
+  row: AuthUser;
+  locked: boolean;
+  onSaved: (user: AuthUser) => void;
+  onError: (message: string) => void;
+  onBusy: (id: string) => void;
+}) {
+  const [name, setName] = useState(row.name || "");
+  const [mobile, setMobile] = useState(row.mobile || "");
+  useEffect(() => {
+    setName(row.name || "");
+    setMobile(row.mobile || "");
+  }, [row.id, row.name, row.mobile]);
+
+  const onSave = async () => {
+    if (!row.id) return;
+    onBusy(row.id);
+    onError("");
+    try {
+      const result = await saveUserContact(row.id, { name, mobile });
+      onSaved(result.user);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not save admin mobile");
+    } finally {
+      onBusy("");
+    }
+  };
+
+  return (
+    <tr className="border-b border-[var(--border)] last:border-0">
+      <td className="px-4 py-3">
+        <input
+          className="h-9 w-full min-w-[140px] rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-semibold"
+          value={name}
+          disabled={locked}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </td>
+      <td className="px-4 py-3 text-sm text-slate-500">{row.email || "—"}</td>
+      <td className="px-4 py-3">
+        <input
+          className="h-9 w-36 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-semibold"
+          value={mobile}
+          inputMode="numeric"
+          maxLength={10}
+          disabled={locked}
+          placeholder="10-digit mobile"
+          onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+        />
+      </td>
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          disabled={locked}
+          onClick={() => void onSave()}
+          className="inline-flex h-8 items-center rounded-md bg-brand-500 px-3 text-[11px] font-semibold text-white disabled:opacity-60"
+        >
+          {locked ? "Saving..." : "Save"}
+        </button>
+      </td>
+    </tr>
   );
 }
 
@@ -535,7 +645,14 @@ function AddClientModal({
                 <input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Ramesh Kumar" />
               </Field>
               <Field label="Mobile">
-                <input className={inputClass} value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="9xxxxxxxxx" />
+                <input
+                  className={inputClass}
+                  value={mobile}
+                  inputMode="numeric"
+                  maxLength={10}
+                  onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="9xxxxxxxxx"
+                />
                 <span className="font-normal text-[11px] text-slate-500">Client portal login number · initial password 1234</span>
               </Field>
               <Field label="Email">
@@ -781,8 +898,15 @@ function EditModal({
         <Field label="Name">
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="WhatsApp mobile">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="10-digit mobile" />
+        <Field label="Mobile no">
+          <input
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            value={mobile}
+            inputMode="numeric"
+            maxLength={10}
+            onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+            placeholder="10-digit mobile"
+          />
         </Field>
         <Field label="Telegram chat id">
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="Chat id from BotFather /start" />

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, type Enrollment, type WalletTopup } from "../api/client";
+import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, saveUserContact, type Enrollment, type WalletTopup } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
@@ -137,12 +137,19 @@ export function Settings() {
               amount: Number(payAmount),
               payeeName: payName,
             })
-              .then((row) => {
+              .then(async (row) => {
                 setPayMobile(row.payments.mobile);
                 setPayUpi(row.payments.upiId);
                 setPayAmount(String(row.payments.amount));
                 setPayName(row.payments.payeeName);
-                setPayNote("Payment number saved. Member enrollments will send money here.");
+                if (user?.id && row.payments.mobile) {
+                  try {
+                    await saveUserContact(user.id, { name: user.name, mobile: row.payments.mobile });
+                  } catch {
+                    // Payment number is already stored even if the profile mobile is taken.
+                  }
+                }
+                setPayNote("Payment number saved on the admin account. Member enrollments will send money here.");
               })
               .catch((err) => setPayNote(err instanceof Error ? err.message : "Could not save"))
               .finally(() => setPayBusy(false));

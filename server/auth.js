@@ -697,10 +697,10 @@ export function getPublicUser(id) {
 export function adminUpdateUser(id, patch = {}) {
   store = loadUsers();
   const user = store.byId.get(String(id || "").trim());
-  if (!user) throw fail("Client not found.", 404);
+  if (!user) throw fail("User not found.", 404);
   if (patch.name != null) {
     const name = String(patch.name || "").trim();
-    if (name.length < 2) throw fail("Enter the client name.");
+    if (name.length < 2) throw fail("Enter the name.");
     user.name = name;
   }
   if (patch.mobile != null) {

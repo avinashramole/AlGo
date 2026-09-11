@@ -13,12 +13,16 @@ export function TradeModal({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   if (!open) return null;
 
+  const signal = data.featuredSignal;
+  const live = Boolean(signal.symbol);
+
   const submit = async () => {
+    if (!live) return;
     setBusy(true);
     try {
       const result = await order({
-        symbol: data.featuredSignal.symbol,
-        side: data.featuredSignal.action,
+        symbol: signal.symbol,
+        side: signal.action,
         qty: 65,
         price: 142.75,
         brokerId: data.activeBrokerId,
@@ -41,7 +45,7 @@ export function TradeModal({ open, onClose }: Props) {
           <div>
             <div className="text-sm font-bold">Review Trade</div>
             <div className="text-xs text-slate-400">
-              {data.featuredSignal.symbol} · {data.featuredSignal.action}
+              {live ? `${signal.symbol} · ${signal.action}` : "No live signal to review"}
             </div>
           </div>
           <button type="button" onClick={onClose} className="icon-btn">
@@ -57,7 +61,9 @@ export function TradeModal({ open, onClose }: Props) {
           <Field label="Target" value="176.00" />
         </div>
         <div className="mt-4 rounded-lg bg-[var(--bg)] p-3 text-xs text-slate-500">
-          Max risk ₹1,827.50 · Confidence {data.featuredSignal.confidence}% · Risk {data.featuredSignal.risk}
+          {live
+            ? `Confidence ${signal.confidence}% · Risk ${signal.risk}`
+            : "Wait for a live BUY or SELL before placing from this ticket."}
         </div>
         <div className="mt-4 flex gap-2">
           <button type="button" onClick={onClose} className="h-10 flex-1 rounded-xl border border-[var(--border)] text-sm font-semibold">
@@ -66,7 +72,7 @@ export function TradeModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={() => void submit()}
-            disabled={busy}
+            disabled={busy || !live}
             className="h-10 flex-1 rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60"
           >
             {busy ? "Placing..." : "Place Order"}

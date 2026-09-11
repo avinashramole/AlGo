@@ -511,6 +511,13 @@ export function listUsers() {
   return request<{ users: AuthUser[] }>("/users");
 }
 
+export function saveUserContact(id: string, payload: { name?: string; mobile?: string }) {
+  return request<{ user: AuthUser }>(`/users/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export type ClientNotifications = {
   instantAlerts: boolean;
   eveningPnl: boolean;

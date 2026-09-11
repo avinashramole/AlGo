@@ -200,6 +200,12 @@ test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-tim
   assert.ok(row.mtm < 0);
 });
 
+test("saveClient stores the client mobile on the user record", () => {
+  const row = saveClient("u-arpit", { mobile: "9876507788", name: "ARPIT" });
+  assert.equal(row.mobile, "9876507788");
+  assert.equal(listPublicUsers().find((item) => item.id === "u-arpit").mobile, "9876507788");
+});
+
 test("deleteClient removes a member and refuses the desk admin", () => {
   assert.throws(() => deleteClient("avinash", { actorId: "segin" }), /admin/);
   const gone = deleteClient("u-arpit", { actorId: "avinash" });

@@ -27,6 +27,8 @@ const {
   safeFrontendOrigin,
   sessionUser,
   upsertGoogleUser,
+  updateProfile,
+  adminUpdateUser,
   verifyOtp,
 } = await import("./auth.js");
 
@@ -367,4 +369,27 @@ test("login OTP without Gmail connected does not leak the code", async () => {
   } finally {
     process.env.T2S_SHOW_OTP = previous;
   }
+});
+
+test("admin and member mobile numbers persist on the user record", () => {
+  const session = loginWithPassword("demo@t2s.app", "demo123");
+  const saved = updateProfile(session.token, {
+    name: "Avinash",
+    email: "demo@t2s.app",
+    mobile: "9876500001",
+  });
+  assert.equal(saved.user.role, "admin");
+  assert.equal(saved.user.mobile, "9876500001");
+  const reloaded = listPublicUsers().find((row) => row.id === "avinash");
+  assert.equal(reloaded.mobile, "9876500001");
+
+  const member = completeSignup({
+    name: "Mobile Member",
+    email: `mobile.save.${Date.now()}@gmail.com`,
+    mobile: "9876500002",
+    password: "create123",
+  });
+  const next = adminUpdateUser(member.user.id, { mobile: "9876500003" });
+  assert.equal(next.mobile, "9876500003");
+  assert.equal(listPublicUsers().find((row) => row.id === member.user.id).mobile, "9876500003");
 });

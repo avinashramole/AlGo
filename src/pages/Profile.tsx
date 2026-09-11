@@ -63,7 +63,14 @@ export function Profile() {
           </label>
           <label className="mb-3 block text-sm font-semibold">
             Mobile no
-            <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={mobile} onChange={(event) => setMobile(event.target.value)} placeholder="98xxxxxxxx" />
+            <input
+              className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal"
+              value={mobile}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+              placeholder="98xxxxxxxx"
+            />
           </label>
           {note ? <p className="mb-3 text-sm font-semibold text-slate-500">{note}</p> : null}
           <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">

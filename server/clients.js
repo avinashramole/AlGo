@@ -32,7 +32,7 @@ function asClient(user, desk, handle = {}) {
     id: user.id,
     name: user.name,
     email: user.email || "",
-    mobile: handle.mobile || user.mobile || "",
+    mobile: user.mobile || handle.mobile || "",
     telegramId: handle.telegramId || "",
     group: desk.group,
     groups: desk.groups || [desk.group || "ALL"],

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, publicBrokers } from "./brokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { clientStatus, createClient, deleteClient, listPositionDesk, saveClient } from "./clients.js";
 import {
@@ -345,6 +345,7 @@ app.get("/api/member/quotes", (req, res) => {
 app.get("/api/member/desk", (req, res) => {
   try {
     const user = memberAuth(req);
+    const snap = snapshot();
     res.json(
       getMemberDesk({
         user,
@@ -352,6 +353,11 @@ app.get("/api/member/desk", (req, res) => {
         algos: listAlgos(),
         quote: quoteSymbol,
         admins: listPublicUsers(),
+        liveBook: {
+          positions: snap.positions || [],
+          orders: snap.orders || [],
+          closedTrades: snap.closedTrades || [],
+        },
       }),
     );
   } catch (error) {
@@ -403,6 +409,14 @@ app.use(deskGuard);
 
 app.get("/api/users", (_req, res) => {
   res.json({ users: listPublicUsers() });
+});
+
+app.post("/api/users/:id", (req, res) => {
+  try {
+    res.json({ user: adminUpdateUser(req.params.id, req.body || {}) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save user" });
+  }
 });
 
 app.get("/api/clients", (_req, res) => {
@@ -486,7 +500,16 @@ app.get("/api/payments", (_req, res) => {
 
 app.post("/api/payments", (req, res) => {
   try {
-    res.json({ ok: true, payments: savePaymentSettings(req.body || {}) });
+    const payments = savePaymentSettings(req.body || {});
+    const actor = req.authUser || sessionUser(readToken(req));
+    if (actor?.id && req.body?.mobile) {
+      try {
+        adminUpdateUser(actor.id, { mobile: req.body.mobile });
+      } catch {
+        // Payment number is saved even if the admin profile mobile is already taken.
+      }
+    }
+    res.json({ ok: true, payments });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not save payment settings" });
   }
