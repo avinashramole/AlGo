@@ -3,12 +3,16 @@ import { useAuth } from "../context/AuthContext";
 import { formatMobile } from "../lib/format";
 
 export function Profile() {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, updateProfile, refreshMe, logout } = useAuth();
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void refreshMe().catch(() => undefined);
+  }, [refreshMe]);
 
   useEffect(() => {
     setName(user?.name || "");

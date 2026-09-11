@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   enableThumb as enableThumbApi,
   getMe,
@@ -47,6 +47,8 @@ type AuthContextValue = {
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
   updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
+  applyUser: (next: AuthUser) => void;
+  refreshMe: () => Promise<void>;
   hasThumb: boolean;
   logout: () => void;
 };
@@ -166,6 +168,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return readUser()?.role === "admin";
   });
 
+  const applyUser = useCallback((next: AuthUser) => {
+    persistUser(next);
+    setUser(next);
+  }, []);
+
+  const refreshMe = useCallback(async () => {
+    const token = readToken();
+    if (!token || token === "t2s-offline-token") return;
+    const row = await getMe(token);
+    persistUser(row.user);
+    setUser(row.user);
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const googleError = params.get("google_error");
@@ -266,6 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistUser(result.user);
         setUser(result.user);
       },
+      applyUser,
+      refreshMe,
       logout: () => {
         localStorage.removeItem("t2s-token");
         localStorage.removeItem("t2s-user");
@@ -274,7 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       },
     }),
-    [user, ready, hasThumb],
+    [user, ready, hasThumb, applyUser, refreshMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -16,13 +16,14 @@ export function setApiToken(token: string) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {};
   const response = await fetch(`${apiBase()}/api${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
       ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(init?.headers || {}),
+      ...(extraHeaders || {}),
     },
-    ...init,
   });
   const text = await response.text();
   let body: { error?: string } = {};

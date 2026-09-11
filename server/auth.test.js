@@ -393,3 +393,15 @@ test("admin and member mobile numbers persist on the user record", () => {
   assert.equal(next.mobile, "9876500003");
   assert.equal(listPublicUsers().find((row) => row.id === member.user.id).mobile, "9876500003");
 });
+
+test("name-only profile update keeps the saved admin mobile after disk reload", () => {
+  const session = loginWithPassword("demo@t2s.app", "demo123");
+  updateProfile(session.token, { name: "Avinash", mobile: "9876508881" });
+  const named = updateProfile(session.token, { name: "Avinash Ramole" });
+  assert.equal(named.user.mobile, "9876508881");
+  assert.equal(listPublicUsers().find((row) => row.id === "avinash").mobile, "9876508881");
+  const fromUsers = adminUpdateUser("avinash", { mobile: "9876508882" });
+  assert.equal(fromUsers.mobile, "9876508882");
+  const afterReload = updateProfile(session.token, { name: "Avinash Ramole" });
+  assert.equal(afterReload.user.mobile, "9876508882");
+});

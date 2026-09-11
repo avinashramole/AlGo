@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
 export function Settings() {
-  const { user, logout } = useAuth();
+  const { user, applyUser, logout } = useAuth();
   const { data } = useMarket();
   const [mailConnected, setMailConnected] = useState(false);
   const [mailFrom, setMailFrom] = useState("");
@@ -144,7 +144,8 @@ export function Settings() {
                 setPayName(row.payments.payeeName);
                 if (user?.id && row.payments.mobile) {
                   try {
-                    await saveUserContact(user.id, { name: user.name, mobile: row.payments.mobile });
+                    const saved = await saveUserContact(user.id, { name: user.name, mobile: row.payments.mobile });
+                    applyUser(saved.user);
                   } catch {
                     // Payment number is already stored even if the profile mobile is taken.
                   }

@@ -280,7 +280,7 @@ function deskGuard(req, res, next) {
 }
 
 app.get("/api/me", (req, res) => {
-  const user = sessionUser(readToken(req));
+  const user = sessionUser(readToken(req), { reload: true });
   if (!user) {
     res.status(401).json({ error: "Sign in first." });
     return;

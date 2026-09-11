@@ -11,6 +11,7 @@ import {
   type ClientBroker,
   type ClientRow,
 } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { cn, formatMobile, formatNumber } from "../lib/format";
 
@@ -18,6 +19,7 @@ type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
 
 export function Users() {
+  const { user, applyUser } = useAuth();
   const seeded = peekClientList();
   const [clients, setClients] = useState<ClientRow[]>(seeded?.clients || []);
   const [groups, setGroups] = useState<string[]>(seeded?.groups?.length ? seeded.groups : ["ALL"]);
@@ -175,7 +177,10 @@ export function Users() {
                 key={row.id || row.email}
                 row={row}
                 locked={savingId === row.id}
-                onSaved={(user) => setAdmins((current) => current.map((item) => (item.id === user.id ? user : item)))}
+                onSaved={(saved) => {
+                  setAdmins((current) => current.map((item) => (item.id === saved.id ? saved : item)));
+                  if (user?.id && saved.id === user.id) applyUser(saved);
+                }}
                 onError={setError}
                 onBusy={setSavingId}
               />

@@ -10,9 +10,14 @@ function authHeaders(): HeadersInit {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {};
   const response = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers || {}) },
-    ...init,
+    ...rest,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(extraHeaders || {}),
+    },
   });
   const text = await response.text();
   let body: { error?: string } = {};

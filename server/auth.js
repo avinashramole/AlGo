@@ -645,12 +645,14 @@ export function loginWithThumb(thumbToken) {
   return issueSession(user);
 }
 
-export function sessionUser(token) {
+export function sessionUser(token, { reload = false } = {}) {
+  if (reload) store = loadUsers();
   const user = userFromToken(token);
   return user ? publicUser(user) : null;
 }
 
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {
+  store = loadUsers();
   const user = userFromToken(sessionToken);
   if (!user) throw fail("Sign in first.", 401);
   const nextName = String(name ?? user.name ?? "").trim();
