@@ -18,7 +18,9 @@ const {
   googleAuthorizeUrl,
   googleOAuthConfigured,
   googleRedirectUri,
+  completeSignup,
   loginWithGoogleCode,
+  loginWithPassword,
   listPublicUsers,
   requestOtp,
   resolveUserRole,
@@ -233,6 +235,41 @@ test("login OTP for a member can be verified from the emailed code", async () =>
   assert.equal(session.user.email, "otp.member@gmail.com");
   assert.equal(session.user.role, "user");
   assert.ok(session.token);
+});
+
+test("admin can sign in with password and with email OTP", async () => {
+  process.env.T2S_SHOW_OTP = "1";
+  const passwordSession = loginWithPassword("demo@t2s.app", "demo123");
+  assert.equal(passwordSession.user.email, "demo@t2s.app");
+  assert.equal(passwordSession.user.role, "admin");
+  const sent = await requestOtp({ identifier: "demo@t2s.app", purpose: "login", channel: "gmail" });
+  assert.match(String(sent.devOtp || ""), /^\d{6}$/);
+  const otpSession = verifyOtp({ identifier: "demo@t2s.app", otp: sent.devOtp, purpose: "login" });
+  assert.equal(otpSession.user.email, "demo@t2s.app");
+  assert.equal(otpSession.user.role, "admin");
+  assert.ok(otpSession.token);
+});
+
+test("member can sign in with password and with email OTP", async () => {
+  process.env.T2S_SHOW_OTP = "1";
+  const email = `otp.both.${Date.now()}@gmail.com`;
+  const signup = await requestOtp({ identifier: email, name: "Both Member", purpose: "signup", channel: "gmail" });
+  assert.match(String(signup.devOtp || ""), /^\d{6}$/);
+  const created = completeSignup({
+    identifier: email,
+    name: "Both Member",
+    otp: signup.devOtp,
+    password: "member123",
+    channel: "gmail",
+  });
+  assert.equal(created.user.role, "user");
+  const passwordSession = loginWithPassword(email, "member123");
+  assert.equal(passwordSession.user.email, email);
+  assert.equal(passwordSession.user.role, "user");
+  const sent = await requestOtp({ identifier: email, purpose: "login", channel: "gmail" });
+  const otpSession = verifyOtp({ identifier: email, otp: sent.devOtp, purpose: "login" });
+  assert.equal(otpSession.user.email, email);
+  assert.equal(otpSession.user.role, "user");
 });
 
 test("login OTP without Gmail connected does not leak the code", async () => {

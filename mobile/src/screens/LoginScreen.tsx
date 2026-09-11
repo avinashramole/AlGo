@@ -34,7 +34,6 @@ export function LoginScreen() {
   const [hint, setHint] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const [usePassword, setUsePassword] = useState(false);
 
   const channel = channelOf(identifier);
 
@@ -139,11 +138,6 @@ export function LoginScreen() {
       return;
     }
 
-    if (!usePassword) {
-      await sendCode("login");
-      return;
-    }
-
     if (!password) {
       Alert.alert("Password", "Enter your password, or tap Email me a login code.");
       return;
@@ -196,9 +190,7 @@ export function LoginScreen() {
             : "Send reset code"
           : sentTo
             ? "Verify & Login"
-            : usePassword
-              ? "Login"
-              : "Email me a login code";
+            : "Login";
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -217,9 +209,7 @@ export function LoginScreen() {
                 ? "Enter the code we sent, then choose a new password"
                 : sentTo
                   ? "Enter the 6-digit code we emailed you"
-                  : usePassword
-                    ? "Login with your password"
-                    : "We will email you a 6-digit login code"}
+                  : "Admin and members: password or email login code"}
           </Text>
           {page === "signup" ? <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" /> : null}
           <Field
@@ -242,7 +232,7 @@ export function LoginScreen() {
               keyboardType="number-pad"
             />
           ) : null}
-          {page === "signin" && !sentTo && usePassword ? (
+          {page === "signin" && !sentTo ? (
             <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secret />
           ) : null}
           {(page === "signup" || page === "reset") && sentTo ? (
@@ -258,17 +248,9 @@ export function LoginScreen() {
             </>
           ) : null}
 
-          {page === "signin" && !sentTo && usePassword ? (
+          {page === "signin" && !sentTo ? (
             <>
-              <Pressable
-                style={styles.ghost}
-                onPress={() => {
-                  setUsePassword(false);
-                  setPassword("");
-                  void sendCode("login");
-                }}
-                disabled={busy}
-              >
+              <Pressable style={styles.ghost} onPress={() => void sendCode("login")} disabled={busy}>
                 <Text style={styles.ghostText}>Email me a login code</Text>
               </Pressable>
               <Pressable style={styles.ghost} onPress={() => void onForgot()} disabled={busy}>
@@ -277,15 +259,18 @@ export function LoginScreen() {
             </>
           ) : null}
 
-          {page === "signin" && !sentTo && !usePassword ? (
+          {page === "signin" && sentTo ? (
             <Pressable
               style={styles.ghost}
               onPress={() => {
-                setUsePassword(true);
+                setSentTo("");
+                setOtp("");
+                setHint("");
+                setDevOtp("");
               }}
               disabled={busy}
             >
-              <Text style={styles.ghostText}>Use password instead</Text>
+              <Text style={styles.ghostText}>Use password</Text>
             </Pressable>
           ) : null}
 

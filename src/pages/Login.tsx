@@ -60,7 +60,6 @@ export function Login() {
   });
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(() => localStorage.getItem("t2s-remember") !== "0");
-  const [usePassword, setUsePassword] = useState(false);
 
   const channel = channelOf(identifier);
 
@@ -82,7 +81,6 @@ export function Login() {
     setCode("");
     setPassword("");
     setConfirm("");
-    setUsePassword(false);
   };
 
   const applyOtpResult = (result: { to?: string; hint?: string; devOtp?: string }) => {
@@ -205,11 +203,6 @@ export function Login() {
       return;
     }
 
-    if (!usePassword) {
-      await onSendCode("login");
-      return;
-    }
-
     if (!password) {
       setError("Enter your password, or tap Email me a login code.");
       return;
@@ -234,9 +227,7 @@ export function Login() {
         ? "Enter the code we sent, then choose a new password"
         : sentTo
           ? "Enter the 6-digit code we emailed you"
-          : usePassword
-            ? "Login with your password"
-            : "We will email you a 6-digit login code";
+          : "Admin and members: password or email login code";
   const submitLabel =
     loading
       ? "Please wait..."
@@ -250,9 +241,7 @@ export function Login() {
             : "Send reset code"
           : sentTo
             ? "Verify & Login"
-            : usePassword
-              ? "Login"
-              : "Email me a login code";
+            : "Login";
 
   return (
     <div className="t2s-login">
@@ -315,7 +304,7 @@ export function Login() {
                   autoComplete="one-time-code"
                 />
               ) : null}
-              {page === "signin" && !sentTo && usePassword ? (
+              {page === "signin" && !sentTo ? (
                 <Field
                   icon="lock"
                   label="Password"
@@ -345,24 +334,9 @@ export function Login() {
                     <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
                     Remember me
                   </label>
-                  {usePassword ? (
-                    <button type="button" className="t2s-forgot" disabled={loading} onClick={() => void onForgot()}>
-                      Forgot Password?
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="t2s-forgot"
-                      disabled={loading}
-                      onClick={() => {
-                        setUsePassword(true);
-                        setError("");
-                        setHint("");
-                      }}
-                    >
-                      Use password instead
-                    </button>
-                  )}
+                  <button type="button" className="t2s-forgot" disabled={loading} onClick={() => void onForgot()}>
+                    Forgot Password?
+                  </button>
                 </div>
               ) : page === "signin" || page === "reset" ? (
                 <div className="t2s-row">
@@ -395,26 +369,14 @@ export function Login() {
                   <span>or</span>
                 </div>
                 <div className="t2s-alt">
+                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
+                    <Mail size={18} />
+                    Email me a login code
+                  </button>
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onGoogle()}>
                     <GoogleIcon />
                     Continue with Google
                   </button>
-                  {usePassword ? (
-                    <button
-                      type="button"
-                      className="t2s-alt-btn"
-                      disabled={loading}
-                      onClick={() => {
-                        setUsePassword(false);
-                        setPassword("");
-                        setError("");
-                        void onSendCode("login");
-                      }}
-                    >
-                      <Mail size={18} />
-                      Email me a login code
-                    </button>
-                  ) : null}
                 </div>
               </>
             ) : null}
