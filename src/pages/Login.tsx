@@ -274,7 +274,7 @@ export function Login() {
   const title = page === "signup" ? "Create Account" : page === "reset" ? "Reset password" : "Welcome Back!";
   const sub =
     page === "signup"
-      ? "User name, 10-digit mobile, email, then create a password or email a code"
+      ? ""
       : page === "reset"
         ? "Enter the code we sent, then choose a new password"
         : sentTo

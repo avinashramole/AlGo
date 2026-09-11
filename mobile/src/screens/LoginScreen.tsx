@@ -243,13 +243,11 @@ export function LoginScreen() {
           <Text style={styles.welcome}>
             {page === "signup" ? "Create account" : page === "reset" ? "Reset password" : "Welcome Back!"}
           </Text>
-          {page === "signup" || page === "reset" || sentTo ? (
+          {page === "reset" || (page === "signin" && sentTo) ? (
             <Text style={styles.sub}>
-              {page === "signup"
-                ? "User name, 10-digit mobile, email, then create a password or email a code"
-                : page === "reset"
-                  ? "Enter the code we sent, then choose a new password"
-                  : "Enter the 6-digit code we emailed you"}
+              {page === "reset"
+                ? "Enter the code we sent, then choose a new password"
+                : "Enter the 6-digit code we emailed you"}
             </Text>
           ) : (
             <View style={{ height: 12 }} />
