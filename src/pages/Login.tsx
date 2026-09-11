@@ -60,6 +60,7 @@ export function Login() {
   });
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(() => localStorage.getItem("t2s-remember") !== "0");
+  const [usePassword, setUsePassword] = useState(false);
 
   const channel = channelOf(identifier);
 
@@ -81,6 +82,7 @@ export function Login() {
     setCode("");
     setPassword("");
     setConfirm("");
+    setUsePassword(false);
   };
 
   const applyOtpResult = (result: { to?: string; hint?: string; devOtp?: string }) => {
@@ -203,6 +205,11 @@ export function Login() {
       return;
     }
 
+    if (!usePassword) {
+      await onSendCode("login");
+      return;
+    }
+
     if (!password) {
       setError("Enter your password, or tap Email me a login code.");
       return;
@@ -225,7 +232,11 @@ export function Login() {
       ? "Create your Trade2Smart account"
       : page === "reset"
         ? "Enter the code we sent, then choose a new password"
-        : "Login to continue to your account";
+        : sentTo
+          ? "Enter the 6-digit code we emailed you"
+          : usePassword
+            ? "Login with your password"
+            : "We will email you a 6-digit login code";
   const submitLabel =
     loading
       ? "Please wait..."
@@ -239,7 +250,9 @@ export function Login() {
             : "Send reset code"
           : sentTo
             ? "Verify & Login"
-            : "Login";
+            : usePassword
+              ? "Login"
+              : "Email me a login code";
 
   return (
     <div className="t2s-login">
@@ -281,8 +294,8 @@ export function Login() {
                 <Field icon="user" label="Name" value={name} onChange={setName} placeholder="Your name" autoComplete="name" />
               ) : null}
               <Field
-                icon="user"
-                label="Email or Username"
+                icon={page === "signin" ? "mail" : "user"}
+                label={page === "signin" ? "Email" : "Email or Username"}
                 value={identifier}
                 onChange={(value) => {
                   setIdentifier(value);
@@ -302,7 +315,7 @@ export function Login() {
                   autoComplete="one-time-code"
                 />
               ) : null}
-              {page === "signin" && !sentTo ? (
+              {page === "signin" && !sentTo && usePassword ? (
                 <Field
                   icon="lock"
                   label="Password"
@@ -332,9 +345,24 @@ export function Login() {
                     <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
                     Remember me
                   </label>
-                  <button type="button" className="t2s-forgot" disabled={loading} onClick={() => void onForgot()}>
-                    Forgot Password?
-                  </button>
+                  {usePassword ? (
+                    <button type="button" className="t2s-forgot" disabled={loading} onClick={() => void onForgot()}>
+                      Forgot Password?
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="t2s-forgot"
+                      disabled={loading}
+                      onClick={() => {
+                        setUsePassword(true);
+                        setError("");
+                        setHint("");
+                      }}
+                    >
+                      Use password instead
+                    </button>
+                  )}
                 </div>
               ) : page === "signin" || page === "reset" ? (
                 <div className="t2s-row">
@@ -371,10 +399,22 @@ export function Login() {
                     <GoogleIcon />
                     Continue with Google
                   </button>
-                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
-                    <Mail size={18} />
-                    Email me a login code
-                  </button>
+                  {usePassword ? (
+                    <button
+                      type="button"
+                      className="t2s-alt-btn"
+                      disabled={loading}
+                      onClick={() => {
+                        setUsePassword(false);
+                        setPassword("");
+                        setError("");
+                        void onSendCode("login");
+                      }}
+                    >
+                      <Mail size={18} />
+                      Email me a login code
+                    </button>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -480,7 +520,7 @@ function Field({
   secret,
   autoComplete,
 }: {
-  icon: "user" | "lock";
+  icon: "user" | "lock" | "mail";
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -489,10 +529,11 @@ function Field({
   autoComplete?: string;
 }) {
   const [show, setShow] = useState(false);
+  const Icon = icon === "mail" ? Mail : icon === "user" ? User : Lock;
   return (
     <label className="t2s-field">
       <span className="t2s-field-box">
-        {icon === "user" ? <User size={18} /> : <Lock size={18} />}
+        <Icon size={18} />
         <input
           className="t2s-input"
           type={secret && !show ? "password" : "text"}

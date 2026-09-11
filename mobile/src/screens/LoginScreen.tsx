@@ -34,6 +34,7 @@ export function LoginScreen() {
   const [hint, setHint] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [busy, setBusy] = useState(false);
+  const [usePassword, setUsePassword] = useState(false);
 
   const channel = channelOf(identifier);
 
@@ -138,6 +139,11 @@ export function LoginScreen() {
       return;
     }
 
+    if (!usePassword) {
+      await sendCode("login");
+      return;
+    }
+
     if (!password) {
       Alert.alert("Password", "Enter your password, or tap Email me a login code.");
       return;
@@ -190,7 +196,9 @@ export function LoginScreen() {
             : "Send reset code"
           : sentTo
             ? "Verify & Login"
-            : "Login";
+            : usePassword
+              ? "Login"
+              : "Email me a login code";
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -207,18 +215,22 @@ export function LoginScreen() {
               ? "Create your Trade 2 Smart account"
               : page === "reset"
                 ? "Enter the code we sent, then choose a new password"
-                : "Login to your Trade 2 Smart account"}
+                : sentTo
+                  ? "Enter the 6-digit code we emailed you"
+                  : usePassword
+                    ? "Login with your password"
+                    : "We will email you a 6-digit login code"}
           </Text>
           {page === "signup" ? <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" /> : null}
           <Field
-            label="Gmail or mobile"
+            label={page === "signin" ? "Email" : "Gmail or mobile"}
             value={identifier}
             onChangeText={(value) => {
               setIdentifier(value);
               setSentTo("");
               setOtp("");
             }}
-            placeholder="Email or mobile"
+            placeholder="Enter your email"
             autoCapitalize="none"
           />
           {sentTo ? (
@@ -230,7 +242,7 @@ export function LoginScreen() {
               keyboardType="number-pad"
             />
           ) : null}
-          {page === "signin" && !sentTo ? (
+          {page === "signin" && !sentTo && usePassword ? (
             <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secret />
           ) : null}
           {(page === "signup" || page === "reset") && sentTo ? (
@@ -246,15 +258,34 @@ export function LoginScreen() {
             </>
           ) : null}
 
-          {page === "signin" && !sentTo ? (
-            <Pressable style={styles.ghost} onPress={() => void sendCode("login")} disabled={busy}>
-              <Text style={styles.ghostText}>Email me a login code</Text>
-            </Pressable>
+          {page === "signin" && !sentTo && usePassword ? (
+            <>
+              <Pressable
+                style={styles.ghost}
+                onPress={() => {
+                  setUsePassword(false);
+                  setPassword("");
+                  void sendCode("login");
+                }}
+                disabled={busy}
+              >
+                <Text style={styles.ghostText}>Email me a login code</Text>
+              </Pressable>
+              <Pressable style={styles.ghost} onPress={() => void onForgot()} disabled={busy}>
+                <Text style={styles.ghostText}>Forgot Password?</Text>
+              </Pressable>
+            </>
           ) : null}
 
-          {page === "signin" && !sentTo ? (
-            <Pressable style={styles.ghost} onPress={() => void onForgot()} disabled={busy}>
-              <Text style={styles.ghostText}>Forgot Password?</Text>
+          {page === "signin" && !sentTo && !usePassword ? (
+            <Pressable
+              style={styles.ghost}
+              onPress={() => {
+                setUsePassword(true);
+              }}
+              disabled={busy}
+            >
+              <Text style={styles.ghostText}>Use password instead</Text>
             </Pressable>
           ) : null}
 
