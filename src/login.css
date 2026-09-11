@@ -184,6 +184,11 @@
   font-size: 14px;
 }
 
+.t2s-login-sub-empty {
+  min-height: 0;
+  margin: 8px 0 18px;
+}
+
 .t2s-field {
   display: block;
   margin-bottom: 12px;

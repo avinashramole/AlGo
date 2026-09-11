@@ -59,7 +59,7 @@ export function LoginScreen() {
         return false;
       }
       if (!looksLikeMobile(mobile)) {
-        Alert.alert("Mobile", "Enter a 10-digit mobile number.");
+        Alert.alert("Mobile", "Mobile no must be 10 digits.");
         return false;
       }
       if (!identifier.includes("@")) {
@@ -124,7 +124,7 @@ export function LoginScreen() {
         return;
       }
       if (!looksLikeMobile(mobile)) {
-        Alert.alert("Mobile", "Enter a 10-digit mobile number.");
+        Alert.alert("Mobile", "Mobile no must be 10 digits.");
         return;
       }
       if (!identifier.includes("@")) {
@@ -243,23 +243,25 @@ export function LoginScreen() {
           <Text style={styles.welcome}>
             {page === "signup" ? "Create account" : page === "reset" ? "Reset password" : "Welcome Back!"}
           </Text>
-          <Text style={styles.sub}>
-            {page === "signup"
-              ? "User name, mobile, email, then create a password or email a code"
-              : page === "reset"
-                ? "Enter the code we sent, then choose a new password"
-                : sentTo
-                  ? "Enter the 6-digit code we emailed you"
-                  : "Admin and members: password or email login code"}
-          </Text>
+          {page === "signup" || page === "reset" || sentTo ? (
+            <Text style={styles.sub}>
+              {page === "signup"
+                ? "User name, 10-digit mobile, email, then create a password or email a code"
+                : page === "reset"
+                  ? "Enter the code we sent, then choose a new password"
+                  : "Enter the 6-digit code we emailed you"}
+            </Text>
+          ) : (
+            <View style={{ height: 12 }} />
+          )}
           {page === "signup" ? (
             <>
               <Field label="User Name" value={name} onChangeText={setName} placeholder="User name" />
               <Field
-                label="Mobile no"
+                label="Mobile no *"
                 value={mobile}
-                onChangeText={setMobile}
-                placeholder="10-digit mobile number"
+                onChangeText={(value) => setMobile(value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="10-digit mobile no"
                 keyboardType="number-pad"
               />
               <Field

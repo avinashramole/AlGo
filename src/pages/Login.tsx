@@ -106,7 +106,7 @@ export function Login() {
         return false;
       }
       if (!looksLikeMobile(mobile)) {
-        setError("Enter a 10-digit mobile number.");
+        setError("Mobile no must be 10 digits.");
         return false;
       }
       if (!identifier.includes("@")) {
@@ -195,7 +195,7 @@ export function Login() {
         return;
       }
       if (!looksLikeMobile(mobile)) {
-        setError("Enter a 10-digit mobile number.");
+        setError("Mobile no must be 10 digits.");
         return;
       }
       if (!identifier.includes("@")) {
@@ -274,12 +274,12 @@ export function Login() {
   const title = page === "signup" ? "Create Account" : page === "reset" ? "Reset password" : "Welcome Back!";
   const sub =
     page === "signup"
-      ? "User name, mobile, email, then create a password or email a code"
+      ? "User name, 10-digit mobile, email, then create a password or email a code"
       : page === "reset"
         ? "Enter the code we sent, then choose a new password"
         : sentTo
           ? "Enter the 6-digit code we emailed you"
-          : "Admin and members: password or email login code";
+          : "";
   const submitLabel =
     loading
       ? "Please wait..."
@@ -320,7 +320,7 @@ export function Login() {
               <img src="/t2s-logo.png" alt="Trade 2 Smart" />
             </div>
             <h2 className="t2s-login-title">{title}</h2>
-            <p className="t2s-login-sub">{sub}</p>
+            {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
 
             <form
               onSubmit={(event) => {
@@ -332,7 +332,16 @@ export function Login() {
               {page === "signup" ? (
                 <>
                   <Field icon="user" label="User Name" value={name} onChange={setName} placeholder="User Name" autoComplete="off" name="t2s-signup-name" />
-                  <Field icon="phone" label="Mobile no" value={mobile} onChange={setMobile} placeholder="Mobile no" autoComplete="off" name="t2s-signup-mobile" />
+                  <Field
+                    icon="phone"
+                    label="Mobile no *"
+                    value={mobile}
+                    onChange={(value) => setMobile(value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="10-digit mobile no"
+                    autoComplete="off"
+                    name="t2s-signup-mobile"
+                    maxLength={10}
+                  />
                   <Field
                     icon="mail"
                     label="Email id"
@@ -577,6 +586,8 @@ function Field({
   autoComplete,
   name,
   blockAutoFill,
+  required,
+  maxLength,
 }: {
   icon: "user" | "lock" | "mail" | "phone";
   label: string;
@@ -587,6 +598,8 @@ function Field({
   autoComplete?: string;
   name?: string;
   blockAutoFill?: boolean;
+  required?: boolean;
+  maxLength?: number;
 }) {
   const [show, setShow] = useState(false);
   const [locked, setLocked] = useState(Boolean(blockAutoFill));
@@ -605,6 +618,9 @@ function Field({
           autoCorrect="off"
           spellCheck={false}
           readOnly={locked}
+          required={required}
+          maxLength={maxLength}
+          inputMode={icon === "phone" ? "numeric" : undefined}
           data-1p-ignore={blockAutoFill || undefined}
           data-lpignore={blockAutoFill ? "true" : undefined}
           aria-label={label}

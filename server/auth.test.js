@@ -253,7 +253,13 @@ test("admin can sign in with password and with email OTP", async () => {
 test("member can sign in with password and with email OTP", async () => {
   process.env.T2S_SHOW_OTP = "1";
   const email = `otp.both.${Date.now()}@gmail.com`;
-  const signup = await requestOtp({ identifier: email, name: "Both Member", purpose: "signup", channel: "gmail" });
+  const signup = await requestOtp({
+    identifier: email,
+    name: "Both Member",
+    mobile: "9876501234",
+    purpose: "signup",
+    channel: "gmail",
+  });
   assert.match(String(signup.devOtp || ""), /^\d{6}$/);
   const created = completeSignup({
     identifier: email,
@@ -312,6 +318,18 @@ test("create account with email signup code and no password can log in by email 
   const login = await requestOtp({ identifier: email, purpose: "login", channel: "gmail" });
   const session = verifyOtp({ identifier: email, otp: login.devOtp, purpose: "login" });
   assert.equal(session.user.email, email);
+});
+
+test("create account requires a 10-digit mobile number", () => {
+  const email = `signup.short.${Date.now()}@gmail.com`;
+  assert.throws(
+    () => completeSignup({ name: "Short Mob", email, mobile: "98765", password: "create123" }),
+    /10 digits/,
+  );
+  assert.throws(
+    () => completeSignup({ name: "No Mob", email, password: "create123" }),
+    /10 digits/,
+  );
 });
 
 test("create account rejects a duplicate mobile number", () => {

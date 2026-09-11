@@ -479,7 +479,7 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
       throw error;
     }
     const extraMobile = normalizeMobile(mobile);
-    if (extraMobile && !isMobile(extraMobile)) throw fail("Enter a 10-digit mobile number.");
+    if (!isMobile(extraMobile)) throw fail("Mobile no must be 10 digits.");
     if (existing?.password || (existing && isRegisteredUser(existing))) {
       throw fail("That email already has an account. Sign in instead.");
     }
@@ -587,7 +587,7 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
   if (!isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
     throw fail("Use a Gmail address (you@gmail.com).");
   }
-  if (!isMobile(nextMobile)) throw fail("Enter a 10-digit mobile number.");
+  if (!isMobile(nextMobile)) throw fail("Mobile no must be 10 digits.");
   const pass = String(password || "");
   const hasOtp = Boolean(String(otp || "").trim());
   if (pass && pass.length < 6) throw fail("Password must be at least 6 characters.");
