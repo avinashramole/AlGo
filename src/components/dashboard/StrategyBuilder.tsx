@@ -72,6 +72,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   }, [open, algo, data.activeBrokerId]);
 
   const connected = (data.brokers || []).filter((item) => item.connected);
+  const liveBrokers = (data.brokers || []).filter((item) => item.id !== "paper");
   const kind = (form.kind || "indicator") as StrategyKind;
   const title = algo ? `Edit ${algo.name}` : "Add strategy";
 
@@ -362,15 +363,20 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               disabled={form.runMode !== "live"}
               onChange={(event) => set({ brokerId: event.target.value })}
             >
-              {(form.runMode === "live" ? connected : connected.filter((item) => item.id === "paper" || item.id === "dhan")).map((item) => (
+              {(form.runMode === "live" ? liveBrokers : connected.filter((item) => item.id === "paper")).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
+                  {item.liveFeed ? " · LIVE" : item.connected && item.id !== "dhan" ? " · connected" : ""}
                 </option>
               ))}
             </select>
             {form.runMode !== "live" ? (
-              <span className="mt-1 block font-medium text-slate-400">Paper uses live quotes. Fills are virtual — they never go to Dhan.</span>
-            ) : null}
+              <span className="mt-1 block font-medium text-slate-400">Paper uses live quotes. Fills are virtual — they never go to a broker.</span>
+            ) : (
+              <span className="mt-1 block font-medium text-slate-400">
+                Live orders go to this broker after you connect it on Brokers. Saving does not start LIVE.
+              </span>
+            )}
           </label>
         </div>
 
@@ -527,7 +533,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <p className="mt-3 text-[11px] font-semibold text-amber-600">
             {hedge
               ? "NIFTY 15m VWAP hedge goes LIVE automatically at 09:30 IST on session days. Saving this form or restarting t2s does not start LIVE."
-              : "Live Dhan stays off until you press Start live on the algo card. Saving this form does not place orders."}
+              : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}
 

@@ -117,7 +117,10 @@ type MarketContextValue = {
   refresh: () => Promise<void>;
   toggle: (id: string) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
-  connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
+  connect: (
+    id: string,
+    payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
+  ) => Promise<void>;
   enableAuto: (payload: {
     clientId?: string;
     loginId?: string;
@@ -232,7 +235,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           throw err;
         }
       },
-      connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
+      connect: async (
+        id: string,
+        payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
+      ) => {
         const result = await connectBroker(id, payload);
         if (result.snapshot) setData(result.snapshot);
         else await refresh();

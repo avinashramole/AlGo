@@ -402,6 +402,8 @@ export type BrokerAccount = {
   keyHint: string;
   liveFeed?: boolean;
   virtual?: boolean;
+  fields?: Array<{ id: string; label: string; placeholder?: string; secret?: boolean }>;
+  help?: string;
 };
 
 export type AuthUser = {
@@ -1118,7 +1120,10 @@ export function refreshDhanToken(
   }>("/brokers/dhan/reset", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {
+export function connectBroker(
+  id: string,
+  payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string; jwtToken?: string },
+) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
     method: "POST",
     body: JSON.stringify(payload),

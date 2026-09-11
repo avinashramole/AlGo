@@ -1,4 +1,4 @@
-import { getActiveBroker, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
+import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -449,7 +449,7 @@ export function queueLiveAlgoOrder(payload) {
       return { ok: true, queued: true, status: "PENDING", duplicate: true };
     }
   }
-  pendingLiveAlgoOrders.push({ ...payload, brokerId: "dhan" });
+  pendingLiveAlgoOrders.push({ ...payload, brokerId: payload.brokerId || "dhan" });
   return { ok: true, queued: true, status: "PENDING" };
 }
 
@@ -607,7 +607,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   vs.peBars = upsertOptionBar(vs.peBars, barTime, peLtp);
   const adapter =
     mode === "live"
-      ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) => queueLiveAlgoOrder({ ...payload, brokerId: algo.brokerId || "dhan" }),
+          squareOff,
+        })
       : PaperTradingAdapter({ placeOrder, squareOff });
   NiftyVwapStrategy.tick({
     algo,
@@ -658,7 +661,10 @@ function cancelPendingForStrategy(strategy) {
 function hedgeAdapter(mode, algo) {
   const base =
     mode === "live"
-      ? LiveTradingAdapter({ queueLiveOrder: queueLiveAlgoOrder, squareOff })
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) => queueLiveAlgoOrder({ ...payload, brokerId: algo.brokerId || "dhan" }),
+          squareOff,
+        })
       : PaperTradingAdapter({ placeOrder, squareOff });
   const withName = (payload = {}) => ({
     ...payload,
@@ -1269,8 +1275,13 @@ export function toggleAlgo(id) {
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
   }
-  if (starting && algo.runMode === "live" && !isDhanFeedLive()) {
-    return { error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." };
+  if (starting && algo.runMode === "live") {
+    const brokerId = algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan";
+    const ready = brokerId === "dhan" ? isDhanFeedLive() : isLiveBrokerReady(brokerId);
+    if (!ready) {
+      const name = publicBrokers().brokers.find((row) => row.id === brokerId)?.name || brokerId;
+      return { error: `Start live needs ${name} LIVE — connect that broker on Brokers first.` };
+    }
   }
   algo.enabled = !algo.enabled;
   if (starting) {
@@ -1800,8 +1811,8 @@ export function replaceDhanOrders(rows) {
 }
 
 export function assignAlgoBroker(id, brokerId) {
-  const account = publicBrokers().brokers.find((item) => item.id === brokerId);
-  if (!account?.connected) return { error: "Connect this broker first" };
+  const wanted = String(brokerId || "").trim();
+  if (wanted !== "paper" && !isKnownLiveBroker(wanted)) return { error: "Unknown live broker" };
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Algo not found" };
   if (algo.runMode === "paper" || algo.runMode === "backtest") {
@@ -1809,7 +1820,7 @@ export function assignAlgoBroker(id, brokerId) {
     persistAlgos();
     return clone(algo);
   }
-  algo.brokerId = brokerId;
+  algo.brokerId = wanted || "dhan";
   persistAlgos();
   return clone(algo);
 }
