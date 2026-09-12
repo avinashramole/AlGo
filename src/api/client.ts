@@ -779,8 +779,10 @@ export type MemberBrokerChoice = {
   color?: string;
   segments?: string[];
   virtual?: boolean;
+  live?: boolean;
   selectable?: boolean;
   selected?: boolean;
+  autoTrade?: boolean;
   mode?: string;
   note?: string;
 };
@@ -830,6 +832,8 @@ export type MemberPosition = {
 export type MemberDesk = {
   wallet: MemberWallet;
   brokerId: string;
+  tradeMode?: "paper" | "real";
+  autoTrade?: boolean;
   brokers: MemberBrokerChoice[];
   plans: MemberPlanRow[];
   report: DeskReport;
@@ -859,10 +863,13 @@ export function getMemberDesk() {
 }
 
 export function selectMemberBroker(brokerId: string) {
-  return request<{ brokerId: string; brokers: MemberBrokerChoice[] }>("/member/broker", {
-    method: "POST",
-    body: JSON.stringify({ brokerId }),
-  });
+  return request<{ brokerId: string; tradeMode?: "paper" | "real"; autoTrade?: boolean; brokers: MemberBrokerChoice[] }>(
+    "/member/broker",
+    {
+      method: "POST",
+      body: JSON.stringify({ brokerId }),
+    },
+  );
 }
 
 export function startWalletTopup(amount: number, channel: "gpay" | "phonepe") {

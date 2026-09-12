@@ -59,6 +59,12 @@ export function MemberPlansScreen() {
       </Card>
       <Card>
         <Text style={styles.label}>Broker</Text>
+        <Text style={styles.muted}>
+          Paper is virtual. Other brokers are desk-managed — you do not enter API keys. A live desk broker wires this account to live auto trading.
+        </Text>
+        <Text style={styles.muted}>
+          {desk?.autoTrade ? `Live auto trading · ${desk.brokerId}` : "Virtual paper book · not live"}
+        </Text>
         <View style={styles.wrap}>
           {(desk?.brokers || []).map((row) => (
             <Pressable
@@ -70,7 +76,10 @@ export function MemberPlansScreen() {
                   .catch((err) => Alert.alert("Broker", err instanceof Error ? err.message : "Could not select"))
               }
             >
-              <Text style={[styles.chipText, row.selected && styles.chipTextOn]}>{row.name}</Text>
+              <Text style={[styles.chipText, row.selected && styles.chipTextOn]}>
+                {row.name}
+                {row.virtual ? " · paper" : row.live ? " · live" : ""}
+              </Text>
             </Pressable>
           ))}
         </View>
