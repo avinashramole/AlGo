@@ -532,11 +532,19 @@ export type ClientNotifications = {
   telegram: boolean;
 };
 
+export type BrokerInstallField = {
+  id: string;
+  label: string;
+  secret?: boolean;
+  placeholder?: string;
+};
+
 export type ClientBroker = {
   id: string;
   name: string;
   color?: string;
   segments: string[];
+  fields?: BrokerInstallField[];
 };
 
 export type ClientRow = {
@@ -564,6 +572,8 @@ export type ClientRow = {
   segments?: string[];
   notifications?: ClientNotifications;
   tokenHint?: string;
+  apiKeyHint?: string;
+  credentialsInstalled?: boolean;
   notes?: string;
   margin: number;
   createdAt?: string;
@@ -605,6 +615,8 @@ export function createClient(payload: {
   segments?: string[];
   notifications?: Partial<ClientNotifications>;
   brokerToken?: string;
+  brokerApiKey?: string;
+  brokerSessionToken?: string;
   notes?: string;
   staticIp?: string;
 }) {
@@ -614,7 +626,17 @@ export function createClient(payload: {
   });
 }
 
-export function saveClient(id: string, payload: Partial<ClientRow> & { name?: string; mobile?: string; telegramId?: string }) {
+export function saveClient(
+  id: string,
+  payload: Partial<ClientRow> & {
+    name?: string;
+    mobile?: string;
+    telegramId?: string;
+    brokerToken?: string;
+    brokerApiKey?: string;
+    brokerSessionToken?: string;
+  },
+) {
   return request<{ client: ClientRow }>(`/clients/${encodeURIComponent(id)}`, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -829,11 +851,22 @@ export type MemberPosition = {
   strategy?: string;
 };
 
+export type MemberBrokerInstall = {
+  brokerId: string;
+  accountId?: string;
+  tokenHint?: string;
+  apiKeyHint?: string;
+  installed?: boolean;
+  fields: BrokerInstallField[];
+  help?: string;
+};
+
 export type MemberDesk = {
   wallet: MemberWallet;
   brokerId: string;
   tradeMode?: "paper" | "real";
   autoTrade?: boolean;
+  install?: MemberBrokerInstall;
   brokers: MemberBrokerChoice[];
   plans: MemberPlanRow[];
   report: DeskReport;
@@ -863,13 +896,29 @@ export function getMemberDesk() {
 }
 
 export function selectMemberBroker(brokerId: string) {
-  return request<{ brokerId: string; tradeMode?: "paper" | "real"; autoTrade?: boolean; brokers: MemberBrokerChoice[] }>(
-    "/member/broker",
-    {
-      method: "POST",
-      body: JSON.stringify({ brokerId }),
-    },
-  );
+  return request<{
+    brokerId: string;
+    tradeMode?: "paper" | "real";
+    autoTrade?: boolean;
+    install?: MemberBrokerInstall;
+    brokers: MemberBrokerChoice[];
+  }>("/member/broker", {
+    method: "POST",
+    body: JSON.stringify({ brokerId }),
+  });
+}
+
+export function installMemberBroker(payload: {
+  brokerId?: string;
+  clientId?: string;
+  apiKey?: string;
+  accessToken?: string;
+  sessionToken?: string;
+}) {
+  return request<{ ok: boolean; brokerId: string; install: MemberBrokerInstall }>("/member/broker/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function startWalletTopup(amount: number, channel: "gpay" | "phonepe") {

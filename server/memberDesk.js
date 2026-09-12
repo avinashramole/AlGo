@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport } from "./desk.js";
+import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
 import { buildUpiLinks, listEnrollments, publicPayments } from "./subscriptions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -159,6 +160,8 @@ function emptyDesk(userId) {
     segments: ["All segments"],
     notifications: asNotifications(),
     brokerToken: "",
+    brokerApiKey: "",
+    brokerSessionToken: "",
     notes: "",
     wallet: { balance: 0, updatedAt: new Date().toISOString() },
     topups: [],
@@ -206,8 +209,45 @@ export function normalizeClientSettings(desk = {}) {
     segments: asSegments(desk.segments),
     notifications: asNotifications(desk.notifications),
     tokenHint: maskSecret(desk.brokerToken),
+    apiKeyHint: maskSecret(desk.brokerApiKey),
+    credentialsInstalled: Boolean(String(desk.brokerToken || "").trim()),
     notes: String(desk.notes || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
+  };
+}
+
+export function brokerInstallFields(brokerId) {
+  const id = String(brokerId || "").trim().toLowerCase();
+  if (!id || id === "paper") return [];
+  const meta = LIVE_BROKER_CATALOG.find((row) => row.id === id);
+  const fields = Array.isArray(meta?.fields) && meta.fields.length
+    ? meta.fields
+    : [
+        { id: "clientId", label: "Client ID", placeholder: "Broker client id" },
+        { id: "apiKey", label: "API key", placeholder: "API key" },
+        { id: "accessToken", label: "Access token", secret: true, placeholder: "Access token" },
+      ];
+  return fields.map((row) => ({
+    id: row.id,
+    label: row.label,
+    secret: Boolean(row.secret),
+    placeholder: row.placeholder || "",
+  }));
+}
+
+export function publicBrokerInstall(desk = {}) {
+  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  return {
+    brokerId,
+    accountId: String(desk.accountId || "").trim(),
+    tokenHint: maskSecret(desk.brokerToken),
+    apiKeyHint: maskSecret(desk.brokerApiKey),
+    installed: Boolean(String(desk.brokerToken || "").trim()),
+    fields: brokerInstallFields(brokerId),
+    help:
+      brokerId === "paper"
+        ? "Paper is virtual. No API key or access token."
+        : "Install this account API key and access token. Saving does not start desk LIVE.",
   };
 }
 
@@ -289,6 +329,12 @@ export function saveClientSettings(userId, patch = {}) {
   }
   if (patch.brokerToken != null && String(patch.brokerToken).trim()) {
     desk.brokerToken = String(patch.brokerToken).trim();
+  }
+  if (patch.brokerApiKey != null && String(patch.brokerApiKey).trim()) {
+    desk.brokerApiKey = String(patch.brokerApiKey).trim();
+  }
+  if (patch.brokerSessionToken != null && String(patch.brokerSessionToken).trim()) {
+    desk.brokerSessionToken = String(patch.brokerSessionToken).trim();
   }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   persist();
@@ -501,6 +547,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     brokerId,
     tradeMode: autoTrade ? "real" : "paper",
     autoTrade,
+    install: publicBrokerInstall(desk),
     brokers: memberBrokerCatalog(brokerId),
     plans: planRows(book, enrollments),
     report,
@@ -525,8 +572,41 @@ export function selectMemberBroker({ user, brokerId } = {}) {
     brokerId: wanted,
     tradeMode: desk.tradeMode,
     autoTrade,
+    install: publicBrokerInstall(desk),
     brokers: memberBrokerCatalog(wanted),
   };
+}
+
+export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken } = {}) {
+  if (!user?.id) throw fail("Sign in first.", 401);
+  const desk = loadDesk(user.id);
+  const wanted = String(brokerId || desk.brokerId || "paper").trim().toLowerCase();
+  if (!catalog.some((row) => row.id === wanted) && !CLIENT_BROKERS.some((row) => row.id === wanted)) {
+    throw fail("Unknown broker.");
+  }
+  if (wanted === "paper") throw fail("Paper is virtual. No API key or access token.");
+  const fields = brokerInstallFields(wanted);
+  if (wanted !== desk.brokerId) {
+    desk.brokerId = wanted;
+    desk.tradeMode = "real";
+    desk.copy = true;
+  }
+  if (clientId != null) desk.accountId = String(clientId || "").trim();
+  const token = String(accessToken || "").trim();
+  if (!token && !desk.brokerToken) throw fail("Paste the access token.");
+  if (token) {
+    if (token.length < 6) throw fail("Access token is too short.");
+    desk.brokerToken = token;
+  }
+  const needsApi = fields.some((row) => row.id === "apiKey");
+  const key = String(apiKey || "").trim();
+  if (needsApi && !key && !desk.brokerApiKey) throw fail("Paste the API key.");
+  if (key) desk.brokerApiKey = key;
+  if (sessionToken != null && String(sessionToken).trim()) {
+    desk.brokerSessionToken = String(sessionToken).trim();
+  }
+  persist();
+  return { ok: true, install: publicBrokerInstall(desk), brokerId: desk.brokerId };
 }
 
 export function startWalletTopup({ user, amount, channel, admins = [] } = {}) {

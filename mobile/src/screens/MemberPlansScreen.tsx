@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { confirmWalletTopup, getMemberDesk, selectMemberBroker, startWalletTopup, type MemberDesk } from "../api";
+import { confirmWalletTopup, getMemberDesk, installMemberBroker, selectMemberBroker, startWalletTopup, type MemberDesk } from "../api";
 import { Card } from "../components/Ui";
 import { colors, formatInr } from "../theme";
 
@@ -8,6 +8,9 @@ export function MemberPlansScreen() {
   const [desk, setDesk] = useState<MemberDesk | null>(null);
   const [amount, setAmount] = useState("5000");
   const [busy, setBusy] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [accessToken, setAccessToken] = useState("");
 
   const load = useCallback(() => {
     void getMemberDesk()
@@ -83,6 +86,33 @@ export function MemberPlansScreen() {
             </Pressable>
           ))}
         </View>
+        {desk && desk.brokerId !== "paper" ? (
+          <View style={{ marginTop: 12, gap: 8 }}>
+            <Text style={styles.muted}>
+              {desk.install?.installed
+                ? `Token installed ${desk.install.tokenHint || ""}`
+                : "Install API key and access token. This does not start LIVE."}
+            </Text>
+            <TextInput style={styles.input} value={clientId} onChangeText={setClientId} placeholder="Client ID" autoCapitalize="none" />
+            <TextInput style={styles.input} value={apiKey} onChangeText={setApiKey} placeholder="API key" autoCapitalize="none" secureTextEntry />
+            <TextInput style={styles.input} value={accessToken} onChangeText={setAccessToken} placeholder="Access token" autoCapitalize="none" secureTextEntry />
+            <Pressable
+              style={styles.btn}
+              disabled={busy === "creds"}
+              onPress={() =>
+                void installMemberBroker({ brokerId: desk.brokerId, clientId, apiKey, accessToken })
+                  .then(() => {
+                    setAccessToken("");
+                    setApiKey("");
+                    load();
+                  })
+                  .catch((err) => Alert.alert("Broker token", err instanceof Error ? err.message : "Could not save"))
+              }
+            >
+              <Text style={styles.btnText}>{busy === "creds" ? "Saving..." : "Save access token"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </Card>
       {(desk?.plans || []).map((row) => (
         <Card key={row.strategyId}>

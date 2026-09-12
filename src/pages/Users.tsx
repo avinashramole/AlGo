@@ -464,7 +464,10 @@ function BrokerCell({ row }: { row: ClientRow }) {
       </span>
       <span>
         <span className="block text-[11px] font-extrabold tracking-wide">{row.brokerName}</span>
-        <span className="block text-[11px] text-slate-500">{row.accountId || "Not linked"}</span>
+        <span className="block text-[11px] text-slate-500">
+          {row.accountId || "Not linked"}
+          {row.credentialsInstalled || row.tokenHint ? ` · token ${row.tokenHint || "saved"}` : " · no access token"}
+        </span>
       </span>
     </div>
   );
@@ -563,6 +566,7 @@ function AddClientModal({
   const [pickedGroups, setPickedGroups] = useState<string[]>([]);
   const [segments, setSegments] = useState<string[]>(["All segments"]);
   const [brokerToken, setBrokerToken] = useState("");
+  const [brokerApiKey, setBrokerApiKey] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -607,6 +611,7 @@ function AddClientModal({
         },
         telegramId,
         brokerToken,
+        brokerApiKey,
         notes,
         staticIp,
       });
@@ -796,7 +801,19 @@ function AddClientModal({
               </div>
             </div>
             <div className="rounded-xl border border-[var(--border)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{broker?.name || "Broker"} credentials</div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{broker?.name || "Broker"} API and access token</div>
+              {needsBrokerApiKey(brokerId) ? (
+                <Field label="API key">
+                  <input
+                    className={inputClass}
+                    type="password"
+                    value={brokerApiKey}
+                    onChange={(event) => setBrokerApiKey(event.target.value)}
+                    placeholder="Broker API key / app id"
+                    autoComplete="off"
+                  />
+                </Field>
+              ) : null}
               <Field label="Access Token *">
                 <input
                   className={inputClass}
@@ -860,6 +877,10 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
   );
 }
 
+function needsBrokerApiKey(brokerId: string) {
+  return ["zerodha", "fyers", "kotak", "angelone"].includes(brokerId);
+}
+
 const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
 
 function EditModal({
@@ -878,6 +899,8 @@ function EditModal({
   const [telegramId, setTelegramId] = useState(row.telegramId || "");
   const [brokerId, setBrokerId] = useState(row.brokerId);
   const [accountId, setAccountId] = useState(row.accountId || "");
+  const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerToken, setBrokerToken] = useState("");
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
   const [error, setError] = useState("");
@@ -888,7 +911,17 @@ function EditModal({
     setBusy(true);
     setError("");
     try {
-      const result = await saveClient(row.id, { name, mobile, telegramId, brokerId, accountId, staticIp, group });
+      const result = await saveClient(row.id, {
+        name,
+        mobile,
+        telegramId,
+        brokerId,
+        accountId,
+        staticIp,
+        group,
+        ...(brokerApiKey.trim() ? { brokerApiKey: brokerApiKey.trim() } : {}),
+        ...(brokerToken.trim() ? { brokerToken: brokerToken.trim() } : {}),
+      });
       onSaved(result.client);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -932,6 +965,35 @@ function EditModal({
         <Field label="Broker account / client id">
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Dhan client id" />
         </Field>
+        {brokerId !== "paper" ? (
+          <>
+            {needsBrokerApiKey(brokerId) ? (
+              <Field label="API key">
+                <input
+                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                  type="password"
+                  value={brokerApiKey}
+                  onChange={(event) => setBrokerApiKey(event.target.value)}
+                  placeholder={row.apiKeyHint || "Paste API key to replace"}
+                  autoComplete="off"
+                />
+              </Field>
+            ) : null}
+            <Field label="Access token">
+              <input
+                className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                type="password"
+                value={brokerToken}
+                onChange={(event) => setBrokerToken(event.target.value)}
+                placeholder={row.tokenHint || "Paste access token to replace"}
+                autoComplete="off"
+              />
+              <span className="font-normal text-[11px] text-slate-500">
+                {row.tokenHint ? `Installed ${row.tokenHint}. Leave blank to keep it.` : "No access token installed yet."} This does not start Dhan LIVE.
+              </span>
+            </Field>
+          </>
+        ) : null}
         <Field label="Static IP">
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />
         </Field>

@@ -139,6 +139,21 @@ test("createClient stores groups, notifications, mapped strategy and hides the a
   assert.equal(row.notes, "Prefers evening report");
 });
 
+test("saveClient can install API key and access token on an existing user", () => {
+  const next = saveClient("u-arpit", {
+    brokerId: "zerodha",
+    accountId: "AB1234",
+    brokerApiKey: "kite-api-key-value",
+    brokerToken: "kite-access-token-value",
+  });
+  assert.equal(next.brokerId, "zerodha");
+  assert.equal(next.accountId, "AB1234");
+  assert.equal(next.credentialsInstalled, true);
+  assert.match(next.tokenHint, /•/);
+  assert.equal(String(next.tokenHint).includes("kite-access-token-value"), false);
+  assert.equal(String(next.apiKeyHint).includes("kite-api-key-value"), false);
+});
+
 test("createClient refuses a broker IP already used on that broker", () => {
   saveClient("u-arpit", { brokerId: "dhan", staticIp: "10.1.1.8" });
   assert.throws(
