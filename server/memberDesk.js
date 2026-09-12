@@ -2,9 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { catalog } from "./brokers.js";
+import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport } from "./desk.js";
-import { buildUpiLinks, publicPayments } from "./subscriptions.js";
+import { buildUpiLinks, listEnrollments, publicPayments } from "./subscriptions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -79,6 +79,29 @@ export const CLIENT_BROKERS = [
 
 function knownBroker(id) {
   return CLIENT_BROKERS.some((row) => row.id === id) || catalog.some((row) => row.id === id);
+}
+
+function deskBrokerLive(id) {
+  if (!id || id === "paper") return false;
+  const row = publicBrokers().brokers.find((item) => item.id === id);
+  return Boolean(row?.liveFeed || row?.status === "LIVE");
+}
+
+function canPlaceLiveOn(id) {
+  const wanted = String(id || "").trim().toLowerCase();
+  if (!wanted || wanted === "paper") return false;
+  if (wanted === "dhan") return deskBrokerLive("dhan");
+  return isKnownLiveBroker(wanted) && isLiveBrokerReady(wanted);
+}
+
+function rowBrokerId(row) {
+  if (row?.paper || row?.brokerId === "paper") return "paper";
+  return String(row?.brokerId || "dhan").trim().toLowerCase() || "dhan";
+}
+
+function rowOnBroker(row, brokerId) {
+  const wanted = String(brokerId || "paper").trim().toLowerCase() || "paper";
+  return rowBrokerId(row) === wanted;
 }
 
 function maskSecret(value) {
@@ -330,18 +353,29 @@ function loadDesk(userId) {
 }
 
 export function memberBrokerCatalog(selectedId = "paper") {
-  return catalog.map((row) => ({
-    id: row.id,
-    name: row.name,
-    vendor: row.vendor,
-    color: row.color,
-    segments: row.segments,
-    virtual: row.id === "paper",
-    selectable: true,
-    selected: row.id === selectedId,
-    mode: row.id === "paper" ? "paper" : "desk-managed",
-    note: row.id === "paper" ? "Virtual paper book. MTM updates here." : "Desk will use this broker for your plan. No API keys on the member side.",
-  }));
+  return catalog.map((row) => {
+    const virtual = row.id === "paper";
+    const live = deskBrokerLive(row.id);
+    const selected = row.id === selectedId;
+    return {
+      id: row.id,
+      name: row.name,
+      vendor: row.vendor,
+      color: row.color,
+      segments: row.segments,
+      virtual,
+      live,
+      selectable: true,
+      selected,
+      autoTrade: selected && !virtual,
+      mode: virtual ? "paper" : live ? "live" : "desk-managed",
+      note: virtual
+        ? "Virtual paper book. Signals stay on the T2S desk."
+        : live
+          ? "Live auto trading uses the desk account. You do not enter API keys."
+          : "Desk-managed. Auto trading starts on this broker when the desk is LIVE. You do not enter API keys.",
+    };
+  });
 }
 
 export function ensurePlanLedger({ user } = {}) {
@@ -355,20 +389,42 @@ function sameStrategy(left, right) {
   return Boolean(a && b && a === b);
 }
 
-function liveBookForPlans(liveBook, enrollments = []) {
+function liveBookForPlans(liveBook, enrollments = [], brokerId = "paper") {
   const names = new Set(
     (enrollments || [])
       .filter((row) => row.status === "paid")
       .map((row) => String(row.strategyName || "").trim().toLowerCase())
       .filter(Boolean),
   );
-  const match = (row) => names.has(String(row?.strategy || "").trim().toLowerCase());
+  const match = (row) => names.has(String(row?.strategy || "").trim().toLowerCase()) && rowOnBroker(row, brokerId);
   if (!liveBook || !names.size) return { positions: [], orders: [], closedTrades: [] };
   return {
     positions: (liveBook.positions || []).filter(match),
     orders: (liveBook.orders || []).filter(match),
     closedTrades: (liveBook.closedTrades || []).filter(match),
   };
+}
+
+export function liveAutoTradeBrokers({ strategyName, strategyId, algoBrokerId } = {}) {
+  const assigned = String(algoBrokerId || "dhan").trim().toLowerCase() || "dhan";
+  const targets = new Set();
+  if (assigned !== "paper") targets.add(assigned);
+  const paid = listEnrollments({ admin: true }).filter((row) => {
+    if (row.status !== "paid") return false;
+    if (strategyId && row.strategyId === strategyId) return true;
+    return sameStrategy(row.strategyName, strategyName);
+  });
+  for (const row of paid) {
+    const desk = peekClientSettings(row.userId);
+    if (desk.tradeMode !== "real") continue;
+    if (desk.copy === false) continue;
+    const id = String(desk.brokerId || "").trim().toLowerCase();
+    if (!id || id === "paper" || id === assigned) continue;
+    if (id !== "dhan" && !isKnownLiveBroker(id)) continue;
+    if (!canPlaceLiveOn(id)) continue;
+    targets.add(id);
+  }
+  return [...targets];
 }
 
 function markMtm(desk, quote) {
@@ -422,7 +478,8 @@ function planRows(book, enrollments = []) {
 export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
-  const book = liveBookForPlans(liveBook, enrollments);
+  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  const book = liveBookForPlans(liveBook, enrollments, brokerId);
   if (!book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
@@ -433,6 +490,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   });
   const unrealized = Number(report.unrealizedPnl || 0);
   const balance = round2(desk.wallet.balance || 0);
+  const autoTrade = brokerId !== "paper" && desk.tradeMode === "real";
   return {
     wallet: {
       balance,
@@ -440,8 +498,10 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
       equity: round2(balance + unrealized),
       updatedAt: desk.wallet.updatedAt,
     },
-    brokerId: desk.brokerId,
-    brokers: memberBrokerCatalog(desk.brokerId),
+    brokerId,
+    tradeMode: autoTrade ? "real" : "paper",
+    autoTrade,
+    brokers: memberBrokerCatalog(brokerId),
     plans: planRows(book, enrollments),
     report,
     positions: book.positions,
@@ -456,9 +516,17 @@ export function selectMemberBroker({ user, brokerId } = {}) {
   if (!catalog.some((row) => row.id === wanted)) throw fail("Unknown broker.");
   const desk = loadDesk(user.id);
   desk.brokerId = wanted;
+  desk.tradeMode = wanted === "paper" ? "paper" : "real";
+  desk.copy = wanted !== "paper";
   desk.positions = desk.positions.map((row) => ({ ...row, brokerId: wanted }));
   persist();
-  return { brokerId: wanted, brokers: memberBrokerCatalog(wanted) };
+  const autoTrade = wanted !== "paper";
+  return {
+    brokerId: wanted,
+    tradeMode: desk.tradeMode,
+    autoTrade,
+    brokers: memberBrokerCatalog(wanted),
+  };
 }
 
 export function startWalletTopup({ user, amount, channel, admins = [] } = {}) {

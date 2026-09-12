@@ -434,12 +434,17 @@ export type MemberBrokerChoice = {
   id: string;
   name: string;
   virtual?: boolean;
+  live?: boolean;
   selected?: boolean;
+  autoTrade?: boolean;
+  note?: string;
 };
 
 export type MemberDesk = {
   wallet: { balance: number; mtm: number; equity: number };
   brokerId: string;
+  tradeMode?: "paper" | "real";
+  autoTrade?: boolean;
   brokers: MemberBrokerChoice[];
   plans: Array<{ strategyId: string; strategyName: string; realizedPnl: number; unrealizedPnl: number; netPnl: number }>;
   report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };

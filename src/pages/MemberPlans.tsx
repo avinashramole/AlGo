@@ -41,8 +41,8 @@ export function MemberPlans() {
     setBusy(brokerId);
     setError("");
     try {
-      const result = await selectMemberBroker(brokerId);
-      setDesk((row) => (row ? { ...row, brokerId: result.brokerId, brokers: result.brokers } : row));
+      await selectMemberBroker(brokerId);
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not select broker");
     } finally {
@@ -94,7 +94,9 @@ export function MemberPlans() {
     <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold">My plan</h1>
-        <p className="text-sm text-slate-400">MTM on enrolled strategies, add wallet balance, and pick the broker for this account.</p>
+        <p className="text-sm text-slate-400">
+          MTM on enrolled strategies, add wallet balance, and pick the broker for live auto trading on this account.
+        </p>
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
 
@@ -156,7 +158,13 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Broker selection</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose the broker used on your plan book. Paper is virtual. Other brokers are desk-managed — you do not enter API keys here.
+          Choose the broker used on your plan book. Paper is virtual. Other brokers are desk-managed — you do not enter API
+          keys here. A live desk broker wires this account to live auto trading.
+        </p>
+        <p className="mt-2 text-xs font-semibold text-slate-500">
+          {desk.autoTrade
+            ? `Live auto trading · ${brokerName(desk.brokerId)}${desk.brokers.find((row) => row.id === desk.brokerId)?.live ? "" : " · waiting for desk LIVE"}`
+            : "Virtual paper book · not live"}
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {desk.brokers.map((row) => (
@@ -174,7 +182,9 @@ export function MemberPlans() {
                 <span className="text-sm font-extrabold">{row.name}</span>
                 {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Selected</span> : null}
               </div>
-              <div className="mt-1 text-[11px] text-slate-500">{row.virtual ? "Virtual paper" : "Desk managed"}</div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {row.virtual ? "Virtual paper" : row.live ? "Live auto trading" : "Desk managed"}
+              </div>
             </button>
           ))}
         </div>
