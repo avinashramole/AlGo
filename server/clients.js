@@ -2,6 +2,7 @@ import { catalog } from "./brokers.js";
 import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser } from "./auth.js";
 import {
   assignedEgressIps,
+  brokerInstallFields,
   CLIENT_BROKERS,
   defaultSubscriptionUntil,
   knownEgressIps,
@@ -53,6 +54,8 @@ function asClient(user, desk, handle = {}) {
     segments: desk.segments,
     notifications: desk.notifications,
     tokenHint: desk.tokenHint,
+    apiKeyHint: desk.apiKeyHint,
+    credentialsInstalled: Boolean(desk.credentialsInstalled),
     notes: desk.notes,
     margin: desk.margin,
     createdAt: user.createdAt || "",
@@ -76,6 +79,8 @@ function settingsPatch(patch = {}) {
     segments: patch.segments,
     notifications: patch.notifications,
     brokerToken: patch.brokerToken,
+    brokerApiKey: patch.brokerApiKey,
+    brokerSessionToken: patch.brokerSessionToken,
     notes: patch.notes,
     staticIp: patch.staticIp,
   };
@@ -97,7 +102,7 @@ export function clientStatus(users = []) {
   return {
     clients,
     groups: listClientGroups(),
-    brokers: CLIENT_BROKERS,
+    brokers: CLIENT_BROKERS.map((row) => ({ ...row, fields: brokerInstallFields(row.id) })),
     assignedIps,
     knownIps: [...new Set([...inventoryAddresses(), ...knownEgressIps()])],
     defaultUntil: defaultSubscriptionUntil(),

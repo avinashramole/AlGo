@@ -15,6 +15,7 @@ const { connectLiveBroker } = await import("./liveBrokers.js");
 const {
   ensurePlanLedger,
   getMemberDesk,
+  installMemberBroker,
   listTopups,
   liveAutoTradeBrokers,
   markTopupPaid,
@@ -216,4 +217,26 @@ test("queueLiveAlgoOrder places one live order per selected desk broker", async 
   });
   const queued = drainPendingLiveAlgoOrders();
   assert.deepEqual(queued.map((row) => row.brokerId).sort(), ["dhan", "zerodha"]);
+});
+
+test("installMemberBroker stores API key and access token hints without secrets", () => {
+  selectMemberBroker({ user, brokerId: "zerodha" });
+  assert.throws(() => installMemberBroker({ user, brokerId: "paper", accessToken: "paper-token-value" }), /virtual/);
+  const row = installMemberBroker({
+    user,
+    brokerId: "zerodha",
+    clientId: "AB1234",
+    apiKey: "kite-api-key-value",
+    accessToken: "kite-access-token-value",
+  });
+  assert.equal(row.ok, true);
+  assert.equal(row.install.installed, true);
+  assert.equal(row.install.accountId, "AB1234");
+  assert.match(row.install.tokenHint, /•/);
+  assert.equal(String(row.install.tokenHint).includes("kite-access-token-value"), false);
+  assert.equal(JSON.stringify(row).includes("kite-access-token-value"), false);
+  const desk = getMemberDesk({ user, enrollments: [], quote: () => 0 });
+  assert.equal(desk.install.installed, true);
+  assert.ok(desk.install.fields.some((field) => field.id === "accessToken"));
+  assert.ok(desk.install.fields.some((field) => field.id === "apiKey"));
 });

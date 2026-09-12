@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   confirmWalletTopup,
   getMemberDesk,
+  installMemberBroker,
   selectMemberBroker,
   startWalletTopup,
   type MemberDesk,
@@ -10,6 +11,7 @@ import {
   type UpiLinks,
   type WalletTopup,
 } from "../api/client";
+import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import { SideBadge } from "../components/desk/Badges";
 import { cn, formatInr, formatIst, formatNumber } from "../lib/format";
 
@@ -19,6 +21,8 @@ export function MemberPlans() {
   const [busy, setBusy] = useState("");
   const [amount, setAmount] = useState("5000");
   const [checkout, setCheckout] = useState<{ topup: WalletTopup; payments: PaymentPublic; links: UpiLinks | null } | null>(null);
+  const [creds, setCreds] = useState<Record<string, string>>({});
+  const [credNote, setCredNote] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -40,11 +44,36 @@ export function MemberPlans() {
   const pickBroker = async (brokerId: string) => {
     setBusy(brokerId);
     setError("");
+    setCredNote("");
+    setCreds({});
     try {
       await selectMemberBroker(brokerId);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not select broker");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const saveCredentials = async () => {
+    if (!desk || desk.brokerId === "paper") return;
+    setBusy("creds");
+    setError("");
+    setCredNote("");
+    try {
+      await installMemberBroker({
+        brokerId: desk.brokerId,
+        clientId: creds.clientId,
+        apiKey: creds.apiKey,
+        accessToken: creds.accessToken,
+        sessionToken: creds.sessionToken,
+      });
+      setCreds({});
+      await load();
+      setCredNote("API key and access token saved on this account. Desk LIVE was not started.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not install broker token");
     } finally {
       setBusy("");
     }
@@ -158,8 +187,8 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Broker selection</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose the broker used on your plan book. Paper is virtual. Other brokers are desk-managed — you do not enter API
-          keys here. A live desk broker wires this account to live auto trading.
+          Choose the broker used on your plan book. Paper is virtual. Other brokers can use the desk account, or install your
+          own API key and access token below. Saving a token does not start desk LIVE.
         </p>
         <p className="mt-2 text-xs font-semibold text-slate-500">
           {desk.autoTrade
@@ -188,6 +217,45 @@ export function MemberPlans() {
             </button>
           ))}
         </div>
+        {desk.brokerId !== "paper" ? (
+          <form
+            className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveCredentials();
+            }}
+          >
+            <div className="text-sm font-bold">API key and access token</div>
+            <p className="mt-1 text-xs text-slate-400">
+              {desk.install?.help || "Install the broker API key and access token for this account."}
+            </p>
+            {desk.install?.installed ? (
+              <p className="mt-2 text-xs font-semibold text-slate-500">
+                Installed{desk.install.accountId ? ` · ${desk.install.accountId}` : ""}
+                {desk.install.tokenHint ? ` · token ${desk.install.tokenHint}` : ""}
+                {desk.install.apiKeyHint ? ` · API ${desk.install.apiKeyHint}` : ""}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs font-semibold text-amber-700">No access token installed yet.</p>
+            )}
+            <div className="mt-3">
+              <BrokerInstallFields
+                fields={desk.install?.fields || []}
+                values={creds}
+                disabled={busy === "creds"}
+                onChange={(id, value) => setCreds((current) => ({ ...current, [id]: value }))}
+              />
+            </div>
+            {credNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{credNote}</p> : null}
+            <button
+              type="submit"
+              disabled={busy === "creds"}
+              className="mt-3 h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {busy === "creds" ? "Saving..." : "Save API key and access token"}
+            </button>
+          </form>
+        ) : null}
       </section>
 
       {desk.plans.length ? (

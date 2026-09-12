@@ -20,7 +20,7 @@ import {
   unassignStaticIp,
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
-import { ensurePlanLedger, getMemberDesk, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
+import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -380,6 +380,23 @@ app.post("/api/member/broker", (req, res) => {
     res.json(selectMemberBroker({ user: memberAuth(req), brokerId: req.body?.brokerId }));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not select broker" });
+  }
+});
+
+app.post("/api/member/broker/credentials", (req, res) => {
+  try {
+    res.json(
+      installMemberBroker({
+        user: memberAuth(req),
+        brokerId: req.body?.brokerId,
+        clientId: req.body?.clientId ?? req.body?.accountId,
+        apiKey: req.body?.apiKey ?? req.body?.brokerApiKey,
+        accessToken: req.body?.accessToken ?? req.body?.brokerToken,
+        sessionToken: req.body?.sessionToken ?? req.body?.brokerSessionToken,
+      }),
+    );
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not install broker token" });
   }
 });
 

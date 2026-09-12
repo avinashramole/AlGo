@@ -440,11 +440,22 @@ export type MemberBrokerChoice = {
   note?: string;
 };
 
+export type MemberBrokerInstall = {
+  brokerId: string;
+  accountId?: string;
+  tokenHint?: string;
+  apiKeyHint?: string;
+  installed?: boolean;
+  fields?: Array<{ id: string; label: string; secret?: boolean; placeholder?: string }>;
+  help?: string;
+};
+
 export type MemberDesk = {
   wallet: { balance: number; mtm: number; equity: number };
   brokerId: string;
   tradeMode?: "paper" | "real";
   autoTrade?: boolean;
+  install?: MemberBrokerInstall;
   brokers: MemberBrokerChoice[];
   plans: Array<{ strategyId: string; strategyName: string; realizedPnl: number; unrealizedPnl: number; netPnl: number }>;
   report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };
@@ -475,6 +486,19 @@ export function selectMemberBroker(brokerId: string) {
   return request<{ brokerId: string; brokers: MemberBrokerChoice[] }>("/member/broker", {
     method: "POST",
     body: JSON.stringify({ brokerId }),
+  });
+}
+
+export function installMemberBroker(payload: {
+  brokerId?: string;
+  clientId?: string;
+  apiKey?: string;
+  accessToken?: string;
+  sessionToken?: string;
+}) {
+  return request<{ ok: boolean; brokerId: string; install: MemberBrokerInstall }>("/member/broker/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
