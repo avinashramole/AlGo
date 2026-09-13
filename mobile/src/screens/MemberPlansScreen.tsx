@@ -1,20 +1,41 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { confirmWalletTopup, getMemberDesk, installMemberBroker, selectMemberBroker, startWalletTopup, type MemberDesk } from "../api";
+import {
+  abandonEnrollment,
+  confirmEnrollmentPaid,
+  enrollStrategy,
+  getMemberDesk,
+  installMemberBroker,
+  listEnrollments,
+  selectMemberBroker,
+  strategyCatalog,
+  type CatalogStrategy,
+  type Enrollment,
+  type MemberDesk,
+  type PlanTerm,
+} from "../api";
 import { Card } from "../components/Ui";
-import { colors, formatInr } from "../theme";
+import { colors, formatInr, formatIstDate, formatPlanTerm } from "../theme";
+
+const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
 export function MemberPlansScreen() {
   const [desk, setDesk] = useState<MemberDesk | null>(null);
-  const [amount, setAmount] = useState("5000");
+  const [strategies, setStrategies] = useState<CatalogStrategy[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [busy, setBusy] = useState("");
+  const [terms, setTerms] = useState<Record<string, PlanTerm>>({});
   const [clientId, setClientId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [accessToken, setAccessToken] = useState("");
 
   const load = useCallback(() => {
-    void getMemberDesk()
-      .then(setDesk)
+    void Promise.all([getMemberDesk(), strategyCatalog(), listEnrollments()])
+      .then(([nextDesk, catalog, mine]) => {
+        setDesk(nextDesk);
+        setStrategies(catalog.strategies || []);
+        setEnrollments(mine.enrollments || []);
+      })
       .catch((err) => Alert.alert("My plan", err instanceof Error ? err.message : "Could not load"));
   }, []);
 
@@ -24,24 +45,44 @@ export function MemberPlansScreen() {
     return () => clearInterval(id);
   }, [load]);
 
-  const addBalance = async () => {
-    setBusy("topup");
+  const termFor = (id: string): PlanTerm => terms[id] || "monthly";
+  const feeFor = (row: CatalogStrategy, term: PlanTerm) =>
+    row.terms?.[term] ?? row.enrollFee * ({ monthly: 1, quarterly: 3, yearly: 12 }[term]);
+  const activeFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "paid" && row.active !== false);
+
+  const enroll = async (row: CatalogStrategy) => {
+    setBusy(row.id);
     try {
-      const result = await startWalletTopup(Number(amount), "gpay");
-      Alert.alert(`Add ${formatInr(result.topup.amount)}`, `Pay ${result.payments.payeeName} · ${result.payments.mobile} via GPay or PhonePe.`, [
-        { text: "Open GPay", onPress: () => void Linking.openURL(result.links?.gpay || result.links?.upi || "").catch(() => undefined) },
-        { text: "Open PhonePe", onPress: () => void Linking.openURL(result.links?.phonepe || result.links?.upi || "").catch(() => undefined) },
-        {
-          text: "I have paid",
-          onPress: () =>
-            void confirmWalletTopup(result.topup.id)
-              .then(load)
-              .catch((err) => Alert.alert("Wallet", err instanceof Error ? err.message : "Could not confirm")),
-        },
-        { text: "Close", style: "cancel" },
-      ]);
+      const result = await enrollStrategy(row.id, "gpay", termFor(row.id));
+      setEnrollments((rows) => [result.enrollment, ...rows.filter((item) => item.id !== result.enrollment.id)]);
+      if (result.already) return;
+      const links = result.links;
+      const payee = `${result.payments.payeeName} · ${result.payments.mobile}`;
+      Alert.alert(
+        `Deposit ${formatInr(result.enrollment.amount)}`,
+        `Send this ${formatPlanTerm(result.enrollment.term).toLowerCase()} amount to the admin GPay / PhonePe number:\n${payee}\nUPI ${result.payments.upiId}`,
+        [
+          { text: "Open GPay", onPress: () => void openPay("gpay", links) },
+          { text: "Open PhonePe", onPress: () => void openPay("phonepe", links) },
+          {
+            text: "I have paid",
+            onPress: () =>
+              void confirmEnrollmentPaid(result.enrollment.id)
+                .then(load)
+                .catch((err) => Alert.alert("Payment", err instanceof Error ? err.message : "Could not confirm")),
+          },
+          {
+            text: "Close",
+            style: "cancel",
+            onPress: () =>
+              void abandonEnrollment(result.enrollment.id)
+                .then(load)
+                .catch(() => undefined),
+          },
+        ],
+      );
     } catch (err) {
-      Alert.alert("Add balance", err instanceof Error ? err.message : "Could not add");
+      Alert.alert("Enroll", err instanceof Error ? err.message : "Could not enroll");
     } finally {
       setBusy("");
     }
@@ -50,15 +91,52 @@ export function MemberPlansScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>My plan</Text>
-      <Text style={styles.muted}>MTM, wallet add, and broker selection.</Text>
+      <Text style={styles.muted}>Subscriptions, MTM, and broker selection. Closing without payment returns Enroll.</Text>
       <Card>
         <Text style={styles.label}>Wallet</Text>
         <Text style={styles.price}>{formatInr(desk?.wallet.balance || 0)}</Text>
         <Text style={styles.muted}>MTM {formatInr(desk?.wallet.mtm || 0)} · Equity {formatInr(desk?.wallet.equity || 0)}</Text>
-        <TextInput style={styles.input} keyboardType="numeric" value={amount} onChangeText={setAmount} placeholder="Amount ₹" />
-        <Pressable style={styles.btn} disabled={busy === "topup"} onPress={() => void addBalance()}>
-          <Text style={styles.btnText}>Add balance</Text>
-        </Pressable>
+      </Card>
+      <Card>
+        <Text style={styles.label}>Subscriptions</Text>
+        <Text style={styles.muted}>
+          {desk?.payments.ready
+            ? `Money goes to ${desk.payments.payeeName} · ${desk.payments.mobileMasked}`
+            : "Admin has not set a GPay / PhonePe number yet."}
+        </Text>
+        {strategies.map((row) => {
+          const current = activeFor(row.id);
+          const selected = termFor(row.id);
+          return (
+            <View key={row.id} style={{ marginTop: 12 }}>
+              <Text style={styles.name}>{row.name}</Text>
+              {current ? (
+                <Text style={styles.paid}>
+                  Enrolled · {formatPlanTerm(current.term)} · started {formatIstDate(current.startedAt)} · ends {formatIstDate(current.endsAt)}
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.wrap}>
+                    {TERMS.map((term) => (
+                      <Pressable
+                        key={term}
+                        style={[styles.chip, selected === term && styles.chipOn]}
+                        onPress={() => setTerms((currentTerms) => ({ ...currentTerms, [row.id]: term }))}
+                      >
+                        <Text style={[styles.chipText, selected === term && styles.chipTextOn]}>
+                          {formatPlanTerm(term)} {formatInr(feeFor(row, term))}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Pressable style={styles.btn} disabled={Boolean(busy) || !desk?.payments.ready} onPress={() => void enroll(row)}>
+                    <Text style={styles.btnText}>{busy === row.id ? "Opening..." : "Enroll"}</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          );
+        })}
       </Card>
       <Card>
         <Text style={styles.label}>Broker</Text>
@@ -117,6 +195,9 @@ export function MemberPlansScreen() {
       {(desk?.plans || []).map((row) => (
         <Card key={row.strategyId}>
           <Text style={styles.name}>{row.strategyName}</Text>
+          <Text style={styles.muted}>
+            {formatPlanTerm(row.term)} · started {formatIstDate(row.startedAt)} · ends {formatIstDate(row.endsAt)}
+          </Text>
           <Text style={styles.muted}>Realized {formatInr(row.realizedPnl)}</Text>
           <Text style={{ color: row.unrealizedPnl >= 0 ? colors.up : colors.down, fontWeight: "800", marginTop: 6 }}>
             MTM {formatInr(row.unrealizedPnl)}
@@ -131,6 +212,16 @@ export function MemberPlansScreen() {
       ))}
     </ScrollView>
   );
+}
+
+async function openPay(channel: "gpay" | "phonepe", links: { gpay?: string; phonepe?: string; upi?: string } | null) {
+  if (!links) return;
+  const url = channel === "phonepe" ? links.phonepe : links.gpay;
+  try {
+    await Linking.openURL(url || "");
+  } catch {
+    await Linking.openURL(links.upi || "").catch(() => Alert.alert("UPI", "Open GPay or PhonePe and pay the amount shown."));
+  }
 }
 
 const styles = StyleSheet.create({
@@ -149,4 +240,5 @@ const styles = StyleSheet.create({
   chipText: { fontWeight: "700", fontSize: 12, color: colors.muted },
   chipTextOn: { color: colors.brand },
   name: { fontWeight: "800", fontSize: 16 },
+  paid: { color: colors.up, fontWeight: "800", marginTop: 8 },
 });

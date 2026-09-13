@@ -6,7 +6,6 @@ import {
   Building2,
   ClipboardList,
   Cpu,
-  CreditCard,
   FileText,
   Home,
   Layers,
@@ -64,8 +63,7 @@ export function MobileNav() {
       ? primary
       : [
           { to: "/", label: "Home", icon: Home },
-          { to: "/subscriptions", label: "Plans", icon: CreditCard },
-          { to: "/plans", label: "Report", icon: Wallet },
+          { to: "/plans", label: "My plan", icon: Wallet },
           { to: "/profile", label: "Profile", icon: User },
         ]
   ) as typeof primary;
@@ -117,7 +115,7 @@ export function MobileNav() {
         </div>
       ) : null}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] md:hidden">
-        <div className={admin ? "grid grid-cols-5" : "grid grid-cols-4"}>
+        <div className={admin ? "grid grid-cols-5" : "grid grid-cols-3"}>
           {visiblePrimary.map((item) => (
             <NavLink
               key={item.to}

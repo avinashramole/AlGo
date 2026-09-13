@@ -9,12 +9,15 @@ process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const {
+  abandonEnrollment,
   buildUpiLinks,
   catalogStrategy,
   enrollStrategy,
+  feeForTerm,
   listCatalog,
   listEnrollments,
   markEnrollmentPaid,
+  planWindow,
   publicPayments,
   savePaymentSettings,
 } = await import("./subscriptions.js");
@@ -63,7 +66,8 @@ test("catalogStrategy only exposes titles and fee, not live trading fields", () 
   );
   assert.equal(row.name, "NIFTY VWAP ATM");
   assert.equal(row.enrollFee, 799);
-  assert.deepEqual(Object.keys(row).sort(), ["enrollFee", "id", "name"]);
+  assert.deepEqual(row.terms, { monthly: 799, quarterly: 2397, yearly: 9588 });
+  assert.deepEqual(Object.keys(row).sort(), ["enrollFee", "id", "name", "terms"]);
   assert.equal(row.enabled, undefined);
   assert.equal(row.brokerId, undefined);
   assert.equal(row.trade, undefined);
@@ -99,4 +103,43 @@ test("listCatalog returns every admin strategy title", () => {
     catalog.strategies.map((row) => row.name),
     ["NIFTY VWAP ATM", "NIFTY 15m VWAP reversal"],
   );
+});
+
+test("unpaid enroll reverts to a fresh Enroll instead of staying Pay now", () => {
+  const algo = { id: "a6", name: "NIFTY 15m VWAP hedge" };
+  const user = { id: "u-abandon", name: "Desk Member", email: "member.abandon@gmail.com", role: "user" };
+  const pending = enrollStrategy({ user, algo, channel: "gpay", term: "quarterly" });
+  assert.equal(pending.enrollment.status, "pending");
+  assert.equal(pending.enrollment.term, "quarterly");
+  assert.equal(pending.enrollment.amount, feeForTerm(499, "quarterly"));
+  const cancelled = abandonEnrollment({ user, enrollmentId: pending.enrollment.id });
+  assert.equal(cancelled.status, "abandoned");
+  const mine = listEnrollments({ userId: user.id });
+  assert.equal(mine.some((row) => row.status === "pending"), false);
+  const again = enrollStrategy({ user, algo, channel: "gpay", term: "monthly" });
+  assert.equal(again.already, false);
+  assert.equal(again.enrollment.status, "pending");
+  assert.equal(again.enrollment.term, "monthly");
+});
+
+test("paid monthly quarterly and yearly enrollments expose start and end dates", () => {
+  const algo = { id: "a7", name: "NIFTY VWAP ATM" };
+  const user = { id: "u-terms", name: "Desk Member", email: "member.terms@gmail.com", role: "user" };
+  const monthly = enrollStrategy({ user, algo, channel: "gpay", term: "monthly" });
+  const paidMonthly = markEnrollmentPaid({ user, enrollmentId: monthly.enrollment.id });
+  assert.equal(paidMonthly.status, "paid");
+  assert.equal(paidMonthly.term, "monthly");
+  assert.equal(paidMonthly.active, true);
+  assert.ok(paidMonthly.startedAt);
+  assert.ok(paidMonthly.endsAt);
+  const monthWindow = planWindow({ startedAt: paidMonthly.startedAt, term: "monthly" });
+  assert.equal(paidMonthly.endsAt, monthWindow.endsAt);
+
+  const other = { id: "a8", name: "NIFTY 15m VWAP reversal" };
+  const yearly = enrollStrategy({ user, algo: other, channel: "phonepe", term: "yearly" });
+  assert.equal(yearly.enrollment.amount, feeForTerm(499, "yearly"));
+  const paidYearly = markEnrollmentPaid({ user, enrollmentId: yearly.enrollment.id });
+  assert.equal(paidYearly.term, "yearly");
+  const yearWindow = planWindow({ startedAt: paidYearly.startedAt, term: "yearly" });
+  assert.equal(paidYearly.endsAt, yearWindow.endsAt);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Shield, UserRound, CreditCard, Wallet } from "lucide-react";
+import { Bell, Shield, UserRound, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getMemberQuotes, type MemberIndexQuote } from "../api/client";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
@@ -32,7 +32,7 @@ export function UserHome() {
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
         <h1 className="mt-1 text-2xl font-extrabold">Welcome, {user?.name || "trader"}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Signed in with {user?.email || "your account"}. Index cards show price and future only — no VWAP. Open My plan for MTM, add wallet balance, and pick a broker.
+          Signed in with {user?.email || "your account"}. Index cards show price and future only — no VWAP. Open My plan for subscriptions, MTM, and broker selection.
         </p>
         <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500 dark:bg-slate-800">
           {user?.role || "user"}
@@ -43,20 +43,10 @@ export function UserHome() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <article className="card p-5">
-          <CreditCard size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Subscriptions</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            See admin strategies and enroll with GPay or PhonePe. Money goes to the desk mobile number.
-          </p>
-          <Link to="/subscriptions" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
-            View plans
-          </Link>
-        </article>
-        <article className="card p-5">
           <Wallet size={18} className="text-brand-500" />
           <h2 className="mt-3 text-sm font-bold">Plan report · MTM</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Realized P&L and open MTM for enrolled strategies, plus wallet add and the broker used for live auto trading.
+            Enroll monthly, quarterly, or yearly, then see realized P&L, open MTM, and the broker used for live auto trading.
           </p>
           <Link to="/plans" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
             Open my plan

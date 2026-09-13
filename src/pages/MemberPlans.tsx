@@ -1,32 +1,50 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
-  confirmWalletTopup,
+  abandonEnrollment,
+  confirmEnrollmentPaid,
+  enrollStrategy,
   getMemberDesk,
   installMemberBroker,
+  listEnrollments,
   selectMemberBroker,
-  startWalletTopup,
+  strategyCatalog,
+  type CatalogStrategy,
+  type Enrollment,
   type MemberDesk,
   type PaymentPublic,
+  type PlanTerm,
   type UpiLinks,
-  type WalletTopup,
 } from "../api/client";
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import { SideBadge } from "../components/desk/Badges";
-import { cn, formatInr, formatIst, formatNumber } from "../lib/format";
+import { cn, formatInr, formatIst, formatIstDate, formatNumber, formatPlanTerm } from "../lib/format";
+
+const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
 export function MemberPlans() {
   const [desk, setDesk] = useState<MemberDesk | null>(null);
+  const [strategies, setStrategies] = useState<CatalogStrategy[]>([]);
+  const [payments, setPayments] = useState<PaymentPublic | null>(null);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
-  const [amount, setAmount] = useState("5000");
-  const [checkout, setCheckout] = useState<{ topup: WalletTopup; payments: PaymentPublic; links: UpiLinks | null } | null>(null);
+  const [terms, setTerms] = useState<Record<string, PlanTerm>>({});
+  const [checkout, setCheckout] = useState<{
+    strategy: CatalogStrategy;
+    enrollment: Enrollment;
+    links: UpiLinks | null;
+    payments: PaymentPublic;
+  } | null>(null);
   const [creds, setCreds] = useState<Record<string, string>>({});
   const [credNote, setCredNote] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setDesk(await getMemberDesk());
+      const [nextDesk, catalog, mine] = await Promise.all([getMemberDesk(), strategyCatalog(), listEnrollments()]);
+      setDesk(nextDesk);
+      setStrategies(catalog.strategies || []);
+      setPayments(catalog.payments);
+      setEnrollments(mine.enrollments || []);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load plan report");
@@ -79,14 +97,23 @@ export function MemberPlans() {
     }
   };
 
-  const addBalance = async (channel: "gpay" | "phonepe") => {
-    setBusy("topup");
+  const termFor = (id: string): PlanTerm => terms[id] || "monthly";
+  const feeFor = (row: CatalogStrategy, term: PlanTerm) => row.terms?.[term] ?? row.enrollFee * ({ monthly: 1, quarterly: 3, yearly: 12 }[term]);
+  const activeFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "paid" && row.active !== false);
+
+  const enroll = async (strategy: CatalogStrategy) => {
+    setBusy(strategy.id);
     setError("");
     try {
-      const result = await startWalletTopup(Number(amount), channel);
-      setCheckout(result);
+      const result = await enrollStrategy(strategy.id, "gpay", termFor(strategy.id));
+      setEnrollments((rows) => {
+        const next = rows.filter((row) => row.id !== result.enrollment.id);
+        return [result.enrollment, ...next];
+      });
+      if (result.already) return;
+      setCheckout({ strategy, enrollment: result.enrollment, links: result.links, payments: result.payments });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add balance");
+      setError(err instanceof Error ? err.message : "Could not enroll");
     } finally {
       setBusy("");
     }
@@ -94,13 +121,28 @@ export function MemberPlans() {
 
   const confirmPaid = async () => {
     if (!checkout) return;
-    setBusy("paid");
+    setBusy(checkout.strategy.id);
     try {
-      await confirmWalletTopup(checkout.topup.id);
+      await confirmEnrollmentPaid(checkout.enrollment.id);
       setCheckout(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not confirm top-up");
+      setError(err instanceof Error ? err.message : "Could not confirm payment");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const closeCheckout = async () => {
+    const current = checkout;
+    setCheckout(null);
+    if (!current || current.enrollment.status === "paid") return;
+    setBusy(current.strategy.id);
+    try {
+      await abandonEnrollment(current.enrollment.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not cancel enrollment");
     } finally {
       setBusy("");
     }
@@ -110,7 +152,7 @@ export function MemberPlans() {
     return (
       <div className="card p-8 text-center">
         <div className="text-base font-bold">Plan report is loading</div>
-        <p className="mt-1 text-sm text-slate-400">{error || "Your MTM, wallet, and broker will show here."}</p>
+        <p className="mt-1 text-sm text-slate-400">{error || "Your subscriptions, MTM, and broker will show here."}</p>
       </div>
     );
   }
@@ -118,13 +160,14 @@ export function MemberPlans() {
   const report = desk.report;
   const maxDaily = Math.max(1, ...(report?.daily || []).map((row) => Math.abs(row.pnl)));
   const brokerName = (id?: string) => desk.brokers.find((row) => row.id === id)?.name || id || "Paper";
+  const payReady = Boolean(payments?.ready || desk.payments.ready);
 
   return (
     <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold">My plan</h1>
         <p className="text-sm text-slate-400">
-          MTM on enrolled strategies, add wallet balance, and pick the broker for live auto trading on this account.
+          Enroll monthly, quarterly, or yearly, then follow MTM on paid strategies and pick the broker for live auto trading.
         </p>
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
@@ -136,52 +179,72 @@ export function MemberPlans() {
       </div>
 
       <section className="card p-4">
-        <div className="text-sm font-bold">Balance adder</div>
+        <div className="text-sm font-bold">Subscriptions</div>
         <p className="mt-1 text-xs text-slate-400">
-          Add money via GPay or PhonePe. It is deposited to the admin number
-          {desk.payments.ready ? ` ${desk.payments.mobileMasked}` : ""}.
+          Choose a term and pay the listed amount to the desk GPay / PhonePe number
+          {payments?.ready ? ` ${payments.mobileMasked}` : ""}. Closing without payment returns the button to Enroll.
         </p>
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="text-xs font-semibold text-slate-500">
-            Amount ₹
-            <input
-              className="mt-1 block h-10 w-36 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              inputMode="numeric"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={busy === "topup" || !desk.payments.ready}
-            onClick={() => void addBalance("gpay")}
-            className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {busy === "topup" ? "Opening..." : "Add via GPay"}
-          </button>
-          <button
-            type="button"
-            disabled={busy === "topup" || !desk.payments.ready}
-            onClick={() => void addBalance("phonepe")}
-            className="h-10 rounded-xl bg-[#5f259f] px-4 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            Add via PhonePe
-          </button>
-        </div>
-        {!desk.payments.ready ? (
+        {payments?.ready ? (
+          <p className="mt-2 text-xs text-slate-500">
+            Payments go to <span className="font-semibold">{payments.payeeName}</span> · {payments.mobileMasked} · UPI {payments.upiId}
+          </p>
+        ) : (
           <p className="mt-2 text-xs font-semibold text-amber-700">Admin has not set a GPay / PhonePe mobile yet.</p>
-        ) : null}
-        {desk.topups.length ? (
-          <div className="mt-4 space-y-1">
-            <div className="text-[11px] font-bold uppercase text-slate-400">Recent top-ups</div>
-            {desk.topups.slice(0, 5).map((row) => (
-              <div key={row.id} className="flex justify-between text-xs">
-                <span className="font-semibold">{formatInr(row.amount)}</span>
-                <span className="uppercase text-slate-500">{row.status}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        )}
+        <div className="mt-3 space-y-3">
+          {strategies.map((row) => {
+            const current = activeFor(row.id);
+            const selected = termFor(row.id);
+            return (
+              <article key={row.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-extrabold">{row.name}</h2>
+                    {current ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {formatPlanTerm(current.term)} · started {formatIstDate(current.startedAt)} · ends {formatIstDate(current.endsAt)}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{formatInr(feeFor(row, selected))} · {formatPlanTerm(selected)}</p>
+                    )}
+                  </div>
+                  {current ? (
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold uppercase text-up">Enrolled</span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={Boolean(busy) || !payReady}
+                      onClick={() => void enroll(row)}
+                      className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {busy === row.id ? "Opening..." : "Enroll"}
+                    </button>
+                  )}
+                </div>
+                {!current ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {TERMS.map((term) => (
+                      <button
+                        key={term}
+                        type="button"
+                        onClick={() => setTerms((currentTerms) => ({ ...currentTerms, [row.id]: term }))}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase",
+                          selected === term
+                            ? "border-brand-500 bg-brand-50 text-brand-500"
+                            : "border-[var(--border)] text-slate-500",
+                        )}
+                      >
+                        {formatPlanTerm(term)} {formatInr(feeFor(row, term))}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+          {!strategies.length ? <p className="text-xs text-slate-400">No strategies published yet.</p> : null}
+        </div>
       </section>
 
       <section className="card p-4">
@@ -264,6 +327,9 @@ export function MemberPlans() {
             <article key={row.strategyId} className="card p-4">
               <div className="text-[11px] font-extrabold uppercase text-slate-400">Enrolled plan</div>
               <h2 className="mt-1 text-base font-extrabold">{row.strategyName}</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                {formatPlanTerm(row.term)} · started {formatIstDate(row.startedAt)} · ends {formatIstDate(row.endsAt)}
+              </p>
               <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <div className="text-[11px] uppercase text-slate-400">Realized</div>
@@ -280,10 +346,7 @@ export function MemberPlans() {
       ) : (
         <section className="card p-5">
           <div className="text-sm font-bold">No enrolled plan yet</div>
-          <p className="mt-1 text-xs text-slate-500">Enroll on Subscriptions. After you pay, MTM for that strategy shows here.</p>
-          <Link to="/subscriptions" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
-            View subscriptions
-          </Link>
+          <p className="mt-1 text-xs text-slate-500">Pick a monthly, quarterly, or yearly term above and complete payment. MTM for that strategy shows here after you pay.</p>
         </section>
       )}
 
@@ -370,9 +433,10 @@ export function MemberPlans() {
       {checkout ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">
           <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
-            <h3 className="text-lg font-extrabold">Add {formatInr(checkout.topup.amount)}</h3>
+            <h3 className="text-lg font-extrabold">Deposit {formatInr(checkout.enrollment.amount)}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Pay this amount to the admin GPay or PhonePe number.
+              Pay this {formatPlanTerm(checkout.enrollment.term).toLowerCase()} amount to the admin GPay or PhonePe number for{" "}
+              <strong>{checkout.strategy.name}</strong>.
               <br />
               Name: <strong>{checkout.payments.payeeName}</strong>
               <br />
@@ -395,7 +459,7 @@ export function MemberPlans() {
               <button type="button" onClick={() => void confirmPaid()} className="h-11 rounded-xl border border-[var(--border)] text-sm font-semibold">
                 I have paid
               </button>
-              <button type="button" onClick={() => setCheckout(null)} className="h-10 text-sm font-semibold text-slate-500">
+              <button type="button" onClick={() => void closeCheckout()} className="h-10 text-sm font-semibold text-slate-500">
                 Close
               </button>
             </div>

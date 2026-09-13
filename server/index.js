@@ -9,7 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
-import { enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { abandonEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { clientStatus, createClient, deleteClient, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
@@ -319,7 +319,7 @@ app.post("/api/subscriptions/enroll", (req, res) => {
     const user = sessionUser(readToken(req));
     if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
     const algo = getAlgo(req.body?.strategyId);
-    res.status(201).json(enrollStrategy({ user, algo, channel: req.body?.channel, admins: listPublicUsers() }));
+    res.status(201).json(enrollStrategy({ user, algo, channel: req.body?.channel, term: req.body?.term, admins: listPublicUsers() }));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not enroll" });
   }
@@ -334,6 +334,16 @@ app.post("/api/subscriptions/:id/paid", (req, res) => {
     res.json({ enrollment });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not confirm payment" });
+  }
+});
+
+app.post("/api/subscriptions/:id/abandon", (req, res) => {
+  try {
+    const user = sessionUser(readToken(req));
+    if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+    res.json({ enrollment: abandonEnrollment({ user, enrollmentId: req.params.id }) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not cancel enrollment" });
   }
 });
 

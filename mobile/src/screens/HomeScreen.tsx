@@ -56,10 +56,7 @@ function MemberHome() {
         <Text style={styles.price}>{user?.email || "Gmail account"}</Text>
         <Text style={styles.tiny}>Role: member</Text>
       </Card>
-      <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Plans")}>
-        <Text style={{ color: colors.brand, fontWeight: "800" }}>View subscriptions</Text>
-      </Pressable>
-      <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Report")}>
+      <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("My plan")}>
         <Text style={{ color: colors.brand, fontWeight: "800" }}>Plan report · MTM</Text>
       </Pressable>
       <Pressable style={{ marginTop: 12 }} onPress={() => navigation.navigate("Profile")}>

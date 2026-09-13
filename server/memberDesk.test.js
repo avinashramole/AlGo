@@ -47,6 +47,26 @@ test("selectMemberBroker stores the chosen broker without secrets", () => {
   selectMemberBroker({ user, brokerId: "dhan" });
 });
 
+test("paid plan report includes monthly start and end dates", () => {
+  const enrolled = enrollStrategy({
+    user,
+    algo,
+    channel: "gpay",
+    term: "monthly",
+    admins: [{ role: "admin", mobile: "9876543210", name: "Avinash" }],
+  });
+  const paid = markEnrollmentPaid({ user, enrollmentId: enrolled.enrollment.id });
+  const desk = getMemberDesk({
+    user,
+    enrollments: [paid],
+    algos: [algo],
+    quote: () => 0,
+  });
+  assert.equal(desk.plans[0].term, "monthly");
+  assert.equal(desk.plans[0].startedAt, paid.startedAt);
+  assert.equal(desk.plans[0].endsAt, paid.endsAt);
+});
+
 test("paid plan report uses the live desk book, not a seeded paper P&L", () => {
   ensurePlanLedger({ user, algo });
   const empty = getMemberDesk({

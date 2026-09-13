@@ -27,7 +27,6 @@ export const adminNav = [
 
 export const userNav = [
   { to: "/", label: "Home" },
-  { to: "/subscriptions", label: "Subscriptions" },
   { to: "/plans", label: "My plan" },
   { to: "/profile", label: "Profile" },
 ] as const;
@@ -39,5 +38,6 @@ export function navForUser(user?: Pick<AuthUser, "role"> | null) {
 export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, path: string) {
   const clean = path.split("?")[0] || "/";
   if (isAdminUser(user)) return true;
+  if (clean === "/subscriptions" || clean.startsWith("/subscriptions/")) return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
 }

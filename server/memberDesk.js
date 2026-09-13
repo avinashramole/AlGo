@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport } from "./desk.js";
 import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
-import { buildUpiLinks, listEnrollments, publicPayments } from "./subscriptions.js";
+import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -438,7 +438,7 @@ function sameStrategy(left, right) {
 function liveBookForPlans(liveBook, enrollments = [], brokerId = "paper") {
   const names = new Set(
     (enrollments || [])
-      .filter((row) => row.status === "paid")
+      .filter((row) => enrollmentActive(row))
       .map((row) => String(row.strategyName || "").trim().toLowerCase())
       .filter(Boolean),
   );
@@ -456,7 +456,7 @@ export function liveAutoTradeBrokers({ strategyName, strategyId, algoBrokerId } 
   const targets = new Set();
   if (assigned !== "paper") targets.add(assigned);
   const paid = listEnrollments({ admin: true }).filter((row) => {
-    if (row.status !== "paid") return false;
+    if (!enrollmentActive(row)) return false;
     if (strategyId && row.strategyId === strategyId) return true;
     return sameStrategy(row.strategyName, strategyName);
   });
@@ -502,7 +502,7 @@ function publicTopup(row) {
 }
 
 function planRows(book, enrollments = []) {
-  const paid = (enrollments || []).filter((row) => row.status === "paid");
+  const paid = (enrollments || []).filter((row) => enrollmentActive(row));
   return paid.map((row) => {
     const open = (book.positions || []).filter((item) => sameStrategy(item.strategy, row.strategyName));
     const closed = (book.closedTrades || []).filter((item) => sameStrategy(item.strategy, row.strategyName));
@@ -512,6 +512,9 @@ function planRows(book, enrollments = []) {
       strategyId: row.strategyId,
       strategyName: row.strategyName,
       status: row.status,
+      term: row.term || "monthly",
+      startedAt: row.startedAt || row.paidAt || "",
+      endsAt: row.endsAt || "",
       realizedPnl,
       unrealizedPnl,
       netPnl: round2(realizedPnl + unrealizedPnl),
