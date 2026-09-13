@@ -11,7 +11,6 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
 
 const { enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
-const { connectLiveBroker } = await import("./liveBrokers.js");
 const {
   ensurePlanLedger,
   getMemberDesk,
@@ -19,6 +18,7 @@ const {
   listTopups,
   liveAutoTradeBrokers,
   markTopupPaid,
+  saveClientSettings,
   selectMemberBroker,
   startWalletTopup,
 } = await import("./memberDesk.js");
@@ -195,7 +195,13 @@ test("plan book follows the selected broker and paper stays virtual", () => {
   assert.deepEqual(kite.positions.map((row) => row.id), ["p-kite"]);
 });
 
-test("liveAutoTradeBrokers adds a member live broker when the desk account is LIVE", async () => {
+test("liveAutoTradeBrokers is the algo desk broker only", () => {
+  selectMemberBroker({ user, brokerId: "zerodha" });
+  assert.deepEqual(liveAutoTradeBrokers({ strategyName: "NIFTY VWAP ATM", algoBrokerId: "dhan" }), ["dhan"]);
+  assert.deepEqual(liveAutoTradeBrokers({ algoBrokerId: "paper" }), []);
+});
+
+test("queueLiveAlgoOrder places the desk broker order without member tokens", async () => {
   const enrolled = enrollStrategy({
     user,
     algo,
@@ -203,28 +209,6 @@ test("liveAutoTradeBrokers adds a member live broker when the desk account is LI
     admins: [{ role: "admin", mobile: "9876543210", name: "Avinash" }],
   });
   markEnrollmentPaid({ user, enrollmentId: enrolled.enrollment.id });
-  selectMemberBroker({ user, brokerId: "zerodha" });
-  assert.deepEqual(liveAutoTradeBrokers({ strategyName: "NIFTY VWAP ATM", algoBrokerId: "dhan" }), ["dhan"]);
-
-  await connectLiveBroker(
-    "zerodha",
-    { clientId: "AB1234", apiKey: "kitekey11", accessToken: "kite-access-token" },
-    async () => ({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ data: { user_id: "AB1234", user_name: "Avinash" } }),
-    }),
-  );
-  assert.deepEqual(liveAutoTradeBrokers({ strategyName: "NIFTY VWAP ATM", algoBrokerId: "dhan" }).sort(), [
-    "dhan",
-    "zerodha",
-  ]);
-
-  selectMemberBroker({ user, brokerId: "paper" });
-  assert.deepEqual(liveAutoTradeBrokers({ strategyName: "NIFTY VWAP ATM", algoBrokerId: "dhan" }), ["dhan"]);
-});
-
-test("queueLiveAlgoOrder places one live order per selected desk broker", async () => {
   selectMemberBroker({ user, brokerId: "zerodha" });
   const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder } = await import("./market.js");
   drainPendingLiveAlgoOrders();
@@ -236,7 +220,8 @@ test("queueLiveAlgoOrder places one live order per selected desk broker", async 
     brokerId: "dhan",
   });
   const queued = drainPendingLiveAlgoOrders();
-  assert.deepEqual(queued.map((row) => row.brokerId).sort(), ["dhan", "zerodha"]);
+  assert.deepEqual(queued.map((row) => row.brokerId), ["dhan"]);
+  assert.equal(queued.every((row) => !row.copyUserId), true);
 });
 
 test("installMemberBroker stores API key and access token hints without secrets", () => {
@@ -255,8 +240,35 @@ test("installMemberBroker stores API key and access token hints without secrets"
   assert.match(row.install.tokenHint, /•/);
   assert.equal(String(row.install.tokenHint).includes("kite-access-token-value"), false);
   assert.equal(JSON.stringify(row).includes("kite-access-token-value"), false);
-  const desk = getMemberDesk({ user, enrollments: [], quote: () => 0 });
+  const desk = getMemberDesk({
+    user,
+    enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
+    quote: () => 0,
+  });
   assert.equal(desk.install.installed, true);
+  assert.equal(desk.copyReady, true);
   assert.ok(desk.install.fields.some((field) => field.id === "accessToken"));
   assert.ok(desk.install.fields.some((field) => field.id === "apiKey"));
+});
+
+test("queueLiveAlgoOrder queues a sized copy on the member token", async () => {
+  saveClientSettings(user.id, { sizingKind: "multiplier", sizingValue: 2, copy: true });
+  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder } = await import("./market.js");
+  drainPendingLiveAlgoOrders();
+  queueLiveAlgoOrder({
+    strategy: "NIFTY VWAP ATM",
+    side: "SELL",
+    symbol: "BANKNIFTY 52000 PE",
+    qty: 30,
+    lotSize: 30,
+    brokerId: "dhan",
+  });
+  const queued = drainPendingLiveAlgoOrders();
+  const desk = queued.find((row) => !row.copyUserId);
+  const copy = queued.find((row) => row.copyUserId === user.id);
+  assert.equal(desk.brokerId, "dhan");
+  assert.equal(copy.brokerId, "zerodha");
+  assert.equal(copy.qty, 60);
+  assert.equal(copy.account.accessToken, "kite-access-token-value");
+  assert.equal(copy.brokerSession.accessToken, "kite-access-token-value");
 });

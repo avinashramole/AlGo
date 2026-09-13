@@ -12,7 +12,9 @@ const {
   abandonEnrollment,
   buildUpiLinks,
   catalogStrategy,
+  claimEnrollmentPaid,
   deleteEnrollment,
+  enrollmentActive,
   enrollStrategy,
   feeForTerm,
   listCatalog,
@@ -143,6 +145,27 @@ test("paid monthly quarterly and yearly enrollments expose start and end dates",
   assert.equal(paidYearly.term, "yearly");
   const yearWindow = planWindow({ startedAt: paidYearly.startedAt, term: "yearly" });
   assert.equal(paidYearly.endsAt, yearWindow.endsAt);
+});
+
+test("member claim waits for admin verify before the plan is active", () => {
+  const algo = { id: "a-claim", name: "NIFTY VWAP ATM" };
+  const member = { id: "u-claim", name: "Desk Member", email: "member.claim@gmail.com", role: "user" };
+  const admin = { id: "admin", name: "Avinash", role: "admin" };
+  const pending = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
+  const claimed = claimEnrollmentPaid({ user: member, enrollmentId: pending.enrollment.id, utr: "123456789012" });
+  assert.equal(claimed.status, "claimed");
+  assert.equal(claimed.utr, "123456789012");
+  assert.equal(claimed.active, false);
+  assert.equal(enrollmentActive(claimed), false);
+  assert.throws(() => abandonEnrollment({ user: member, enrollmentId: claimed.id }), /waiting for admin/);
+  const again = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
+  assert.equal(again.already, true);
+  assert.equal(again.enrollment.status, "claimed");
+  const paid = markEnrollmentPaid({ user: admin, enrollmentId: claimed.id });
+  assert.equal(paid.status, "paid");
+  assert.equal(paid.active, true);
+  assert.equal(paid.verifiedBy, "admin");
+  assert.ok(paid.verifiedAt);
 });
 
 test("admin can delete a member subscription and a member cannot", () => {

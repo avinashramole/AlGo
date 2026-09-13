@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   abandonEnrollment,
-  confirmEnrollmentPaid,
+  claimEnrollmentPaid,
   enrollStrategy,
   getMemberDesk,
   installMemberBroker,
@@ -37,6 +37,7 @@ export function MemberPlans() {
   } | null>(null);
   const [creds, setCreds] = useState<Record<string, string>>({});
   const [credNote, setCredNote] = useState("");
+  const [utr, setUtr] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +101,7 @@ export function MemberPlans() {
   const termFor = (id: string): PlanTerm => terms[id] || "monthly";
   const feeFor = (row: CatalogStrategy, term: PlanTerm) => row.terms?.[term] ?? row.enrollFee * ({ monthly: 1, quarterly: 3, yearly: 12 }[term]);
   const activeFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "paid" && row.active !== false);
+  const claimedFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "claimed");
 
   const enroll = async (strategy: CatalogStrategy) => {
     setBusy(strategy.id);
@@ -111,6 +113,7 @@ export function MemberPlans() {
         return [result.enrollment, ...next];
       });
       if (result.already) return;
+      setUtr("");
       setCheckout({ strategy, enrollment: result.enrollment, links: result.links, payments: result.payments });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not enroll");
@@ -119,15 +122,16 @@ export function MemberPlans() {
     }
   };
 
-  const confirmPaid = async () => {
+  const claimPaid = async () => {
     if (!checkout) return;
     setBusy(checkout.strategy.id);
     try {
-      await confirmEnrollmentPaid(checkout.enrollment.id);
+      await claimEnrollmentPaid(checkout.enrollment.id, utr);
       setCheckout(null);
+      setUtr("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not confirm payment");
+      setError(err instanceof Error ? err.message : "Could not send payment claim");
     } finally {
       setBusy("");
     }
@@ -136,7 +140,8 @@ export function MemberPlans() {
   const closeCheckout = async () => {
     const current = checkout;
     setCheckout(null);
-    if (!current || current.enrollment.status === "paid") return;
+    setUtr("");
+    if (!current || current.enrollment.status === "paid" || current.enrollment.status === "claimed") return;
     setBusy(current.strategy.id);
     try {
       await abandonEnrollment(current.enrollment.id);
@@ -167,7 +172,7 @@ export function MemberPlans() {
       <div>
         <h1 className="text-xl font-bold">My plan</h1>
         <p className="text-sm text-slate-400">
-          Enroll monthly, quarterly, or yearly, then follow MTM on paid strategies and pick the broker for live auto trading.
+          Enroll monthly, quarterly, or yearly. After you pay, tap I have paid. Live copy starts only after the desk confirms payment and you install your own broker token.
         </p>
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
@@ -183,6 +188,7 @@ export function MemberPlans() {
         <p className="mt-1 text-xs text-slate-400">
           Choose a term and pay the listed amount to the desk GPay / PhonePe number
           {payments?.ready ? ` ${payments.mobileMasked}` : ""}. Closing without payment returns the button to Enroll.
+          Live trades use your token and size after an admin confirms the payment.
         </p>
         {payments?.ready ? (
           <p className="mt-2 text-xs text-slate-500">
@@ -194,6 +200,7 @@ export function MemberPlans() {
         <div className="mt-3 space-y-3">
           {strategies.map((row) => {
             const current = activeFor(row.id);
+            const waiting = claimedFor(row.id);
             const selected = termFor(row.id);
             return (
               <article key={row.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
@@ -204,12 +211,18 @@ export function MemberPlans() {
                       <p className="mt-1 text-xs text-slate-500">
                         {formatPlanTerm(current.term)} · started {formatIstDate(current.startedAt)} · ends {formatIstDate(current.endsAt)}
                       </p>
+                    ) : waiting ? (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Payment claimed{waiting.utr ? ` · UTR ${waiting.utr}` : ""}. Waiting for the desk to confirm.
+                      </p>
                     ) : (
                       <p className="mt-1 text-xs font-semibold text-slate-500">{formatInr(feeFor(row, selected))} · {formatPlanTerm(selected)}</p>
                     )}
                   </div>
                   {current ? (
                     <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold uppercase text-up">Enrolled</span>
+                  ) : waiting ? (
+                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold uppercase text-amber-700">Waiting for admin</span>
                   ) : (
                     <button
                       type="button"
@@ -221,7 +234,7 @@ export function MemberPlans() {
                     </button>
                   )}
                 </div>
-                {!current ? (
+                {!current && !waiting ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {TERMS.map((term) => (
                       <button
@@ -250,13 +263,15 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Broker selection</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose the broker used on your plan book. Paper is virtual. Other brokers can use the desk account, or install your
-          own API key and access token below. Saving a token does not start desk LIVE.
+          Choose the broker used for your live copies. Paper stays on this plan book only. Live brokers use your own API key
+          and access token — not the desk token. Saving a token does not start desk LIVE.
         </p>
         <p className="mt-2 text-xs font-semibold text-slate-500">
-          {desk.autoTrade
-            ? `Live auto trading · ${brokerName(desk.brokerId)}${desk.brokers.find((row) => row.id === desk.brokerId)?.live ? "" : " · waiting for desk LIVE"}`
-            : "Virtual paper book · not live"}
+          {desk.copyReady
+            ? `Live copy ready · ${brokerName(desk.brokerId)} uses your token on each master signal`
+            : desk.autoTrade
+              ? `Broker selected · live copy starts after admin confirms payment and your token is installed`
+              : "Virtual paper book · copies stay on this plan book"}
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {desk.brokers.map((row) => (
@@ -456,7 +471,13 @@ export function MemberPlans() {
                   </a>
                 </>
               ) : null}
-              <button type="button" onClick={() => void confirmPaid()} className="h-11 rounded-xl border border-[var(--border)] text-sm font-semibold">
+              <input
+                className="h-11 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                value={utr}
+                onChange={(event) => setUtr(event.target.value)}
+                placeholder="UTR / UPI reference (optional)"
+              />
+              <button type="button" onClick={() => void claimPaid()} className="h-11 rounded-xl border border-[var(--border)] text-sm font-semibold">
                 I have paid
               </button>
               <button type="button" onClick={() => void closeCheckout()} className="h-10 text-sm font-semibold text-slate-500">

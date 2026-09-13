@@ -666,6 +666,7 @@ export type ClientDetail = {
   plans: MemberPlanRow[];
   report: DeskReport;
   positions: MemberPosition[];
+  copyReady?: boolean;
 };
 
 export function getClientDetail(id: string) {
@@ -780,10 +781,14 @@ export type Enrollment = {
   amount: number;
   channel?: string;
   term?: PlanTerm | string;
-  status: "pending" | "paid" | "abandoned" | string;
+  status: "pending" | "claimed" | "paid" | "abandoned" | string;
   payeeMobile?: string;
   createdAt?: string;
   paidAt?: string;
+  claimedAt?: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  utr?: string;
   startedAt?: string;
   endsAt?: string;
   active?: boolean;
@@ -809,6 +814,13 @@ export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe", 
     "/subscriptions/enroll",
     { method: "POST", body: JSON.stringify({ strategyId, channel, term }) },
   );
+}
+
+export function claimEnrollmentPaid(id: string, utr?: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/claim`, {
+    method: "POST",
+    body: JSON.stringify({ utr: utr || "" }),
+  });
 }
 
 export function confirmEnrollmentPaid(id: string) {
@@ -916,6 +928,7 @@ export type MemberDesk = {
   positions: MemberPosition[];
   topups: WalletTopup[];
   payments: PaymentPublic;
+  copyReady?: boolean;
 };
 
 export type MemberIndexQuote = {

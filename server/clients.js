@@ -255,7 +255,7 @@ export function getClientDetail({ userId, users = [], algos = [], quote, admins 
       channel: row.channel,
       status: row.status,
       term: row.term || "",
-      at: row.paidAt || row.createdAt || "",
+      at: row.paidAt || row.claimedAt || row.createdAt || "",
     })),
     ...topups.map((row) => ({
       id: row.id,
@@ -276,6 +276,7 @@ export function getClientDetail({ userId, users = [], algos = [], quote, admins 
     plans: desk.plans,
     report: desk.report,
     positions: desk.positions,
+    copyReady: Boolean(desk.copyReady),
   };
 }
 
