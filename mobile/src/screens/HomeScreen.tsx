@@ -1,22 +1,26 @@
 import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
-import { getMemberQuotes, type MemberIndexQuote } from "../api";
+import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api";
 import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
-import { colors, formatInr, formatNumber, formatPct, isNseSessionOpen } from "../theme";
+import { colors, formatInr, formatIst, formatNumber, formatPct, isNseSessionOpen } from "../theme";
 
 function MemberHome() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
+  const [desk, setDesk] = useState<MemberDesk | null>(null);
 
   useEffect(() => {
     const load = () => {
-      void getMemberQuotes()
-        .then((row) => setIndices(row.indices || []))
+      void Promise.all([getMemberQuotes(), getMemberDesk()])
+        .then(([quotes, nextDesk]) => {
+          setIndices(quotes.indices || []);
+          setDesk(nextDesk);
+        })
         .catch(() => undefined);
     };
     load();
@@ -28,7 +32,7 @@ function MemberHome() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <BrandMark variant="horizontal" />
       <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
-      <Text style={styles.muted}>Price and future only. VWAP is hidden on the member dashboard.</Text>
+      <Text style={styles.muted}>Price and future only. VWAP is hidden. Open positions, MTM, and closed trades are below.</Text>
       {indices.map((item) => {
         const up = item.change >= 0;
         return (
@@ -52,6 +56,49 @@ function MemberHome() {
           </Card>
         );
       })}
+      <Card>
+        <Text style={styles.tiny}>OPEN MTM</Text>
+        <Text style={[styles.price, { color: (desk?.wallet.mtm || 0) >= 0 ? colors.up : colors.down }]}>
+          {formatInr(desk?.wallet.mtm || 0)}
+        </Text>
+        <Text style={styles.muted}>
+          Realized {formatInr(desk?.report.realizedPnl || 0)} · Net {formatInr(desk?.report.netPnl || 0)}
+        </Text>
+      </Card>
+      <Card>
+        <Text style={styles.heading}>Open positions · MTM</Text>
+        {(desk?.positions || []).map((row) => (
+          <View key={row.id} style={styles.row}>
+            <View>
+              <Text style={styles.rowTitle}>{row.symbol}</Text>
+              <Text style={styles.tiny}>
+                {row.strategy} · {row.qty} qty · LTP {formatNumber(row.ltp)}
+              </Text>
+            </View>
+            <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "700" }}>{formatInr(row.pnl)}</Text>
+          </View>
+        ))}
+        {!(desk?.positions || []).length ? <Text style={styles.muted}>No open positions.</Text> : null}
+      </Card>
+      <Card>
+        <Text style={styles.heading}>Trade book</Text>
+        <Text style={styles.muted}>Closed trades with entry, exit, and P&L.</Text>
+        {(desk?.report.tradeBook || []).map((row) => (
+          <View key={row.id} style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>{row.symbol}</Text>
+              <Text style={styles.tiny}>
+                {row.side} · {row.qty} · {formatIst(row.closedAt)}
+              </Text>
+              <Text style={styles.tiny}>
+                Entry {formatNumber(row.entry)} · Exit {formatNumber(row.exit)}
+              </Text>
+            </View>
+            <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "700" }}>{formatInr(row.pnl)}</Text>
+          </View>
+        ))}
+        {!(desk?.report.tradeBook || []).length ? <Text style={styles.muted}>No closed trades yet.</Text> : null}
+      </Card>
       <Card>
         <Text style={styles.price}>{user?.email || "Gmail account"}</Text>
         <Text style={styles.tiny}>Role: member</Text>
