@@ -23,6 +23,20 @@ export function formatPct(value: number, digits = 2) {
   return `${sign}${value.toFixed(digits)}%`;
 }
 
+export function formatIst(iso?: string) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export function formatIstDate(iso?: string) {
   if (!iso) return "—";
   const date = new Date(iso);

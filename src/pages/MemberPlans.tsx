@@ -16,8 +16,8 @@ import {
   type UpiLinks,
 } from "../api/client";
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
-import { SideBadge } from "../components/desk/Badges";
-import { cn, formatInr, formatIst, formatIstDate, formatNumber, formatPlanTerm } from "../lib/format";
+import { MemberLiveBook } from "../components/desk/MemberLiveBook";
+import { cn, formatInr, formatIstDate, formatPlanTerm } from "../lib/format";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -372,78 +372,27 @@ export function MemberPlans() {
         <Stat label="Win rate" value={`${report.winRate}%`} />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <section className="card p-4">
-          <div className="mb-3 text-sm font-bold">Daily P&L</div>
-          <div className="space-y-2">
-            {(report.daily || []).map((row) => (
-              <div key={row.date}>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span className="font-semibold">{row.date}</span>
-                  <span className={row.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(row.pnl)}</span>
-                </div>
-                <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div
-                    className={cn("h-2 rounded-full", row.pnl >= 0 ? "bg-up" : "bg-down")}
-                    style={{ width: `${Math.max(6, (Math.abs(row.pnl) / maxDaily) * 100)}%` }}
-                  />
-                </div>
+      <section className="card p-4">
+        <div className="mb-3 text-sm font-bold">Daily P&L</div>
+        <div className="space-y-2">
+          {(report.daily || []).map((row) => (
+            <div key={row.date}>
+              <div className="mb-1 flex justify-between text-xs">
+                <span className="font-semibold">{row.date}</span>
+                <span className={row.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(row.pnl)}</span>
               </div>
-            ))}
-          </div>
-        </section>
-        <section className="card p-4">
-          <div className="mb-3 text-sm font-bold">Open positions · MTM</div>
-          <div className="space-y-2">
-            {desk.positions.map((row) => (
-              <div key={row.id} className="flex items-center justify-between rounded-lg bg-[var(--bg)] px-3 py-2 text-sm">
-                <div>
-                  <div className="font-semibold">{row.symbol}</div>
-                  <div className="text-[11px] text-slate-400">
-                    {row.strategy} · {row.qty} qty · LTP {formatNumber(row.ltp)}
-                  </div>
-                </div>
-                <div className={cn("font-bold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</div>
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className={cn("h-2 rounded-full", row.pnl >= 0 ? "bg-up" : "bg-down")}
+                  style={{ width: `${Math.max(6, (Math.abs(row.pnl) / maxDaily) * 100)}%` }}
+                />
               </div>
-            ))}
-            {!desk.positions.length ? <p className="text-xs text-slate-400">No open plan positions.</p> : null}
-          </div>
-        </section>
-      </div>
-
-      <section className="card overflow-x-auto">
-        <div className="px-4 pt-4 text-sm font-bold">Trade book</div>
-        <table className="mt-2 w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Closed</th>
-              <th className="px-4 py-3 font-semibold">Symbol</th>
-              <th className="px-4 py-3 font-semibold">Side</th>
-              <th className="px-4 py-3 text-right font-semibold">Qty</th>
-              <th className="px-4 py-3 text-right font-semibold">Entry</th>
-              <th className="px-4 py-3 text-right font-semibold">Exit</th>
-              <th className="px-4 py-3 text-right font-semibold">P&L</th>
-              <th className="px-4 py-3 font-semibold">Broker</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(report.tradeBook || []).map((row) => (
-              <tr key={row.id} className="soft-row">
-                <td className="px-4 py-3 text-xs text-slate-500">{formatIst(row.closedAt)}</td>
-                <td className="px-4 py-3 font-semibold">{row.symbol}</td>
-                <td className="px-4 py-3">
-                  <SideBadge side={row.side} />
-                </td>
-                <td className="px-4 py-3 text-right">{row.qty}</td>
-                <td className="px-4 py-3 text-right">{formatNumber(row.entry)}</td>
-                <td className="px-4 py-3 text-right">{formatNumber(row.exit)}</td>
-                <td className={cn("px-4 py-3 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</td>
-                <td className="px-4 py-3">{brokerName(row.brokerId)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </div>
+          ))}
+        </div>
       </section>
+
+      <MemberLiveBook positions={desk.positions} tradeBook={report.tradeBook} brokerName={brokerName} />
 
       {checkout ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">

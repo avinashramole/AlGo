@@ -486,7 +486,24 @@ export type MemberDesk = {
     startedAt?: string;
     endsAt?: string;
   }>;
-  report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };
+  report: {
+    realizedPnl: number;
+    unrealizedPnl: number;
+    netPnl: number;
+    winRate: number;
+    tradeBook?: Array<{
+      id: string;
+      symbol: string;
+      side: "BUY" | "SELL" | string;
+      qty: number;
+      entry: number;
+      exit: number;
+      pnl: number;
+      strategy?: string;
+      brokerId?: string;
+      closedAt?: string;
+    }>;
+  };
   positions: Array<{ id: string; symbol: string; pnl: number; strategy?: string; ltp: number; qty: number }>;
   payments: PaymentPublic;
   copyReady?: boolean;

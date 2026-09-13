@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import { Bell, Shield, UserRound, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getMemberQuotes, type MemberIndexQuote } from "../api/client";
+import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api/client";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
+import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { useAuth } from "../context/AuthContext";
+import { cn, formatInr } from "../lib/format";
 
 export function UserHome() {
   const { user } = useAuth();
   const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
+  const [desk, setDesk] = useState<MemberDesk | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = () => {
-      void getMemberQuotes()
-        .then((row) => {
-          if (alive) setIndices(row.indices || []);
+      void Promise.all([getMemberQuotes(), getMemberDesk()])
+        .then(([quotes, nextDesk]) => {
+          if (!alive) return;
+          setIndices(quotes.indices || []);
+          setDesk(nextDesk);
         })
         .catch(() => undefined);
     };
@@ -26,13 +31,17 @@ export function UserHome() {
     };
   }, []);
 
+  const report = desk?.report;
+  const brokerName = (id?: string) => desk?.brokers.find((row) => row.id === id)?.name || id || "Paper";
+
   return (
     <div className="space-y-4">
       <section className="card p-6">
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
         <h1 className="mt-1 text-2xl font-extrabold">Welcome, {user?.name || "trader"}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Signed in with {user?.email || "your account"}. Index cards show price and future only — no VWAP. Open My plan for subscriptions, MTM, and broker selection.
+          Signed in with {user?.email || "your account"}. Index cards show price and future only — no VWAP. Open positions,
+          MTM, and your closed trade book are on this page.
         </p>
         <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500 dark:bg-slate-800">
           {user?.role || "user"}
@@ -40,6 +49,14 @@ export function UserHome() {
       </section>
 
       <MemberIndexBoard indices={indices} />
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Stat label="Open MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
+        <Stat label="Realized P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
+        <Stat label="Net P&L" value={formatInr(report?.netPnl || 0)} signed={report?.netPnl} />
+      </div>
+
+      <MemberLiveBook positions={desk?.positions || []} tradeBook={report?.tradeBook} brokerName={brokerName} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <article className="card p-5">
@@ -75,6 +92,15 @@ export function UserHome() {
           </p>
         </article>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {
+  return (
+    <div className="card p-4">
+      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
+      <div className={cn("mt-1 text-2xl font-bold", signed != null && (signed >= 0 ? "text-up" : "text-down"))}>{value}</div>
     </div>
   );
 }
