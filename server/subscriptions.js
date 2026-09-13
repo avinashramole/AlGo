@@ -304,3 +304,13 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   persistEnrollments();
   return publicEnroll(row);
 }
+
+export function deleteEnrollment({ user, enrollmentId } = {}) {
+  if (!user?.id) throw fail("Sign in first.", 401);
+  if (user.role !== "admin") throw fail("Admin only.", 403);
+  const index = enrollments.findIndex((item) => item.id === enrollmentId);
+  if (index < 0) throw fail("Enrollment not found.", 404);
+  const [row] = enrollments.splice(index, 1);
+  persistEnrollments();
+  return publicEnroll(row);
+}

@@ -9,6 +9,8 @@ process.env.T2S_USERS_FILE = path.join(dir, "users.json");
 process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_MESSAGING_FILE = path.join(dir, "messaging.json");
+process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
+process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 fs.writeFileSync(
   process.env.T2S_USERS_FILE,

@@ -647,6 +647,31 @@ export function deleteClient(id: string) {
   return request<{ ok: boolean; id: string }>(`/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export type ClientTransaction = {
+  id: string;
+  kind: "subscription" | "wallet" | string;
+  label: string;
+  amount: number;
+  channel?: string;
+  status: string;
+  term?: string;
+  at?: string;
+};
+
+export type ClientDetail = {
+  client: ClientRow;
+  enrollments: Enrollment[];
+  transactions: ClientTransaction[];
+  wallet: MemberWallet;
+  plans: MemberPlanRow[];
+  report: DeskReport;
+  positions: MemberPosition[];
+};
+
+export function getClientDetail(id: string) {
+  return request<ClientDetail>(`/clients/${encodeURIComponent(id)}/detail`);
+}
+
 export type EgressBrokerSlot = { id: string; name: string; color?: string };
 
 export type EgressAssignment = {
@@ -792,6 +817,10 @@ export function confirmEnrollmentPaid(id: string) {
 
 export function abandonEnrollment(id: string) {
   return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/abandon`, { method: "POST" });
+}
+
+export function deleteEnrollment(id: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}`, { method: "DELETE" });
 }
 
 export function getPaymentSettings() {

@@ -12,6 +12,7 @@ const {
   abandonEnrollment,
   buildUpiLinks,
   catalogStrategy,
+  deleteEnrollment,
   enrollStrategy,
   feeForTerm,
   listCatalog,
@@ -142,4 +143,16 @@ test("paid monthly quarterly and yearly enrollments expose start and end dates",
   assert.equal(paidYearly.term, "yearly");
   const yearWindow = planWindow({ startedAt: paidYearly.startedAt, term: "yearly" });
   assert.equal(paidYearly.endsAt, yearWindow.endsAt);
+});
+
+test("admin can delete a member subscription and a member cannot", () => {
+  const algo = { id: "a9", name: "NIFTY VWAP ATM" };
+  const member = { id: "u-del", name: "Desk Member", email: "member.del@gmail.com", role: "user" };
+  const admin = { id: "admin", name: "Avinash", role: "admin" };
+  const pending = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
+  const paid = markEnrollmentPaid({ user: member, enrollmentId: pending.enrollment.id });
+  assert.throws(() => deleteEnrollment({ user: member, enrollmentId: paid.id }), /Admin only/);
+  const removed = deleteEnrollment({ user: admin, enrollmentId: paid.id });
+  assert.equal(removed.id, paid.id);
+  assert.equal(listEnrollments({ userId: member.id }).some((row) => row.id === paid.id), false);
 });

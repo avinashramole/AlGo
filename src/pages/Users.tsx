@@ -1,4 +1,5 @@
 import { MessageSquare, Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users as UsersIcon, X } from "lucide-react";
+import { UserDetailModal, ViewUserButton } from "../components/users/UserDetailModal";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -33,6 +34,7 @@ export function Users() {
   const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState("");
   const [edit, setEdit] = useState<ClientRow | null>(null);
+  const [view, setView] = useState<ClientRow | null>(null);
   const [groupFor, setGroupFor] = useState<ClientRow | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [admins, setAdmins] = useState<AuthUser[]>([]);
@@ -278,6 +280,7 @@ export function Users() {
                   <td className="px-4 py-3 align-middle font-semibold">₹{formatNumber(row.margin, 2)}</td>
                   <td className="px-4 py-3 align-middle">
                     <div className="flex flex-wrap items-center gap-1.5">
+                      <ViewUserButton onClick={() => setView(row)} />
                       <ActionBtn onClick={() => setGroupFor(row)}>Groups</ActionBtn>
                       <ActionBtn onClick={() => setEdit(row)}>
                         <Pencil size={12} />
@@ -331,6 +334,7 @@ export function Users() {
           }}
         />
       ) : null}
+      {view ? <UserDetailModal row={view} onClose={() => setView(null)} /> : null}
       {edit ? (
         <EditModal
           row={edit}
