@@ -1,6 +1,7 @@
 import { Eye, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
+  confirmEnrollmentPaid,
   deleteEnrollment,
   getClientDetail,
   type ClientDetail,
@@ -26,6 +27,19 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const onConfirmPay = async (id: string) => {
+    setBusyId(id);
+    setError("");
+    try {
+      await confirmEnrollmentPaid(id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not confirm payment");
+    } finally {
+      setBusyId("");
+    }
+  };
 
   const onDeleteSub = async (id: string, name: string) => {
     if (!window.confirm(`Delete ${name} subscription for ${row.name}? They can enroll again. This does not start LIVE.`)) return;
@@ -73,12 +87,13 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                 <Info label="Joined" value={formatIstDate(client.createdAt)} />
                 <Info label="Last login" value={formatIst(client.lastLoginAt)} />
                 <Info label="Wallet" value={formatInr(detail.wallet.balance)} />
+                <Info label="Live copy" value={detail.copyReady ? "Ready · own token" : "Waiting · pay + token"} />
               </section>
 
               <section>
                 <h3 className="mb-2 text-sm font-bold">Enrolled subscriptions</h3>
                 <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-                  <table className="w-full min-w-[720px] text-left text-sm">
+                  <table className="w-full min-w-[860px] text-left text-sm">
                     <thead className="bg-[var(--bg)] text-[10px] font-bold uppercase tracking-wide text-slate-400">
                       <tr>
                         <th className="px-3 py-2">Strategy</th>
@@ -87,6 +102,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                         <th className="px-3 py-2">Started</th>
                         <th className="px-3 py-2">Ends</th>
                         <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">UTR</th>
                         <th className="px-3 py-2">Action</th>
                       </tr>
                     </thead>
@@ -99,16 +115,29 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                           <td className="px-3 py-2 text-xs text-slate-500">{formatIstDate(item.startedAt)}</td>
                           <td className="px-3 py-2 text-xs text-slate-500">{formatIstDate(item.endsAt)}</td>
                           <td className="px-3 py-2 uppercase">{item.status}</td>
+                          <td className="px-3 py-2 text-xs text-slate-500">{item.utr || "—"}</td>
                           <td className="px-3 py-2">
-                            <button
-                              type="button"
-                              disabled={Boolean(busyId)}
-                              onClick={() => void onDeleteSub(item.id, item.strategyName)}
-                              className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
-                            >
-                              <Trash2 size={12} />
-                              {busyId === item.id ? "Deleting..." : "Delete"}
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                              {item.status === "claimed" || item.status === "pending" ? (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(busyId)}
+                                  onClick={() => void onConfirmPay(item.id)}
+                                  className="inline-flex h-8 items-center rounded-md bg-brand-500 px-2 text-[11px] font-semibold text-white disabled:opacity-50"
+                                >
+                                  {busyId === item.id ? "Confirming..." : "Confirm payment"}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={Boolean(busyId)}
+                                onClick={() => void onDeleteSub(item.id, item.strategyName)}
+                                className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
+                              >
+                                <Trash2 size={12} />
+                                {busyId === item.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

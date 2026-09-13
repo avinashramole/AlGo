@@ -451,26 +451,120 @@ function liveBookForPlans(liveBook, enrollments = [], brokerId = "paper") {
   };
 }
 
-export function liveAutoTradeBrokers({ strategyName, strategyId, algoBrokerId } = {}) {
+export function liveAutoTradeBrokers({ algoBrokerId } = {}) {
   const assigned = String(algoBrokerId || "dhan").trim().toLowerCase() || "dhan";
-  const targets = new Set();
-  if (assigned !== "paper") targets.add(assigned);
-  const paid = listEnrollments({ admin: true }).filter((row) => {
-    if (!enrollmentActive(row)) return false;
-    if (strategyId && row.strategyId === strategyId) return true;
-    return sameStrategy(row.strategyName, strategyName);
-  });
-  for (const row of paid) {
-    const desk = peekClientSettings(row.userId);
-    if (desk.tradeMode !== "real") continue;
-    if (desk.copy === false) continue;
-    const id = String(desk.brokerId || "").trim().toLowerCase();
-    if (!id || id === "paper" || id === assigned) continue;
-    if (id !== "dhan" && !isKnownLiveBroker(id)) continue;
-    if (!canPlaceLiveOn(id)) continue;
-    targets.add(id);
+  if (assigned === "paper") return [];
+  return [assigned];
+}
+
+export function peekClientSecrets(userId) {
+  const desk = store[userId] || emptyDesk(userId);
+  return {
+    userId,
+    ...normalizeClientSettings(desk),
+    brokerToken: String(desk.brokerToken || "").trim(),
+    brokerApiKey: String(desk.brokerApiKey || "").trim(),
+    brokerSessionToken: String(desk.brokerSessionToken || "").trim(),
+  };
+}
+
+export function sizeCopyQty(masterQty, { sizingKind, sizingValue, lotSize } = {}) {
+  const master = Math.max(0, Math.round(Number(masterQty) || 0));
+  const size = Number(sizingValue);
+  const lot = Math.max(1, Math.round(Number(lotSize) || master || 1));
+  if (sizingKind === "fixed") return Math.max(1, Math.round(Number.isFinite(size) && size >= 1 ? size : 1));
+  if (sizingKind === "lots") return Math.max(1, Math.round(lot * (Number.isFinite(size) && size > 0 ? size : 1)));
+  const mult = Number.isFinite(size) && size > 0 ? size : 1;
+  return Math.max(1, Math.round((master || lot) * mult));
+}
+
+export function recordMemberCopyFill({ userId, payload = {}, live, error, paper = false } = {}) {
+  if (!userId) return null;
+  const desk = loadDesk(userId);
+  const now = new Date().toISOString();
+  const qty = Math.max(1, Math.round(Number(payload.qty) || 1));
+  const price = Number(live?.price || payload.price || 0);
+  const side = payload.side === "SELL" ? "SELL" : "BUY";
+  const brokerId = String(payload.brokerId || desk.brokerId || "paper");
+  const status = error ? "REJECTED" : paper || !live ? "FILLED" : String(live.status || "PENDING").toUpperCase();
+  const mapped = status === "TRANSIT" || status === "OPEN" ? "PENDING" : status === "TRADED" ? "FILLED" : status;
+  const order = {
+    id: live?.orderId ? String(live.orderId) : `mo${crypto.randomBytes(6).toString("hex")}`,
+    userId,
+    symbol: payload.symbol || "",
+    side,
+    qty,
+    filledQty: mapped === "FILLED" ? qty : Number(live?.filledQty || 0),
+    price,
+    status: mapped,
+    strategy: payload.strategy || "",
+    brokerId,
+    paper: Boolean(paper),
+    live: Boolean(live?.orderId) && !paper,
+    reason: error ? String(error.message || error) : "",
+    createdAt: now,
+  };
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
+  desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
+  desk.orders.unshift(order);
+  if (!error && (paper || mapped === "FILLED" || mapped === "PENDING")) {
+    applyMemberPosition(desk, {
+      symbol: order.symbol,
+      side,
+      qty,
+      price: price || Number(payload.price || 0),
+      strategy: order.strategy,
+      brokerId,
+      paper,
+      openedAt: now,
+    });
   }
-  return [...targets];
+  persist();
+  return order;
+}
+
+function applyMemberPosition(desk, fill) {
+  const price = Number(fill.price || 0);
+  if (fill.side === "SELL") {
+    const open = desk.positions.find(
+      (row) => sameStrategy(row.symbol, fill.symbol) && String(row.strategy || "") === String(fill.strategy || "") && row.type !== "SELL",
+    );
+    if (open) {
+      const closeQty = Math.min(Number(open.qty || 0), Number(fill.qty || 0));
+      const pnl = round2((price - Number(open.avg || 0)) * closeQty);
+      desk.closedTrades.unshift({
+        id: `mt${crypto.randomBytes(6).toString("hex")}`,
+        symbol: fill.symbol,
+        side: "SELL",
+        qty: closeQty,
+        entry: Number(open.avg || 0),
+        exit: price,
+        pnl,
+        strategy: fill.strategy,
+        brokerId: fill.brokerId,
+        paper: Boolean(fill.paper),
+        closedAt: fill.openedAt,
+      });
+      open.qty = Number(open.qty || 0) - closeQty;
+      if (open.qty <= 0) desk.positions = desk.positions.filter((row) => row !== open);
+      return;
+    }
+  }
+  desk.positions.unshift({
+    id: `mp${crypto.randomBytes(6).toString("hex")}`,
+    symbol: fill.symbol,
+    type: fill.side,
+    qty: fill.qty,
+    avg: price,
+    ltp: price,
+    pnl: 0,
+    strategy: fill.strategy,
+    brokerId: fill.brokerId,
+    paper: Boolean(fill.paper),
+    live: !fill.paper,
+    openedAt: fill.openedAt,
+  });
 }
 
 function markMtm(desk, quote) {
@@ -528,7 +622,13 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
-  const book = liveBookForPlans(liveBook, enrollments, brokerId);
+  const own = {
+    positions: Array.isArray(desk.positions) ? desk.positions : [],
+    orders: Array.isArray(desk.orders) ? desk.orders : [],
+    closedTrades: Array.isArray(desk.closedTrades) ? desk.closedTrades : [],
+  };
+  const hasOwn = own.positions.length || own.orders.length || own.closedTrades.length;
+  const book = hasOwn ? own : liveBookForPlans(liveBook, enrollments, brokerId);
   if (!book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
@@ -557,6 +657,9 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     positions: book.positions,
     topups: desk.topups.map(publicTopup),
     payments: publicPayments(admins),
+    copyReady: Boolean(
+      autoTrade && desk.copy !== false && String(desk.brokerToken || "").trim() && (enrollments || []).some((row) => enrollmentActive(row)),
+    ),
   };
 }
 

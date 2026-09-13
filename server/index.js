@@ -9,7 +9,8 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
-import { abandonEnrollment, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
@@ -95,6 +96,11 @@ async function flushLiveAlgoOrders() {
     for (const payload of queued) {
       const brokerId = String(payload.brokerId || "dhan");
       try {
+        if (payload.copyUserId) {
+          const order = await sendMemberCopyOrder(payload);
+          noteLiveAlgoOrderResult(payload, { status: order?.status || "PENDING", orderId: order?.id }, order?.reason);
+          continue;
+        }
         const live = await sendLiveBrokerOrder(payload);
         const order = placeOrder({ ...payload, brokerId, live });
         noteLiveAlgoOrderResult(payload, live, order?.error);
@@ -102,6 +108,11 @@ async function flushLiveAlgoOrders() {
           console.log(`Strategy live fill book: ${order.error}`);
         }
       } catch (error) {
+        if (payload.copyUserId) {
+          noteLiveAlgoOrderResult(payload, error.live || { status: "REJECTED" }, error);
+          console.log(`Member copy order failed: ${error.message || error}`);
+          continue;
+        }
         const order = bookRejectedLiveOrder({ ...payload, brokerId }, error);
         noteLiveAlgoOrderResult(payload, error.live || { status: "REJECTED" }, error);
         if (order?.error) {
@@ -325,12 +336,29 @@ app.post("/api/subscriptions/enroll", (req, res) => {
   }
 });
 
+app.post("/api/subscriptions/:id/claim", (req, res) => {
+  try {
+    const user = sessionUser(readToken(req));
+    if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+    const enrollment = claimEnrollmentPaid({ user, enrollmentId: req.params.id, utr: req.body?.utr });
+    res.json({ enrollment });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not claim payment" });
+  }
+});
+
 app.post("/api/subscriptions/:id/paid", (req, res) => {
   try {
     const user = sessionUser(readToken(req));
     if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+    if (user.role !== "admin") {
+      throw Object.assign(new Error("Only an admin can confirm payment. Use I have paid after you transfer."), { status: 403 });
+    }
     const enrollment = markEnrollmentPaid({ user, enrollmentId: req.params.id });
-    if (enrollment.status === "paid") ensurePlanLedger({ user, algo: getAlgo(enrollment.strategyId) });
+    if (enrollment.status === "paid") {
+      const owner = { id: enrollment.userId, name: enrollment.userName, email: enrollment.userEmail, role: "user" };
+      ensurePlanLedger({ user: owner, algo: getAlgo(enrollment.strategyId) });
+    }
     res.json({ enrollment });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not confirm payment" });

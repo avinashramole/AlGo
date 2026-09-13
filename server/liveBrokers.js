@@ -364,8 +364,22 @@ function orderSide(payload) {
 }
 
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
-  const session = liveBrokerSession(id);
-  if (!session?.accessToken) throw fail(`Connect ${liveBrokerMeta(id)?.name || id} on Brokers first.`);
+  const override = payload.brokerSession && typeof payload.brokerSession === "object" ? payload.brokerSession : null;
+  const session = override?.accessToken
+    ? {
+        accessToken: String(override.accessToken || "").trim(),
+        apiKey: String(override.apiKey || "").trim(),
+        clientId: String(override.clientId || "").trim(),
+        sessionToken: String(override.sessionToken || "").trim(),
+      }
+    : liveBrokerSession(id);
+  if (!session?.accessToken) {
+    throw fail(
+      override
+        ? `This member has no ${liveBrokerMeta(id)?.name || id} access token. Install it on My plan.`
+        : `Connect ${liveBrokerMeta(id)?.name || id} on Brokers first.`,
+    );
+  }
   const qty = orderQty(payload);
   const side = orderSide(payload);
   const symbol = String(payload.symbol || "").trim();

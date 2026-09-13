@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   abandonEnrollment,
-  confirmEnrollmentPaid,
+  claimEnrollmentPaid,
   enrollStrategy,
   getMemberDesk,
   installMemberBroker,
@@ -49,6 +49,7 @@ export function MemberPlansScreen() {
   const feeFor = (row: CatalogStrategy, term: PlanTerm) =>
     row.terms?.[term] ?? row.enrollFee * ({ monthly: 1, quarterly: 3, yearly: 12 }[term]);
   const activeFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "paid" && row.active !== false);
+  const claimedFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "claimed");
 
   const enroll = async (row: CatalogStrategy) => {
     setBusy(row.id);
@@ -67,9 +68,9 @@ export function MemberPlansScreen() {
           {
             text: "I have paid",
             onPress: () =>
-              void confirmEnrollmentPaid(result.enrollment.id)
+              void claimEnrollmentPaid(result.enrollment.id)
                 .then(load)
-                .catch((err) => Alert.alert("Payment", err instanceof Error ? err.message : "Could not confirm")),
+                .catch((err) => Alert.alert("Payment", err instanceof Error ? err.message : "Could not send claim")),
           },
           {
             text: "Close",
@@ -91,7 +92,7 @@ export function MemberPlansScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>My plan</Text>
-      <Text style={styles.muted}>Subscriptions, MTM, and broker selection. Closing without payment returns Enroll.</Text>
+      <Text style={styles.muted}>Subscriptions, MTM, and your broker token. I have paid waits for admin before live copy starts.</Text>
       <Card>
         <Text style={styles.label}>Wallet</Text>
         <Text style={styles.price}>{formatInr(desk?.wallet.balance || 0)}</Text>
@@ -106,6 +107,7 @@ export function MemberPlansScreen() {
         </Text>
         {strategies.map((row) => {
           const current = activeFor(row.id);
+          const waiting = claimedFor(row.id);
           const selected = termFor(row.id);
           return (
             <View key={row.id} style={{ marginTop: 12 }}>
@@ -114,6 +116,8 @@ export function MemberPlansScreen() {
                 <Text style={styles.paid}>
                   Enrolled · {formatPlanTerm(current.term)} · started {formatIstDate(current.startedAt)} · ends {formatIstDate(current.endsAt)}
                 </Text>
+              ) : waiting ? (
+                <Text style={styles.waiting}>Waiting for admin{waiting.utr ? ` · UTR ${waiting.utr}` : ""}</Text>
               ) : (
                 <>
                   <View style={styles.wrap}>
@@ -141,10 +145,14 @@ export function MemberPlansScreen() {
       <Card>
         <Text style={styles.label}>Broker</Text>
         <Text style={styles.muted}>
-          Paper is virtual. Other brokers are desk-managed — you do not enter API keys. A live desk broker wires this account to live auto trading.
+          Paper is virtual. Live brokers use your own API key and access token for copy trades. Saving a token does not start desk LIVE.
         </Text>
         <Text style={styles.muted}>
-          {desk?.autoTrade ? `Live auto trading · ${desk.brokerId}` : "Virtual paper book · not live"}
+          {desk?.copyReady
+            ? `Live copy ready · ${desk.brokerId} uses your token`
+            : desk?.autoTrade
+              ? "Broker selected · waiting for admin payment confirm and token"
+              : "Virtual paper book · not live"}
         </Text>
         <View style={styles.wrap}>
           {(desk?.brokers || []).map((row) => (
@@ -241,4 +249,5 @@ const styles = StyleSheet.create({
   chipTextOn: { color: colors.brand },
   name: { fontWeight: "800", fontSize: 16 },
   paid: { color: colors.up, fontWeight: "800", marginTop: 8 },
+  waiting: { color: "#b45309", fontWeight: "800", marginTop: 8 },
 });

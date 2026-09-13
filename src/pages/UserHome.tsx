@@ -46,7 +46,7 @@ export function UserHome() {
           <Wallet size={18} className="text-brand-500" />
           <h2 className="mt-3 text-sm font-bold">Plan report · MTM</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Enroll monthly, quarterly, or yearly, then see realized P&L, open MTM, and the broker used for live auto trading.
+            Enroll monthly, quarterly, or yearly. After admin confirms payment and you install your token, live copies use your account size.
           </p>
           <Link to="/plans" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
             Open my plan

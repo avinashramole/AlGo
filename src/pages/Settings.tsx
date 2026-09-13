@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, saveUserContact, type Enrollment, type WalletTopup } from "../api/client";
+import { confirmEnrollmentPaid, connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, saveUserContact, type Enrollment, type WalletTopup } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 
@@ -21,6 +21,7 @@ export function Settings() {
   const [payBusy, setPayBusy] = useState(false);
   const [enrolls, setEnrolls] = useState<Enrollment[]>([]);
   const [topups, setTopups] = useState<WalletTopup[]>([]);
+  const [confirmBusy, setConfirmBusy] = useState("");
   const rows = [
     ["Desk", user?.desk || "Index Options"],
     ["Gmail mail", mailConnected ? `Sending · ${mailFrom}` : "Not connected — codes and login mail stay off"],
@@ -123,7 +124,7 @@ export function Settings() {
       <section className="card p-4">
         <div className="text-sm font-bold">GPay / PhonePe enrollments</div>
         <p className="mt-1 text-xs text-slate-400">
-          Members pay this monthly amount — or 3× quarterly / 12× yearly — to your GPay or PhonePe mobile when they tap Enroll. Use the 10-digit number linked to those apps. Optional UPI ID example: 98xxxxxxxx@ybl (PhonePe) or 98xxxxxxxx@okicici (GPay).
+          Members pay this monthly amount — or 3× quarterly / 12× yearly — to your GPay or PhonePe mobile when they tap Enroll. Use the 10-digit number linked to those apps. Optional UPI ID example: 98xxxxxxxx@ybl (PhonePe) or 98xxxxxxxx@okicici (GPay). After a member taps I have paid, confirm the transfer here. Live copy starts only after you confirm.
         </p>
         <form
           className="mt-3 grid gap-2 sm:grid-cols-2"
@@ -165,20 +166,42 @@ export function Settings() {
           </button>
         </form>
         {payNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{payNote}</p> : null}
-        {enrolls.length ? (
+        {enrolls.filter((row) => row.status !== "abandoned").length ? (
           <div className="mt-4 overflow-x-auto">
             <div className="mb-2 text-xs font-bold uppercase text-slate-400">Member enrollments</div>
-            {enrolls.slice(0, 12).map((row) => (
-              <div key={row.id} className="flex justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
-                <span className="font-semibold">{row.userName || row.userEmail}</span>
-                <span className="text-slate-500">
-                  {row.strategyName}
-                  {row.term ? ` · ${row.term}` : ""}
-                  {row.startedAt ? ` · ${row.startedAt.slice(0, 10)} to ${(row.endsAt || "").slice(0, 10)}` : ""}
-                </span>
-                <span className="uppercase">{row.status}</span>
-              </div>
-            ))}
+            {enrolls
+              .filter((row) => row.status !== "abandoned")
+              .slice(0, 12)
+              .map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
+                  <span className="font-semibold">{row.userName || row.userEmail}</span>
+                  <span className="text-slate-500">
+                    {row.strategyName}
+                    {row.term ? ` · ${row.term}` : ""}
+                    {row.utr ? ` · UTR ${row.utr}` : ""}
+                    {row.startedAt ? ` · ${row.startedAt.slice(0, 10)} to ${(row.endsAt || "").slice(0, 10)}` : ""}
+                  </span>
+                  <span className="uppercase">{row.status}</span>
+                  {row.status === "claimed" || row.status === "pending" ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(confirmBusy)}
+                      onClick={() => {
+                        setConfirmBusy(row.id);
+                        void confirmEnrollmentPaid(row.id)
+                          .then((next) => {
+                            setEnrolls((items) => items.map((item) => (item.id === next.enrollment.id ? next.enrollment : item)));
+                          })
+                          .catch(() => undefined)
+                          .finally(() => setConfirmBusy(""));
+                      }}
+                      className="h-8 rounded-md bg-brand-500 px-2 text-[11px] font-semibold text-white disabled:opacity-50"
+                    >
+                      {confirmBusy === row.id ? "Confirming..." : "Confirm payment"}
+                    </button>
+                  ) : null}
+                </div>
+              ))}
           </div>
         ) : null}
         {topups.length ? (

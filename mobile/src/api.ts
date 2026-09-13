@@ -411,6 +411,7 @@ export type Enrollment = {
   amount: number;
   term?: PlanTerm | string;
   status: string;
+  utr?: string;
   startedAt?: string;
   endsAt?: string;
   active?: boolean;
@@ -431,6 +432,13 @@ export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe", 
     "/subscriptions/enroll",
     { method: "POST", body: JSON.stringify({ strategyId, channel, term }) },
   );
+}
+
+export function claimEnrollmentPaid(id: string, utr?: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/claim`, {
+    method: "POST",
+    body: JSON.stringify({ utr: utr || "" }),
+  });
 }
 
 export function confirmEnrollmentPaid(id: string) {
@@ -481,6 +489,7 @@ export type MemberDesk = {
   report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };
   positions: Array<{ id: string; symbol: string; pnl: number; strategy?: string; ltp: number; qty: number }>;
   payments: PaymentPublic;
+  copyReady?: boolean;
 };
 
 export type MemberIndexQuote = {

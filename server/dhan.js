@@ -1192,8 +1192,15 @@ function attachPlaceLive(error, extra = {}) {
 }
 
 export async function placeDhanOrder(payload = {}) {
-  if (!accessToken || !clientId) {
-    const error = new Error("Dhan live is off. Open Brokers and paste Client ID + Access Token.");
+  const account = payload.account && typeof payload.account === "object" ? payload.account : null;
+  const token = String(account?.accessToken || accessToken || "").trim();
+  const id = String(account?.clientId || clientId || "").trim();
+  if (!token || !id) {
+    const error = new Error(
+      account
+        ? "This member has no Dhan Client ID + Access Token. Install them on My plan."
+        : "Dhan live is off. Open Brokers and paste Client ID + Access Token.",
+    );
     error.status = 400;
     throw error;
   }
@@ -1249,7 +1256,7 @@ export async function placeDhanOrder(payload = {}) {
   const correlationId = orderCorrelationId(tagged);
   if (strategy) rememberOrderStrategy({ correlationId, strategy }, strategy);
   let body = {
-    dhanClientId: String(clientId),
+    dhanClientId: String(id),
     correlationId,
     transactionType: payload.side === "SELL" ? "SELL" : "BUY",
     exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
@@ -1275,7 +1282,7 @@ export async function placeDhanOrder(payload = {}) {
     console.log(
       `Dhan ${orderBody.afterMarketOrder ? "AMO " : ""}${orderBody.transactionType} ${orderBody.exchangeSegment} ${orderBody.productType} ${orderBody.orderType} qty ${orderBody.quantity} security ${orderBody.securityId}${orderBody.amoTime ? ` ${orderBody.amoTime}` : ""}`,
     );
-    return dhanPost("/orders", accessToken, clientId, orderBody);
+    return dhanPost("/orders", token, id, orderBody);
   };
 
   let result;
@@ -1314,10 +1321,12 @@ export async function placeDhanOrder(payload = {}) {
     error.message = formatPlaceError(error, ip, body);
     throw error;
   }
-  try {
-    await pullAccount();
-  } catch {
-    /* order is still at Dhan */
+  if (!account) {
+    try {
+      await pullAccount();
+    } catch {
+      /* order is still at Dhan */
+    }
   }
   return {
     orderId,

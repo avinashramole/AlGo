@@ -217,6 +217,10 @@ function publicEnroll(row) {
     payeeMobile: row.payeeMobile,
     createdAt: row.createdAt,
     paidAt: row.paidAt || "",
+    claimedAt: row.claimedAt || "",
+    verifiedAt: row.verifiedAt || "",
+    verifiedBy: row.verifiedBy || "",
+    utr: row.utr || "",
     startedAt: dates.startedAt,
     endsAt: dates.endsAt,
     active: enrollmentActive(row),
@@ -242,6 +246,10 @@ export function enrollStrategy({ user, algo, channel, term, admins } = {}) {
   const activePaid = enrollments.find((row) => row.userId === user.id && row.strategyId === algo.id && enrollmentActive(row));
   if (activePaid) {
     return { enrollment: publicEnroll(activePaid), payments: pub, links: null, already: true };
+  }
+  const claimed = enrollments.find((row) => row.userId === user.id && row.strategyId === algo.id && row.status === "claimed");
+  if (claimed) {
+    return { enrollment: publicEnroll(claimed), payments: pub, links: null, already: true };
   }
   const existing = enrollments.find((row) => row.userId === user.id && row.strategyId === algo.id && row.status === "pending");
   const row = existing || {
@@ -277,14 +285,34 @@ export function enrollStrategy({ user, algo, channel, term, admins } = {}) {
   return { enrollment: publicEnroll(row), payments: pub, links, already: false };
 }
 
+export function claimEnrollmentPaid({ user, enrollmentId, utr } = {}) {
+  if (!user?.id) throw fail("Sign in first.", 401);
+  const row = enrollments.find((item) => item.id === enrollmentId);
+  if (!row) throw fail("Enrollment not found.", 404);
+  if (row.userId !== user.id && user.role !== "admin") throw fail("Enrollment not found.", 404);
+  if (row.status === "paid") return publicEnroll(row);
+  if (row.status === "abandoned") throw fail("This enrollment was cancelled. Enroll again.");
+  row.status = "claimed";
+  row.claimedAt = new Date().toISOString();
+  row.utr = String(utr || "").replace(/\s+/g, "").slice(0, 32);
+  persistEnrollments();
+  return publicEnroll(row);
+}
+
 export function markEnrollmentPaid({ user, enrollmentId } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const row = enrollments.find((item) => item.id === enrollmentId);
   if (!row) throw fail("Enrollment not found.", 404);
   if (row.userId !== user.id && user.role !== "admin") throw fail("Enrollment not found.", 404);
+  if (row.status === "paid") return publicEnroll(row);
+  if (row.status === "abandoned") throw fail("Enrollment is cancelled.");
   const now = new Date().toISOString();
   row.status = "paid";
   row.paidAt = now;
+  if (user.role === "admin") {
+    row.verifiedAt = now;
+    row.verifiedBy = user.id || user.email || "admin";
+  }
   row.term = normalizePlanTerm(row.term);
   const window = planWindow({ startedAt: now, term: row.term });
   row.startedAt = window.startedAt;
@@ -299,6 +327,7 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   if (!row) throw fail("Enrollment not found.", 404);
   if (row.userId !== user.id && user.role !== "admin") throw fail("Enrollment not found.", 404);
   if (row.status === "paid") throw fail("Paid enrollments cannot be cancelled.");
+  if (row.status === "claimed" && user.role !== "admin") throw fail("Payment is waiting for admin. Ask the desk to verify or delete it.");
   row.status = "abandoned";
   row.abandonedAt = new Date().toISOString();
   persistEnrollments();

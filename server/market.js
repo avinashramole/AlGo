@@ -1,5 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { liveAutoTradeBrokers } from "./memberDesk.js";
+import { memberCopyPayloads } from "./liveCopy.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -427,13 +428,17 @@ function enqueueLiveAlgoOrder(payload) {
   const role = String(payload?.role || "");
   const brokerId = orderBrokerId(payload);
   const allowHedge = payload?.allowHedge === true && role === "hedge";
+  const copyUserId = String(payload?.copyUserId || "");
+  const sameCopy = (row) => String(row?.copyUserId || "") === copyUserId;
   const sameContractPending = pendingLiveAlgoOrders.some(
-    (row) => orderBrokerId(row) === brokerId && liveOrderSide(row) === side && sameLiveContract(payload, row),
+    (row) =>
+      sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === side && sameLiveContract(payload, row),
   );
   if (sameContractPending) {
     return { ok: true, queued: true, status: "PENDING", duplicate: true };
   }
   const sameStrategyRole = pendingLiveAlgoOrders.some((row) => {
+    if (!sameCopy(row)) return false;
     if (orderBrokerId(row) !== brokerId) return false;
     if (!strategy || row.strategy !== strategy) return false;
     if (liveOrderSide(row) !== side) return false;
@@ -444,7 +449,8 @@ function enqueueLiveAlgoOrder(payload) {
   }
   if (side === "BUY" && allowHedge) {
     const pendingStrategyBuy = pendingLiveAlgoOrders.some(
-      (row) => orderBrokerId(row) === brokerId && row.strategy === strategy && liveOrderSide(row) === "BUY",
+      (row) =>
+        sameCopy(row) && orderBrokerId(row) === brokerId && row.strategy === strategy && liveOrderSide(row) === "BUY",
     );
     if (pendingStrategyBuy) {
       return { ok: true, queued: true, status: "PENDING", duplicate: true };
@@ -453,12 +459,14 @@ function enqueueLiveAlgoOrder(payload) {
     const openNifty = (state.positions || []).some(
       (row) => !isPaperRow(row) && orderBrokerId(row) === brokerId && PositionManager.isOpenNiftyOption(row),
     );
-    const pendingBuy = pendingLiveAlgoOrders.some((row) => orderBrokerId(row) === brokerId && liveOrderSide(row) === "BUY");
+    const pendingBuy = pendingLiveAlgoOrders.some(
+      (row) => sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === "BUY",
+    );
     if (openNifty || pendingBuy) {
       return { ok: true, queued: true, status: "PENDING", duplicate: true };
     }
   }
-  pendingLiveAlgoOrders.push({ ...payload, brokerId });
+  pendingLiveAlgoOrders.push({ ...payload, brokerId, copyUserId });
   return { ok: true, queued: true, status: "PENDING" };
 }
 
@@ -471,6 +479,10 @@ export function queueLiveAlgoOrder(payload) {
   let last = { ok: true, queued: true, status: "PENDING" };
   for (const brokerId of targets) {
     last = enqueueLiveAlgoOrder({ ...payload, brokerId });
+  }
+  const algo = (state.algos || []).find((row) => String(row.name || "") === String(payload?.strategy || ""));
+  for (const copy of memberCopyPayloads(payload, algo || {})) {
+    last = enqueueLiveAlgoOrder(copy);
   }
   return last;
 }
