@@ -91,7 +91,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                       </tr>
                     </thead>
                     <tbody>
-                      {detail.enrollments.map((item) => (
+                      {detail.enrollments.filter((item) => item.status !== "abandoned").map((item) => (
                         <tr key={item.id} className="border-t border-[var(--border)]">
                           <td className="px-3 py-2 font-semibold">{item.strategyName}</td>
                           <td className="px-3 py-2">{formatPlanTerm(item.term)}</td>
@@ -114,7 +114,9 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                       ))}
                     </tbody>
                   </table>
-                  {!detail.enrollments.length ? <p className="px-3 py-4 text-xs text-slate-400">No subscriptions yet.</p> : null}
+                  {!detail.enrollments.filter((item) => item.status !== "abandoned").length ? (
+                    <p className="px-3 py-4 text-xs text-slate-400">No subscriptions yet.</p>
+                  ) : null}
                 </div>
               </section>
 
