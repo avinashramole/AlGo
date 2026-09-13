@@ -5,13 +5,16 @@ import {
   brokerInstallFields,
   CLIENT_BROKERS,
   defaultSubscriptionUntil,
+  getMemberDesk,
   knownEgressIps,
   listClientGroups,
+  listTopups,
   peekClientBook,
   peekClientSettings,
   removeDesk,
   saveClientSettings,
 } from "./memberDesk.js";
+import { listEnrollments } from "./subscriptions.js";
 import { inventoryAddresses } from "./ipManagement.js";
 import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
 
@@ -227,6 +230,52 @@ function bookTotals(positions = [], closedTrades = []) {
     mtm: round2(rows.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
     realized: round2((closedTrades || []).reduce((sum, row) => sum + Number(row.pnl || 0), 0)),
     open: rows.length,
+  };
+}
+
+export function getClientDetail({ userId, users = [], algos = [], quote, admins = [], liveBook } = {}) {
+  const user = getPublicUser(userId) || (users || []).find((row) => row.id === userId);
+  if (!user?.id || user.role === "admin") throw fail("Client not found.", 404);
+  const enrollments = listEnrollments({ userId: user.id });
+  const desk = getMemberDesk({
+    user,
+    enrollments,
+    algos,
+    quote,
+    admins,
+    liveBook,
+  });
+  const topups = listTopups({ userId: user.id });
+  const transactions = [
+    ...enrollments.map((row) => ({
+      id: row.id,
+      kind: "subscription",
+      label: row.strategyName,
+      amount: row.amount,
+      channel: row.channel,
+      status: row.status,
+      term: row.term || "",
+      at: row.paidAt || row.createdAt || "",
+    })),
+    ...topups.map((row) => ({
+      id: row.id,
+      kind: "wallet",
+      label: "Wallet top-up",
+      amount: row.amount,
+      channel: row.channel,
+      status: row.status,
+      term: "",
+      at: row.paidAt || row.createdAt || "",
+    })),
+  ].sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  return {
+    client: asClient(user, peekClientSettings(user.id), messagingHandleForUser(user.id)),
+    enrollments,
+    transactions,
+    wallet: desk.wallet,
+    plans: desk.plans,
+    report: desk.report,
+    positions: desk.positions,
   };
 }
 

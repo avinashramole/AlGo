@@ -9,8 +9,8 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
-import { abandonEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
-import { clientStatus, createClient, deleteClient, listPositionDesk, saveClient } from "./clients.js";
+import { abandonEnrollment, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
   assignStaticIp,
@@ -347,6 +347,16 @@ app.post("/api/subscriptions/:id/abandon", (req, res) => {
   }
 });
 
+app.delete("/api/subscriptions/:id", (req, res) => {
+  try {
+    const user = sessionUser(readToken(req));
+    if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
+    res.json({ enrollment: deleteEnrollment({ user, enrollmentId: req.params.id }) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not delete subscription" });
+  }
+});
+
 function memberAuth(req) {
   const user = sessionUser(readToken(req));
   if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
@@ -461,6 +471,28 @@ app.get("/api/clients", (_req, res) => {
     ...clientStatus(listPublicUsers()),
     strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
   });
+});
+
+app.get("/api/clients/:id/detail", (req, res) => {
+  try {
+    const snap = snapshot();
+    res.json(
+      getClientDetail({
+        userId: req.params.id,
+        users: listPublicUsers(),
+        algos: listAlgos(),
+        quote: quoteSymbol,
+        admins: listPublicUsers(),
+        liveBook: {
+          positions: snap.positions || [],
+          orders: snap.orders || [],
+          closedTrades: snap.closedTrades || [],
+        },
+      }),
+    );
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not load client detail" });
+  }
 });
 
 app.post("/api/clients", (req, res) => {
