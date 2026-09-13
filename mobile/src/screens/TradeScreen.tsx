@@ -6,8 +6,10 @@ import { colors } from "../theme";
 export function TradeScreen() {
   const { data, order } = useMarket();
   const signal = data.featuredSignal;
+  const live = Boolean(signal?.symbol);
 
   const submit = async () => {
+    if (!live) return;
     try {
       const result = await order({
         symbol: signal.symbol,
@@ -31,14 +33,16 @@ export function TradeScreen() {
       <Card>
         <Text style={styles.muted}>REVIEW TRADE</Text>
         <Text style={styles.title}>
-          {signal.action} {signal.symbol}
+          {live ? `${signal.action} ${signal.symbol}` : "No live signal"}
         </Text>
         <Text style={styles.muted}>
-          {data.brokers?.find((item) => item.active)?.name || "Paper"} · MIS · MARKET · 65 qty · Confidence {signal.confidence}%
+          {live
+            ? `${data.brokers?.find((item) => item.active)?.name || "Paper"} · MIS · MARKET · 65 qty · Confidence ${signal.confidence}%`
+            : "Wait for a live BUY or SELL before placing from this ticket."}
         </Text>
       </Card>
-      <Pressable style={styles.cta} onPress={() => void submit()}>
-        <Text style={styles.ctaText}>Place Order</Text>
+      <Pressable style={[styles.cta, !live && { opacity: 0.5 }]} onPress={() => void submit()}>
+        <Text style={styles.ctaText}>{live ? "Place Order" : "Waiting"}</Text>
       </Pressable>
     </View>
   );

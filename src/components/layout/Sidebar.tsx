@@ -12,7 +12,9 @@ import {
   Home,
   Wallet,
   Layers,
+  MessageSquare,
   Moon,
+  Network,
   PieChart,
   Settings,
   Sun,
@@ -42,6 +44,8 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
   { to: "/users", label: "Users", icon: Users, admin: true },
+  { to: "/settings/ips", label: "IP management", icon: Network, admin: true },
+  { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User },
   { to: "/settings", label: "Settings", icon: Settings, admin: true },
 ];

@@ -9,14 +9,21 @@ import {
   currentOptionRows,
   getChainSpot,
   getOptionMeta,
+  quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
   restoreSimulatedDesk,
+  livePositionQuoteTargets,
+  onDhanBookChanged,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
+  snapshot,
 } from "./market.js";
-import { buildScripChain, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
+import { isSaneOptionLtp } from "./positionMark.js";
+import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
@@ -69,6 +76,7 @@ let clientId = "";
 let pollTimer = null;
 let accountTimer = null;
 let chainTimer = null;
+let candleTimer = null;
 let tokenTimer = null;
 let tokenWatchdogTimer = null;
 const persistedBackoff = loadTokenBackoff();
@@ -113,7 +121,38 @@ function requestKind(path) {
 }
 
 function liveInstruments() {
-  return INSTRUMENTS.concat(futureInstruments);
+  return INSTRUMENTS.concat(futureInstruments, livePositionQuoteTargets());
+}
+
+function feedInstrumentList() {
+  const seen = new Set();
+  const list = [];
+  for (const row of liveInstruments()) {
+    const segment = usedFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
+    const securityId = String(row.securityId);
+    const key = `${segment}:${securityId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push({ ExchangeSegment: segment, SecurityId: securityId });
+  }
+  return list;
+}
+
+function subscribeFeedInstruments() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const list = feedInstrumentList();
+  if (!list.length) return;
+  try {
+    socket.send(
+      JSON.stringify({
+        RequestCode: 17,
+        InstrumentCount: list.length,
+        InstrumentList: list,
+      }),
+    );
+  } catch {
+    /* socket dropped */
+  }
 }
 
 function tokenHint(token) {
@@ -217,7 +256,7 @@ function withAmo(body) {
     ...body,
     afterMarketOrder: true,
     amoTime: "OPEN",
-    correlationId: `t2s${Date.now()}`.slice(0, 30),
+    correlationId: body.correlationId || `t2s${Date.now()}`.slice(0, 25),
   };
 }
 
@@ -374,9 +413,9 @@ function flattenQuotes(payload) {
       const instrument =
         instruments.find(
           (row) =>
-            row.securityId === securityId &&
+            Number(row.securityId) === securityId &&
             (row.segment === segment || row.fallbackSegment === segment),
-        ) || instruments.find((row) => row.securityId === securityId);
+        ) || instruments.find((row) => Number(row.securityId) === securityId);
       if (!instrument) continue;
       const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
@@ -454,7 +493,7 @@ function asList(raw) {
   return [];
 }
 
-function mapDhanOrders(raw) {
+function mapDhanOrders(raw, algos = []) {
   const statusMap = {
     TRANSIT: "PENDING",
     PENDING: "PENDING",
@@ -464,17 +503,20 @@ function mapDhanOrders(raw) {
     PART_TRADED: "PARTIAL",
     EXPIRED: "CANCELLED",
   };
-  return asList(raw).map((row) => ({
+  return asList(raw).map((row) => {
+    const correlationId = String(row.correlationId || row.CorrelationId || row.correlationID || row.corrId || "");
+    return {
     id: String(row.orderId || row.dhanOrderId || `dhan-${row.securityId}`),
     symbol: row.tradingSymbol || String(row.securityId || ""),
     side: String(row.transactionType || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
     qty: Number(row.quantity || 0),
-    filledQty: Number(row.filledQty || 0),
-    price: Number(row.price || row.tradedPrice || 0),
+    filledQty: dhanFilledQty(row),
+    price: dhanOrderFillPrice(row),
     product: row.productType || "MIS",
     type: row.orderType || "MARKET",
     status: statusMap[row.orderStatus] || row.orderStatus || "PENDING",
-    strategy: "",
+    strategy: strategyFromCorrelation(correlationId, algos),
+    correlationId,
     brokerId: "dhan",
     brokerName: "Dhan",
     securityId: String(row.securityId || ""),
@@ -482,7 +524,8 @@ function mapDhanOrders(raw) {
     sim: false,
     reason: row.omsErrorDescription || row.rejectedReason || "",
     createdAt: row.createTime || row.updateTime || new Date().toISOString(),
-  }));
+  };
+  });
 }
 
 function mapDhanPositions(raw) {
@@ -493,19 +536,42 @@ function mapDhanPositions(raw) {
       const qty = Math.abs(Number(row.netQty) || 0);
       const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
       const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
-      const pnl = Number(row.unrealizedProfit || 0);
       const dir = type === "BUY" ? 1 : -1;
-      const implied = qty ? avg + pnl / (qty * dir) : avg;
+      const brokerPnl = Number(row.unrealizedProfit || 0);
+      const brokerLtp = Number(row.lastTradedPrice || row.ltp || row.close || 0);
+      const parsed = parseOptionContract(row.tradingSymbol || "");
+      const chainLtp = quoteSymbol(row.tradingSymbol || String(row.securityId || ""));
+      const option = Boolean(parsed?.option);
+      const ltp = option
+        ? isSaneOptionLtp(chainLtp, avg)
+          ? chainLtp
+          : isSaneOptionLtp(brokerLtp, avg)
+            ? brokerLtp
+            : avg
+        : chainLtp > 0
+          ? chainLtp
+          : brokerLtp || avg;
+      const pnl = option
+        ? isSaneOptionLtp(chainLtp, avg) && qty
+          ? (chainLtp - avg) * qty * dir
+          : brokerPnl
+        : chainLtp > 0 && qty
+          ? (chainLtp - avg) * qty * dir
+          : brokerPnl;
       return {
         id: `dhan-pos-${row.securityId}-${row.productType || "MIS"}`,
         symbol: row.tradingSymbol || String(row.securityId),
         type,
         qty,
         avg: Number(avg.toFixed(2)),
-        ltp: Number((Number.isFinite(implied) ? implied : avg).toFixed(2)),
-        pnl: Number(pnl.toFixed(2)),
+        ltp: Number((Number.isFinite(ltp) ? ltp : avg).toFixed(2)),
+        pnl: Number(Number(pnl).toFixed(2)),
+        brokerPnl: Number(Number(brokerPnl).toFixed(2)),
+        brokerLtp: Number((Number.isFinite(brokerLtp) ? brokerLtp : 0).toFixed(2)),
         product: row.productType || "MIS",
         strategy: "",
+        option: parsed?.option || "",
+        strike: parsed?.strike || 0,
         securityId: String(row.securityId || ""),
         brokerId: "dhan",
         live: true,
@@ -571,11 +637,23 @@ async function pullAccount() {
       (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
     );
     replaceDhanBook([...positions, ...holdings]);
-    replaceDhanOrders(mapDhanOrders(ordersRaw));
+    replaceDhanOrders(mapDhanOrders(ordersRaw, snapshot().algos || []));
     setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
   } catch (error) {
     handleDhanPollError("positions", error);
   }
+}
+
+function niftyChartTarget() {
+  const front = listFutures().find((row) => row.root === "NIFTY" && row.front && row.securityId);
+  if (front?.securityId) {
+    return {
+      securityId: String(front.securityId),
+      exchangeSegment: front.segment || "NSE_FNO",
+      instrument: "FUTIDX",
+    };
+  }
+  return { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" };
 }
 
 async function pullNiftyCandles() {
@@ -584,17 +662,27 @@ async function pullNiftyCandles() {
   try {
     const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:15:00");
     const to = kolkataStamp(new Date());
-    const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
-      securityId: "13",
-      exchangeSegment: "IDX_I",
-      instrument: "INDEX",
-      interval: "1",
-      oi: false,
-      fromDate: from,
-      toDate: to,
-    });
-    const candles = mapChartCandles(payload);
-    if (candles.length) setLiveCandles(candles);
+    const targets = [niftyChartTarget(), { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" }];
+    for (const inst of targets) {
+      try {
+        const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
+          securityId: String(inst.securityId),
+          exchangeSegment: inst.exchangeSegment,
+          instrument: inst.instrument,
+          interval: "1",
+          oi: false,
+          fromDate: from,
+          toDate: to,
+        });
+        const candles = mapChartCandles(payload);
+        if (candles.length) {
+          setLiveCandles(candles);
+          return;
+        }
+      } catch {
+        /* try index fallback */
+      }
+    }
   } catch {
     /* quotes still drive the last bar */
   }
@@ -682,7 +770,7 @@ function parseFeedPackets(buffer) {
     const code = buffer.readUInt8(offset);
     const length = buffer.readUInt16LE(offset + 1);
     const securityId = buffer.readInt32LE(offset + 4);
-    const instrument = instruments.find((row) => row.securityId === securityId);
+    const instrument = instruments.find((row) => Number(row.securityId) === Number(securityId));
     const packetLen = Math.max(length >= 16 ? length : length + 8, 16);
     if (instrument && (code === 2 || code === 4 || code === 8)) {
       const ltp = buffer.readFloatLE(offset + 8);
@@ -691,6 +779,7 @@ function parseFeedPackets(buffer) {
           symbol: instrument.symbol,
           parent: instrument.parent || instrument.symbol,
           kind: instrument.kind,
+          securityId: instrument.securityId,
           ltp,
         };
         if (code === 4 && offset + 50 <= buffer.length) {
@@ -735,17 +824,7 @@ function startSocket() {
   }
 
   socket.on("open", () => {
-    const list = liveInstruments().map((row) => ({
-      ExchangeSegment: usedFallback && row.fallbackSegment ? row.fallbackSegment : row.segment,
-      SecurityId: String(row.securityId),
-    }));
-    socket.send(
-      JSON.stringify({
-        RequestCode: 17,
-        InstrumentCount: list.length,
-        InstrumentList: list,
-      }),
-    );
+    subscribeFeedInstruments();
     setDhanFeed({ live: true, source: "websocket", error: null });
   });
 
@@ -878,6 +957,7 @@ export async function selectOptionDesk({ symbol, expiry }) {
 
 function startLiveLoop() {
   stopLiveLoop(false);
+  onDhanBookChanged(subscribeFeedInstruments);
   void (async () => {
     try {
       futureInstruments = await resolveFrontFutures();
@@ -896,6 +976,9 @@ function startLiveLoop() {
   setTimeout(() => {
     void pullNiftyCandles();
   }, 1400);
+  candleTimer = setInterval(() => {
+    void pullNiftyCandles();
+  }, 15_000);
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 2500);
@@ -929,6 +1012,10 @@ function stopLiveLoop(clearCreds) {
     clearInterval(chainTimer);
     chainTimer = null;
   }
+  if (candleTimer) {
+    clearInterval(candleTimer);
+    candleTimer = null;
+  }
   stopSocket();
   if (clearCreds) {
     accessToken = "";
@@ -939,6 +1026,21 @@ function stopLiveLoop(clearCreds) {
 
 export function isDhanLive() {
   return Boolean(accessToken);
+}
+
+export async function ensureDhanLiveFromSavedToken() {
+  if (isDhanLive()) return { live: true, started: false };
+  const session = loadDhanSession();
+  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || "").trim();
+  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
+  if (!token || !id) return { live: false, reason: "no-token" };
+  try {
+    await startDhanLive({ accessToken: token, clientId: id });
+    return { live: true, started: true };
+  } catch (error) {
+    console.log(`Hedge 09:30 Dhan start failed: ${error.message || error}`);
+    return { live: false, reason: error.message || "start-failed" };
+  }
 }
 
 export function getDhanCredentials() {
@@ -1045,6 +1147,50 @@ function securityIdFromOpenChain(payload = {}) {
   return String((opt === "PE" ? row.putId : row.callId) || "");
 }
 
+function dhanOrderLiveFromBody(result, extra = {}) {
+  if (!result || typeof result !== "object") return extra.live || null;
+  const data = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data : {};
+  const orderId = String(
+    extra.orderId ||
+      result.orderId ||
+      result.order_id ||
+      result.dhanOrderId ||
+      data.orderId ||
+      data.order_id ||
+      data.dhanOrderId ||
+      extra.live?.orderId ||
+      "",
+  );
+  if (!orderId) return extra.live || null;
+  const status = String(
+    extra.status ||
+      result.orderStatus ||
+      result.order_status ||
+      data.orderStatus ||
+      data.order_status ||
+      extra.live?.status ||
+      extra.defaultStatus ||
+      "REJECTED",
+  );
+  return {
+    orderId,
+    status,
+    securityId: extra.securityId
+      ? String(extra.securityId)
+      : String(result.securityId || data.securityId || extra.live?.securityId || ""),
+    filledQty: dhanFilledQty({ ...data, ...result, ...extra.live }),
+    price: dhanOrderFillPrice({ ...data, ...result, ...extra.live }),
+    afterMarketOrder: Boolean(extra.afterMarketOrder ?? extra.live?.afterMarketOrder),
+    correlationId: extra.correlationId || result.correlationId || data.correlationId || extra.live?.correlationId || "",
+    raw: result,
+  };
+}
+
+function attachPlaceLive(error, extra = {}) {
+  const live = dhanOrderLiveFromBody(error?.body, extra);
+  if (live) error.live = live;
+}
+
 export async function placeDhanOrder(payload = {}) {
   if (!accessToken || !clientId) {
     const error = new Error("Dhan live is off. Open Brokers and paste Client ID + Access Token.");
@@ -1092,9 +1238,19 @@ export async function placeDhanOrder(payload = {}) {
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
   const ip = await fetchDhanIp();
   const useAmo = payload.afterMarketOrder === true || payload.amo === true || !nseSessionOpen();
+  let algos = [];
+  try {
+    algos = snapshot().algos || [];
+  } catch {
+    algos = [];
+  }
+  const strategy = strategyForPlacedOrder(payload, algos);
+  const tagged = { ...payload, strategy };
+  const correlationId = orderCorrelationId(tagged);
+  if (strategy) rememberOrderStrategy({ correlationId, strategy }, strategy);
   let body = {
     dhanClientId: String(clientId),
-    correlationId: `t2s${Date.now()}`.slice(0, 30),
+    correlationId,
     transactionType: payload.side === "SELL" ? "SELL" : "BUY",
     exchangeSegment: payload.exchangeSegment || fnoSegment(payload.symbol),
     productType: productType(payload.product),
@@ -1108,6 +1264,12 @@ export async function placeDhanOrder(payload = {}) {
     afterMarketOrder: useAmo,
   };
   if (useAmo) body.amoTime = "OPEN";
+  const liveExtra = {
+    securityId,
+    afterMarketOrder: useAmo,
+    correlationId,
+    defaultStatus: "REJECTED",
+  };
 
   const submit = (orderBody) => {
     console.log(
@@ -1125,10 +1287,12 @@ export async function placeDhanOrder(payload = {}) {
       try {
         result = await submit(body);
       } catch (retryError) {
+        attachPlaceLive(retryError, { ...liveExtra, afterMarketOrder: true });
         retryError.message = formatPlaceError(retryError, ip, body);
         throw retryError;
       }
     } else {
+      attachPlaceLive(error, liveExtra);
       error.message = formatPlaceError(error, ip, body);
       throw error;
     }
@@ -1136,10 +1300,17 @@ export async function placeDhanOrder(payload = {}) {
   const data = result?.data && typeof result.data === "object" ? result.data : result || {};
   const orderId = String(data.orderId || data.order_id || result?.orderId || "");
   const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
+  const live = dhanOrderLiveFromBody(result, {
+    ...liveExtra,
+    orderId,
+    status: status || "TRANSIT",
+    defaultStatus: "TRANSIT",
+  });
   if (!orderId || status.toUpperCase() === "REJECTED") {
     const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
     error.status = 400;
     error.body = result;
+    if (live) error.live = live;
     error.message = formatPlaceError(error, ip, body);
     throw error;
   }
@@ -1152,8 +1323,10 @@ export async function placeDhanOrder(payload = {}) {
     orderId,
     status: status || "TRANSIT",
     securityId: String(securityId),
-    filledQty: Number(data.filledQty || result?.filledQty || 0),
+    filledQty: dhanFilledQty({ ...data, ...result }),
+    price: dhanOrderFillPrice({ ...data, ...result }),
     afterMarketOrder: Boolean(body.afterMarketOrder),
+    correlationId,
     raw: result,
   };
 }

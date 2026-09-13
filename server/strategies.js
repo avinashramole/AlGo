@@ -1,4 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
 
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
@@ -239,6 +246,7 @@ export function strikeOffsetLabel(offset) {
 }
 
 export function contractLabel(algo) {
+  if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -255,6 +263,9 @@ export function summarizeAlgo(algo) {
   const lots = algo.lots || 1;
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
   const contract = contractLabel(algo);
+  if (isNiftyVwapHedgeAlgo(algo)) {
+    return `NIFTY 15m VWAP hedge · weekly ATM · open below VWAP + close above → BUY 1 lot CE · open above VWAP + close below → BUY 1 lot PE · primary +40% · −20% buys 2 lots opposite once · +5% account P&L exits all · daily LIVE 09:30 IST · ${size}`;
+  }
   if (isNiftyVwapReversalAlgo(algo)) {
     const sl = algo.initialSlPct || 15;
     const tgt = algo.targetPct || 30;
@@ -290,13 +301,74 @@ export function summarizeAlgo(algo) {
   })} · ${tf} · ${size}`;
 }
 
+function mappingIds(value) {
+  return [...new Set((Array.isArray(value) ? value : []).map((id) => String(id || "").trim()).filter(Boolean))];
+}
+
+function mappingFields(input = {}, existing = {}) {
+  const scopeRaw = input.mappingScope != null ? input.mappingScope : existing.mappingScope;
+  const mappingScope = ["master", "clients", "both"].includes(String(scopeRaw || "")) ? String(scopeRaw) : "both";
+  const mappedClientIds = mappingIds(input.mappedClientIds != null ? input.mappedClientIds : existing.mappedClientIds);
+  return { mappingScope, mappedClientIds };
+}
+
+function withMapping(next, input, existing) {
+  return { ...next, ...mappingFields(input, existing) };
+}
+
 export function normalizeAlgo(input = {}, existing = {}) {
   const merged = { ...existing, ...input };
+  const keepHedge =
+    isNiftyVwapHedgeAlgo(merged) &&
+    input.kind !== "indicator" &&
+    input.kind !== "price-action" &&
+    input.kind !== "nifty-vwap" &&
+    input.kind !== "nifty-vwap-reversal";
+  if (keepHedge) {
+    const cfg = niftyVwapHedgeConfig(merged);
+    const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+      ? input.runMode
+      : ["live", "paper", "backtest"].includes(existing.runMode)
+        ? existing.runMode
+        : "live";
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultNiftyVwapHedgeAlgo({
+        ...merged,
+        name: String(input.name || existing.name || "").trim() || "NIFTY 15m VWAP hedge",
+        runMode,
+        lots: cfg.lots,
+        lotSize: cfg.lotSize,
+      }),
+      id: existing.id || `a${Date.now()}`,
+      kind: NIFTY_VWAP_HEDGE_KIND,
+      slPct: 0,
+      initialSlPct: 0,
+      targetPct: cfg.primaryTargetPct,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
+      hedgeState: existing.hedgeState,
+      enabled: creating ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return withMapping(next, input, existing);
+  }
   const keepReversal =
     isNiftyVwapReversalAlgo(merged) &&
     input.kind !== "indicator" &&
     input.kind !== "price-action" &&
-    input.kind !== "nifty-vwap";
+    input.kind !== "nifty-vwap" &&
+    input.kind !== "nifty-vwap-hedge";
   if (keepReversal) {
     const cfg = niftyVwapReversalConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -335,13 +407,14 @@ export function normalizeAlgo(input = {}, existing = {}) {
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
     next.summary = summarizeAlgo(next);
-    return next;
+    return withMapping(next, input, existing);
   }
   const keepNiftyVwap =
     isNiftyVwapAlgo(merged) &&
     input.kind !== "indicator" &&
     input.kind !== "price-action" &&
-    input.kind !== "nifty-vwap-reversal";
+    input.kind !== "nifty-vwap-reversal" &&
+    input.kind !== "nifty-vwap-hedge";
   if (keepNiftyVwap) {
     const cfg = niftyVwapConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -383,7 +456,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
     next.summary = summarizeAlgo(next);
-    return next;
+    return withMapping(next, input, existing);
   }
   const kind = input.kind === "price-action" ? "price-action" : "indicator";
   const symbol = SYMBOLS.some((row) => row.id === input.symbol) ? input.symbol : existing.symbol || "NIFTY";
@@ -487,7 +560,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   };
   delete next.trade;
   next.summary = summarizeAlgo(next);
-  return next;
+  return withMapping(next, input, existing);
 }
 
 export function seedAlgos() {
@@ -506,7 +579,69 @@ export function seedAlgos() {
       }),
       { id: "a5", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
+    normalizeAlgo(
+      defaultNiftyVwapHedgeAlgo({
+        name: "NIFTY 15m VWAP hedge",
+        runMode: "live",
+      }),
+      { id: "a6", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
+    ),
   ];
+}
+
+function uniqueIds(ids = []) {
+  return [...new Set((ids || []).map((id) => String(id || "").trim()).filter(Boolean))];
+}
+
+function pauseLiveAlgo(algo) {
+  if (!algo || algo.runMode !== "live") return algo;
+  return { ...algo, enabled: false, status: algo.status === "LIVE" ? "PAUSED" : algo.status || "PAUSED" };
+}
+
+function readAlgoFile() {
+  try {
+    const row = JSON.parse(fs.readFileSync(ALGOS_FILE, "utf8"));
+    return row && typeof row === "object" ? row : {};
+  } catch {
+    return {};
+  }
+}
+
+export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
+  const removedIds = uniqueIds(stored.removedIds);
+  const removed = new Set(removedIds);
+  const hasSaved = Array.isArray(stored.algos);
+  const algos = [];
+  const seen = new Set();
+  if (hasSaved) {
+    for (const row of stored.algos) {
+      const id = String(row?.id || "").trim();
+      if (!id || removed.has(id) || seen.has(id)) continue;
+      const next = pauseLiveAlgo(normalizeAlgo(row, { ...row, id }));
+      next.id = id;
+      algos.push(next);
+      seen.add(id);
+    }
+  }
+  for (const seed of catalog || []) {
+    const id = String(seed.id || "").trim();
+    if (!id || removed.has(id) || seen.has(id)) continue;
+    algos.push(seed);
+    seen.add(id);
+  }
+  return { algos, removedIds };
+}
+
+export function loadAlgoStore(catalog = seedAlgos()) {
+  return hydrateAlgos(readAlgoFile(), catalog);
+}
+
+export function saveAlgoStore(algos = [], removedIds = []) {
+  fs.mkdirSync(path.dirname(ALGOS_FILE), { recursive: true });
+  fs.writeFileSync(
+    ALGOS_FILE,
+    `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) }, null, 2)}\n`,
+  );
 }
 
 export const STRATEGY_META = { SYMBOLS, INDICATORS, PATTERNS, TIMEFRAMES, OPERATORS, SOURCES, OP_LABEL, SRC_LABEL };

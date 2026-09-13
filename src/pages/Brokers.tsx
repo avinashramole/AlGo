@@ -10,6 +10,8 @@ export function Brokers() {
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
   const [clientId, setClientId] = useState("");
   const [secret, setSecret] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [dhanClientId, setDhanClientId] = useState("");
   const [dhanToken, setDhanToken] = useState("");
   const [dhanPin, setDhanPin] = useState("");
@@ -35,6 +37,8 @@ export function Brokers() {
     } else {
       setClientId("");
       setSecret("");
+      setApiKey("");
+      setSessionToken("");
     }
   };
 
@@ -51,7 +55,7 @@ export function Brokers() {
       if (selected.id === "dhan") {
         await submitDhan(clientId, secret);
       } else {
-        await connect(selected.id, { clientId, apiKey: secret });
+        await connect(selected.id, { clientId, apiKey, accessToken: secret, sessionToken });
       }
       setSelected(null);
       setSecret("");
@@ -119,8 +123,8 @@ export function Brokers() {
       <div>
         <h1 className="text-xl font-bold">Brokers</h1>
         <p className="text-sm text-slate-400">
-          Main broker is <b>Dhan</b>. BUY/SELL hits Dhan only while the Access Token is LIVE. Dhan order APIs also need
-          a static IP whitelist on web.dhan.co.
+          Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect the broker first,
+          then pick it on the algo card. Connecting a broker does not start LIVE algos.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -431,7 +435,7 @@ export function Brokers() {
                   onClick={() => openForm(broker)}
                   className="h-9 w-full rounded-lg bg-brand-500 text-xs font-semibold text-white"
                 >
-                  Connect sandbox
+                  Connect live
                 </button>
               )}
             </div>
@@ -440,25 +444,25 @@ export function Brokers() {
         ))}
       </div>
       <p className="text-xs text-slate-400">
-        Dhan uses the official Access Token. BUY/SELL is sent to DhanHQ <code>POST /v2/orders</code> only while LIVE.
-        If Dhan rejects the order (IP not whitelisted, invalid token, or missing security ID), the desk shows that error
-        and does not invent a fill. Zerodha / Kotak / Fyers stay sandbox (demo / demo123) until those apps are approved.
+        Dhan uses DhanHQ <code>POST /v2/orders</code> while LIVE. Zerodha, Upstox, Fyers, Kotak Neo, and Angel Broking
+        send real orders to that broker after you connect their token. A rejected broker API is shown as an error — the
+        desk does not invent a fill. Restart does not start LIVE algos.
       </p>
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="card w-full max-w-md p-5">
             <div className="text-sm font-bold">
-              {selected.id === "dhan" ? "Update Dhan access token" : `Connect ${selected.name}`}
+              {selected.id === "dhan" ? "Update Dhan access token" : `Connect ${selected.name} live`}
             </div>
             <p className="mt-1 text-xs text-slate-400">
               {selected.id === "dhan"
                 ? clientLocked
                   ? "Client ID stays on the live Dhan account. Paste a new Access Token only."
                   : "Paste Client ID and Access Token from web.dhan.co → My Profile → Access DhanHQ APIs."
-                : "Sandbox login. Enter Client ID and API key. Use demo / demo123 if you do not have an app yet."}
+                : selected.help || "Paste the live API credentials from that broker. This does not start algos."}
             </p>
             <label className="mt-3 block text-xs font-semibold">
-              Client ID
+              {selected.id === "angelone" ? "Client code" : selected.id === "zerodha" ? "User ID" : "Client ID"}
               <input
                 className={`mt-1 h-10 w-full rounded-lg border border-[var(--border)] px-3 text-sm ${
                   clientLocked ? "cursor-not-allowed bg-slate-100 text-slate-500 dark:bg-slate-800" : "bg-[var(--bg)]"
@@ -472,8 +476,19 @@ export function Brokers() {
                 autoComplete="off"
               />
             </label>
+            {selected.id !== "dhan" && selected.id !== "upstox" ? (
+              <label className="mt-3 block text-xs font-semibold">
+                {selected.id === "fyers" ? "App ID" : selected.id === "kotak" ? "Consumer key" : "API key"}
+                <input
+                  className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            ) : null}
             <label className="mt-3 block text-xs font-semibold">
-              {selected.id === "dhan" ? "Access token" : "API key / access token"}
+              {selected.id === "dhan" ? "Access token" : selected.id === "angelone" ? "JWT token" : "Access token"}
               <input
                 type="password"
                 className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
@@ -482,6 +497,18 @@ export function Brokers() {
                 autoComplete="off"
               />
             </label>
+            {selected.id === "kotak" ? (
+              <label className="mt-3 block text-xs font-semibold">
+                Sid / session
+                <input
+                  type="password"
+                  className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                  value={sessionToken}
+                  onChange={(event) => setSessionToken(event.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            ) : null}
             {error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>}
             <div className="mt-4 flex gap-2">
               <button type="button" onClick={() => setSelected(null)} className="h-10 flex-1 rounded-xl border border-[var(--border)] text-sm font-semibold">
@@ -493,7 +520,7 @@ export function Brokers() {
                 onClick={() => void submit()}
                 className="h-10 flex-1 rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {busy ? "Connecting..." : selected.id === "dhan" ? "Start live feed" : "Connect"}
+                {busy ? "Connecting..." : selected.id === "dhan" ? "Start live feed" : "Connect live"}
               </button>
             </div>
           </div>

@@ -66,7 +66,9 @@ export function optionRoot(symbol) {
 
 export function parseOptionContract(symbol) {
   const clean = String(symbol || "").replace(/,/g, "").toUpperCase();
-  const match = clean.match(/\b(BANKNIFTY|FINNIFTY|SENSEX|NIFTY)\s+(\d+(?:\.\d+)?)\s+(CE|PE)\b/);
+  const match = clean.match(
+    /\b(BANKNIFTY|FINNIFTY|SENSEX|NIFTY)\b(?:[\s-]+[A-Z0-9]+)*[\s-]+(\d{4,6})[\s-]*(CE|PE)\b/,
+  );
   if (!match) return null;
   return { root: match[1], strike: Number(match[2]), option: match[3] };
 }

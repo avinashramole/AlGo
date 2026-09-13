@@ -25,10 +25,10 @@ test("isWeeklyOptionExpiry skips NIFTY monthly Tuesdays", () => {
 
 test("nearestWeeklyExpiry buys the next weekly and never the monthly", () => {
   assert.equal(
-    nearestWeeklyExpiry(["2026-09-08", "2026-09-15", "2026-09-22", "2026-09-29"], "NIFTY"),
-    "2026-09-08",
+    nearestWeeklyExpiry(["2027-03-02", "2027-03-09", "2027-03-16", "2027-03-30"], "NIFTY"),
+    "2027-03-02",
   );
-  assert.equal(nearestWeeklyExpiry(["2026-09-29", "2026-10-06", "2026-10-13"], "NIFTY"), "2026-10-06");
-  assert.equal(isWeeklyOptionExpiry(nearestWeeklyExpiry(["2026-09-29"], "NIFTY"), "NIFTY"), true);
-  assert.notEqual(nearestWeeklyExpiry(["2026-09-29"], "NIFTY"), "2026-09-29");
+  assert.equal(nearestWeeklyExpiry(["2027-03-30", "2027-04-06", "2027-04-13"], "NIFTY"), "2027-04-06");
+  assert.equal(isWeeklyOptionExpiry(nearestWeeklyExpiry(["2027-03-30"], "NIFTY"), "NIFTY"), true);
+  assert.notEqual(nearestWeeklyExpiry(["2027-03-30"], "NIFTY"), "2027-03-30");
 });

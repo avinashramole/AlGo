@@ -1,29 +1,24 @@
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
+import {
+  connectLiveBroker,
+  disconnectLiveBroker,
+  isKnownLiveBroker,
+  isLiveBrokerReady,
+  listLiveBrokerPublic,
+  liveBrokerMeta,
+  liveBrokerPublic,
+} from "./liveBrokers.js";
 
 export const MAIN_BROKER_ID = "dhan";
 
 export const catalog = [
   { id: "dhan", name: "Dhan", vendor: "Dhan", color: "#0f9d58", auth: "access_token", segments: ["EQ", "FNO"], main: true },
   { id: "zerodha", name: "Zerodha Kite", vendor: "Zerodha", color: "#f6461a", auth: "api_key", segments: ["EQ", "FNO", "COM"], main: false },
+  { id: "upstox", name: "Upstox", vendor: "Upstox", color: "#5b2d8e", auth: "oauth", segments: ["EQ", "FNO"], main: false },
   { id: "kotak", name: "Kotak Neo", vendor: "Kotak", color: "#0033a0", auth: "oauth", segments: ["EQ", "FNO"], main: false },
   { id: "fyers", name: "Fyers", vendor: "Fyers", color: "#111827", auth: "oauth", segments: ["EQ", "FNO"], main: false },
+  { id: "angelone", name: "Angel Broking", vendor: "Angel One", color: "#c2410c", auth: "api_key", segments: ["EQ", "FNO"], main: false },
   { id: "paper", name: "Paper Trading", vendor: "T2S", color: "#2f54eb", auth: "none", segments: ["EQ", "FNO"], main: false },
 ];
-
-const sampleBooks = {
-  dhan: [
-    { id: "d1", symbol: "SBIN", type: "BUY", qty: 40, avg: 798.5, ltp: 812.35, pnl: 554.0, brokerId: "dhan" },
-    { id: "d2", symbol: "NIFTY 24500 CE", type: "BUY", qty: 65, avg: 128.4, ltp: 142.75, pnl: 1076.25, brokerId: "dhan" },
-  ],
-  zerodha: [
-    { id: "z1", symbol: "RELIANCE", type: "BUY", qty: 20, avg: 2940.1, ltp: 2984.2, pnl: 882.0, brokerId: "zerodha" },
-    { id: "z2", symbol: "BANKNIFTY 52100 PE", type: "SELL", qty: 30, avg: 178.2, ltp: 164.5, pnl: 411.0, brokerId: "zerodha" },
-  ],
-  kotak: [{ id: "k1", symbol: "HDFCBANK", type: "BUY", qty: 15, avg: 1658.0, ltp: 1672.4, pnl: 216.0, brokerId: "kotak" }],
-  fyers: [{ id: "f1", symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, avg: 74.1, ltp: 88.2, pnl: 916.5, brokerId: "fyers" }],
-};
 
 export const PAPER_STARTING_FUNDS = 10_00_000;
 
@@ -51,23 +46,45 @@ const connections = {
 
 let activeBrokerId = MAIN_BROKER_ID;
 
+function hydrateSavedLiveBrokers() {
+  for (const row of listLiveBrokerPublic()) {
+    if (!row.live) continue;
+    connections[row.id] = {
+      connected: true,
+      clientId: row.clientId,
+      funds: row.funds,
+      marginUsed: row.marginUsed,
+      mode: "live",
+      keyHint: row.keyHint,
+      displayName: row.profileName || catalog.find((item) => item.id === row.id)?.name,
+      liveFeed: true,
+    };
+  }
+}
+
+hydrateSavedLiveBrokers();
+
 function publicAccount(meta) {
+  const saved = meta.id !== "dhan" && meta.id !== "paper" ? liveBrokerPublic(meta.id) : null;
   const conn = connections[meta.id];
-  const connected = Boolean(conn?.connected);
+  const connected = Boolean(conn?.connected || saved?.live);
+  const liveFeed = Boolean(conn?.liveFeed || saved?.live);
   return {
     ...meta,
     main: Boolean(meta.main),
-    name: conn?.displayName || meta.name,
+    name: conn?.displayName || saved?.profileName || meta.name,
     connected,
     active: activeBrokerId === meta.id,
-    mode: conn?.mode || (meta.id === "paper" ? "paper" : "sandbox"),
-    clientId: connected ? conn.clientId : "",
-    funds: connected ? conn.funds : 0,
-    marginUsed: connected ? conn.marginUsed : 0,
-    status: connected ? (conn.liveFeed ? "LIVE" : "CONNECTED") : "DISCONNECTED",
-    keyHint: connected ? conn.keyHint || "" : "",
-    liveFeed: Boolean(conn?.liveFeed),
+    mode: conn?.mode || (meta.id === "paper" ? "paper" : liveFeed ? "live" : "idle"),
+    clientId: connected ? conn?.clientId || saved?.clientId || "" : "",
+    funds: connected ? Number(conn?.funds || saved?.funds || 0) : 0,
+    marginUsed: connected ? Number(conn?.marginUsed || saved?.marginUsed || 0) : 0,
+    status: liveFeed ? "LIVE" : connected ? "CONNECTED" : "DISCONNECTED",
+    keyHint: connected ? conn?.keyHint || saved?.keyHint || "" : "",
+    liveFeed,
     virtual: meta.id === "paper" || Boolean(conn?.virtual),
+    fields: liveBrokerMeta(meta.id)?.fields || [],
+    help: liveBrokerMeta(meta.id)?.help || "",
   };
 }
 
@@ -84,7 +101,7 @@ export function getActiveBroker() {
   return publicAccount(meta);
 }
 
-export function connectBroker(id, payload = {}) {
+export async function connectBroker(id, payload = {}, fetchImpl = fetch) {
   const meta = catalog.find((item) => item.id === id);
   if (!meta) return { error: "Unknown broker" };
   if (id === "paper") {
@@ -102,22 +119,23 @@ export function connectBroker(id, payload = {}) {
   if (id === MAIN_BROKER_ID) {
     return { error: "Dhan live feed needs Client ID and Access Token from web.dhan.co." };
   }
-
-  const clientId = String(payload.clientId || payload.userId || "").trim();
-  const apiKey = String(payload.apiKey || payload.accessToken || "").trim();
-  if (clientId.length < 3 || apiKey.length < 3) {
-    return { error: "Enter client ID and API key. For sandbox use demo / demo123." };
+  if (!isKnownLiveBroker(id)) return { error: "Unknown live broker" };
+  try {
+    const live = await connectLiveBroker(id, payload, fetchImpl);
+    connections[id] = {
+      connected: true,
+      clientId: live.clientId,
+      funds: live.funds,
+      marginUsed: live.marginUsed,
+      mode: "live",
+      keyHint: live.keyHint,
+      displayName: live.profileName || meta.name,
+      liveFeed: true,
+    };
+    return { ok: true, account: publicAccount(meta), positions: [] };
+  } catch (error) {
+    return { error: error.message || "Could not connect live broker" };
   }
-
-  connections[id] = {
-    connected: true,
-    clientId,
-    funds: 2_50_000 + Math.round(Math.random() * 1_50_000),
-    marginUsed: 18_000 + Math.round(Math.random() * 22_000),
-    mode: "sandbox",
-    keyHint: `••••${apiKey.slice(-4)}`,
-  };
-  return { ok: true, account: publicAccount(meta), positions: clone(sampleBooks[id] || []) };
 }
 
 export function markDhanLive({ clientId, funds, marginUsed, keyHint, displayName }) {
@@ -155,6 +173,7 @@ export function disconnectBroker(id) {
     return { ok: true, stoppedLive: true, ...listBrokers() };
   }
   if (id === "paper") return { error: "Paper trading stays connected" };
+  disconnectLiveBroker(id);
   delete connections[id];
   if (activeBrokerId === id) activeBrokerId = MAIN_BROKER_ID;
   return { ok: true, ...listBrokers() };
@@ -179,7 +198,7 @@ export function setPaperLedger({ funds, marginUsed } = {}) {
 export function activateBroker(id) {
   const meta = catalog.find((item) => item.id === id);
   if (!meta) return { error: "Unknown broker" };
-  if (!connections[id]?.connected) return { error: "Connect this broker first" };
+  if (!connections[id]?.connected && !isLiveBrokerReady(id) && id !== "paper") return { error: "Connect this broker first" };
   activeBrokerId = id;
   return { ok: true, ...listBrokers() };
 }
@@ -187,3 +206,5 @@ export function activateBroker(id) {
 export function publicBrokers() {
   return listBrokers();
 }
+
+export { isKnownLiveBroker, isLiveBrokerReady };

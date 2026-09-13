@@ -79,7 +79,24 @@ export const NiftyVwapStrategy = {
     const state = runtimeState(algo);
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
-    if (!signal.buyCe && !signal.buyPe) return { action: "wait" };
+    if (!signal.buyCe && !signal.buyPe) {
+      if (config.signalMode === "reversal") {
+        const open = Number(signal.futuresOpen || 0).toFixed(2);
+        const close = Number(signal.futuresClose || 0).toFixed(2);
+        const vwap = Number(signal.futuresVwap || 0).toFixed(2);
+        if (signal.previewFilled && signal.missedOpen) {
+          algo.lastSignal = `SKIP OLD 15m O ${open} C ${close} VWAP ${vwap}`;
+          return { action: "wait", reason: "missed-open" };
+        }
+        if (signal.previewFilled && !signal.inNewCandle) {
+          algo.lastSignal = `WAIT NEXT ${config.barMinutes || 15}m OPEN O ${open} C ${close} VWAP ${vwap}`;
+          return { action: "wait", reason: "wait-next-open" };
+        }
+        algo.lastSignal = `WAIT ${config.barMinutes || 15}m O ${open} C ${close} VWAP ${vwap}`;
+        return { action: "wait", reason: "no-reversal" };
+      }
+      return { action: "wait", reason: "no-signal" };
+    }
     if (RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime)) {
       return { action: "skip", reason: "duplicate-bar" };
     }
@@ -137,8 +154,15 @@ export const NiftyVwapStrategy = {
       TrailingStopManager.initialStop(fill, config.initialSlPct),
       TrailingStopManager.targetPrice(fill, config.targetPct),
     );
-    TradeLogger.record("entry", { symbol: pick.symbol, fill, strategy: algo.name });
-    algo.lastSignal = `BUY ${pick.option}`;
+    TradeLogger.record("entry", {
+      symbol: pick.symbol,
+      fill,
+      strategy: algo.name,
+      open: signal.futuresOpen,
+      close: signal.futuresClose,
+      vwap: signal.futuresVwap,
+    });
+    algo.lastSignal = `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },
 
@@ -178,6 +202,7 @@ export const NiftyVwapStrategy = {
     const open = PositionManager.openFor(input.positions, algo.name, state);
     if (open) {
       if (!state.fillPrice) {
+        const leg = PositionManager.niftyOptionLeg(open) || {};
         PositionManager.markFill(
           state,
           Number(open.avg || open.ltp),
@@ -185,13 +210,14 @@ export const NiftyVwapStrategy = {
           TrailingStopManager.targetPrice(Number(open.avg || open.ltp), config.targetPct),
         );
         PositionManager.lockContract(state, {
-          strike: open.strike,
-          option: open.option,
+          strike: open.strike || leg.strike,
+          option: open.option || leg.option,
           symbol: open.symbol,
         });
       }
+      const leg = PositionManager.niftyOptionLeg(open);
       const mark = Number(
-        open.option === "PE" ? input.peLtp || open.ltp : input.ceLtp || open.ltp || open.avg,
+        (leg?.option || open.option) === "PE" ? input.peLtp || open.ltp : input.ceLtp || open.ltp || open.avg,
       );
       return this.manageOpen({
         algo,
@@ -205,14 +231,19 @@ export const NiftyVwapStrategy = {
       });
     }
 
+    if (!open && (input.positions || []).some((row) => PositionManager.isOpenNiftyOption(row))) {
+      algo.lastSignal = "HOLD 1 LOT";
+      return { action: "skip", reason: "already-open" };
+    }
+
     if (state.inFlight && !open) {
-      if (state.lastEntryAt && now - state.lastEntryAt > 120_000) {
-        state.inFlight = false;
-        if (!state.fillPrice) PositionManager.clearOpen(state);
-        algo.lastSignal = "ORDER TIMEOUT";
-      } else {
+      const timedOut = state.lastEntryAt && now - state.lastEntryAt > 120_000;
+      if (!timedOut || RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime)) {
         return { action: "skip", reason: "in-flight" };
       }
+      state.inFlight = false;
+      if (!state.fillPrice) PositionManager.clearOpen(state);
+      algo.lastSignal = "ORDER TIMEOUT";
     }
 
     if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) {

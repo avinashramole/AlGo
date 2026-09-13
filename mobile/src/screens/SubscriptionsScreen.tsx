@@ -78,7 +78,6 @@ export function SubscriptionsScreen() {
         return (
           <Card key={row.id}>
             <Text style={styles.name}>{row.name}</Text>
-            <Text style={styles.muted}>{row.summary || row.tag || "Desk strategy"}</Text>
             <Text style={styles.price}>{formatInr(row.enrollFee)}</Text>
             {current?.status === "paid" ? (
               <Text style={styles.paid}>Enrolled</Text>

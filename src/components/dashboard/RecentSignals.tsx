@@ -7,6 +7,7 @@ export function RecentSignals() {
     <section className="card p-4">
       <div className="mb-3 text-sm font-bold">Recent Signals</div>
       <div className="space-y-2">
+        {!data.signals.length ? <p className="text-xs text-slate-400">No live signals yet.</p> : null}
         {data.signals.map((signal) => (
           <div key={signal.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2">
             <span

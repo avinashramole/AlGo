@@ -10,9 +10,14 @@ function authHeaders(): HeadersInit {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {};
   const response = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers || {}) },
-    ...init,
+    ...rest,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(extraHeaders || {}),
+    },
   });
   const text = await response.text();
   let body: { error?: string } = {};
@@ -153,7 +158,7 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
-    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
+    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
     symbol?: string;
     instrument?: "future" | "option";
     optionType?: "CE" | "PE";
@@ -192,6 +197,9 @@ export type Snapshot = {
     buyConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
     sellConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
     summary?: string;
+    dailyLiveIst?: string;
+    mappingScope?: "master" | "clients" | "both";
+    mappedClientIds?: string[];
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {
       ranAt?: string;
@@ -219,7 +227,7 @@ export type Snapshot = {
     trade?: {
       kind?: "future" | "option";
       symbol?: string;
-      option?: "CE" | "PE";
+      option?: "CE" | "PE" | "";
       strike?: number;
       expiry?: string;
       ltp?: number;
@@ -241,6 +249,8 @@ export type Snapshot = {
     openedAt?: string;
     brokerId?: string;
     securityId?: string;
+    live?: boolean;
+    paper?: boolean;
   }>;
   orders: DeskOrder[];
   report?: DeskReport;
@@ -397,6 +407,8 @@ export type BrokerAccount = {
   keyHint: string;
   liveFeed?: boolean;
   virtual?: boolean;
+  fields?: Array<{ id: string; label: string; placeholder?: string; secret?: boolean }>;
+  help?: string;
 };
 
 export type AuthUser = {
@@ -439,6 +451,7 @@ export type SocialProvider = "google" | "microsoft" | "apple";
 export function requestOtp(payload: {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
@@ -465,10 +478,12 @@ export function resetPassword(payload: { identifier: string; otp: string; passwo
 
 export function signup(payload: {
   name: string;
-  identifier: string;
-  otp: string;
-  password: string;
-  channel: "gmail" | "mobile";
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 }) {
   return request<{ token: string; user: AuthUser }>("/auth/signup", {
     method: "POST",
@@ -503,14 +518,218 @@ export function listUsers() {
   return request<{ users: AuthUser[] }>("/users");
 }
 
+export function saveUserContact(id: string, payload: { name?: string; mobile?: string }) {
+  return request<{ user: AuthUser }>(`/users/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type ClientNotifications = {
+  instantAlerts: boolean;
+  eveningPnl: boolean;
+  whatsapp: boolean;
+  telegram: boolean;
+};
+
+export type BrokerInstallField = {
+  id: string;
+  label: string;
+  secret?: boolean;
+  placeholder?: string;
+};
+
+export type ClientBroker = {
+  id: string;
+  name: string;
+  color?: string;
+  segments: string[];
+  fields?: BrokerInstallField[];
+};
+
+export type ClientRow = {
+  id: string;
+  name: string;
+  email?: string;
+  mobile?: string;
+  telegramId?: string;
+  group: string;
+  groups?: string[];
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+  linked: boolean;
+  sizingKind: "multiplier" | "lots" | "fixed";
+  sizingValue: number;
+  tradeMode: "paper" | "real";
+  copy: boolean;
+  staticIp?: string;
+  status: "LIVE" | "PAPER ONLY";
+  subscriptionMode?: "copy" | "strategy" | "both";
+  subscriptionUntil?: string;
+  mappedStrategy?: string;
+  segments?: string[];
+  notifications?: ClientNotifications;
+  tokenHint?: string;
+  apiKeyHint?: string;
+  credentialsInstalled?: boolean;
+  notes?: string;
+  margin: number;
+  createdAt?: string;
+  lastLoginAt?: string;
+};
+
+export type ClientsList = {
+  clients: ClientRow[];
+  groups: string[];
+  brokers: ClientBroker[];
+  assignedIps: Record<string, string[]>;
+  knownIps: string[];
+  defaultUntil: string;
+  strategies: Array<{ id: string; name: string }>;
+  live: number;
+  paper: number;
+};
+
+export function listClients() {
+  return request<ClientsList>("/clients");
+}
+
+export function createClient(payload: {
+  name: string;
+  mobile: string;
+  email?: string;
+  brokerId?: string;
+  accountId?: string;
+  sizingKind?: ClientRow["sizingKind"];
+  sizingValue?: number;
+  tradeMode?: ClientRow["tradeMode"];
+  copy?: boolean;
+  subscriptionMode?: ClientRow["subscriptionMode"];
+  subscriptionUntil?: string;
+  group?: string;
+  groups?: string[];
+  telegramId?: string;
+  mappedStrategy?: string;
+  segments?: string[];
+  notifications?: Partial<ClientNotifications>;
+  brokerToken?: string;
+  brokerApiKey?: string;
+  brokerSessionToken?: string;
+  notes?: string;
+  staticIp?: string;
+}) {
+  return request<{ client: ClientRow }>("/clients", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveClient(
+  id: string,
+  payload: Partial<ClientRow> & {
+    name?: string;
+    mobile?: string;
+    telegramId?: string;
+    brokerToken?: string;
+    brokerApiKey?: string;
+    brokerSessionToken?: string;
+  },
+) {
+  return request<{ client: ClientRow }>(`/clients/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteClient(id: string) {
+  return request<{ ok: boolean; id: string }>(`/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export type EgressBrokerSlot = { id: string; name: string; color?: string };
+
+export type EgressAssignment = {
+  userId: string;
+  name: string;
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+};
+
+export type EgressAccountRow = {
+  userId: string;
+  name: string;
+  kind: "master" | "child";
+  brokerId: string;
+  brokerName: string;
+  brokerColor?: string;
+  accountId?: string;
+  staticIp: string;
+  status: "active" | "inactive";
+};
+
+export type EgressIpCard = {
+  address: string;
+  family: "ipv4" | "ipv6";
+  label: string;
+  status: "healthy" | "failed" | "untested";
+  lastTestAt?: string;
+  lastTestError?: string;
+  assignedCount: number;
+  slotsUsed: number;
+  slotsMax: number;
+  assigned: EgressAssignment[];
+  availableSlots: EgressBrokerSlot[];
+};
+
+export type IpManagementSnapshot = {
+  slots: EgressBrokerSlot[];
+  stats: {
+    ipv4: number;
+    ipv6: number;
+    healthy: number;
+    assignments: number;
+    brokersCovered: number;
+    serverDefault: number;
+  };
+  ips: EgressIpCard[];
+  accounts: EgressAccountRow[];
+  unassigned: EgressAssignment[];
+  test?: { ok: boolean; seen?: string; error?: string };
+};
+
+export function listStaticIps() {
+  return request<IpManagementSnapshot>("/ips");
+}
+
+export function addStaticIp(payload: { address: string; label?: string }) {
+  return request<IpManagementSnapshot>("/ips", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteStaticIp(address: string) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}`, { method: "DELETE" });
+}
+
+export function testStaticIp(address: string) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}/test`, { method: "POST" });
+}
+
+export function assignStaticIp(address: string, payload: { userId: string; brokerId?: string }) {
+  return request<IpManagementSnapshot>(`/ips/${encodeURIComponent(address)}/assign`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function unassignStaticIp(userId: string) {
+  return request<IpManagementSnapshot>("/ips/unassign", { method: "POST", body: JSON.stringify({ userId }) });
+}
+
 export type CatalogStrategy = {
   id: string;
   name: string;
-  tag?: string;
-  kind?: string;
-  summary?: string;
-  symbol?: string;
-  timeframe?: string;
   enrollFee: number;
 };
 
@@ -582,8 +801,10 @@ export type MemberBrokerChoice = {
   color?: string;
   segments?: string[];
   virtual?: boolean;
+  live?: boolean;
   selectable?: boolean;
   selected?: boolean;
+  autoTrade?: boolean;
   mode?: string;
   note?: string;
 };
@@ -630,9 +851,22 @@ export type MemberPosition = {
   strategy?: string;
 };
 
+export type MemberBrokerInstall = {
+  brokerId: string;
+  accountId?: string;
+  tokenHint?: string;
+  apiKeyHint?: string;
+  installed?: boolean;
+  fields: BrokerInstallField[];
+  help?: string;
+};
+
 export type MemberDesk = {
   wallet: MemberWallet;
   brokerId: string;
+  tradeMode?: "paper" | "real";
+  autoTrade?: boolean;
+  install?: MemberBrokerInstall;
   brokers: MemberBrokerChoice[];
   plans: MemberPlanRow[];
   report: DeskReport;
@@ -662,9 +896,28 @@ export function getMemberDesk() {
 }
 
 export function selectMemberBroker(brokerId: string) {
-  return request<{ brokerId: string; brokers: MemberBrokerChoice[] }>("/member/broker", {
+  return request<{
+    brokerId: string;
+    tradeMode?: "paper" | "real";
+    autoTrade?: boolean;
+    install?: MemberBrokerInstall;
+    brokers: MemberBrokerChoice[];
+  }>("/member/broker", {
     method: "POST",
     body: JSON.stringify({ brokerId }),
+  });
+}
+
+export function installMemberBroker(payload: {
+  brokerId?: string;
+  clientId?: string;
+  apiKey?: string;
+  accessToken?: string;
+  sessionToken?: string;
+}) {
+  return request<{ ok: boolean; brokerId: string; install: MemberBrokerInstall }>("/member/broker/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -712,6 +965,13 @@ export function getSnapshot() {
   return request<Snapshot>("/snapshot");
 }
 
+export function getDeskMtm() {
+  return request<{
+    positions: Array<{ id: string; symbol: string; ltp: number; pnl: number; strategy?: string }>;
+    serverTime?: string;
+  }>("/mtm");
+}
+
 export function getContracts(symbol?: string, expiry?: string) {
   const query = new URLSearchParams();
   if (symbol) query.set("symbol", symbol);
@@ -752,8 +1012,129 @@ export function squareOff(id: string) {
   return request<{ snapshot: Snapshot }>(`/positions/${id}/squareoff`, { method: "POST" });
 }
 
+export type LedgerPosition = {
+  id: string;
+  symbol: string;
+  product: string;
+  type: "BUY" | "SELL";
+  buyQty: number;
+  buyPrice: number;
+  sellQty: number;
+  sellPrice: number;
+  netQty: number;
+  ltp: number;
+  realized: number;
+  mtm: number;
+  paper: boolean;
+  segment: "indian" | "crypto";
+  strategy?: string;
+};
+
+export type PositionLedger = {
+  id: string;
+  name: string;
+  kind: "master" | "client";
+  title: string;
+  subtitle: string;
+  tradeMode: "paper" | "real";
+  positions: LedgerPosition[];
+  mtm: number;
+  realized: number;
+  open: number;
+};
+
+export type PositionsDeskSnapshot = {
+  master: PositionLedger;
+  clients: PositionLedger[];
+  masterMtm: number;
+  clientMtm: number;
+  totalMtm: number;
+  openPositions: number;
+};
+
+export function getPositionsDesk() {
+  return request<PositionsDeskSnapshot>("/positions/desk");
+}
+
 export function sendChat(text: string) {
   return request("/chat", { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export type MessagingChannelStatus = {
+  kind: "whatsapp" | "telegram";
+  ready: boolean;
+  label: string;
+  hint?: string;
+};
+
+export type MessagingConversation = {
+  id: string;
+  name: string;
+  mobile?: string;
+  telegramId?: string;
+  broker?: string;
+  channels: Array<"whatsapp" | "telegram">;
+  preview?: string;
+  lastAt?: string;
+};
+
+export type MessagingMessage = {
+  id: string;
+  from: string;
+  text: string;
+  via?: string;
+  at?: string;
+  mine?: boolean;
+  status?: string;
+  error?: string;
+};
+
+export function getMessaging() {
+  return request<{
+    sendVia: "both" | "whatsapp" | "telegram";
+    whatsapp: MessagingChannelStatus;
+    telegram: MessagingChannelStatus;
+    conversations: MessagingConversation[];
+  }>("/messaging");
+}
+
+export function saveMessagingConfig(payload: {
+  sendVia?: "both" | "whatsapp" | "telegram";
+  whatsappToken?: string;
+  phoneNumberId?: string;
+  telegramToken?: string;
+}) {
+  return request<{
+    sendVia: "both" | "whatsapp" | "telegram";
+    whatsapp: MessagingChannelStatus;
+    telegram: MessagingChannelStatus;
+    conversations: MessagingConversation[];
+  }>("/messaging/config", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function addMessagingContact(payload: { name: string; mobile?: string; telegramId?: string; broker?: string }) {
+  return request<{ contact: MessagingConversation }>("/messaging/contacts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMessagingThread(id: string) {
+  return request<{ messages: MessagingMessage[] }>(`/messaging/thread/${encodeURIComponent(id)}`);
+}
+
+export function sendMessaging(payload: { contactId: string; text: string; via?: "both" | "whatsapp" | "telegram" }) {
+  return request<{ ok: boolean; message: MessagingMessage; warnings?: string[] }>("/messaging/send", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function broadcastMessaging(payload: { text: string; via?: "both" | "whatsapp" | "telegram" }) {
+  return request<{ ok: boolean; sent: number; failed: number; errors?: Array<{ name: string; error: string }> }>(
+    "/messaging/broadcast",
+    { method: "POST", body: JSON.stringify(payload) },
+  );
 }
 
 export function enableDhanAuto(payload: {
@@ -800,7 +1181,10 @@ export function refreshDhanToken(
   }>("/brokers/dhan/reset", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function connectBroker(id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) {
+export function connectBroker(
+  id: string,
+  payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string; jwtToken?: string },
+) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
     method: "POST",
     body: JSON.stringify(payload),

@@ -10,6 +10,11 @@ export function Signals() {
         <p className="text-sm text-slate-400">AI and strategy alerts across indices and options</p>
       </div>
       <div className="grid gap-3">
+        {!data.signals.length ? (
+          <div className="card px-4 py-8 text-center text-sm text-slate-400">
+            No live signals yet. Start an algo or wait for a Dhan / paper fill.
+          </div>
+        ) : null}
         {data.signals.map((signal) => (
           <article key={signal.id} className="card flex items-center gap-4 p-4">
             <span

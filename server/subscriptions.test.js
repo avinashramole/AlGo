@@ -46,14 +46,29 @@ test("buildUpiLinks create GPay and PhonePe intents to the admin VPA", () => {
 
 test("catalogStrategy only exposes titles and fee, not live trading fields", () => {
   const row = catalogStrategy(
-    { id: "a4", name: "NIFTY VWAP ATM", enabled: true, brokerId: "dhan", trade: { ready: true }, enrollFee: 799 },
+    {
+      id: "a4",
+      name: "NIFTY VWAP ATM",
+      tag: "NIFTY VWAP",
+      kind: "nifty-vwap",
+      summary: "NIFTY VWAP ATM · 5m options · SL 20% / TGT 40%",
+      symbol: "NIFTY",
+      timeframe: "5m",
+      enabled: true,
+      brokerId: "dhan",
+      trade: { ready: true },
+      enrollFee: 799,
+    },
     { amount: 999 },
   );
   assert.equal(row.name, "NIFTY VWAP ATM");
   assert.equal(row.enrollFee, 799);
+  assert.deepEqual(Object.keys(row).sort(), ["enrollFee", "id", "name"]);
   assert.equal(row.enabled, undefined);
   assert.equal(row.brokerId, undefined);
   assert.equal(row.trade, undefined);
+  assert.equal(row.summary, undefined);
+  assert.equal(row.symbol, undefined);
 });
 
 test("enrollStrategy asks for GPay/PhonePe and records a pending member", () => {

@@ -16,13 +16,14 @@ export function setApiToken(token: string) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {};
   const response = await fetch(`${apiBase()}/api${path}`, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
       ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(init?.headers || {}),
+      ...(extraHeaders || {}),
     },
-    ...init,
   });
   const text = await response.text();
   let body: { error?: string } = {};
@@ -94,7 +95,7 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
-    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal";
+    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
     symbol?: string;
     instrument?: "future" | "option";
     optionType?: "CE" | "PE";
@@ -131,6 +132,7 @@ export type Snapshot = {
     rangeMinutes?: number;
     lookback?: number;
     summary?: string;
+    dailyLiveIst?: string;
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {
       trades?: number;
@@ -326,6 +328,7 @@ export type SocialProvider = "google" | "microsoft" | "apple";
 export function requestOtp(payload: {
   identifier: string;
   name?: string;
+  mobile?: string;
   channel?: "gmail" | "mobile";
   purpose?: OtpPurpose;
   provider?: SocialProvider;
@@ -352,10 +355,12 @@ export function resetPassword(payload: { identifier: string; otp: string; passwo
 
 export function signup(payload: {
   name: string;
-  identifier: string;
-  otp: string;
-  password: string;
-  channel: "gmail" | "mobile";
+  email?: string;
+  mobile?: string;
+  identifier?: string;
+  otp?: string;
+  password?: string;
+  channel?: "gmail" | "mobile";
 }) {
   return request<{ token: string; user: AuthUser }>("/auth/signup", {
     method: "POST",
@@ -384,10 +389,6 @@ export function getMe(token: string) {
 export type CatalogStrategy = {
   id: string;
   name: string;
-  tag?: string;
-  summary?: string;
-  symbol?: string;
-  timeframe?: string;
   enrollFee: number;
 };
 
@@ -433,12 +434,28 @@ export type MemberBrokerChoice = {
   id: string;
   name: string;
   virtual?: boolean;
+  live?: boolean;
   selected?: boolean;
+  autoTrade?: boolean;
+  note?: string;
+};
+
+export type MemberBrokerInstall = {
+  brokerId: string;
+  accountId?: string;
+  tokenHint?: string;
+  apiKeyHint?: string;
+  installed?: boolean;
+  fields?: Array<{ id: string; label: string; secret?: boolean; placeholder?: string }>;
+  help?: string;
 };
 
 export type MemberDesk = {
   wallet: { balance: number; mtm: number; equity: number };
   brokerId: string;
+  tradeMode?: "paper" | "real";
+  autoTrade?: boolean;
+  install?: MemberBrokerInstall;
   brokers: MemberBrokerChoice[];
   plans: Array<{ strategyId: string; strategyName: string; realizedPnl: number; unrealizedPnl: number; netPnl: number }>;
   report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };
@@ -469,6 +486,19 @@ export function selectMemberBroker(brokerId: string) {
   return request<{ brokerId: string; brokers: MemberBrokerChoice[] }>("/member/broker", {
     method: "POST",
     body: JSON.stringify({ brokerId }),
+  });
+}
+
+export function installMemberBroker(payload: {
+  brokerId?: string;
+  clientId?: string;
+  apiKey?: string;
+  accessToken?: string;
+  sessionToken?: string;
+}) {
+  return request<{ ok: boolean; brokerId: string; install: MemberBrokerInstall }>("/member/broker/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

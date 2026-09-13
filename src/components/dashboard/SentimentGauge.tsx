@@ -11,7 +11,9 @@ export function SentimentGauge() {
       <div className={`mt-1 text-center text-sm font-extrabold tracking-wide ${bullish ? "text-up" : "text-down"}`}>
         {bullish ? "BULLISH" : "BEARISH"}
       </div>
-      <p className="mt-1 text-center text-[11px] text-slate-400">Strong buy-side pressure with rising OI</p>
+      <p className="mt-1 text-center text-[11px] text-slate-400">
+        {data.dhanFeed?.live ? "From live index change and option buy pressure" : "From the current desk tape"}
+      </p>
     </section>
   );
 }

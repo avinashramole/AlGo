@@ -6,7 +6,8 @@ import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
-const GMAIL_FILE = path.join(__dirname, "data", "gmail.json");
+const SESSIONS_FILE = process.env.T2S_SESSIONS_FILE || path.join(__dirname, "data", "sessions.json");
+const GMAIL_FILE = process.env.T2S_GMAIL_FILE || path.join(__dirname, "data", "gmail.json");
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
 const MAX_ATTEMPTS = 5;
@@ -34,7 +35,38 @@ const SEED_USERS = [
 const DEFAULT_ADMIN_EMAILS = ["demo@t2s.app", "avinash.ramole86@gmail.com"];
 
 const otps = new Map();
-const sessions = new Map();
+const sessions = loadSessions();
+
+function loadSessions() {
+  try {
+    const row = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
+    const map = new Map();
+    if (!row || typeof row !== "object" || Array.isArray(row)) return map;
+    for (const [token, value] of Object.entries(row)) {
+      if (!token || !value || typeof value !== "object") continue;
+      const userId = String(value.userId || "").trim();
+      if (!userId) continue;
+      map.set(token, {
+        userId,
+        email: String(value.email || ""),
+        mobile: String(value.mobile || ""),
+        at: Number(value.at) || Date.now(),
+      });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function persistSessions() {
+  try {
+    fs.mkdirSync(path.dirname(SESSIONS_FILE), { recursive: true });
+    fs.writeFileSync(SESSIONS_FILE, `${JSON.stringify(Object.fromEntries(sessions), null, 2)}\n`);
+  } catch (error) {
+    console.log(`Could not save sign-in sessions: ${error.message || error}`);
+  }
+}
 
 function now() {
   return Date.now();
@@ -260,6 +292,7 @@ function issueSession(user) {
   user.createdAt = user.createdAt || at;
   persist();
   sessions.set(token, { userId: user.id, email: user.email, mobile: user.mobile, at: now() });
+  persistSessions();
   return { token, user: publicUser(user) };
 }
 
@@ -290,8 +323,20 @@ function gmailReady() {
   return Boolean(gmailCreds.user && gmailCreds.pass);
 }
 
-function gmailTransport() {
+function allowOnScreenOtp() {
+  return process.env.T2S_SHOW_OTP === "1";
+}
+
+function gmailTransport(port = 465) {
   if (!gmailReady()) return null;
+  if (port === 587) {
+    return nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: { user: gmailCreds.user, pass: gmailCreds.pass },
+    });
+  }
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
@@ -330,18 +375,27 @@ export async function connectGmail({ email, appPassword } = {}) {
 }
 
 async function sendMail({ to, subject, text, html }) {
-  const transport = gmailTransport();
-  if (!transport) return { delivered: false, reason: "gmail-not-configured" };
-  await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
-  return { delivered: true };
+  if (!gmailReady()) return { delivered: false, reason: "gmail-not-configured" };
+  let lastError = null;
+  for (const port of [465, 587]) {
+    try {
+      const transport = gmailTransport(port);
+      if (!transport) return { delivered: false, reason: "gmail-not-configured" };
+      await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
+      return { delivered: true };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || fail("Could not send email.");
 }
 
 async function sendOtpMail(email, code, name) {
   return sendMail({
     to: email,
     subject: `${code} is your T2S login code`,
-    text: `Hi ${name || "there"},\n\nYour T2S Algo login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
-    html: `<p>Hi ${name || "there"},</p><p>Your T2S Algo login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
+    text: `Hi ${name || "there"},\n\nYour Trade 2 Smart login code is ${code}.\nIt expires in 10 minutes.\n\nIf you did not request this, ignore this email.\n`,
+    html: `<p>Hi ${name || "there"},</p><p>Your Trade 2 Smart login code is <strong style="font-size:20px;letter-spacing:2px">${code}</strong>.</p><p>It expires in 10 minutes. Check Inbox and Spam.</p>`,
   });
 }
 
@@ -407,7 +461,9 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   }
   if (wanted === "gmail") {
     if (provider) assertEmailForProvider(target, provider);
-    else if (intent === "signup" && !isGmail(target)) {
+    else if (intent === "login" && !target.includes("@")) {
+      throw fail("Enter the email on your account. We will send a 6-digit login code there.");
+    } else if (intent === "signup" && !isGmail(target)) {
       throw fail("Use a Gmail address (you@gmail.com), or continue with Microsoft / Apple.");
     } else if (!target.includes("@")) {
       throw fail("Enter a valid email.");
@@ -418,11 +474,21 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   const displayName = String(name || existing?.name || "").trim();
   if (intent === "signup") {
     if (!displayName || displayName.length < 2) {
-      const error = fail("Enter your name, then send the code.");
+      const error = fail("Enter your user name.");
       error.needName = true;
       throw error;
     }
-    if (existing?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
+    const extraMobile = normalizeMobile(mobile);
+    if (!isMobile(extraMobile)) throw fail("Mobile no must be 10 digits.");
+    if (existing?.password || (existing && isRegisteredUser(existing))) {
+      throw fail("That email already has an account. Sign in instead.");
+    }
+    if (extraMobile) {
+      const mobileUser = findUser(extraMobile);
+      if (mobileUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+        throw fail("That mobile number already has an account. Sign in instead.");
+      }
+    }
   } else if (!existing) {
     throw fail("No account for that email / mobile. Sign up first.");
   }
@@ -445,14 +511,24 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   let delivered = false;
   try {
     if (wanted === "gmail") {
+      const mustEmail = intent === "login" && !allowOnScreenOtp();
+      if (!gmailReady() && mustEmail) {
+        otps.delete(key);
+        throw fail("Email login codes need Gmail connected in Settings (Google App Password).");
+      }
       delivered = (await sendOtpMail(target, code, displayName || existing?.name)).delivered;
+      if (!delivered && mustEmail) {
+        otps.delete(key);
+        throw fail("Could not email the login code. Check Gmail App Password in Settings.");
+      }
     } else {
       delivered = (await sendSms(target, code)).delivered;
     }
   } catch (err) {
+    otps.delete(key);
     throw fail(err.message || "Could not send the code.");
   }
-  const showCode = !delivered;
+  const showCode = !delivered && (allowOnScreenOtp() || intent !== "login");
   const to = wanted === "gmail" ? maskEmail(target) : maskMobile(target);
   if (showCode) console.log(`T2S OTP (${wanted} ${intent}) ${target}: ${code}`);
   return {
@@ -503,14 +579,32 @@ export function resetPassword({ email, mobile, identifier, otp, password } = {})
 }
 
 export function completeSignup({ name, email, mobile, identifier, otp, password, channel } = {}) {
-  const wanted = channel === "mobile" || isMobile(identifier || mobile) ? "mobile" : "gmail";
-  const target = wanted === "mobile" ? normalizeMobile(identifier || mobile || email) : normalizeEmail(identifier || email);
   const displayName = String(name || "").trim();
-  if (displayName.length < 2) throw fail("Enter a name.");
-  if (String(password || "").length < 6) throw fail("Password must be at least 6 characters.");
-  consumeOtp(wanted, target, otp, "signup");
-  let user = findUser(target);
-  if (user?.password) throw fail("That Gmail / mobile already has an account. Sign in instead.");
+  if (displayName.length < 2) throw fail("Enter your user name.");
+  const nextEmail = normalizeEmail(email || (String(identifier || "").includes("@") ? identifier : ""));
+  const nextMobile = normalizeMobile(mobile || (isMobile(identifier) ? identifier : ""));
+  if (!nextEmail.includes("@")) throw fail("Enter your email id.");
+  if (!isGmail(nextEmail) && !nextEmail.endsWith("@t2s.app")) {
+    throw fail("Use a Gmail address (you@gmail.com).");
+  }
+  if (!isMobile(nextMobile)) throw fail("Mobile no must be 10 digits.");
+  const pass = String(password || "");
+  const hasOtp = Boolean(String(otp || "").trim());
+  if (pass && pass.length < 6) throw fail("Password must be at least 6 characters.");
+  if (!hasOtp && !pass) throw fail("Create a password, or email a signup code first.");
+  if (hasOtp) {
+    const wanted = channel === "mobile" ? "mobile" : "gmail";
+    consumeOtp(wanted, wanted === "mobile" ? nextMobile : nextEmail, otp, "signup");
+  }
+  const emailUser = findUser(nextEmail);
+  const mobileUser = findUser(nextMobile);
+  if (emailUser?.password || (emailUser && isRegisteredUser(emailUser))) {
+    throw fail("That email already has an account. Sign in instead.");
+  }
+  if (mobileUser && mobileUser !== emailUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+    throw fail("That mobile number already has an account. Sign in instead.");
+  }
+  let user = emailUser && !isRegisteredUser(emailUser) ? emailUser : null;
   if (!user) {
     const pendingSegin = displayName.toLowerCase() === "segin" ? store.users.find((row) => row.id === "segin") : null;
     user = pendingSegin || {
@@ -524,11 +618,11 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
   }
   user.name = displayName;
   user.desk = user.desk || "Index Options";
-  user.password = hashPassword(password);
+  user.email = nextEmail;
+  user.mobile = nextMobile;
+  if (pass) user.password = hashPassword(pass);
   user.createdAt = user.createdAt || new Date().toISOString();
-  user.authProvider = user.authProvider || "password";
-  if (wanted === "gmail") user.email = target;
-  else user.mobile = target;
+  user.authProvider = pass ? "password" : user.authProvider || "email";
   if (!user.role) user.role = resolveUserRole(user);
   persist();
   return issueSession(user);
@@ -551,12 +645,14 @@ export function loginWithThumb(thumbToken) {
   return issueSession(user);
 }
 
-export function sessionUser(token) {
+export function sessionUser(token, { reload = false } = {}) {
+  if (reload) store = loadUsers();
   const user = userFromToken(token);
   return user ? publicUser(user) : null;
 }
 
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {
+  store = loadUsers();
   const user = userFromToken(sessionToken);
   if (!user) throw fail("Sign in first.", 401);
   const nextName = String(name ?? user.name ?? "").trim();
@@ -594,23 +690,119 @@ export function listPublicUsers() {
     });
 }
 
+export function getPublicUser(id) {
+  store = loadUsers();
+  const user = store.byId.get(String(id || "").trim());
+  return user ? publicUser(user) : null;
+}
+
+export function adminUpdateUser(id, patch = {}) {
+  store = loadUsers();
+  const user = store.byId.get(String(id || "").trim());
+  if (!user) throw fail("User not found.", 404);
+  if (patch.name != null) {
+    const name = String(patch.name || "").trim();
+    if (name.length < 2) throw fail("Enter the name.");
+    user.name = name;
+  }
+  if (patch.mobile != null) {
+    const mobile = normalizeMobile(patch.mobile);
+    if (mobile && !isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile, or leave it blank.");
+    if (mobile) {
+      const taken = store.byMobile.get(mobile);
+      if (taken && taken.id !== user.id) throw fail("That mobile is already on another account.");
+    }
+    user.mobile = mobile;
+  }
+  persist();
+  return publicUser(user);
+}
+
+export function deleteRegisteredUser(id, { actorId } = {}) {
+  store = loadUsers();
+  const userId = String(id || "").trim();
+  const user = store.byId.get(userId);
+  if (!user) throw fail("Client not found.", 404);
+  if (userId === actorId) throw fail("You cannot delete the signed-in account.");
+  if (userId === "avinash" || userId === "segin") throw fail("The desk admin accounts cannot be deleted.");
+  if (resolveUserRole(user) === "admin") throw fail("Delete a member from All clients, not an admin.");
+  store.users = store.users.filter((row) => row.id !== userId);
+  persist();
+  for (const [token, session] of [...sessions.entries()]) {
+    if (session.userId === userId) sessions.delete(token);
+  }
+  persistSessions();
+  return { ok: true, id: userId };
+}
+
+export const INITIAL_CLIENT_PASSWORD = "1234";
+
+export function adminCreateMember(patch = {}) {
+  store = loadUsers();
+  const name = String(patch.name || "").trim();
+  if (name.length < 2) throw fail("Enter the client name.");
+  const mobile = normalizeMobile(patch.mobile);
+  if (!isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile. That number is the client portal login.");
+  const email = normalizeEmail(patch.email);
+  if (email && !email.includes("@")) throw fail("Enter a valid email, or leave it blank.");
+  if (email && store.byEmail.get(email)) throw fail("That email is already on another account.");
+  if (store.byMobile.get(mobile)) throw fail("That mobile is already on another account.");
+  const nowIso = new Date().toISOString();
+  const user = {
+    id: `u${crypto.randomBytes(6).toString("hex")}`,
+    name,
+    email,
+    mobile,
+    desk: "Index Options",
+    role: "user",
+    authProvider: "password",
+    createdAt: nowIso,
+    password: hashPassword(INITIAL_CLIENT_PASSWORD),
+  };
+  store.users.push(user);
+  persist();
+  return publicUser(user);
+}
+
 export function googleOAuthConfigured(env = process.env) {
   return Boolean(String(env.GOOGLE_CLIENT_ID || "").trim() && String(env.GOOGLE_CLIENT_SECRET || "").trim());
+}
+
+function firstHeader(value) {
+  return String(value || "")
+    .split(",")[0]
+    .trim();
+}
+
+function publicSiteHost(host) {
+  const bare = String(host || "")
+    .toLowerCase()
+    .replace(/:(80|443)$/, "");
+  if (bare === "www.trade2smart.com") return "trade2smart.com";
+  return bare;
+}
+
+function requestHost(req) {
+  return publicSiteHost(firstHeader(req?.headers?.["x-forwarded-host"] || req?.headers?.host));
+}
+
+function requestProto(req, host) {
+  if (host === "trade2smart.com" || host.endsWith(".trade2smart.com")) return "https";
+  const forwarded = firstHeader(req?.headers?.["x-forwarded-proto"]).toLowerCase();
+  if (forwarded === "https" || forwarded === "http") return forwarded;
+  return firstHeader(req?.protocol) === "https" ? "https" : "http";
 }
 
 export function googleRedirectUri(env = process.env, req) {
   const explicit = String(env.GOOGLE_REDIRECT_URI || "").trim();
   if (explicit) return explicit;
   if (req) {
-    const proto = String(req.headers?.["x-forwarded-proto"] || req.protocol || "http")
-      .split(",")[0]
-      .trim();
-    const host = String(req.headers?.["x-forwarded-host"] || req.headers?.host || "")
-      .split(",")[0]
-      .trim();
-    if (host) return `${proto === "https" ? "https" : "http"}://${host}/api/auth/google/callback`;
+    const host = requestHost(req);
+    if (host) return `${requestProto(req, host)}://${host}/api/auth/google/callback`;
   }
-  const publicUrl = String(env.PUBLIC_URL || "http://localhost:4000").replace(/\/$/, "");
+  const publicUrl = String(env.PUBLIC_URL || env.FRONTEND_ORIGIN || "http://localhost:4000")
+    .trim()
+    .replace(/\/+$/, "");
   return `${publicUrl}/api/auth/google/callback`;
 }
 
@@ -661,7 +853,7 @@ export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
     response_type: "code",
     scope: "openid email profile",
     access_type: "online",
-    prompt: "select_account",
+    include_granted_scopes: "true",
     state: encodeOAuthState(next, { redirectUri }),
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -720,7 +912,11 @@ export async function loginWithGoogleCode({ code, fetchImpl = fetch, env = proce
   });
   const tokenJson = await tokenRes.json().catch(() => ({}));
   if (!tokenRes.ok || !tokenJson.access_token) {
-    throw fail(tokenJson.error_description || "Google login failed. Try again.", 401);
+    const detail = String(tokenJson.error_description || tokenJson.error || "").trim();
+    if (/redirect_uri/i.test(detail) || tokenJson.error === "redirect_uri_mismatch") {
+      throw fail(`Google redirect URI mismatch. Authorized URI must be exactly ${redirect}`, 401);
+    }
+    throw fail(detail || "Google login failed. Try again.", 401);
   }
   const userRes = await fetchImpl("https://www.googleapis.com/oauth2/v3/userinfo", {
     headers: { Authorization: `Bearer ${tokenJson.access_token}`, Accept: "application/json" },

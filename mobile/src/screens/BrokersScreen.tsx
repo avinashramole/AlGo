@@ -37,7 +37,7 @@ export function BrokersScreen() {
       if (target === "dhan") {
         await connect("dhan", { clientId, accessToken: secret, apiKey: secret });
       } else {
-        await connect(target, { clientId, apiKey: secret });
+        await connect(target, { clientId, apiKey: secret, accessToken: secret });
       }
       setTarget(null);
       setSecret("");
@@ -170,7 +170,7 @@ export function BrokersScreen() {
                 </>
               ) : (
                 <Pressable style={styles.primary} onPress={() => openForm(broker.id)}>
-                  <Text style={styles.primaryText}>Connect sandbox</Text>
+                  <Text style={styles.primaryText}>Connect live</Text>
                 </Pressable>
               )}
             </View>

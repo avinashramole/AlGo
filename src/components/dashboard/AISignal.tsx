@@ -8,8 +8,9 @@ type Props = {
 export function AISignal({ onReview }: Props) {
   const { data } = useMarket();
   const signal = data.featuredSignal;
+  const live = Boolean(signal.symbol);
   const dash = 2 * Math.PI * 42;
-  const offset = dash * (1 - signal.confidence / 100);
+  const offset = dash * (1 - (live ? signal.confidence : 0) / 100);
 
   return (
     <section className="card flex h-full flex-col p-4">
@@ -17,11 +18,11 @@ export function AISignal({ onReview }: Props) {
       <div className="mt-2 flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-extrabold text-up dark:bg-emerald-950/50">
-            {signal.action}
+            {live ? signal.action : "WAIT"}
           </div>
-          <div className="mt-2 text-lg font-bold leading-tight">{signal.symbol}</div>
+          <div className="mt-2 text-lg font-bold leading-tight">{live ? signal.symbol : "No live signal"}</div>
           <div className="mt-1 text-xs text-slate-500">
-            {signal.strategy} · Expiry {signal.expiry}
+            {live ? `${signal.strategy} · Expiry ${signal.expiry}` : "Start an algo or wait for a Dhan fill"}
           </div>
         </div>
         <div className="relative h-[92px] w-[92px]">
@@ -60,9 +61,10 @@ export function AISignal({ onReview }: Props) {
       <button
         type="button"
         onClick={onReview}
-        className="mt-auto h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600"
+        disabled={!live}
+        className="mt-auto h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
       >
-        Review Trade
+        {live ? "Review Trade" : "Waiting for live signal"}
       </button>
     </section>
   );

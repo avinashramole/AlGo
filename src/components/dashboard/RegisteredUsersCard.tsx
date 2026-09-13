@@ -2,6 +2,7 @@ import { Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUsers, type AuthUser } from "../../api/client";
+import { loadClientList } from "../../lib/clientsCache";
 
 export function RegisteredUsersCard() {
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -15,6 +16,7 @@ export function RegisteredUsersCard() {
           setError("");
         })
         .catch((err) => setError(err instanceof Error ? err.message : "Could not load users"));
+      void loadClientList();
     };
     load();
     const id = window.setInterval(load, 8000);
@@ -36,7 +38,7 @@ export function RegisteredUsersCard() {
           <p className="mt-1 text-xs text-slate-500">Gmail OAuth and Create Account members.</p>
         </div>
         <Link to="/users" className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-semibold leading-9 text-white">
-          User list
+          All clients
         </Link>
       </div>
       {error ? <p className="mt-3 text-xs text-down">{error}</p> : null}
@@ -44,7 +46,7 @@ export function RegisteredUsersCard() {
         {latest.map((row) => (
           <li key={row.id || row.email} className="flex items-center justify-between gap-2 text-sm">
             <span className="truncate font-semibold">{row.name}</span>
-            <span className="truncate text-xs text-slate-400">{row.email || row.mobile || "Member"}</span>
+            <span className="truncate text-xs text-slate-400">{row.mobile || row.email || "Member"}</span>
           </li>
         ))}
         {!latest.length && !error ? <li className="text-sm text-slate-400">No members registered yet.</li> : null}
