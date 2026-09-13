@@ -23,6 +23,23 @@ export function formatPct(value: number, digits = 2) {
   return `${sign}${value.toFixed(digits)}%`;
 }
 
+export function formatIstDate(iso?: string) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatPlanTerm(term?: string) {
+  const key = String(term || "").trim().toLowerCase();
+  return { monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" }[key] || "Monthly";
+}
+
 export function formatInr(value: number) {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;

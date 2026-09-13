@@ -727,10 +727,13 @@ export function unassignStaticIp(userId: string) {
   return request<IpManagementSnapshot>("/ips/unassign", { method: "POST", body: JSON.stringify({ userId }) });
 }
 
+export type PlanTerm = "monthly" | "quarterly" | "yearly";
+
 export type CatalogStrategy = {
   id: string;
   name: string;
   enrollFee: number;
+  terms?: Record<PlanTerm, number>;
 };
 
 export type PaymentPublic = {
@@ -751,10 +754,14 @@ export type Enrollment = {
   strategyName: string;
   amount: number;
   channel?: string;
-  status: "pending" | "paid" | string;
+  term?: PlanTerm | string;
+  status: "pending" | "paid" | "abandoned" | string;
   payeeMobile?: string;
   createdAt?: string;
   paidAt?: string;
+  startedAt?: string;
+  endsAt?: string;
+  active?: boolean;
 };
 
 export type UpiLinks = {
@@ -772,15 +779,19 @@ export function listEnrollments() {
   return request<{ enrollments: Enrollment[] }>("/subscriptions");
 }
 
-export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe") {
+export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe", term: PlanTerm = "monthly") {
   return request<{ enrollment: Enrollment; payments: PaymentPublic; links: UpiLinks | null; already?: boolean }>(
     "/subscriptions/enroll",
-    { method: "POST", body: JSON.stringify({ strategyId, channel }) },
+    { method: "POST", body: JSON.stringify({ strategyId, channel, term }) },
   );
 }
 
 export function confirmEnrollmentPaid(id: string) {
   return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/paid`, { method: "POST" });
+}
+
+export function abandonEnrollment(id: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/abandon`, { method: "POST" });
 }
 
 export function getPaymentSettings() {
@@ -820,6 +831,9 @@ export type MemberPlanRow = {
   strategyId: string;
   strategyName: string;
   status: string;
+  term?: PlanTerm | string;
+  startedAt?: string;
+  endsAt?: string;
   realizedPnl: number;
   unrealizedPnl: number;
   netPnl: number;

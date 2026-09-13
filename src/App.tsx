@@ -12,7 +12,6 @@ function lazyPage<M extends Record<string, ComponentType>>(loader: () => Promise
 const Dashboard = lazyPage(() => import("./pages/Dashboard"), "Dashboard");
 const UserHome = lazyPage(() => import("./pages/UserHome"), "UserHome");
 const Profile = lazyPage(() => import("./pages/Profile"), "Profile");
-const Subscriptions = lazyPage(() => import("./pages/Subscriptions"), "Subscriptions");
 const MemberPlans = lazyPage(() => import("./pages/MemberPlans"), "MemberPlans");
 const Markets = lazyPage(() => import("./pages/Markets"), "Markets");
 const Options = lazyPage(() => import("./pages/Options"), "Options");
@@ -69,7 +68,7 @@ export default function App() {
         >
           <Route index element={<RoleHome />} />
           <Route path="profile" element={<Profile />} />
-          <Route path="subscriptions" element={<Subscriptions />} />
+          <Route path="subscriptions" element={<Navigate to="/plans" replace />} />
           <Route path="plans" element={<MemberPlans />} />
           <Route path="markets" element={<AdminOnly><Markets /></AdminOnly>} />
           <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />

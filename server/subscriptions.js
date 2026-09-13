@@ -7,6 +7,59 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAYMENTS_FILE = process.env.T2S_PAYMENTS_FILE || path.join(__dirname, "data", "payments.json");
 const ENROLL_FILE = process.env.T2S_ENROLL_FILE || path.join(__dirname, "data", "enrollments.json");
 const DEFAULT_AMOUNT = 999;
+export const PLAN_TERMS = ["monthly", "quarterly", "yearly"];
+
+function addCalendarMonths(date, months) {
+  const next = new Date(date.getTime());
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + Number(months || 0));
+  const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, last));
+  return next;
+}
+
+export function normalizePlanTerm(value) {
+  const term = String(value || "").trim().toLowerCase();
+  return PLAN_TERMS.includes(term) ? term : "monthly";
+}
+
+export function termMonths(value) {
+  return { monthly: 1, quarterly: 3, yearly: 12 }[normalizePlanTerm(value)];
+}
+
+export function feeForTerm(base, term) {
+  const monthly = Number(base);
+  if (!Number.isFinite(monthly) || monthly < 1) return 0;
+  return Math.round(monthly) * termMonths(term);
+}
+
+export function planWindow({ startedAt, term } = {}) {
+  const start = startedAt ? new Date(startedAt) : new Date();
+  const from = Number.isNaN(start.getTime()) ? new Date() : start;
+  return {
+    startedAt: from.toISOString(),
+    endsAt: addCalendarMonths(from, termMonths(term)).toISOString(),
+  };
+}
+
+function hydratePlanDates(row = {}) {
+  const term = normalizePlanTerm(row.term);
+  if (row.status !== "paid") {
+    return { term, startedAt: row.startedAt || "", endsAt: row.endsAt || "" };
+  }
+  if (row.startedAt && row.endsAt) {
+    return { term, startedAt: row.startedAt, endsAt: row.endsAt };
+  }
+  return { term, ...planWindow({ startedAt: row.startedAt || row.paidAt || row.createdAt, term }) };
+}
+
+export function enrollmentActive(row, now = new Date()) {
+  if (!row || row.status !== "paid") return false;
+  const { endsAt } = hydratePlanDates(row);
+  if (!endsAt) return true;
+  return new Date(endsAt).getTime() >= now.getTime();
+}
 
 function fail(message, status = 400) {
   const error = new Error(message);
@@ -127,10 +180,16 @@ export function buildUpiLinks({ vpa, payeeName, amount, note } = {}) {
 export function catalogStrategy(algo, settings = payments) {
   if (!algo) return null;
   const fee = Number(algo.enrollFee);
+  const monthly = Number.isFinite(fee) && fee > 0 ? Math.round(fee) : settings.amount;
   return {
     id: algo.id,
     name: algo.name || "Strategy",
-    enrollFee: Number.isFinite(fee) && fee > 0 ? Math.round(fee) : settings.amount,
+    enrollFee: monthly,
+    terms: {
+      monthly,
+      quarterly: feeForTerm(monthly, "quarterly"),
+      yearly: feeForTerm(monthly, "yearly"),
+    },
   };
 }
 
@@ -143,6 +202,7 @@ export function listCatalog(algos = [], admins = []) {
 }
 
 function publicEnroll(row) {
+  const dates = hydratePlanDates(row);
   return {
     id: row.id,
     userId: row.userId,
@@ -152,10 +212,14 @@ function publicEnroll(row) {
     strategyName: row.strategyName,
     amount: row.amount,
     channel: row.channel,
+    term: dates.term,
     status: row.status,
     payeeMobile: row.payeeMobile,
     createdAt: row.createdAt,
     paidAt: row.paidAt || "",
+    startedAt: dates.startedAt,
+    endsAt: dates.endsAt,
+    active: enrollmentActive(row),
   };
 }
 
@@ -166,19 +230,20 @@ export function listEnrollments({ userId, admin } = {}) {
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
-export function enrollStrategy({ user, algo, channel, admins } = {}) {
+export function enrollStrategy({ user, algo, channel, term, admins } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   if (!algo?.id) throw fail("Strategy not found.", 404);
   const pub = publicPayments(admins);
   if (!pub.ready) throw fail("Admin has not set a GPay / PhonePe mobile yet. Ask the desk to add it in Settings.");
   const wanted = channel === "phonepe" ? "phonepe" : "gpay";
+  const wantedTerm = normalizePlanTerm(term);
   const catalog = catalogStrategy(algo, payments);
-  const existing = enrollments.find(
-    (row) => row.userId === user.id && row.strategyId === algo.id && (row.status === "paid" || row.status === "pending"),
-  );
-  if (existing?.status === "paid") {
-    return { enrollment: publicEnroll(existing), payments: pub, links: null, already: true };
+  const amount = feeForTerm(catalog.enrollFee, wantedTerm);
+  const activePaid = enrollments.find((row) => row.userId === user.id && row.strategyId === algo.id && enrollmentActive(row));
+  if (activePaid) {
+    return { enrollment: publicEnroll(activePaid), payments: pub, links: null, already: true };
   }
+  const existing = enrollments.find((row) => row.userId === user.id && row.strategyId === algo.id && row.status === "pending");
   const row = existing || {
     id: `en${crypto.randomBytes(8).toString("hex")}`,
     userId: user.id,
@@ -186,23 +251,28 @@ export function enrollStrategy({ user, algo, channel, admins } = {}) {
     userEmail: user.email || "",
     strategyId: algo.id,
     strategyName: catalog.name,
-    amount: catalog.enrollFee,
+    amount,
+    term: wantedTerm,
     channel: wanted,
     status: "pending",
     payeeMobile: pub.mobile,
     createdAt: new Date().toISOString(),
   };
   row.channel = wanted;
-  row.amount = catalog.enrollFee;
+  row.term = wantedTerm;
+  row.amount = amount;
   row.strategyName = catalog.name;
   row.payeeMobile = pub.mobile;
+  row.startedAt = "";
+  row.endsAt = "";
+  row.paidAt = "";
   if (!existing) enrollments.unshift(row);
   persistEnrollments();
   const links = buildUpiLinks({
     vpa: pub.upiId,
     payeeName: pub.payeeName,
     amount: row.amount,
-    note: `T2S ${catalog.name}`.slice(0, 50),
+    note: `T2S ${catalog.name} ${wantedTerm}`.slice(0, 50),
   });
   return { enrollment: publicEnroll(row), payments: pub, links, already: false };
 }
@@ -212,8 +282,25 @@ export function markEnrollmentPaid({ user, enrollmentId } = {}) {
   const row = enrollments.find((item) => item.id === enrollmentId);
   if (!row) throw fail("Enrollment not found.", 404);
   if (row.userId !== user.id && user.role !== "admin") throw fail("Enrollment not found.", 404);
+  const now = new Date().toISOString();
   row.status = "paid";
-  row.paidAt = new Date().toISOString();
+  row.paidAt = now;
+  row.term = normalizePlanTerm(row.term);
+  const window = planWindow({ startedAt: now, term: row.term });
+  row.startedAt = window.startedAt;
+  row.endsAt = window.endsAt;
+  persistEnrollments();
+  return publicEnroll(row);
+}
+
+export function abandonEnrollment({ user, enrollmentId } = {}) {
+  if (!user?.id) throw fail("Sign in first.", 401);
+  const row = enrollments.find((item) => item.id === enrollmentId);
+  if (!row) throw fail("Enrollment not found.", 404);
+  if (row.userId !== user.id && user.role !== "admin") throw fail("Enrollment not found.", 404);
+  if (row.status === "paid") throw fail("Paid enrollments cannot be cancelled.");
+  row.status = "abandoned";
+  row.abandonedAt = new Date().toISOString();
   persistEnrollments();
   return publicEnroll(row);
 }

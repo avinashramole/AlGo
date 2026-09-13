@@ -22,7 +22,6 @@ import { ReportScreen } from "./src/screens/ReportScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { SignalsScreen } from "./src/screens/SignalsScreen";
 import { MemberPlansScreen } from "./src/screens/MemberPlansScreen";
-import { SubscriptionsScreen } from "./src/screens/SubscriptionsScreen";
 import { TradeScreen } from "./src/screens/TradeScreen";
 import { colors } from "./src/theme";
 
@@ -47,8 +46,7 @@ function Tabs() {
       {admin ? <Tab.Screen name="Signals" component={SignalsScreen} /> : null}
       {admin ? <Tab.Screen name="Algo" component={AlgoScreen} /> : null}
       {admin ? <Tab.Screen name="Portfolio" component={PortfolioScreen} /> : null}
-      {!admin ? <Tab.Screen name="Plans" component={SubscriptionsScreen} /> : null}
-      {!admin ? <Tab.Screen name="Report" component={MemberPlansScreen} /> : null}
+      {!admin ? <Tab.Screen name="My plan" component={MemberPlansScreen} /> : null}
       {!admin ? <Tab.Screen name="Profile" component={ProfileScreen} /> : null}
     </Tab.Navigator>
   );

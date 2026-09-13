@@ -7,7 +7,6 @@ import {
   Building2,
   ClipboardList,
   Cpu,
-  CreditCard,
   FileText,
   Home,
   Wallet,
@@ -31,7 +30,6 @@ import { cn } from "../../lib/format";
 
 const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean; member?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/subscriptions", label: "Subscriptions", icon: CreditCard, member: true },
   { to: "/plans", label: "My plan", icon: Wallet, member: true },
   { to: "/markets", label: "Markets", icon: BarChart3, admin: true },
   { to: "/options", label: "Chain", icon: Layers, admin: true },

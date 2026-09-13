@@ -123,7 +123,7 @@ export function Settings() {
       <section className="card p-4">
         <div className="text-sm font-bold">GPay / PhonePe enrollments</div>
         <p className="mt-1 text-xs text-slate-400">
-          Members pay this amount to your GPay or PhonePe mobile when they tap Enroll. Use the 10-digit number linked to those apps. Optional UPI ID example: 98xxxxxxxx@ybl (PhonePe) or 98xxxxxxxx@okicici (GPay).
+          Members pay this monthly amount — or 3× quarterly / 12× yearly — to your GPay or PhonePe mobile when they tap Enroll. Use the 10-digit number linked to those apps. Optional UPI ID example: 98xxxxxxxx@ybl (PhonePe) or 98xxxxxxxx@okicici (GPay).
         </p>
         <form
           className="mt-3 grid gap-2 sm:grid-cols-2"
@@ -171,7 +171,11 @@ export function Settings() {
             {enrolls.slice(0, 12).map((row) => (
               <div key={row.id} className="flex justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
                 <span className="font-semibold">{row.userName || row.userEmail}</span>
-                <span className="text-slate-500">{row.strategyName}</span>
+                <span className="text-slate-500">
+                  {row.strategyName}
+                  {row.term ? ` · ${row.term}` : ""}
+                  {row.startedAt ? ` · ${row.startedAt.slice(0, 10)} to ${(row.endsAt || "").slice(0, 10)}` : ""}
+                </span>
                 <span className="uppercase">{row.status}</span>
               </div>
             ))}

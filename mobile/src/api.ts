@@ -386,10 +386,13 @@ export function getMe(token: string) {
   return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
 }
 
+export type PlanTerm = "monthly" | "quarterly" | "yearly";
+
 export type CatalogStrategy = {
   id: string;
   name: string;
   enrollFee: number;
+  terms?: Record<PlanTerm, number>;
 };
 
 export type PaymentPublic = {
@@ -406,7 +409,11 @@ export type Enrollment = {
   strategyId: string;
   strategyName: string;
   amount: number;
+  term?: PlanTerm | string;
   status: string;
+  startedAt?: string;
+  endsAt?: string;
+  active?: boolean;
 };
 
 export type UpiLinks = { upi: string; gpay: string; phonepe: string; qr?: string };
@@ -419,15 +426,19 @@ export function listEnrollments() {
   return request<{ enrollments: Enrollment[] }>("/subscriptions");
 }
 
-export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe") {
-  return request<{ enrollment: Enrollment; payments: PaymentPublic; links: UpiLinks | null }>(
+export function enrollStrategy(strategyId: string, channel: "gpay" | "phonepe", term: PlanTerm = "monthly") {
+  return request<{ enrollment: Enrollment; payments: PaymentPublic; links: UpiLinks | null; already?: boolean }>(
     "/subscriptions/enroll",
-    { method: "POST", body: JSON.stringify({ strategyId, channel }) },
+    { method: "POST", body: JSON.stringify({ strategyId, channel, term }) },
   );
 }
 
 export function confirmEnrollmentPaid(id: string) {
   return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/paid`, { method: "POST" });
+}
+
+export function abandonEnrollment(id: string) {
+  return request<{ enrollment: Enrollment }>(`/subscriptions/${id}/abandon`, { method: "POST" });
 }
 
 export type MemberBrokerChoice = {
@@ -457,7 +468,16 @@ export type MemberDesk = {
   autoTrade?: boolean;
   install?: MemberBrokerInstall;
   brokers: MemberBrokerChoice[];
-  plans: Array<{ strategyId: string; strategyName: string; realizedPnl: number; unrealizedPnl: number; netPnl: number }>;
+  plans: Array<{
+    strategyId: string;
+    strategyName: string;
+    realizedPnl: number;
+    unrealizedPnl: number;
+    netPnl: number;
+    term?: string;
+    startedAt?: string;
+    endsAt?: string;
+  }>;
   report: { realizedPnl: number; unrealizedPnl: number; netPnl: number; winRate: number };
   positions: Array<{ id: string; symbol: string; pnl: number; strategy?: string; ltp: number; qty: number }>;
   payments: PaymentPublic;
