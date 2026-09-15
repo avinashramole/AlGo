@@ -19,14 +19,24 @@ export function chainIdFromIndex(symbol: string) {
   return "";
 }
 
+type ChainCardStats = {
+  spot: string;
+  atm: string;
+  pcr: string;
+  maxPain: string;
+  atmIv: string;
+};
+
 type TickerStripProps = {
   selectedId?: string;
   onSelect?: (chainId: string) => void;
+  chainStats?: ChainCardStats;
 };
 
-export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
+export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripProps = {}) {
   const { data, order } = useMarket();
   const [busy, setBusy] = useState("");
+  const watchBySymbol = new Map((data.marketWatch || []).map((row) => [row.symbol, row]));
 
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
     const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
@@ -63,6 +73,7 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
         const chainId = chainIdFromIndex(item.symbol);
         const selectable = Boolean(onSelect && chainId);
         const selected = selectable && chainId === selectedId;
+        const volume = watchBySymbol.get(item.symbol)?.volume || (showDeriv ? "Live" : "—");
         return (
           <div
             key={item.symbol}
@@ -108,13 +119,40 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Lot</div>
-                  <div className="text-sm font-bold">{item.lot ? `1 lot = ${item.lot}` : "—"}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    {onSelect ? "Volume" : "Lot"}
+                  </div>
+                  <div className="text-sm font-bold">{onSelect ? volume : item.lot ? `1 lot = ${item.lot}` : "—"}</div>
+                  {onSelect && item.lot ? <div className="text-[10px] text-slate-400">1 lot = {item.lot}</div> : null}
                 </div>
+              </div>
+            ) : null}
+            {selected && chainStats ? (
+              <div className="mt-2 grid grid-cols-5 gap-1 border-t border-[var(--border)] pt-2">
+                <ChainStat label="Spot" value={chainStats.spot} />
+                <ChainStat label="ATM" value={chainStats.atm} />
+                <ChainStat label="PCR" value={chainStats.pcr} />
+                <ChainStat label="Max pain" value={chainStats.maxPain} />
+                <ChainStat label="ATM IV" value={chainStats.atmIv} />
               </div>
             ) : null}
             {showDeriv ? (
               <div className="mt-2 flex gap-1">
+                {selectable ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect?.(chainId);
+                    }}
+                    className={cn(
+                      "h-10 rounded-md px-2 text-xs font-bold disabled:opacity-50 md:h-7 md:text-[10px]",
+                      selected ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--bg)]",
+                    )}
+                  >
+                    Chain
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={Boolean(busy)}
@@ -142,6 +180,15 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ChainStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="text-xs font-bold leading-tight">{value}</div>
     </div>
   );
 }
