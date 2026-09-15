@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { cn, formatChange, formatNumber, formatPct } from "../../lib/format";
+import { cn, formatChange, formatNumber, formatPct, vwapTone } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
+
+function cardVwap(item: { future?: number; price: number; vwap?: number; futureVwap?: number }) {
+  const vwap = Number(item.futureVwap || item.vwap);
+  return vwap > 0 ? vwap : 0;
+}
 
 export function TickerStrip() {
   const { data, order } = useMarket();
@@ -37,6 +42,8 @@ export function TickerStrip() {
         const up = item.change >= 0;
         const showDeriv = item.symbol !== "INDIA VIX";
         const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.name || item.symbol;
+        const vwap = cardVwap(item);
+        const futureLtp = item.future || item.price;
         return (
           <div key={item.symbol} className="card px-4 py-3">
             <div className="flex items-start justify-between gap-3">
@@ -50,11 +57,17 @@ export function TickerStrip() {
               <Sparkline data={item.spark || [item.price]} up={up} />
             </div>
             {showDeriv ? (
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-2">
+              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-2">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Future</div>
-                  <div className="text-sm font-bold">{formatNumber(item.future || item.price)}</div>
+                  <div className="text-sm font-bold">{formatNumber(futureLtp)}</div>
                   <div className="text-[10px] text-slate-400">{item.futureExpiry || ""}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">VWAP</div>
+                  <div className={cn("text-sm font-bold", vwapTone(vwap, futureLtp))}>
+                    {vwap ? formatNumber(vwap) : "—"}
+                  </div>
                 </div>
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Lot</div>

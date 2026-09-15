@@ -6,7 +6,7 @@ import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
-import { colors, formatInr, formatIst, formatNumber, formatPct, isNseSessionOpen } from "../theme";
+import { colors, formatInr, formatIst, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
 
 function MemberHome() {
   const navigation = useNavigation<any>();
@@ -159,7 +159,7 @@ export function HomeScreen() {
           const showDeriv = item.symbol !== "INDIA VIX";
           return (
             <Card key={item.symbol}>
-              <View style={{ width: 168 }}>
+              <View style={{ width: 200 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
                 <Text style={styles.price}>{formatNumber(item.price)}</Text>
                 <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
@@ -170,6 +170,12 @@ export function HomeScreen() {
                     <View>
                       <Text style={styles.tiny}>FUT</Text>
                       <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                    </View>
+                    <View>
+                      <Text style={styles.tiny}>VWAP</Text>
+                      <Text style={[styles.deskVal, { color: vwapColor(Number(item.futureVwap || item.vwap), item.future || item.price) }]}>
+                        {Number(item.futureVwap || item.vwap) > 0 ? formatNumber(Number(item.futureVwap || item.vwap)) : "—"}
+                      </Text>
                     </View>
                     <View>
                       <Text style={styles.tiny}>LOT</Text>
