@@ -22,6 +22,8 @@ const {
   loginWithGoogleCode,
   loginWithPassword,
   listPublicUsers,
+  notifyLogin,
+  GMAIL_SMTP_TIMEOUT_MS,
   requestOtp,
   resolveUserRole,
   safeFrontendOrigin,
@@ -404,4 +406,16 @@ test("name-only profile update keeps the saved admin mobile after disk reload", 
   assert.equal(fromUsers.mobile, "9876508882");
   const afterReload = updateProfile(session.token, { name: "Avinash Ramole" });
   assert.equal(afterReload.user.mobile, "9876508882");
+});
+
+test("notifyLogin returns quickly when Gmail is not configured", async () => {
+  const started = Date.now();
+  const result = await notifyLogin({ name: "Avinash", email: "avinash.ramole86@gmail.com" });
+  assert.ok(Date.now() - started < 500);
+  assert.equal(result.delivered, false);
+});
+
+test("Gmail SMTP timeout is short enough to beat an nginx 504", () => {
+  assert.equal(GMAIL_SMTP_TIMEOUT_MS, 4000);
+  assert.ok(GMAIL_SMTP_TIMEOUT_MS < 15_000);
 });

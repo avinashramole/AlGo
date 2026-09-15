@@ -19,6 +19,7 @@ import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import type { SocialProvider } from "../api/client";
 import { PreviewDeskBanner } from "../lib/deskHost";
+import { publicDeskError } from "../lib/liveSite";
 import "../login.css";
 
 function looksLikeMobile(value: string) {
@@ -642,7 +643,7 @@ function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: 
     <>
       {hint ? <p className="t2s-hint">{hint}</p> : null}
       {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
-      {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
+      {error ? <div className="t2s-alert t2s-alert-err">{publicDeskError(error)}</div> : null}
     </>
   );
 }

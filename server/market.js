@@ -1032,7 +1032,19 @@ export function restoreSimulatedDesk() {
   syncPaperLedger();
 }
 
+let tickBusy = false;
+
 export function tickMarket() {
+  if (tickBusy) return;
+  tickBusy = true;
+  try {
+    tickMarketBody();
+  } finally {
+    tickBusy = false;
+  }
+}
+
+function tickMarketBody() {
   if (state.dhanFeed.live) {
     runPaperAlgos();
     runLiveAlgos();
