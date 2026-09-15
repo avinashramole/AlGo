@@ -7,6 +7,7 @@ import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
 import { colors, formatInr, formatIst, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
+import { catchDeskError } from "../liveSite";
 
 function MemberHome() {
   const navigation = useNavigation<any>();
@@ -137,7 +138,7 @@ export function HomeScreen() {
       });
       Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${root} FUT`);
     } catch (err) {
-      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+      Alert.alert("Order failed", catchDeskError(err, "Try again"));
     }
   };
 

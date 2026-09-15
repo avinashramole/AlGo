@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { confirmEnrollmentPaid, connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, saveUserContact, type Enrollment, type WalletTopup } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
+import { catchDeskError } from "../lib/liveSite";
 
 export function Settings() {
   const { user, applyUser, logout } = useAuth();
@@ -68,7 +69,7 @@ export function Settings() {
       setAppPassword("");
       setMailNote("Gmail connected. Login codes and notices will be emailed.");
     } catch (err) {
-      setMailNote(err instanceof Error ? err.message : "Gmail connect failed");
+      setMailNote(catchDeskError(err, "Gmail connect failed"));
     } finally {
       setMailBusy(false);
     }
@@ -153,7 +154,7 @@ export function Settings() {
                 }
                 setPayNote("Payment number saved on the admin account. Member enrollments will send money here.");
               })
-              .catch((err) => setPayNote(err instanceof Error ? err.message : "Could not save"))
+              .catch((err) => setPayNote(catchDeskError(err, "Could not save")))
               .finally(() => setPayBusy(false));
           }}
         >

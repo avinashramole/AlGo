@@ -1032,7 +1032,19 @@ export function restoreSimulatedDesk() {
   syncPaperLedger();
 }
 
+let tickBusy = false;
+
 export function tickMarket() {
+  if (tickBusy) return;
+  tickBusy = true;
+  try {
+    tickMarketBody();
+  } finally {
+    tickBusy = false;
+  }
+}
+
+function tickMarketBody() {
   if (state.dhanFeed.live) {
     runPaperAlgos();
     runLiveAlgos();
@@ -1205,7 +1217,8 @@ export function snapshot() {
     const key = row.brokerId || "dhan";
     byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
   }
-  const { liveCandles: _liveCandles, closedTrades: _closedTrades, ...publicState } = clone(state);
+  const { liveCandles: _omitLiveCandles, closedTrades: _omitClosedTrades, ...rest } = state;
+  const publicState = clone(rest);
   const liveState = { ...publicState, orders, positions, closedTrades };
   liveState.algos = (liveState.algos || []).map((algo) => ({ ...algo, trade: resolveAlgoTrade(algo) }));
   const dnaScores = buildLiveDna({ indices: publicState.indices, optionChain: publicState.optionChain });

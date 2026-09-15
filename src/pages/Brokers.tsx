@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMarket } from "../context/MarketContext";
 import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
+import { catchDeskError } from "../lib/liveSite";
 
 export function Brokers() {
   const { data, connect, enableAuto, refreshToken, disconnect, activate } = useMarket();
@@ -60,7 +61,7 @@ export function Brokers() {
       setSelected(null);
       setSecret("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect");
+      setError(catchDeskError(err, "Could not connect"));
     } finally {
       setBusy(false);
     }
@@ -80,7 +81,7 @@ export function Brokers() {
       setDhanPin("");
       setDhanTotp("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate token");
+      setError(catchDeskError(err, "Could not generate token"));
     } finally {
       setBusy(false);
     }
@@ -100,7 +101,7 @@ export function Brokers() {
       setDhanPin("");
       setDhanTotp("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reset token");
+      setError(catchDeskError(err, "Could not reset token"));
     } finally {
       setBusy(false);
     }
@@ -112,7 +113,7 @@ export function Brokers() {
     try {
       await submitDhan(dhanClientId, dhanToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect");
+      setError(catchDeskError(err, "Could not connect"));
     } finally {
       setBusy(false);
     }

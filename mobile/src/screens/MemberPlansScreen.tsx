@@ -16,6 +16,7 @@ import {
 } from "../api";
 import { Card } from "../components/Ui";
 import { colors, formatInr, formatIstDate, formatPlanTerm } from "../theme";
+import { catchDeskError } from "../liveSite";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -36,7 +37,7 @@ export function MemberPlansScreen() {
         setStrategies(catalog.strategies || []);
         setEnrollments(mine.enrollments || []);
       })
-      .catch((err) => Alert.alert("My plan", err instanceof Error ? err.message : "Could not load"));
+      .catch((err) => Alert.alert("My plan", catchDeskError(err, "Could not load")));
   }, []);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export function MemberPlansScreen() {
             onPress: () =>
               void claimEnrollmentPaid(result.enrollment.id)
                 .then(load)
-                .catch((err) => Alert.alert("Payment", err instanceof Error ? err.message : "Could not send claim")),
+                .catch((err) => Alert.alert("Payment", catchDeskError(err, "Could not send claim"))),
           },
           {
             text: "Close",
@@ -83,7 +84,7 @@ export function MemberPlansScreen() {
         ],
       );
     } catch (err) {
-      Alert.alert("Enroll", err instanceof Error ? err.message : "Could not enroll");
+      Alert.alert("Enroll", catchDeskError(err, "Could not enroll"));
     } finally {
       setBusy("");
     }
@@ -162,7 +163,7 @@ export function MemberPlansScreen() {
               onPress={() =>
                 void selectMemberBroker(row.id)
                   .then(load)
-                  .catch((err) => Alert.alert("Broker", err instanceof Error ? err.message : "Could not select"))
+                  .catch((err) => Alert.alert("Broker", catchDeskError(err, "Could not select")))
               }
             >
               <Text style={[styles.chipText, row.selected && styles.chipTextOn]}>
@@ -192,7 +193,7 @@ export function MemberPlansScreen() {
                     setApiKey("");
                     load();
                   })
-                  .catch((err) => Alert.alert("Broker token", err instanceof Error ? err.message : "Could not save"))
+                  .catch((err) => Alert.alert("Broker token", catchDeskError(err, "Could not save")))
               }
             >
               <Text style={styles.btnText}>{busy === "creds" ? "Saving..." : "Save access token"}</Text>

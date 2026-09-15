@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { getPositionsDesk, type LedgerPosition, type PositionLedger, type PositionsDeskSnapshot } from "../api/client";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber } from "../lib/format";
+import { catchDeskError } from "../lib/liveSite";
 
 type ModeFilter = "all" | "paper" | "real";
 type SegmentFilter = "all" | "indian" | "crypto";
@@ -109,7 +110,7 @@ export function PositionsDesk() {
       setDesk(next);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load position ledgers");
+      setError(catchDeskError(err, "Could not load position ledgers"));
     } finally {
       setReady(true);
     }

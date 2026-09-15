@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatNumber, formatPct, vwapColor } from "../theme";
+import { catchDeskError } from "../liveSite";
 
 export function OptionsScreen() {
   const { data, selectChain, order } = useMarket();
@@ -49,7 +50,7 @@ export function OptionsScreen() {
         Alert.alert("Desk fill only", result.warning || `${action} ${symbol} · ${lot} qty. Connect live Access Token on Brokers to send this to Dhan.`);
       }
     } catch (err) {
-      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+      Alert.alert("Order failed", catchDeskError(err, "Try again"));
     }
   };
 
@@ -69,7 +70,7 @@ export function OptionsScreen() {
       });
       Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${row.name || row.symbol}`);
     } catch (err) {
-      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+      Alert.alert("Order failed", catchDeskError(err, "Try again"));
     }
   };
 

@@ -281,13 +281,34 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       saveAlgo: async (payload: Record<string, unknown>) => {
         const id = String(payload.id || "");
         const result = id ? await updateAlgo(id, payload) : await createAlgo(payload);
-        if (result.snapshot) setData(result.snapshot);
-        else await refresh();
+        if (result.snapshot) {
+          setData(result.snapshot);
+          return;
+        }
+        if (result.algo) {
+          setData((current) => {
+            const next = result.algo as Snapshot["algos"][number];
+            const algos = current.algos || [];
+            const exists = algos.some((row) => row.id === next.id);
+            return {
+              ...current,
+              algos: exists ? algos.map((row) => (row.id === next.id ? { ...row, ...next } : row)) : [next, ...algos],
+            };
+          });
+        }
+        void refresh();
       },
       removeAlgo: async (id: string) => {
         const result = await deleteAlgo(id);
-        if (result.snapshot) setData(result.snapshot);
-        else await refresh();
+        if (result.snapshot) {
+          setData(result.snapshot);
+          return;
+        }
+        setData((current) => ({
+          ...current,
+          algos: (current.algos || []).filter((row) => row.id !== id),
+        }));
+        void refresh();
       },
       backtest: async (id: string, options?: BacktestOptions) => {
         const result = await backtestAlgo(id, options);

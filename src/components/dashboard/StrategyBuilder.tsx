@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn } from "../../lib/format";
+import { catchDeskError } from "../../lib/liveSite";
 import {
   INDICATORS,
   OPERATORS,
@@ -120,7 +121,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       await saveAlgo({ ...form, id: algo?.id });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save strategy");
+      setError(catchDeskError(err, "Could not save strategy"));
     } finally {
       setBusy(false);
     }

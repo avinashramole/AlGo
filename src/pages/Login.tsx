@@ -19,6 +19,7 @@ import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import type { SocialProvider } from "../api/client";
 import { PreviewDeskBanner } from "../lib/deskHost";
+import { publicDeskError, catchDeskError } from "../lib/liveSite";
 import "../login.css";
 
 function looksLikeMobile(value: string) {
@@ -137,7 +138,7 @@ export function Login() {
       applyOtpResult(result);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send code");
+      setError(catchDeskError(err, "Could not send code"));
       return false;
     } finally {
       setLoading(false);
@@ -150,7 +151,7 @@ export function Login() {
     try {
       await startGoogleLogin();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Google login failed");
+      setError(catchDeskError(err, "Google login failed"));
       setLoading(false);
     }
   };
@@ -182,7 +183,7 @@ export function Login() {
         await resetPassword({ identifier, otp: code, password }, remember);
         navigate("/", { replace: true });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not reset password");
+        setError(catchDeskError(err, "Could not reset password"));
       } finally {
         setLoading(false);
       }
@@ -216,7 +217,7 @@ export function Login() {
           await signup({ name, email: identifier, identifier, mobile, otp: code, password, channel: "gmail" }, remember);
           navigate("/", { replace: true });
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Sign up failed");
+          setError(catchDeskError(err, "Sign up failed"));
         } finally {
           setLoading(false);
         }
@@ -235,7 +236,7 @@ export function Login() {
         await signup({ name, email: identifier, identifier, mobile, password, channel: "gmail" }, remember);
         navigate("/", { replace: true });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Sign up failed");
+        setError(catchDeskError(err, "Sign up failed"));
       } finally {
         setLoading(false);
       }
@@ -248,7 +249,7 @@ export function Login() {
         await verifyOtp(identifier, code, remember);
         navigate("/", { replace: true });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not verify code");
+        setError(catchDeskError(err, "Could not verify code"));
       } finally {
         setLoading(false);
       }
@@ -265,7 +266,7 @@ export function Login() {
       await login(identifier || "demo@t2s.app", password, remember);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign in failed");
+      setError(catchDeskError(err, "Sign in failed"));
     } finally {
       setLoading(false);
     }
@@ -642,7 +643,7 @@ function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: 
     <>
       {hint ? <p className="t2s-hint">{hint}</p> : null}
       {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
-      {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
+      {error ? <div className="t2s-alert t2s-alert-err">{publicDeskError(error)}</div> : null}
     </>
   );
 }

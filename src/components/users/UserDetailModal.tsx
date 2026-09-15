@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { SideBadge } from "../desk/Badges";
 import { cn, formatInr, formatIst, formatIstDate, formatMobile, formatNumber, formatPlanTerm } from "../../lib/format";
+import { catchDeskError } from "../../lib/liveSite";
 
 export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () => void }) {
   const [detail, setDetail] = useState<ClientDetail | null>(null);
@@ -20,7 +21,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
       setDetail(await getClientDetail(row.id));
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load user details");
+      setError(catchDeskError(err, "Could not load user details"));
     }
   }, [row.id]);
 
@@ -35,7 +36,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
       await confirmEnrollmentPaid(id);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not confirm payment");
+      setError(catchDeskError(err, "Could not confirm payment"));
     } finally {
       setBusyId("");
     }
@@ -49,7 +50,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
       await deleteEnrollment(id);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete subscription");
+      setError(catchDeskError(err, "Could not delete subscription"));
     } finally {
       setBusyId("");
     }

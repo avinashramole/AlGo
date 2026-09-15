@@ -319,12 +319,22 @@ function loadGmailCreds() {
 
 let gmailCreds = loadGmailCreds();
 
+export const GMAIL_SMTP_TIMEOUT_MS = 4000;
+
 function gmailReady() {
   return Boolean(gmailCreds.user && gmailCreds.pass);
 }
 
 function allowOnScreenOtp() {
   return process.env.T2S_SHOW_OTP === "1";
+}
+
+function smtpTimeouts() {
+  return {
+    connectionTimeout: GMAIL_SMTP_TIMEOUT_MS,
+    greetingTimeout: GMAIL_SMTP_TIMEOUT_MS,
+    socketTimeout: GMAIL_SMTP_TIMEOUT_MS,
+  };
 }
 
 function gmailTransport(port = 465) {
@@ -334,6 +344,7 @@ function gmailTransport(port = 465) {
       host: "smtp.gmail.com",
       port: 587,
       secure: false,
+      ...smtpTimeouts(),
       auth: { user: gmailCreds.user, pass: gmailCreds.pass },
     });
   }
@@ -341,6 +352,7 @@ function gmailTransport(port = 465) {
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
+    ...smtpTimeouts(),
     auth: { user: gmailCreds.user, pass: gmailCreds.pass },
   });
 }
@@ -361,6 +373,7 @@ export async function connectGmail({ email, appPassword } = {}) {
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
+    ...smtpTimeouts(),
     auth: { user, pass },
   });
   try {
@@ -381,7 +394,12 @@ async function sendMail({ to, subject, text, html }) {
     try {
       const transport = gmailTransport(port);
       if (!transport) return { delivered: false, reason: "gmail-not-configured" };
-      await transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html });
+      await Promise.race([
+        transport.sendMail({ from: `T2S Algo <${gmailCreds.user}>`, to, subject, text, html }),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("smtp-timeout")), GMAIL_SMTP_TIMEOUT_MS);
+        }),
+      ]);
       return { delivered: true };
     } catch (err) {
       lastError = err;
@@ -413,16 +431,25 @@ export async function notifyLogin(user) {
   if (!isGmail(email) || !gmailReady()) return { delivered: false };
   const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   try {
-    return await sendMail({
-      to: email,
-      subject: `T2S login · ${user.name || "desk"}`,
-      text: `Hi ${user.name || "there"},\n\nYou signed in to T2S Algo Desk at ${when} IST.\nAccount: ${email}${user.mobile ? ` / ${user.mobile}` : ""}\n\nIf this was not you, change your password.\n`,
-      html: `<p>Hi ${user.name || "there"},</p><p>You signed in to <strong>T2S Algo Desk</strong> at <strong>${when} IST</strong>.</p><p>Account: ${email}${user.mobile ? ` · ${user.mobile}` : ""}</p>`,
-    });
+    return await Promise.race([
+      sendMail({
+        to: email,
+        subject: `T2S login · ${user.name || "desk"}`,
+        text: `Hi ${user.name || "there"},\n\nYou signed in to T2S Algo Desk at ${when} IST.\nAccount: ${email}${user.mobile ? ` / ${user.mobile}` : ""}\n\nIf this was not you, change your password.\n`,
+        html: `<p>Hi ${user.name || "there"},</p><p>You signed in to <strong>T2S Algo Desk</strong> at <strong>${when} IST</strong>.</p><p>Account: ${email}${user.mobile ? ` · ${user.mobile}` : ""}</p>`,
+      }),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("login-mail-timeout")), GMAIL_SMTP_TIMEOUT_MS);
+      }),
+    ]);
   } catch (err) {
     console.log(`Login mail failed: ${err.message || err}`);
     return { delivered: false, error: err.message };
   }
+}
+
+export function queueLoginNotice(user) {
+  void notifyLogin(user).catch((err) => console.log(`Login mail failed: ${err.message || err}`));
 }
 
 function otpKey(channel, identifier) {

@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { formatNumber } from "../../lib/format";
+import { catchDeskError } from "../../lib/liveSite";
 
 type Props = {
   open: boolean;
@@ -32,7 +33,7 @@ export function TradeModal({ open, onClose }: Props) {
       }
       onClose();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Order failed");
+      window.alert(catchDeskError(err, "Order failed"));
     } finally {
       setBusy(false);
     }

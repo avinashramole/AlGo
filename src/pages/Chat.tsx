@@ -12,6 +12,7 @@ import {
   type MessagingMessage,
 } from "../api/client";
 import { cn, formatMobile } from "../lib/format";
+import { catchDeskError } from "../lib/liveSite";
 
 type SendVia = "both" | "whatsapp" | "telegram";
 
@@ -41,7 +42,7 @@ export function Chat() {
   }, []);
 
   useEffect(() => {
-    void load().catch((err) => setNote(err instanceof Error ? err.message : "Could not load messages"));
+    void load().catch((err) => setNote(catchDeskError(err, "Could not load messages")));
   }, [load]);
 
   useEffect(() => {
@@ -94,7 +95,7 @@ export function Chat() {
       if (result.warnings?.length) setNote(result.warnings.join(" "));
       await load();
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "Send failed");
+      setNote(catchDeskError(err, "Send failed"));
     } finally {
       setBusy(false);
     }
@@ -347,7 +348,7 @@ function ConfigModal({
       });
       await onSaved(via);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(catchDeskError(err, "Could not save"));
     } finally {
       setBusy(false);
     }
@@ -400,7 +401,7 @@ function ContactModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id:
       const result = await addMessagingContact({ name, mobile, telegramId, broker });
       await onSaved(result.contact.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add contact");
+      setError(catchDeskError(err, "Could not add contact"));
     } finally {
       setBusy(false);
     }
@@ -451,7 +452,7 @@ function BroadcastModal({
       const result = await broadcastMessaging({ text, via: sendVia });
       await onSent(`Broadcast sent to ${result.sent} client${result.sent === 1 ? "" : "s"}${result.failed ? ` · ${result.failed} skipped` : ""}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Broadcast failed");
+      setError(catchDeskError(err, "Broadcast failed"));
     } finally {
       setBusy(false);
     }

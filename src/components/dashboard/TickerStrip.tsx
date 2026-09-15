@@ -2,6 +2,7 @@ import { useState } from "react";
 import { cn, formatChange, formatNumber, formatPct, vwapTone } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
+import { catchDeskError } from "../../lib/liveSite";
 
 function cardVwap(item: { future?: number; price: number; vwap?: number; futureVwap?: number }) {
   const vwap = Number(item.futureVwap || item.vwap);
@@ -30,7 +31,7 @@ export function TickerStrip() {
         exchangeSegment: item.futureSegment,
       });
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Order failed");
+      window.alert(catchDeskError(err, "Order failed"));
     } finally {
       setBusy("");
     }

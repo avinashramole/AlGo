@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, queueLoginNotice, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
@@ -126,6 +126,15 @@ async function flushLiveAlgoOrders() {
   }
 }
 
+function safeSnapshot() {
+  try {
+    return snapshot();
+  } catch (error) {
+    console.log(`Desk snapshot failed: ${error.message || error}`);
+    return null;
+  }
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "t2s-api", time: new Date().toISOString() });
 });
@@ -161,7 +170,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
     });
     try {
-      await notifyLogin(result.user);
+      queueLoginNotice(result.user);
     } catch (mailError) {
       console.error("[auth] Google login mail failed:", mailError?.message || mailError);
     }
@@ -175,8 +184,8 @@ app.get("/api/auth/google/callback", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Login failed" });
   }
@@ -209,8 +218,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       purpose: req.body?.purpose,
     });
     if (result.token) {
-      const mail = await notifyLogin(result.user);
-      res.json({ ...result, mail });
+      queueLoginNotice(result.user);
+      res.json(result);
       return;
     }
     res.json(result);
@@ -222,8 +231,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 app.post("/api/auth/reset", async (req, res) => {
   try {
     const result = resetPassword(req.body || {});
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not reset password" });
   }
@@ -232,8 +241,8 @@ app.post("/api/auth/reset", async (req, res) => {
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const result = completeSignup(req.body || {});
-    const mail = await notifyLogin(result.user);
-    res.status(201).json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Sign up failed" });
   }
@@ -251,8 +260,8 @@ app.post("/api/auth/thumb/enable", (req, res) => {
 app.post("/api/auth/thumb", async (req, res) => {
   try {
     const result = loginWithThumb(req.body?.thumbToken);
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
   }
@@ -403,7 +412,7 @@ app.get("/api/member/quotes", (req, res) => {
 app.get("/api/member/desk", (req, res) => {
   try {
     const user = memberAuth(req);
-    const snap = snapshot();
+    const snap = safeSnapshot() || {};
     res.json(
       getMemberDesk({
         user,
@@ -503,7 +512,7 @@ app.get("/api/clients", (_req, res) => {
 
 app.get("/api/clients/:id/detail", (req, res) => {
   try {
-    const snap = snapshot();
+    const snap = safeSnapshot() || {};
     res.json(
       getClientDetail({
         userId: req.params.id,
@@ -626,16 +635,28 @@ app.post("/api/auth/gmail", async (req, res) => {
 });
 
 app.get("/api/snapshot", (_req, res) => {
-  res.json(snapshot());
+  try {
+    res.json(snapshot());
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load desk" });
+  }
 });
 
 app.get("/api/mtm", (_req, res) => {
-  res.json(deskMtm());
+  try {
+    res.json(deskMtm());
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load MTM" });
+  }
 });
 
 app.get("/api/positions/desk", (_req, res) => {
-  const snap = snapshot();
-  res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
+  try {
+    const snap = snapshot();
+    res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load positions" });
+  }
 });
 
 app.get("/api/brokers", (_req, res) => {
@@ -666,7 +687,7 @@ app.post("/api/brokers/dhan/auto", async (req, res) => {
       tokenExpiry: result.tokenExpiry,
       nextRenewAt: result.nextRenewAt,
       account: publicBrokers().brokers.find((item) => item.id === "dhan"),
-      snapshot: snapshot(),
+      snapshot: safeSnapshot(),
     });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not generate Dhan token" });
@@ -689,7 +710,7 @@ async function handleDhanTokenReset(req, res) {
       tokenExpiry: result.tokenExpiry,
       nextRenewAt: result.nextRenewAt,
       account: publicBrokers().brokers.find((item) => item.id === "dhan"),
-      snapshot: snapshot(),
+      snapshot: safeSnapshot(),
     });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not reset Dhan token" });
@@ -711,7 +732,7 @@ app.post("/api/brokers/:id/connect", async (req, res) => {
         live: true,
         tokenHint: result.tokenHint,
         account: publicBrokers().brokers.find((item) => item.id === "dhan"),
-        snapshot: snapshot(),
+        snapshot: safeSnapshot(),
       });
       return;
     }
@@ -721,43 +742,59 @@ app.post("/api/brokers/:id/connect", async (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ ...result, live: true, snapshot: snapshot() });
+    res.json({ ...result, live: true, snapshot: safeSnapshot() });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Dhan connect failed" });
   }
 });
 
 app.post("/api/brokers/:id/disconnect", (req, res) => {
-  if (req.params.id === "dhan") {
-    stopDhanLive();
-    idleDhan();
-    res.json({ ok: true, stoppedLive: true, ...publicBrokers(), snapshot: snapshot() });
-    return;
+  try {
+    if (req.params.id === "dhan") {
+      stopDhanLive();
+      idleDhan();
+      res.json({ ok: true, stoppedLive: true, ...publicBrokers(), snapshot: safeSnapshot() });
+      return;
+    }
+    const result = disconnectBroker(req.params.id);
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    dropBrokerPositions(req.params.id);
+    res.json({ ...result, snapshot: safeSnapshot() });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not disconnect broker" });
   }
-  const result = disconnectBroker(req.params.id);
-  if (result.error) {
-    res.status(400).json({ error: result.error });
-    return;
-  }
-  dropBrokerPositions(req.params.id);
-  res.json({ ...result, snapshot: snapshot() });
 });
 
 app.post("/api/brokers/:id/activate", (req, res) => {
-  const result = activateBroker(req.params.id);
-  if (result.error) {
-    res.status(400).json({ error: result.error });
-    return;
+  try {
+    const result = activateBroker(req.params.id);
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ...result, snapshot: safeSnapshot() });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not activate broker" });
   }
-  res.json({ ...result, snapshot: snapshot() });
 });
 
 app.get("/api/candles", (req, res) => {
-  res.json(getCandles(String(req.query.tf || "5m")));
+  try {
+    res.json(getCandles(String(req.query.tf || "5m")));
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load candles" });
+  }
 });
 
 app.get("/api/option-chain", (_req, res) => {
-  res.json({ ...getOptionMeta(), rows: snapshot().optionChain });
+  try {
+    res.json({ ...getOptionMeta(), rows: snapshot().optionChain });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load option chain" });
+  }
 });
 
 app.get("/api/contracts", async (req, res) => {
@@ -780,61 +817,81 @@ app.post("/api/option-chain/select", async (req, res) => {
       symbol: String(req.body?.symbol || "NIFTY"),
       expiry: req.body?.expiry,
     });
-    res.json({ ok: true, meta: getOptionMeta(), snapshot: snapshot() });
+    res.json({ ok: true, meta: getOptionMeta(), snapshot: safeSnapshot() });
   } catch (error) {
     applySyntheticOptionChain(String(req.body?.symbol || "NIFTY"), req.body?.expiry);
-    res.status(error.status || 400).json({ error: error.message || "Option chain failed", snapshot: snapshot() });
+    res.status(error.status || 400).json({ error: error.message || "Option chain failed", snapshot: safeSnapshot() });
   }
 });
 
 app.post("/api/algos/:id/toggle", (req, res) => {
-  const current = getAlgo(req.params.id);
-  if (current && current.runMode === "live" && !current.enabled && !isDhanLive()) {
-    res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
-    return;
+  try {
+    const current = getAlgo(req.params.id);
+    if (current && current.runMode === "live" && !current.enabled && !isDhanLive()) {
+      res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
+      return;
+    }
+    const algo = toggleAlgo(req.params.id);
+    if (!algo) {
+      res.status(404).json({ error: "Algo not found" });
+      return;
+    }
+    if (algo.error) {
+      res.status(400).json({ error: algo.error });
+      return;
+    }
+    res.json({ ok: true, ...algo });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not toggle strategy" });
   }
-  const algo = toggleAlgo(req.params.id);
-  if (!algo) {
-    res.status(404).json({ error: "Algo not found" });
-    return;
-  }
-  if (algo.error) {
-    res.status(400).json({ error: algo.error, snapshot: snapshot() });
-    return;
-  }
-  res.json({ ...algo, snapshot: snapshot() });
 });
 
 app.post("/api/algos", (req, res) => {
-  const algo = createAlgo(req.body || {});
-  res.status(201).json({ ok: true, algo, snapshot: snapshot() });
+  try {
+    const algo = createAlgo(req.body || {});
+    res.status(201).json({ ok: true, algo, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
+  }
 });
 
 app.put("/api/algos/:id", (req, res) => {
-  const result = updateAlgo(req.params.id, req.body || {});
-  if (result.error) {
-    res.status(404).json({ error: result.error });
-    return;
+  try {
+    const result = updateAlgo(req.params.id, req.body || {});
+    if (result.error) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, algo: result, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
   }
-  res.json({ ok: true, algo: result, snapshot: snapshot() });
 });
 
 app.delete("/api/algos/:id", (req, res) => {
-  const result = deleteAlgo(req.params.id);
-  if (result.error) {
-    res.status(404).json({ error: result.error });
-    return;
+  try {
+    const result = deleteAlgo(req.params.id);
+    if (result.error) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...result, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not delete strategy" });
   }
-  res.json({ ok: true, ...result, snapshot: snapshot() });
 });
 
 app.post("/api/algos/:id/broker", (req, res) => {
-  const result = assignAlgoBroker(req.params.id, String(req.body?.brokerId || ""));
-  if (result.error) {
-    res.status(400).json({ error: result.error });
-    return;
+  try {
+    const result = assignAlgoBroker(req.params.id, String(req.body?.brokerId || ""));
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not assign broker" });
   }
-  res.json(result);
 });
 
 app.post("/api/algos/:id/backtest", async (req, res) => {
@@ -874,7 +931,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ ...result, snapshot: snapshot() });
+    res.json({ ...result, snapshot: safeSnapshot() });
   } catch (error) {
     res.status(400).json({ error: error.message || "Backtest failed" });
   }
@@ -882,7 +939,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
 
 app.post("/api/orders", async (req, res) => {
   const body = req.body || {};
-  const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
+  const brokerId = String(body.brokerId || publicBrokers().activeBrokerId || "dhan");
   try {
     if ((brokerId === "dhan" && isDhanLive()) || (brokerId !== "paper" && isLiveBrokerReady(brokerId))) {
       if (isPreviewRequest(req)) {
@@ -890,7 +947,7 @@ app.post("/api/orders", async (req, res) => {
         return;
       }
       const live = await sendLiveBrokerOrder({ ...body, brokerId });
-      let order = snapshot().orders.find((row) => String(row.id) === String(live.orderId));
+      let order = (safeSnapshot()?.orders || []).find((row) => String(row.id) === String(live.orderId));
       if (!order) {
         order = placeOrder({ ...body, brokerId, live });
         if (order.error) {
@@ -903,7 +960,7 @@ app.post("/api/orders", async (req, res) => {
         live: true,
         afterMarketOrder: Boolean(live.afterMarketOrder),
         order,
-        snapshot: snapshot(),
+        snapshot: safeSnapshot(),
       });
       return;
     }
@@ -920,7 +977,7 @@ app.post("/api/orders", async (req, res) => {
           ? undefined
           : `Order stayed on the T2S desk. ${brokerId} is not LIVE — connect it on Brokers first.`,
       order,
-      snapshot: snapshot(),
+      snapshot: safeSnapshot(),
     });
   } catch (error) {
     const booked = brokerId === "dhan" ? bookRejectedLiveOrder({ ...body, brokerId }, error) : null;
@@ -930,7 +987,7 @@ app.post("/api/orders", async (req, res) => {
         live: true,
         error: String(error.message || "Order failed"),
         order: booked,
-        snapshot: snapshot(),
+        snapshot: safeSnapshot(),
       });
       return;
     }
@@ -945,19 +1002,19 @@ app.post("/api/orders", async (req, res) => {
 app.post("/api/orders/:id/cancel", async (req, res) => {
   try {
     const id = String(req.params.id || "");
-    const row = snapshot().orders.find((item) => String(item.id) === id);
+    const row = (safeSnapshot()?.orders || []).find((item) => String(item.id) === id);
     if (row?.paper || row?.brokerId === "paper") {
       const result = cancelOrder(id);
       if (result.error) {
         res.status(400).json({ error: result.error });
         return;
       }
-      res.json({ ok: true, order: result, snapshot: snapshot() });
+      res.json({ ok: true, order: result, snapshot: safeSnapshot() });
       return;
     }
     if (isDhanLive() && id && !id.startsWith("o") && !id.startsWith("p")) {
       await cancelDhanOrder(id);
-      res.json({ ok: true, live: true, snapshot: snapshot() });
+      res.json({ ok: true, live: true, snapshot: safeSnapshot() });
       return;
     }
     if (isDhanLive()) {
@@ -969,7 +1026,7 @@ app.post("/api/orders/:id/cancel", async (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ ok: true, order: result, snapshot: snapshot() });
+    res.json({ ok: true, order: result, snapshot: safeSnapshot() });
   } catch (error) {
     res.status(error.status || 400).json({ ok: false, error: error.message || "Cancel failed" });
   }
@@ -977,7 +1034,7 @@ app.post("/api/orders/:id/cancel", async (req, res) => {
 
 app.post("/api/positions/:id/squareoff", async (req, res) => {
   try {
-    const pos = snapshot().positions.find((row) => row.id === req.params.id);
+    const pos = (safeSnapshot()?.positions || []).find((row) => row.id === req.params.id);
     if (!pos) {
       res.status(404).json({ error: "Position not found" });
       return;
@@ -989,7 +1046,7 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
           res.status(400).json({ error: result.error });
           return;
         }
-        res.json({ ...result, snapshot: snapshot() });
+        res.json({ ...result, snapshot: safeSnapshot() });
         return;
       }
       if (pos.sim || pos.brokerId !== "dhan" || !pos.securityId || !String(pos.id).startsWith("dhan-pos-")) {
@@ -1011,7 +1068,7 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
         strategy: pos.strategy,
         exchangeSegment: String(pos.symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
-      res.json({ ok: true, live: true, snapshot: snapshot() });
+      res.json({ ok: true, live: true, snapshot: safeSnapshot() });
       return;
     }
     const result = squareOff(req.params.id);
@@ -1019,23 +1076,31 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ ...result, snapshot: snapshot() });
+    res.json({ ...result, snapshot: safeSnapshot() });
   } catch (error) {
     res.status(error.status || 400).json({ ok: false, error: error.message || "Square off failed" });
   }
 });
 
 app.get("/api/report", (_req, res) => {
-  res.json(snapshot().report);
+  try {
+    res.json(snapshot().report);
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load report" });
+  }
 });
 
 app.post("/api/chat", (req, res) => {
-  const text = String(req.body?.text || "").trim();
-  if (!text) {
-    res.status(400).json({ error: "Message required" });
-    return;
+  try {
+    const text = String(req.body?.text || "").trim();
+    if (!text) {
+      res.status(400).json({ error: "Message required" });
+      return;
+    }
+    res.json(addChat(text));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not send chat" });
   }
-  res.json(addChat(text));
 });
 
 app.get("/api/messaging", (_req, res) => {
@@ -1093,7 +1158,7 @@ app.post("/api/messaging/broadcast", async (req, res) => {
 
 app.use("/api", (req, res) => {
   res.status(404).json({
-    error: `${req.method} ${req.originalUrl} was not found. The API on port 4000 is old — stop it and run npm start again.`,
+    error: `${req.method} ${req.originalUrl} was not found. Restart t2s, then press Ctrl+Shift+R.`,
   });
 });
 
@@ -1115,7 +1180,7 @@ if (serveWebsite) {
   });
 }
 
-app.listen(port, "0.0.0.0", async () => {
+const server = app.listen(port, "0.0.0.0", () => {
   console.log(`T2S API running on http://localhost:${port}`);
   if (googleOAuthConfigured()) {
     console.log(`Google login ready. Callback ${googleRedirectUri(process.env)}`);
@@ -1128,13 +1193,26 @@ app.listen(port, "0.0.0.0", async () => {
   } else {
     console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   }
+  void bootBackground();
+});
+server.timeout = 20_000;
+server.headersTimeout = 22_000;
+server.keepAliveTimeout = 5_000;
+server.requestTimeout = 20_000;
+
+async function bootBackground() {
   try {
     const publicIp = await thisComputerPublicIpv4();
     if (publicIp) {
       console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
       console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
     }
-    const booted = await bootDhanFromEnv();
+    const booted = await Promise.race([
+      bootDhanFromEnv(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Dhan boot timed out after 20s")), 20_000);
+      }),
+    ]);
     if (booted) {
       console.log("Dhan live feed started (saved token or PIN + TOTP)");
     } else if (process.env.DHAN_ACCESS_TOKEN) {
@@ -1167,4 +1245,4 @@ app.listen(port, "0.0.0.0", async () => {
       return result;
     },
   });
-});
+}
