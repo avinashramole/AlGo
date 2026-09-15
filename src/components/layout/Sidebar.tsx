@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
-  BarChart3,
   BookOpen,
   Briefcase,
   Building2,
@@ -31,8 +30,7 @@ import { cn } from "../../lib/format";
 const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean; member?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
   { to: "/plans", label: "My plan", icon: Wallet, member: true },
-  { to: "/markets", label: "Markets", icon: BarChart3, admin: true },
-  { to: "/options", label: "Chain", icon: Layers, admin: true },
+  { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/signals", label: "Signals", icon: Zap, admin: true },
   { to: "/algo", label: "Algo", icon: Cpu, admin: true },
   { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },

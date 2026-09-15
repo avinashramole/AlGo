@@ -2,7 +2,18 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { useMarket } from "../context/MarketContext";
-import { cn, formatNumber, isNseSessionOpen } from "../lib/format";
+import { cn, formatNumber, formatPct, isNseSessionOpen } from "../lib/format";
+
+function chainIdFromWatch(symbol: string) {
+  const compact = String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (compact.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (compact.includes("FINNIFTY")) return "FINNIFTY";
+  if (compact.includes("SENSEX")) return "SENSEX";
+  if (compact.includes("NIFTY")) return "NIFTY";
+  return "";
+}
 
 export function Options() {
   const { data, selectChain } = useMarket();
@@ -14,6 +25,7 @@ export function Options() {
     { id: "SENSEX", label: "SENSEX", lot: 20 },
   ];
   const rows = data.optionChain || [];
+  const watch = data.marketWatch || [];
   const [lots, setLots] = useState(1);
   const atm = rows.find((row) => row.atm);
   const spot = meta?.spot || data.indices[0]?.price || 0;
@@ -63,6 +75,58 @@ export function Options() {
             </label>
           </div>
         </div>
+        <section className="card overflow-hidden">
+          <div className="border-b border-[var(--border)] px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+            Markets
+          </div>
+          <div className="max-h-48 overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-4 py-2 font-semibold">Symbol</th>
+                  <th className="px-4 py-2 text-right font-semibold">LTP</th>
+                  <th className="px-4 py-2 text-right font-semibold">Change</th>
+                  <th className="px-4 py-2 text-right font-semibold">Volume</th>
+                  <th className="px-4 py-2 text-right font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {watch.map((row) => {
+                  const chainId = chainIdFromWatch(row.symbol);
+                  const active = Boolean(chainId) && chainId === meta?.symbol;
+                  return (
+                    <tr key={row.symbol} className="soft-row">
+                      <td className="px-4 py-2 font-semibold">{row.symbol}</td>
+                      <td className="px-4 py-2 text-right">{formatNumber(row.ltp)}</td>
+                      <td className={cn("px-4 py-2 text-right font-semibold", row.chg >= 0 ? "text-up" : "text-down")}>
+                        {formatPct(row.chg)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-slate-500">{row.volume}</td>
+                      <td className="px-4 py-2 text-right">
+                        {chainId ? (
+                          <button
+                            type="button"
+                            onClick={() => void selectChain(chainId)}
+                            className={cn(
+                              "rounded-lg px-3 py-1 text-xs font-semibold",
+                              active
+                                ? "bg-brand-500 text-white"
+                                : "bg-brand-50 text-brand-500 dark:bg-brand-500/15",
+                            )}
+                          >
+                            Chain
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Stat label="Spot" value={formatNumber(spot)} />
           <Stat label="ATM" value={atm ? String(atm.strike) : "—"} />

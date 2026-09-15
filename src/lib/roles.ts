@@ -8,8 +8,7 @@ export function isAdminUser(user?: Pick<AuthUser, "role"> | null) {
 
 export const adminNav = [
   { to: "/", label: "Home" },
-  { to: "/markets", label: "Markets" },
-  { to: "/options", label: "Chain" },
+  { to: "/options", label: "Option Chain" },
   { to: "/signals", label: "Signals" },
   { to: "/algo", label: "Algo" },
   { to: "/orders", label: "Orders" },
@@ -38,6 +37,7 @@ export function navForUser(user?: Pick<AuthUser, "role"> | null) {
 const extraTitles = [
   { to: "/notifications", label: "Notifications" },
   { to: "/subscriptions", label: "My plan" },
+  { to: "/markets", label: "Option Chain" },
 ] as const;
 
 function normalizePath(path: string) {

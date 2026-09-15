@@ -13,7 +13,6 @@ const Dashboard = lazyPage(() => import("./pages/Dashboard"), "Dashboard");
 const UserHome = lazyPage(() => import("./pages/UserHome"), "UserHome");
 const Profile = lazyPage(() => import("./pages/Profile"), "Profile");
 const MemberPlans = lazyPage(() => import("./pages/MemberPlans"), "MemberPlans");
-const Markets = lazyPage(() => import("./pages/Markets"), "Markets");
 const Options = lazyPage(() => import("./pages/Options"), "Options");
 const Signals = lazyPage(() => import("./pages/Signals"), "Signals");
 const Algo = lazyPage(() => import("./pages/Algo"), "Algo");
@@ -70,7 +69,7 @@ export default function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="subscriptions" element={<Navigate to="/plans" replace />} />
           <Route path="plans" element={<MemberPlans />} />
-          <Route path="markets" element={<AdminOnly><Markets /></AdminOnly>} />
+          <Route path="markets" element={<Navigate to="/options" replace />} />
           <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
           <Route path="signals" element={<AdminOnly><Signals /></AdminOnly>} />
           <Route path="algo" element={<AdminOnly><Algo /></AdminOnly>} />
