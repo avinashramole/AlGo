@@ -553,7 +553,7 @@ function AddClientModal({
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
-  const [accountId, setAccountId] = useState("master");
+  const [accountId, setAccountId] = useState("");
   const [brokerId, setBrokerId] = useState("dhan");
   const [sizingKind, setSizingKind] = useState<SizingKind>("multiplier");
   const [sizingValue, setSizingValue] = useState("1");
@@ -672,8 +672,9 @@ function AddClientModal({
               <Field label="Email">
                 <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="client@email.com" />
               </Field>
-              <Field label="Broker Client ID">
-                <input className={inputClass} value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="master" />
+              <Field label="Client ID">
+                <input className={inputClass} value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Broker client ID" />
+                <span className="font-normal text-[11px] text-slate-500">Saved on this client and on their My plan page. Required with the access token.</span>
               </Field>
               <Field label="Broker">
                 <select
@@ -824,11 +825,11 @@ function AddClientModal({
                   type="password"
                   value={brokerToken}
                   onChange={(event) => setBrokerToken(event.target.value)}
-                  placeholder="•••••"
+                  placeholder="Paste access token"
                   autoComplete="off"
                 />
                 <span className="font-normal text-[11px] text-slate-500">
-                  {brokerId === "upstox" ? "Upstox daily access token" : "Broker access token. Required for Real mode. This does not start Dhan LIVE."}
+                  Saved on admin Users and on the client My plan page. Required for Real mode. This does not start Dhan LIVE.
                 </span>
               </Field>
             </div>
@@ -966,8 +967,8 @@ function EditModal({
             <option value="fyers">FYERS</option>
           </select>
         </Field>
-        <Field label="Broker account / client id">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Dhan client id" />
+        <Field label="Client ID">
+          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Dhan / broker client ID" />
         </Field>
         {brokerId !== "paper" ? (
           <>

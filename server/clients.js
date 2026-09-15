@@ -43,7 +43,7 @@ function asClient(user, desk, handle = {}) {
     brokerId: desk.brokerId,
     brokerName: brokerLabel(desk.brokerId),
     brokerColor: broker?.color || "#64748b",
-    accountId: paper ? "" : desk.accountId,
+    accountId: desk.accountId,
     linked: !paper,
     sizingKind: desk.sizingKind,
     sizingValue: desk.sizingValue,
@@ -120,6 +120,12 @@ export function createClient(patch = {}) {
   if (tradeMode === "real" && (brokerId === "paper" || !brokerId)) {
     throw fail("Add a broker before enabling real orders. New clients stay PAPER.");
   }
+  if (String(patch.brokerToken || "").trim() && !String(patch.accountId || "").trim()) {
+    throw fail("Paste the client ID with the access token.");
+  }
+  if (tradeMode === "real" && !String(patch.accountId || "").trim()) {
+    throw fail("Paste the client ID before enabling real orders.");
+  }
   if (tradeMode === "real" && !String(patch.brokerToken || "").trim()) {
     throw fail("Paste the broker access token before enabling real orders.");
   }
@@ -158,6 +164,9 @@ export function saveClient(userId, patch = {}) {
   const existing = getPublicUser(userId);
   if (!existing) throw fail("Client not found.", 404);
   if (existing.role === "admin") throw fail("Desk admins are not edited on All clients.");
+  if (String(patch.brokerToken || "").trim() && !String(patch.accountId || peekClientSettings(userId).accountId || "").trim()) {
+    throw fail("Paste the client ID with the access token.");
+  }
   if (patch.name != null || patch.mobile != null) {
     adminUpdateUser(userId, {
       ...(patch.name != null ? { name: patch.name } : {}),

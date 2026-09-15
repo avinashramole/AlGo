@@ -46,6 +46,10 @@ export function MemberPlans() {
       setStrategies(catalog.strategies || []);
       setPayments(catalog.payments);
       setEnrollments(mine.enrollments || []);
+      setCreds((current) => ({
+        ...current,
+        clientId: current.clientId || nextDesk.install?.accountId || "",
+      }));
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load plan report");
@@ -83,14 +87,14 @@ export function MemberPlans() {
     try {
       await installMemberBroker({
         brokerId: desk.brokerId,
-        clientId: creds.clientId,
+        clientId: creds.clientId || desk.install?.accountId,
         apiKey: creds.apiKey,
         accessToken: creds.accessToken,
         sessionToken: creds.sessionToken,
       });
-      setCreds({});
+      setCreds((current) => ({ clientId: current.clientId || desk.install?.accountId || "" }));
       await load();
-      setCredNote("API key and access token saved on this account. Desk LIVE was not started.");
+      setCredNote("Client ID and access token saved on this account and on admin Users. Desk LIVE was not started.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not install broker token");
     } finally {
@@ -303,9 +307,9 @@ export function MemberPlans() {
               void saveCredentials();
             }}
           >
-            <div className="text-sm font-bold">API key and access token</div>
+            <div className="text-sm font-bold">Client ID and access token</div>
             <p className="mt-1 text-xs text-slate-400">
-              {desk.install?.help || "Install the broker API key and access token for this account."}
+              {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>
             {desk.install?.installed ? (
               <p className="mt-2 text-xs font-semibold text-slate-500">
@@ -330,7 +334,7 @@ export function MemberPlans() {
               disabled={busy === "creds"}
               className="mt-3 h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
             >
-              {busy === "creds" ? "Saving..." : "Save API key and access token"}
+              {busy === "creds" ? "Saving..." : "Save client ID and access token"}
             </button>
           </form>
         ) : null}

@@ -40,7 +40,12 @@ function writeStore(store) {
 let store = readStore();
 
 function persist() {
-  writeStore(store);
+  try {
+    writeStore(store);
+  } catch (error) {
+    console.log(`Could not save client ID / access token: ${error.message || error}`);
+    throw fail("Could not save client ID and access token.");
+  }
 }
 
 const SIZING_KINDS = ["multiplier", "lots", "fixed"];
@@ -247,7 +252,7 @@ export function publicBrokerInstall(desk = {}) {
     help:
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
-        : "Install this account API key and access token. Saving does not start desk LIVE.",
+        : "Install this account client ID and access token. Saving does not start desk LIVE. Admin Users and My plan share the same saved values.",
   };
 }
 
@@ -697,7 +702,9 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
     desk.tradeMode = "real";
     desk.copy = true;
   }
-  if (clientId != null) desk.accountId = String(clientId || "").trim();
+  const nextClientId = clientId != null ? String(clientId || "").trim() : String(desk.accountId || "").trim();
+  if (!nextClientId) throw fail("Paste the client ID.");
+  desk.accountId = nextClientId;
   const token = String(accessToken || "").trim();
   if (!token && !desk.brokerToken) throw fail("Paste the access token.");
   if (token) {

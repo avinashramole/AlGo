@@ -247,8 +247,13 @@ test("installMemberBroker stores API key and access token hints without secrets"
   });
   assert.equal(desk.install.installed, true);
   assert.equal(desk.copyReady, true);
+  assert.equal(desk.install.accountId, "AB1234");
   assert.ok(desk.install.fields.some((field) => field.id === "accessToken"));
   assert.ok(desk.install.fields.some((field) => field.id === "apiKey"));
+  assert.throws(
+    () => installMemberBroker({ user: { id: "u-empty", name: "Empty", role: "user" }, brokerId: "dhan", accessToken: "dhan-token-value" }),
+    /client ID/,
+  );
 });
 
 test("queueLiveAlgoOrder queues a sized copy on the member token", async () => {

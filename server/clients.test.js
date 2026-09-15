@@ -40,7 +40,7 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings } = await import("./memberDesk.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk } = await import("./memberDesk.js");
 const { asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
@@ -154,6 +154,47 @@ test("saveClient can install API key and access token on an existing user", () =
   assert.match(next.tokenHint, /•/);
   assert.equal(String(next.tokenHint).includes("kite-access-token-value"), false);
   assert.equal(String(next.apiKeyHint).includes("kite-api-key-value"), false);
+});
+
+test("createClient keeps client ID on paper and requires it with an access token", () => {
+  assert.throws(
+    () =>
+      createClient({
+        name: "Token No Id",
+        mobile: "9000000099",
+        brokerId: "dhan",
+        brokerToken: "dhan-access-token-value",
+      }),
+    /client ID/,
+  );
+  const row = createClient({
+    name: "Paper With Token",
+    mobile: "9000000088",
+    brokerId: "dhan",
+    accountId: "11004567",
+    brokerToken: "dhan-access-token-value",
+    tradeMode: "paper",
+  });
+  assert.equal(row.accountId, "11004567");
+  assert.equal(row.credentialsInstalled, true);
+  assert.equal(row.tradeMode, "paper");
+});
+
+test("member install and admin save share the same client ID and token hint", () => {
+  const member = { id: "u-arpit", name: "ARPIT", email: "arpit@gmail.com", role: "user" };
+  const installed = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "99887766",
+    accessToken: "member-dhan-access-token",
+  });
+  assert.equal(installed.install.accountId, "99887766");
+  const adminView = listClients(listPublicUsers()).find((row) => row.id === "u-arpit");
+  assert.equal(adminView.accountId, "99887766");
+  assert.equal(adminView.credentialsInstalled, true);
+  const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(desk.install.accountId, "99887766");
+  assert.equal(desk.install.installed, true);
 });
 
 test("createClient refuses a broker IP already used on that broker", () => {

@@ -8,9 +8,35 @@ function cardVwap(item: { future?: number; price: number; vwap?: number; futureV
   return vwap > 0 ? vwap : 0;
 }
 
-export function TickerStrip() {
+export function chainIdFromIndex(symbol: string) {
+  const compact = String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (compact.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (compact.includes("FINNIFTY")) return "FINNIFTY";
+  if (compact.includes("SENSEX")) return "SENSEX";
+  if (compact.includes("NIFTY") && !compact.includes("VIX")) return "NIFTY";
+  return "";
+}
+
+type ChainCardStats = {
+  spot: string;
+  atm: string;
+  pcr: string;
+  maxPain: string;
+  atmIv: string;
+};
+
+type TickerStripProps = {
+  selectedId?: string;
+  onSelect?: (chainId: string) => void;
+  chainStats?: ChainCardStats;
+};
+
+export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripProps = {}) {
   const { data, order } = useMarket();
   const [busy, setBusy] = useState("");
+  const watchBySymbol = new Map((data.marketWatch || []).map((row) => [row.symbol, row]));
 
   const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
     const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
@@ -44,8 +70,31 @@ export function TickerStrip() {
         const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.name || item.symbol;
         const vwap = cardVwap(item);
         const futureLtp = item.future || item.price;
+        const chainId = chainIdFromIndex(item.symbol);
+        const selectable = Boolean(onSelect && chainId);
+        const selected = selectable && chainId === selectedId;
+        const volume = watchBySymbol.get(item.symbol)?.volume || (showDeriv ? "Live" : "—");
         return (
-          <div key={item.symbol} className="card px-4 py-3">
+          <div
+            key={item.symbol}
+            role={selectable ? "button" : undefined}
+            tabIndex={selectable ? 0 : undefined}
+            onClick={() => {
+              if (selectable) onSelect?.(chainId);
+            }}
+            onKeyDown={(event) => {
+              if (!selectable) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect?.(chainId);
+              }
+            }}
+            className={cn(
+              "card px-4 py-3",
+              selectable && "cursor-pointer",
+              selected && "ring-2 ring-brand-500",
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
@@ -70,25 +119,58 @@ export function TickerStrip() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Lot</div>
-                  <div className="text-sm font-bold">{item.lot ? `1 lot = ${item.lot}` : "—"}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    {onSelect ? "Volume" : "Lot"}
+                  </div>
+                  <div className="text-sm font-bold">{onSelect ? volume : item.lot ? `1 lot = ${item.lot}` : "—"}</div>
+                  {onSelect && item.lot ? <div className="text-[10px] text-slate-400">1 lot = {item.lot}</div> : null}
                 </div>
               </div>
             ) : null}
-            {showDeriv ? (
+            {selected && chainStats ? (
+              <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1 border-t border-[var(--border)] pt-2">
+                <ChainStat label="Spot" value={chainStats.spot} />
+                <ChainStat label="ATM" value={chainStats.atm} />
+                <ChainStat label="PCR" value={chainStats.pcr} />
+                <ChainStat label="Max pain" value={chainStats.maxPain} />
+                <ChainStat label="ATM IV" value={chainStats.atmIv} />
+              </div>
+            ) : null}
+            {showDeriv && selectable ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelect?.(chainId);
+                }}
+                className={cn(
+                  "mt-2 h-10 w-full rounded-md text-xs font-bold md:h-7 md:text-[10px]",
+                  selected ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--bg)]",
+                )}
+              >
+                Chain
+              </button>
+            ) : null}
+            {showDeriv && !selectable ? (
               <div className="mt-2 flex gap-1">
                 <button
                   type="button"
                   disabled={Boolean(busy)}
-                  onClick={() => void tradeFuture(item, "BUY")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void tradeFuture(item, "BUY");
+                  }}
                   className="h-10 flex-1 rounded-md bg-emerald-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
-                  {busy === `${root}-BUY` ? "..." : "BUY"}
+                  {busy === `${root}-BUY` ? "..." : `BUY ${root} FUT`}
                 </button>
                 <button
                   type="button"
                   disabled={Boolean(busy)}
-                  onClick={() => void tradeFuture(item, "SELL")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void tradeFuture(item, "SELL");
+                  }}
                   className="h-10 flex-1 rounded-md bg-rose-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
                   {busy === `${root}-SELL` ? "..." : "SELL"}
@@ -98,6 +180,15 @@ export function TickerStrip() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ChainStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="truncate text-xs font-bold leading-tight">{value}</div>
     </div>
   );
 }
