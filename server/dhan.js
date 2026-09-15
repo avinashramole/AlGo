@@ -1038,7 +1038,7 @@ export async function ensureDhanLiveFromSavedToken() {
     await startDhanLive({ accessToken: token, clientId: id });
     return { live: true, started: true };
   } catch (error) {
-    console.log(`Hedge 09:30 Dhan start failed: ${error.message || error}`);
+    console.log(`09:20 daily LIVE Dhan start failed: ${error.message || error}`);
     return { live: false, reason: error.message || "start-failed" };
   }
 }

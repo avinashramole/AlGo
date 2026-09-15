@@ -1156,7 +1156,7 @@ app.listen(port, "0.0.0.0", async () => {
       if (!isDhanLive()) {
         const dhan = await ensureDhanLiveFromSavedToken();
         if (!dhan.live) {
-          console.log(`Hedge 09:30 LIVE arm waiting for Dhan (${dhan.reason || "not-live"})`);
+          console.log(`NIFTY 15m VWAP 09:20 LIVE arm waiting for Dhan (${dhan.reason || "not-live"})`);
         }
       }
       let result = armNiftyVwapHedgeDailyLive();
