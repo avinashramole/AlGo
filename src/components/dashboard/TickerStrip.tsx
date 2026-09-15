@@ -136,23 +136,23 @@ export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripPro
                 <ChainStat label="ATM IV" value={chainStats.atmIv} />
               </div>
             ) : null}
-            {showDeriv ? (
+            {showDeriv && selectable ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelect?.(chainId);
+                }}
+                className={cn(
+                  "mt-2 h-10 w-full rounded-md text-xs font-bold md:h-7 md:text-[10px]",
+                  selected ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--bg)]",
+                )}
+              >
+                Chain
+              </button>
+            ) : null}
+            {showDeriv && !selectable ? (
               <div className="mt-2 flex gap-1">
-                {selectable ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onSelect?.(chainId);
-                    }}
-                    className={cn(
-                      "h-10 rounded-md px-2 text-xs font-bold disabled:opacity-50 md:h-7 md:text-[10px]",
-                      selected ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--bg)]",
-                    )}
-                  >
-                    Chain
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   disabled={Boolean(busy)}
