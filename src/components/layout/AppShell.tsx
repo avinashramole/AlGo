@@ -18,7 +18,7 @@ export function AppShell() {
     <div className="h-[100dvh] overflow-hidden bg-[var(--bg)]">
       <PreviewDeskBanner />
       <Sidebar />
-      <div className="flex h-[100dvh] flex-col pl-0 md:pl-[68px]">
+      <div className="flex h-[100dvh] flex-col pl-0 md:pl-56">
         <Header />
         <main className="min-h-0 flex-1 overflow-auto p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:p-4 md:pb-4">
           <Outlet />

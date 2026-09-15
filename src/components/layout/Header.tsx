@@ -1,12 +1,12 @@
 import { Bell, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
 import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
-import { isAdminUser } from "../../lib/roles";
+import { isAdminUser, pageTitleForPath } from "../../lib/roles";
 import { cn, formatIstClock, formatMobile, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
@@ -14,6 +14,8 @@ export function Header() {
   const { logout, user } = useAuth();
   const admin = isAdminUser(user);
   const { live, data } = useMarket();
+  const location = useLocation();
+  const pageTitle = pageTitleForPath(location.pathname, user);
   const [now, setNow] = useState(() => new Date());
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -31,6 +33,10 @@ export function Header() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  useEffect(() => {
+    document.title = `${pageTitle} · Trade 2 Smart`;
+  }, [pageTitle]);
+
   const marketOpen = isNseSessionOpen(now);
   const dhanLive = Boolean(data.dhanFeed?.live);
   const lastTick = data.dhanFeed?.lastTickAt
@@ -47,19 +53,19 @@ export function Header() {
       <Link to="/" className="shrink-0 md:hidden" title="Trade 2 Smart">
         <BrandMark variant="horizontal" size="md" theme={theme} />
       </Link>
-      <div className="relative mx-auto hidden w-full max-w-xl md:block">
-        {admin ? (
-          <>
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
-              placeholder="Search NIFTY, BANKNIFTY, Strategy, Order..."
-            />
-          </>
-        ) : (
-          <div className="text-sm font-semibold text-slate-400">Member portal</div>
-        )}
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-sm font-extrabold tracking-tight md:text-base">{pageTitle}</h1>
+        {!admin ? <p className="hidden truncate text-[11px] font-semibold text-slate-400 md:block">Member portal</p> : null}
       </div>
+      {admin ? (
+        <div className="relative hidden min-w-0 max-w-md flex-1 lg:block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <input
+            className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
+            placeholder="Search NIFTY, BANKNIFTY, Strategy, Order..."
+          />
+        </div>
+      ) : null}
       <div className="ml-auto flex min-w-0 items-center gap-1.5 md:gap-3">
         {admin ? <BrokerSwitch /> : null}
         <div
