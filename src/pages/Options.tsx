@@ -52,7 +52,7 @@ export function Options() {
           onSelect={(chainId) => void selectChain(chainId)}
           chainStats={{
             spot: formatNumber(spot),
-            atm: atm ? String(atm.strike) : "—",
+            atm: atm ? formatNumber(atm.strike, 0) : "—",
             pcr: meta?.pcr != null ? meta.pcr.toFixed(2) : "—",
             maxPain: meta?.maxPain ? formatNumber(meta.maxPain, 0) : "—",
             atmIv: meta?.atmIv ? `${meta.atmIv.toFixed(1)}%` : "—",

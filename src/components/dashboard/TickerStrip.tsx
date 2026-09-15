@@ -128,7 +128,7 @@ export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripPro
               </div>
             ) : null}
             {selected && chainStats ? (
-              <div className="mt-2 grid grid-cols-5 gap-1 border-t border-[var(--border)] pt-2">
+              <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1 border-t border-[var(--border)] pt-2">
                 <ChainStat label="Spot" value={chainStats.spot} />
                 <ChainStat label="ATM" value={chainStats.atm} />
                 <ChainStat label="PCR" value={chainStats.pcr} />
@@ -186,9 +186,9 @@ export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripPro
 
 function ChainStat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-xs font-bold leading-tight">{value}</div>
+      <div className="truncate text-xs font-bold leading-tight">{value}</div>
     </div>
   );
 }
