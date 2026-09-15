@@ -20,7 +20,6 @@ import {
   Wallet,
   X,
   Zap,
-  BarChart3,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -31,13 +30,12 @@ import { cn } from "../../lib/format";
 
 const primary: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/options", label: "Chain", icon: Layers, admin: true },
+  { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },
   { to: "/positions", label: "Book", icon: BookOpen, admin: true },
 ];
 
 const moreItems: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean }> = [
-  { to: "/markets", label: "Markets", icon: BarChart3, admin: true },
   { to: "/signals", label: "Signals", icon: Zap, admin: true },
   { to: "/algo", label: "Algo", icon: Cpu, admin: true },
   { to: "/reports", label: "Reports", icon: FileText, admin: true },

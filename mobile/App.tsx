@@ -12,7 +12,6 @@ import { AlgoScreen } from "./src/screens/AlgoScreen";
 import { BrokersScreen } from "./src/screens/BrokersScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
-import { MarketsScreen } from "./src/screens/MarketsScreen";
 import { OptionsScreen } from "./src/screens/OptionsScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { PortfolioScreen } from "./src/screens/PortfolioScreen";
@@ -41,8 +40,7 @@ function Tabs() {
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      {admin ? <Tab.Screen name="Markets" component={MarketsScreen} /> : null}
-      {admin ? <Tab.Screen name="Chain" component={OptionsScreen} /> : null}
+      {admin ? <Tab.Screen name="Option Chain" component={OptionsScreen} /> : null}
       {admin ? <Tab.Screen name="Signals" component={SignalsScreen} /> : null}
       {admin ? <Tab.Screen name="Algo" component={AlgoScreen} /> : null}
       {admin ? <Tab.Screen name="Portfolio" component={PortfolioScreen} /> : null}
