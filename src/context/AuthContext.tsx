@@ -15,6 +15,7 @@ import {
   type OtpRequestResult,
   type SocialProvider,
 } from "../api/client";
+import { isTrade2SmartHost } from "../lib/liveSite";
 
 type OtpPayload = {
   identifier: string;
@@ -226,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           persist(result.user, result.token, remember);
           setUser(result.user);
         } catch (error) {
-          if (!isDemo) throw error;
+          if (isTrade2SmartHost() || !isDemo) throw error;
           persist(demoUser, "t2s-offline-token", remember);
           setUser(demoUser);
         }

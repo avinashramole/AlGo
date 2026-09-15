@@ -1,3 +1,5 @@
+import { apiDownMessage, publicDeskError } from "../lib/liveSite";
+
 const API = "/api";
 
 function authHeaders(): HeadersInit {
@@ -9,15 +11,7 @@ function authHeaders(): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
-function apiDownMessage() {
-  const host = typeof location !== "undefined" ? location.hostname : "";
-  if (/trade2smart/i.test(host)) {
-    return "API is down on the server. On the VPS as root run: systemctl start t2s. Then press Ctrl+Shift+R. Do not open localhost.";
-  }
-  return "API is not running. Keep the npm start window open (both [api] and [web]). Open http://localhost:5173";
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestOnce<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
   let response: Response;
   try {
@@ -41,15 +35,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     throw new Error(
-      body.error ||
-        (response.status === 404
-          ? "API route missing. On the VPS run: systemctl restart t2s. Then press Ctrl+Shift+R."
-          : response.status === 502 || response.status === 503 || response.status === 504
-            ? apiDownMessage()
-            : `Request failed (${response.status})`),
+      publicDeskError(
+        body.error ||
+          (response.status === 404
+            ? "API route missing. On the VPS run: systemctl restart t2s. Then press Ctrl+Shift+R."
+            : response.status === 502 || response.status === 503 || response.status === 504
+              ? apiDownMessage()
+              : `Request failed (${response.status})`),
+      ),
     );
   }
   return (body as T) || ({} as T);
+}
+
+function isTransientApiDown(error: unknown) {
+  return /API is down|API is not running|Request failed \(50[234]\)/i.test(String((error as Error)?.message || error || ""));
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = String(init?.method || "GET").toUpperCase();
+  const retries = method === "POST" && /\/login$|\/auth\//.test(path) ? 3 : 1;
+  let last: unknown;
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      return await requestOnce<T>(path, init);
+    } catch (error) {
+      last = error;
+      if (attempt === retries - 1 || !isTransientApiDown(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    }
+  }
+  throw last;
 }
 
 export type DeskOrder = {
