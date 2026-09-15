@@ -8,7 +8,23 @@ function cardVwap(item: { future?: number; price: number; vwap?: number; futureV
   return vwap > 0 ? vwap : 0;
 }
 
-export function TickerStrip() {
+export function chainIdFromIndex(symbol: string) {
+  const compact = String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (compact.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (compact.includes("FINNIFTY")) return "FINNIFTY";
+  if (compact.includes("SENSEX")) return "SENSEX";
+  if (compact.includes("NIFTY") && !compact.includes("VIX")) return "NIFTY";
+  return "";
+}
+
+type TickerStripProps = {
+  selectedId?: string;
+  onSelect?: (chainId: string) => void;
+};
+
+export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
   const { data, order } = useMarket();
   const [busy, setBusy] = useState("");
 
@@ -44,8 +60,30 @@ export function TickerStrip() {
         const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.name || item.symbol;
         const vwap = cardVwap(item);
         const futureLtp = item.future || item.price;
+        const chainId = chainIdFromIndex(item.symbol);
+        const selectable = Boolean(onSelect && chainId);
+        const selected = selectable && chainId === selectedId;
         return (
-          <div key={item.symbol} className="card px-4 py-3">
+          <div
+            key={item.symbol}
+            role={selectable ? "button" : undefined}
+            tabIndex={selectable ? 0 : undefined}
+            onClick={() => {
+              if (selectable) onSelect?.(chainId);
+            }}
+            onKeyDown={(event) => {
+              if (!selectable) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect?.(chainId);
+              }
+            }}
+            className={cn(
+              "card px-4 py-3",
+              selectable && "cursor-pointer",
+              selected && "ring-2 ring-brand-500",
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
@@ -80,15 +118,21 @@ export function TickerStrip() {
                 <button
                   type="button"
                   disabled={Boolean(busy)}
-                  onClick={() => void tradeFuture(item, "BUY")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void tradeFuture(item, "BUY");
+                  }}
                   className="h-10 flex-1 rounded-md bg-emerald-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
-                  {busy === `${root}-BUY` ? "..." : "BUY"}
+                  {busy === `${root}-BUY` ? "..." : `BUY ${root} FUT`}
                 </button>
                 <button
                   type="button"
                   disabled={Boolean(busy)}
-                  onClick={() => void tradeFuture(item, "SELL")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void tradeFuture(item, "SELL");
+                  }}
                   className="h-10 flex-1 rounded-md bg-rose-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
                 >
                   {busy === `${root}-SELL` ? "..." : "SELL"}
