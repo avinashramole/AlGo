@@ -194,6 +194,22 @@ Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443
 
 ---
 
+## 504 Gateway Time-out (permanent)
+
+Nginx is up. Node on **127.0.0.1:4000** is stuck or restarting. Do **not** git merge. Do **not** run `npm run build` first. Restarting `t2s` does **not** turn LIVE on.
+
+On the VPS as root, run:
+
+```bash
+bash /opt/t2s/deploy/fix-504-vps.sh
+```
+
+If that file is missing, paste the same script from `deploy/fix-504-vps.sh` in this repo. It adds 2G swap, raises `t2s` to 1500M RAM, and makes nginx serve `/opt/t2s/dist` so the website stays up while Node restarts. Users, tokens, and `.env` are not touched.
+
+Then hard-refresh https://trade2smart.com (`Ctrl+Shift+R`).
+
+---
+
 ## 502 Bad Gateway (nginx)
 
 Nginx is running. Node on **127.0.0.1:4000** is not. This happens if Block A stopped `t2s` and Block B did not finish (`npm run build` OOM). Restarting `t2s` does **not** turn LIVE on.
