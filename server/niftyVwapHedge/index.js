@@ -6,5 +6,6 @@ export { runNiftyVwapHedgeBacktest, HedgeBacktestAdapter } from "./BacktestAdapt
 export {
   HEDGE_DAILY_LIVE_LABEL,
   applyHedgeDailyLive,
+  isNiftyDailyLiveAlgo,
   startHedgeDailyLiveScheduler,
 } from "./dailyLive.js";

@@ -1272,7 +1272,7 @@ export function armNiftyVwapHedgeDailyLive(now = new Date()) {
     lastArmedYmd,
   });
   if (result.reason === "dhan-not-live") {
-    console.log("NIFTY 15m VWAP hedge 09:30 arm skipped — Dhan is not LIVE");
+    console.log("NIFTY 15m VWAP daily LIVE 09:20 arm skipped — Dhan is not LIVE");
     return result;
   }
   if (result.lastArmedYmd && result.lastArmedYmd !== lastArmedYmd) {
@@ -1287,13 +1287,15 @@ export function armNiftyVwapHedgeDailyLive(now = new Date()) {
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = "WAIT";
-    const hs = hedgeState(algo);
-    hs.inFlight = false;
-    hs.pendingRole = "";
+    if (isNiftyVwapHedgeAlgo(algo)) {
+      const hs = hedgeState(algo);
+      hs.inFlight = false;
+      hs.pendingRole = "";
+    }
   }
   persistAlgos();
-  state.notifications.unshift(`NIFTY 15m VWAP hedge · daily LIVE 09:30 IST · ${result.armedIds.join(",")}`);
-  console.log(`NIFTY 15m VWAP hedge armed LIVE at 09:30 IST · ${result.armedIds.join(",")}`);
+  state.notifications.unshift(`NIFTY 15m VWAP hedge + reversal · daily LIVE 09:20 IST · ${result.armedIds.join(",")}`);
+  console.log(`NIFTY 15m VWAP hedge + reversal armed LIVE at 09:20 IST · ${result.armedIds.join(",")}`);
   return result;
 }
 

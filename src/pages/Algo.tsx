@@ -44,14 +44,14 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-vwap-hedge" as const,
       category: "SYSTEMATIC NIFTY HEDGE",
-      config: "15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · +40% / −20% hedge · +5% · daily LIVE 09:30 IST",
+      config: "15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · +40% / −20% hedge · +5% · daily LIVE 09:20 IST",
     };
   }
   if (isNiftyVwapReversalKind(algo)) {
     return {
       kind: "nifty-vwap-reversal" as const,
       category: "SYSTEMATIC NIFTY 15M",
-      config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}%`,
+      config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · daily LIVE 09:20 IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -429,7 +429,9 @@ function AlgoCard({
       {isNiftyOptionEngineKind(algo) ? (
         <div className="mt-2 text-[11px] text-slate-500">
           Saving or mapping clients does not start LIVE.
-          {isNiftyVwapHedgeKind(algo) ? " Hedge arms automatically at 09:30 IST on session days." : ""}
+          {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo)
+            ? " LIVE arms automatically at 09:20 IST on session days."
+            : ""}
         </div>
       ) : null}
     </section>
