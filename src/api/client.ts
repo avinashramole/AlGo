@@ -54,7 +54,8 @@ function isTransientApiDown(error: unknown) {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = String(init?.method || "GET").toUpperCase();
-  const retries = method === "POST" && /\/login$|\/auth\//.test(path) ? 3 : 1;
+  const mutating = method === "POST" || method === "PUT" || method === "DELETE" || method === "PATCH";
+  const retries = mutating ? 3 : 1;
   let last: unknown;
   for (let attempt = 0; attempt < retries; attempt += 1) {
     try {
@@ -1289,15 +1290,21 @@ export function assignAlgoBroker(id: string, brokerId: string) {
 }
 
 export function createAlgo(payload: Record<string, unknown>) {
-  return request<{ snapshot: Snapshot }>(`/algos`, { method: "POST", body: JSON.stringify(payload) });
+  return request<{ ok?: boolean; algo?: Snapshot["algos"][number]; snapshot: Snapshot | null }>(`/algos`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function updateAlgo(id: string, payload: Record<string, unknown>) {
-  return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  return request<{ ok?: boolean; algo?: Snapshot["algos"][number]; snapshot: Snapshot | null }>(`/algos/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function deleteAlgo(id: string) {
-  return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
+  return request<{ ok?: boolean; snapshot: Snapshot | null }>(`/algos/${id}`, { method: "DELETE" });
 }
 
 export type BacktestOptions = {

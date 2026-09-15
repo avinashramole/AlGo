@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import { formatMobile } from "../lib/format";
+import { catchDeskError } from "../lib/liveSite";
 
 export function Profile() {
   const { user, updateProfile, refreshMe, logout } = useAuth();
@@ -28,7 +29,7 @@ export function Profile() {
       await updateProfile({ name, email, mobile });
       setNote("Profile saved.");
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "Could not save profile");
+      setNote(catchDeskError(err, "Could not save profile"));
     } finally {
       setBusy(false);
     }

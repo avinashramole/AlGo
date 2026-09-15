@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
+import { catchDeskError } from "../../lib/liveSite";
 
 export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const { data, selectChain, order } = useMarket();
@@ -49,7 +50,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Order failed";
+      const message = catchDeskError(err, "Order failed");
       setNoteFail(true);
       setNote(message);
       window.alert(message);

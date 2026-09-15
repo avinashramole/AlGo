@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatInr } from "../theme";
+import { catchDeskError } from "../liveSite";
 
 const SYMBOLS: Array<{ id: string; lot: number }> = [
   { id: "NIFTY", lot: 65 },
@@ -510,7 +511,7 @@ export function AlgoScreen() {
         }
         setRangeDraft(null);
       } catch (err) {
-        Alert.alert("Backtest failed", err instanceof Error ? err.message : "Try again");
+        Alert.alert("Backtest failed", catchDeskError(err, "Try again"));
       } finally {
         setRangeBusy(false);
       }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatPct, vwapTone } from "../../lib/format";
+import { catchDeskError } from "../../lib/liveSite";
 
 export function OptionChain() {
   const { data, order } = useMarket();
@@ -33,7 +34,7 @@ export function OptionChain() {
         exchangeSegment: String(data.optionMeta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
       });
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Order failed");
+      window.alert(catchDeskError(err, "Order failed"));
     } finally {
       setBusy("");
     }

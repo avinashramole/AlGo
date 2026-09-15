@@ -15,6 +15,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { cn, formatMobile, formatNumber } from "../lib/format";
+import { catchDeskError } from "../lib/liveSite";
 
 type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
@@ -54,7 +55,7 @@ export function Users() {
       if (result.defaultUntil) setDefaultUntil(result.defaultUntil);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load clients");
+      setError(catchDeskError(err, "Could not load clients"));
     } finally {
       setBusy(false);
     }
@@ -81,7 +82,7 @@ export function Users() {
         setGroups((current) => (current.includes(payload.group as string) ? current : [...current, String(payload.group)]));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save client");
+      setError(catchDeskError(err, "Could not save client"));
       await load();
     } finally {
       setSavingId("");
@@ -96,7 +97,7 @@ export function Users() {
       await deleteClient(row.id);
       setClients((current) => current.filter((item) => item.id !== row.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete client");
+      setError(catchDeskError(err, "Could not delete client"));
     } finally {
       setSavingId("");
     }
@@ -390,7 +391,7 @@ function AdminMobileRow({
       const result = await saveUserContact(row.id, { name, mobile });
       onSaved(result.user);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not save admin mobile");
+      onError(catchDeskError(err, "Could not save admin mobile"));
     } finally {
       onBusy("");
     }
@@ -621,7 +622,7 @@ function AddClientModal({
       });
       onSaved(result.client);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create client");
+      setError(catchDeskError(err, "Could not create client"));
     } finally {
       setBusy(false);
     }
@@ -928,7 +929,7 @@ function EditModal({
       });
       onSaved(result.client);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(catchDeskError(err, "Could not save"));
     } finally {
       setBusy(false);
     }
@@ -1044,7 +1045,7 @@ function GroupModal({
       const result = await saveClient(row.id, { group });
       onSaved(result.client);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save group");
+      setError(catchDeskError(err, "Could not save group"));
     } finally {
       setBusy(false);
     }

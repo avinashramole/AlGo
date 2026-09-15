@@ -2,6 +2,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors } from "../theme";
+import { catchDeskError } from "../liveSite";
 
 export function TradeScreen() {
   const { data, order } = useMarket();
@@ -24,7 +25,7 @@ export function TradeScreen() {
         Alert.alert("Desk fill only", result.warning || `${signal.action} ${signal.symbol} 65 qty`);
       }
     } catch (err) {
-      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
+      Alert.alert("Order failed", catchDeskError(err, "Try again"));
     }
   };
 

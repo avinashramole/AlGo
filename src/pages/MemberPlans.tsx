@@ -18,6 +18,7 @@ import {
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { cn, formatInr, formatIstDate, formatPlanTerm } from "../lib/format";
+import { catchDeskError } from "../lib/liveSite";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -48,7 +49,7 @@ export function MemberPlans() {
       setEnrollments(mine.enrollments || []);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load plan report");
+      setError(catchDeskError(err, "Could not load plan report"));
     }
   }, []);
 
@@ -69,7 +70,7 @@ export function MemberPlans() {
       await selectMemberBroker(brokerId);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not select broker");
+      setError(catchDeskError(err, "Could not select broker"));
     } finally {
       setBusy("");
     }
@@ -92,7 +93,7 @@ export function MemberPlans() {
       await load();
       setCredNote("API key and access token saved on this account. Desk LIVE was not started.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not install broker token");
+      setError(catchDeskError(err, "Could not install broker token"));
     } finally {
       setBusy("");
     }
@@ -116,7 +117,7 @@ export function MemberPlans() {
       setUtr("");
       setCheckout({ strategy, enrollment: result.enrollment, links: result.links, payments: result.payments });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not enroll");
+      setError(catchDeskError(err, "Could not enroll"));
     } finally {
       setBusy("");
     }
@@ -131,7 +132,7 @@ export function MemberPlans() {
       setUtr("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send payment claim");
+      setError(catchDeskError(err, "Could not send payment claim"));
     } finally {
       setBusy("");
     }
@@ -147,7 +148,7 @@ export function MemberPlans() {
       await abandonEnrollment(current.enrollment.id);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not cancel enrollment");
+      setError(catchDeskError(err, "Could not cancel enrollment"));
     } finally {
       setBusy("");
     }

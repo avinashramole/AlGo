@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, vwapTone } from "../../lib/format";
+import { catchDeskError } from "../../lib/liveSite";
 
 function futureQuotes(
   row: { parent?: string; root?: string },
@@ -48,7 +49,7 @@ export function FuturesTape() {
           : result.warning || `Desk fill · ${side} ${row.name}`,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Order failed";
+      const message = catchDeskError(err, "Order failed");
       setNoteFail(true);
       setNote(message);
       window.alert(message);

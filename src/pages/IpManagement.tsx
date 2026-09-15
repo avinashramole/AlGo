@@ -23,6 +23,7 @@ import {
   type EgressIpCard,
   type IpManagementSnapshot,
 } from "../api/client";
+import { catchDeskError } from "../lib/liveSite";
 import { cn } from "../lib/format";
 
 const emptySnap: IpManagementSnapshot = {
@@ -133,7 +134,7 @@ export function IpManagement() {
       if (book?.clients) setClients(book.clients);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load IP inventory");
+      setError(catchDeskError(err, "Could not load IP inventory"));
     } finally {
       setBusy(false);
     }
@@ -165,7 +166,7 @@ export function IpManagement() {
       if (okNote) setNote(okNote);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update IP");
+      setError(catchDeskError(err, "Could not update IP"));
       return false;
     }
   };
@@ -545,7 +546,7 @@ function AddIpModal({
     try {
       await onSave(address.trim(), label.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add IP");
+      setError(catchDeskError(err, "Could not add IP"));
     } finally {
       setBusy(false);
     }
