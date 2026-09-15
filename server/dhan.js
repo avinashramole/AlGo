@@ -1640,7 +1640,12 @@ async function keepDhanTokenFresh(reason = "schedule") {
         scheduleTokenKeepAlive();
         return;
       }
-      await rotateDhanAccessToken({ reason });
+      await Promise.race([
+        rotateDhanAccessToken({ reason }),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Dhan token rotate timed out after 20s")), 20_000);
+        }),
+      ]);
     } catch (error) {
       if (isDhanInvalidTotpError(error)) {
         blockBadTotp(error);

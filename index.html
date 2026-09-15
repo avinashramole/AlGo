@@ -50,8 +50,9 @@
         <h1>Trade 2 Smart</h1>
         <p>Loading the desk…</p>
         <p>
-          If this stays here, Chrome is on the wrong address. Type
-          <code>http://localhost:5173</code> after <code>npm start</code> on your PC.
+          If this stays here on <b>trade2smart.com</b>, wait 10 seconds and press Ctrl+Shift+R.
+          Do not open localhost. On your PC desk only, use
+          <code>http://localhost:5173</code> after <code>npm start</code>.
         </p>
       </div>
     </div>
@@ -61,10 +62,17 @@
         function (event) {
           var root = document.getElementById("root");
           if (!root) return;
+          var host = String((location && location.hostname) || "");
+          var live = host.indexOf("trade2smart") !== -1;
+          var hint = live
+            ? "This is the live site. Wait 10 seconds and press Ctrl+Shift+R. Do not open localhost."
+            : "In Chrome type http://localhost:5173 and press Enter. Keep npm start open.";
           root.innerHTML =
             '<div id="t2s-boot"><h1>T2S failed to start</h1><p>' +
             String((event && event.message) || "Script error") +
-            "</p><p>In Chrome type <code>http://localhost:5173</code> and press Enter. Keep npm start open.</p></div>";
+            "</p><p>" +
+            hint +
+            "</p></div>";
         },
         true,
       );
