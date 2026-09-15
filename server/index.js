@@ -1115,7 +1115,7 @@ if (serveWebsite) {
   });
 }
 
-app.listen(port, "0.0.0.0", async () => {
+const server = app.listen(port, "0.0.0.0", () => {
   console.log(`T2S API running on http://localhost:${port}`);
   if (googleOAuthConfigured()) {
     console.log(`Google login ready. Callback ${googleRedirectUri(process.env)}`);
@@ -1128,13 +1128,26 @@ app.listen(port, "0.0.0.0", async () => {
   } else {
     console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   }
+  void bootBackground();
+});
+server.timeout = 20_000;
+server.headersTimeout = 22_000;
+server.keepAliveTimeout = 5_000;
+server.requestTimeout = 20_000;
+
+async function bootBackground() {
   try {
     const publicIp = await thisComputerPublicIpv4();
     if (publicIp) {
       console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
       console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
     }
-    const booted = await bootDhanFromEnv();
+    const booted = await Promise.race([
+      bootDhanFromEnv(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Dhan boot timed out after 20s")), 20_000);
+      }),
+    ]);
     if (booted) {
       console.log("Dhan live feed started (saved token or PIN + TOTP)");
     } else if (process.env.DHAN_ACCESS_TOKEN) {
@@ -1167,4 +1180,4 @@ app.listen(port, "0.0.0.0", async () => {
       return result;
     },
   });
-});
+}
