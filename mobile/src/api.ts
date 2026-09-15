@@ -15,30 +15,43 @@ export function setApiToken(token: string) {
   sessionToken = token && token !== "t2s-offline-token" ? token : "";
 }
 
+function apiDownMessage() {
+  const host = typeof location !== "undefined" ? location.hostname : "";
+  if (/trade2smart/i.test(host)) {
+    return "API is down on the server. On the VPS as root run: systemctl start t2s. Then press Ctrl+Shift+R. Do not open localhost.";
+  }
+  return "API is not running. Keep npm start open. Open http://localhost:5173";
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
-  const response = await fetch(`${apiBase()}/api${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(extraHeaders || {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}/api${path}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        ...(extraHeaders || {}),
+      },
+    });
+  } catch {
+    throw new Error(apiDownMessage());
+  }
   const text = await response.text();
   let body: { error?: string } = {};
   try {
     body = text ? (JSON.parse(text) as { error?: string }) : {};
   } catch {
-    /* HTML 404 from an old Express process */
+    /* nginx 504 HTML when Node is down */
   }
   if (!response.ok) {
     throw new Error(
       body.error ||
         (response.status === 404
-          ? "API route missing. Stop the old process on port 4000 and run npm start again."
+          ? "API route missing. On the VPS run: systemctl restart t2s. Then press Ctrl+Shift+R."
           : response.status === 502 || response.status === 503 || response.status === 504
-            ? "API is not running. Keep npm start open. Open http://localhost:5173"
+            ? apiDownMessage()
             : `Request failed ${response.status}`),
     );
   }
