@@ -1,17 +1,20 @@
 import { SideBadge } from "./Badges";
-import type { DeskReport, MemberPosition } from "../../api/client";
+import type { DeskOrder, DeskReport, MemberPosition } from "../../api/client";
 import { cn, formatInr, formatIst, formatNumber } from "../../lib/format";
 
 export function MemberLiveBook({
   positions,
+  orders,
   tradeBook,
   brokerName,
 }: {
   positions: MemberPosition[];
+  orders?: DeskOrder[];
   tradeBook?: DeskReport["tradeBook"];
   brokerName?: (id?: string) => string;
 }) {
   const closed = tradeBook || [];
+  const copied = (orders || []).slice(0, 20);
   const nameOf = brokerName || ((id?: string) => id || "Paper");
 
   return (
@@ -32,6 +35,38 @@ export function MemberLiveBook({
           ))}
           {!positions.length ? <p className="text-xs text-slate-400">No open positions.</p> : null}
         </div>
+      </section>
+
+      <section className="card overflow-x-auto">
+        <div className="px-4 pt-4 text-sm font-bold">Copied orders</div>
+        <p className="px-4 pt-1 text-xs text-slate-400">Orders copied from the admin desk after mapping.</p>
+        <table className="mt-2 w-full min-w-[640px] text-left text-sm">
+          <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Time</th>
+              <th className="px-4 py-3 font-semibold">Symbol</th>
+              <th className="px-4 py-3 font-semibold">Side</th>
+              <th className="px-4 py-3 text-right font-semibold">Qty</th>
+              <th className="px-4 py-3 text-right font-semibold">Price</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {copied.map((row) => (
+              <tr key={row.id} className="soft-row">
+                <td className="px-4 py-3 text-xs text-slate-500">{row.createdAt ? formatIst(row.createdAt) : "—"}</td>
+                <td className="px-4 py-3 font-semibold">{row.symbol}</td>
+                <td className="px-4 py-3">
+                  <SideBadge side={row.side} />
+                </td>
+                <td className="px-4 py-3 text-right">{row.qty}</td>
+                <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
+                <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!copied.length ? <p className="px-4 pb-4 text-xs text-slate-400">No copied orders yet.</p> : null}
       </section>
 
       <section className="card overflow-x-auto">

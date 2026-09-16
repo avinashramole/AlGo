@@ -10,7 +10,7 @@ process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
-const { getMemberDesk, installMemberBroker, recordMemberCopyFill, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
+const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
 const { dispatchMemberCopies, listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
@@ -89,6 +89,71 @@ test("paper members get a book fill only", () => {
   assert.equal(mine.paper, true);
   assert.equal(mine.brokerId, "paper");
   assert.equal(mine.brokerToken, "");
+});
+
+test("copy master clients receive admin orders without enrollment or algo mapping", () => {
+  const user = { id: "u-copy-master", name: "Copy Master", email: "copymaster@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    subscriptionUntil: "2026-12-31",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.equal(targets.some((row) => row.userId === user.id), true);
+});
+
+test("users mapped strategy on All clients copies that strategy without enrollment", () => {
+  const user = { id: "u-user-map", name: "User Map", email: "usermap@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "User Map VWAP",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: "User Map VWAP",
+    strategyId: "a-user-map",
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.deepEqual(
+    targets.filter((row) => row.userId === user.id).map((row) => row.userId),
+    [user.id],
+  );
+});
+
+test("expired subscriptionUntil is not a copy target", () => {
+  const user = { id: "u-expired", name: "Expired", email: "expired@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    subscriptionUntil: "2020-01-01",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.equal(targets.some((row) => row.userId === user.id), false);
 });
 
 test("mapped clients copy without a paid enrollment when scope is clients", () => {
@@ -196,6 +261,7 @@ test("dispatchMemberCopies writes paper fills for mapped clients", () => {
     quote: () => 0,
   });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24800 CE"));
+  assert.ok((desk.orders || []).some((row) => row.symbol === "NIFTY 24800 CE" && row.status === "FILLED"));
 });
 
 test("sendMemberCopyOrder paper path writes the member book", async () => {

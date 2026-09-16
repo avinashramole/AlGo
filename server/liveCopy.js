@@ -1,10 +1,36 @@
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
-import { peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
+import { listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
 
 function sameStrategy(left, right) {
   const a = String(left || "").trim().toLowerCase();
   const b = String(right || "").trim().toLowerCase();
   return Boolean(a && b && a === b);
+}
+
+function subscriptionOpen(until) {
+  const day = String(until || "").trim();
+  if (!day) return true;
+  return day >= new Date().toISOString().slice(0, 10);
+}
+
+function deskCopyMatches({ strategyName, strategyId } = {}) {
+  const mapped = new Set();
+  const copyMaster = new Set();
+  const name = String(strategyName || "").trim();
+  const id = String(strategyId || "").trim();
+  for (const row of listDeskRecords()) {
+    if (!row.userId || row.userId === "admin") continue;
+    if (!subscriptionOpen(row.subscriptionUntil)) continue;
+    const mode = row.subscriptionMode || "copy";
+    const mappedName = String(row.mappedStrategy || "").trim();
+    const mappedHit =
+      Boolean(mappedName) && (sameStrategy(mappedName, name) || mappedName === id || sameStrategy(mappedName, id));
+    if (mappedHit) mapped.add(row.userId);
+    if (row.copy && (mode === "copy" || mode === "both") && row.subscriptionUntil && subscriptionOpen(row.subscriptionUntil)) {
+      copyMaster.add(row.userId);
+    }
+  }
+  return { mapped, copyMaster };
 }
 
 function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyName, enrollment } = {}) {
@@ -46,13 +72,28 @@ export function listLiveCopyTargets({
     return sameStrategy(row.strategyName, strategyName);
   });
   const paidByUser = new Map(paid.map((row) => [row.userId, row]));
-  const userIds = new Set(paid.map((row) => row.userId));
+  const desks = deskCopyMatches({ strategyName, strategyId });
+  const userIds = new Set();
+  if (scope === "both") {
+    for (const row of paid) userIds.add(row.userId);
+    if (!mapped.size) {
+      for (const id of desks.copyMaster) userIds.add(id);
+    }
+  }
   if (scope === "clients" || scope === "both") {
     for (const id of mapped) userIds.add(id);
+    for (const id of desks.mapped) userIds.add(id);
+  }
+  if (scope === "both" && mapped.size) {
+    for (const id of desks.copyMaster) {
+      if (mapped.has(id)) userIds.add(id);
+    }
+    for (const id of [...userIds]) {
+      if (!mapped.has(id) && !desks.mapped.has(id)) userIds.delete(id);
+    }
   }
   const targets = [];
   for (const userId of userIds) {
-    if ((scope === "clients" || scope === "both") && mapped.size && !mapped.has(userId)) continue;
     const target = copyTargetForUser(userId, {
       masterQty,
       lotSize,

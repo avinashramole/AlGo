@@ -956,6 +956,7 @@ export type MemberDesk = {
   plans: MemberPlanRow[];
   report: DeskReport;
   positions: MemberPosition[];
+  orders?: DeskOrder[];
   topups: WalletTopup[];
   payments: PaymentPublic;
   copyReady?: boolean;

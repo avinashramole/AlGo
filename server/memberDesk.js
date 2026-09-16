@@ -660,11 +660,10 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     plans: planRows(book, enrollments),
     report,
     positions: book.positions,
+    orders: book.orders || [],
     topups: desk.topups.map(publicTopup),
     payments: publicPayments(admins),
-    copyReady: Boolean(
-      autoTrade && desk.copy !== false && String(desk.brokerToken || "").trim() && (enrollments || []).some((row) => enrollmentActive(row)),
-    ),
+    copyReady: Boolean(autoTrade && desk.copy !== false && String(desk.brokerToken || "").trim()),
   };
 }
 

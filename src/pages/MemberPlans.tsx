@@ -396,7 +396,12 @@ export function MemberPlans() {
         </div>
       </section>
 
-      <MemberLiveBook positions={desk.positions} tradeBook={report.tradeBook} brokerName={brokerName} />
+      <MemberLiveBook
+        positions={desk.positions}
+        orders={desk.orders || []}
+        tradeBook={report.tradeBook}
+        brokerName={brokerName}
+      />
 
       {checkout ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center">

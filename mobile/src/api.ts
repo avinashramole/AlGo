@@ -513,6 +513,7 @@ export type MemberDesk = {
     }>;
   };
   positions: Array<{ id: string; symbol: string; pnl: number; strategy?: string; ltp: number; qty: number }>;
+  orders?: Array<{ id: string; symbol: string; side?: string; qty?: number; price?: number; status?: string; strategy?: string; createdAt?: string }>;
   payments: PaymentPublic;
   copyReady?: boolean;
 };
