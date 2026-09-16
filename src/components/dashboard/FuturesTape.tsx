@@ -53,7 +53,6 @@ export function FuturesTape() {
       const message = err instanceof Error ? err.message : "Order failed";
       setNoteFail(true);
       setNote(message);
-      window.alert(message);
     } finally {
       setBusy("");
     }

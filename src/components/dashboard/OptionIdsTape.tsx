@@ -57,7 +57,6 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
       const message = err instanceof Error ? err.message : "Order failed";
       setNoteFail(true);
       setNote(message);
-      window.alert(message);
     } finally {
       setBusy("");
     }

@@ -951,7 +951,7 @@ app.post("/api/orders", async (req, res) => {
       res.status(201).json({
         ok: false,
         live: true,
-        error: String(error.message || "Order failed"),
+        error: String(error.message || "Dhan received this order and rejected it."),
         order: booked,
         snapshot: snapshot(),
       });
@@ -959,7 +959,7 @@ app.post("/api/orders", async (req, res) => {
     }
     res.status(error.status || 400).json({
       ok: false,
-      live: false,
+      live: Boolean(error.live),
       error: String(error.message || "Order failed"),
     });
   }

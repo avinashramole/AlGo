@@ -20,6 +20,7 @@ import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp 
 import { buildReport } from "./desk.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
+import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -1727,13 +1728,15 @@ function liveRejectReason(live, fallback) {
 }
 
 export function bookRejectedLiveOrder(payload, error) {
-  const live = error?.live;
-  if (!live?.orderId) return null;
+  if (!isDhanBrokerReject(error)) return null;
+  const live = error?.live && typeof error.live === "object" ? error.live : {};
+  const orderId = String(live.orderId || error.correlationId || payload.correlationId || `rej${Date.now()}`);
   return placeOrder({
     ...payload,
     brokerId: payload.brokerId || "dhan",
     live: {
       ...live,
+      orderId,
       status: live.status || "REJECTED",
       reason: live.reason || error?.message,
     },

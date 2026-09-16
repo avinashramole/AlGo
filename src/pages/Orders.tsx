@@ -97,6 +97,11 @@ export function Orders() {
                     <div className="mt-1 text-[11px] text-slate-400">
                       {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
                     </div>
+                    {row.reason ? (
+                      <div className={cn("mt-1 text-[11px]", row.status === "REJECTED" ? "text-down" : "text-slate-400")}>
+                        {row.reason}
+                      </div>
+                    ) : null}
                     {row.status === "PENDING" || row.status === "PARTIAL" ? (
                       <button
                         type="button"

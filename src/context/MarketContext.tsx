@@ -356,17 +356,20 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         if (isRemotePreviewHost()) {
           throw new Error(PREVIEW_DESK_MESSAGE);
         }
+        let applied = false;
         try {
           const result = await placeOrder(payload);
-          if (result.snapshot) setData(result.snapshot);
-          else await refresh();
+          if (result.snapshot) {
+            setData(result.snapshot);
+            applied = true;
+          } else await refresh();
           const status = String(result.order?.status || "").toUpperCase();
           if (result.error || result.ok === false || status === "REJECTED") {
             throw new Error(result.error || result.order?.reason || "Dhan did not place this order.");
           }
           return result;
         } catch (err) {
-          await refresh();
+          if (!applied) await refresh();
           throw err;
         }
       },

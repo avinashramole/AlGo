@@ -26,6 +26,7 @@ import {
 } from "./market.js";
 import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
+import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
@@ -255,13 +256,14 @@ function formatPlaceError(error, ip, body) {
       ? `${hours}. Dhan did not accept this after-market order. Place it when the market opens.`
       : `${hours}. Dhan asked for an offline/AMO order.`;
   }
-  const raw = error?.body ? JSON.stringify(error.body).slice(0, 280) : "";
-  const sent = body
-    ? `sent ${body.transactionType} ${body.exchangeSegment} ${body.productType} ${body.orderType} qty ${body.quantity}`
-    : "";
-  return [String(error?.message || "Dhan order failed"), describeIp(ip), sent, raw ? `raw ${raw}` : ""]
-    .filter(Boolean)
-    .join(" · ");
+  return dhanPlaceErrorMessage(error, describeIp(ip), body);
+}
+
+function stampPlaceError(error, ip, body, extra = {}) {
+  attachPlaceLive(error, extra);
+  error.status = error.status || 400;
+  error.message = formatPlaceError(error, ip, body);
+  if (error.live) error.live.reason = error.message;
 }
 
 function authHeaders(token, id) {
@@ -1263,8 +1265,19 @@ function dhanOrderLiveFromBody(result, extra = {}) {
 }
 
 function attachPlaceLive(error, extra = {}) {
-  const live = dhanOrderLiveFromBody(error?.body, extra);
-  if (live) error.live = live;
+  const fromBody = dhanOrderLiveFromBody(error?.body, extra);
+  const orderId = String(fromBody?.orderId || extra.orderId || extra.correlationId || `rej${Date.now()}`);
+  error.live = {
+    orderId,
+    status: fromBody?.status || extra.defaultStatus || "REJECTED",
+    securityId: String(extra.securityId || fromBody?.securityId || ""),
+    filledQty: fromBody?.filledQty || 0,
+    price: fromBody?.price || 0,
+    afterMarketOrder: Boolean(extra.afterMarketOrder ?? fromBody?.afterMarketOrder),
+    correlationId: extra.correlationId || fromBody?.correlationId || "",
+    raw: error?.body || fromBody?.raw || {},
+    reason: dhanErrorText(error?.body, error?.message || "Dhan rejected this order"),
+  };
 }
 
 export async function placeDhanOrder(payload = {}) {
@@ -1371,31 +1384,27 @@ export async function placeDhanOrder(payload = {}) {
       try {
         result = await submit(body);
       } catch (retryError) {
-        attachPlaceLive(retryError, { ...liveExtra, afterMarketOrder: true });
-        retryError.message = formatPlaceError(retryError, await ipPromise, body);
+        stampPlaceError(retryError, await ipPromise, body, { ...liveExtra, afterMarketOrder: true });
         throw retryError;
       }
     } else {
-      attachPlaceLive(error, liveExtra);
-      error.message = formatPlaceError(error, await ipPromise, body);
+      stampPlaceError(error, await ipPromise, body, liveExtra);
       throw error;
     }
   }
   const data = result?.data && typeof result.data === "object" ? result.data : result || {};
   const orderId = String(data.orderId || data.order_id || result?.orderId || "");
   const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
-  const live = dhanOrderLiveFromBody(result, {
-    ...liveExtra,
-    orderId,
-    status: status || "TRANSIT",
-    defaultStatus: "TRANSIT",
-  });
   if (!orderId || status.toUpperCase() === "REJECTED") {
     const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
     error.status = 400;
     error.body = result;
-    if (live) error.live = live;
-    error.message = formatPlaceError(error, await ipPromise, body);
+    stampPlaceError(error, await ipPromise, body, {
+      ...liveExtra,
+      orderId,
+      status: status || "REJECTED",
+      defaultStatus: "REJECTED",
+    });
     throw error;
   }
   if (!account) {
