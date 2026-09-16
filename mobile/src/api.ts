@@ -604,8 +604,11 @@ export function getContracts(symbol?: string, expiry?: string) {
   }>(`/contracts${suffix}`);
 }
 
-export function toggleAlgo(id: string) {
-  return request(`/algos/${id}/toggle`, { method: "POST" });
+export function toggleAlgo(id: string, enabled?: boolean) {
+  return request<{ ok: boolean; algo?: Snapshot["algos"][number]; snapshot?: Snapshot | null }>(`/algos/${id}/toggle`, {
+    method: "POST",
+    body: JSON.stringify(enabled === undefined ? {} : { enabled }),
+  });
 }
 
 export function createAlgo(payload: Record<string, unknown>) {

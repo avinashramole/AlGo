@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert } from "react-native";
 import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
 import { useAuth } from "./AuthContext";
@@ -28,13 +28,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const admin = user?.role === "admin";
   const [data, setData] = useState<Snapshot>(fallbackSnapshot);
   const [live, setLive] = useState(false);
+  const snapshotGen = useRef(0);
 
   const refresh = useCallback(async () => {
+    const gen = ++snapshotGen.current;
     try {
       const next = await getSnapshot();
+      if (gen !== snapshotGen.current) return;
       setData(next);
       setLive(true);
     } catch {
+      if (gen !== snapshotGen.current) return;
       setLive(false);
     }
   }, []);
@@ -57,12 +61,44 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       live,
       refresh,
       toggle: async (id: string) => {
+        let nextEnabled = true;
+        let previous: Snapshot["algos"][number] | undefined;
+        snapshotGen.current += 1;
+        setData((current) => {
+          previous = (current.algos || []).find((row) => row.id === id);
+          nextEnabled = !previous?.enabled;
+          return {
+            ...current,
+            algos: (current.algos || []).map((row) =>
+              row.id === id
+                ? {
+                    ...row,
+                    enabled: nextEnabled,
+                    status: nextEnabled ? (row.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED",
+                  }
+                : row,
+            ),
+          };
+        });
         try {
-          await toggleAlgo(id);
-          await refresh();
+          const result = await toggleAlgo(id, nextEnabled);
+          const next = result.algo;
+          if (next?.id) {
+            setData((current) => ({
+              ...current,
+              algos: (current.algos || []).map((row) => (row.id === next.id ? { ...row, ...next } : row)),
+            }));
+          }
+          void refresh();
         } catch (err) {
+          if (previous) {
+            setData((current) => ({
+              ...current,
+              algos: (current.algos || []).map((row) => (row.id === id ? previous! : row)),
+            }));
+          }
           Alert.alert("Paper / live", err instanceof Error ? err.message : "Could not start");
-          await refresh();
+          void refresh();
         }
       },
       order: async (payload: Record<string, unknown>) => {

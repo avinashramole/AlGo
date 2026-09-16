@@ -1072,8 +1072,11 @@ export function getCandles(tf: string) {
   );
 }
 
-export function toggleAlgo(id: string) {
-  return request(`/algos/${id}/toggle`, { method: "POST" });
+export function toggleAlgo(id: string, enabled?: boolean) {
+  return request<{ ok: boolean; algo?: Snapshot["algos"][number]; snapshot?: Snapshot | null }>(`/algos/${id}/toggle`, {
+    method: "POST",
+    body: JSON.stringify(enabled === undefined ? {} : { enabled }),
+  });
 }
 
 export type PlaceOrderResult = {

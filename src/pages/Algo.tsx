@@ -107,10 +107,13 @@ export function Algo() {
   };
 
   const startOrPause = async (algo: AlgoStrategy) => {
+    setBusyId(algo.id);
     try {
       await toggle(algo.id);
     } catch (err) {
       window.alert(catchDeskError(err, "Could not start"));
+    } finally {
+      setBusyId("");
     }
   };
 

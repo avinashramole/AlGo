@@ -1297,7 +1297,7 @@ export function armNiftyVwapHedgeDailyLive(now = new Date()) {
   return result;
 }
 
-export function toggleAlgo(id) {
+export function toggleAlgo(id, patch = {}) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;
   if (algo.runMode === "backtest") {
@@ -1305,7 +1305,19 @@ export function toggleAlgo(id) {
     algo.status = "BACKTEST";
     return { error: "Backtest strategies do not go live. Use Run backtest." };
   }
-  const starting = !algo.enabled;
+  const wantEnabled =
+    patch.enabled === true ? true : patch.enabled === false ? false : !algo.enabled;
+  const starting = wantEnabled && !algo.enabled;
+  const stopping = !wantEnabled && algo.enabled;
+  if (!starting && !stopping) {
+    if (algo.runMode === "paper") {
+      algo.brokerId = "paper";
+      algo.status = algo.enabled ? "PAPER" : "PAUSED";
+    } else {
+      algo.status = algo.enabled ? "LIVE" : "PAUSED";
+    }
+    return clone(algo);
+  }
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
   }
@@ -1317,7 +1329,7 @@ export function toggleAlgo(id) {
       return { error: `Start live needs ${name} LIVE — connect that broker on Brokers first.` };
     }
   }
-  algo.enabled = !algo.enabled;
+  algo.enabled = wantEnabled;
   if (starting) {
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;

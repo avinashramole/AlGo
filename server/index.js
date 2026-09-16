@@ -788,21 +788,27 @@ app.post("/api/option-chain/select", async (req, res) => {
 });
 
 app.post("/api/algos/:id/toggle", (req, res) => {
-  const current = getAlgo(req.params.id);
-  if (current && current.runMode === "live" && !current.enabled && !isDhanLive()) {
-    res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
-    return;
+  try {
+    const current = getAlgo(req.params.id);
+    const wantEnabled = req.body?.enabled;
+    const starting = current && current.runMode === "live" && !current.enabled && wantEnabled !== false;
+    if (starting && !isDhanLive()) {
+      res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
+      return;
+    }
+    const algo = toggleAlgo(req.params.id, { enabled: wantEnabled });
+    if (!algo) {
+      res.status(404).json({ error: "Algo not found" });
+      return;
+    }
+    if (algo.error) {
+      res.status(400).json({ error: algo.error });
+      return;
+    }
+    res.json({ ok: true, algo, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start strategy" });
   }
-  const algo = toggleAlgo(req.params.id);
-  if (!algo) {
-    res.status(404).json({ error: "Algo not found" });
-    return;
-  }
-  if (algo.error) {
-    res.status(400).json({ error: algo.error });
-    return;
-  }
-  res.json({ ok: true, ...algo, snapshot: null });
 });
 
 app.post("/api/algos", (req, res) => {
