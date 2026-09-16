@@ -48,7 +48,7 @@ export function ActiveAlgos() {
             </div>
             <button
               type="button"
-              onClick={() => void toggle(algo.id)}
+              onClick={() => void toggle(algo.id, !algo.enabled)}
               className={cn(
                 "relative h-6 w-11 rounded-full transition-colors",
                 algo.enabled ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600",

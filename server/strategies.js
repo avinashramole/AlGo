@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,10 @@ import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
+
+function newAlgoId() {
+  return `a${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`;
+}
 
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
@@ -341,7 +346,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         lots: cfg.lots,
         lotSize: cfg.lotSize,
       }),
-      id: existing.id || `a${Date.now()}`,
+      id: existing.id || newAlgoId(),
       kind: NIFTY_VWAP_HEDGE_KIND,
       slPct: 0,
       initialSlPct: 0,
@@ -386,7 +391,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         lots: cfg.lots,
         lotSize: cfg.lotSize,
       }),
-      id: existing.id || `a${Date.now()}`,
+      id: existing.id || newAlgoId(),
       kind: NIFTY_VWAP_REVERSAL_KIND,
       slPct: cfg.initialSlPct,
       initialSlPct: cfg.initialSlPct,
@@ -432,7 +437,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         lots: cfg.lots,
         lotSize: cfg.lotSize,
       }),
-      id: existing.id || `a${Date.now()}`,
+      id: existing.id || newAlgoId(),
       kind: NIFTY_VWAP_KIND,
       slPct: cfg.initialSlPct,
       initialSlPct: cfg.initialSlPct,
@@ -524,7 +529,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
   const next = {
     ...existing,
-    id: existing.id || `a${Date.now()}`,
+    id: existing.id || newAlgoId(),
     name,
     kind,
     tag: kind === "indicator" ? "Indicator" : "Price action",
@@ -638,10 +643,7 @@ export function loadAlgoStore(catalog = seedAlgos()) {
 
 export function saveAlgoStore(algos = [], removedIds = []) {
   fs.mkdirSync(path.dirname(ALGOS_FILE), { recursive: true });
-  fs.writeFileSync(
-    ALGOS_FILE,
-    `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) }, null, 2)}\n`,
-  );
+  fs.writeFileSync(ALGOS_FILE, `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) })}\n`);
 }
 
 export const STRATEGY_META = { SYMBOLS, INDICATORS, PATTERNS, TIMEFRAMES, OPERATORS, SOURCES, OP_LABEL, SRC_LABEL };

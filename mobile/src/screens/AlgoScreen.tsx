@@ -585,7 +585,7 @@ export function AlgoScreen() {
           ) : (
           <View style={styles.row}>
             <Text style={styles.muted}>{algo.enabled ? "Running" : "Paused"}</Text>
-            <Switch value={algo.enabled} onValueChange={() => void toggle(algo.id)} />
+            <Switch value={algo.enabled} onValueChange={(value) => void toggle(algo.id, value)} />
           </View>
           )}
           <View style={styles.actions}>

@@ -34,13 +34,21 @@ test("starting one strategy does not stop another, and a second start click stay
     assert.equal(live.find((row) => row.id === first.id).enabled, true);
     assert.equal(live.find((row) => row.id === second.id).enabled, true);
 
+    const third = createAlgo({ name: `Toggle Three ${stamp}`, kind: "indicator", runMode: "live" });
+    const startedThird = toggleAlgo(third.id, { enabled: true });
+    assert.equal(startedThird.enabled, true);
+    assert.equal(listAlgos().find((row) => row.id === first.id).enabled, true);
+    assert.equal(listAlgos().find((row) => row.id === second.id).enabled, true);
+
     const stopped = toggleAlgo(first.id, { enabled: false });
     assert.equal(stopped.enabled, false);
     assert.equal(stopped.status, "PAUSED");
     assert.equal(listAlgos().find((row) => row.id === second.id).enabled, true);
+    assert.equal(listAlgos().find((row) => row.id === third.id).enabled, true);
   } finally {
-    deleteAlgo(first.id);
-    deleteAlgo(second.id);
+    for (const row of listAlgos().filter((item) => item.name.includes(String(stamp)))) {
+      deleteAlgo(row.id);
+    }
     setDhanFeed({ live: false });
     assert.equal(names(...listAlgos().filter((row) => row.name.includes(String(stamp)))).length, 0);
   }

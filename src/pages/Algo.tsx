@@ -34,9 +34,10 @@ function moneyClass(value: number) {
 }
 
 function statusLabel(algo: AlgoStrategy) {
-  if (algo.status === "LIVE") return "LIVE";
+  if (algo.runMode === "backtest" || algo.status === "BACKTEST") return "RESEARCH";
+  if (algo.enabled && algo.runMode === "paper") return "PAPER";
+  if (algo.enabled || algo.status === "LIVE") return "LIVE";
   if (algo.status === "PAPER") return "PAPER";
-  if (algo.status === "BACKTEST") return "RESEARCH";
   return "STOPPED";
 }
 
@@ -109,7 +110,7 @@ export function Algo() {
   const startOrPause = async (algo: AlgoStrategy) => {
     setBusyId(algo.id);
     try {
-      await toggle(algo.id);
+      await toggle(algo.id, !algo.enabled);
     } catch (err) {
       window.alert(catchDeskError(err, "Could not start"));
     } finally {

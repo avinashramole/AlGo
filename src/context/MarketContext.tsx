@@ -115,7 +115,7 @@ type MarketContextValue = {
   data: Snapshot;
   live: boolean;
   refresh: () => Promise<void>;
-  toggle: (id: string) => Promise<void>;
+  toggle: (id: string, enabled?: boolean) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (
     id: string,
@@ -154,13 +154,41 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Snapshot>(fallback);
   const [live, setLive] = useState(false);
   const snapshotGen = useRef(0);
+  const dataRef = useRef(data);
+  const pendingToggles = useRef(new Map<string, { enabled: boolean; status: Snapshot["algos"][number]["status"] }>());
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
+    setData((current) => {
+      const next = {
+        ...current,
+        algos: (current.algos || []).map((row) => (row.id === id ? { ...row, ...patch } : row)),
+      };
+      dataRef.current = next;
+      return next;
+    });
+  };
+
+  const mergeSnapshot = (incoming: Snapshot) => {
+    const pending = pendingToggles.current;
+    const algos = (incoming.algos || []).map((row) => {
+      const hold = pending.get(row.id);
+      return hold ? { ...row, enabled: hold.enabled, status: hold.status } : row;
+    });
+    const next = { ...incoming, algos };
+    dataRef.current = next;
+    setData(next);
+  };
 
   const refresh = useCallback(async () => {
     const gen = ++snapshotGen.current;
     try {
       const next = await getSnapshot();
       if (gen !== snapshotGen.current) return;
-      setData(next);
+      mergeSnapshot(next);
       setLive(true);
     } catch {
       if (gen !== snapshotGen.current) return;
@@ -178,7 +206,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           const next = byId.get(row.id);
           return next ? { ...row, ltp: next.ltp, pnl: next.pnl } : row;
         });
-        return { ...current, positions };
+        const next = { ...current, positions };
+        dataRef.current = next;
+        return next;
       });
     } catch {
       /* keep last snapshot */
@@ -212,22 +242,33 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       data,
       live,
       refresh,
-      toggle: async (id: string) => {
-        const previous = (data.algos || []).find((row) => row.id === id);
-        const nextEnabled = !previous?.enabled;
+      toggle: async (id: string, enabled?: boolean) => {
+        const previous = (dataRef.current.algos || []).find((row) => row.id === id);
+        if (!previous) throw new Error("Strategy not found");
+        const nextEnabled = enabled === undefined ? !previous.enabled : enabled;
+        if (nextEnabled === Boolean(previous.enabled)) return;
+        if (previous.runMode === "backtest" && nextEnabled) {
+          throw new Error("Backtest strategies do not go live. Use Run backtest.");
+        }
+        if (nextEnabled && previous.runMode !== "backtest" && !dataRef.current.dhanFeed?.live) {
+          throw new Error(
+            previous.runMode === "paper"
+              ? "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first."
+              : "Start live needs Dhan LIVE — real CE/PE and futures orders only.",
+          );
+        }
+        const status = nextEnabled ? (previous.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
+        pendingToggles.current.set(id, { enabled: nextEnabled, status });
         snapshotGen.current += 1;
+        patchAlgo(id, { enabled: nextEnabled, status });
         try {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
-          if (next?.id) {
-            setData((current) => ({
-              ...current,
-              algos: (current.algos || []).map((row) => (row.id === next.id ? { ...row, ...next } : row)),
-            }));
-          }
-          void refresh();
+          pendingToggles.current.delete(id);
+          if (next?.id) patchAlgo(next.id, next);
         } catch (err) {
-          void refresh();
+          pendingToggles.current.delete(id);
+          patchAlgo(id, previous);
           throw err;
         }
       },
