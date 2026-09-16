@@ -330,65 +330,44 @@ function inferTimeframe(candles, fallback = "1H") {
 
 const state = {
   indices: [
-    withDeskQuotes({ symbol: "NIFTY 50", name: "NIFTY", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24455, 24410, 24480, 24510, 24490, 24540, 24580] }),
-    withDeskQuotes({ symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 51940, 51910, 52020, 52080, 52040, 52110, 52141] }),
-    withDeskQuotes({ symbol: "FINNIFTY", name: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24780, 24755, 24810, 24840, 24820, 24870, 24891] }),
-    withDeskQuotes({ symbol: "SENSEX", name: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642] }),
-    withDeskQuotes({ symbol: "CRUDEOIL", name: "CRUDE OIL", price: 6124.5, change: 18.4, changePct: 0.3, spark: [6088, 6096, 6082, 6104, 6112, 6106, 6118, 6124] }),
-    withDeskQuotes({ symbol: "INDIA VIX", name: "VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.72, 13.8, 13.55, 13.48, 13.4, 13.3, 13.24] }),
+    emptyDeskIndex("NIFTY 50", "NIFTY"),
+    emptyDeskIndex("BANKNIFTY", "BANKNIFTY"),
+    emptyDeskIndex("FINNIFTY", "FINNIFTY"),
+    emptyDeskIndex("SENSEX", "SENSEX"),
+    emptyDeskIndex("CRUDEOIL", "CRUDE OIL"),
+    emptyDeskIndex("INDIA VIX", "VIX"),
   ],
-  ohlc: { open: 24462.1, high: 24612.8, low: 24418.35, close: 24580.25 },
+  ohlc: { open: 0, high: 0, low: 0, close: 0 },
   dnaScores: [
-    { label: "Trend", value: 86 },
-    { label: "Momentum", value: 78 },
-    { label: "Buy Pressure", value: 91 },
-    { label: "Volatility", value: 34 },
-    { label: "OI Build", value: 72 },
-    { label: "PCR", value: 64 },
+    { label: "Trend", value: 0 },
+    { label: "Momentum", value: 0 },
+    { label: "Buy Pressure", value: 0 },
+    { label: "Volatility", value: 0 },
+    { label: "OI Build", value: 0 },
+    { label: "PCR", value: 0 },
   ],
-  optionChain: buildSyntheticChain(24580.25, 50, 10),
+  optionChain: [],
   optionMeta: withExpiryLabels({
     symbol: "NIFTY",
-    expiry: upcomingExpiries("NIFTY")[0] || "2026-08-25",
+    expiry: upcomingExpiries("NIFTY")[0] || "",
     expiries: upcomingExpiries("NIFTY"),
-    spot: 24580.25,
-    pcr: 0.86,
-    maxPain: 24500,
-    atmIv: 12.4,
-    source: "demo",
+    spot: 0,
+    pcr: 0,
+    maxPain: 0,
+    atmIv: 0,
+    source: "idle",
     lastAt: null,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
   algos: algoStore.algos,
   positions: [],
   signals: [],
-  watchlist: [
-    { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12 },
-    { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64 },
-    { symbol: "ICICIBANK", ltp: 1238.9, chg: 0.41 },
-    { symbol: "INFY", ltp: 1864.15, chg: -0.28 },
-    { symbol: "TCS", ltp: 4128.6, chg: -0.14 },
-    { symbol: "SBIN", ltp: 812.35, chg: 1.04 },
-    { symbol: "BHARTIARTL", ltp: 1542.8, chg: 0.72 },
-    { symbol: "ITC", ltp: 492.15, chg: -0.36 },
-  ],
+  watchlist: [],
   fiiDii: {
-    fii: { buy: 12480, sell: 10840, net: 1640 },
-    dii: { buy: 9860, sell: 8420, net: 1440 },
+    fii: { buy: 0, sell: 0, net: 0 },
+    dii: { buy: 0, sell: 0, net: 0 },
   },
-  marketWatch: [
-    { symbol: "NIFTY 50", ltp: 24580.25, chg: 0.51, volume: "182.4 Cr" },
-    { symbol: "BANKNIFTY", ltp: 52140.8, chg: 0.4, volume: "96.1 Cr" },
-    { symbol: "CRUDEOIL", ltp: 6124.5, chg: 0.3, volume: "MCX" },
-    { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12, volume: "48.2 L" },
-    { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64, volume: "62.8 L" },
-    { symbol: "ICICIBANK", ltp: 1238.9, chg: 0.41, volume: "54.1 L" },
-    { symbol: "INFY", ltp: 1864.15, chg: -0.28, volume: "31.6 L" },
-    { symbol: "TCS", ltp: 4128.6, chg: -0.14, volume: "18.4 L" },
-    { symbol: "SBIN", ltp: 812.35, chg: 1.04, volume: "71.2 L" },
-    { symbol: "LT", ltp: 3612.4, chg: 0.88, volume: "12.9 L" },
-    { symbol: "AXISBANK", ltp: 1174.5, chg: 0.22, volume: "28.7 L" },
-  ],
+  marketWatch: [],
   featuredSignal: {
     action: "BUY",
     symbol: "",
@@ -448,24 +427,9 @@ function rememberOptionChain(symbol, rows, meta) {
 }
 
 function seedCachedChains() {
-  rememberOptionChain(state.optionMeta.symbol, state.optionChain, state.optionMeta);
-  const crude = getUnderlying("CRUDEOIL");
-  const spot = getChainSpot(crude.id);
-  const rows = buildSyntheticChain(spot, crude.step, 10);
-  const stats = chainStats(rows, spot);
-  rememberOptionChain(
-    crude.id,
-    rows,
-    withExpiryLabels({
-      symbol: crude.id,
-      expiry: upcomingExpiries(crude.id)[0] || "",
-      expiries: upcomingExpiries(crude.id),
-      ...stats,
-      source: "demo",
-      lastAt: Date.now(),
-      underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
-    }),
-  );
+  if (Array.isArray(state.optionChain) && state.optionChain.length) {
+    rememberOptionChain(state.optionMeta.symbol, state.optionChain, state.optionMeta);
+  }
 }
 
 seedCachedChains();
@@ -1064,14 +1028,10 @@ function withDeskQuotes(item) {
   const price = Number(item.price) || 0;
   const change = Number(item.change) || 0;
   const isVix = item.symbol === "INDIA VIX";
-  const future = Number(item.future) > 0 ? Number(item.future) : round2(isVix ? price : price + Math.max(6, price * 0.00085));
+  const future = Number(item.future) > 0 ? Number(item.future) : isVix && price > 0 ? round2(price) : 0;
   const vwap =
-    Number(item.futureVwap) > 0
-      ? Number(item.futureVwap)
-      : Number(item.vwap) > 0
-        ? Number(item.vwap)
-        : round2(isVix ? price : price - Math.max(2, price * 0.00032));
-  const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : round2(price - change);
+    Number(item.futureVwap) > 0 ? Number(item.futureVwap) : Number(item.vwap) > 0 ? Number(item.vwap) : isVix && price > 0 ? round2(price) : 0;
+  const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : price > 0 && change ? round2(price - change) : 0;
   const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, CRUDEOIL: 565899, "INDIA VIX": 21 };
   return {
     ...item,
@@ -1080,6 +1040,21 @@ function withDeskQuotes(item) {
     prevClose,
     securityId: item.securityId || ids[item.symbol] || undefined,
   };
+}
+
+function emptyDeskIndex(symbol, name) {
+  return withDeskQuotes({
+    symbol,
+    name,
+    price: 0,
+    change: 0,
+    changePct: 0,
+    spark: [],
+    future: 0,
+    vwap: 0,
+    futureVwap: 0,
+    prevClose: 0,
+  });
 }
 
 function sanePrevClose(ltp, prev) {
@@ -1111,10 +1086,6 @@ export function hasLastLiveBook() {
 
 function publicDhanFeed() {
   return { ...clone(state.dhanFeed), hasQuotes: hasLastLiveBook() };
-}
-
-function jitter(price, magnitude) {
-  return Number((price + (Math.random() - 0.48) * magnitude).toFixed(2));
 }
 
 function isSimRow(row) {
@@ -1157,79 +1128,13 @@ export function restoreSimulatedDesk() {
   state.closedTrades = (state.closedTrades || []).filter(isPaperRow);
   state.signals = [];
   state.notifications = [];
-  applySyntheticOptionChain();
   syncPaperLedger();
 }
 
 export function tickMarket() {
-  if (state.dhanFeed.live) {
-    runPaperAlgos();
-    runLiveAlgos();
-    markPaperToMarket();
-    return;
-  }
-
-  if (hasLastLiveBook()) {
-    runPaperAlgos();
-    markPaperToMarket();
-    return;
-  }
-
-  state.indices = state.indices.map((item) => {
-    const next = jitter(item.price, item.symbol === "INDIA VIX" ? 0.04 : item.price * 0.00012);
-    const spark = item.spark.slice(1).concat(next);
-    const change = Number((item.change + (next - item.price)).toFixed(2));
-    const prevClose = item.prevClose > 0 ? item.prevClose : round2(next - change);
-    const changePct = Number(((change / (prevClose || next - change || 1)) * 100).toFixed(2));
-    const future = item.symbol === "INDIA VIX" ? next : jitter((item.future || next) + (next - item.price), 0.35);
-    const futureVwap = item.symbol === "INDIA VIX" ? next : item.futureVwap > 0 ? jitter(item.futureVwap, item.price * 0.00004) : 0;
-    const vwap =
-      item.symbol === "INDIA VIX" ? next : futureVwap > 0 ? futureVwap : jitter(item.vwap || next, item.price * 0.00004);
-    return withDeskQuotes({ ...item, price: next, change, changePct, spark, future, vwap, futureVwap, prevClose });
-  });
-
-  const nifty = state.indices[0];
-  state.ohlc.close = nifty.price;
-  state.ohlc.high = Math.max(state.ohlc.high, nifty.price);
-  state.ohlc.low = Math.min(state.ohlc.low, nifty.price);
-
-  state.positions = state.positions.map((row) => {
-    if (isPaperRow(row)) return row;
-    const ltp = jitter(row.ltp, 0.35);
-    const dir = row.type === "BUY" ? 1 : -1;
-    const pnl = Number(((ltp - row.avg) * row.qty * dir).toFixed(2));
-    return { ...row, ltp, pnl };
-  });
-
-  state.algos = state.algos.map((algo) => {
-    if (!algo.enabled) return algo;
-    if (algo.runMode === "paper" || algo.runMode === "backtest") return algo;
-    const pnl = Number((algo.pnl + (Math.random() - 0.35) * 12).toFixed(2));
-    return { ...algo, pnl };
-  });
-
-  const spot = getChainSpot(state.optionMeta.symbol);
-  const und = getUnderlying(state.optionMeta.symbol);
-  const atm = atmStrike(spot, und.step);
-  state.optionChain = state.optionChain.map((row) => ({
-    ...row,
-    callLtp: jitter(row.callLtp, 0.55),
-    putLtp: jitter(row.putLtp, 0.55),
-    callOi: Math.max(1000, Math.round((row.callOi || 0) + (Math.random() - 0.45) * 8000)),
-    putOi: Math.max(1000, Math.round((row.putOi || 0) + (Math.random() - 0.45) * 8000)),
-    callVol: Math.max(0, Math.round((row.callVol || 0) + (Math.random() - 0.4) * 4000)),
-    putVol: Math.max(0, Math.round((row.putVol || 0) + (Math.random() - 0.4) * 4000)),
-    callBuy: Math.max(0, Math.round((row.callBuy || 0) + (Math.random() - 0.45) * 120)),
-    callSell: Math.max(0, Math.round((row.callSell || 0) + (Math.random() - 0.45) * 120)),
-    putBuy: Math.max(0, Math.round((row.putBuy || 0) + (Math.random() - 0.45) * 120)),
-    putSell: Math.max(0, Math.round((row.putSell || 0) + (Math.random() - 0.45) * 120)),
-    callVwap: jitter(row.callVwap || row.callLtp, 0.25),
-    putVwap: jitter(row.putVwap || row.putLtp, 0.25),
-    atm: row.strike === atm,
-  }));
-  const stats = chainStats(state.optionChain, spot);
-  state.optionMeta = withExpiryLabels({ ...state.optionMeta, ...stats, source: "demo" });
+  if (state.dhanFeed.live) runLiveAlgos();
   runPaperAlgos();
+  markPaperToMarket();
 }
 
 export function quoteSymbol(symbol) {
@@ -2188,7 +2093,7 @@ export function setLiveCandles(candles, symbol = "NIFTY") {
 export function getChainSpot(symbol = state.optionMeta.symbol) {
   const meta = getUnderlying(symbol);
   const index = state.indices.find((item) => item.symbol === meta.indexSymbol);
-  return Number(index?.price || state.optionMeta.spot || 24580);
+  return Number(index?.price || state.optionMeta.spot || 0);
 }
 
 export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expiry = state.optionMeta.expiry) {
@@ -2199,7 +2104,8 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
     expiries = [...expiries, wanted].sort();
   }
   const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
-  const spot = getChainSpot(meta.id);
+  const liveSpot = getChainSpot(meta.id);
+  const spot = liveSpot > 0 ? liveSpot : meta.id === "CRUDEOIL" ? 6100 : 24500;
   const rows = buildSyntheticChain(spot, meta.step, 10);
   const stats = chainStats(rows, spot);
   state.optionChain = rows;
@@ -2365,8 +2271,6 @@ function dayChange(index, quote, ltp) {
 }
 
 export function applyLiveQuotes(quotes) {
-  const indexPrev = Object.fromEntries(state.indices.map((item) => [item.symbol, item.price]));
-
   for (const quote of quotes) {
     const indexSymbol = INDEX_ALIASES[quote.parent || quote.symbol] || quote.symbol;
     const index = state.indices.find((item) => item.symbol === indexSymbol);
@@ -2416,15 +2320,7 @@ export function applyLiveQuotes(quotes) {
       index.change = day.change;
       index.changePct = day.changePct;
       index.prevClose = day.prevClose;
-      if (!(index.futureVwap > 0)) {
-        if (vwap > 0) index.vwap = round2(vwap);
-        else if (!(index.vwap > 0) || Math.abs(index.vwap - ltp) / ltp > 0.012) {
-          index.vwap = round2(ltp - Math.max(2, ltp * 0.00032));
-        }
-      }
-      if (!(index.future > 0) || Math.abs(index.future - ltp) / ltp > 0.012) {
-        index.future = round2(ltp + Math.max(6, ltp * 0.00085));
-      }
+      if (vwap > 0 && !(index.futureVwap > 0)) index.vwap = round2(vwap);
       if (quote.securityId) index.securityId = Number(quote.securityId) || index.securityId;
       index.spark = pushSpark(index.spark, ltp);
       if (index.symbol === "NIFTY 50") {
@@ -2466,33 +2362,9 @@ export function applyLiveQuotes(quotes) {
       const dir = row.type === "BUY" ? 1 : -1;
       return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir), ticked: true };
     }
-    if (state.dhanFeed.live) return row;
-    const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
-    if (equity) {
-      const ltp = round2(equity.ltp);
-      const dir = row.type === "BUY" ? 1 : -1;
-      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-    }
-    const indexName = relatedIndex(row.symbol);
-    if (!indexName || !indexPrev[indexName]) return row;
-    const nextIndex = state.indices.find((item) => item.symbol === indexName);
-    if (!nextIndex) return row;
-    const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
-    if (!Number.isFinite(movePct) || movePct === 0) return row;
-    const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
-    const dir = row.type === "BUY" ? 1 : -1;
-    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+    return row;
   });
 
-  const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
-  if (nifty && indexPrev["NIFTY 50"] && state.optionMeta?.source !== "dhan") {
-    const move = nifty.price - indexPrev["NIFTY 50"];
-    state.optionChain = state.optionChain.map((row) => ({
-      ...row,
-      callLtp: round2(Math.max(0.05, row.callLtp + move * 0.08)),
-      putLtp: round2(Math.max(0.05, row.putLtp - move * 0.08)),
-    }));
-  }
   runPaperAlgos();
   runLiveAlgos();
   markPaperToMarket();
@@ -2506,15 +2378,8 @@ export function getCandles(tf = "5m", symbol = "NIFTY") {
         ? state.liveCandles
         : liveCandleCache.get("NIFTY") || []
       : liveCandleCache.get(key) || [];
-  if (state.dhanFeed.live || hasLastLiveBook()) {
-    if (!liveRows.length) return [];
-    const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
-    if (minutes <= 1) return clone(liveRows);
-    return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
-  }
-  const index =
-    state.indices.find((item) => candleSymbol(item.symbol) === key || candleSymbol(item.name) === key) || state.indices[0];
-  const price = Number(index?.price || (key === "CRUDEOIL" ? 6124 : 24420));
-  const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
-  return generateCandles(count, price, tf.length * 17 + (key === "CRUDEOIL" ? 11 : 0));
+  if (!liveRows.length) return [];
+  const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  if (minutes <= 1) return clone(liveRows);
+  return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
 }

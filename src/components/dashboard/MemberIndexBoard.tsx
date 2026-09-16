@@ -1,4 +1,4 @@
-import { cn, formatChange, formatNumber, formatPct } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote } from "../../lib/format";
 import type { MemberIndexQuote } from "../../api/client";
 import { Sparkline } from "../charts/Sparkline";
 
@@ -18,7 +18,7 @@ export function MemberIndexBoard({ indices }: { indices: MemberIndexQuote[] }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
-                <div className="mt-1 text-lg font-bold leading-none">{formatNumber(item.price)}</div>
+                <div className="mt-1 text-lg font-bold leading-none">{formatQuote(item.price)}</div>
                 <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today
                 </div>
@@ -28,7 +28,7 @@ export function MemberIndexBoard({ indices }: { indices: MemberIndexQuote[] }) {
             <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-2">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Future</div>
-                <div className="text-sm font-bold">{formatNumber(item.future || item.price)}</div>
+                <div className="text-sm font-bold">{formatQuote(item.future || item.price)}</div>
                 <div className="text-[10px] text-slate-400">{item.futureExpiry || ""}</div>
               </div>
               <div>

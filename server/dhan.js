@@ -4,7 +4,6 @@ import { WebSocket } from "ws";
 import { markDhanLive } from "./brokers.js";
 import {
   applyLiveQuotes,
-  applySyntheticOptionChain,
   cacheOptionDesk,
   clearSimulatedDesk,
   currentOptionRows,
@@ -901,7 +900,7 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const cached = peekOptionChain(und.id);
   const chosen = expiry || cached?.meta?.expiry || desk.expiry;
   const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(und.id);
-  const liveOnly = Boolean(accessToken);
+  const liveOnly = true;
   const fallback = lastChainRows(und, sameSymbol, cached);
   const liveRows = Array.isArray(rows) && rows.length ? rows : fallback;
   const next = buildScripChain({
@@ -925,16 +924,7 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
 }
 
 async function refreshOptionChain() {
-  if (!accessToken) {
-    if (hasLastLiveBook()) return;
-    applySyntheticOptionChain();
-    paintDesk({
-      symbol: getOptionMeta().symbol,
-      expiry: getOptionMeta().expiry,
-      source: "demo",
-    });
-    return;
-  }
+  if (!accessToken) return;
   const desk = getOptionMeta();
   const und = getUnderlying(desk.symbol);
   const currentExpiry = normalizeExpiry(desk.expiry);
@@ -1001,8 +991,15 @@ export async function selectOptionDesk({ symbol, expiry }) {
         ? normalizeExpiry(cached.meta.expiry)
         : expiries[0];
   if (!accessToken) {
-    applySyntheticOptionChain(und.id, chosen);
-    paintDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
+    if (cached?.rows?.length && cached?.meta?.source === "dhan") {
+      paintDesk({
+        symbol: und.id,
+        expiry: chosen,
+        expiries,
+        rows: cached.rows,
+        source: "dhan",
+      });
+    }
     return getOptionMeta();
   }
   paintDesk({

@@ -13,7 +13,7 @@ export function Header() {
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
   const admin = isAdminUser(user);
-  const { live, data } = useMarket();
+  const { data } = useMarket();
   const location = useLocation();
   const pageTitle = pageTitleForPath(location.pathname, user);
   const [now, setNow] = useState(() => new Date());
@@ -41,7 +41,7 @@ export function Header() {
   const mcxOpen = isMcxSessionOpen(now);
   const marketOpen = nseOpen || mcxOpen;
   const dhanQuotes = hasDhanQuotes(data);
-  const feedLabel = dhanQuotes ? "DHAN" : live ? "LIVE" : "DEMO";
+  const feedLabel = dhanQuotes ? "DHAN" : "";
   const sessionLabel = nseOpen && mcxOpen ? "Open" : nseOpen ? "NSE Open" : mcxOpen ? "MCX Open" : "Closed";
   const sessionTitle = `NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST. Last Dhan quotes stay after close.`;
   const lastTick = data.dhanFeed?.lastTickAt
@@ -84,7 +84,7 @@ export function Header() {
         >
           <span className={cn("h-2 w-2 shrink-0 rounded-full", marketOpen ? "pulse-dot bg-up" : "bg-slate-400")} />
           <span className="truncate">{sessionLabel}</span>
-          <span className="hidden truncate sm:inline">{` · ${feedLabel}`}</span>
+          {feedLabel ? <span className="hidden truncate sm:inline">{` · ${feedLabel}`}</span> : null}
           <span className={cn("hidden font-medium md:inline", marketOpen ? "text-emerald-600/80 dark:text-emerald-400" : "text-slate-500")}>
             {formatIstClock(now)}
           </span>

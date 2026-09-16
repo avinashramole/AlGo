@@ -1,3 +1,7 @@
+export function formatQuote(value: number, digits = 2) {
+  return Number(value) > 0 ? formatNumber(value, digits) : "—";
+}
+
 export function formatNumber(value: number, digits = 2) {
   return value.toLocaleString("en-IN", {
     minimumFractionDigits: digits,
@@ -91,7 +95,7 @@ export function dhanFeedLabel(
   data?: { dhanFeed?: { live?: boolean; hasQuotes?: boolean }; optionMeta?: { source?: string } },
   sessionOpen?: boolean,
 ) {
-  if (!hasDhanQuotes(data)) return "DEMO";
+  if (!hasDhanQuotes(data)) return "WAIT";
   if (data?.dhanFeed?.live && (sessionOpen == null || sessionOpen)) {
     return data?.optionMeta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain";
   }
@@ -112,7 +116,7 @@ export function liveBookCopy(live?: boolean, hasQuotes?: boolean) {
   if (hasQuotes) {
     return "Last Dhan quotes stay on the desk after NSE and MCX close. Paper trading uses the live feed only.";
   }
-  return "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
+  return "Waiting for Dhan quotes. No simulated tape.";
 }
 
 export function deskStrategyName(strategy?: string, algos?: Array<{ id?: string; name?: string }>) {

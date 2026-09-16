@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
-import { cn, formatNumber, formatPct, vwapTone } from "../../lib/format";
+import { cn, formatNumber, formatPct, formatQuote, vwapTone } from "../../lib/format";
 
 export function OptionChain() {
   const { data } = useMarket();
@@ -17,7 +17,7 @@ export function OptionChain() {
         <div className="text-sm font-bold">Option Chain</div>
         <Link to="/options" className="text-[11px] font-semibold text-brand-500">
           {data.optionMeta?.symbol || "NIFTY"} · {data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "expiry"} · Spot{" "}
-          {formatNumber(spot, 0)} →
+          {formatQuote(spot, 0)} →
         </Link>
       </div>
       <table className="w-full text-left text-xs">

@@ -10,17 +10,17 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getCandles } from "../../api/client";
-import { generateCandles, type Candle } from "../../lib/chartData";
-import { formatNumber, hasDhanQuotes } from "../../lib/format";
+import { cn, formatQuote, hasDhanQuotes } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { CandleChart } from "../charts/CandleChart";
+import type { Candle } from "../../lib/chartData";
 
 const timeframes = ["1m", "5m", "15m", "1H", "1D"] as const;
 
 export function PriceChart() {
   const { theme } = useTheme();
-  const { data, live } = useMarket();
+  const { data } = useMarket();
   const ohlc = data.ohlc;
   const dhanLive = Boolean(data.dhanFeed?.live);
   const dhanQuotes = hasDhanQuotes(data);
@@ -33,16 +33,10 @@ export function PriceChart() {
       try {
         const next = await getCandles(tf);
         if (cancelled) return;
-        if (next?.length) setCandles(next);
-        else if (dhanQuotes) setCandles([]);
+        setCandles(next?.length ? next : []);
       } catch {
         if (cancelled) return;
-        if (dhanQuotes) {
-          setCandles([]);
-          return;
-        }
-        const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
-        setCandles(generateCandles(count, ohlc.close || 24420, tf.length * 17));
+        setCandles([]);
       }
     };
     void load();
@@ -51,7 +45,7 @@ export function PriceChart() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [tf, dhanLive, dhanQuotes]);
+  }, [tf, dhanLive]);
 
   const tools = [Crosshair, Minus, Spline, Square, Type, PenLine, Ruler];
 
@@ -61,15 +55,15 @@ export function PriceChart() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold">NIFTY 50 NSE</h2>
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-up">
-              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-up" />
-              {dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : live ? "LIVE" : "DEMO"}
+            <span className={cn("flex items-center gap-1 text-[11px] font-semibold", dhanQuotes ? "text-up" : "text-slate-400")}>
+              <span className={cn("h-1.5 w-1.5 rounded-full", dhanQuotes ? "pulse-dot bg-up" : "bg-slate-400")} />
+              {dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : "WAIT"}
             </span>
           </div>
           <div className="mt-1 flex items-end gap-3">
-            <div className="text-2xl font-extrabold leading-none">{formatNumber(ohlc.close)}</div>
+            <div className="text-2xl font-extrabold leading-none">{formatQuote(ohlc.close)}</div>
             <div className="mb-0.5 text-xs font-medium text-slate-500">
-              O {formatNumber(ohlc.open)} &nbsp; H {formatNumber(ohlc.high)} &nbsp; L {formatNumber(ohlc.low)} &nbsp; C {formatNumber(ohlc.close)}
+              O {formatQuote(ohlc.open)} &nbsp; H {formatQuote(ohlc.high)} &nbsp; L {formatQuote(ohlc.low)} &nbsp; C {formatQuote(ohlc.close)}
             </div>
           </div>
         </div>

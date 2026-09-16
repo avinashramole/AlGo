@@ -25,7 +25,6 @@ import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markT
 import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
-  applySyntheticOptionChain,
   assignAlgoBroker,
   cancelOrder,
   createAlgo,
@@ -789,7 +788,6 @@ app.post("/api/option-chain/select", async (req, res) => {
     });
     res.json({ ok: true, meta: getOptionMeta(), snapshot: snapshot() });
   } catch (error) {
-    applySyntheticOptionChain(String(req.body?.symbol || "NIFTY"), req.body?.expiry);
     res.status(error.status || 400).json({ error: error.message || "Option chain failed", snapshot: snapshot() });
   }
 });

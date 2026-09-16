@@ -214,3 +214,13 @@ test("tickMarket keeps last Dhan quotes after the feed stops", () => {
   setDhanFeed({ live: false, source: "idle", lastTickAt: null });
   applySyntheticOptionChain("NIFTY");
 });
+
+test("tickMarket never invents DEMO prices", () => {
+  applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY 50", ltp: 25001, kind: "index" }]);
+  setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  const before = snapshot().indices.find((row) => row.symbol === "NIFTY 50")?.price;
+  assert.equal(before, 25001);
+  tickMarket();
+  tickMarket();
+  assert.equal(snapshot().indices.find((row) => row.symbol === "NIFTY 50")?.price, 25001);
+});

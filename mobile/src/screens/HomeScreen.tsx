@@ -116,7 +116,7 @@ function MemberHome() {
 export function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { data, live } = useMarket();
+  const { data } = useMarket();
   const signal = data.featuredSignal;
   if (user?.role !== "admin") {
     return <MemberHome />;
@@ -137,7 +137,7 @@ export function HomeScreen() {
               : isMcxSessionOpen()
                 ? "MCX Open"
                 : "Market Closed"}
-          {hasDhanQuotes(data) ? (data.dhanFeed?.live ? " · DHAN LIVE" : " · DHAN") : live ? " · LIVE" : " · DEMO"}
+          {hasDhanQuotes(data) ? (data.dhanFeed?.live ? " · DHAN LIVE" : " · DHAN") : ""}
         </Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
@@ -148,7 +148,7 @@ export function HomeScreen() {
             <Card key={item.symbol}>
               <View style={{ width: 200 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
-                <Text style={styles.price}>{formatNumber(item.price)}</Text>
+                <Text style={styles.price}>{item.price > 0 ? formatNumber(item.price) : "—"}</Text>
                 <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
                   {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
                 </Text>
@@ -156,7 +156,7 @@ export function HomeScreen() {
                   <View style={styles.deskRow}>
                     <View>
                       <Text style={styles.tiny}>FUT</Text>
-                      <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                      <Text style={styles.deskVal}>{(item.future || item.price) > 0 ? formatNumber(item.future || item.price) : "—"}</Text>
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>

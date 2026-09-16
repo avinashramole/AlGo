@@ -474,7 +474,7 @@ export function scripExpiries(symbol) {
   return dropExpired([...new Set(dates)].sort());
 }
 
-export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10, liveOnly = false } = {}) {
+export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10, liveOnly = true } = {}) {
   const root = optionRoot(symbol);
   const exp = normalizeExpiry(expiry);
   const bucket = cache.byExpiry.get(expiryKey(root, exp));

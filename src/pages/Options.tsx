@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { useMarket } from "../context/MarketContext";
-import { cn, dhanFeedLabel, formatNumber, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
+import { cn, dhanFeedLabel, formatNumber, formatQuote, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
 import { isCrudeUnderlying, OPTION_UNDERLYINGS } from "../lib/markets";
 
 export function Options() {
@@ -30,7 +30,7 @@ export function Options() {
           <div>
             <h1 className="text-xl font-bold">Option Chain</h1>
             <p className="text-sm text-slate-400">
-              {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · ATM{" "}
+              {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatQuote(spot)} · ATM{" "}
               {atm ? formatNumber(atm.strike, 0) : "—"} · PCR {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · ATM ±10 ·{" "}
               {sourceLabel}
             </p>
