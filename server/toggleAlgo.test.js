@@ -8,6 +8,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
 const { createAlgo, deleteAlgo, listAlgos, setDhanFeed, toggleAlgo } = await import("./market.js");
+const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
   return rows.map((row) => row.name);
@@ -72,6 +73,27 @@ test("all live strategies can start at the same time", () => {
     for (const row of listAlgos().filter((item) => item.name.includes(String(stamp)))) {
       deleteAlgo(row.id);
     }
+    setDhanFeed({ live: false });
+  }
+});
+
+test("a started strategy stays LIVE after the saved file is reloaded", () => {
+  setDhanFeed({ live: true });
+  const stamp = Date.now();
+  const created = createAlgo({ name: `Persist Live ${stamp}`, kind: "indicator", runMode: "live" });
+  try {
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    const stored = JSON.parse(fs.readFileSync(process.env.T2S_ALGOS_FILE, "utf8"));
+    const saved = (stored.algos || []).find((row) => row.id === created.id);
+    assert.equal(saved.enabled, true);
+    assert.equal(saved.status, "LIVE");
+    const reloaded = hydrateAlgos(stored, seedAlgos());
+    const again = reloaded.algos.find((row) => row.id === created.id);
+    assert.equal(again.enabled, true);
+    assert.equal(again.status, "LIVE");
+  } finally {
+    deleteAlgo(created.id);
     setDhanFeed({ live: false });
   }
 });

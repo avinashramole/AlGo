@@ -86,7 +86,7 @@ test("hydrate still adds a new catalog strategy that was never deleted", () => {
   assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
 });
 
-test("hydrate keeps a user-created strategy and pauses a saved LIVE algo", () => {
+test("hydrate keeps a user-created strategy and a started LIVE algo after reload", () => {
   const catalog = seedAlgos();
   const custom = normalizeAlgo({ name: "My RSI", kind: "indicator" }, { id: "a99" });
   const liveAtm = { ...catalog[0], enabled: true, status: "LIVE" };
@@ -94,11 +94,20 @@ test("hydrate keeps a user-created strategy and pauses a saved LIVE algo", () =>
   assert.equal(next.algos.some((row) => row.id === "a99"), true);
   assert.equal(next.algos.some((row) => row.id === "a5"), false);
   const atm = next.algos.find((row) => row.id === "a4");
-  assert.equal(atm.enabled, false);
-  assert.equal(atm.status, "PAUSED");
+  assert.equal(atm.enabled, true);
+  assert.equal(atm.status, "LIVE");
   assert.equal(next.algos.some((row) => row.id === "a6"), true);
   assert.equal(next.algos.some((row) => row.id === "a7"), true);
   assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
+});
+
+test("hydrate does not start a paused strategy from the catalog", () => {
+  const catalog = seedAlgos();
+  const paused = { ...catalog[0], enabled: false, status: "PAUSED" };
+  const next = hydrateAlgos({ algos: [paused], removedIds: [] }, catalog);
+  const atm = next.algos.find((row) => row.id === "a4");
+  assert.equal(atm.enabled, false);
+  assert.equal(atm.status, "PAUSED");
 });
 
 test("seed includes paused CRUDE OIL option strategies", () => {

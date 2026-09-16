@@ -648,9 +648,18 @@ function uniqueIds(ids = []) {
   return [...new Set((ids || []).map((id) => String(id || "").trim()).filter(Boolean))];
 }
 
-function pauseLiveAlgo(algo) {
-  if (!algo || algo.runMode !== "live") return algo;
-  return { ...algo, enabled: false, status: algo.status === "LIVE" ? "PAUSED" : algo.status || "PAUSED" };
+function restoreRunStatus(algo) {
+  if (!algo) return algo;
+  if (algo.runMode === "backtest") {
+    return { ...algo, enabled: false, status: "BACKTEST" };
+  }
+  if (algo.enabled && algo.runMode === "paper") {
+    return { ...algo, enabled: true, status: "PAPER" };
+  }
+  if (algo.enabled) {
+    return { ...algo, enabled: true, status: "LIVE" };
+  }
+  return { ...algo, enabled: false, status: algo.status === "BACKTEST" ? "BACKTEST" : "PAUSED" };
 }
 
 function readAlgoFile() {
@@ -672,7 +681,7 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
     for (const row of stored.algos) {
       const id = String(row?.id || "").trim();
       if (!id || removed.has(id) || seen.has(id)) continue;
-      const next = pauseLiveAlgo(normalizeAlgo(row, { ...row, id }));
+      const next = restoreRunStatus(normalizeAlgo(row, { ...row, id }));
       next.id = id;
       algos.push(next);
       seen.add(id);

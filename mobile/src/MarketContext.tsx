@@ -56,7 +56,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     const pending = pendingToggles.current;
     const algos = (incoming.algos || []).map((row) => {
       const hold = pending.get(row.id);
-      return hold ? { ...row, enabled: hold.enabled, status: hold.status } : row;
+      if (!hold) return row;
+      if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
+      return { ...row, enabled: hold.enabled, status: hold.status };
     });
     const next = { ...incoming, algos };
     dataRef.current = next;
@@ -121,8 +123,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         try {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
-          pendingToggles.current.delete(id);
-          if (next?.id) patchAlgo(next.id, next);
+          if (next?.id) patchAlgo(next.id, { ...next, enabled: nextEnabled, status });
         } catch (err) {
           pendingToggles.current.delete(id);
           patchAlgo(id, previous);
@@ -132,7 +133,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       order: async (payload: Record<string, unknown>) => {
         try {
           const result = await placeOrder(payload);
-          if (result.snapshot) setData(result.snapshot);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
           const status = String(result.order?.status || "").toUpperCase();
           if (result.error || result.ok === false || status === "REJECTED") {
@@ -146,44 +147,44 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
         const result = await connectBroker(id, payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       disconnect: async (id: string) => {
         const result = await disconnectBroker(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       activate: async (id: string) => {
         const result = await activateBroker(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       selectChain: async (symbol: string, expiry?: string) => {
         const result = await selectOptionChain(symbol, expiry);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       saveAlgo: async (payload: Record<string, unknown>) => {
         const id = String(payload.id || "");
         const result = id ? await updateAlgo(id, payload) : await createAlgo(payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       removeAlgo: async (id: string) => {
         const result = await deleteAlgo(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       backtest: async (id: string, options?: BacktestOptions) => {
         const result = await backtestAlgo(id, options);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       cancel: async (id: string) => {
         try {
           const result = await cancelOrder(id);
-          if (result.snapshot) setData(result.snapshot);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
         } catch {
           /* offline */
@@ -192,7 +193,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       closePosition: async (id: string) => {
         try {
           const result = await squareOff(id);
-          if (result.snapshot) setData(result.snapshot);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
         } catch {
           /* offline */

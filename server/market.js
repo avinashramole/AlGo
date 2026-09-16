@@ -64,15 +64,11 @@ const algoStore = loadAlgoStore();
 let removedAlgoIds = [...(algoStore.removedIds || [])];
 
 function persistAlgos() {
-  const algos = state.algos || [];
-  const removed = removedAlgoIds;
-  setImmediate(() => {
-    try {
-      saveAlgoStore(algos, removed);
-    } catch (error) {
-      console.log(`Could not save strategies: ${error.message || error}`);
-    }
-  });
+  try {
+    saveAlgoStore(clone(state.algos || []), [...removedAlgoIds]);
+  } catch (error) {
+    console.log(`Could not save strategies: ${error.message || error}`);
+  }
 }
 
 function clone(value) {

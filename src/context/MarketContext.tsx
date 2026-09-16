@@ -222,7 +222,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     const pending = pendingToggles.current;
     const algos = (incoming.algos || []).map((row) => {
       const hold = pending.get(row.id);
-      return hold ? { ...row, enabled: hold.enabled, status: hold.status } : row;
+      if (!hold) return row;
+      if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
+      return { ...row, enabled: hold.enabled, status: hold.status };
     });
     const next = { ...incoming, algos };
     dataRef.current = next;
@@ -311,8 +313,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         try {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
-          pendingToggles.current.delete(id);
-          if (next?.id) patchAlgo(next.id, next);
+          if (next?.id) patchAlgo(next.id, { ...next, enabled: nextEnabled, status });
         } catch (err) {
           pendingToggles.current.delete(id);
           patchAlgo(id, previous);
@@ -338,11 +339,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         const failed: string[] = [];
         results.forEach((result, index) => {
           const row = rows[index];
-          pendingToggles.current.delete(row.id);
+          const status = enabled ? (row.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
           if (result.status === "fulfilled" && result.value.algo?.id) {
-            patchAlgo(result.value.algo.id, result.value.algo);
+            patchAlgo(result.value.algo.id, { ...result.value.algo, enabled, status });
             return;
           }
+          pendingToggles.current.delete(row.id);
           patchAlgo(row.id, row);
           if (result.status === "rejected") {
             failed.push(result.reason instanceof Error ? result.reason.message : String(result.reason || row.name));
@@ -360,7 +362,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         try {
           const result = await placeOrder(payload);
           if (result.snapshot) {
-            setData(result.snapshot);
+            mergeSnapshot(result.snapshot);
             applied = true;
           } else await refresh();
           const status = String(result.order?.status || "").toUpperCase();
@@ -378,7 +380,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
       ) => {
         const result = await connectBroker(id, payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       enableAuto: async (payload: {
@@ -389,22 +391,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         totpSecret?: string;
       }) => {
         const result = await enableDhanAuto(payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       refreshToken: async (payload = {}) => {
         const result = await refreshDhanToken(payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       disconnect: async (id: string) => {
         const result = await disconnectBroker(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       activate: async (id: string) => {
         const result = await activateBroker(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       routeAlgo: async (id: string, brokerId: string) => {
@@ -413,14 +415,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       selectChain: async (symbol: string, expiry?: string) => {
         const result = await selectOptionChain(symbol, expiry);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       saveAlgo: async (payload: Record<string, unknown>) => {
         const id = String(payload.id || "");
         const result = id ? await updateAlgo(id, payload) : await createAlgo(payload);
         if (result.snapshot) {
-          setData(result.snapshot);
+          mergeSnapshot(result.snapshot);
           return;
         }
         if (result.algo) {
@@ -439,7 +441,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       removeAlgo: async (id: string) => {
         const result = await deleteAlgo(id);
         if (result.snapshot) {
-          setData(result.snapshot);
+          mergeSnapshot(result.snapshot);
           return;
         }
         setData((current) => ({
@@ -450,17 +452,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       backtest: async (id: string, options?: BacktestOptions) => {
         const result = await backtestAlgo(id, options);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       cancel: async (id: string) => {
         const result = await cancelOrder(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       closePosition: async (id: string) => {
         const result = await squareOff(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
     }),
