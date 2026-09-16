@@ -39,7 +39,7 @@ export function OptionsScreen() {
         price: ltp,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         kind: "option",
         option,
         strike: row.strike,
@@ -49,6 +49,7 @@ export function OptionsScreen() {
           : String(meta?.symbol || "").toUpperCase().includes("SENSEX")
             ? "BSE_FNO"
             : "NSE_FNO",
+        securityId: option === "CE" ? row.callId : row.putId,
       });
       if (result.live) {
         Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty`);
@@ -70,9 +71,10 @@ export function OptionsScreen() {
         qty: row.qty || row.lot || lot,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         expiry: row.expiry,
         exchangeSegment: row.segment,
+        securityId: row.securityId,
       });
       Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${row.name || row.symbol}`);
     } catch (err) {

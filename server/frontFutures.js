@@ -409,6 +409,10 @@ export function attachContractIds(indices) {
   });
 }
 
+export function scripMasterLoaded() {
+  return Number(cache.at) > 0;
+}
+
 export async function reloadScripMaster() {
   if (loading) return loading;
   cache.at = 0;

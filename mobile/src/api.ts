@@ -289,6 +289,7 @@ export type Snapshot = {
     lot: number;
     qty: number;
     front?: boolean;
+    securityId?: string;
   }>;
 };
 

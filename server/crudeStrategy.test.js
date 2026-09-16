@@ -8,6 +8,8 @@ import {
   isCrudeSymbol,
   mcxMarketSession,
   nseMarketSession,
+  liveSessionOpenForOrder,
+  routeManualOrderBrokerId,
   optionRowsForSymbol,
   resolveAlgoTrade,
   setDhanFeed,
@@ -36,6 +38,33 @@ test("MCX session is 09:00–23:30 IST on weekdays", () => {
   assert.equal(mcxMarketSession(fridayNight).open, false);
   assert.equal(mcxMarketSession(saturday).open, false);
   assert.equal(nseMarketSession(fridayEvening).open, false);
+});
+
+test("crude option-chain BUY stays live after NSE close", () => {
+  const afterNse = new Date("2026-09-18T10:31:00.000Z");
+  assert.equal(nseMarketSession(afterNse).open, false);
+  assert.equal(mcxMarketSession(afterNse).open, true);
+  assert.equal(liveSessionOpenForOrder({ symbol: "NIFTY 24600 CE", exchangeSegment: "NSE_FNO" }, afterNse), false);
+  assert.equal(liveSessionOpenForOrder({ symbol: "CRUDEOIL 6100 CE", exchangeSegment: "MCX_COMM" }, afterNse), true);
+});
+
+test("option-chain BUY goes to Dhan when LIVE even if Paper is selected", () => {
+  assert.equal(
+    routeManualOrderBrokerId({ brokerId: "paper", kind: "option", securityId: "12345" }, { dhanLive: true }),
+    "dhan",
+  );
+  assert.equal(
+    routeManualOrderBrokerId({ brokerId: "paper", kind: "future" }, { dhanLive: true }),
+    "dhan",
+  );
+  assert.equal(
+    routeManualOrderBrokerId({ brokerId: "paper", kind: "option" }, { dhanLive: false }),
+    "paper",
+  );
+  assert.equal(
+    routeManualOrderBrokerId({ brokerId: "paper" }, { dhanLive: true }),
+    "paper",
+  );
 });
 
 test("resolveAlgoTrade uses the CRUDEOIL option chain and keeps it after switching to NIFTY", () => {

@@ -40,12 +40,13 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         price: option === "CE" ? row.callLtp : row.putLtp,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         kind: "option",
         option,
         strike: row.strike,
         expiry: meta?.expiry,
         exchangeSegment: exchangeSegmentFor(symbol),
+        securityId: option === "CE" ? row.callId : row.putId,
       });
       setNote(
         result.live

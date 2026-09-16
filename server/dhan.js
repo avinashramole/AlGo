@@ -17,13 +17,14 @@ import {
   replaceDhanOrders,
   restoreSimulatedDesk,
   livePositionQuoteTargets,
+  liveSessionOpenForOrder,
   onDhanBookChanged,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
   snapshot,
 } from "./market.js";
-import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
@@ -237,24 +238,6 @@ function isClosedMarketError(error) {
   return /market is closed|offline order|after[\s-]?market order/i.test(errorBlob(error));
 }
 
-function nseSessionOpen(date = new Date()) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Kolkata",
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    })
-      .formatToParts(date)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
-  return !weekend && minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
-}
-
 function withAmo(body) {
   return {
     ...body,
@@ -266,9 +249,11 @@ function withAmo(body) {
 
 function formatPlaceError(error, ip, body) {
   if (isClosedMarketError(error)) {
+    const mcx = String(body?.exchangeSegment || "") === "MCX_COMM";
+    const hours = mcx ? "MCX is closed (09:00–23:30 IST)" : "NSE is closed (09:15–15:30 IST)";
     return body?.afterMarketOrder
-      ? "NSE is closed (09:15–15:30 IST). Dhan did not accept this after-market order. Place it when the market opens."
-      : "NSE is closed (09:15–15:30 IST). Dhan asked for an offline/AMO order.";
+      ? `${hours}. Dhan did not accept this after-market order. Place it when the market opens.`
+      : `${hours}. Dhan asked for an offline/AMO order.`;
   }
   const raw = error?.body ? JSON.stringify(error.body).slice(0, 280) : "";
   const sent = body
@@ -1296,7 +1281,8 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const desk = getOptionMeta();
-  let securityId = securityIdFromOpenChain(payload);
+  let securityId = String(payload.securityId || "").trim();
+  if (!securityId || securityId === "0") securityId = securityIdFromOpenChain(payload);
   if (!securityId || securityId === "0") {
     securityId = await resolveTradableSecurityId({
       symbol: payload.symbol,
@@ -1306,7 +1292,7 @@ export async function placeDhanOrder(payload = {}) {
       kind: payload.kind,
     });
   }
-  if (!securityId || securityId === "0") {
+  if ((!securityId || securityId === "0") && !scripMasterLoaded()) {
     await reloadScripMaster();
     securityId = await resolveTradableSecurityId({
       symbol: payload.symbol,
@@ -1334,8 +1320,8 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
-  const ip = await fetchDhanIp();
-  const useAmo = payload.afterMarketOrder === true || payload.amo === true || !nseSessionOpen();
+  const useAmo = payload.afterMarketOrder === true || payload.amo === true || !liveSessionOpenForOrder(payload);
+  const ipPromise = fetchDhanIp();
   let algos = [];
   try {
     algos = snapshot().algos || [];
@@ -1386,12 +1372,12 @@ export async function placeDhanOrder(payload = {}) {
         result = await submit(body);
       } catch (retryError) {
         attachPlaceLive(retryError, { ...liveExtra, afterMarketOrder: true });
-        retryError.message = formatPlaceError(retryError, ip, body);
+        retryError.message = formatPlaceError(retryError, await ipPromise, body);
         throw retryError;
       }
     } else {
       attachPlaceLive(error, liveExtra);
-      error.message = formatPlaceError(error, ip, body);
+      error.message = formatPlaceError(error, await ipPromise, body);
       throw error;
     }
   }
@@ -1409,15 +1395,11 @@ export async function placeDhanOrder(payload = {}) {
     error.status = 400;
     error.body = result;
     if (live) error.live = live;
-    error.message = formatPlaceError(error, ip, body);
+    error.message = formatPlaceError(error, await ipPromise, body);
     throw error;
   }
   if (!account) {
-    try {
-      await pullAccount();
-    } catch {
-      /* order is still at Dhan */
-    }
+    void pullAccount();
   }
   return {
     orderId,

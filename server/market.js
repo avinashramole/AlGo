@@ -191,6 +191,22 @@ function sessionOpenForAlgo(algo) {
   return isCrudeSymbol(algo?.symbol) ? mcxMarketSession().open : nseMarketSession().open;
 }
 
+export function liveSessionOpenForOrder(payload = {}, date = new Date()) {
+  const segment = String(payload.exchangeSegment || exchangeSegmentFor(payload.symbol) || "");
+  if (segment === "MCX_COMM" || isCrudeSymbol(payload.symbol)) return mcxMarketSession(date).open;
+  return nseMarketSession(date).open;
+}
+
+export function routeManualOrderBrokerId(payload = {}, options = {}) {
+  const requested = String(payload.brokerId || options.activeBrokerId || "dhan");
+  const chainClick =
+    String(payload.kind || "") === "option" ||
+    String(payload.kind || "") === "future" ||
+    Boolean(String(payload.securityId || "").trim());
+  if (options.dhanLive === true && chainClick && requested === "paper") return "dhan";
+  return requested;
+}
+
 export function shiftYmd(ymd, days) {
   const [year, month, day] = String(ymd).split("-").map(Number);
   const next = new Date(Date.UTC(year, month - 1, day + Number(days || 0)));

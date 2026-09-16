@@ -380,6 +380,7 @@ export type Snapshot = {
     qty: number;
     front?: boolean;
     tradable?: boolean;
+    securityId?: string;
   }>;
   contracts?: {
     indices: Array<{

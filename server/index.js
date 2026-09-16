@@ -52,6 +52,7 @@ import {
   noteLiveAlgoOrderResult,
   bookRejectedLiveOrder,
   queueLivePositionExit,
+  routeManualOrderBrokerId,
 } from "./market.js";
 import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
 
@@ -901,7 +902,10 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
 
 app.post("/api/orders", async (req, res) => {
   const body = req.body || {};
-  const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
+  const brokerId = routeManualOrderBrokerId(body, {
+    dhanLive: isDhanLive(),
+    activeBrokerId: snapshot().activeBrokerId,
+  });
   try {
     if ((brokerId === "dhan" && isDhanLive()) || (brokerId !== "paper" && isLiveBrokerReady(brokerId))) {
       if (isPreviewRequest(req)) {

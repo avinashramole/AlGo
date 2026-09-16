@@ -39,9 +39,10 @@ export function FuturesTape() {
         price: data.indices.find((item) => item.symbol === row.parent)?.future,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         expiry: row.expiry,
         exchangeSegment: row.segment,
+        securityId: row.securityId,
       });
       setNote(
         result.live
