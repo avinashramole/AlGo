@@ -5,24 +5,38 @@ import { colors, formatInr, formatNumber } from "../theme";
 
 export function PositionsScreen() {
   const { data, closePosition } = useMarket();
-  const pnl = data.positions.reduce((sum, row) => sum + row.pnl, 0);
+  const closed = (data.closedTrades || []).map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    type: (row.type || row.side || "BUY") as "BUY" | "SELL",
+    qty: row.qty,
+    avg: row.entry,
+    ltp: row.exit,
+    pnl: row.pnl,
+    product: row.product,
+    strategy: row.strategy,
+    brokerId: row.brokerId,
+    closed: true,
+  }));
+  const rows = [...(data.positions || []).map((row) => ({ ...row, closed: false })), ...closed];
+  const pnl = rows.reduce((sum, row) => sum + row.pnl, 0);
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Positions</Text>
       <Text style={styles.muted}>
-        {data.dhanFeed?.live ? "LIVE feed · Dhan actual + Paper virtual. No sim book." : "Open book"}
+        {data.dhanFeed?.live ? "LIVE feed · Dhan actual + Paper virtual. Closed P&L stays on this book." : "Open and closed book"}
       </Text>
       <Card>
-        <Text style={styles.muted}>UNREALIZED P&L</Text>
+        <Text style={styles.muted}>LIVE P&L · MTM</Text>
         <Text style={[styles.pnl, { color: pnl >= 0 ? colors.up : colors.down }]}>{formatInr(pnl)}</Text>
       </Card>
-      {data.positions.length ? (
-        data.positions.map((row) => (
+      {rows.length ? (
+        rows.map((row) => (
         <Card key={row.id}>
           <View style={styles.row}>
             <Text style={styles.symbol}>{row.symbol}</Text>
-            <Pill text={row.type} up={row.type === "BUY"} />
+            <Pill text={row.closed ? "CLOSED" : row.type} up={!row.closed && row.type === "BUY"} />
           </View>
           <Text style={styles.muted}>
             {row.product || "MIS"} · Qty {row.qty} · Avg {formatNumber(row.avg)} · LTP {formatNumber(row.ltp)}
@@ -31,6 +45,7 @@ export function PositionsScreen() {
             <Text style={styles.muted}>{row.strategy || row.brokerId || "dhan"}</Text>
             <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
           </View>
+          {row.closed ? null : (
           <Pressable
             style={styles.btn}
             onPress={() =>
@@ -42,11 +57,12 @@ export function PositionsScreen() {
           >
             <Text style={styles.btnText}>Square off</Text>
           </Pressable>
+          )}
         </Card>
       ))
       ) : (
         <Card>
-          <Text style={styles.muted}>{data.dhanFeed?.live ? "No live Dhan or paper positions" : "No open positions"}</Text>
+          <Text style={styles.muted}>{data.dhanFeed?.live ? "No live Dhan, paper, or closed positions" : "No open or closed positions"}</Text>
         </Card>
       )}
     </ScrollView>

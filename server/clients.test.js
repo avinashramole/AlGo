@@ -41,7 +41,7 @@ fs.writeFileSync(
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
 const { saveClientSettings, installMemberBroker, getMemberDesk } = await import("./memberDesk.js");
-const { asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
+const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
   const rows = listClients(listPublicUsers());
@@ -232,16 +232,58 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(desk.master.positions[0].buyQty, 65);
   assert.equal(desk.master.positions[0].netQty, 65);
   assert.equal(desk.master.positions[0].segment, "indian");
+  assert.equal(desk.master.positions[1].closed, true);
+  assert.equal(desk.master.positions[1].netQty, 0);
+  assert.equal(desk.master.positions[1].realized, 200);
+  assert.equal(desk.master.positions[1].mtm, 200);
+  assert.equal(desk.master.realized, 200);
   assert.equal(desk.clients.some((row) => row.name === "Avinash"), false);
   const arpit = desk.clients.find((row) => row.id === "u-arpit");
   assert.equal(arpit.subtitle, "CLIENT ACCOUNT");
   assert.equal(arpit.open, 0);
   assert.equal(desk.openPositions, 1);
-  assert.equal(desk.masterMtm, 650);
+  assert.equal(desk.masterMtm, 850);
+  assert.equal(desk.totalMtm, 850);
   const crypto = asLedgerPosition({ symbol: "BTCUSDT", type: "SELL", qty: 1, avg: 100, ltp: 90, pnl: 10 });
   assert.equal(crypto.segment, "crypto");
   assert.equal(crypto.sellQty, 1);
   assert.equal(crypto.netQty, -1);
+});
+
+test("closed trades stay on the position desk with live P&L and MTM", () => {
+  const closed = asClosedLedgerPosition({
+    id: "t-close",
+    symbol: "NIFTY 24600 CE",
+    side: "BUY",
+    qty: 65,
+    entry: 100,
+    exit: 112.4,
+    pnl: 806,
+    product: "MIS",
+    brokerId: "dhan",
+  });
+  assert.equal(closed.netQty, 0);
+  assert.equal(closed.buyQty, 65);
+  assert.equal(closed.sellQty, 65);
+  assert.equal(closed.buyPrice, 100);
+  assert.equal(closed.sellPrice, 112.4);
+  assert.equal(closed.ltp, 112.4);
+  assert.equal(closed.realized, 806);
+  assert.equal(closed.mtm, 806);
+  assert.equal(closed.closed, true);
+
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [],
+    [{ id: "t-close", symbol: "NIFTY 24600 CE", side: "BUY", qty: 65, entry: 100, exit: 112.4, pnl: 806, brokerId: "dhan" }],
+  );
+  assert.equal(desk.master.open, 0);
+  assert.equal(desk.master.positions.length, 1);
+  assert.equal(desk.master.positions[0].realized, 806);
+  assert.equal(desk.master.mtm, 806);
+  assert.equal(desk.master.realized, 806);
+  assert.equal(desk.totalMtm, 806);
+  assert.equal(desk.openPositions, 0);
 });
 
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {

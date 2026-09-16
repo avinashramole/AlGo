@@ -540,15 +540,19 @@ function applyMemberPosition(desk, fill) {
       const pnl = round2((price - Number(open.avg || 0)) * closeQty);
       desk.closedTrades.unshift({
         id: `mt${crypto.randomBytes(6).toString("hex")}`,
+        sourcePositionId: open.id,
         symbol: fill.symbol,
-        side: "SELL",
+        side: open.type || "BUY",
+        type: open.type || "BUY",
         qty: closeQty,
         entry: Number(open.avg || 0),
         exit: price,
         pnl,
+        product: open.product || "MIS",
         strategy: fill.strategy,
         brokerId: fill.brokerId,
         paper: Boolean(fill.paper),
+        live: !fill.paper,
         closedAt: fill.openedAt,
       });
       open.qty = Number(open.qty || 0) - closeQty;

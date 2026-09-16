@@ -198,7 +198,16 @@ export function HomeScreen() {
       </Card>
       <Card>
         <Text style={styles.heading}>Positions · {formatInr(data.totalPnl)}</Text>
-        {data.positions.slice(0, 4).map((row) => (
+        {[
+          ...(data.positions || []),
+          ...(data.closedTrades || []).map((row) => ({
+            id: row.id,
+            symbol: row.symbol,
+            pnl: row.pnl,
+          })),
+        ]
+          .slice(0, 4)
+          .map((row) => (
           <View key={row.id} style={styles.row}>
             <Text style={styles.rowTitle}>{row.symbol}</Text>
             <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "700" }}>{formatInr(row.pnl)}</Text>

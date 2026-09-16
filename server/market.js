@@ -1296,12 +1296,7 @@ export function snapshot() {
   const brokers = publicBrokers();
   const active = getActiveBroker();
   const { orders, positions, closedTrades } = liveDesk();
-  const totalPnl = positions.reduce((sum, row) => sum + row.pnl, 0);
-  const byBroker = {};
-  for (const row of positions) {
-    const key = row.brokerId || "dhan";
-    byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
-  }
+  const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
   const { liveCandles: _liveCandles, closedTrades: _closedTrades, ...publicState } = clone(state);
   const liveState = { ...publicState, orders, positions, closedTrades };
   liveState.algos = (liveState.algos || []).map((algo) => ({ ...algo, trade: resolveAlgoTrade(algo) }));
@@ -1877,6 +1872,61 @@ export function cancelOrder(id) {
   return clone(order);
 }
 
+function bookPnl(positions = [], closedTrades = []) {
+  const byBroker = {};
+  let unrealized = 0;
+  let realized = 0;
+  for (const row of positions || []) {
+    const pnl = Number(row.pnl || 0);
+    unrealized += pnl;
+    const key = row.brokerId || "dhan";
+    byBroker[key] = Number(((byBroker[key] || 0) + pnl).toFixed(2));
+  }
+  for (const row of closedTrades || []) {
+    const pnl = Number(row.pnl || 0);
+    realized += pnl;
+    const key = row.brokerId || "dhan";
+    byBroker[key] = Number(((byBroker[key] || 0) + pnl).toFixed(2));
+  }
+  return { totalPnl: Number((unrealized + realized).toFixed(2)), pnlByBroker: byBroker };
+}
+
+function rememberClosedFromPosition(pos, extra = {}) {
+  if (!pos) return null;
+  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
+  const sourceId = String(extra.sourcePositionId || pos.id || "");
+  if (sourceId && state.closedTrades.some((row) => String(row.sourcePositionId || "") === sourceId)) {
+    return state.closedTrades.find((row) => String(row.sourcePositionId || "") === sourceId);
+  }
+  const paper = isPaperRow(pos);
+  const dir = String(pos.type || "BUY").toUpperCase() === "SELL" ? -1 : 1;
+  const qty = Math.abs(Number(extra.qty || pos.qty) || 0);
+  const entry = Number(pos.avg || 0);
+  const exit = Number(extra.exit || pos.ltp || entry);
+  const marked = Number(extra.pnl);
+  const pnl = Number.isFinite(marked) ? Number(marked.toFixed(2)) : Number(((exit - entry) * qty * dir).toFixed(2));
+  const closed = {
+    id: extra.id || `t${Date.now()}`,
+    sourcePositionId: sourceId,
+    symbol: pos.symbol,
+    side: pos.type,
+    type: pos.type,
+    qty,
+    entry,
+    exit,
+    pnl,
+    product: pos.product || "MIS",
+    strategy: extra.strategy || pos.strategy || "",
+    brokerId: extra.brokerId || pos.brokerId || "dhan",
+    closedAt: extra.closedAt || new Date().toISOString(),
+    sim: !paper && Boolean(pos.sim),
+    live: !paper && pos.live !== false,
+    paper,
+  };
+  state.closedTrades.unshift(closed);
+  return closed;
+}
+
 export function squareOff(id) {
   const index = state.positions.findIndex((item) => item.id === id);
   if (index < 0) return { error: "Position not found" };
@@ -1913,22 +1963,13 @@ export function squareOff(id) {
   };
   state.orders.unshift(order);
   if (order.strategy) rememberOrderStrategy(order, order.strategy);
-  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
-  state.closedTrades.unshift({
+  rememberClosedFromPosition(pos, {
     id: `t${Date.now()}`,
-    symbol: pos.symbol,
-    side: pos.type,
-    qty: pos.qty,
-    entry: pos.avg,
     exit,
     pnl,
-    product: pos.product || "MIS",
     strategy: order.strategy,
     brokerId: account.id,
     closedAt: order.createdAt,
-    sim: !pos.paper,
-    live: false,
-    paper: Boolean(pos.paper || pos.brokerId === "paper"),
   });
   state.positions.splice(index, 1);
   state.notifications.unshift(`Squared off ${pos.symbol} · ${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toFixed(2)}`);
@@ -2022,6 +2063,16 @@ export function replaceDhanBook(rows) {
   });
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
   const previousDhan = new Map(state.positions.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]));
+  const incomingIds = new Set(incoming.map((row) => String(row.id)));
+  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
+  state.closedTrades = state.closedTrades.filter((row) => {
+    const source = String(row.sourcePositionId || "");
+    return !source || !incomingIds.has(source);
+  });
+  for (const [id, prev] of previousDhan) {
+    if (incomingIds.has(id)) continue;
+    rememberClosedFromPosition(prev);
+  }
   state.positions = [
     ...incoming.map((row) => {
       const prev = previousDhan.get(String(row.id));

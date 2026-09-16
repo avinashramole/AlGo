@@ -282,6 +282,22 @@ export type Snapshot = {
     live?: boolean;
     paper?: boolean;
   }>;
+  closedTrades?: Array<{
+    id: string;
+    symbol: string;
+    side?: "BUY" | "SELL";
+    type?: "BUY" | "SELL";
+    qty: number;
+    entry: number;
+    exit: number;
+    pnl: number;
+    product?: string;
+    strategy?: string;
+    brokerId?: string;
+    closedAt?: string;
+    paper?: boolean;
+    live?: boolean;
+  }>;
   orders: DeskOrder[];
   report?: DeskReport;
   signals: Array<{
@@ -1118,6 +1134,7 @@ export type LedgerPosition = {
   paper: boolean;
   segment: "indian" | "crypto";
   strategy?: string;
+  closed?: boolean;
 };
 
 export type PositionLedger = {

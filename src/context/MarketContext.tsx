@@ -41,6 +41,7 @@ const fallback: Snapshot = {
   optionChain,
   algos: initialAlgos,
   positions: [],
+  closedTrades: [],
   signals: [],
   watchlist,
   fiiDii: { fii: { buy: 0, sell: 0, net: 0 }, dii: { buy: 0, sell: 0, net: 0 } },
@@ -140,6 +141,7 @@ function writeCachedDesk(next: Snapshot) {
         marketStatus: next.marketStatus,
         serverTime: next.serverTime,
         positions: next.positions,
+        closedTrades: next.closedTrades || [],
         orders: next.orders,
       }),
     );

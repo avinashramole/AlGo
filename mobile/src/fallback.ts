@@ -27,6 +27,7 @@ export const fallbackSnapshot: Snapshot = {
     { id: "a6", name: "NIFTY 15m VWAP hedge", tag: "15m hedge", kind: "nifty-vwap-hedge", symbol: "NIFTY", instrument: "option", optionType: "CE", indicator: "NIFTY_VWAP_HEDGE", lots: 1, lotSize: 65, qty: 65, timeframe: "15m", slPct: 0, targetPct: 40, summary: "NIFTY 15m VWAP hedge · weekly ATM · 1 lot + 2 opposite · +40% / −20% / +5% account · daily LIVE 09:30 IST", status: "PAUSED", pnl: 0, winRate: 0, enabled: false, brokerId: "dhan", runMode: "live", dailyLiveIst: "09:30" },
   ],
   positions: [],
+  closedTrades: [],
   signals: [],
   marketWatch: [
     { symbol: "NIFTY 50", ltp: 24580.25, chg: 0.51, volume: "182.4 Cr" },

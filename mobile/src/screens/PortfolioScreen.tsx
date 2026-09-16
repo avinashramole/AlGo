@@ -28,6 +28,20 @@ export function PortfolioScreen() {
           </View>
         </Card>
       ))}
+      {(data.closedTrades || []).map((row) => (
+        <Card key={row.id}>
+          <View style={styles.row}>
+            <Text style={styles.symbol}>{row.symbol}</Text>
+            <Pill text="CLOSED" up={row.pnl >= 0} />
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.muted}>
+              {row.brokerId || "dhan"} · Qty {row.qty} · Avg {formatNumber(row.entry)}
+            </Text>
+            <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
+          </View>
+        </Card>
+      ))}
       <Pressable onPress={() => navigation.navigate("Orders")}>
         <Text style={styles.link}>Order book →</Text>
       </Pressable>

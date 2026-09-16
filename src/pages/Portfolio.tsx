@@ -5,7 +5,19 @@ import { cn, formatInr, formatNumber, fundsCaption } from "../lib/format";
 
 export function Portfolio() {
   const { data } = useMarket();
-  const invested = data.positions.reduce((sum, row) => sum + row.avg * row.qty, 0);
+  const closed = (data.closedTrades || []).map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    type: (row.type || row.side || "BUY") as "BUY" | "SELL",
+    qty: row.qty,
+    avg: row.entry,
+    ltp: row.exit,
+    pnl: row.pnl,
+    brokerId: row.brokerId,
+    closed: true,
+  }));
+  const rows = [...(data.positions || []).map((row) => ({ ...row, closed: false })), ...closed];
+  const invested = (data.positions || []).reduce((sum, row) => sum + row.avg * row.qty, 0);
   const connected = (data.brokers || []).filter((item) => item.connected);
 
   return (
@@ -57,11 +69,11 @@ export function Portfolio() {
             </tr>
           </thead>
           <tbody>
-            {data.positions.map((row) => (
+            {rows.map((row) => (
               <tr key={row.id} className="soft-row">
                 <td className="px-4 py-3 font-semibold">{row.symbol}</td>
                 <td className="px-4 py-3">{brokerName(data.brokers, row.brokerId)}</td>
-                <td className="px-4 py-3">{row.type}</td>
+                <td className="px-4 py-3">{row.closed ? "CLOSED" : row.type}</td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.avg)}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.ltp)}</td>

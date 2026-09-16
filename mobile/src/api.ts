@@ -185,6 +185,21 @@ export type Snapshot = {
     brokerId?: string;
     securityId?: string;
   }>;
+  closedTrades?: Array<{
+    id: string;
+    symbol: string;
+    side?: "BUY" | "SELL";
+    type?: "BUY" | "SELL";
+    qty: number;
+    entry: number;
+    exit: number;
+    pnl: number;
+    product?: string;
+    strategy?: string;
+    brokerId?: string;
+    closedAt?: string;
+    paper?: boolean;
+  }>;
   orders?: Array<{
     id: string;
     symbol: string;
