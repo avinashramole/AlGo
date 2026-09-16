@@ -868,6 +868,8 @@ function algoOrderFields(algo, side, trade) {
     symbol: trade.symbol,
     side,
     qty: algo.qty || 65,
+    lots: algo.lots || 1,
+    lotSize: algo.lotSize,
     price: trade.ltp || 0,
     kind: trade.kind,
     option: trade.option,

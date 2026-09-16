@@ -44,7 +44,8 @@ export function Options() {
               onChange={(event) => setLots(Math.max(1, Number(event.target.value) || 1))}
             />
             <span className="text-slate-400">
-              1 lot = {lotSize} · qty {qty}
+              1 lot = Dhan qty {isCrude ? Math.max(1, lots) : qty}
+              {isCrude ? ` · size ${lotSize}` : ""}
             </span>
           </label>
         </div>

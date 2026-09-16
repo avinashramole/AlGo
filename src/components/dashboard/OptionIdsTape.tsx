@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
-import { exchangeSegmentFor } from "../../lib/markets";
+import { exchangeSegmentFor, isCrudeUnderlying } from "../../lib/markets";
 
 export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const { data, selectChain, order } = useMarket();
@@ -21,7 +21,9 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   }, [rows]);
 
   const lot = meta?.underlyings?.find((item) => item.id === symbol)?.lot || 65;
+  const crude = isCrudeUnderlying(symbol);
   const qty = Math.max(1, lots) * lot;
+  const dhanQty = crude ? Math.max(1, lots) : qty;
 
   const trade = async (option: "CE" | "PE", side: "BUY" | "SELL", row: (typeof rows)[number]) => {
     const key = `${row.strike}-${option}-${side}`;
@@ -34,6 +36,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         side,
         qty,
         lots: Math.max(1, lots),
+        lotSize: lot,
         price: option === "CE" ? row.callLtp : row.putLtp,
         product: "MIS",
         type: "MARKET",
@@ -46,8 +49,8 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
       });
       setNote(
         result.live
-          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
-          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
+          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`
+          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order failed";

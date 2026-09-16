@@ -35,6 +35,7 @@ export function FuturesTape() {
         side,
         qty: row.qty || row.lot || 65,
         lots: 1,
+        lotSize: row.lot || 65,
         price: data.indices.find((item) => item.symbol === row.parent)?.future,
         product: "MIS",
         type: "MARKET",

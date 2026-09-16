@@ -9,6 +9,7 @@ import {
   upcomingExpiries,
   UNDERLYINGS,
   weekdayNameIST,
+  dhanOrderQuantity,
 } from "./optionChain.js";
 
 test("NIFTY monthly is the last Tuesday of the month", () => {
@@ -56,4 +57,13 @@ test("CRUDE OIL is listed next to index underlyings for the option chain", () =>
   const ids = UNDERLYINGS.map((row) => row.id);
   assert.deepEqual(ids.slice(-1), ["CRUDEOIL"]);
   assert.equal(UNDERLYINGS.find((row) => row.id === "CRUDEOIL").label, "CRUDE OIL");
+});
+
+test("Dhan MCX quantity is lots, not barrel lot-size", () => {
+  assert.equal(dhanOrderQuantity({ symbol: "NIFTY 24600 CE", qty: 65 }), 65);
+  assert.equal(dhanOrderQuantity({ symbol: "BANKNIFTY 52000 PE", qty: 30, lots: 1, lotSize: 30 }), 30);
+  assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 CE", qty: 100, lots: 1, lotSize: 100, exchangeSegment: "MCX_COMM" }), 1);
+  assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 CE", qty: 200, lots: 1, lotSize: 100 }), 2);
+  assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL FUT", qty: 200, exchangeSegment: "MCX_COMM", lotSize: 100 }), 2);
+  assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 PE", qty: 1, exchangeSegment: "MCX_COMM" }), 1);
 });

@@ -13,8 +13,28 @@ export function exchangeSegmentFor(symbol) {
   return "NSE_FNO";
 }
 
+export function isMcxSymbol(symbol) {
+  return String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .includes("CRUDEOIL");
+}
+
 export function getUnderlying(id) {
   return UNDERLYINGS.find((row) => row.id === id) || UNDERLYINGS[0];
+}
+
+/** Dhan MCX quantity is lots (1), not barrel lot-size (100). NSE F&O stays in units. */
+export function dhanOrderQuantity(payload = {}) {
+  const qty = Math.max(0, Math.round(Number(payload.qty || payload.quantity) || 0));
+  const segment = String(payload.exchangeSegment || exchangeSegmentFor(payload.symbol) || "");
+  const mcx = segment === "MCX_COMM" || isMcxSymbol(payload.symbol);
+  if (!mcx) return qty;
+  const lotSize = Math.max(1, Math.round(Number(payload.lotSize) || getUnderlying("CRUDEOIL").lot || 100));
+  const lots = Math.max(0, Math.round(Number(payload.lots) || 0));
+  if (qty >= lotSize) return Math.max(1, Math.round(qty / lotSize));
+  if (lots > 0) return lots;
+  return Math.max(1, qty);
 }
 
 function kolkataParts(date = new Date()) {

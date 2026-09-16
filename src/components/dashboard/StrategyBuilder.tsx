@@ -342,7 +342,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               }}
             />
             <span className="mt-1 block font-medium text-slate-400">
-              {hedge ? "Primary 1 lot (65) · hedge 2 lots (130) · max 3 lots" : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
+              {hedge
+                ? "Primary 1 lot (65) · hedge 2 lots (130) · max 3 lots"
+                : form.symbol === "CRUDEOIL"
+                  ? `1 lot · Dhan qty ${lots} (size ${lotSize})`
+                  : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
           <label className="text-xs font-semibold text-slate-500">

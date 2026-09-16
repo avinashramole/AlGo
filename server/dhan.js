@@ -27,7 +27,7 @@ import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContra
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
-import { dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import { dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -1327,7 +1327,7 @@ export async function placeDhanOrder(payload = {}) {
     error.status = 400;
     throw error;
   }
-  const qty = Math.max(0, Math.round(Number(payload.qty) || 0));
+  const qty = dhanOrderQuantity(payload);
   if (!qty) {
     const error = new Error("Quantity must be at least 1 lot.");
     error.status = 400;

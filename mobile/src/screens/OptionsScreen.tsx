@@ -34,6 +34,8 @@ export function OptionsScreen() {
         symbol,
         side: action,
         qty: lot,
+        lots: 1,
+        lotSize: lot,
         price: ltp,
         product: "MIS",
         type: "MARKET",
@@ -84,10 +86,11 @@ export function OptionsScreen() {
       <Text style={styles.title}>Option Chain</Text>
       <Text style={styles.muted}>
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
-        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · 1 lot = {lot}
+        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"}
         {"\n"}
         {data.dhanFeed?.live ? "Orders go to Dhan. The desk looks up the live contract." : "Desk fill only until Access Token on Brokers"}
         {" · ATM ±10"}
+        {String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL") ? " · 1 lot = Dhan qty 1 (size 100)" : ` · 1 lot = ${lot}`}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
