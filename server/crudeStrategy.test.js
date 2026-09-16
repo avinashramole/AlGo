@@ -12,6 +12,8 @@ import {
   resolveAlgoTrade,
   setDhanFeed,
   setLiveCandles,
+  setOptionDesk,
+  snapshot,
 } from "./market.js";
 import { hydrateAlgos, normalizeAlgo, seedAlgos } from "./strategies.js";
 
@@ -111,4 +113,25 @@ test("seed catalog hydrates Crude Oil strategies onto an existing NIFTY-only des
   assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
   assert.equal(next.algos.find((row) => row.id === "a8").timeframe, "15m");
   assert.equal(next.algos.find((row) => row.id === "a9").indicator, "SUPERTREND");
+});
+
+test("switching option desk does not keep the previous underlying strikes", () => {
+  applySyntheticOptionChain("NIFTY");
+  const niftyStrike = snapshot().optionChain[0]?.strike;
+  assert.equal(Number(niftyStrike) > 20000, true);
+  cacheOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: "2026-09-17",
+    expiries: ["2026-09-17"],
+    rows: [
+      { strike: 6100, atm: true, callLtp: 42.5, putLtp: 38.1, callId: "c-6100", putId: "p-6100" },
+    ],
+    spot: 6124,
+    source: "dhan",
+  });
+  setOptionDesk({ symbol: "CRUDEOIL", expiry: "2026-09-17", rows: [] });
+  const desk = snapshot();
+  assert.equal(desk.optionMeta.symbol, "CRUDEOIL");
+  assert.equal(desk.optionChain[0].strike, 6100);
+  assert.notEqual(desk.optionChain[0].strike, niftyStrike);
 });

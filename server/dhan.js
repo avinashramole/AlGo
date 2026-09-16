@@ -11,6 +11,7 @@ import {
   getChainSpot,
   getOptionMeta,
   optionRowsForSymbol,
+  peekOptionChain,
   quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
@@ -901,10 +902,13 @@ async function loadExpiryList(und) {
 function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const desk = getOptionMeta();
   const und = getUnderlying(symbol || desk.symbol);
-  const chosen = expiry || desk.expiry;
-  const nextSpot = Number(spot) || getChainSpot(und.id);
+  const sameSymbol = String(desk.symbol || "").toUpperCase() === und.id;
+  const cached = peekOptionChain(und.id);
+  const chosen = expiry || cached?.meta?.expiry || desk.expiry;
+  const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(und.id);
   const liveOnly = Boolean(accessToken);
-  const liveRows = rows !== undefined ? rows : liveOnly ? currentOptionRows() : currentOptionRows();
+  const liveRows =
+    rows !== undefined ? rows : sameSymbol ? currentOptionRows() : cached?.rows || [];
   const next = buildScripChain({
     symbol: und.id,
     expiry: chosen,
@@ -984,17 +988,35 @@ export async function selectOptionDesk({ symbol, expiry }) {
   const und = getUnderlying(symbol);
   const expiries = await loadExpiryList(und);
   const wanted = normalizeExpiry(expiry);
-  const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
+  const cached = peekOptionChain(und.id);
+  const chosen =
+    wanted && expiries.includes(wanted)
+      ? wanted
+      : cached?.meta?.expiry && expiries.includes(normalizeExpiry(cached.meta.expiry))
+        ? normalizeExpiry(cached.meta.expiry)
+        : expiries[0];
   if (!accessToken) {
     applySyntheticOptionChain(und.id, chosen);
     paintDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
     return getOptionMeta();
   }
-  paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
+  paintDesk({
+    symbol: und.id,
+    expiry: chosen,
+    expiries,
+    rows: cached?.rows || undefined,
+    source: cached?.meta?.source || "dhan",
+  });
   try {
     await refreshOptionChain();
   } catch (error) {
-    paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
+    paintDesk({
+      symbol: und.id,
+      expiry: chosen,
+      expiries,
+      rows: cached?.rows || undefined,
+      source: "dhan",
+    });
     handleDhanPollError("option chain", error);
   }
   return getOptionMeta();

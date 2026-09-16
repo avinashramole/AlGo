@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { cn, formatChange, formatNumber, formatPct, vwapTone } from "../../lib/format";
 import { chainIdFromIndex } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
@@ -9,55 +8,20 @@ function cardVwap(item: { future?: number; price: number; vwap?: number; futureV
   return vwap > 0 ? vwap : 0;
 }
 
-type ChainCardStats = {
-  spot: string;
-  atm: string;
-  pcr: string;
-  maxPain: string;
-  atmIv: string;
-};
-
 type TickerStripProps = {
   selectedId?: string;
   onSelect?: (chainId: string) => void;
-  chainStats?: ChainCardStats;
 };
 
-export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripProps = {}) {
-  const { data, order } = useMarket();
-  const [busy, setBusy] = useState("");
+export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
+  const { data } = useMarket();
   const watchBySymbol = new Map((data.marketWatch || []).map((row) => [row.symbol, row]));
 
-  const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
-    const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
-    const key = `${root}-${side}`;
-    setBusy(key);
-    try {
-      await order({
-        symbol: `${root} FUT`,
-        kind: "future",
-        side,
-        qty: item.lot || 65,
-        price: item.future || item.price,
-        product: "MIS",
-        type: "MARKET",
-        brokerId: data.activeBrokerId,
-        expiry: item.futureExpiry,
-        exchangeSegment: item.futureSegment,
-      });
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Order failed");
-    } finally {
-      setBusy("");
-    }
-  };
-
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+    <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {data.indices.map((item) => {
         const up = item.change >= 0;
         const showDeriv = item.symbol !== "INDIA VIX";
-        const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.name || item.symbol;
         const vwap = cardVwap(item);
         const futureLtp = item.future || item.price;
         const chainId = chainIdFromIndex(item.symbol);
@@ -117,15 +81,6 @@ export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripPro
                 </div>
               </div>
             ) : null}
-            {selected && chainStats ? (
-              <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1 border-t border-[var(--border)] pt-2">
-                <ChainStat label="Spot" value={chainStats.spot} />
-                <ChainStat label="ATM" value={chainStats.atm} />
-                <ChainStat label="PCR" value={chainStats.pcr} />
-                <ChainStat label="Max pain" value={chainStats.maxPain} />
-                <ChainStat label="ATM IV" value={chainStats.atmIv} />
-              </div>
-            ) : null}
             {showDeriv && selectable ? (
               <button
                 type="button"
@@ -141,44 +96,9 @@ export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripPro
                 Chain
               </button>
             ) : null}
-            {showDeriv && !selectable ? (
-              <div className="mt-2 flex gap-1">
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void tradeFuture(item, "BUY");
-                  }}
-                  className="h-10 flex-1 rounded-md bg-emerald-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
-                >
-                  {busy === `${root}-BUY` ? "..." : `BUY ${root} FUT`}
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void tradeFuture(item, "SELL");
-                  }}
-                  className="h-10 flex-1 rounded-md bg-rose-500 text-xs font-bold text-white disabled:opacity-50 md:h-7 md:text-[10px]"
-                >
-                  {busy === `${root}-SELL` ? "..." : "SELL"}
-                </button>
-              </div>
-            ) : null}
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function ChainStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="truncate text-xs font-bold leading-tight">{value}</div>
     </div>
   );
 }

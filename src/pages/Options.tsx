@@ -29,7 +29,9 @@ export function Options() {
           <div>
             <h1 className="text-xl font-bold">Option Chain</h1>
             <p className="text-sm text-slate-400">
-              {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · ATM ±10 · {sourceLabel}
+              {meta?.symbol || "NIFTY"} · Expiry {expiryLabel} · Spot {formatNumber(spot)} · ATM{" "}
+              {atm ? formatNumber(atm.strike, 0) : "—"} · PCR {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · ATM ±10 ·{" "}
+              {sourceLabel}
             </p>
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs font-semibold">
@@ -63,17 +65,7 @@ export function Options() {
             </button>
           ))}
         </div>
-        <TickerStrip
-          selectedId={meta?.symbol}
-          onSelect={(chainId) => void selectChain(chainId)}
-          chainStats={{
-            spot: formatNumber(spot),
-            atm: atm ? formatNumber(atm.strike, 0) : "—",
-            pcr: meta?.pcr != null ? meta.pcr.toFixed(2) : "—",
-            maxPain: meta?.maxPain ? formatNumber(meta.maxPain, 0) : "—",
-            atmIv: meta?.atmIv ? `${meta.atmIv.toFixed(1)}%` : "—",
-          }}
-        />
+        <TickerStrip selectedId={meta?.symbol} onSelect={(chainId) => void selectChain(chainId)} />
         <div
           className={cn(
             "rounded-xl px-4 py-2 text-sm font-semibold",

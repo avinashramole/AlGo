@@ -468,6 +468,10 @@ export function optionRowsForSymbol(symbol) {
   return chainForSymbol(candleSymbol(symbol))?.rows || [];
 }
 
+export function peekOptionChain(symbol) {
+  return optionChainCache.get(String(symbol || "").toUpperCase()) || null;
+}
+
 export function drainPendingLiveAlgoOrders() {
   return pendingLiveAlgoOrders.splice(0, pendingLiveAlgoOrders.length);
 }
@@ -2085,22 +2089,31 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
 
 export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const meta = getUnderlying(symbol || state.optionMeta.symbol);
-  const nextRows = Array.isArray(rows) && rows.length ? rows : state.optionChain;
-  const nextSpot = Number(spot) || getChainSpot(meta.id);
+  const sameSymbol = String(state.optionMeta?.symbol || "").toUpperCase() === meta.id;
+  const cached = optionChainCache.get(meta.id);
+  const nextRows = Array.isArray(rows) && rows.length
+    ? rows
+    : sameSymbol
+      ? state.optionChain
+      : cached?.rows?.length
+        ? cached.rows
+        : [];
+  const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
   state.optionChain = nextRows;
   state.optionMeta = withExpiryLabels({
     ...state.optionMeta,
+    ...(cached?.meta || {}),
     symbol: meta.id,
-    expiry: expiry || state.optionMeta.expiry,
-    expiries: expiries?.length ? expiries : state.optionMeta.expiries,
+    expiry: expiry || cached?.meta?.expiry || (sameSymbol ? state.optionMeta.expiry : upcomingExpiries(meta.id)[0] || ""),
+    expiries: expiries?.length ? expiries : cached?.meta?.expiries || (sameSymbol ? state.optionMeta.expiries : upcomingExpiries(meta.id)),
     ...stats,
-    source: source || state.optionMeta.source,
+    source: source || cached?.meta?.source || state.optionMeta.source,
     lastAt: Date.now(),
     contractIds: nextRows.filter((row) => row.callId || row.putId).length,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   });
-  rememberOptionChain(meta.id, nextRows, state.optionMeta);
+  if (nextRows.length) rememberOptionChain(meta.id, nextRows, state.optionMeta);
   return clone(state.optionMeta);
 }
 
