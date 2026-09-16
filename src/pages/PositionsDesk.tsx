@@ -1,6 +1,7 @@
 import { Activity, Crown, Inbox, RefreshCw, TrendingUp, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getPositionsDesk, type LedgerPosition, type PositionLedger, type PositionsDeskSnapshot } from "../api/client";
+import { PortfolioSummary } from "../components/dashboard/PortfolioSummary";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber } from "../lib/format";
 
@@ -256,8 +257,8 @@ export function PositionsDesk() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Positions</h1>
-          <p className="text-sm text-slate-400">Master first, followed by a separate live position ledger for every client</p>
+          <h1 className="text-xl font-bold">Position</h1>
+          <p className="text-sm text-slate-400">Portfolio, master book, and a live ledger for every client</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <ChipGroup>
@@ -289,6 +290,8 @@ export function PositionsDesk() {
           </button>
         </div>
       </div>
+
+      <PortfolioSummary />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<TrendingUp size={18} />} label="Master MTM" value={rupee(masterMtm)} tone={moneyClass(masterMtm)} />

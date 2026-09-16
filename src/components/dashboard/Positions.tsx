@@ -29,7 +29,7 @@ export function Positions() {
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <Link to="/positions" className="text-sm font-bold hover:text-brand-500">
-          Positions
+          Position
         </Link>
         <select
           className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] font-semibold"

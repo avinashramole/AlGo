@@ -197,7 +197,7 @@ export function HomeScreen() {
         </View>
       </Card>
       <Card>
-        <Text style={styles.heading}>Positions · {formatInr(data.totalPnl)}</Text>
+        <Text style={styles.heading}>Position · {formatInr(data.totalPnl)}</Text>
         {[
           ...(data.positions || []),
           ...(data.closedTrades || []).map((row) => ({

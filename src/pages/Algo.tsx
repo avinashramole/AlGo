@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
+import { SignalFeed } from "../components/dashboard/SignalFeed";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { catchDeskError } from "../lib/liveSite";
@@ -168,8 +169,8 @@ export function Algo() {
         <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-xl font-bold">Algo trading</h1>
-              <p className="text-sm text-slate-400">Create, monitor and control automated trading strategies from one workspace</p>
+              <h1 className="text-xl font-bold">Algo</h1>
+              <p className="text-sm text-slate-400">Signals, strategies, and live control in one workspace</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -219,6 +220,7 @@ export function Algo() {
               </button>
             ))}
           </div>
+          <SignalFeed />
           {rows.length ? (
             <div className="grid gap-3 xl:grid-cols-2">
               {rows.map((algo) => (

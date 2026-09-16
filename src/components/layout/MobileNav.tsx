@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Bell,
   BookOpen,
-  Briefcase,
   Building2,
   ClipboardList,
   Cpu,
@@ -19,7 +18,6 @@ import {
   User,
   Wallet,
   X,
-  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -32,14 +30,12 @@ const primary: Array<{ to: string; label: string; icon: LucideIcon; admin?: bool
   { to: "/", label: "Home", icon: Home },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },
-  { to: "/positions", label: "Book", icon: BookOpen, admin: true },
+  { to: "/positions", label: "Position", icon: BookOpen, admin: true },
 ];
 
 const moreItems: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean }> = [
-  { to: "/signals", label: "Signals", icon: Zap, admin: true },
   { to: "/algo", label: "Algo", icon: Cpu, admin: true },
   { to: "/reports", label: "Reports", icon: FileText, admin: true },
-  { to: "/portfolio", label: "Portfolio", icon: Briefcase, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
   { to: "/users", label: "Users", icon: User, admin: true },

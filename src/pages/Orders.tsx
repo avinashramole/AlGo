@@ -43,7 +43,7 @@ export function Orders() {
         </div>
         <div className="flex gap-2 text-sm font-semibold">
           <Link to="/positions" className="text-brand-500">
-            Positions
+            Position
           </Link>
           <span className="text-slate-300">·</span>
           <Link to="/reports" className="text-brand-500">

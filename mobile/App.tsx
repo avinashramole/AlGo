@@ -14,12 +14,10 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { OptionsScreen } from "./src/screens/OptionsScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
-import { PortfolioScreen } from "./src/screens/PortfolioScreen";
 import { PositionsScreen } from "./src/screens/PositionsScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { ReportScreen } from "./src/screens/ReportScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
-import { SignalsScreen } from "./src/screens/SignalsScreen";
 import { MemberPlansScreen } from "./src/screens/MemberPlansScreen";
 import { TradeScreen } from "./src/screens/TradeScreen";
 import { colors } from "./src/theme";
@@ -41,9 +39,8 @@ function Tabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       {admin ? <Tab.Screen name="Option Chain" component={OptionsScreen} /> : null}
-      {admin ? <Tab.Screen name="Signals" component={SignalsScreen} /> : null}
       {admin ? <Tab.Screen name="Algo" component={AlgoScreen} /> : null}
-      {admin ? <Tab.Screen name="Portfolio" component={PortfolioScreen} /> : null}
+      {admin ? <Tab.Screen name="Position" component={PositionsScreen} /> : null}
       {!admin ? <Tab.Screen name="My plan" component={MemberPlansScreen} /> : null}
       {!admin ? <Tab.Screen name="Profile" component={ProfileScreen} /> : null}
     </Tab.Navigator>
@@ -70,7 +67,7 @@ function Root() {
             <>
               <Stack.Screen name="Options" component={OptionsScreen} />
               <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: "Order Book" }} />
-              <Stack.Screen name="Positions" component={PositionsScreen} />
+              <Stack.Screen name="Positions" component={PositionsScreen} options={{ title: "Position" }} />
               <Stack.Screen name="Report" component={ReportScreen} />
               <Stack.Screen name="Brokers" component={BrokersScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />

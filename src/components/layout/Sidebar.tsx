@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BookOpen,
-  Briefcase,
   Building2,
   ClipboardList,
   Cpu,
@@ -18,7 +17,6 @@ import {
   Sun,
   User,
   Users,
-  Zap,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
@@ -31,12 +29,10 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/", label: "Home", icon: Home },
   { to: "/plans", label: "My plan", icon: Wallet, member: true },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
-  { to: "/signals", label: "Signals", icon: Zap, admin: true },
   { to: "/algo", label: "Algo", icon: Cpu, admin: true },
   { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },
-  { to: "/positions", label: "Positions", icon: BookOpen, admin: true },
+  { to: "/positions", label: "Position", icon: BookOpen, admin: true },
   { to: "/reports", label: "Reports", icon: FileText, admin: true },
-  { to: "/portfolio", label: "Portfolio", icon: Briefcase, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
   { to: "/users", label: "Users", icon: Users, admin: true },

@@ -9,12 +9,10 @@ export function isAdminUser(user?: Pick<AuthUser, "role"> | null) {
 export const adminNav = [
   { to: "/", label: "Home" },
   { to: "/options", label: "Option Chain" },
-  { to: "/signals", label: "Signals" },
   { to: "/algo", label: "Algo" },
   { to: "/orders", label: "Orders" },
-  { to: "/positions", label: "Positions" },
+  { to: "/positions", label: "Position" },
   { to: "/reports", label: "Reports" },
-  { to: "/portfolio", label: "Portfolio" },
   { to: "/brokers", label: "Brokers" },
   { to: "/analytics", label: "Analytics" },
   { to: "/users", label: "Users" },
@@ -38,6 +36,8 @@ const extraTitles = [
   { to: "/notifications", label: "Notifications" },
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
+  { to: "/signals", label: "Algo" },
+  { to: "/portfolio", label: "Position" },
 ] as const;
 
 function normalizePath(path: string) {

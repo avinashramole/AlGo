@@ -58,7 +58,7 @@ export function Reports() {
             Order book
           </Link>
           <Link to="/positions" className="text-sm font-semibold text-brand-500">
-            Positions
+            Position
           </Link>
           <button type="button" onClick={download} className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
             Download CSV
