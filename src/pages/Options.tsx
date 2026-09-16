@@ -4,17 +4,12 @@ import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
+import { isCrudeUnderlying, OPTION_UNDERLYINGS } from "../lib/markets";
 
 export function Options() {
   const { data, selectChain } = useMarket();
   const meta = data.optionMeta;
-  const underlyings = meta?.underlyings || [
-    { id: "NIFTY", label: "NIFTY", lot: 65 },
-    { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
-    { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
-    { id: "SENSEX", label: "SENSEX", lot: 20 },
-    { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
-  ];
+  const underlyings = meta?.underlyings?.length ? meta.underlyings : OPTION_UNDERLYINGS;
   const rows = data.optionChain || [];
   const [lots, setLots] = useState(1);
   const atm = rows.find((row) => row.atm);
@@ -23,7 +18,7 @@ export function Options() {
   const qty = Math.max(1, lots) * lotSize;
   const sourceLabel = data.dhanFeed?.live ? (meta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain") : "DEMO";
   const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
-  const isCrude = String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL");
+  const isCrude = isCrudeUnderlying(meta?.symbol);
   const sessionOpen = isCrude ? isMcxSessionOpen() : isNseSessionOpen();
   const sessionHours = isCrude ? "MCX 09:00–23:30 IST" : "NSE 09:15–15:30 IST";
 
@@ -50,6 +45,23 @@ export function Options() {
               1 lot = {lotSize} · qty {qty}
             </span>
           </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {underlyings.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => void selectChain(item.id)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-semibold",
+                meta?.symbol === item.id
+                  ? "bg-brand-500 text-white"
+                  : "border border-[var(--border)] bg-[var(--card)]",
+              )}
+            >
+              {item.label} · {item.lot}
+            </button>
+          ))}
         </div>
         <TickerStrip
           selectedId={meta?.symbol}

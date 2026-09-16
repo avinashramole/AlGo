@@ -125,8 +125,8 @@ export function ymdIST(date = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-export function nseMarketSession(date = new Date()) {
-  const parts = Object.fromEntries(
+function sessionParts(date = new Date()) {
+  return Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
       weekday: "short",
@@ -139,12 +139,12 @@ export function nseMarketSession(date = new Date()) {
       .filter((part) => part.type !== "literal")
       .map((part) => [part.type, part.value]),
   );
-  const hour = Number(parts.hour);
-  const minute = Number(parts.minute);
-  const minutes = hour * 60 + minute;
+}
+
+function clockSession(date, openMins, closeMins, hours) {
+  const parts = sessionParts(date);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
-  const openMins = 9 * 60 + 15;
-  const closeMins = 15 * 60 + 30;
   const inHours = minutes >= openMins && minutes < closeMins;
   const open = !weekend && inHours;
   let reason = "session";
@@ -155,10 +155,40 @@ export function nseMarketSession(date = new Date()) {
     status: open ? "OPEN" : "CLOSED",
     open,
     reason,
-    hours: "09:15–15:30 IST",
+    hours,
     weekday: parts.weekday,
     ist: `${parts.hour}:${parts.minute}:${parts.second}`,
   };
+}
+
+export function nseMarketSession(date = new Date()) {
+  return clockSession(date, 9 * 60 + 15, 15 * 60 + 30, "09:15–15:30 IST");
+}
+
+export function mcxMarketSession(date = new Date()) {
+  return clockSession(date, 9 * 60, 23 * 60 + 30, "09:00–23:30 IST");
+}
+
+export function isCrudeSymbol(symbol) {
+  return String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .includes("CRUDEOIL");
+}
+
+export function candleSymbol(symbol) {
+  const raw = String(symbol || "NIFTY")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
+  if (raw.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (raw.includes("FINNIFTY")) return "FINNIFTY";
+  if (raw.includes("SENSEX")) return "SENSEX";
+  return "NIFTY";
+}
+
+function sessionOpenForAlgo(algo) {
+  return isCrudeSymbol(algo?.symbol) ? mcxMarketSession().open : nseMarketSession().open;
 }
 
 export function shiftYmd(ymd, days) {
@@ -394,6 +424,7 @@ const state = {
 };
 
 const optionChainCache = new Map();
+const liveCandleCache = new Map();
 const pendingLiveAlgoOrders = [];
 
 function rememberOptionChain(symbol, rows, meta) {
@@ -402,12 +433,39 @@ function rememberOptionChain(symbol, rows, meta) {
   optionChainCache.set(id, { rows, meta, at: Date.now() });
 }
 
+function seedCachedChains() {
+  rememberOptionChain(state.optionMeta.symbol, state.optionChain, state.optionMeta);
+  const crude = getUnderlying("CRUDEOIL");
+  const spot = getChainSpot(crude.id);
+  const rows = buildSyntheticChain(spot, crude.step, 10);
+  const stats = chainStats(rows, spot);
+  rememberOptionChain(
+    crude.id,
+    rows,
+    withExpiryLabels({
+      symbol: crude.id,
+      expiry: upcomingExpiries(crude.id)[0] || "",
+      expiries: upcomingExpiries(crude.id),
+      ...stats,
+      source: "demo",
+      lastAt: Date.now(),
+      underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+    }),
+  );
+}
+
+seedCachedChains();
+
 function chainForSymbol(symbol) {
   const id = String(symbol || "").toUpperCase();
   if (String(state.optionMeta?.symbol || "").toUpperCase() === id && Array.isArray(state.optionChain) && state.optionChain.length) {
     return { rows: state.optionChain, meta: state.optionMeta };
   }
   return optionChainCache.get(id) || null;
+}
+
+export function optionRowsForSymbol(symbol) {
+  return chainForSymbol(candleSymbol(symbol))?.rows || [];
 }
 
 export function drainPendingLiveAlgoOrders() {
@@ -1047,6 +1105,7 @@ export function clearSimulatedDesk() {
   state.positions = state.positions.filter((row) => row.paper || row.brokerId === "paper");
   state.closedTrades = (state.closedTrades || []).filter((row) => row.paper || row.brokerId === "paper");
   state.liveCandles = [];
+  liveCandleCache.clear();
   state.algos = (state.algos || []).map((algo) =>
     algo.runMode === "paper" ? algo : { ...algo, pnl: algo.runMode === "backtest" ? algo.pnl : 0 },
   );
@@ -1425,13 +1484,16 @@ export function deleteAlgo(id) {
   return { ok: true, id };
 }
 
-function candlesForBacktest(tf, allowSample = true) {
-  const live = getCandles(tf || "5m");
+function candlesForBacktest(tf, allowSample = true, symbol = "NIFTY") {
+  const live = getCandles(tf || "5m", symbol);
   if (live.length >= 40) return { candles: live, sample: false };
   if (!allowSample) return { candles: live, sample: false };
-  const price = Number(state.indices[0]?.price || 24580);
+  const key = candleSymbol(symbol);
+  const index =
+    state.indices.find((item) => candleSymbol(item.symbol) === key || candleSymbol(item.name) === key) || state.indices[0];
+  const price = Number(index?.price || (key === "CRUDEOIL" ? 6124 : 24580));
   const count = tf === "1m" ? 180 : tf === "15m" ? 96 : tf === "1H" ? 80 : 120;
-  return { candles: generateCandles(count, price, 91), sample: true };
+  return { candles: generateCandles(count, price, key === "CRUDEOIL" ? 73 : 91), sample: true };
 }
 
 export function getAlgo(id) {
@@ -1543,7 +1605,7 @@ function runPaperAlgos() {
     }
     if (!feedLive) continue;
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
-    const pack = candlesForBacktest(algo.timeframe, false);
+    const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
     if (pack.candles.length < 32) continue;
     const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
     const open = state.positions.find((row) => (row.paper || row.brokerId === "paper") && row.strategy === algo.name);
@@ -1577,7 +1639,6 @@ function runPaperAlgos() {
 
 function runLiveAlgos() {
   const feedLive = Boolean(state.dhanFeed.live);
-  const sessionOpen = nseMarketSession().open;
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;
@@ -1589,9 +1650,9 @@ function runLiveAlgos() {
       tickNiftyVwapAlgo(algo, "live", feedLive);
       continue;
     }
-    if (!feedLive || !sessionOpen) continue;
+    if (!feedLive || !sessionOpenForAlgo(algo)) continue;
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
-    const pack = candlesForBacktest(algo.timeframe, false);
+    const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
     if (pack.candles.length < 32) continue;
     const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
     const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
@@ -1970,8 +2031,11 @@ export function replaceDhanBook(rows) {
   if (typeof onLiveBookChange === "function") onLiveBookChange();
 }
 
-export function setLiveCandles(candles) {
+export function setLiveCandles(candles, symbol = "NIFTY") {
   if (!Array.isArray(candles) || !candles.length) return;
+  const key = candleSymbol(symbol);
+  liveCandleCache.set(key, candles);
+  if (key !== "NIFTY") return;
   state.liveCandles = candles;
   const last = candles[candles.length - 1];
   state.ohlc = {
@@ -2040,6 +2104,25 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) 
   return clone(state.optionMeta);
 }
 
+export function cacheOptionDesk({ symbol, expiry, expiries, rows, spot, source } = {}) {
+  const meta = getUnderlying(symbol || "CRUDEOIL");
+  const nextRows = Array.isArray(rows) && rows.length ? rows : [];
+  const nextSpot = Number(spot) || getChainSpot(meta.id);
+  const stats = chainStats(nextRows, nextSpot);
+  const nextMeta = withExpiryLabels({
+    symbol: meta.id,
+    expiry: expiry || upcomingExpiries(meta.id)[0] || "",
+    expiries: expiries?.length ? expiries : upcomingExpiries(meta.id),
+    ...stats,
+    source: source || "dhan",
+    lastAt: Date.now(),
+    contractIds: nextRows.filter((row) => row.callId || row.putId).length,
+    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+  });
+  rememberOptionChain(meta.id, nextRows, nextMeta);
+  return clone(nextMeta);
+}
+
 export function currentOptionRows() {
   return state.optionChain;
 }
@@ -2072,7 +2155,7 @@ function pushSpark(spark, value) {
 
 function seedLiveCandles(price) {
   const now = Date.now();
-  state.liveCandles = [
+  const candles = [
     {
       time: now,
       open: price,
@@ -2082,6 +2165,8 @@ function seedLiveCandles(price) {
       volume: 0,
     },
   ];
+  state.liveCandles = candles;
+  liveCandleCache.set("NIFTY", candles);
 }
 
 function updateLiveCandle(price) {
@@ -2267,13 +2352,23 @@ export function applyLiveQuotes(quotes) {
   markPaperToMarket();
 }
 
-export function getCandles(tf = "5m") {
+export function getCandles(tf = "5m", symbol = "NIFTY") {
+  const key = candleSymbol(symbol);
   if (state.dhanFeed.live) {
-    if (!state.liveCandles.length) return [];
+    const liveRows =
+      key === "NIFTY"
+        ? state.liveCandles.length
+          ? state.liveCandles
+          : liveCandleCache.get("NIFTY") || []
+        : liveCandleCache.get(key) || [];
+    if (!liveRows.length) return [];
     const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
-    if (minutes <= 1) return clone(state.liveCandles);
-    return VwapSignalEngine.aggregateSessionBars(state.liveCandles, minutes);
+    if (minutes <= 1) return clone(liveRows);
+    return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
   }
+  const index =
+    state.indices.find((item) => candleSymbol(item.symbol) === key || candleSymbol(item.name) === key) || state.indices[0];
+  const price = Number(index?.price || (key === "CRUDEOIL" ? 6124 : 24420));
   const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
-  return generateCandles(count, 24420, tf.length * 17);
+  return generateCandles(count, price, tf.length * 17 + (key === "CRUDEOIL" ? 11 : 0));
 }

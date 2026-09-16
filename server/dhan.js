@@ -5,10 +5,12 @@ import { markDhanLive } from "./brokers.js";
 import {
   applyLiveQuotes,
   applySyntheticOptionChain,
+  cacheOptionDesk,
   clearSimulatedDesk,
   currentOptionRows,
   getChainSpot,
   getOptionMeta,
+  optionRowsForSymbol,
   quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
@@ -77,6 +79,7 @@ let pollTimer = null;
 let accountTimer = null;
 let chainTimer = null;
 let candleTimer = null;
+let crudeChainTimer = null;
 let tokenTimer = null;
 let tokenWatchdogTimer = null;
 const persistedBackoff = loadTokenBackoff();
@@ -656,13 +659,28 @@ function niftyChartTarget() {
   return { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" };
 }
 
-async function pullNiftyCandles() {
+function crudeChartTarget() {
+  const front = listFutures().find((row) => row.root === "CRUDEOIL" && row.front && row.securityId);
+  if (front?.securityId) {
+    return {
+      securityId: String(front.securityId),
+      exchangeSegment: front.segment || "MCX_COMM",
+      instrument: "FUTCOM",
+    };
+  }
+  return { securityId: "565899", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" };
+}
+
+async function pullChartCandles(symbol = "NIFTY") {
   if (!accessToken) return;
   if (Date.now() < quoteBackoffUntil) return;
+  const crude = String(symbol || "").toUpperCase().includes("CRUDEOIL");
   try {
-    const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:15:00");
+    const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), crude ? "09:00:00" : "09:15:00");
     const to = kolkataStamp(new Date());
-    const targets = [niftyChartTarget(), { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" }];
+    const targets = crude
+      ? [crudeChartTarget()]
+      : [niftyChartTarget(), { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" }];
     for (const inst of targets) {
       try {
         const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
@@ -676,16 +694,20 @@ async function pullNiftyCandles() {
         });
         const candles = mapChartCandles(payload);
         if (candles.length) {
-          setLiveCandles(candles);
+          setLiveCandles(candles, crude ? "CRUDEOIL" : "NIFTY");
           return;
         }
       } catch {
-        /* try index fallback */
+        /* try next instrument */
       }
     }
   } catch {
     /* quotes still drive the last bar */
   }
+}
+
+async function pullNiftyCandles() {
+  return pullChartCandles("NIFTY");
 }
 
 async function pullQuotes() {
@@ -931,6 +953,32 @@ async function refreshOptionChain() {
   });
 }
 
+async function refreshCachedOptionChain(symbol) {
+  if (!accessToken) return;
+  const und = getUnderlying(symbol);
+  if (!und?.id) return;
+  if (String(getOptionMeta().symbol || "").toUpperCase() === und.id) {
+    await refreshOptionChain();
+    return;
+  }
+  let expiries = await loadExpiryList(und);
+  let expiry = expiries[0];
+  const payload = await dhanPost("/optionchain", accessToken, clientId, {
+    ...chainUnderlyingRequest(und.id),
+    Expiry: expiry,
+  });
+  const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
+  if (!parsed.rows.length) return;
+  cacheOptionDesk({
+    symbol: und.id,
+    expiry,
+    expiries,
+    rows: parsed.rows,
+    spot: parsed.spot || getChainSpot(und.id),
+    source: "dhan",
+  });
+}
+
 export async function selectOptionDesk({ symbol, expiry }) {
   await resolveFrontFutures().catch(() => []);
   const und = getUnderlying(symbol);
@@ -966,6 +1014,8 @@ function startLiveLoop() {
     void pullQuotes();
     await sleep(400);
     void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
+    await sleep(400);
+    void refreshCachedOptionChain("CRUDEOIL").catch(() => undefined);
   })();
   setTimeout(() => {
     void pullAccount();
@@ -973,9 +1023,19 @@ function startLiveLoop() {
   setTimeout(() => {
     void pullNiftyCandles();
   }, 1400);
+  setTimeout(() => {
+    void pullChartCandles("CRUDEOIL");
+  }, 2200);
   candleTimer = setInterval(() => {
     void pullNiftyCandles();
   }, 15_000);
+  crudeChainTimer = setInterval(() => {
+    if (Date.now() < quoteBackoffUntil) return;
+    void pullChartCandles("CRUDEOIL");
+    void refreshCachedOptionChain("CRUDEOIL").catch((error) => {
+      handleDhanPollError("crude option chain", error);
+    });
+  }, 18_000);
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 2500);
@@ -1012,6 +1072,10 @@ function stopLiveLoop(clearCreds) {
   if (candleTimer) {
     clearInterval(candleTimer);
     candleTimer = null;
+  }
+  if (crudeChainTimer) {
+    clearInterval(crudeChainTimer);
+    crudeChainTimer = null;
   }
   stopSocket();
   if (clearCreds) {
@@ -1082,7 +1146,13 @@ export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
   const toDate = dateOnly(to);
   if (!fromDate || !toDate) return [];
   const interval = intradayInterval(timeframe);
-  const days = Math.max(1, Math.round((Date.parse(`${toDate}T15:30:00+05:30`) - Date.parse(`${fromDate}T09:15:00+05:30`)) / 86_400_000));
+  const crude = String(symbol || "").toUpperCase().includes("CRUDEOIL");
+  const openStamp = crude ? "09:00:00" : "09:15:00";
+  const closeStamp = crude ? "23:30:00" : "15:30:00";
+  const days = Math.max(
+    1,
+    Math.round((Date.parse(`${toDate}T${closeStamp}+05:30`) - Date.parse(`${fromDate}T${openStamp}+05:30`)) / 86_400_000),
+  );
 
   const historical = async () => {
     const payload = await dhanPost("/charts/historical", accessToken, clientId, {
@@ -1106,8 +1176,8 @@ export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
         instrument: inst.instrument,
         interval,
         oi: false,
-        fromDate: `${fromDate} 09:15:00`,
-        toDate: `${toDate} 15:30:00`,
+        fromDate: `${fromDate} ${openStamp}`,
+        toDate: `${toDate} ${closeStamp}`,
       });
       const candles = mapChartCandles(payload);
       if (candles.length >= 40) return candles;
@@ -1140,7 +1210,8 @@ function securityIdFromOpenChain(payload = {}) {
   const option = String(payload.option || parsed?.option || "").toUpperCase();
   const opt = option === "PUT" || option === "P" ? "PE" : option === "CALL" || option === "C" ? "CE" : option;
   if (!strike || (opt !== "CE" && opt !== "PE")) return "";
-  const row = currentOptionRows().find((item) => Number(item.strike) === strike);
+  const rows = optionRowsForSymbol(payload.symbol || parsed?.root) || currentOptionRows() || [];
+  const row = rows.find((item) => Number(item.strike) === strike);
   if (!row) return "";
   return String((opt === "PE" ? row.putId : row.callId) || "");
 }

@@ -51,3 +51,9 @@ test("CRUDEOIL is a market card underlying on MCX", () => {
   assert.equal(expiries.every((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)), true);
   assert.equal(["Sat", "Sun"].includes(weekdayNameIST(expiries[0])), false);
 });
+
+test("CRUDE OIL is listed next to index underlyings for the option chain", () => {
+  const ids = UNDERLYINGS.map((row) => row.id);
+  assert.deepEqual(ids.slice(-1), ["CRUDEOIL"]);
+  assert.equal(UNDERLYINGS.find((row) => row.id === "CRUDEOIL").label, "CRUDE OIL");
+});

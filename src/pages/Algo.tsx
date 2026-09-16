@@ -18,7 +18,7 @@ import {
 } from "../lib/strategies";
 
 type DeskTab = "copy" | "tradingview";
-type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
+type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
 
 function rupee(value: number) {
@@ -93,6 +93,7 @@ export function Algo() {
 
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
+    if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL";
     if (filter === "nifty-vwap") return isNiftyVwapKind(algo);
     if (filter === "nifty-vwap-reversal") return isNiftyVwapReversalKind(algo);
     if (filter === "nifty-vwap-hedge") return isNiftyVwapHedgeKind(algo);
@@ -202,6 +203,7 @@ export function Algo() {
                 ["nifty-vwap", "NIFTY VWAP ATM"],
                 ["nifty-vwap-reversal", "15m VWAP reversal"],
                 ["nifty-vwap-hedge", "15m VWAP hedge"],
+                ["crudeoil", "CRUDE OIL"],
               ] as const
             ).map(([id, label]) => (
               <button

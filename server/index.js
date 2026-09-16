@@ -754,7 +754,7 @@ app.post("/api/brokers/:id/activate", (req, res) => {
 });
 
 app.get("/api/candles", (req, res) => {
-  res.json(getCandles(String(req.query.tf || "5m")));
+  res.json(getCandles(String(req.query.tf || "5m"), String(req.query.symbol || "NIFTY")));
 });
 
 app.get("/api/option-chain", (_req, res) => {

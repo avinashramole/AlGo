@@ -569,6 +569,22 @@ export function normalizeAlgo(input = {}, existing = {}) {
   return withMapping(next, input, existing);
 }
 
+function seedCrudeAlgo(input, existing) {
+  return normalizeAlgo(
+    {
+      kind: "indicator",
+      symbol: "CRUDEOIL",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      lots: 1,
+      runMode: "live",
+      ...input,
+    },
+    { pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live", ...existing },
+  );
+}
+
 export function seedAlgos() {
   return [
     normalizeAlgo(
@@ -591,6 +607,39 @@ export function seedAlgos() {
         runMode: "live",
       }),
       { id: "a6", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
+    ),
+    seedCrudeAlgo(
+      {
+        name: "CRUDE OIL VWAP ATM",
+        indicator: "VWAP",
+        timeframe: "5m",
+        side: "BUY",
+        slPct: 0.4,
+        targetPct: 0.8,
+      },
+      { id: "a7" },
+    ),
+    seedCrudeAlgo(
+      {
+        name: "CRUDE OIL 15m VWAP reversal",
+        indicator: "VWAP",
+        timeframe: "15m",
+        side: "BOTH",
+        slPct: 0.4,
+        targetPct: 0.8,
+      },
+      { id: "a8" },
+    ),
+    seedCrudeAlgo(
+      {
+        name: "CRUDE OIL Supertrend ATM",
+        indicator: "SUPERTREND",
+        timeframe: "5m",
+        side: "BUY",
+        slPct: 0.4,
+        targetPct: 0.8,
+      },
+      { id: "a9" },
     ),
   ];
 }

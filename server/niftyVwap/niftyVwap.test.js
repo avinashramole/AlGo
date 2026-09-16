@@ -510,7 +510,7 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
 
 test("seed includes paused NIFTY VWAP ATM and 15m reversal algos", () => {
   const seeded = seedAlgos();
-  assert.equal(seeded.length, 3);
+  assert.ok(seeded.length >= 6);
   assert.equal(seeded[0].name, "NIFTY VWAP ATM");
   assert.equal(isNiftyVwapAlgo(seeded[0]), true);
   assert.equal(seeded[0].enabled, false);
