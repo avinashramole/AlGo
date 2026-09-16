@@ -61,25 +61,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       live,
       refresh,
       toggle: async (id: string) => {
-        let nextEnabled = true;
-        let previous: Snapshot["algos"][number] | undefined;
+        const previous = (data.algos || []).find((row) => row.id === id);
+        const nextEnabled = !previous?.enabled;
         snapshotGen.current += 1;
-        setData((current) => {
-          previous = (current.algos || []).find((row) => row.id === id);
-          nextEnabled = !previous?.enabled;
-          return {
-            ...current,
-            algos: (current.algos || []).map((row) =>
-              row.id === id
-                ? {
-                    ...row,
-                    enabled: nextEnabled,
-                    status: nextEnabled ? (row.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED",
-                  }
-                : row,
-            ),
-          };
-        });
         try {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
@@ -91,12 +75,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           }
           void refresh();
         } catch (err) {
-          if (previous) {
-            setData((current) => ({
-              ...current,
-              algos: (current.algos || []).map((row) => (row.id === id ? previous! : row)),
-            }));
-          }
           Alert.alert("Paper / live", err instanceof Error ? err.message : "Could not start");
           void refresh();
         }
