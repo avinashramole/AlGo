@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { apiDownMessage, publicDeskError } from "./liveSite";
 
 export function apiBase() {
   const env = process.env.EXPO_PUBLIC_API_URL;
@@ -17,29 +18,36 @@ export function setApiToken(token: string) {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
-  const response = await fetch(`${apiBase()}/api${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(extraHeaders || {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}/api${path}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        ...(extraHeaders || {}),
+      },
+    });
+  } catch {
+    throw new Error(apiDownMessage());
+  }
   const text = await response.text();
   let body: { error?: string } = {};
   try {
     body = text ? (JSON.parse(text) as { error?: string }) : {};
   } catch {
-    /* HTML 404 from an old Express process */
+    /* nginx 504 HTML when Node is down */
   }
   if (!response.ok) {
     throw new Error(
-      body.error ||
-        (response.status === 404
-          ? "API route missing. Stop the old process on port 4000 and run npm start again."
-          : response.status === 502 || response.status === 503 || response.status === 504
-            ? "API is not running. Keep npm start open. Open http://localhost:5173"
-            : `Request failed ${response.status}`),
+      publicDeskError(
+        body.error ||
+          (response.status === 404
+            ? "API route missing. On the VPS run: systemctl restart t2s."
+            : response.status === 502 || response.status === 503 || response.status === 504
+              ? apiDownMessage()
+              : `Request failed ${response.status}`),
+      ),
     );
   }
   return (body as T) || ({} as T);

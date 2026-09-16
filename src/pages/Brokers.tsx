@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMarket } from "../context/MarketContext";
 import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
+import { catchDeskError, isTrade2SmartHost } from "../lib/liveSite";
 
 export function Brokers() {
   const { data, connect, enableAuto, refreshToken, disconnect, activate } = useMarket();
@@ -60,7 +61,7 @@ export function Brokers() {
       setSelected(null);
       setSecret("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect");
+      setError(catchDeskError(err, "Could not connect"));
     } finally {
       setBusy(false);
     }
@@ -80,7 +81,7 @@ export function Brokers() {
       setDhanPin("");
       setDhanTotp("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate token");
+      setError(catchDeskError(err, "Could not generate token"));
     } finally {
       setBusy(false);
     }
@@ -100,7 +101,7 @@ export function Brokers() {
       setDhanPin("");
       setDhanTotp("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reset token");
+      setError(catchDeskError(err, "Could not reset token"));
     } finally {
       setBusy(false);
     }
@@ -112,7 +113,7 @@ export function Brokers() {
     try {
       await submitDhan(dhanClientId, dhanToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect");
+      setError(catchDeskError(err, "Could not connect"));
     } finally {
       setBusy(false);
     }
@@ -217,9 +218,10 @@ export function Brokers() {
         feed.ipCheck.detectedIP !== feed.ipCheck.primaryIP &&
         feed.ipCheck.detectedIP !== feed.ipCheck.secondaryIP ? (
           <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">
-            Dhan saw <b>{feed.ipCheck.detectedIP}</b>, not saved {feed.ipCheck.primaryIP}. Keep{" "}
-            <code>npm start</code> on this PC and open localhost:5173. Ignore Vite 192.168.x. Do not add another IP if
-            Static IP 1 is already {feed.ipCheck.primaryIP}.
+            Dhan saw <b>{feed.ipCheck.detectedIP}</b>, not saved {feed.ipCheck.primaryIP}.{" "}
+            {isTrade2SmartHost()
+              ? "This is the VPS public IP. Put that IP on Dhan. Do not open localhost."
+              : `Keep npm start on this PC and open localhost:5173. Ignore Vite 192.168.x. Do not add another IP if Static IP 1 is already ${feed.ipCheck.primaryIP}.`}
           </div>
         ) : null}
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}

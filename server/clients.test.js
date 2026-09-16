@@ -17,9 +17,9 @@ fs.writeFileSync(
   `${JSON.stringify(
     [
       {
-        id: "avinash",
-        name: "Avinash",
-        email: "demo@t2s.app",
+        id: "admin",
+        name: "Trade2Smart",
+        email: "trades2smart@gmail.com",
         desk: "Index Options",
         role: "admin",
         password: "demo123",
@@ -45,7 +45,7 @@ const { asLedgerPosition, clientStatus, createClient, deleteClient, listClients,
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
   const rows = listClients(listPublicUsers());
-  assert.equal(rows.some((row) => row.role === "admin" || row.name === "Avinash"), false);
+  assert.equal(rows.some((row) => row.role === "admin" || row.name === "Trade2Smart"), false);
   const arpit = rows.find((row) => row.id === "u-arpit");
   assert.equal(arpit.brokerName, "PAPER");
   assert.equal(arpit.linked, false);
@@ -265,8 +265,8 @@ test("saveClient stores the client mobile on the user record", () => {
 });
 
 test("deleteClient removes a member and refuses the desk admin", () => {
-  assert.throws(() => deleteClient("avinash", { actorId: "segin" }), /admin/);
-  const gone = deleteClient("u-arpit", { actorId: "avinash" });
+  assert.throws(() => deleteClient("admin", { actorId: "u-arpit" }), /admin/);
+  const gone = deleteClient("u-arpit", { actorId: "admin" });
   assert.equal(gone.ok, true);
   assert.equal(listClients(listPublicUsers()).some((row) => row.id === "u-arpit"), false);
 });

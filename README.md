@@ -8,7 +8,7 @@ One trading desk. Same login, same live demo data.
 | **Android** | Expo Go app on your phone |
 | **iOS** | Expo Go app on iPhone / iPad |
 
-Demo login (Avinash): **demo@t2s.app** / **demo123**
+Demo login: **trades2smart@gmail.com** / **demo123**
 
 **Sign up:** Gmail or mobile + code, then set a password. Use **New here? Create account**.
 
@@ -51,7 +51,7 @@ Open **http://localhost:5173** in Chrome.
 
 - **New user:** Create account → Gmail or mobile → send code → set password.
 - **Sign in:** Gmail or mobile + password, or Sign in with code. Phone also has Use thumb.
-- **Avinash demo:** `demo@t2s.app` / `demo123`
+- **Admin:** `trades2smart@gmail.com` / `demo123`
 
 Connect Gmail (App Password) so Gmail codes and login notices are emailed. Mobile SMS needs `FAST2SMS_API_KEY`. Without those, the screen shows a temporary code. Google Account → Security → 2-Step Verification → App passwords. Do not use your normal Gmail password.
 
@@ -85,7 +85,7 @@ A QR code appears.
 - **Android:** open Expo Go and scan the QR code  
 - **iPhone:** open the Camera app, scan the QR code, then open in Expo Go  
 
-Login: Sign up with Gmail or mobile code, then password / Gmail / mobile. Phone also has thumb. Demo: `demo@t2s.app` / `demo123`
+Login: Sign up with Gmail or mobile code, then password / Gmail / mobile. Phone also has thumb. Admin: `trades2smart@gmail.com` / `demo123`
 
 The phone talks to the API on your computer, so leave `npm start` running in the first terminal.
 

@@ -3,6 +3,7 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import { useAuth } from "../AuthContext";
 import { BrandMark } from "../components/BrandMark";
 import type { SocialProvider } from "../api";
+import { catchDeskError } from "../liveSite";
 import { colors } from "../theme";
 
 function looksLikeMobile(value: string) {
@@ -49,7 +50,7 @@ export function LoginScreen() {
   };
 
   const fail = (title: string, error: unknown) => {
-    Alert.alert(title, error instanceof Error ? error.message : "Try again");
+    Alert.alert(title, catchDeskError(error, "Try again"));
   };
 
   const sendCode = async (purpose: "signup" | "login" | "reset", provider?: SocialProvider) => {
@@ -181,6 +182,11 @@ export function LoginScreen() {
       return;
     }
 
+    if (!identifier.trim()) {
+      Alert.alert("Email", "Enter your Gmail or mobile.");
+      return;
+    }
+
     if (!password) {
       Alert.alert("Password", "Enter your password, or tap Email me a login code.");
       return;
@@ -188,7 +194,7 @@ export function LoginScreen() {
 
     setBusy(true);
     try {
-      await login(identifier || "demo@t2s.app", password);
+      await login(identifier, password);
     } catch (error) {
       fail("Sign in failed", error);
     } finally {

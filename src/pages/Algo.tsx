@@ -5,6 +5,7 @@ import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
+import { catchDeskError } from "../lib/liveSite";
 import { brokerName, defaultBrokers } from "../lib/brokers";
 import { cn, formatInr, formatNumber } from "../lib/format";
 import {
@@ -109,7 +110,7 @@ export function Algo() {
     try {
       await toggle(algo.id);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Could not start");
+      window.alert(catchDeskError(err, "Could not start"));
     }
   };
 
@@ -211,7 +212,7 @@ export function Algo() {
                     setRangeError("");
                     void backtest(algo.id, payload)
                       .then(() => setRangeId(""))
-                      .catch((err: unknown) => setRangeError(err instanceof Error ? err.message : "Backtest failed"))
+                      .catch((err: unknown) => setRangeError(catchDeskError(err, "Backtest failed")))
                       .finally(() => setBusyId(""));
                   }}
                   onStart={() => void startOrPause(algo)}
@@ -256,7 +257,7 @@ export function Algo() {
           setRangeError("");
           void backtest(rangeFor.id, payload)
             .then(() => setRangeId(""))
-            .catch((err: unknown) => setRangeError(err instanceof Error ? err.message : "Backtest failed"))
+            .catch((err: unknown) => setRangeError(catchDeskError(err, "Backtest failed")))
             .finally(() => setBusyId(""));
         }}
       />
@@ -452,7 +453,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
       setClients(result.clients || []);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load clients");
+      setError(catchDeskError(err, "Could not load clients"));
     } finally {
       setLoaded(true);
     }
@@ -474,7 +475,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
       await refresh();
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save mapping");
+      setError(catchDeskError(err, "Could not save mapping"));
     } finally {
       setBusy(false);
     }

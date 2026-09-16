@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, queueLoginNotice, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
@@ -161,7 +161,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
     });
     try {
-      await notifyLogin(result.user);
+      queueLoginNotice(result.user);
     } catch (mailError) {
       console.error("[auth] Google login mail failed:", mailError?.message || mailError);
     }
@@ -175,8 +175,8 @@ app.get("/api/auth/google/callback", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Login failed" });
   }
@@ -209,8 +209,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       purpose: req.body?.purpose,
     });
     if (result.token) {
-      const mail = await notifyLogin(result.user);
-      res.json({ ...result, mail });
+      queueLoginNotice(result.user);
+      res.json(result);
       return;
     }
     res.json(result);
@@ -222,8 +222,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 app.post("/api/auth/reset", async (req, res) => {
   try {
     const result = resetPassword(req.body || {});
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not reset password" });
   }
@@ -232,8 +232,8 @@ app.post("/api/auth/reset", async (req, res) => {
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const result = completeSignup(req.body || {});
-    const mail = await notifyLogin(result.user);
-    res.status(201).json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Sign up failed" });
   }
@@ -251,8 +251,8 @@ app.post("/api/auth/thumb/enable", (req, res) => {
 app.post("/api/auth/thumb", async (req, res) => {
   try {
     const result = loginWithThumb(req.body?.thumbToken);
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
   }
@@ -799,33 +799,45 @@ app.post("/api/algos/:id/toggle", (req, res) => {
     return;
   }
   if (algo.error) {
-    res.status(400).json({ error: algo.error, snapshot: snapshot() });
+    res.status(400).json({ error: algo.error });
     return;
   }
-  res.json({ ...algo, snapshot: snapshot() });
+  res.json({ ok: true, ...algo, snapshot: null });
 });
 
 app.post("/api/algos", (req, res) => {
-  const algo = createAlgo(req.body || {});
-  res.status(201).json({ ok: true, algo, snapshot: snapshot() });
+  try {
+    const algo = createAlgo(req.body || {});
+    res.status(201).json({ ok: true, algo, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
+  }
 });
 
 app.put("/api/algos/:id", (req, res) => {
-  const result = updateAlgo(req.params.id, req.body || {});
-  if (result.error) {
-    res.status(404).json({ error: result.error });
-    return;
+  try {
+    const result = updateAlgo(req.params.id, req.body || {});
+    if (result.error) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, algo: result, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
   }
-  res.json({ ok: true, algo: result, snapshot: snapshot() });
 });
 
 app.delete("/api/algos/:id", (req, res) => {
-  const result = deleteAlgo(req.params.id);
-  if (result.error) {
-    res.status(404).json({ error: result.error });
-    return;
+  try {
+    const result = deleteAlgo(req.params.id);
+    if (result.error) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...result, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not delete strategy" });
   }
-  res.json({ ok: true, ...result, snapshot: snapshot() });
 });
 
 app.post("/api/algos/:id/broker", (req, res) => {
