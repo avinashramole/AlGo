@@ -1069,6 +1069,10 @@ export function getSnapshot() {
   return request<Snapshot>("/snapshot", undefined, { retries: 3 });
 }
 
+export function getDeskFeed() {
+  return request<Partial<Snapshot>>("/feed", undefined, { retries: 3 });
+}
+
 export function getDeskMtm() {
   return request<{
     positions: Array<{ id: string; symbol: string; ltp: number; pnl: number; strategy?: string }>;

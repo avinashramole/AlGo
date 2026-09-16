@@ -10,6 +10,7 @@ import {
   enableDhanAuto,
   getDeskMtm,
   getSnapshot,
+  getDeskFeed,
   placeOrder,
   refreshDhanToken,
   selectOptionChain,
@@ -33,6 +34,7 @@ import {
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
+import { keepStrikeWindow, patchById } from "../lib/deskFeed";
 
 const fallback: Snapshot = {
   indices,
@@ -220,16 +222,69 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
   const mergeSnapshot = (incoming: Snapshot) => {
     const pending = pendingToggles.current;
+    const current = dataRef.current;
     const algos = (incoming.algos || []).map((row) => {
       const hold = pending.get(row.id);
       if (!hold) return row;
       if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
       return { ...row, enabled: hold.enabled, status: hold.status };
     });
-    const next = { ...incoming, algos };
+    const sameDesk =
+      current.optionMeta?.symbol === incoming.optionMeta?.symbol &&
+      current.optionMeta?.expiry === incoming.optionMeta?.expiry;
+    const optionChain = sameDesk
+      ? keepStrikeWindow(current.optionChain || [], incoming.optionChain || [])
+      : incoming.optionChain || [];
+    const next = { ...incoming, algos, optionChain };
     dataRef.current = next;
     writeCachedDesk(next);
     setData(next);
+  };
+
+  const applyFeed = (feed: Partial<Snapshot>) => {
+    const pending = pendingToggles.current;
+    setData((current) => {
+      const incomingAlgos = feed.algos || [];
+      const byId = new Map(incomingAlgos.map((row) => [row.id, row]));
+      const algos = (current.algos || []).map((row) => {
+        const next = byId.get(row.id);
+        if (!next) return row;
+        const hold = pending.get(row.id);
+        const enabled = hold ? hold.enabled : next.enabled;
+        const status = hold ? hold.status : next.status;
+        if (hold && Boolean(next.enabled) === hold.enabled) pending.delete(row.id);
+        return {
+          ...row,
+          ...next,
+          enabled,
+          status,
+        };
+      });
+      const sameDesk =
+        current.optionMeta?.symbol === (feed.optionMeta?.symbol || current.optionMeta?.symbol) &&
+        current.optionMeta?.expiry === (feed.optionMeta?.expiry || current.optionMeta?.expiry);
+      const optionChain = sameDesk
+        ? keepStrikeWindow(current.optionChain || [], feed.optionChain || current.optionChain || [])
+        : feed.optionChain || current.optionChain;
+      const next = {
+        ...current,
+        ...feed,
+        algos,
+        optionChain,
+        optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
+        positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
+        orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
+        closedTrades: feed.closedTrades ? patchById(current.closedTrades || [], feed.closedTrades) : current.closedTrades,
+        report: current.report,
+        chat: current.chat,
+        notifications: current.notifications,
+        settings: current.settings,
+        contracts: current.contracts,
+        brokers: current.brokers,
+      };
+      dataRef.current = next;
+      return next;
+    });
   };
 
   const refresh = useCallback(async () => {
@@ -264,17 +319,35 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshFeed = useCallback(async () => {
+    const gen = snapshotGen.current;
+    try {
+      const feed = await getDeskFeed();
+      if (gen !== snapshotGen.current) return;
+      applyFeed(feed);
+      setLive(true);
+    } catch {
+      if (gen !== snapshotGen.current) return;
+    }
+  }, []);
+
   useEffect(() => {
     if (!admin) {
       setLive(false);
       return;
     }
     void refresh();
-    const id = window.setInterval(() => {
-      void refresh();
+    const feedId = window.setInterval(() => {
+      void refreshFeed();
     }, 2000);
-    return () => window.clearInterval(id);
-  }, [admin, refresh]);
+    const snapId = window.setInterval(() => {
+      void refresh();
+    }, 30000);
+    return () => {
+      window.clearInterval(feedId);
+      window.clearInterval(snapId);
+    };
+  }, [admin, refresh, refreshFeed]);
 
   const liveOpen = Boolean(data.dhanFeed?.live) && (data.positions || []).some((row) => row.live || row.brokerId === "dhan");
   useEffect(() => {

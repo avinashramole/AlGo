@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
 import { exchangeSegmentFor, isCrudeUnderlying } from "../../lib/markets";
@@ -12,13 +12,6 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [noteFail, setNoteFail] = useState(false);
-
-  const visible = useMemo(() => {
-    const atmIndex = rows.findIndex((row) => row.atm);
-    const next =
-      atmIndex < 0 ? rows.slice(0, 21) : rows.slice(Math.max(0, atmIndex - 10), atmIndex + 11);
-    return next;
-  }, [rows]);
 
   const lot = meta?.underlyings?.find((item) => item.id === symbol)?.lot || 65;
   const crude = isCrudeUnderlying(symbol);
@@ -91,7 +84,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         <div className={cn("mb-2 break-words text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
       ) : null}
       <div className="space-y-2 md:hidden">
-        {visible.map((row) => {
+        {rows.map((row) => {
           const callVwap = row.callVwap || row.callLtp;
           const putVwap = row.putVwap || row.putLtp;
           return (
@@ -161,7 +154,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           </tr>
         </thead>
         <tbody>
-          {visible.map((row) => (
+          {rows.map((row) => (
             <tr key={row.strike} className={cn("soft-row", row.atm && "bg-brand-50/80 dark:bg-brand-500/10")}>
               <td className="py-2">
                 <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />

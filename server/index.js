@@ -39,6 +39,7 @@ import {
   quoteSymbol,
   placeOrder,
   snapshot,
+  deskFeed,
   deskMtm,
   squareOff,
   tickMarket,
@@ -629,6 +630,10 @@ app.post("/api/auth/gmail", async (req, res) => {
 
 app.get("/api/snapshot", (_req, res) => {
   res.json(snapshot());
+});
+
+app.get("/api/feed", (_req, res) => {
+  res.json(deskFeed());
 });
 
 app.get("/api/mtm", (_req, res) => {

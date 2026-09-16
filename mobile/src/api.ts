@@ -608,6 +608,10 @@ export function getSnapshot() {
   return request<Snapshot>("/snapshot");
 }
 
+export function getDeskFeed() {
+  return request<Partial<Snapshot>>("/feed");
+}
+
 export function getContracts(symbol?: string, expiry?: string) {
   const query = new URLSearchParams();
   if (symbol) query.set("symbol", symbol);

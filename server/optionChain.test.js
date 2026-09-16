@@ -10,6 +10,7 @@ import {
   UNDERLYINGS,
   weekdayNameIST,
   dhanOrderQuantity,
+  keepStrikeWindow,
 } from "./optionChain.js";
 
 test("NIFTY monthly is the last Tuesday of the month", () => {
@@ -66,4 +67,26 @@ test("Dhan MCX quantity is lots, not barrel lot-size", () => {
   assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 CE", qty: 200, lots: 1, lotSize: 100 }), 2);
   assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL FUT", qty: 200, exchangeSegment: "MCX_COMM", lotSize: 100 }), 2);
   assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 PE", qty: 1, exchangeSegment: "MCX_COMM" }), 1);
+});
+
+test("keepStrikeWindow patches LTP on the same strikes instead of recentering ATM", () => {
+  const open = [
+    { strike: 24500, atm: true, callLtp: 100 },
+    { strike: 24550, atm: false, callLtp: 80 },
+    { strike: 24600, atm: false, callLtp: 60 },
+  ];
+  const incoming = [
+    { strike: 24450, atm: false, callLtp: 140 },
+    { strike: 24500, atm: false, callLtp: 110 },
+    { strike: 24550, atm: true, callLtp: 90 },
+    { strike: 24600, atm: false, callLtp: 70 },
+    { strike: 24650, atm: false, callLtp: 50 },
+  ];
+  const next = keepStrikeWindow(open, incoming);
+  assert.deepEqual(
+    next.map((row) => row.strike),
+    [24500, 24550, 24600],
+  );
+  assert.equal(next[0].callLtp, 110);
+  assert.equal(next[1].atm, true);
 });

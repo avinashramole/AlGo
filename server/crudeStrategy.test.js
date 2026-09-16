@@ -164,3 +164,26 @@ test("switching option desk does not keep the previous underlying strikes", () =
   assert.equal(desk.optionChain[0].strike, 6100);
   assert.notEqual(desk.optionChain[0].strike, niftyStrike);
 });
+
+test("same-symbol option feed keeps the open strike window", () => {
+  applySyntheticOptionChain("NIFTY");
+  const first = snapshot().optionChain.map((row) => row.strike);
+  assert.equal(first.length > 5, true);
+  const shifted = [
+    { strike: first[0] - 50, atm: false, callLtp: 1, putLtp: 1 },
+    ...snapshot().optionChain.map((row, index) => ({
+      ...row,
+      atm: index === 2,
+      callLtp: Number(row.callLtp) + 1,
+    })),
+    { strike: first[first.length - 1] + 50, atm: false, callLtp: 1, putLtp: 1 },
+  ];
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: snapshot().optionMeta.expiry,
+    rows: shifted,
+  });
+  const second = snapshot().optionChain.map((row) => row.strike);
+  assert.deepEqual(second, first);
+  assert.equal(snapshot().optionChain[0].callLtp, shifted[1].callLtp);
+});

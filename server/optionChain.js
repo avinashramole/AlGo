@@ -381,6 +381,21 @@ export function trimAroundAtm(rows, wings = 12) {
   return rows.slice(Math.max(0, atmIndex - wings), atmIndex + wings + 1);
 }
 
+export function keepStrikeWindow(previous = [], incoming = []) {
+  const prev = Array.isArray(previous) ? previous : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  if (!prev.length) return next;
+  if (!next.length) return prev;
+  const byStrike = new Map(next.map((row) => [Number(row.strike), row]));
+  const patched = [];
+  for (const row of prev) {
+    const fresh = byStrike.get(Number(row.strike));
+    if (fresh) patched.push({ ...row, ...fresh });
+  }
+  if (patched.length >= Math.min(11, prev.length)) return patched;
+  return next;
+}
+
 export function chainStats(rows, spot) {
   const callOi = rows.reduce((sum, row) => sum + (row.callOi || 0), 0);
   const putOi = rows.reduce((sum, row) => sum + (row.putOi || 0), 0);

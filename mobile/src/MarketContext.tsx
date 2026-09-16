@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert } from "react-native";
-import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
+import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getDeskFeed, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
 import { useAuth } from "./AuthContext";
+import { keepStrikeWindow, patchById } from "./deskFeed";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -54,15 +55,58 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
   const mergeSnapshot = (incoming: Snapshot) => {
     const pending = pendingToggles.current;
+    const current = dataRef.current;
     const algos = (incoming.algos || []).map((row) => {
       const hold = pending.get(row.id);
       if (!hold) return row;
       if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
       return { ...row, enabled: hold.enabled, status: hold.status };
     });
-    const next = { ...incoming, algos };
+    const sameDesk =
+      current.optionMeta?.symbol === incoming.optionMeta?.symbol &&
+      current.optionMeta?.expiry === incoming.optionMeta?.expiry;
+    const optionChain = sameDesk
+      ? keepStrikeWindow(current.optionChain || [], incoming.optionChain || [])
+      : incoming.optionChain || [];
+    const next = { ...incoming, algos, optionChain };
     dataRef.current = next;
     setData(next);
+  };
+
+  const applyFeed = (feed: Partial<Snapshot>) => {
+    const pending = pendingToggles.current;
+    setData((current) => {
+      const incomingAlgos = feed.algos || [];
+      const byId = new Map(incomingAlgos.map((row) => [row.id, row]));
+      const algos = (current.algos || []).map((row) => {
+        const next = byId.get(row.id);
+        if (!next) return row;
+        const hold = pending.get(row.id);
+        const enabled = hold ? hold.enabled : next.enabled;
+        const status = hold ? hold.status : next.status;
+        if (hold && Boolean(next.enabled) === hold.enabled) pending.delete(row.id);
+        return { ...row, ...next, enabled, status };
+      });
+      const sameDesk =
+        current.optionMeta?.symbol === (feed.optionMeta?.symbol || current.optionMeta?.symbol) &&
+        current.optionMeta?.expiry === (feed.optionMeta?.expiry || current.optionMeta?.expiry);
+      const optionChain = sameDesk
+        ? keepStrikeWindow(current.optionChain || [], feed.optionChain || current.optionChain || [])
+        : feed.optionChain || current.optionChain;
+      const next = {
+        ...current,
+        ...feed,
+        algos,
+        optionChain,
+        optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
+        positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
+        orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
+        report: current.report,
+        brokers: current.brokers,
+      };
+      dataRef.current = next;
+      return next;
+    });
   };
 
   const refresh = useCallback(async () => {
@@ -78,17 +122,35 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshFeed = useCallback(async () => {
+    const gen = snapshotGen.current;
+    try {
+      const feed = await getDeskFeed();
+      if (gen !== snapshotGen.current) return;
+      applyFeed(feed);
+      setLive(true);
+    } catch {
+      if (gen !== snapshotGen.current) return;
+    }
+  }, []);
+
   useEffect(() => {
     if (!admin) {
       setLive(false);
       return;
     }
     void refresh();
-    const id = setInterval(() => {
+    const feedId = setInterval(() => {
+      void refreshFeed();
+    }, 2000);
+    const snapId = setInterval(() => {
       void refresh();
-    }, 2500);
-    return () => clearInterval(id);
-  }, [admin, refresh]);
+    }, 30000);
+    return () => {
+      clearInterval(feedId);
+      clearInterval(snapId);
+    };
+  }, [admin, refresh, refreshFeed]);
 
   const value = useMemo(
     () => ({

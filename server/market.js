@@ -14,6 +14,7 @@ import {
   isWeeklyOptionExpiry,
   upcomingExpiries,
   withExpiryLabels,
+  keepStrikeWindow,
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
@@ -1188,11 +1189,6 @@ export function tickMarket() {
   const spot = getChainSpot(state.optionMeta.symbol);
   const und = getUnderlying(state.optionMeta.symbol);
   const atm = atmStrike(spot, und.step);
-  const currentAtm = state.optionChain.find((row) => row.atm)?.strike;
-  if (atm !== currentAtm) {
-    applySyntheticOptionChain(state.optionMeta.symbol, state.optionMeta.expiry);
-    return;
-  }
   state.optionChain = state.optionChain.map((row) => ({
     ...row,
     callLtp: jitter(row.callLtp, 0.55),
@@ -1344,6 +1340,48 @@ export function snapshot() {
     indices: publicIndices(publicState.indices),
     optionChain: publicOptionRows(publicState.optionChain),
     settings: { ...state.settings, broker: active.name },
+    marketStatus: nseMarketSession().status,
+    marketSession: nseMarketSession(),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+export function deskFeed() {
+  markPaperToMarket();
+  const { orders, positions, closedTrades } = liveDesk();
+  const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
+  const dnaScores = buildLiveDna({ indices: state.indices, optionChain: state.optionChain });
+  const algos = (state.algos || []).map((algo) => ({
+    id: algo.id,
+    enabled: algo.enabled,
+    status: algo.status,
+    pnl: algo.pnl,
+    winRate: algo.winRate,
+    lastSignal: algo.lastSignal,
+    trade: resolveAlgoTrade(algo),
+  }));
+  const signalAlgos = (state.algos || []).map((algo, index) => ({ ...algo, ...algos[index] }));
+  const signals = buildLiveSignals({ algos: signalAlgos, orders });
+  const watch = indexWatchRows(state.indices);
+  return {
+    indices: publicIndices(state.indices),
+    ohlc: state.ohlc,
+    optionChain: publicOptionRows(state.optionChain),
+    optionMeta: clone(state.optionMeta),
+    futures: publicFutures(),
+    dhanFeed: clone(state.dhanFeed),
+    positions,
+    orders,
+    closedTrades,
+    algos,
+    signals,
+    featuredSignal: buildFeaturedSignal(signals, state.optionMeta, dnaScores),
+    dnaScores,
+    sentiment: liveSentiment(dnaScores),
+    totalPnl: Number(totalPnl.toFixed(2)),
+    pnlByBroker: byBroker,
+    marketWatch: watch,
+    watchlist: watch.map(({ volume: _volume, ...row }) => row),
     marketStatus: nseMarketSession().status,
     marketSession: nseMarketSession(),
     serverTime: new Date().toISOString(),
@@ -2159,13 +2197,16 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) 
   const meta = getUnderlying(symbol || state.optionMeta.symbol);
   const sameSymbol = String(state.optionMeta?.symbol || "").toUpperCase() === meta.id;
   const cached = optionChainCache.get(meta.id);
-  const nextRows = Array.isArray(rows) && rows.length
+  const nextExpiry = expiry || cached?.meta?.expiry || (sameSymbol ? state.optionMeta.expiry : upcomingExpiries(meta.id)[0] || "");
+  const sameExpiry = normalizeExpiry(nextExpiry) === normalizeExpiry(state.optionMeta.expiry);
+  let nextRows = Array.isArray(rows) && rows.length
     ? rows
     : sameSymbol
       ? state.optionChain
       : cached?.rows?.length
         ? cached.rows
         : [];
+  if (sameSymbol && sameExpiry) nextRows = keepStrikeWindow(state.optionChain, nextRows);
   const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
   state.optionChain = nextRows;
@@ -2173,7 +2214,7 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) 
     ...state.optionMeta,
     ...(cached?.meta || {}),
     symbol: meta.id,
-    expiry: expiry || cached?.meta?.expiry || (sameSymbol ? state.optionMeta.expiry : upcomingExpiries(meta.id)[0] || ""),
+    expiry: nextExpiry,
     expiries: expiries?.length ? expiries : cached?.meta?.expiries || (sameSymbol ? state.optionMeta.expiries : upcomingExpiries(meta.id)),
     ...stats,
     source: source || cached?.meta?.source || state.optionMeta.source,

@@ -1,5 +1,4 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useMemo } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatNumber, formatPct, vwapColor } from "../theme";
@@ -19,12 +18,7 @@ export function OptionsScreen() {
     (row) =>
       row.front && (!meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol)),
   );
-  const visibleRows = useMemo(() => {
-    const rows = data.optionChain || [];
-    const atm = rows.findIndex((row) => row.atm);
-    if (atm < 0) return rows.slice(0, 21);
-    return rows.slice(Math.max(0, atm - 10), atm + 11);
-  }, [data.optionChain]);
+  const chainRows = data.optionChain || [];
 
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
@@ -144,7 +138,7 @@ export function OptionsScreen() {
       })}
       </View>
       <ScrollView style={styles.chain} contentContainerStyle={styles.chainContent}>
-      {visibleRows.map((row) => (
+      {chainRows.map((row) => (
         <Card key={row.strike}>
           <Text style={styles.strike}>
             {row.strike} {row.atm ? "ATM" : ""}
