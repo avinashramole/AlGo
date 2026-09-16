@@ -6,7 +6,7 @@ import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
-import { colors, formatInr, formatIst, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
+import { colors, formatInr, formatIst, formatNumber, formatPct, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen, vwapColor } from "../theme";
 
 function MemberHome() {
   const navigation = useNavigation<any>();
@@ -129,9 +129,15 @@ export function HomeScreen() {
           <BrandMark variant="horizontal" />
           <Text style={styles.user}>{user?.name || "Trader"} · {user?.email || user?.mobile || "Profile"}</Text>
         </Pressable>
-        <Text style={[styles.live, !isNseSessionOpen() && { color: colors.muted }]}>
-          {isNseSessionOpen() ? "Market Open" : "Market Closed"}
-          {data.dhanFeed?.live ? " · DHAN LIVE" : live ? " · LIVE" : " · DEMO"}
+        <Text style={[styles.live, !(isNseSessionOpen() || isMcxSessionOpen()) && { color: colors.muted }]}>
+          {isNseSessionOpen() && isMcxSessionOpen()
+            ? "Market Open"
+            : isNseSessionOpen()
+              ? "NSE Open"
+              : isMcxSessionOpen()
+                ? "MCX Open"
+                : "Market Closed"}
+          {hasDhanQuotes(data) ? (data.dhanFeed?.live ? " · DHAN LIVE" : " · DHAN") : live ? " · LIVE" : " · DEMO"}
         </Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>

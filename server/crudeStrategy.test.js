@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  applyLiveQuotes,
   applySyntheticOptionChain,
   cacheOptionDesk,
   candleSymbol,
@@ -16,6 +17,8 @@ import {
   setLiveCandles,
   setOptionDesk,
   snapshot,
+  tickMarket,
+  hasLastLiveBook,
 } from "./market.js";
 import { hydrateAlgos, normalizeAlgo, seedAlgos } from "./strategies.js";
 
@@ -186,4 +189,28 @@ test("same-symbol option feed keeps the open strike window", () => {
   const second = snapshot().optionChain.map((row) => row.strike);
   assert.deepEqual(second, first);
   assert.equal(snapshot().optionChain[0].callLtp, shifted[1].callLtp);
+});
+
+test("tickMarket keeps last Dhan quotes after the feed stops", () => {
+  applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY 50", ltp: 24880, kind: "index" }]);
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: snapshot().optionMeta.expiry,
+    rows: snapshot().optionChain.map((row, index) => ({ ...row, callLtp: 111 + index, putLtp: 88 + index })),
+    source: "dhan",
+  });
+  setDhanFeed({ live: false, source: "rest", lastTickAt: Date.now() });
+  const before = snapshot();
+  const nifty = before.indices.find((row) => row.symbol === "NIFTY 50");
+  const callLtp = before.optionChain[0].callLtp;
+  assert.equal(hasLastLiveBook(), true);
+  tickMarket();
+  tickMarket();
+  const after = snapshot();
+  assert.equal(after.indices.find((row) => row.symbol === "NIFTY 50")?.price, nifty?.price);
+  assert.equal(after.optionChain[0].callLtp, callLtp);
+  assert.equal(after.optionMeta.source, "dhan");
+  assert.equal(after.dhanFeed.hasQuotes, true);
+  setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  applySyntheticOptionChain("NIFTY");
 });

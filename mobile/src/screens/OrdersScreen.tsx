@@ -1,7 +1,7 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
-import { colors, formatNumber } from "../theme";
+import { colors, formatNumber, hasDhanQuotes } from "../theme";
 
 function strategyLabel(row: { strategy?: string }, algos: Array<{ id?: string; name?: string }> = []) {
   const raw = String(row.strategy || "").trim();
@@ -23,7 +23,7 @@ export function OrdersScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Order Book</Text>
       <Text style={styles.muted}>
-        {data.dhanFeed?.live ? `${orders.length} live Dhan + paper orders today` : `${orders.length} orders today`}
+        {hasDhanQuotes(data) ? `${orders.length} live Dhan + paper orders today` : `${orders.length} orders today`}
       </Text>
       {orders.map((row) => (
         <Card key={row.id}>

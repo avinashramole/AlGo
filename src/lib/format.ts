@@ -75,6 +75,29 @@ export function isMcxSessionOpen(date = new Date()) {
   return !weekend && minutes >= 9 * 60 && minutes < 23 * 60 + 30;
 }
 
+export function hasDhanQuotes(data?: {
+  dhanFeed?: { live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };
+  optionMeta?: { source?: string };
+}) {
+  return Boolean(
+    data?.dhanFeed?.live ||
+      data?.dhanFeed?.hasQuotes ||
+      data?.dhanFeed?.lastTickAt ||
+      data?.optionMeta?.source === "dhan",
+  );
+}
+
+export function dhanFeedLabel(
+  data?: { dhanFeed?: { live?: boolean; hasQuotes?: boolean }; optionMeta?: { source?: string } },
+  sessionOpen?: boolean,
+) {
+  if (!hasDhanQuotes(data)) return "DEMO";
+  if (data?.dhanFeed?.live && (sessionOpen == null || sessionOpen)) {
+    return data?.optionMeta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain";
+  }
+  return sessionOpen === false ? "DHAN · last" : "DHAN";
+}
+
 export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?: boolean; funds: number }) {
   const amount = `₹${formatNumber(broker.funds, 0)}`;
   if (broker.virtual || broker.id === "paper") return `${amount} virtual`;
@@ -82,10 +105,14 @@ export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?
   return amount;
 }
 
-export function liveBookCopy(live?: boolean) {
-  return live
-    ? "LIVE feed · Dhan actual + Paper virtual fills. No simulated book or simulated balance."
-    : "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
+export function liveBookCopy(live?: boolean, hasQuotes?: boolean) {
+  if (live) {
+    return "LIVE feed · Dhan actual + Paper virtual fills. No simulated book or simulated balance.";
+  }
+  if (hasQuotes) {
+    return "Last Dhan quotes stay on the desk after NSE and MCX close. Paper trading uses the live feed only.";
+  }
+  return "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
 }
 
 export function deskStrategyName(strategy?: string, algos?: Array<{ id?: string; name?: string }>) {

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { brokerName } from "../../lib/brokers";
-import { cn, formatInr, formatNumber } from "../../lib/format";
+import { cn, formatInr, formatNumber, hasDhanQuotes } from "../../lib/format";
 
 export function Positions() {
   const { data } = useMarket();
@@ -87,7 +87,7 @@ export function Positions() {
             ) : (
               <tr>
                 <td className="py-6 text-center text-slate-400" colSpan={7}>
-                  {data.dhanFeed?.live ? "No live Dhan, paper, or closed positions" : "No open or closed positions"}
+                  {hasDhanQuotes(data) ? "No live Dhan, paper, or closed positions" : "No open or closed positions"}
                 </td>
               </tr>
             )}

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { confirmEnrollmentPaid, connectGmail, getGmailStatus, getPaymentSettings, listEnrollments, listWalletTopups, savePaymentSettings, saveUserContact, type Enrollment, type WalletTopup } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
+import { hasDhanQuotes } from "../lib/format";
 
 export function Settings() {
   const { user, applyUser, logout } = useAuth();
@@ -29,7 +30,7 @@ export function Settings() {
     ["Order confirmation", data.settings.confirmation || "Enabled"],
     ["Risk guard", data.settings.riskGuard || "Max 2% per trade"],
     ["Active broker", data.brokers?.find((item) => item.active)?.name || "Dhan"],
-    ["Dhan feed", data.dhanFeed?.live ? `Live · ${data.dhanFeed.tokenHint || "connected"}` : "Waiting for access token"],
+    ["Dhan feed", data.dhanFeed?.live ? `Live · ${data.dhanFeed.tokenHint || "connected"}` : hasDhanQuotes(data) ? "Last Dhan quotes after market close" : "Waiting for access token"],
     ["Connected brokers", String((data.brokers || []).filter((item) => item.connected).length)],
     ["Notifications", data.settings.notifications || "Signals + fills"],
   ];

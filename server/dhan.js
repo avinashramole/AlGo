@@ -10,6 +10,7 @@ import {
   currentOptionRows,
   getChainSpot,
   getOptionMeta,
+  hasLastLiveBook,
   optionRowsForSymbol,
   peekOptionChain,
   quoteSymbol,
@@ -874,16 +875,23 @@ async function loadExpiryList(und) {
   await resolveFrontFutures().catch(() => []);
   const fromScrip = scripExpiries(und.id);
   const chain = chainUnderlyingRequest(und.id);
+  const keep = normalizeExpiry(getOptionMeta().expiry);
   if (!accessToken) return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
   try {
     const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, chain);
-    const dates = dropExpired(Array.isArray(list?.data) ? list.data : []);
+    const dates = dropExpired(Array.isArray(list?.data) ? list.data : [], { symbol: und.id, keep });
     const merged = [...new Set([...dates, ...fromScrip].map(normalizeExpiry).filter(Boolean))].sort();
     if (merged.length) return merged;
   } catch {
     /* fall through */
   }
   return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
+}
+
+function lastChainRows(und, sameSymbol, cached) {
+  if (sameSymbol && Array.isArray(currentOptionRows()) && currentOptionRows().length) return currentOptionRows();
+  if (Array.isArray(cached?.rows) && cached.rows.length) return cached.rows;
+  return [];
 }
 
 function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
@@ -894,8 +902,8 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const chosen = expiry || cached?.meta?.expiry || desk.expiry;
   const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(und.id);
   const liveOnly = Boolean(accessToken);
-  const liveRows =
-    rows !== undefined ? rows : sameSymbol ? currentOptionRows() : cached?.rows || [];
+  const fallback = lastChainRows(und, sameSymbol, cached);
+  const liveRows = Array.isArray(rows) && rows.length ? rows : fallback;
   const next = buildScripChain({
     symbol: und.id,
     expiry: chosen,
@@ -904,12 +912,21 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
     liveRows,
     liveOnly,
   });
-  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, rows: next, spot: nextSpot, source: liveOnly ? source || "dhan" : source });
-  return next;
+  const keepLast = liveOnly || hasLastLiveBook() || String(cached?.meta?.source || desk.source || "") === "dhan";
+  setOptionDesk({
+    symbol: und.id,
+    expiry: chosen,
+    expiries,
+    rows: next.length ? next : fallback,
+    spot: nextSpot,
+    source: keepLast ? source || cached?.meta?.source || "dhan" : source,
+  });
+  return next.length ? next : fallback;
 }
 
 async function refreshOptionChain() {
   if (!accessToken) {
+    if (hasLastLiveBook()) return;
     applySyntheticOptionChain();
     paintDesk({
       symbol: getOptionMeta().symbol,
@@ -920,18 +937,19 @@ async function refreshOptionChain() {
   }
   const desk = getOptionMeta();
   const und = getUnderlying(desk.symbol);
-  let expiries = dropExpired(desk.expiries || []);
+  const currentExpiry = normalizeExpiry(desk.expiry);
+  let expiries = dropExpired(desk.expiries || [], { symbol: und.id, keep: currentExpiry });
   if (!expiries.length) expiries = await loadExpiryList(und);
-  let expiry = normalizeExpiry(desk.expiry);
-  if (!expiry || !expiries.includes(expiry)) expiry = expiries[0];
+  let expiry = currentExpiry;
+  if (!expiry || !expiries.includes(expiry)) expiry = expiries[0] || currentExpiry;
   const payload = await dhanPost("/optionchain", accessToken, clientId, {
     ...chainUnderlyingRequest(und.id),
     Expiry: expiry,
   });
   const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
   if (!parsed.rows.length) {
-    setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}.` });
-    paintDesk({ symbol: und.id, expiry, expiries, rows: [], source: "dhan" });
+    setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}. Last live chain kept.` });
+    paintDesk({ symbol: und.id, expiry: currentExpiry || expiry, expiries, source: "dhan" });
     return;
   }
   paintDesk({

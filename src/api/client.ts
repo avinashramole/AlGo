@@ -341,6 +341,14 @@ export type Snapshot = {
     weekday?: string;
     ist?: string;
   };
+  mcxSession?: {
+    status: string;
+    open: boolean;
+    reason?: string;
+    hours?: string;
+    weekday?: string;
+    ist?: string;
+  };
   serverTime: string;
   dhanFeed?: {
     live: boolean;
@@ -360,6 +368,7 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    hasQuotes?: boolean;
     autoRenew?: boolean;
     autoMode?: string;
     tokenExpiry?: string | null;

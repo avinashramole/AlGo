@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { cn, formatIst, formatNumber, liveBookCopy, deskStrategyName } from "../lib/format";
+import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "CANCELLED"] as const;
 
@@ -38,7 +38,7 @@ export function Orders() {
         <div>
           <h1 className="text-xl font-bold">Order Book</h1>
           <p className="text-sm text-slate-400">
-            {liveBookCopy(data.dhanFeed?.live)} Price is the Dhan average fill, not the LTP at send.
+            {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))} Price is the Dhan average fill, not the LTP at send.
           </p>
         </div>
         <div className="flex gap-2 text-sm font-semibold">
@@ -185,7 +185,7 @@ export function Orders() {
           </>
         ) : (
           <div className="p-8 text-center text-sm text-slate-400">
-            {data.dhanFeed?.live ? "No live Dhan or paper orders" : "No orders in this view"}
+            {hasDhanQuotes(data) ? "No live Dhan or paper orders" : "No orders in this view"}
           </div>
         )}
       </section>

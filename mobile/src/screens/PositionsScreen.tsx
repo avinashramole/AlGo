@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
-import { colors, formatInr, formatNumber } from "../theme";
+import { colors, formatInr, formatNumber, hasDhanQuotes } from "../theme";
 
 export function PositionsScreen() {
   const navigation = useNavigation<any>();
@@ -29,8 +29,8 @@ export function PositionsScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Position</Text>
       <Text style={styles.muted}>
-        {data.dhanFeed?.live
-          ? "LIVE feed · Dhan actual + Paper virtual. Closed P&L stays on this book."
+        {hasDhanQuotes(data)
+          ? "LIVE feed · Dhan actual + Paper virtual. Last quotes stay after NSE and MCX close."
           : "Portfolio, open book, and closed P&L"}
       </Text>
       <Card>
@@ -82,7 +82,7 @@ export function PositionsScreen() {
       ) : (
         <Card>
           <Text style={styles.muted}>
-            {data.dhanFeed?.live ? "No live Dhan, paper, or closed positions" : "No open or closed positions"}
+            {hasDhanQuotes(data) ? "No live Dhan, paper, or closed positions" : "No open or closed positions"}
           </Text>
         </Card>
       )}

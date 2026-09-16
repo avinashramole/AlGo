@@ -103,18 +103,30 @@ export function formatExpiryLabel(ymd) {
   return `${weekday}, ${day} ${month} ${year}`;
 }
 
-function afterExpiryCutoff() {
-  const parts = kolkataParts();
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return minutes >= 15 * 60 + 30;
+export function expiryCutoffMins(symbol) {
+  return isMcxSymbol(symbol) ? 23 * 60 + 30 : 15 * 60 + 30;
 }
 
-export function dropExpired(dates) {
-  const today = ymdKolkata(new Date());
-  const skipToday = afterExpiryCutoff();
+function afterExpiryCutoff(date = new Date(), closeMins = 15 * 60 + 30) {
+  const parts = kolkataParts(date);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= closeMins;
+}
+
+export function dropExpired(dates, options = {}) {
+  const now = options.date instanceof Date ? options.date : new Date();
+  const today = ymdKolkata(now);
+  const keep = normalizeExpiry(options.keep);
+  const closeMins = Number.isFinite(Number(options.closeMins))
+    ? Number(options.closeMins)
+    : expiryCutoffMins(options.symbol);
+  // Keep today's expiry on the desk after NSE 15:30 / MCX 23:30 so last live
+  // quotes still show. Only drop a date once the next IST calendar day starts,
+  // unless a live desk expiry is explicitly kept.
+  const skipToday = options.rollToday === true && afterExpiryCutoff(now, closeMins);
   return [...new Set((dates || []).map(normalizeExpiry))]
     .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
-    .filter((date) => date > today || (date === today && !skipToday))
+    .filter((date) => date > today || (date === today && !skipToday) || (keep && date === keep))
     .sort();
 }
 
@@ -424,9 +436,9 @@ export function chainStats(rows, spot) {
   };
 }
 
-export function nearestExpiries(dates, count = 4, keep) {
-  const live = dropExpired(dates);
+export function nearestExpiries(dates, count = 4, keep, options = {}) {
   const wanted = normalizeExpiry(keep);
+  const live = dropExpired(dates, { ...options, keep: wanted });
   const next = live.slice(0, count);
   if (wanted && live.includes(wanted) && !next.includes(wanted)) {
     return [...next.slice(0, Math.max(0, count - 1)), wanted];
@@ -436,13 +448,15 @@ export function nearestExpiries(dates, count = 4, keep) {
 
 export function withExpiryLabels(meta) {
   const expiry = normalizeExpiry(meta.expiry);
-  const expiries = nearestExpiries(meta.expiries || [], 4, expiry);
-  const chosen = expiries.includes(expiry) ? expiry : expiries[0] || expiry;
+  const expiries = nearestExpiries(meta.expiries || [], 4, expiry, { symbol: meta.symbol });
+  const keepLast = Boolean(expiry) && (expiries.includes(expiry) || String(meta.source || "") === "dhan");
+  const chosen = keepLast ? expiry : expiries[0] || expiry;
+  const listed = expiries.includes(chosen) || !chosen ? expiries : [chosen, ...expiries.filter((day) => day !== chosen)].slice(0, 4);
   return {
     ...meta,
     expiry: chosen,
-    expiries,
+    expiries: listed,
     expiryLabel: formatExpiryLabel(chosen),
-    expiryLabels: Object.fromEntries(expiries.map((date) => [date, formatExpiryLabel(date)])),
+    expiryLabels: Object.fromEntries(listed.map((date) => [date, formatExpiryLabel(date)])),
   };
 }

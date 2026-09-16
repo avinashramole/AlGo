@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
+import { hasDhanQuotes } from "../../lib/format";
 
 export function BrokerSwitch() {
   const { data, activate } = useMarket();
@@ -22,9 +23,9 @@ export function BrokerSwitch() {
           </option>
         ))}
       </select>
-      {data.dhanFeed?.live && (
+      {hasDhanQuotes(data) && (
         <span className="hidden rounded bg-emerald-50 px-1.5 py-1 text-[10px] font-extrabold text-up dark:bg-emerald-950/40 sm:inline">
-          DHAN LIVE
+          {data.dhanFeed?.live ? "DHAN LIVE" : "DHAN"}
         </span>
       )}
       <Link to="/brokers" className="hidden text-[11px] font-semibold text-brand-500 lg:inline">

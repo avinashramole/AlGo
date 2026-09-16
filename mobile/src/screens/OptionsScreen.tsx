@@ -1,7 +1,7 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
-import { colors, formatNumber, formatPct, vwapColor } from "../theme";
+import { colors, formatNumber, formatPct, hasDhanQuotes, vwapColor } from "../theme";
 
 export function OptionsScreen() {
   const { data, selectChain, order } = useMarket();
@@ -84,7 +84,7 @@ export function OptionsScreen() {
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
         {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"}
         {"\n"}
-        {data.dhanFeed?.live ? "Orders go to Dhan. The desk looks up the live contract." : "Desk fill only until Access Token on Brokers"}
+        {hasDhanQuotes(data) ? "Last Dhan quotes stay after NSE and MCX close. Orders go to Dhan when LIVE." : "Desk fill only until Access Token on Brokers"}
         {" · ATM ±10"}
         {String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL") ? " · 1 lot = Dhan qty 1 (size 100)" : ` · 1 lot = ${lot}`}
       </Text>

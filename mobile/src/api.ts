@@ -276,6 +276,7 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    hasQuotes?: boolean;
     autoMode?: string;
     needsFresh?: boolean;
   };

@@ -1097,6 +1097,22 @@ export function isDhanFeedLive() {
   return Boolean(state.dhanFeed.live);
 }
 
+export function hasLastLiveBook() {
+  if (state.dhanFeed.live) return true;
+  if (state.optionMeta?.source === "dhan") return true;
+  if (state.dhanFeed.lastTickAt) return true;
+  const source = String(state.dhanFeed.source || "");
+  if (source === "rest" || source === "websocket") return true;
+  for (const pack of optionChainCache.values()) {
+    if (pack?.meta?.source === "dhan") return true;
+  }
+  return false;
+}
+
+function publicDhanFeed() {
+  return { ...clone(state.dhanFeed), hasQuotes: hasLastLiveBook() };
+}
+
 function jitter(price, magnitude) {
   return Number((price + (Math.random() - 0.48) * magnitude).toFixed(2));
 }
@@ -1149,6 +1165,12 @@ export function tickMarket() {
   if (state.dhanFeed.live) {
     runPaperAlgos();
     runLiveAlgos();
+    markPaperToMarket();
+    return;
+  }
+
+  if (hasLastLiveBook()) {
+    runPaperAlgos();
     markPaperToMarket();
     return;
   }
@@ -1330,7 +1352,7 @@ export function snapshot() {
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
-    dhanFeed: clone(state.dhanFeed),
+    dhanFeed: publicDhanFeed(),
     futures: publicFutures(),
     contracts: {
       indices: listIndexContracts().map(({ securityId, ...row }) => row),
@@ -1342,6 +1364,7 @@ export function snapshot() {
     settings: { ...state.settings, broker: active.name },
     marketStatus: nseMarketSession().status,
     marketSession: nseMarketSession(),
+    mcxSession: mcxMarketSession(),
     serverTime: new Date().toISOString(),
   };
 }
@@ -1369,7 +1392,7 @@ export function deskFeed() {
     optionChain: publicOptionRows(state.optionChain),
     optionMeta: clone(state.optionMeta),
     futures: publicFutures(),
-    dhanFeed: clone(state.dhanFeed),
+    dhanFeed: publicDhanFeed(),
     positions,
     orders,
     closedTrades,
@@ -1384,6 +1407,7 @@ export function deskFeed() {
     watchlist: watch.map(({ volume: _volume, ...row }) => row),
     marketStatus: nseMarketSession().status,
     marketSession: nseMarketSession(),
+    mcxSession: mcxMarketSession(),
     serverTime: new Date().toISOString(),
   };
 }
@@ -2476,13 +2500,13 @@ export function applyLiveQuotes(quotes) {
 
 export function getCandles(tf = "5m", symbol = "NIFTY") {
   const key = candleSymbol(symbol);
-  if (state.dhanFeed.live) {
-    const liveRows =
-      key === "NIFTY"
-        ? state.liveCandles.length
-          ? state.liveCandles
-          : liveCandleCache.get("NIFTY") || []
-        : liveCandleCache.get(key) || [];
+  const liveRows =
+    key === "NIFTY"
+      ? state.liveCandles.length
+        ? state.liveCandles
+        : liveCandleCache.get("NIFTY") || []
+      : liveCandleCache.get(key) || [];
+  if (state.dhanFeed.live || hasLastLiveBook()) {
     if (!liveRows.length) return [];
     const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
     if (minutes <= 1) return clone(liveRows);

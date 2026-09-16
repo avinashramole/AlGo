@@ -11,6 +11,8 @@ import {
   weekdayNameIST,
   dhanOrderQuantity,
   keepStrikeWindow,
+  dropExpired,
+  withExpiryLabels,
 } from "./optionChain.js";
 
 test("NIFTY monthly is the last Tuesday of the month", () => {
@@ -89,4 +91,24 @@ test("keepStrikeWindow patches LTP on the same strikes instead of recentering AT
   );
   assert.equal(next[0].callLtp, 110);
   assert.equal(next[1].atm, true);
+});
+
+test("today's expiry stays listed after NSE 15:30 so last live chain still shows", () => {
+  const expiryDay = "2026-09-22";
+  const afterNse = new Date("2026-09-22T10:31:00.000Z");
+  const kept = dropExpired([expiryDay, "2026-09-29"], { date: afterNse });
+  assert.equal(kept.includes(expiryDay), true);
+  const mcxAfterNse = dropExpired([expiryDay, "2026-10-19"], { date: afterNse, symbol: "CRUDEOIL" });
+  assert.equal(mcxAfterNse.includes(expiryDay), true);
+});
+
+test("withExpiryLabels keeps a Dhan expiry after the session rolls", () => {
+  const meta = withExpiryLabels({
+    symbol: "NIFTY",
+    expiry: "2026-09-22",
+    expiries: ["2026-09-29", "2026-10-06"],
+    source: "dhan",
+  });
+  assert.equal(meta.expiry, "2026-09-22");
+  assert.equal(meta.expiries[0], "2026-09-22");
 });

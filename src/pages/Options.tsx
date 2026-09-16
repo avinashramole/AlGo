@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { useMarket } from "../context/MarketContext";
-import { cn, formatNumber, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
+import { cn, dhanFeedLabel, formatNumber, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
 import { isCrudeUnderlying, OPTION_UNDERLYINGS } from "../lib/markets";
 
 export function Options() {
@@ -16,11 +16,12 @@ export function Options() {
   const spot = meta?.spot || data.indices[0]?.price || 0;
   const lotSize = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
   const qty = Math.max(1, lots) * lotSize;
-  const sourceLabel = data.dhanFeed?.live ? (meta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain") : "DEMO";
-  const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
   const isCrude = isCrudeUnderlying(meta?.symbol);
   const sessionOpen = isCrude ? isMcxSessionOpen() : isNseSessionOpen();
   const sessionHours = isCrude ? "MCX 09:00–23:30 IST" : "NSE 09:15–15:30 IST";
+  const dhanQuotes = hasDhanQuotes(data);
+  const sourceLabel = dhanFeedLabel(data, sessionOpen);
+  const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
 
   return (
     <div className="flex min-h-0 flex-col gap-3 md:h-full md:overflow-hidden">
@@ -70,7 +71,7 @@ export function Options() {
         <div
           className={cn(
             "rounded-xl px-4 py-2 text-sm font-semibold",
-            data.dhanFeed?.live ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+            dhanQuotes ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
           )}
         >
           {data.dhanFeed?.live ? (
@@ -84,13 +85,17 @@ export function Options() {
             </>
             ) : (
             <>
-              {sessionHours} is closed. BUY/SELL is sent to Dhan as an after-market order for next open. Confirm in the{" "}
+              {sessionHours} is closed. Last Dhan quotes stay on the chain. BUY/SELL is sent to Dhan as an after-market order for next open. Confirm in the{" "}
               <Link to="/orders" className="underline">
                 order book
               </Link>{" "}
               and the Dhan app AMO tab.
             </>
             )
+          ) : dhanQuotes ? (
+            <>
+              Last Dhan quotes stay after NSE 15:30 and MCX 23:30 IST. BUY/SELL waits until Dhan ticks again.
+            </>
           ) : (
             <>
               Desk fill only until Dhan is LIVE. Paste Access Token on{" "}
