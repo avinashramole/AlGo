@@ -150,4 +150,38 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
   }
 }
 
+export function memberExitPayload(pos = {}, extras = {}) {
+  const qty = Math.max(1, Math.round(Math.abs(Number(pos.qty) || 0)));
+  const openSide = String(pos.type || pos.side || "BUY").toUpperCase();
+  const side = openSide === "SELL" ? "BUY" : "SELL";
+  const strategy = String(extras.strategy || pos.strategy || "").trim();
+  const symbol = String(pos.symbol || extras.symbol || "").trim();
+  return {
+    symbol,
+    name: symbol,
+    side,
+    qty,
+    price: Number(extras.price || pos.ltp || pos.avg || 0),
+    product: pos.product || "MIS",
+    type: "MARKET",
+    strategy,
+    brokerId: pos.brokerId && pos.brokerId !== "paper" ? pos.brokerId : extras.brokerId || "dhan",
+    securityId: pos.securityId,
+    strike: pos.strike,
+    option: pos.option,
+    expiry: pos.expiry,
+    kind: pos.kind || (pos.option ? "option" : undefined),
+    lotSize: extras.lotSize || pos.lotSize || qty,
+    exchangeSegment:
+      extras.exchangeSegment || (symbol.toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO"),
+  };
+}
+
+export function dispatchMemberExitCopies(pos, algo = {}, { enqueueLiveOrder } = {}) {
+  if (!pos || pos.copyUserId) return;
+  const strategy = String(pos.strategy || algo?.name || "").trim();
+  if (!strategy || !pos.symbol) return;
+  dispatchMemberCopies(memberExitPayload(pos, { strategy }), algo || {}, { enqueueLiveOrder });
+}
+
 export { recordMemberCopyFill, sizeCopyQty };

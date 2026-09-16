@@ -11,7 +11,7 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
-const { dispatchMemberCopies, listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
+const { dispatchMemberCopies, dispatchMemberExitCopies, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
 savePaymentSettings({
@@ -262,6 +262,75 @@ test("dispatchMemberCopies writes paper fills for mapped clients", () => {
   });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24800 CE"));
   assert.ok((desk.orders || []).some((row) => row.symbol === "NIFTY 24800 CE" && row.status === "FILLED"));
+});
+
+test("memberExitPayload is the opposite market side of the master open", () => {
+  const exit = memberExitPayload(
+    { symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, ltp: 88, strategy: algo.name, product: "MIS" },
+    { strategy: algo.name },
+  );
+  assert.equal(exit.side, "SELL");
+  assert.equal(exit.symbol, "NIFTY 24600 CE");
+  assert.equal(exit.qty, 65);
+  assert.equal(exit.type, "MARKET");
+  assert.equal(exit.strategy, algo.name);
+});
+
+test("dispatchMemberExitCopies closes mapped paper positions on master exit", () => {
+  const user = { id: "u-exit-map", name: "Exit Map", email: "exitmap@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [user.id] };
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 24900 CE", qty: 65, price: 70, brokerId: "paper" },
+    mapped,
+  );
+  const open = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.ok(open.positions.some((row) => row.symbol === "NIFTY 24900 CE" && row.qty === 65));
+  dispatchMemberExitCopies(
+    { symbol: "NIFTY 24900 CE", type: "BUY", qty: 65, strategy: algo.name, ltp: 90, brokerId: "paper" },
+    mapped,
+  );
+  const closed = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.equal(closed.positions.some((row) => row.symbol === "NIFTY 24900 CE"), false);
+  assert.ok((closed.orders || []).some((row) => row.symbol === "NIFTY 24900 CE" && row.side === "SELL" && row.status === "FILLED"));
+});
+
+test("dispatchMemberExitCopies queues a live SELL on mapped real accounts", () => {
+  const user = { id: "u-exit-live", name: "Exit Live", email: "exitlive@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100888", accessToken: "exit-live-token" });
+  payMember(user);
+  const queued = [];
+  dispatchMemberExitCopies(
+    { symbol: "NIFTY 25000 PE", type: "BUY", qty: 65, strategy: algo.name, securityId: "12345" },
+    algo,
+    { enqueueLiveOrder: (copy) => queued.push(copy) },
+  );
+  const mine = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.side, "SELL");
+  assert.equal(mine.symbol, "NIFTY 25000 PE");
+  assert.equal(mine.account.accessToken, "exit-live-token");
+});
+
+test("master exit closes every mapped paper client on that strategy", () => {
+  const a = { id: "u-exit-a", name: "Exit A", email: "exita@t2s.app", role: "user" };
+  const b = { id: "u-exit-b", name: "Exit B", email: "exitb@t2s.app", role: "user" };
+  for (const user of [a, b]) selectMemberBroker({ user, brokerId: "paper" });
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [a.id, b.id] };
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 25100 CE", qty: 65, price: 42, brokerId: "paper" },
+    mapped,
+  );
+  dispatchMemberExitCopies(
+    { symbol: "NIFTY 25100 CE", type: "BUY", qty: 65, strategy: algo.name, ltp: 50, brokerId: "paper" },
+    mapped,
+  );
+  for (const user of [a, b]) {
+    const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+    assert.equal(desk.positions.some((row) => row.symbol === "NIFTY 25100 CE"), false);
+    assert.ok((desk.orders || []).some((row) => row.side === "SELL" && row.symbol === "NIFTY 25100 CE"));
+  }
 });
 
 test("sendMemberCopyOrder paper path writes the member book", async () => {

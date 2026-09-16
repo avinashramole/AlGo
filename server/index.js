@@ -51,6 +51,7 @@ import {
   drainPendingLiveAlgoOrders,
   noteLiveAlgoOrderResult,
   bookRejectedLiveOrder,
+  queueLivePositionExit,
 } from "./market.js";
 import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
 
@@ -1018,18 +1019,13 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
         res.status(400).json({ error: PREVIEW_ORDER_ERROR });
         return;
       }
-      await placeDhanOrder({
-        symbol: pos.symbol,
-        name: pos.symbol,
-        side: pos.type === "BUY" ? "SELL" : "BUY",
-        qty: Math.abs(Number(pos.qty) || 0),
-        product: pos.product || "MIS",
-        type: "MARKET",
-        securityId: pos.securityId,
-        strategy: pos.strategy,
-        exchangeSegment: String(pos.symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
-      });
-      res.json({ ok: true, live: true, snapshot: snapshot() });
+      const queued = queueLivePositionExit(pos);
+      if (queued?.error) {
+        res.status(400).json({ error: queued.error });
+        return;
+      }
+      await flushLiveAlgoOrders();
+      res.json({ ok: true, live: true, queued: true, snapshot: snapshot() });
       return;
     }
     const result = squareOff(req.params.id);

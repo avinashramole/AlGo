@@ -1,6 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { liveAutoTradeBrokers } from "./memberDesk.js";
-import { dispatchMemberCopies, memberCopyPayloads } from "./liveCopy.js";
+import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -489,6 +489,32 @@ export function queueLiveAlgoOrder(payload) {
     last = enqueueLiveAlgoOrder(copy);
   }
   return last;
+}
+
+export function queueLivePositionExit(pos) {
+  if (!pos) return { error: "Position not found" };
+  const strategy =
+    resolveOrderStrategy(pos, {
+      previous: state.orders || [],
+      algos: state.algos || [],
+      positions: state.positions || [],
+    }) || realStrategyName(pos.strategy);
+  return queueLiveAlgoOrder({
+    symbol: pos.symbol,
+    name: pos.symbol,
+    side: pos.type === "BUY" ? "SELL" : "BUY",
+    qty: Math.abs(Number(pos.qty) || 0),
+    product: pos.product || "MIS",
+    type: "MARKET",
+    securityId: pos.securityId,
+    strategy,
+    brokerId: pos.brokerId && pos.brokerId !== "paper" ? pos.brokerId : "dhan",
+    strike: pos.strike,
+    option: pos.option,
+    expiry: pos.expiry,
+    kind: pos.kind || (pos.option ? "option" : undefined),
+    exchangeSegment: String(pos.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+  });
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
@@ -1838,6 +1864,12 @@ export function squareOff(id) {
   state.positions.splice(index, 1);
   state.notifications.unshift(`Squared off ${pos.symbol} · ${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toFixed(2)}`);
   if (isPaperRow(pos)) markPaperToMarket();
+  if (order.strategy) {
+    const algo = (state.algos || []).find((row) => String(row.name || "") === String(order.strategy || ""));
+    dispatchMemberExitCopies({ ...pos, strategy: order.strategy, qty: pos.qty }, algo || {}, {
+      enqueueLiveOrder: enqueueLiveAlgoOrder,
+    });
+  }
   return { ok: true, order, pnl };
 }
 
