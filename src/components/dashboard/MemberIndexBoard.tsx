@@ -10,7 +10,7 @@ export function MemberIndexBoard({ indices }: { indices: MemberIndexQuote[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
       {indices.map((item) => {
         const up = item.change >= 0;
         return (

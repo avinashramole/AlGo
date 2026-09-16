@@ -12,6 +12,7 @@ export function OptionsScreen() {
     { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
     { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
     { id: "SENSEX", label: "SENSEX", lot: 20 },
+    { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
   ];
   const lot = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
   const futures = (data.futures || []).filter(
@@ -41,7 +42,11 @@ export function OptionsScreen() {
         option,
         strike: row.strike,
         expiry: meta?.expiry,
-        exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+        exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL")
+          ? "MCX_COMM"
+          : String(meta?.symbol || "").toUpperCase().includes("SENSEX")
+            ? "BSE_FNO"
+            : "NSE_FNO",
       });
       if (result.live) {
         Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty`);

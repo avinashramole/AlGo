@@ -20,11 +20,11 @@ import {
   setOptionDesk,
   snapshot,
 } from "./market.js";
-import { buildScripChain, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
-import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import { dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -863,12 +863,10 @@ function startSocket() {
 async function loadExpiryList(und) {
   await resolveFrontFutures().catch(() => []);
   const fromScrip = scripExpiries(und.id);
+  const chain = chainUnderlyingRequest(und.id);
   if (!accessToken) return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
   try {
-    const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, {
-      UnderlyingScrip: und.scrip,
-      UnderlyingSeg: und.segment,
-    });
+    const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, chain);
     const dates = dropExpired(Array.isArray(list?.data) ? list.data : []);
     const merged = [...new Set([...dates, ...fromScrip].map(normalizeExpiry).filter(Boolean))].sort();
     if (merged.length) return merged;
@@ -914,8 +912,7 @@ async function refreshOptionChain() {
   let expiry = normalizeExpiry(desk.expiry);
   if (!expiry || !expiries.includes(expiry)) expiry = expiries[0];
   const payload = await dhanPost("/optionchain", accessToken, clientId, {
-    UnderlyingScrip: und.scrip,
-    UnderlyingSeg: und.segment,
+    ...chainUnderlyingRequest(und.id),
     Expiry: expiry,
   });
   const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
@@ -1054,6 +1051,7 @@ const CHART_UNDERLYINGS = {
   "BANK NIFTY": { securityId: "25", exchangeSegment: "IDX_I", instrument: "INDEX" },
   FINNIFTY: { securityId: "27", exchangeSegment: "IDX_I", instrument: "INDEX" },
   SENSEX: { securityId: "51", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  CRUDEOIL: { securityId: "565899", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
 };
 
 function chartInstrument(symbol) {
@@ -1126,7 +1124,7 @@ export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
 }
 
 function fnoSegment(symbol) {
-  return String(symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO";
+  return exchangeSegmentFor(symbol);
 }
 
 function productType(product) {

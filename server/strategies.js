@@ -17,6 +17,7 @@ const SYMBOLS = [
   { id: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", lot: 60 },
   { id: "SENSEX", lot: 20 },
+  { id: "CRUDEOIL", lot: 100 },
 ];
 
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];

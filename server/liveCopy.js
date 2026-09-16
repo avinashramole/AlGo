@@ -1,5 +1,6 @@
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
 import { listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
+import { exchangeSegmentFor } from "./optionChain.js";
 
 function sameStrategy(left, right) {
   const a = String(left || "").trim().toLowerCase();
@@ -172,8 +173,7 @@ export function memberExitPayload(pos = {}, extras = {}) {
     expiry: pos.expiry,
     kind: pos.kind || (pos.option ? "option" : undefined),
     lotSize: extras.lotSize || pos.lotSize || qty,
-    exchangeSegment:
-      extras.exchangeSegment || (symbol.toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO"),
+    exchangeSegment: extras.exchangeSegment || exchangeSegmentFor(symbol),
   };
 }
 

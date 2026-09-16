@@ -87,6 +87,7 @@ const fallback: Snapshot = {
       { root: "BANKNIFTY", parent: "BANKNIFTY", symbol: "BANKNIFTY", kind: "index", segment: "IDX_I", lot: 30, tradable: false },
       { root: "FINNIFTY", parent: "FINNIFTY", symbol: "FINNIFTY", kind: "index", segment: "IDX_I", lot: 60, tradable: false },
       { root: "SENSEX", parent: "SENSEX", symbol: "SENSEX", kind: "index", segment: "IDX_I", lot: 20, tradable: false },
+      { root: "CRUDEOIL", parent: "CRUDEOIL", symbol: "CRUDEOIL", kind: "index", segment: "MCX_COMM", lot: 100, tradable: false },
     ],
     futures: [],
     optionCount: 0,
@@ -107,6 +108,7 @@ const fallback: Snapshot = {
       { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
       { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
       { id: "SENSEX", label: "SENSEX", lot: 20 },
+      { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
     ],
   },
 };

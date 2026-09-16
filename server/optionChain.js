@@ -3,7 +3,15 @@ export const UNDERLYINGS = [
   { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 30, expiryWeekday: "Tue", weekly: false },
   { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 60, expiryWeekday: "Tue", weekly: false },
   { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 20, expiryWeekday: "Thu", weekly: true },
+  { id: "CRUDEOIL", label: "CRUDE OIL", indexSymbol: "CRUDEOIL", step: 50, scrip: 565899, segment: "MCX_COMM", lot: 100, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
 ];
+
+export function exchangeSegmentFor(symbol) {
+  const upper = String(symbol || "").toUpperCase();
+  if (upper.includes("CRUDEOIL")) return "MCX_COMM";
+  if (upper.includes("SENSEX")) return "BSE_FNO";
+  return "NSE_FNO";
+}
 
 export function getUnderlying(id) {
   return UNDERLYINGS.find((row) => row.id === id) || UNDERLYINGS[0];
@@ -133,11 +141,42 @@ function lastWeekdayOfMonth(year, month, weekday) {
   return null;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function mcxContractDay(year, month) {
+  let day = 19;
+  while (day > 1) {
+    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
+    const weekday = weekdayNameIST(ymd);
+    if (weekday !== "Sat" && weekday !== "Sun") return ymd;
+    day -= 1;
+  }
+  return `${year}-${pad2(month)}-19`;
+}
+
 export function upcomingExpiries(symbol = "NIFTY", count = 8) {
   const und = getUnderlying(symbol);
   const today = ymdKolkata(new Date());
   const skipToday = afterExpiryCutoff();
   const dates = [];
+
+  if (und.expiryKind === "mcx" || und.segment === "MCX_COMM") {
+    const now = kolkataParts();
+    let year = Number(now.year);
+    let month = Number(now.month);
+    while (dates.length < count) {
+      const ymd = mcxContractDay(year, month);
+      if (ymd >= today && !(ymd === today && skipToday)) dates.push(ymd);
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+    return dates;
+  }
 
   if (und.weekly) {
     for (let i = 0; i < 120 && dates.length < count; i += 1) {

@@ -7,6 +7,7 @@ import {
   buildSyntheticChain,
   chainStats,
   dropExpired,
+  exchangeSegmentFor,
   getUnderlying,
   nearestWeeklyExpiry,
   normalizeExpiry,
@@ -289,6 +290,7 @@ const state = {
     withDeskQuotes({ symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 51940, 51910, 52020, 52080, 52040, 52110, 52141] }),
     withDeskQuotes({ symbol: "FINNIFTY", name: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24780, 24755, 24810, 24840, 24820, 24870, 24891] }),
     withDeskQuotes({ symbol: "SENSEX", name: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642] }),
+    withDeskQuotes({ symbol: "CRUDEOIL", name: "CRUDE OIL", price: 6124.5, change: 18.4, changePct: 0.3, spark: [6088, 6096, 6082, 6104, 6112, 6106, 6118, 6124] }),
     withDeskQuotes({ symbol: "INDIA VIX", name: "VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.72, 13.8, 13.55, 13.48, 13.4, 13.3, 13.24] }),
   ],
   ohlc: { open: 24462.1, high: 24612.8, low: 24418.35, close: 24580.25 },
@@ -333,6 +335,7 @@ const state = {
   marketWatch: [
     { symbol: "NIFTY 50", ltp: 24580.25, chg: 0.51, volume: "182.4 Cr" },
     { symbol: "BANKNIFTY", ltp: 52140.8, chg: 0.4, volume: "96.1 Cr" },
+    { symbol: "CRUDEOIL", ltp: 6124.5, chg: 0.3, volume: "MCX" },
     { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12, volume: "48.2 L" },
     { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64, volume: "62.8 L" },
     { symbol: "ICICIBANK", ltp: 1238.9, chg: 0.41, volume: "54.1 L" },
@@ -513,7 +516,7 @@ export function queueLivePositionExit(pos) {
     option: pos.option,
     expiry: pos.expiry,
     kind: pos.kind || (pos.option ? "option" : undefined),
-    exchangeSegment: String(pos.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+    exchangeSegment: exchangeSegmentFor(pos.symbol),
   });
 }
 
@@ -811,7 +814,7 @@ function algoOrderFields(algo, side, trade) {
     product: "MIS",
     type: "MARKET",
     strategy: algo.name,
-    exchangeSegment: String(algo.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+    exchangeSegment: exchangeSegmentFor(algo.symbol),
   };
 }
 
@@ -971,6 +974,7 @@ const INDEX_ALIASES = {
   BANKNIFTY: "BANKNIFTY",
   FINNIFTY: "FINNIFTY",
   SENSEX: "SENSEX",
+  CRUDEOIL: "CRUDEOIL",
   "INDIA VIX": "INDIA VIX",
 };
 
@@ -990,7 +994,7 @@ function withDeskQuotes(item) {
         ? Number(item.vwap)
         : round2(isVix ? price : price - Math.max(2, price * 0.00032));
   const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : round2(price - change);
-  const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, "INDIA VIX": 21 };
+  const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, CRUDEOIL: 565899, "INDIA VIX": 21 };
   return {
     ...item,
     future,
@@ -1138,7 +1142,7 @@ export function quoteSymbol(symbol) {
 
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
+  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
   const option = named || raw.match(/(\d{3,6})\s*(CE|PE)\b/);
   if (option) {
     const strike = Number(named ? named[2] : option[1]);
@@ -1218,7 +1222,7 @@ export function livePositionQuoteTargets() {
     .filter((row) => row.securityId && (row.live || row.brokerId === "dhan") && !isPaperRow(row))
     .map((row) => ({
       symbol: row.symbol,
-      segment: String(row.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+      segment: exchangeSegmentFor(row.symbol),
       securityId: Number(row.securityId) || row.securityId,
       kind: isOptionContract(row.symbol, row.option) ? "option" : "future",
     }));
@@ -2055,6 +2059,7 @@ function relatedIndex(symbol) {
   if (upper.includes("BANKNIFTY") || upper.includes("BANK NIFTY")) return "BANKNIFTY";
   if (upper.includes("FINNIFTY")) return "FINNIFTY";
   if (upper.includes("SENSEX")) return "SENSEX";
+  if (upper.includes("CRUDEOIL")) return "CRUDEOIL";
   if (upper.includes("NIFTY")) return "NIFTY 50";
   return null;
 }
@@ -2143,6 +2148,14 @@ export function applyLiveQuotes(quotes) {
       if (futVwap > 0) {
         index.futureVwap = round2(futVwap);
         index.vwap = round2(futVwap);
+      }
+      if (index.symbol === "CRUDEOIL") {
+        const day = dayChange(index, quote, ltp);
+        index.price = round2(ltp);
+        index.change = day.change;
+        index.changePct = day.changePct;
+        index.prevClose = day.prevClose;
+        index.spark = pushSpark(index.spark, ltp);
       }
       continue;
     }

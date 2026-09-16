@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
+import { exchangeSegmentFor } from "../../lib/markets";
 
 export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const { data, selectChain, order } = useMarket();
@@ -41,7 +42,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         option,
         strike: row.strike,
         expiry: meta?.expiry,
-        exchangeSegment: String(symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+        exchangeSegment: exchangeSegmentFor(symbol),
       });
       setNote(
         result.live
@@ -62,7 +63,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
     <section className="card p-3 md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden md:p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2 md:shrink-0">
         <div>
-          <div className="text-sm font-bold">Index options · next 4 expiries</div>
+          <div className="text-sm font-bold">Options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
             ATM ±10. Phone shows LTP, VWAP, and BUY/SELL on each strike. VWAP colour is the same as desktop.
           </p>

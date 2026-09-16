@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { useMarket } from "../context/MarketContext";
-import { cn, formatNumber, isNseSessionOpen } from "../lib/format";
+import { cn, formatNumber, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
 
 export function Options() {
   const { data, selectChain } = useMarket();
@@ -13,6 +13,7 @@ export function Options() {
     { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
     { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
     { id: "SENSEX", label: "SENSEX", lot: 20 },
+    { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
   ];
   const rows = data.optionChain || [];
   const [lots, setLots] = useState(1);
@@ -22,6 +23,9 @@ export function Options() {
   const qty = Math.max(1, lots) * lotSize;
   const sourceLabel = data.dhanFeed?.live ? (meta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain") : "DEMO";
   const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
+  const isCrude = String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL");
+  const sessionOpen = isCrude ? isMcxSessionOpen() : isNseSessionOpen();
+  const sessionHours = isCrude ? "MCX 09:00–23:30 IST" : "NSE 09:15–15:30 IST";
 
   return (
     <div className="flex min-h-0 flex-col gap-3 md:h-full md:overflow-hidden">
@@ -65,7 +69,7 @@ export function Options() {
           )}
         >
           {data.dhanFeed?.live ? (
-            isNseSessionOpen() ? (
+            sessionOpen ? (
             <>
               BUY/SELL goes to Dhan. Confirm in the{" "}
               <Link to="/orders" className="underline">
@@ -75,7 +79,7 @@ export function Options() {
             </>
             ) : (
             <>
-              NSE is closed (09:15–15:30 IST). BUY/SELL is sent to Dhan as an after-market order for next open. Confirm in the{" "}
+              {sessionHours} is closed. BUY/SELL is sent to Dhan as an after-market order for next open. Confirm in the{" "}
               <Link to="/orders" className="underline">
                 order book
               </Link>{" "}

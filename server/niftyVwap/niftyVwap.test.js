@@ -906,8 +906,11 @@ test("parseOptionContract reads Dhan hyphen symbols and skips BANKNIFTY", () => 
   assert.deepEqual(parseOptionContract("NIFTY-SEP2026-24500-CE"), { root: "NIFTY", strike: 24500, option: "CE" });
   assert.deepEqual(parseOptionContract("NIFTY 16 SEP 24500 PE"), { root: "NIFTY", strike: 24500, option: "PE" });
   assert.equal(parseOptionContract("BANKNIFTY 52000 CE").root, "BANKNIFTY");
+  assert.deepEqual(parseOptionContract("CRUDEOIL 6100 CE"), { root: "CRUDEOIL", strike: 6100, option: "CE" });
+  assert.deepEqual(parseOptionContract("CRUDEOIL-17Sep2026-6100-PE"), { root: "CRUDEOIL", strike: 6100, option: "PE" });
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "NIFTY-SEP2026-24500-CE", qty: 65, type: "BUY" }), true);
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "BANKNIFTY 52000 CE", qty: 65, type: "BUY" }), false);
+  assert.equal(PositionManager.isOpenNiftyOption({ symbol: "CRUDEOIL 6100 CE", qty: 100, type: "BUY" }), false);
 });
 
 test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", () => {

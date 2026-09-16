@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatPct, vwapTone } from "../../lib/format";
+import { exchangeSegmentFor } from "../../lib/markets";
 
 export function OptionChain() {
   const { data, order } = useMarket();
@@ -30,7 +31,7 @@ export function OptionChain() {
         option,
         strike: row.strike,
         expiry: data.optionMeta?.expiry,
-        exchangeSegment: String(data.optionMeta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+        exchangeSegment: exchangeSegmentFor(data.optionMeta?.symbol),
       });
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Order failed");

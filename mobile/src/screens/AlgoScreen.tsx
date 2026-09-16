@@ -9,6 +9,7 @@ const SYMBOLS: Array<{ id: string; lot: number }> = [
   { id: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", lot: 60 },
   { id: "SENSEX", lot: 20 },
+  { id: "CRUDEOIL", lot: 100 },
 ];
 const INDICATORS = ["VWAP", "RSI", "EMA", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];

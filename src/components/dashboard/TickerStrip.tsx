@@ -1,22 +1,12 @@
 import { useState } from "react";
 import { cn, formatChange, formatNumber, formatPct, vwapTone } from "../../lib/format";
+import { chainIdFromIndex } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
 
 function cardVwap(item: { future?: number; price: number; vwap?: number; futureVwap?: number }) {
   const vwap = Number(item.futureVwap || item.vwap);
   return vwap > 0 ? vwap : 0;
-}
-
-export function chainIdFromIndex(symbol: string) {
-  const compact = String(symbol || "")
-    .toUpperCase()
-    .replace(/\s+/g, "");
-  if (compact.includes("BANKNIFTY")) return "BANKNIFTY";
-  if (compact.includes("FINNIFTY")) return "FINNIFTY";
-  if (compact.includes("SENSEX")) return "SENSEX";
-  if (compact.includes("NIFTY") && !compact.includes("VIX")) return "NIFTY";
-  return "";
 }
 
 type ChainCardStats = {
@@ -63,7 +53,7 @@ export function TickerStrip({ selectedId, onSelect, chainStats }: TickerStripPro
   };
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {data.indices.map((item) => {
         const up = item.change >= 0;
         const showDeriv = item.symbol !== "INDIA VIX";
