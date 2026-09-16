@@ -53,3 +53,25 @@ test("starting one strategy does not stop another, and a second start click stay
     assert.equal(names(...listAlgos().filter((row) => row.name.includes(String(stamp)))).length, 0);
   }
 });
+
+test("all live strategies can start at the same time", () => {
+  setDhanFeed({ live: true });
+  const stamp = Date.now();
+  const created = ["A", "B", "C", "D"].map((label) =>
+    createAlgo({ name: `StartAll ${label} ${stamp}`, kind: "indicator", runMode: "live" }),
+  );
+  try {
+    const started = created.map((row) => toggleAlgo(row.id, { enabled: true }));
+    assert.equal(started.every((row) => row.enabled === true && row.status === "LIVE"), true);
+    const live = listAlgos();
+    for (const row of created) {
+      assert.equal(live.find((item) => item.id === row.id).enabled, true);
+      assert.equal(live.find((item) => item.id === row.id).status, "LIVE");
+    }
+  } finally {
+    for (const row of listAlgos().filter((item) => item.name.includes(String(stamp)))) {
+      deleteAlgo(row.id);
+    }
+    setDhanFeed({ live: false });
+  }
+});

@@ -52,10 +52,10 @@ function isTransientApiDown(error: unknown) {
   return /API is down|API is not running|Request failed \(50[234]\)/i.test(String((error as Error)?.message || error || ""));
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, extra?: { retries?: number }) {
   const method = String(init?.method || "GET").toUpperCase();
   const mutating = method === "POST" || method === "PUT" || method === "DELETE" || method === "PATCH";
-  const retries = mutating ? 3 : 1;
+  const retries = extra?.retries ?? (mutating ? 3 : 1);
   let last: unknown;
   for (let attempt = 0; attempt < retries; attempt += 1) {
     try {
@@ -1049,7 +1049,7 @@ export function connectGmail(email: string, appPassword: string) {
 }
 
 export function getSnapshot() {
-  return request<Snapshot>("/snapshot");
+  return request<Snapshot>("/snapshot", undefined, { retries: 3 });
 }
 
 export function getDeskMtm() {

@@ -30,11 +30,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
   const snapshotGen = useRef(0);
   const dataRef = useRef(data);
+  const liveRef = useRef(live);
   const pendingToggles = useRef(new Map<string, { enabled: boolean; status: Snapshot["algos"][number]["status"] }>());
 
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
+
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
 
   const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
     setData((current) => {
@@ -67,7 +72,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       setLive(true);
     } catch {
       if (gen !== snapshotGen.current) return;
-      setLive(false);
+      if (!liveRef.current) setLive(false);
     }
   }, []);
 

@@ -78,7 +78,7 @@ function kindMeta(algo: AlgoStrategy) {
 }
 
 export function Algo() {
-  const { data, toggle, removeAlgo, backtest, closePosition, refresh } = useMarket();
+  const { data, toggle, setAll, removeAlgo, backtest, closePosition, refresh } = useMarket();
   const [tab, setTab] = useState<DeskTab>("copy");
   const [filter, setFilter] = useState<Filter>("all");
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -88,6 +88,8 @@ export function Algo() {
   const [rangeError, setRangeError] = useState("");
   const [mapFor, setMapFor] = useState<AlgoStrategy | null>(null);
   const rangeFor = data.algos.find((item) => item.id === rangeId) || null;
+  const canStartAll = data.algos.some((row) => row.runMode !== "backtest" && !row.enabled);
+  const canStopAll = data.algos.some((row) => row.enabled);
 
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
@@ -113,6 +115,17 @@ export function Algo() {
       await toggle(algo.id, !algo.enabled);
     } catch (err) {
       window.alert(catchDeskError(err, "Could not start"));
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const startOrStopAll = async (enabled: boolean) => {
+    setBusyId("all");
+    try {
+      await setAll(enabled);
+    } catch (err) {
+      window.alert(catchDeskError(err, enabled ? "Could not start strategies" : "Could not stop strategies"));
     } finally {
       setBusyId("");
     }
@@ -157,10 +170,28 @@ export function Algo() {
               <h1 className="text-xl font-bold">Algo trading</h1>
               <p className="text-sm text-slate-400">Create, monitor and control automated trading strategies from one workspace</p>
             </div>
-            <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
-              <Plus size={16} />
-              Add strategy
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busyId === "all" || !canStartAll}
+                onClick={() => void startOrStopAll(true)}
+                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+              >
+                Start all
+              </button>
+              <button
+                type="button"
+                disabled={busyId === "all" || !canStopAll}
+                onClick={() => void startOrStopAll(false)}
+                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+              >
+                Stop all
+              </button>
+              <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
+                <Plus size={16} />
+                Add strategy
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(
@@ -194,7 +225,7 @@ export function Algo() {
                   algo={algo}
                   orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
                   positions={(data.positions || []).filter((row) => row.strategy === algo.name)}
-                  busy={busyId === algo.id || busyId === `exit-${algo.id}`}
+                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
                   onEdit={() => {

@@ -111,11 +111,47 @@ const fallback: Snapshot = {
   },
 };
 
+const DESK_CACHE_KEY = "t2s-last-desk";
+
+function readCachedDesk(): Snapshot | null {
+  try {
+    const raw = sessionStorage.getItem(DESK_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<Snapshot>;
+    if (!Array.isArray(parsed.algos)) return null;
+    return { ...fallback, ...parsed, algos: parsed.algos };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedDesk(next: Snapshot) {
+  try {
+    sessionStorage.setItem(
+      DESK_CACHE_KEY,
+      JSON.stringify({
+        algos: next.algos,
+        dhanFeed: next.dhanFeed,
+        brokers: next.brokers,
+        activeBrokerId: next.activeBrokerId,
+        mainBrokerId: next.mainBrokerId,
+        marketStatus: next.marketStatus,
+        serverTime: next.serverTime,
+        positions: next.positions,
+        orders: next.orders,
+      }),
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
 type MarketContextValue = {
   data: Snapshot;
   live: boolean;
   refresh: () => Promise<void>;
   toggle: (id: string, enabled?: boolean) => Promise<void>;
+  setAll: (enabled: boolean) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (
     id: string,
@@ -151,15 +187,20 @@ const MarketContext = createContext<MarketContextValue | null>(null);
 export function MarketProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const admin = user?.role === "admin";
-  const [data, setData] = useState<Snapshot>(fallback);
-  const [live, setLive] = useState(false);
+  const [data, setData] = useState<Snapshot>(() => readCachedDesk() || fallback);
+  const [live, setLive] = useState(() => Boolean(readCachedDesk()));
   const snapshotGen = useRef(0);
   const dataRef = useRef(data);
+  const liveRef = useRef(live);
   const pendingToggles = useRef(new Map<string, { enabled: boolean; status: Snapshot["algos"][number]["status"] }>());
 
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
+
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
 
   const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
     setData((current) => {
@@ -168,6 +209,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         algos: (current.algos || []).map((row) => (row.id === id ? { ...row, ...patch } : row)),
       };
       dataRef.current = next;
+      writeCachedDesk(next);
       return next;
     });
   };
@@ -180,6 +222,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     });
     const next = { ...incoming, algos };
     dataRef.current = next;
+    writeCachedDesk(next);
     setData(next);
   };
 
@@ -192,7 +235,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       setLive(true);
     } catch {
       if (gen !== snapshotGen.current) return;
-      setLive(false);
+      if (!liveRef.current) setLive(false);
     }
   }, []);
 
@@ -271,6 +314,39 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           patchAlgo(id, previous);
           throw err;
         }
+      },
+      setAll: async (enabled: boolean) => {
+        const rows = (dataRef.current.algos || []).filter((row) => {
+          if (row.runMode === "backtest") return false;
+          return Boolean(row.enabled) !== enabled;
+        });
+        if (!rows.length) return;
+        if (enabled && !dataRef.current.dhanFeed?.live) {
+          throw new Error("Start live needs Dhan LIVE — real CE/PE and futures orders only.");
+        }
+        snapshotGen.current += 1;
+        for (const row of rows) {
+          const status = enabled ? (row.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
+          pendingToggles.current.set(row.id, { enabled, status });
+          patchAlgo(row.id, { enabled, status });
+        }
+        const results = await Promise.allSettled(rows.map((row) => toggleAlgo(row.id, enabled)));
+        const failed: string[] = [];
+        results.forEach((result, index) => {
+          const row = rows[index];
+          pendingToggles.current.delete(row.id);
+          if (result.status === "fulfilled" && result.value.algo?.id) {
+            patchAlgo(result.value.algo.id, result.value.algo);
+            return;
+          }
+          patchAlgo(row.id, row);
+          if (result.status === "rejected") {
+            failed.push(result.reason instanceof Error ? result.reason.message : String(result.reason || row.name));
+          } else if (result.status === "fulfilled" && result.value.algo == null) {
+            failed.push(`${row.name} was not found`);
+          }
+        });
+        if (failed.length) throw new Error(failed[0]);
       },
       order: async (payload: Record<string, unknown>) => {
         if (isRemotePreviewHost()) {
