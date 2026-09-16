@@ -11,7 +11,7 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, recordMemberCopyFill, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
-const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
+const { dispatchMemberCopies, listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
 savePaymentSettings({
@@ -91,6 +91,38 @@ test("paper members get a book fill only", () => {
   assert.equal(mine.brokerToken, "");
 });
 
+test("mapped clients copy without a paid enrollment when scope is clients", () => {
+  const user = { id: "u-mapped-only", name: "Mapped Only", email: "mappedonly@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  assert.deepEqual(targets.map((row) => row.userId), [user.id]);
+  assert.equal(targets[0].paper, true);
+});
+
+test("mappingScope both with mapped ids does not copy unmapped paid members", () => {
+  const keep = { id: "u-mapped", name: "Mapped", email: "mapped@t2s.app", role: "user" };
+  const skip = { id: "u-other", name: "Other", email: "other@t2s.app", role: "user" };
+  for (const user of [keep, skip]) {
+    selectMemberBroker({ user, brokerId: "paper" });
+    payMember(user);
+  }
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    mappingScope: "both",
+    mappedClientIds: [keep.id],
+  });
+  assert.deepEqual(targets.map((row) => row.userId), [keep.id]);
+});
+
 test("mappingScope master sends no copies and clients filters mapped ids", () => {
   const keep = { id: "u-mapped", name: "Mapped", email: "mapped@t2s.app", role: "user" };
   const skip = { id: "u-other", name: "Other", email: "other@t2s.app", role: "user" };
@@ -148,6 +180,22 @@ test("recordMemberCopyFill writes the member book used by My plan", () => {
   assert.equal(fill.status, "FILLED");
   const desk = getMemberDesk({ user, enrollments: [paid], algos: [algo], quote: () => 0 });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24600 CE" && row.qty === 65));
+});
+
+test("dispatchMemberCopies writes paper fills for mapped clients", () => {
+  const user = { id: "u-dispatch", name: "Dispatch", email: "dispatch@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 24800 CE", qty: 65, price: 55, brokerId: "paper" },
+    { ...algo, mappingScope: "clients", mappedClientIds: [user.id] },
+  );
+  const desk = getMemberDesk({
+    user,
+    enrollments: [],
+    algos: [algo],
+    quote: () => 0,
+  });
+  assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24800 CE"));
 });
 
 test("sendMemberCopyOrder paper path writes the member book", async () => {

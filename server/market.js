@@ -1,6 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { liveAutoTradeBrokers } from "./memberDesk.js";
-import { memberCopyPayloads } from "./liveCopy.js";
+import { dispatchMemberCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -1763,6 +1763,10 @@ export function placeOrder(payload) {
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
   );
   if (isPaper) markPaperToMarket();
+  if (isPaper && order.strategy && !payload.copyUserId) {
+    const algo = (state.algos || []).find((row) => String(row.name || "") === String(order.strategy || ""));
+    dispatchMemberCopies({ ...payload, strategy: order.strategy }, algo || {}, { enqueueLiveOrder: enqueueLiveAlgoOrder });
+  }
   return order;
 }
 
