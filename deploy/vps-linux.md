@@ -48,21 +48,23 @@ npm -v
 
 ## Step 2 — Download T2S
 
+The live checkout is **`/root/download/algo`**. `systemctl start t2s` must use this folder (not the old `/opt/t2s` path).
+
 ```bash
-mkdir -p /opt/t2s
-cd /opt/t2s
-git clone https://github.com/avinashramole/AlGo.git /opt/t2s
-cd /opt/t2s
-git checkout cursor/all-desk-checks-00e8
-git pull origin cursor/all-desk-checks-00e8
+mkdir -p /root/download/algo
+cd /root/download/algo
+git clone https://github.com/avinashramole/AlGo.git /root/download/algo
+cd /root/download/algo
+git checkout main
+git pull origin main
 ```
 
 If clone says the folder is not empty:
 
 ```bash
-cd /opt/t2s
-git checkout cursor/all-desk-checks-00e8
-git pull origin cursor/all-desk-checks-00e8
+cd /root/download/algo
+git checkout main
+git pull origin main
 ```
 
 ---
@@ -70,7 +72,7 @@ git pull origin cursor/all-desk-checks-00e8
 ## Step 3 — Build
 
 ```bash
-cd /opt/t2s
+cd /root/download/algo
 npm run setup:vps
 npm run build
 ```
@@ -97,7 +99,7 @@ iptables -I INPUT -p tcp --dport 4000 -j ACCEPT
 ## Step 5 — Test
 
 ```bash
-cd /opt/t2s
+cd /root/download/algo
 PORT=4000 npm run start:vps
 ```
 
@@ -106,7 +108,8 @@ On your PC, Chrome: **http://66.116.248.198:4000**
 Stop the test with Ctrl+C, then keep it running:
 
 ```bash
-cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
+cp /root/download/algo/deploy/t2s.service /etc/systemd/system/t2s.service
+bash /root/download/algo/deploy/install-t2s-service.sh
 systemctl daemon-reload
 systemctl enable --now t2s
 systemctl status t2s
@@ -138,12 +141,12 @@ You must see **66.116.248.198**. If you still see an old IP, wait and try again.
 T2S must already be running (`systemctl status t2s` shows **active**). Open TCP **80** and **443** in the VPS **hosting panel**. Then in SSH:
 
 ```bash
-cd /opt/t2s
-git pull origin cursor/all-desk-checks-00e8
+cd /root/download/algo
+git pull origin main
 dnf -y install epel-release
 dnf -y install nginx certbot python3-certbot-nginx
 setsebool -P httpd_can_network_connect 1
-cp /opt/t2s/deploy/nginx-trade2smart.conf /etc/nginx/conf.d/trade2smart.conf
+cp /root/download/algo/deploy/nginx-trade2smart.conf /etc/nginx/conf.d/trade2smart.conf
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
@@ -194,6 +197,36 @@ Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443
 
 ---
 
+## API is down (`systemctl start t2s`)
+
+Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
+
+The app now lives in **`/root/download/algo`**. If systemd still points at `/opt/t2s`, `systemctl start t2s` does nothing useful. Restart does **not** turn LIVE on. Do **not** open localhost.
+
+On the VPS as root:
+
+```bash
+cd /root/download/algo
+git fetch origin main
+git checkout main
+git pull origin main
+bash /root/download/algo/deploy/fix-connection-reset-vps.sh
+```
+
+That script finds `download/algo`, points `t2s` at it, and starts Node. You want `t2s` **active**, `app:200`, and `api:200`. Wait 10 seconds, then Chrome **https://trade2smart.com** and press Ctrl+Shift+R.
+
+If `download/algo` is missing, clone it:
+
+```bash
+mkdir -p /root/download
+git clone https://github.com/avinashramole/AlGo.git /root/download/algo
+cd /root/download/algo
+git checkout main
+bash deploy/fix-connection-reset-vps.sh
+```
+
+---
+
 ## Connection reset by peer (`app:000`)
 
 `curl` to `http://127.0.0.1:4000/` printed:
@@ -208,11 +241,11 @@ Something accepted TCP **4000** and then died (Node crash loop / OOM while loadi
 On the VPS as root:
 
 ```bash
-cd /opt/t2s
-git fetch origin cursor/connection-reset-4000-0a8c
-git checkout cursor/connection-reset-4000-0a8c
-git pull origin cursor/connection-reset-4000-0a8c
-bash /opt/t2s/deploy/fix-connection-reset-vps.sh
+cd /root/download/algo
+git fetch origin main
+git checkout main
+git pull origin main
+bash /root/download/algo/deploy/fix-connection-reset-vps.sh
 ```
 
 Skip `npm run build` unless you also want the website JS rebuilt. This fix is the Node process on port 4000.
@@ -291,7 +324,7 @@ You must see **Swap** with about **2.0Gi** before continuing.
 Do **not** stop `t2s` first. Skip `npm run setup:vps`. Restarting `t2s` does **not** turn LIVE on.
 
 ```bash
-cd /opt/t2s
+cd /root/download/algo
 git fetch origin cursor/ip-management-1488
 git checkout cursor/ip-management-1488
 git pull origin cursor/ip-management-1488
@@ -320,10 +353,10 @@ systemctl start t2s
 ## Later updates
 
 ```bash
-cd /opt/t2s
-git fetch origin cursor/ip-management-1488
-git checkout cursor/ip-management-1488
-git pull origin cursor/ip-management-1488
+cd /root/download/algo
+git fetch origin main
+git checkout main
+git pull origin main
 NODE_OPTIONS=--max-old-space-size=384 npm run build
 systemctl restart t2s
 ```
