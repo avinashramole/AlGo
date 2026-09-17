@@ -197,6 +197,41 @@ Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443
 
 ---
 
+## ERR_CONNECTION_REFUSED (trade2smart.com)
+
+Chrome: **Hmmm… can't reach this page / trade2smart.com refused to connect.**
+
+Port **80** is nginx. Port **443** is HTTPS. Node on **4000** is only for the API behind nginx. Two bugs made this tab fail:
+
+1. nginx `root` was `/root/download/algo/dist`. The nginx user cannot read `/root`, so **trade2smart.com returned 500**.
+2. The HTTP-only nginx file replaced Let's Encrypt, so **HTTPS closed during the handshake** (Chrome reports that as refused).
+
+Restart does **not** turn LIVE on. Do **not** open localhost.
+
+On the VPS as root:
+
+```bash
+cd /root/download/algo
+git fetch origin main
+git checkout main
+git pull origin main
+bash /root/download/algo/deploy/fix-connection-reset-vps.sh
+```
+
+You want `nginx` **active**, `t2s` **active**, `http80:301` or `200`, and `https443:200`. Then Chrome **https://trade2smart.com** and Ctrl+Shift+R.
+
+If Chrome still refuses, also allow **80** and **443** in the VPS hosting-panel firewall, then:
+
+```bash
+systemctl start nginx t2s
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+firewall-cmd --reload
+ss -tlnp | grep -E ':80|:443|:4000'
+```
+
+---
+
 ## API is down (`systemctl start t2s`)
 
 Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
