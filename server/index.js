@@ -22,7 +22,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
-import { contractCatalog, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
+import { publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
   applySyntheticOptionChain,
@@ -53,9 +53,19 @@ import {
   bookRejectedLiveOrder,
 } from "./market.js";
 import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
+import {
+  attachHttpServerGuards,
+  attachProcessGuards,
+  httpErrorHandler,
+  sendReadyPage,
+  skipDhanBoot,
+  withTimeout,
+} from "./httpReady.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
+
+attachProcessGuards();
 
 const app = express();
 app.set("trust proxy", 1);
@@ -71,7 +81,13 @@ function isPreviewRequest(req) {
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 
-setInterval(tickMarket, 1500);
+setInterval(() => {
+  try {
+    tickMarket();
+  } catch (error) {
+    console.error(`tickMarket failed: ${error.message || error}`);
+  }
+}, 1500);
 setInterval(() => {
   void flushLiveAlgoOrders();
 }, 1500);
@@ -1100,6 +1116,11 @@ app.use("/api", (req, res) => {
 const dist = path.join(__dirname, "..", "dist");
 const distIndex = path.join(dist, "index.html");
 const serveWebsite = fs.existsSync(distIndex);
+
+app.get(["/", "/index.html"], (_req, res) => {
+  sendReadyPage(res, serveWebsite ? distIndex : "");
+});
+
 if (serveWebsite) {
   app.use(express.static(dist));
   app.use((req, res, next) => {
@@ -1111,11 +1132,13 @@ if (serveWebsite) {
       next();
       return;
     }
-    res.sendFile(distIndex);
+    sendReadyPage(res, distIndex);
   });
 }
 
-app.listen(port, "0.0.0.0", async () => {
+app.use(httpErrorHandler);
+
+const server = app.listen(port, "0.0.0.0", () => {
   console.log(`T2S API running on http://localhost:${port}`);
   if (googleOAuthConfigured()) {
     console.log(`Google login ready. Callback ${googleRedirectUri(process.env)}`);
@@ -1128,29 +1151,11 @@ app.listen(port, "0.0.0.0", async () => {
   } else {
     console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   }
-  try {
-    const publicIp = await thisComputerPublicIpv4();
-    if (publicIp) {
-      console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
-      console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
-    }
-    const booted = await bootDhanFromEnv();
-    if (booted) {
-      console.log("Dhan live feed started (saved token or PIN + TOTP)");
-    } else if (process.env.DHAN_ACCESS_TOKEN) {
-      console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
-    }
-    const futs = await resolveFrontFutures();
-    const catalog = contractCatalog();
-    console.log(
-      `Dhan scrip master ready · ${futs.length} front-month futures · ${catalog.counts.futures} FUTIDX · ${catalog.counts.options} OPTIDX`,
-    );
-    if (!isDhanLive()) {
-      await selectOptionDesk({ symbol: "NIFTY" }).catch(() => undefined);
-    }
-  } catch (error) {
-    console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
-  }
+  void bootBackground();
+});
+attachHttpServerGuards(server);
+
+async function bootBackground() {
   startHedgeDailyLiveScheduler({
     arm: async () => {
       if (!isDhanLive()) {
@@ -1167,4 +1172,23 @@ app.listen(port, "0.0.0.0", async () => {
       return result;
     },
   });
-});
+  if (skipDhanBoot()) {
+    console.log("Dhan boot skipped (T2S_SKIP_DHAN_BOOT). API is answering on this port.");
+    return;
+  }
+  try {
+    const publicIp = await thisComputerPublicIpv4();
+    if (publicIp) {
+      console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
+      console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
+    }
+    const booted = await withTimeout(bootDhanFromEnv(), 20_000, "Dhan boot timed out after 20s");
+    if (booted) {
+      console.log("Dhan live feed started (saved token or PIN + TOTP)");
+    } else if (process.env.DHAN_ACCESS_TOKEN) {
+      console.log("Dhan env token present but live feed did not start. Check DHAN_CLIENT_ID and token validity.");
+    }
+  } catch (error) {
+    console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
+  }
+}
