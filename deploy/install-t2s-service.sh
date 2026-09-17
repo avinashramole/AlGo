@@ -1,9 +1,11 @@
 #!/bin/bash
-# Point systemd t2s at the checkout (download/algo or /opt/t2s) and start it.
+# Point systemd t2s at download/algo, publish dist where nginx can read it,
+# restore HTTP+HTTPS, and start Node + nginx.
 # Restart does NOT turn LIVE on. Does not touch users/tokens/.env.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+WEBROOT=/var/www/trade2smart
 # shellcheck source=t2s-home.sh
 . "$SCRIPT_DIR/t2s-home.sh"
 
@@ -34,80 +36,32 @@ RestartSec=2
 Environment=NODE_OPTIONS=--max-old-space-size=512
 EOF
 
-if [ -f "$HOME_DIR/deploy/nginx-trade2smart.conf" ]; then
-  mkdir -p /etc/nginx/conf.d
-  sed "s|/opt/t2s|$HOME_DIR|g" "$HOME_DIR/deploy/nginx-trade2smart.conf" > /etc/nginx/conf.d/trade2smart.conf
+echo "== publish dist to $WEBROOT (nginx cannot read /root) =="
+mkdir -p "$WEBROOT"
+if [ -f "$HOME_DIR/dist/index.html" ]; then
+  cp -a "$HOME_DIR/dist/." "$WEBROOT/"
+else
+  echo "No $HOME_DIR/dist yet — nginx will proxy the website to Node on 4000."
+fi
+chmod -R a+rX "$WEBROOT" || true
+
+echo "== nginx HTTP+HTTPS, not root /root/... =="
+python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf
+# Old HTTP-only copies under /root made Chrome 500 / connection refused on HTTPS.
+if [ -f /etc/nginx/conf.d/trade2smart.conf.bak-t2shome ]; then
+  echo "left backup /etc/nginx/conf.d/trade2smart.conf.bak-t2shome"
 fi
 
-python3 - "$HOME_DIR" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-home = sys.argv[1]
-dist = f"{home}/dist"
-SEARCH_ROOTS = [Path("/etc/nginx/conf.d"), Path("/etc/nginx/sites-enabled"), Path("/etc/nginx/nginx.conf")]
-NEW_BLOCK = f"""
-    location /api/ {{
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Connection "";
-        proxy_connect_timeout 2s;
-        proxy_send_timeout 15s;
-        proxy_read_timeout 15s;
-    }}
-
-    location / {{
-        root {dist};
-        try_files $uri $uri/ /index.html;
-    }}
-""".rstrip()
-LOCATION_RE = re.compile(
-    r"location\s+/\s*\{(?:[^{}]|\{[^{}]*\})*proxy_pass\s+http://127\.0\.0\.1:4000[^;]*;(?:[^{}]|\{[^{}]*\})*\}",
-    re.DOTALL,
-)
-
-def iter_confs():
-    seen = set()
-    for root in SEARCH_ROOTS:
-        if root.is_file():
-            yield root
-            continue
-        if not root.is_dir():
-            continue
-        for path in sorted(root.rglob("*")):
-            if path.is_file() and (path.suffix in {".conf", ".inc"} or path.name == "nginx.conf"):
-                key = str(path.resolve())
-                if key in seen:
-                    continue
-                seen.add(key)
-                yield path
-
-changed = 0
-for path in iter_confs():
-    try:
-        original = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        continue
-    if f"root {dist}" in original and "location /api/" in original and 'Connection ""' in original:
-        continue
-    if "proxy_pass http://127.0.0.1:4000" not in original:
-        continue
-    updated, count = LOCATION_RE.subn(NEW_BLOCK, original, count=8)
-    if not count or updated == original:
-        continue
-    bak = path.with_suffix(path.suffix + ".bak-t2shome")
-    if not bak.exists():
-        bak.write_text(original, encoding="utf-8")
-    path.write_text(updated, encoding="utf-8")
-    print("patched", path)
-    changed += 1
-print("nginx files patched:", changed)
-PY
+if command -v setsebool >/dev/null 2>&1; then
+  setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+fi
+if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+  firewall-cmd --permanent --add-service=http || true
+  firewall-cmd --permanent --add-service=https || true
+  firewall-cmd --reload || true
+fi
+iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
 
 systemctl daemon-reload
 systemctl enable t2s >/dev/null 2>&1 || true
@@ -117,11 +71,24 @@ pkill -9 -f "node server/index.js" 2>/dev/null || true
 sleep 1
 systemctl start t2s
 sleep 4
+
+if command -v nginx >/dev/null 2>&1; then
+  nginx -t
+  systemctl enable nginx >/dev/null 2>&1 || true
+  systemctl reload nginx || systemctl restart nginx || systemctl start nginx
+fi
+
 echo "== service =="
 systemctl is-active t2s || true
+systemctl is-active nginx || true
 systemctl show t2s -p WorkingDirectory -p FragmentPath || true
+ss -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 ' || netstat -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 ' || true
 echo "== curl =="
 curl -sS -o /dev/null -w "app:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/ || true
 curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health || true
-echo "Want app:200 and api:200. Restart did not turn LIVE on."
-echo "Then hard-refresh https://trade2smart.com (Ctrl+Shift+R). Do not open localhost."
+curl -sS -o /dev/null -w "http80:%{http_code}\n" --max-time 8 -H "Host: trade2smart.com" http://127.0.0.1/ || true
+if [ -f /etc/letsencrypt/live/trade2smart.com/fullchain.pem ]; then
+  curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 8 --resolve trade2smart.com:443:127.0.0.1 https://trade2smart.com/ || true
+fi
+echo "Want t2s active, nginx active, app:200, api:200, and http80/https443 200 or 301."
+echo "Restart did not turn LIVE on. Then hard-refresh https://trade2smart.com (Ctrl+Shift+R). Do not open localhost."
