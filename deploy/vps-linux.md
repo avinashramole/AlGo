@@ -216,7 +216,11 @@ Port **80** is nginx. Port **443** is HTTPS. Node on **4000** is only for the AP
 
 The **VPS** folder is **`/opt/t2s`**. The **PC** folder is **`C:\Users\SHIVAMFINTECH\Desktop\AlGo`**. Restart does **not** turn LIVE on. Do **not** open localhost.
 
-On the VPS as root (even if the prompt says `algo`):
+On the VPS as root (`[root@trade2smart ...]#`, not Windows):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/fix-https-now.sh | bash
+```
 
 ```bash
 systemctl stop t2s || true
