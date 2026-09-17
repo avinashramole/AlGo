@@ -5,7 +5,9 @@ import {
   applySyntheticOptionChain,
   cacheOptionDesk,
   candleSymbol,
+  clearSimulatedDesk,
   getCandles,
+  getChainSpot,
   isCrudeSymbol,
   mcxMarketSession,
   nseMarketSession,
@@ -223,4 +225,53 @@ test("tickMarket never invents DEMO prices", () => {
   tickMarket();
   tickMarket();
   assert.equal(snapshot().indices.find((row) => row.symbol === "NIFTY 50")?.price, 25001);
+});
+
+test("getChainSpot does not use Crude Oil desk spot for NIFTY algos", () => {
+  applySyntheticOptionChain("CRUDEOIL");
+  applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY 50", ltp: 24850, kind: "index" }]);
+  cacheOptionDesk({
+    symbol: "NIFTY",
+    expiry: "2026-09-22",
+    expiries: ["2026-09-22"],
+    rows: [{ strike: 24850, atm: true, callLtp: 120, putLtp: 110, callId: "c-24850", putId: "p-24850" }],
+    spot: 24850,
+    source: "dhan",
+  });
+  const niftySpot = getChainSpot("NIFTY");
+  const crudeSpot = getChainSpot("CRUDEOIL");
+  assert.equal(crudeSpot > 1000 && crudeSpot < 20000, true);
+  assert.notEqual(niftySpot, crudeSpot);
+  assert.equal(niftySpot, 24850);
+  const algo = normalizeAlgo({ name: "NIFTY VWAP ATM spot", kind: "nifty-vwap" });
+  const trade = resolveAlgoTrade(algo);
+  assert.equal(trade.strike, 24850);
+  assert.match(String(trade.symbol), /NIFTY 24850/);
+});
+
+test("clearSimulatedDesk keeps real Dhan candles so algos can still fire", () => {
+  const nifty = [{ time: 1, open: 24500, high: 24510, low: 24490, close: 24505, volume: 10 }];
+  setLiveCandles(nifty, "NIFTY");
+  clearSimulatedDesk();
+  const kept = getCandles("1m", "NIFTY");
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].close, 24505);
+});
+
+test("tickMarket still evaluates live algos from last Dhan quotes when the socket is down", () => {
+  applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY 50", ltp: 24880, kind: "index" }]);
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: snapshot().optionMeta.expiry,
+    rows: snapshot().optionChain,
+    source: "dhan",
+  });
+  setDhanFeed({ live: false, source: "rest", lastTickAt: Date.now() });
+  const liveAlgo = snapshot().algos.find((row) => row.enabled && row.runMode === "live");
+  tickMarket();
+  if (liveAlgo) {
+    const after = snapshot().algos.find((row) => row.id === liveAlgo.id);
+    assert.equal(typeof after?.lastSignal, "string");
+    assert.notEqual(String(after.lastSignal || "").trim(), "");
+  }
 });

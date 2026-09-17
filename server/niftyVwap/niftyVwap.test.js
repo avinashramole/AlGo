@@ -478,6 +478,39 @@ test("paper and live adapters share BUY option payloads", () => {
   assert.equal(paperOrders[0].strike, liveOrders[0].strike);
 });
 
+test("live adapter does not treat a duplicate queue as a new order", () => {
+  const live = LiveTradingAdapter({
+    queueLiveOrder: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }),
+  });
+  const result = live.place({ symbol: "NIFTY 24500 CE", side: "BUY", qty: 65 });
+  assert.equal(result.queued, false);
+  assert.equal(result.duplicate, true);
+});
+
+test("duplicate live queue does not mark the strategy as filled", () => {
+  const algo = defaultNiftyVwapAlgo({ name: "Dup Queue" });
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 6 * BAR,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars: risingFutures(6),
+    ceBars: optionAboveVwap(6, "CE"),
+    peBars: optionAboveVwap(6, "PE"),
+    spot: 24500,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 140,
+    peLtp: 110,
+    positions: [],
+    adapter: { place: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }), exit: () => ({}) },
+  });
+  assert.equal(result.action, "skip");
+  assert.equal(result.reason, "duplicate");
+  assert.equal(algo.vwapState.inFlight, false);
+  assert.equal(algo.lastSignal, "HOLD 1 LOT");
+});
+
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
   const algo = defaultNiftyVwapAlgo({ name: "BT" });
   const candles = [

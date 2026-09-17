@@ -95,6 +95,7 @@ export const NiftyVwapStrategy = {
         algo.lastSignal = `WAIT ${config.barMinutes || 15}m O ${open} C ${close} VWAP ${vwap}`;
         return { action: "wait", reason: "no-reversal" };
       }
+      algo.lastSignal = "WAIT OPTION VWAP";
       return { action: "wait", reason: "no-signal" };
     }
     if (RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime)) {
@@ -102,7 +103,10 @@ export const NiftyVwapStrategy = {
     }
     const option = signal.buyCe ? "CE" : "PE";
     const ltp = option === "CE" ? Number(ceLtp) : Number(peLtp);
-    if (!(ltp > 0)) return { action: "wait", reason: "no-option-ltp" };
+    if (!(ltp > 0)) {
+      algo.lastSignal = "WAIT OPTION LTP";
+      return { action: "wait", reason: "no-option-ltp" };
+    }
     const pick = OptionStrikeSelector.select({
       spot,
       step,
@@ -110,7 +114,10 @@ export const NiftyVwapStrategy = {
       symbol: config.symbol,
       locked: state.lockedStrike ? { strike: state.lockedStrike, option: state.lockedOption } : null,
     });
-    if (!pick.strike) return { action: "wait", reason: "no-atm" };
+    if (!pick.strike) {
+      algo.lastSignal = "WAIT ATM";
+      return { action: "wait", reason: "no-atm" };
+    }
     state.inFlight = true;
     state.lastEntryBarTime = signal.barTime;
     state.lastEntryAt = Date.now();
@@ -136,6 +143,12 @@ export const NiftyVwapStrategy = {
       TradeLogger.record("rejected", { message: result?.error || "broker-rejected", strategy: algo.name });
       algo.lastSignal = "REJECTED";
       return { action: "rejected", result };
+    }
+    if (result?.duplicate || result?.queued === false) {
+      state.inFlight = false;
+      if (!state.fillPrice) PositionManager.clearOpen(state);
+      algo.lastSignal = "HOLD 1 LOT";
+      return { action: "skip", reason: "duplicate" };
     }
     const fill = fillFromResult(result, ltp);
     if (result?.queued) {
@@ -251,7 +264,10 @@ export const NiftyVwapStrategy = {
       return { action: "eod-flat" };
     }
 
-    if (!signal.ready) return { action: "wait", reason: "need-completed-bar" };
+    if (!signal.ready) {
+      algo.lastSignal = `WAIT ${config.barMinutes || 5}m BAR`;
+      return { action: "wait", reason: "need-completed-bar" };
+    }
 
     return this.maybeEnter({
       algo,

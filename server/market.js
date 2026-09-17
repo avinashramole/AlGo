@@ -482,7 +482,7 @@ function enqueueLiveAlgoOrder(payload) {
       sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === side && sameLiveContract(payload, row),
   );
   if (sameContractPending) {
-    return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    return { ok: true, queued: false, status: "PENDING", duplicate: true };
   }
   const sameStrategyRole = pendingLiveAlgoOrders.some((row) => {
     if (!sameCopy(row)) return false;
@@ -492,7 +492,7 @@ function enqueueLiveAlgoOrder(payload) {
     return String(row.role || "") === role;
   });
   if (sameStrategyRole) {
-    return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    return { ok: true, queued: false, status: "PENDING", duplicate: true };
   }
   if (side === "BUY" && allowHedge) {
     const pendingStrategyBuy = pendingLiveAlgoOrders.some(
@@ -500,7 +500,7 @@ function enqueueLiveAlgoOrder(payload) {
         sameCopy(row) && orderBrokerId(row) === brokerId && row.strategy === strategy && liveOrderSide(row) === "BUY",
     );
     if (pendingStrategyBuy) {
-      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+      return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
     const openNifty = (state.positions || []).some(
@@ -510,7 +510,7 @@ function enqueueLiveAlgoOrder(payload) {
       (row) => sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === "BUY",
     );
     if (openNifty || pendingBuy) {
-      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+      return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId, copyUserId });
@@ -695,6 +695,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       algo.lastSignal = "WAIT WEEKLY EXPIRY";
       return;
     }
+  }
+  if (feedLive && !open && !futuresBars.length) {
+    algo.lastSignal = "WAIT CANDLES";
+    return;
   }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
@@ -1084,6 +1088,10 @@ export function hasLastLiveBook() {
   return false;
 }
 
+function dhanTapeReady() {
+  return Boolean(state.dhanFeed.live) || hasLastLiveBook();
+}
+
 function publicDhanFeed() {
   return { ...clone(state.dhanFeed), hasQuotes: hasLastLiveBook() };
 }
@@ -1111,8 +1119,6 @@ export function clearSimulatedDesk() {
   state.orders = state.orders.filter((row) => row.paper || row.brokerId === "paper");
   state.positions = state.positions.filter((row) => row.paper || row.brokerId === "paper");
   state.closedTrades = (state.closedTrades || []).filter((row) => row.paper || row.brokerId === "paper");
-  state.liveCandles = [];
-  liveCandleCache.clear();
   state.algos = (state.algos || []).map((algo) =>
     algo.runMode === "paper" ? algo : { ...algo, pnl: algo.runMode === "backtest" ? algo.pnl : 0 },
   );
@@ -1132,7 +1138,7 @@ export function restoreSimulatedDesk() {
 }
 
 export function tickMarket() {
-  if (state.dhanFeed.live) runLiveAlgos();
+  if (dhanTapeReady()) runLiveAlgos();
   runPaperAlgos();
   markPaperToMarket();
 }
@@ -1571,7 +1577,7 @@ export function backtestAlgo(id, options = {}) {
 }
 
 function runPaperAlgos() {
-  const feedLive = Boolean(state.dhanFeed.live);
+  const feedLive = dhanTapeReady();
   noteNiftyVwapFeed(feedLive);
   const now = Date.now();
   for (const algo of state.algos) {
@@ -1619,7 +1625,7 @@ function runPaperAlgos() {
 }
 
 function runLiveAlgos() {
-  const feedLive = Boolean(state.dhanFeed.live);
+  const feedLive = dhanTapeReady();
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;
@@ -1631,10 +1637,20 @@ function runLiveAlgos() {
       tickNiftyVwapAlgo(algo, "live", feedLive);
       continue;
     }
-    if (!feedLive || !sessionOpenForAlgo(algo)) continue;
+    if (!feedLive) {
+      algo.lastSignal = "FEED DOWN";
+      continue;
+    }
+    if (!sessionOpenForAlgo(algo)) {
+      algo.lastSignal = "WAIT SESSION";
+      continue;
+    }
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
-    if (pack.candles.length < 32) continue;
+    if (pack.candles.length < 32) {
+      algo.lastSignal = "WAIT CANDLES";
+      continue;
+    }
     const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
     const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
     const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
@@ -1643,7 +1659,10 @@ function runLiveAlgos() {
       continue;
     }
     const side = wantBuy ? "BUY" : "SELL";
-    if (algo.lastLiveSide === side) continue;
+    const openLive = (state.positions || []).find(
+      (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
+    );
+    if (algo.lastLiveSide === side && openLive) continue;
     const trade = resolveAlgoTrade(algo);
     if (!trade) continue;
     if (trade.kind === "option" && !(trade.strike && trade.expiry)) {
@@ -2093,7 +2112,14 @@ export function setLiveCandles(candles, symbol = "NIFTY") {
 export function getChainSpot(symbol = state.optionMeta.symbol) {
   const meta = getUnderlying(symbol);
   const index = state.indices.find((item) => item.symbol === meta.indexSymbol);
-  return Number(index?.price || state.optionMeta.spot || 0);
+  if (Number(index?.price) > 0) return Number(index.price);
+  if (Number(index?.future) > 0) return Number(index.future);
+  const pack = chainForSymbol(meta.id);
+  if (Number(pack?.meta?.spot) > 0) return Number(pack.meta.spot);
+  if (String(state.optionMeta?.symbol || "").toUpperCase() === meta.id && Number(state.optionMeta.spot) > 0) {
+    return Number(state.optionMeta.spot);
+  }
+  return 0;
 }
 
 export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expiry = state.optionMeta.expiry) {

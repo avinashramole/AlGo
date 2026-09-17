@@ -9,7 +9,11 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
         type: "MARKET",
         product: "MIS",
       });
-      return queued && typeof queued === "object" ? { ok: true, queued: true, status: "PENDING", ...queued } : { ok: true, queued: true, status: "PENDING" };
+      if (queued && typeof queued === "object") {
+        const isQueued = queued.queued !== false && queued.duplicate !== true;
+        return { ok: true, status: queued.status || "PENDING", ...queued, queued: isQueued };
+      }
+      return { ok: true, queued: true, status: "PENDING" };
     },
     exit(position) {
       if ((position?.paper || position?.brokerId === "paper") && position?.id && typeof squareOff === "function") {
