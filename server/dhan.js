@@ -838,21 +838,32 @@ function startSocket() {
     setDhanFeed({ live: true, source: "websocket", error: null });
   });
 
+  let pendingQuotes = [];
+  let quotesScheduled = false;
+  const flushQuotes = () => {
+    quotesScheduled = false;
+    const quotes = pendingQuotes;
+    pendingQuotes = [];
+    if (!quotes.length) return;
+    applyLiveQuotes(quotes);
+    setDhanFeed({
+      live: true,
+      source: "websocket",
+      lastTickAt,
+      error: null,
+      quoteCount: quotes.length,
+    });
+  };
   socket.on("message", (data) => {
     try {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       const quotes = parseFeedPackets(buffer);
-      if (quotes.length) {
-        lastTickAt = Date.now();
-        applyLiveQuotes(quotes);
-        setDhanFeed({
-          live: true,
-          source: "websocket",
-          lastTickAt,
-          error: null,
-          quoteCount: quotes.length,
-        });
-      }
+      if (!quotes.length) return;
+      lastTickAt = Date.now();
+      pendingQuotes.push(...quotes);
+      if (quotesScheduled) return;
+      quotesScheduled = true;
+      setImmediate(flushQuotes);
     } catch {
       /* ignore a bad packet */
     }

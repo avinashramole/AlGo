@@ -227,6 +227,20 @@ test("sign-in session is saved so a restart does not ask to sign in again", () =
   assert.equal(sessionUser(result.token).id, result.user.id);
 });
 
+test("session written by another process is visible without restart", () => {
+  const saved = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
+  saved["t2s-from-login-gate"] = {
+    userId: "admin",
+    email: "trades2smart@gmail.com",
+    mobile: "",
+    at: Date.now(),
+  };
+  fs.writeFileSync(sessionsFile, `${JSON.stringify(saved, null, 2)}\n`);
+  const user = sessionUser("t2s-from-login-gate");
+  assert.equal(user?.id, "admin");
+  assert.equal(user?.email, "trades2smart@gmail.com");
+});
+
 test("login OTP for a member can be verified from the emailed code", async () => {
   process.env.T2S_SHOW_OTP = "1";
   const { user } = upsertGoogleUser({

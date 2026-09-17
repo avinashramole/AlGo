@@ -11,6 +11,7 @@ import {
   sendReadyPage,
   skipDhanBoot,
   skipLiveAlgos,
+  loginGatePort,
   withTimeout,
 } from "./httpReady.js";
 
@@ -36,6 +37,11 @@ test("skipDhanBoot reads T2S_SKIP_DHAN_BOOT", () => {
 test("skipLiveAlgos reads T2S_SKIP_LIVE_ALGOS", () => {
   assert.equal(skipLiveAlgos({}), false);
   assert.equal(skipLiveAlgos({ T2S_SKIP_LIVE_ALGOS: "1" }), true);
+});
+
+test("loginGatePort defaults to 3999", () => {
+  assert.equal(loginGatePort({}), 3999);
+  assert.equal(loginGatePort({ T2S_LOGIN_PORT: "4010" }), 4010);
 });
 
 test("withTimeout rejects after the limit", async () => {

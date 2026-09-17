@@ -19,6 +19,11 @@ export function skipLiveAlgos(env = process.env) {
   return /^(1|true|yes)$/i.test(String(env.T2S_SKIP_LIVE_ALGOS || ""));
 }
 
+export function loginGatePort(env = process.env) {
+  const n = Number(env.T2S_LOGIN_PORT || 3999);
+  return Number.isFinite(n) && n > 0 ? n : 3999;
+}
+
 export function withTimeout(task, ms, message) {
   const timeoutMs = Number(ms);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return task;

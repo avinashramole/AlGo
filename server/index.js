@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, queueLoginNotice, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
+import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
@@ -143,137 +144,7 @@ function safeSnapshot() {
   }
 }
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "t2s-api", time: new Date().toISOString() });
-});
-
-app.get("/api/auth/google/status", (req, res) => {
-  const configured = googleOAuthConfigured();
-  res.json({ configured, redirectUri: configured ? googleRedirectUri(process.env, req) : "" });
-});
-
-app.get("/api/auth/google", (req, res) => {
-  try {
-    const next = Array.isArray(req.query.next) ? req.query.next[0] : req.query.next;
-    res.redirect(googleAuthorizeUrl({ next, req }));
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Google login is not configured" });
-  }
-});
-
-function queryValue(value) {
-  return Array.isArray(value) ? String(value[0] || "") : String(value || "");
-}
-
-app.get("/api/auth/google/callback", async (req, res) => {
-  const state = queryValue(req.query.state);
-  const payload = decodeOAuthPayload(state);
-  const next = safeFrontendOrigin(payload.next || decodeOAuthState(state) || process.env.PUBLIC_URL);
-  try {
-    if (req.query.error) {
-      throw Object.assign(new Error("Google login was cancelled."), { status: 401 });
-    }
-    const result = await loginWithGoogleCode({
-      code: queryValue(req.query.code),
-      redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
-    });
-    try {
-      queueLoginNotice(result.user);
-    } catch (mailError) {
-      console.error("[auth] Google login mail failed:", mailError?.message || mailError);
-    }
-    res.redirect(`${next}/login?google_token=${encodeURIComponent(result.token)}`);
-  } catch (error) {
-    console.error("[auth] Google callback failed:", error?.message || error);
-    res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
-  }
-});
-
-app.post("/api/login", async (req, res) => {
-  try {
-    const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
-    queueLoginNotice(result.user);
-    res.json(result);
-  } catch (error) {
-    res.status(error.status || 401).json({ error: error.message || "Login failed" });
-  }
-});
-
-app.post("/api/auth/otp/request", async (req, res) => {
-  try {
-    const result = await requestOtp({
-      email: req.body?.email,
-      mobile: req.body?.mobile,
-      identifier: req.body?.identifier,
-      name: req.body?.name,
-      channel: req.body?.channel,
-      purpose: req.body?.purpose,
-      provider: req.body?.provider,
-    });
-    res.json(result);
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not send code", needName: Boolean(error.needName) });
-  }
-});
-
-app.post("/api/auth/otp/verify", async (req, res) => {
-  try {
-    const result = verifyOtp({
-      email: req.body?.email,
-      mobile: req.body?.mobile,
-      identifier: req.body?.identifier,
-      otp: req.body?.otp,
-      purpose: req.body?.purpose,
-    });
-    if (result.token) {
-      queueLoginNotice(result.user);
-      res.json(result);
-      return;
-    }
-    res.json(result);
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
-  }
-});
-
-app.post("/api/auth/reset", async (req, res) => {
-  try {
-    const result = resetPassword(req.body || {});
-    queueLoginNotice(result.user);
-    res.json(result);
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not reset password" });
-  }
-});
-
-app.post("/api/auth/signup", async (req, res) => {
-  try {
-    const result = completeSignup(req.body || {});
-    queueLoginNotice(result.user);
-    res.status(201).json(result);
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Sign up failed" });
-  }
-});
-
-app.post("/api/auth/thumb/enable", (req, res) => {
-  try {
-    const token = String(req.body?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    res.json(enableThumb(token));
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not enable thumb" });
-  }
-});
-
-app.post("/api/auth/thumb", async (req, res) => {
-  try {
-    const result = loginWithThumb(req.body?.thumbToken);
-    queueLoginNotice(result.user);
-    res.json(result);
-  } catch (error) {
-    res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
-  }
-});
+attachLoginRoutes(app);
 
 function readToken(req) {
   return String(req.body?.token || req.query?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -281,7 +152,16 @@ function readToken(req) {
 
 function deskGuard(req, res, next) {
   const pathname = String(req.originalUrl || req.url || "").split("?")[0];
-  if (!pathname.startsWith("/api") || pathname.startsWith("/api/auth/google")) {
+  if (
+    !pathname.startsWith("/api") ||
+    pathname === "/api/health" ||
+    pathname === "/api/login" ||
+    pathname.startsWith("/api/auth/google") ||
+    pathname.startsWith("/api/auth/otp") ||
+    pathname === "/api/auth/reset" ||
+    pathname === "/api/auth/signup" ||
+    pathname.startsWith("/api/auth/thumb")
+  ) {
     next();
     return;
   }
@@ -306,23 +186,6 @@ function deskGuard(req, res, next) {
   }
   next();
 }
-
-app.get("/api/me", (req, res) => {
-  const user = sessionUser(readToken(req), { reload: true });
-  if (!user) {
-    res.status(401).json({ error: "Sign in first." });
-    return;
-  }
-  res.json({ user });
-});
-
-app.post("/api/me", (req, res) => {
-  try {
-    res.json(updateProfile(readToken(req), req.body || {}));
-  } catch (error) {
-    res.status(error.status || 400).json({ error: error.message || "Could not update profile" });
-  }
-});
 
 app.get("/api/strategies/catalog", (req, res) => {
   const user = sessionUser(readToken(req));
@@ -1228,22 +1091,26 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
-  startHedgeDailyLiveScheduler({
-    arm: async () => {
-      if (!isDhanLive()) {
-        const dhan = await ensureDhanLiveFromSavedToken();
-        if (!dhan.live) {
-          console.log(`NIFTY 15m VWAP 09:20 LIVE arm waiting for Dhan (${dhan.reason || "not-live"})`);
+  if (skipLiveAlgos()) {
+    console.log("NIFTY 15m VWAP daily LIVE scheduler off (T2S_SKIP_LIVE_ALGOS). Login stays answering.");
+  } else {
+    startHedgeDailyLiveScheduler({
+      arm: async () => {
+        if (!isDhanLive()) {
+          const dhan = await ensureDhanLiveFromSavedToken();
+          if (!dhan.live) {
+            console.log(`NIFTY 15m VWAP 09:20 LIVE arm waiting for Dhan (${dhan.reason || "not-live"})`);
+          }
         }
-      }
-      let result = armNiftyVwapHedgeDailyLive();
-      if (result.reason === "dhan-not-live") {
-        const dhan = await ensureDhanLiveFromSavedToken();
-        if (dhan.live) result = armNiftyVwapHedgeDailyLive();
-      }
-      return result;
-    },
-  });
+        let result = armNiftyVwapHedgeDailyLive();
+        if (result.reason === "dhan-not-live") {
+          const dhan = await ensureDhanLiveFromSavedToken();
+          if (dhan.live) result = armNiftyVwapHedgeDailyLive();
+        }
+        return result;
+      },
+    });
+  }
   if (skipDhanBoot()) {
     console.log("Dhan boot skipped (T2S_SKIP_DHAN_BOOT). API is answering on this port.");
     return;

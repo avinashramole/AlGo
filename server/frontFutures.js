@@ -95,6 +95,99 @@ function strikeBucket(byExpiry, root, expiry, strike) {
   return strikes.get(strike);
 }
 
+function scripYieldEvery(env = process.env) {
+  const n = Number(env.T2S_SCRIP_YIELD_EVERY);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return 1500;
+}
+
+export async function parseScripMasterText(text, env = process.env) {
+  const grouped = Object.fromEntries(UNDERLYINGS.map((row) => [row.root, []]));
+  const options = new Map();
+  const byExpiry = new Map();
+  const every = scripYieldEvery(env);
+  let header = true;
+  let idx = {};
+  let n = 0;
+  let start = 0;
+  while (start < text.length) {
+    let end = text.indexOf("\n", start);
+    if (end < 0) end = text.length;
+    let line = text.slice(start, end);
+    start = end + 1;
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    if (!line) continue;
+    if (header) {
+      const cols = splitCsvLine(line).map((col, i) => (i === 0 ? col.replace(/^\uFEFF/, "") : col));
+      idx = Object.fromEntries(cols.map((col, i) => [col, i]));
+      header = false;
+      continue;
+    }
+    n += 1;
+    const isFut = line.includes("FUTIDX") || line.includes("FUTCOM");
+    const isOpt = line.includes("OPTIDX") || line.includes("OPTFUT");
+    if (isFut || isOpt) {
+      const parts = splitCsvLine(line);
+      const instrument = parts[idx.SEM_INSTRUMENT_NAME];
+      const trading = parts[idx.SEM_TRADING_SYMBOL] || "";
+      const root = trading.split("-")[0];
+      const und = UNDERLYINGS.find((row) => row.root === root && parts[idx.SEM_EXM_EXCH_ID] === row.exchange);
+      if (und && ROOTS.has(root)) {
+        const expiry = normalizeExpiry(parts[idx.SEM_EXPIRY_DATE]);
+        const securityId = Number(parts[idx.SEM_SMST_SECURITY_ID]);
+        if (expiry && Number.isFinite(securityId) && securityId > 0) {
+          const futName = und.futInstrument || "FUTIDX";
+          const optName = und.optInstrument || "OPTIDX";
+          const parsedLot = Number(parts[idx.SEM_LOT_UNITS]);
+          const lot = parsedLot > 1 ? parsedLot : und.lot;
+          if (instrument === futName) {
+            grouped[root].push({
+              expiry,
+              securityId,
+              trading,
+              lot,
+              segment: und.segment,
+            });
+          } else if (instrument === optName) {
+            const option = optionType(parts[idx.SEM_OPTION_TYPE]);
+            const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
+            if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
+              options.set(optionKey(root, expiry, strike, option), String(securityId));
+              const ids = strikeBucket(byExpiry, root, expiry, strike);
+              if (option === "CE") ids.callId = securityId;
+              else ids.putId = securityId;
+            }
+          }
+        }
+      }
+    }
+    if (every > 0 && n % every === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+
+  const instruments = UNDERLYINGS.map((und) => {
+    const front = pickFront(grouped[und.root] || []);
+    const fallback = FALLBACK.find((row) => row.parent === und.parent);
+    if (!front) return fallback;
+    return {
+      parent: und.parent,
+      symbol: `${und.root} FUT`,
+      kind: "future",
+      segment: und.segment,
+      securityId: front.securityId,
+      expiry: front.expiry,
+    };
+  }).filter(Boolean);
+
+  return {
+    instruments: instruments.length ? instruments : FALLBACK,
+    options,
+    byExpiry,
+    futures: grouped,
+  };
+}
+
 async function loadScripMaster() {
   if (cache.at && Date.now() - cache.at < CACHE_MS) return cache;
   if (loading) return loading;
@@ -104,71 +197,13 @@ async function loadScripMaster() {
       const res = await fetch(SCRIP_MASTER_URL);
       if (!res.ok) throw new Error(`scrip master ${res.status}`);
       const text = await res.text();
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      const cols = splitCsvLine(lines[0] || "").map((col, i) => (i === 0 ? col.replace(/^\uFEFF/, "") : col));
-      const idx = Object.fromEntries(cols.map((col, i) => [col, i]));
-      const grouped = Object.fromEntries(UNDERLYINGS.map((row) => [row.root, []]));
-      const options = new Map();
-      const byExpiry = new Map();
-
-      for (let i = 1; i < lines.length; i += 1) {
-        const line = lines[i];
-        const isFut = line.includes("FUTIDX") || line.includes("FUTCOM");
-        const isOpt = line.includes("OPTIDX") || line.includes("OPTFUT");
-        if (!isFut && !isOpt) continue;
-        const parts = splitCsvLine(line);
-        const instrument = parts[idx.SEM_INSTRUMENT_NAME];
-        const trading = parts[idx.SEM_TRADING_SYMBOL] || "";
-        const root = trading.split("-")[0];
-        const und = UNDERLYINGS.find((row) => row.root === root && parts[idx.SEM_EXM_EXCH_ID] === row.exchange);
-        if (!und || !ROOTS.has(root)) continue;
-        const expiry = normalizeExpiry(parts[idx.SEM_EXPIRY_DATE]);
-        const securityId = Number(parts[idx.SEM_SMST_SECURITY_ID]);
-        if (!expiry || !Number.isFinite(securityId) || securityId <= 0) continue;
-        const futName = und.futInstrument || "FUTIDX";
-        const optName = und.optInstrument || "OPTIDX";
-        const parsedLot = Number(parts[idx.SEM_LOT_UNITS]);
-        const lot = parsedLot > 1 ? parsedLot : und.lot;
-        if (instrument === futName) {
-          grouped[root].push({
-            expiry,
-            securityId,
-            trading,
-            lot,
-            segment: und.segment,
-          });
-        } else if (instrument === optName) {
-          const option = optionType(parts[idx.SEM_OPTION_TYPE]);
-          const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
-          if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
-            options.set(optionKey(root, expiry, strike, option), String(securityId));
-            const ids = strikeBucket(byExpiry, root, expiry, strike);
-            if (option === "CE") ids.callId = securityId;
-            else ids.putId = securityId;
-          }
-        }
-      }
-
-      const instruments = UNDERLYINGS.map((und) => {
-        const front = pickFront(grouped[und.root] || []);
-        const fallback = FALLBACK.find((row) => row.parent === und.parent);
-        if (!front) return fallback;
-        return {
-          parent: und.parent,
-          symbol: `${und.root} FUT`,
-          kind: "future",
-          segment: und.segment,
-          securityId: front.securityId,
-          expiry: front.expiry,
-        };
-      }).filter(Boolean);
-
+      const parsed = await parseScripMasterText(text);
       cache = {
         at: Date.now(),
-        instruments: instruments.length ? instruments : FALLBACK,
-        options,
-        byExpiry,
-        futures: grouped,
+        instruments: parsed.instruments,
+        options: parsed.options,
+        byExpiry: parsed.byExpiry,
+        futures: parsed.futures,
       };
       return cache;
     } catch (error) {
