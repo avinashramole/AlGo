@@ -390,9 +390,26 @@ curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000
 
 ---
 
-## API is down (`systemctl start t2s`)
+## API is down (`systemctl restart t2s`)
 
 Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
+
+The website can be **200** while `/api/health` is nginx **504**. `systemctl start t2s` does nothing if Node is already listed as active but hung. Use **restart**. Restart does **not** turn LIVE on. Do **not** open localhost.
+
+On the VPS as root:
+
+```bash
+cd /opt/t2s
+git fetch origin main
+git checkout main
+git pull origin main
+systemctl restart t2s
+sleep 3
+systemctl is-active t2s
+ss -tlnp | grep 4000
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000/api/health
+curl -skS -o /dev/null -w "https-api:%{http_code}\n" --max-time 8 https://trade2smart.com/api/health
+```
 
 On the **VPS** the checkout is **`/opt/t2s`**. The **PC** folder is **`C:\Users\SHIVAMFINTECH\Desktop\AlGo`**. Do not `cd` into `/root/download/algo` or any Windows path on the server.
 

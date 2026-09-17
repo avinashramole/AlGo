@@ -4,7 +4,7 @@ export function isTrade2SmartHost(host = typeof location !== "undefined" ? locat
 
 export function apiDownMessage(host?: string) {
   if (isTrade2SmartHost(host)) {
-    return "API is down on the server. On the VPS as root run: systemctl start t2s. Wait 10 seconds, then press Ctrl+Shift+R. Do not open localhost.";
+    return "API is down on the server. On the VPS as root run: systemctl restart t2s. Wait 10 seconds, then press Ctrl+Shift+R. Do not open localhost.";
   }
   return "API is not running. Keep the npm start window open (both [api] and [web]). Open http://localhost:5173";
 }
