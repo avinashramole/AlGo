@@ -236,29 +236,31 @@ ss -tlnp | grep -E ':80|:443|:4000'
 
 Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
 
-The app now lives in **`/root/download/algo`**. If systemd still points at `/opt/t2s`, `systemctl start t2s` does nothing useful. Restart does **not** turn LIVE on. Do **not** open localhost.
+On the **VPS** the checkout is usually **`/opt/t2s`**. `download/algo` is the PC folder. If you already cloned on the VPS into some `algo` directory, stay in that folder.
 
-On the VPS as root:
+If logs show `Cannot find package 'cors'`, the API packages were never installed. Restart does **not** turn LIVE on. Do **not** open localhost.
+
+On the VPS as root (you can paste this from `/root/download/algo` or `/opt/t2s`):
 
 ```bash
-cd /root/download/algo
+pwd
+npm --prefix server install --omit=dev
+systemctl start t2s
+sleep 4
+systemctl is-active t2s
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health
+```
+
+Then:
+
+```bash
 git fetch origin main
 git checkout main
 git pull origin main
-bash /root/download/algo/deploy/fix-connection-reset-vps.sh
-```
-
-That script finds `download/algo`, points `t2s` at it, and starts Node. You want `t2s` **active**, `app:200`, and `api:200`. Wait 10 seconds, then Chrome **https://trade2smart.com** and press Ctrl+Shift+R.
-
-If `download/algo` is missing, clone it:
-
-```bash
-mkdir -p /root/download
-git clone https://github.com/avinashramole/AlGo.git /root/download/algo
-cd /root/download/algo
-git checkout main
 bash deploy/fix-connection-reset-vps.sh
 ```
+
+You want `t2s` **active** and `api:200`. Wait 10 seconds, then Chrome **https://trade2smart.com** and press Ctrl+Shift+R.
 
 ---
 

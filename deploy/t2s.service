@@ -6,13 +6,13 @@ StartLimitBurst=12
 
 [Service]
 Type=simple
-WorkingDirectory=/root/download/algo
+WorkingDirectory=/opt/t2s
 Environment=NODE_ENV=production
 Environment=PORT=4000
 Environment=NODE_OPTIONS=--max-old-space-size=512
-Environment=T2S_HOME=/root/download/algo
-EnvironmentFile=-/root/download/algo/.env
-EnvironmentFile=-/root/download/algo/tokan.env
+Environment=T2S_HOME=/opt/t2s
+EnvironmentFile=-/opt/t2s/.env
+EnvironmentFile=-/opt/t2s/tokan.env
 ExecStart=/usr/bin/node server/index.js
 Restart=always
 RestartSec=2

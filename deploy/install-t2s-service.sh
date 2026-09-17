@@ -8,12 +8,15 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 WEBROOT=/var/www/trade2smart
 # shellcheck source=t2s-home.sh
 . "$SCRIPT_DIR/t2s-home.sh"
+T2S_SCRIPT_HOME=$(cd "$SCRIPT_DIR/.." && pwd)
+export T2S_SCRIPT_HOME
 
 HOME_DIR=$(t2s_find_home) || {
-  echo "Could not find T2S. Put the repo at /root/download/algo (or /opt/t2s) so server/index.js exists."
+  echo "Could not find T2S. On the VPS use /opt/t2s. download/algo is the PC folder."
   exit 1
 }
 echo "T2S_HOME=$HOME_DIR"
+t2s_ensure_server_modules "$HOME_DIR"
 
 if [ -f "$HOME_DIR/deploy/t2s.service" ]; then
   cp "$HOME_DIR/deploy/t2s.service" /etc/systemd/system/t2s.service
