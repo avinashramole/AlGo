@@ -61,6 +61,7 @@ import {
   httpErrorHandler,
   sendReadyPage,
   skipDhanBoot,
+  skipLiveAlgos,
   withTimeout,
 } from "./httpReady.js";
 
@@ -1177,12 +1178,24 @@ const server = app.listen(port, "0.0.0.0", () => {
     console.log("Google login off. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env");
   }
   console.log("T2S Dhan orders: send-through (not blocked locally)");
+  if (skipLiveAlgos()) {
+    console.log("LIVE algo ticks off on this process (T2S_SKIP_LIVE_ALGOS). Login and quotes still run.");
+  }
   if (serveWebsite) {
     console.log(`Website is served from this same port. Open http://THIS-SERVER:${port}`);
   } else {
     console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   }
-  void bootBackground();
+  const bootDelay = Number(process.env.T2S_DHAN_BOOT_DELAY_MS || 4000);
+  const waitBoot = Number.isFinite(bootDelay) && bootDelay >= 0 ? bootDelay : 4000;
+  if (waitBoot === 0) {
+    void bootBackground();
+  } else {
+    console.log(`Dhan boot starts in ${waitBoot}ms so /api/login can answer first`);
+    setTimeout(() => {
+      void bootBackground();
+    }, waitBoot);
+  }
   startDeskTimers();
 });
 attachHttpServerGuards(server);

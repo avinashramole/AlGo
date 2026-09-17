@@ -15,6 +15,10 @@ export function skipDhanBoot(env = process.env) {
   return /^(1|true|yes)$/i.test(String(env.T2S_SKIP_DHAN_BOOT || ""));
 }
 
+export function skipLiveAlgos(env = process.env) {
+  return /^(1|true|yes)$/i.test(String(env.T2S_SKIP_LIVE_ALGOS || ""));
+}
+
 export function withTimeout(task, ms, message) {
   const timeoutMs = Number(ms);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return task;

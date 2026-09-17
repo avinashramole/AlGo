@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart hung Trade 2 Smart API so login works
+After=t2s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/t2s-health-watch.sh

@@ -10,6 +10,7 @@ import {
   httpErrorHandler,
   sendReadyPage,
   skipDhanBoot,
+  skipLiveAlgos,
   withTimeout,
 } from "./httpReady.js";
 
@@ -30,6 +31,11 @@ test("skipDhanBoot reads T2S_SKIP_DHAN_BOOT", () => {
   assert.equal(skipDhanBoot({}), false);
   assert.equal(skipDhanBoot({ T2S_SKIP_DHAN_BOOT: "1" }), true);
   assert.equal(skipDhanBoot({ T2S_SKIP_DHAN_BOOT: "true" }), true);
+});
+
+test("skipLiveAlgos reads T2S_SKIP_LIVE_ALGOS", () => {
+  assert.equal(skipLiveAlgos({}), false);
+  assert.equal(skipLiveAlgos({ T2S_SKIP_LIVE_ALGOS: "1" }), true);
 });
 
 test("withTimeout rejects after the limit", async () => {

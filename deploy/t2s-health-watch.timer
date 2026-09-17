@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch Trade 2 Smart API health every 45s
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=45s
+AccuracySec=5s
+Unit=t2s-health-watch.service
+
+[Install]
+WantedBy=timers.target

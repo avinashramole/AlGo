@@ -41,6 +41,8 @@ WorkingDirectory=$HOME_DIR
 EnvironmentFile=-$HOME_DIR/.env
 EnvironmentFile=-$HOME_DIR/tokan.env
 Environment=T2S_HOME=$HOME_DIR
+Environment=T2S_SKIP_LIVE_ALGOS=1
+Environment=T2S_DHAN_BOOT_DELAY_MS=4000
 EOF
 
 cat > /etc/systemd/system/t2s.service.d/memory.conf <<'EOF'
@@ -98,6 +100,11 @@ iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
 
 systemctl daemon-reload
 systemctl enable t2s >/dev/null 2>&1 || true
+install -m 755 "$SCRIPT_DIR/t2s-health-watch.sh" /usr/local/sbin/t2s-health-watch.sh
+cp "$SCRIPT_DIR/t2s-health-watch.service" /etc/systemd/system/t2s-health-watch.service
+cp "$SCRIPT_DIR/t2s-health-watch.timer" /etc/systemd/system/t2s-health-watch.timer
+systemctl daemon-reload
+systemctl enable --now t2s-health-watch.timer >/dev/null 2>&1 || true
 systemctl stop t2s || true
 sleep 1
 pkill -9 -f "node server/index.js" 2>/dev/null || true
@@ -119,6 +126,7 @@ ss -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 ' || netstat -tlnp 2>/dev/null 
 echo "== curl =="
 curl -sS -o /dev/null -w "app:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/ || true
 curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health || true
+curl -sS -o /dev/null -w "login:%{http_code}\n" --max-time 8 -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:4000/api/login || true
 curl -sS -o /dev/null -w "http80:%{http_code}\n" --max-time 8 -H "Host: trade2smart.com" http://127.0.0.1/ || true
 if [ -f /etc/letsencrypt/live/trade2smart.com/fullchain.pem ]; then
   curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 8 --resolve trade2smart.com:443:127.0.0.1 https://trade2smart.com/ || true

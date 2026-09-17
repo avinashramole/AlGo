@@ -11,6 +11,8 @@ Environment=NODE_ENV=production
 Environment=PORT=4000
 Environment=NODE_OPTIONS=--max-old-space-size=512
 Environment=T2S_HOME=/opt/t2s
+Environment=T2S_SKIP_LIVE_ALGOS=1
+Environment=T2S_DHAN_BOOT_DELAY_MS=4000
 EnvironmentFile=-/opt/t2s/.env
 EnvironmentFile=-/opt/t2s/tokan.env
 ExecStart=/usr/bin/node server/index.js

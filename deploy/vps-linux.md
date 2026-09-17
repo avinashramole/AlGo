@@ -403,11 +403,27 @@ cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main
+install -m 755 /opt/t2s/deploy/t2s-health-watch.sh /usr/local/sbin/t2s-health-watch.sh
+cp /opt/t2s/deploy/t2s-health-watch.service /etc/systemd/system/
+cp /opt/t2s/deploy/t2s-health-watch.timer /etc/systemd/system/
+cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
+mkdir -p /etc/systemd/system/t2s.service.d
+cat > /etc/systemd/system/t2s.service.d/home.conf <<'EOF'
+[Service]
+WorkingDirectory=/opt/t2s
+EnvironmentFile=-/opt/t2s/.env
+EnvironmentFile=-/opt/t2s/tokan.env
+Environment=T2S_HOME=/opt/t2s
+Environment=T2S_SKIP_LIVE_ALGOS=1
+Environment=T2S_DHAN_BOOT_DELAY_MS=4000
+EOF
+systemctl daemon-reload
+systemctl enable --now t2s-health-watch.timer
 systemctl restart t2s
 sleep 3
 systemctl is-active t2s
-ss -tlnp | grep 4000
 curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000/api/health
+curl -sS -o /dev/null -w "login:%{http_code}\n" --max-time 5 -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:4000/api/login
 curl -skS -o /dev/null -w "https-api:%{http_code}\n" --max-time 8 https://trade2smart.com/api/health
 ```
 

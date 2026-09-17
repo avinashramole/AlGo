@@ -1139,11 +1139,15 @@ export function restoreSimulatedDesk() {
 
 let tickBusy = false;
 
+function skipLiveAlgoTicks() {
+  return /^(1|true|yes)$/i.test(String(process.env.T2S_SKIP_LIVE_ALGOS || ""));
+}
+
 export function tickMarket() {
   if (tickBusy) return;
   tickBusy = true;
   try {
-    if (dhanTapeReady()) runLiveAlgos();
+    if (dhanTapeReady() && !skipLiveAlgoTicks()) runLiveAlgos();
     runPaperAlgos();
     markPaperToMarket();
   } catch (error) {
