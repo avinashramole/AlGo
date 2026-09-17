@@ -210,7 +210,11 @@ export function IpManagement() {
           </button>
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setError("");
+              setNote("");
+              setAddOpen(true);
+            }}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white"
           >
             <Plus size={14} />
@@ -282,7 +286,11 @@ export function IpManagement() {
       {addOpen ? (
         <AddIpModal
           family={family}
-          onClose={() => setAddOpen(false)}
+          error={error}
+          onClose={() => {
+            setAddOpen(false);
+            setError("");
+          }}
           onSave={async (address, label) => {
             if (await run(() => addStaticIp({ address, label }), `${address} added to inventory`)) setAddOpen(false);
           }}
@@ -526,10 +534,12 @@ function IpCard({
 
 function AddIpModal({
   family,
+  error: parentError,
   onClose,
   onSave,
 }: {
   family: FamilyFilter;
+  error?: string;
   onClose: () => void;
   onSave: (address: string, label: string) => Promise<void>;
 }) {
@@ -537,6 +547,7 @@ function AddIpModal({
   const [label, setLabel] = useState(family === "ipv4" ? "IPv4" : "IPv6");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const shownError = error || parentError || "";
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -576,7 +587,7 @@ function AddIpModal({
             placeholder="Quantity"
           />
         </label>
-        {error ? <p className="text-xs font-semibold text-down">{error}</p> : null}
+        {shownError ? <p className="text-xs font-semibold text-down">{shownError}</p> : null}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-9 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold">
             Cancel

@@ -144,6 +144,15 @@ async function flushLiveAlgoOrders() {
   }
 }
 
+function safeSnapshot() {
+  try {
+    return snapshot();
+  } catch (error) {
+    console.log(`Desk snapshot failed: ${error.message || error}`);
+    return null;
+  }
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "t2s-api", time: new Date().toISOString() });
 });
@@ -421,7 +430,7 @@ app.get("/api/member/quotes", (req, res) => {
 app.get("/api/member/desk", (req, res) => {
   try {
     const user = memberAuth(req);
-    const snap = snapshot();
+    const snap = safeSnapshot() || {};
     res.json(
       getMemberDesk({
         user,
@@ -521,7 +530,7 @@ app.get("/api/clients", (_req, res) => {
 
 app.get("/api/clients/:id/detail", (req, res) => {
   try {
-    const snap = snapshot();
+    const snap = safeSnapshot() || {};
     res.json(
       getClientDetail({
         userId: req.params.id,
@@ -644,7 +653,11 @@ app.post("/api/auth/gmail", async (req, res) => {
 });
 
 app.get("/api/snapshot", (_req, res) => {
-  res.json(snapshot());
+  try {
+    res.json(snapshot());
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load desk" });
+  }
 });
 
 app.get("/api/feed", (_req, res) => {
@@ -652,12 +665,20 @@ app.get("/api/feed", (_req, res) => {
 });
 
 app.get("/api/mtm", (_req, res) => {
-  res.json(deskMtm());
+  try {
+    res.json(deskMtm());
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load MTM" });
+  }
 });
 
 app.get("/api/positions/desk", (_req, res) => {
-  const snap = snapshot();
-  res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
+  try {
+    const snap = safeSnapshot() || {};
+    res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load positions" });
+  }
 });
 
 app.get("/api/brokers", (_req, res) => {

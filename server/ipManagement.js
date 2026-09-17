@@ -67,7 +67,11 @@ function writeStore(next) {
 let store = readStore();
 
 function persist() {
-  writeStore(store);
+  try {
+    writeStore(store);
+  } catch (error) {
+    throw fail(`Could not save IP inventory: ${error.message || error}`, 500);
+  }
 }
 
 function asInventoryRow(row = {}) {
@@ -252,7 +256,11 @@ export function addStaticIp({ address, label } = {}) {
     }),
   );
   persist();
-  return ipManagementStatus();
+  try {
+    return ipManagementStatus();
+  } catch (error) {
+    throw fail(`${ip} was saved. Refresh IP management if the new card is missing. ${error.message || ""}`.trim(), 500);
+  }
 }
 
 export function removeStaticIp(address) {
@@ -287,9 +295,9 @@ export function unassignStaticIp({ userId } = {}) {
 
 export async function probeEgressBind(address) {
   const ip = normalizeAddress(address);
-  const args = ["--interface", ip, "--max-time", "8", "-sS", ip.includes(":") ? "https://api64.ipify.org" : "https://api.ipify.org"];
+  const args = ["--interface", ip, "--max-time", "6", "-sS", ip.includes(":") ? "https://api64.ipify.org" : "https://api.ipify.org"];
   try {
-    const { stdout } = await execFileAsync("curl", args, { timeout: 12_000 });
+    const { stdout } = await execFileAsync("curl", args, { timeout: 8_000 });
     const seen = String(stdout || "").trim();
     const ok = Boolean(seen) && (seen === ip || ip.includes(":"));
     return { ok, seen, error: ok ? "" : `Bind returned ${seen || "nothing"}` };
