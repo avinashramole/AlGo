@@ -35,6 +35,7 @@ export function MemberPlansScreen() {
         setDesk(nextDesk);
         setStrategies(catalog.strategies || []);
         setEnrollments(mine.enrollments || []);
+        setClientId((current) => current || nextDesk.install?.accountId || "");
       })
       .catch((err) => Alert.alert("My plan", err instanceof Error ? err.message : "Could not load"));
   }, []);
@@ -176,8 +177,8 @@ export function MemberPlansScreen() {
           <View style={{ marginTop: 12, gap: 8 }}>
             <Text style={styles.muted}>
               {desk.install?.installed
-                ? `Token installed ${desk.install.tokenHint || ""}`
-                : "Install API key and access token. This does not start LIVE."}
+                ? `Saved ${desk.install.accountId || "client ID"} · token ${desk.install.tokenHint || ""}`
+                : "Install client ID and access token. This does not start LIVE."}
             </Text>
             <TextInput style={styles.input} value={clientId} onChangeText={setClientId} placeholder="Client ID" autoCapitalize="none" />
             <TextInput style={styles.input} value={apiKey} onChangeText={setApiKey} placeholder="API key" autoCapitalize="none" secureTextEntry />
@@ -195,7 +196,7 @@ export function MemberPlansScreen() {
                   .catch((err) => Alert.alert("Broker token", err instanceof Error ? err.message : "Could not save"))
               }
             >
-              <Text style={styles.btnText}>{busy === "creds" ? "Saving..." : "Save access token"}</Text>
+              <Text style={styles.btnText}>{busy === "creds" ? "Saving..." : "Save client ID and access token"}</Text>
             </Pressable>
           </View>
         ) : null}

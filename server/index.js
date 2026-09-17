@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, notifyLogin, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
+import { adminUpdateUser, connectGmail, completeSignup, decodeOAuthPayload, decodeOAuthState, enableThumb, gmailStatus, googleAuthorizeUrl, googleOAuthConfigured, googleRedirectUri, listPublicUsers, loginWithGoogleCode, loginWithPassword, loginWithThumb, queueLoginNotice, requestOtp, resetPassword, safeFrontendOrigin, sessionUser, updateProfile, verifyOtp } from "./auth.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
@@ -25,7 +25,6 @@ import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markT
 import { publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
-  applySyntheticOptionChain,
   assignAlgoBroker,
   cancelOrder,
   createAlgo,
@@ -39,6 +38,7 @@ import {
   quoteSymbol,
   placeOrder,
   snapshot,
+  deskFeed,
   deskMtm,
   squareOff,
   tickMarket,
@@ -51,6 +51,8 @@ import {
   drainPendingLiveAlgoOrders,
   noteLiveAlgoOrderResult,
   bookRejectedLiveOrder,
+  queueLivePositionExit,
+  routeManualOrderBrokerId,
 } from "./market.js";
 import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
 import {
@@ -177,7 +179,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
     });
     try {
-      await notifyLogin(result.user);
+      queueLoginNotice(result.user);
     } catch (mailError) {
       console.error("[auth] Google login mail failed:", mailError?.message || mailError);
     }
@@ -191,8 +193,8 @@ app.get("/api/auth/google/callback", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Login failed" });
   }
@@ -225,8 +227,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       purpose: req.body?.purpose,
     });
     if (result.token) {
-      const mail = await notifyLogin(result.user);
-      res.json({ ...result, mail });
+      queueLoginNotice(result.user);
+      res.json(result);
       return;
     }
     res.json(result);
@@ -238,8 +240,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 app.post("/api/auth/reset", async (req, res) => {
   try {
     const result = resetPassword(req.body || {});
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not reset password" });
   }
@@ -248,8 +250,8 @@ app.post("/api/auth/reset", async (req, res) => {
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const result = completeSignup(req.body || {});
-    const mail = await notifyLogin(result.user);
-    res.status(201).json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.status(201).json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Sign up failed" });
   }
@@ -267,8 +269,8 @@ app.post("/api/auth/thumb/enable", (req, res) => {
 app.post("/api/auth/thumb", async (req, res) => {
   try {
     const result = loginWithThumb(req.body?.thumbToken);
-    const mail = await notifyLogin(result.user);
-    res.json({ ...result, mail });
+    queueLoginNotice(result.user);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
   }
@@ -645,6 +647,10 @@ app.get("/api/snapshot", (_req, res) => {
   res.json(snapshot());
 });
 
+app.get("/api/feed", (_req, res) => {
+  res.json(deskFeed());
+});
+
 app.get("/api/mtm", (_req, res) => {
   res.json(deskMtm());
 });
@@ -769,7 +775,7 @@ app.post("/api/brokers/:id/activate", (req, res) => {
 });
 
 app.get("/api/candles", (req, res) => {
-  res.json(getCandles(String(req.query.tf || "5m")));
+  res.json(getCandles(String(req.query.tf || "5m"), String(req.query.symbol || "NIFTY")));
 });
 
 app.get("/api/option-chain", (_req, res) => {
@@ -798,50 +804,67 @@ app.post("/api/option-chain/select", async (req, res) => {
     });
     res.json({ ok: true, meta: getOptionMeta(), snapshot: snapshot() });
   } catch (error) {
-    applySyntheticOptionChain(String(req.body?.symbol || "NIFTY"), req.body?.expiry);
     res.status(error.status || 400).json({ error: error.message || "Option chain failed", snapshot: snapshot() });
   }
 });
 
 app.post("/api/algos/:id/toggle", (req, res) => {
-  const current = getAlgo(req.params.id);
-  if (current && current.runMode === "live" && !current.enabled && !isDhanLive()) {
-    res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
-    return;
+  try {
+    const current = getAlgo(req.params.id);
+    const wantEnabled = req.body?.enabled;
+    const starting = current && current.runMode === "live" && !current.enabled && wantEnabled !== false;
+    if (starting && !isDhanLive()) {
+      res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
+      return;
+    }
+    const algo = toggleAlgo(req.params.id, { enabled: wantEnabled });
+    if (!algo) {
+      res.status(404).json({ error: "Algo not found" });
+      return;
+    }
+    if (algo.error) {
+      res.status(400).json({ error: algo.error });
+      return;
+    }
+    res.json({ ok: true, algo, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start strategy" });
   }
-  const algo = toggleAlgo(req.params.id);
-  if (!algo) {
-    res.status(404).json({ error: "Algo not found" });
-    return;
-  }
-  if (algo.error) {
-    res.status(400).json({ error: algo.error, snapshot: snapshot() });
-    return;
-  }
-  res.json({ ...algo, snapshot: snapshot() });
 });
 
 app.post("/api/algos", (req, res) => {
-  const algo = createAlgo(req.body || {});
-  res.status(201).json({ ok: true, algo, snapshot: snapshot() });
+  try {
+    const algo = createAlgo(req.body || {});
+    res.status(201).json({ ok: true, algo, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
+  }
 });
 
 app.put("/api/algos/:id", (req, res) => {
-  const result = updateAlgo(req.params.id, req.body || {});
-  if (result.error) {
-    res.status(404).json({ error: result.error });
-    return;
+  try {
+    const result = updateAlgo(req.params.id, req.body || {});
+    if (result.error) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, algo: result, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
   }
-  res.json({ ok: true, algo: result, snapshot: snapshot() });
 });
 
 app.delete("/api/algos/:id", (req, res) => {
-  const result = deleteAlgo(req.params.id);
-  if (result.error) {
-    res.status(404).json({ error: result.error });
-    return;
+  try {
+    const result = deleteAlgo(req.params.id);
+    if (result.error) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, ...result, snapshot: null });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not delete strategy" });
   }
-  res.json({ ok: true, ...result, snapshot: snapshot() });
 });
 
 app.post("/api/algos/:id/broker", (req, res) => {
@@ -898,7 +921,10 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
 
 app.post("/api/orders", async (req, res) => {
   const body = req.body || {};
-  const brokerId = String(body.brokerId || snapshot().activeBrokerId || "dhan");
+  const brokerId = routeManualOrderBrokerId(body, {
+    dhanLive: isDhanLive(),
+    activeBrokerId: snapshot().activeBrokerId,
+  });
   try {
     if ((brokerId === "dhan" && isDhanLive()) || (brokerId !== "paper" && isLiveBrokerReady(brokerId))) {
       if (isPreviewRequest(req)) {
@@ -944,7 +970,7 @@ app.post("/api/orders", async (req, res) => {
       res.status(201).json({
         ok: false,
         live: true,
-        error: String(error.message || "Order failed"),
+        error: String(error.message || "Dhan received this order and rejected it."),
         order: booked,
         snapshot: snapshot(),
       });
@@ -952,7 +978,7 @@ app.post("/api/orders", async (req, res) => {
     }
     res.status(error.status || 400).json({
       ok: false,
-      live: false,
+      live: Boolean(error.live),
       error: String(error.message || "Order failed"),
     });
   }
@@ -1016,18 +1042,13 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
         res.status(400).json({ error: PREVIEW_ORDER_ERROR });
         return;
       }
-      await placeDhanOrder({
-        symbol: pos.symbol,
-        name: pos.symbol,
-        side: pos.type === "BUY" ? "SELL" : "BUY",
-        qty: Math.abs(Number(pos.qty) || 0),
-        product: pos.product || "MIS",
-        type: "MARKET",
-        securityId: pos.securityId,
-        strategy: pos.strategy,
-        exchangeSegment: String(pos.symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
-      });
-      res.json({ ok: true, live: true, snapshot: snapshot() });
+      const queued = queueLivePositionExit(pos);
+      if (queued?.error) {
+        res.status(400).json({ error: queued.error });
+        return;
+      }
+      await flushLiveAlgoOrders();
+      res.json({ ok: true, live: true, queued: true, snapshot: snapshot() });
       return;
     }
     const result = squareOff(req.params.id);

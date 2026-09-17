@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
-import { cn, formatNumber, vwapTone } from "../../lib/format";
+import { cn, formatQuote, vwapTone } from "../../lib/format";
 
 function futureQuotes(
   row: { parent?: string; root?: string },
@@ -35,12 +35,14 @@ export function FuturesTape() {
         side,
         qty: row.qty || row.lot || 65,
         lots: 1,
+        lotSize: row.lot || 65,
         price: data.indices.find((item) => item.symbol === row.parent)?.future,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         expiry: row.expiry,
         exchangeSegment: row.segment,
+        securityId: row.securityId,
       });
       setNote(
         result.live
@@ -51,7 +53,6 @@ export function FuturesTape() {
       const message = err instanceof Error ? err.message : "Order failed";
       setNoteFail(true);
       setNote(message);
-      window.alert(message);
     } finally {
       setBusy("");
     }
@@ -91,9 +92,9 @@ export function FuturesTape() {
                   <div className="text-[11px] text-slate-400">{row.expiry || "—"} · lot {row.lot}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold">{formatNumber(quotes.ltp)}</div>
+                  <div className="text-sm font-bold">{formatQuote(quotes.ltp)}</div>
                   <div className={cn("text-[11px] font-semibold", vwapTone(quotes.vwap, quotes.ltp))}>
-                    VWAP {formatNumber(quotes.vwap)}
+                    VWAP {formatQuote(quotes.vwap)}
                   </div>
                 </div>
               </div>
@@ -139,9 +140,9 @@ export function FuturesTape() {
                 <td className="py-2 font-semibold">{row.symbol}</td>
                 <td className="py-2 text-slate-500">{row.expiry || "—"}</td>
                 <td className="py-2 text-slate-500">{row.segment}</td>
-                <td className="py-2 text-right font-bold">{formatNumber(quotes.ltp)}</td>
+                <td className="py-2 text-right font-bold">{formatQuote(quotes.ltp)}</td>
                 <td className={cn("py-2 text-right font-semibold", vwapTone(quotes.vwap, quotes.ltp))}>
-                  {formatNumber(quotes.vwap)}
+                  {formatQuote(quotes.vwap)}
                 </td>
                 <td className="py-2 text-right">{row.lot}</td>
                 <td className="py-2 text-right">

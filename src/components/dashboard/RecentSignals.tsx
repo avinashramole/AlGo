@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn } from "../../lib/format";
 
@@ -5,7 +6,12 @@ export function RecentSignals() {
   const { data } = useMarket();
   return (
     <section className="card p-4">
-      <div className="mb-3 text-sm font-bold">Recent Signals</div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-bold">Recent Signals</div>
+        <Link to="/algo" className="text-[11px] font-semibold text-brand-500">
+          Algo →
+        </Link>
+      </div>
       <div className="space-y-2">
         {!data.signals.length ? <p className="text-xs text-slate-400">No live signals yet.</p> : null}
         {data.signals.map((signal) => (

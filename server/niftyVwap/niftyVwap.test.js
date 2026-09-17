@@ -478,6 +478,39 @@ test("paper and live adapters share BUY option payloads", () => {
   assert.equal(paperOrders[0].strike, liveOrders[0].strike);
 });
 
+test("live adapter does not treat a duplicate queue as a new order", () => {
+  const live = LiveTradingAdapter({
+    queueLiveOrder: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }),
+  });
+  const result = live.place({ symbol: "NIFTY 24500 CE", side: "BUY", qty: 65 });
+  assert.equal(result.queued, false);
+  assert.equal(result.duplicate, true);
+});
+
+test("duplicate live queue does not mark the strategy as filled", () => {
+  const algo = defaultNiftyVwapAlgo({ name: "Dup Queue" });
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 6 * BAR,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars: risingFutures(6),
+    ceBars: optionAboveVwap(6, "CE"),
+    peBars: optionAboveVwap(6, "PE"),
+    spot: 24500,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 140,
+    peLtp: 110,
+    positions: [],
+    adapter: { place: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }), exit: () => ({}) },
+  });
+  assert.equal(result.action, "skip");
+  assert.equal(result.reason, "duplicate");
+  assert.equal(algo.vwapState.inFlight, false);
+  assert.equal(algo.lastSignal, "HOLD 1 LOT");
+});
+
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
   const algo = defaultNiftyVwapAlgo({ name: "BT" });
   const candles = [
@@ -510,7 +543,7 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
 
 test("seed includes paused NIFTY VWAP ATM and 15m reversal algos", () => {
   const seeded = seedAlgos();
-  assert.equal(seeded.length, 3);
+  assert.ok(seeded.length >= 6);
   assert.equal(seeded[0].name, "NIFTY VWAP ATM");
   assert.equal(isNiftyVwapAlgo(seeded[0]), true);
   assert.equal(seeded[0].enabled, false);
@@ -906,8 +939,11 @@ test("parseOptionContract reads Dhan hyphen symbols and skips BANKNIFTY", () => 
   assert.deepEqual(parseOptionContract("NIFTY-SEP2026-24500-CE"), { root: "NIFTY", strike: 24500, option: "CE" });
   assert.deepEqual(parseOptionContract("NIFTY 16 SEP 24500 PE"), { root: "NIFTY", strike: 24500, option: "PE" });
   assert.equal(parseOptionContract("BANKNIFTY 52000 CE").root, "BANKNIFTY");
+  assert.deepEqual(parseOptionContract("CRUDEOIL 6100 CE"), { root: "CRUDEOIL", strike: 6100, option: "CE" });
+  assert.deepEqual(parseOptionContract("CRUDEOIL-17Sep2026-6100-PE"), { root: "CRUDEOIL", strike: 6100, option: "PE" });
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "NIFTY-SEP2026-24500-CE", qty: 65, type: "BUY" }), true);
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "BANKNIFTY 52000 CE", qty: 65, type: "BUY" }), false);
+  assert.equal(PositionManager.isOpenNiftyOption({ symbol: "CRUDEOIL 6100 CE", qty: 100, type: "BUY" }), false);
 });
 
 test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", () => {

@@ -11,7 +11,7 @@ function authHeaders(): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestOnce<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
   let response: Response;
   try {
@@ -31,7 +31,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     body = text ? (JSON.parse(text) as { error?: string }) : {};
   } catch {
-    /* nginx HTML when Node reset the connection */
+    /* nginx HTML when Node is down or reset the connection */
   }
   if (!response.ok) {
     throw new Error(
@@ -46,6 +46,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   return (body as T) || ({} as T);
+}
+
+function isTransientApiDown(error: unknown) {
+  return /API is down|API is not running|Request failed \(50[234]\)/i.test(String((error as Error)?.message || error || ""));
+}
+
+async function request<T>(path: string, init?: RequestInit, extra?: { retries?: number }) {
+  const method = String(init?.method || "GET").toUpperCase();
+  const mutating = method === "POST" || method === "PUT" || method === "DELETE" || method === "PATCH";
+  const retries = extra?.retries ?? (mutating ? 3 : 1);
+  let last: unknown;
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      return await requestOnce<T>(path, init);
+    } catch (error) {
+      last = error;
+      if (attempt === retries - 1 || !isTransientApiDown(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    }
+  }
+  throw last;
 }
 
 export type DeskOrder = {
@@ -261,6 +282,22 @@ export type Snapshot = {
     live?: boolean;
     paper?: boolean;
   }>;
+  closedTrades?: Array<{
+    id: string;
+    symbol: string;
+    side?: "BUY" | "SELL";
+    type?: "BUY" | "SELL";
+    qty: number;
+    entry: number;
+    exit: number;
+    pnl: number;
+    product?: string;
+    strategy?: string;
+    brokerId?: string;
+    closedAt?: string;
+    paper?: boolean;
+    live?: boolean;
+  }>;
   orders: DeskOrder[];
   report?: DeskReport;
   signals: Array<{
@@ -304,6 +341,14 @@ export type Snapshot = {
     weekday?: string;
     ist?: string;
   };
+  mcxSession?: {
+    status: string;
+    open: boolean;
+    reason?: string;
+    hours?: string;
+    weekday?: string;
+    ist?: string;
+  };
   serverTime: string;
   dhanFeed?: {
     live: boolean;
@@ -323,6 +368,7 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    hasQuotes?: boolean;
     autoRenew?: boolean;
     autoMode?: string;
     tokenExpiry?: string | null;
@@ -343,6 +389,7 @@ export type Snapshot = {
     qty: number;
     front?: boolean;
     tradable?: boolean;
+    securityId?: string;
   }>;
   contracts?: {
     indices: Array<{
@@ -935,6 +982,7 @@ export type MemberDesk = {
   plans: MemberPlanRow[];
   report: DeskReport;
   positions: MemberPosition[];
+  orders?: DeskOrder[];
   topups: WalletTopup[];
   payments: PaymentPublic;
   copyReady?: boolean;
@@ -1027,7 +1075,11 @@ export function connectGmail(email: string, appPassword: string) {
 }
 
 export function getSnapshot() {
-  return request<Snapshot>("/snapshot");
+  return request<Snapshot>("/snapshot", undefined, { retries: 3 });
+}
+
+export function getDeskFeed() {
+  return request<Partial<Snapshot>>("/feed", undefined, { retries: 3 });
 }
 
 export function getDeskMtm() {
@@ -1051,8 +1103,11 @@ export function getCandles(tf: string) {
   );
 }
 
-export function toggleAlgo(id: string) {
-  return request(`/algos/${id}/toggle`, { method: "POST" });
+export function toggleAlgo(id: string, enabled?: boolean) {
+  return request<{ ok: boolean; algo?: Snapshot["algos"][number]; snapshot?: Snapshot | null }>(`/algos/${id}/toggle`, {
+    method: "POST",
+    body: JSON.stringify(enabled === undefined ? {} : { enabled }),
+  });
 }
 
 export type PlaceOrderResult = {
@@ -1093,6 +1148,7 @@ export type LedgerPosition = {
   paper: boolean;
   segment: "indian" | "crypto";
   strategy?: string;
+  closed?: boolean;
 };
 
 export type PositionLedger = {
@@ -1269,15 +1325,15 @@ export function assignAlgoBroker(id: string, brokerId: string) {
 }
 
 export function createAlgo(payload: Record<string, unknown>) {
-  return request<{ snapshot: Snapshot }>(`/algos`, { method: "POST", body: JSON.stringify(payload) });
+  return request<{ snapshot: Snapshot | null; algo?: Snapshot["algos"][number] }>(`/algos`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function updateAlgo(id: string, payload: Record<string, unknown>) {
-  return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  return request<{ snapshot: Snapshot | null; algo?: Snapshot["algos"][number] }>(`/algos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
 
 export function deleteAlgo(id: string) {
-  return request<{ snapshot: Snapshot }>(`/algos/${id}`, { method: "DELETE" });
+  return request<{ snapshot: Snapshot | null; ok?: boolean }>(`/algos/${id}`, { method: "DELETE" });
 }
 
 export type BacktestOptions = {

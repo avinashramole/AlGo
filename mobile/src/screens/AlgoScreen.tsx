@@ -9,6 +9,7 @@ const SYMBOLS: Array<{ id: string; lot: number }> = [
   { id: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", lot: 60 },
   { id: "SENSEX", lot: 20 },
+  { id: "CRUDEOIL", lot: 100 },
 ];
 const INDICATORS = ["VWAP", "RSI", "EMA", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
@@ -545,8 +546,26 @@ export function AlgoScreen() {
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Algo Desk</Text>
-      <Text style={styles.muted}>Paper trading uses the live feed. Pick Future or Option CE/PE. Fills stay on Paper Trading.</Text>
+      <Text style={styles.title}>Algo</Text>
+      <Text style={styles.muted}>Signals and strategies. Paper uses the live feed. Pick Future or Option CE/PE.</Text>
+      {data.signals.length ? (
+        data.signals.map((signal) => (
+          <Card key={signal.id}>
+            <View style={styles.row}>
+              <Pill text={signal.action} up={signal.action === "BUY"} />
+              <Text style={{ color: colors.brand, fontWeight: "800" }}>{signal.confidence}%</Text>
+            </View>
+            <Text style={styles.name}>{signal.symbol}</Text>
+            <Text style={styles.muted}>
+              {signal.strategy} · {signal.time}
+            </Text>
+          </Card>
+        ))
+      ) : (
+        <Card>
+          <Text style={styles.muted}>No live signals yet. Start a strategy or wait for a fill.</Text>
+        </Card>
+      )}
       <View style={styles.chips}>
         <Chip label="All" on={filter === "all"} onPress={() => setFilter("all")} />
         <Chip label="Indicator" on={filter === "indicator"} onPress={() => setFilter("indicator")} />
@@ -585,7 +604,7 @@ export function AlgoScreen() {
           ) : (
           <View style={styles.row}>
             <Text style={styles.muted}>{algo.enabled ? "Running" : "Paused"}</Text>
-            <Switch value={algo.enabled} onValueChange={() => void toggle(algo.id)} />
+            <Switch value={algo.enabled} onValueChange={(value) => void toggle(algo.id, value)} />
           </View>
           )}
           <View style={styles.actions}>

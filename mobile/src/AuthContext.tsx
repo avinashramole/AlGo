@@ -92,19 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       hasThumb,
       login: async (identifier: string, password: string) => {
-        const isDemo =
-          (identifier.trim().toLowerCase() === "demo@t2s.app" || identifier.trim().toLowerCase() === "demo") &&
-          password === "demo123";
-        const demoUser = { name: "Avinash", email: "demo@t2s.app", mobile: "", desk: "Index Options", role: "admin" as const };
-        try {
-          const result = await loginRequest(identifier, password);
-          await persist(result.user, result.token);
-          setUser(result.user);
-        } catch (error) {
-          if (!isDemo) throw error;
-          await persist(demoUser, "t2s-offline-token");
-          setUser(demoUser);
-        }
+        const result = await loginRequest(identifier, password);
+        await persist(result.user, result.token);
+        setUser(result.user);
       },
       requestOtp: (payload: OtpPayload) => requestOtpApi(payload),
       verifyOtp: async (identifier: string, otp: string) => {

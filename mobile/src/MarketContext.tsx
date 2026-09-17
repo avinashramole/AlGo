@@ -1,14 +1,15 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert } from "react-native";
-import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
+import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getDeskFeed, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
 import { useAuth } from "./AuthContext";
+import { keepStrikeWindow, patchById } from "./deskFeed";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
   data: Snapshot;
   live: boolean;
   refresh: () => Promise<void>;
-  toggle: (id: string) => Promise<void>;
+  toggle: (id: string, enabled?: boolean) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<{ ok: boolean; live?: boolean; warning?: string; snapshot?: Snapshot }>;
   connect: (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
@@ -28,14 +29,108 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const admin = user?.role === "admin";
   const [data, setData] = useState<Snapshot>(fallbackSnapshot);
   const [live, setLive] = useState(false);
+  const snapshotGen = useRef(0);
+  const dataRef = useRef(data);
+  const liveRef = useRef(live);
+  const pendingToggles = useRef(new Map<string, { enabled: boolean; status: Snapshot["algos"][number]["status"] }>());
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
+
+  const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
+    setData((current) => {
+      const next = {
+        ...current,
+        algos: (current.algos || []).map((row) => (row.id === id ? { ...row, ...patch } : row)),
+      };
+      dataRef.current = next;
+      return next;
+    });
+  };
+
+  const mergeSnapshot = (incoming: Snapshot) => {
+    const pending = pendingToggles.current;
+    const current = dataRef.current;
+    const algos = (incoming.algos || []).map((row) => {
+      const hold = pending.get(row.id);
+      if (!hold) return row;
+      if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
+      return { ...row, enabled: hold.enabled, status: hold.status };
+    });
+    const sameDesk =
+      current.optionMeta?.symbol === incoming.optionMeta?.symbol &&
+      current.optionMeta?.expiry === incoming.optionMeta?.expiry;
+    const optionChain = sameDesk
+      ? keepStrikeWindow(current.optionChain || [], incoming.optionChain || [])
+      : incoming.optionChain || [];
+    const next = { ...incoming, algos, optionChain };
+    dataRef.current = next;
+    setData(next);
+  };
+
+  const applyFeed = (feed: Partial<Snapshot>) => {
+    const pending = pendingToggles.current;
+    setData((current) => {
+      const incomingAlgos = feed.algos || [];
+      const byId = new Map(incomingAlgos.map((row) => [row.id, row]));
+      const algos = (current.algos || []).map((row) => {
+        const next = byId.get(row.id);
+        if (!next) return row;
+        const hold = pending.get(row.id);
+        const enabled = hold ? hold.enabled : next.enabled;
+        const status = hold ? hold.status : next.status;
+        if (hold && Boolean(next.enabled) === hold.enabled) pending.delete(row.id);
+        return { ...row, ...next, enabled, status };
+      });
+      const sameDesk =
+        current.optionMeta?.symbol === (feed.optionMeta?.symbol || current.optionMeta?.symbol) &&
+        current.optionMeta?.expiry === (feed.optionMeta?.expiry || current.optionMeta?.expiry);
+      const optionChain = sameDesk
+        ? keepStrikeWindow(current.optionChain || [], feed.optionChain || current.optionChain || [])
+        : feed.optionChain || current.optionChain;
+      const next = {
+        ...current,
+        ...feed,
+        algos,
+        optionChain,
+        optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
+        positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
+        orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
+        report: current.report,
+        brokers: current.brokers,
+      };
+      dataRef.current = next;
+      return next;
+    });
+  };
 
   const refresh = useCallback(async () => {
+    const gen = ++snapshotGen.current;
     try {
       const next = await getSnapshot();
-      setData(next);
+      if (gen !== snapshotGen.current) return;
+      mergeSnapshot(next);
       setLive(true);
     } catch {
-      setLive(false);
+      if (gen !== snapshotGen.current) return;
+      if (!liveRef.current) setLive(false);
+    }
+  }, []);
+
+  const refreshFeed = useCallback(async () => {
+    const gen = snapshotGen.current;
+    try {
+      const feed = await getDeskFeed();
+      if (gen !== snapshotGen.current) return;
+      applyFeed(feed);
+      setLive(true);
+    } catch {
+      if (gen !== snapshotGen.current) return;
     }
   }, []);
 
@@ -45,30 +140,62 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       return;
     }
     void refresh();
-    const id = setInterval(() => {
+    const feedId = setInterval(() => {
+      void refreshFeed();
+    }, 2000);
+    const snapId = setInterval(() => {
       void refresh();
-    }, 2500);
-    return () => clearInterval(id);
-  }, [admin, refresh]);
+    }, 30000);
+    return () => {
+      clearInterval(feedId);
+      clearInterval(snapId);
+    };
+  }, [admin, refresh, refreshFeed]);
 
   const value = useMemo(
     () => ({
       data,
       live,
       refresh,
-      toggle: async (id: string) => {
+      toggle: async (id: string, enabled?: boolean) => {
+        const previous = (dataRef.current.algos || []).find((row) => row.id === id);
+        if (!previous) {
+          Alert.alert("Paper / live", "Strategy not found");
+          return;
+        }
+        const nextEnabled = enabled === undefined ? !previous.enabled : enabled;
+        if (nextEnabled === Boolean(previous.enabled)) return;
+        if (previous.runMode === "backtest" && nextEnabled) {
+          Alert.alert("Paper / live", "Backtest strategies do not go live. Use Run backtest.");
+          return;
+        }
+        if (nextEnabled && previous.runMode !== "backtest" && !dataRef.current.dhanFeed?.live) {
+          Alert.alert(
+            "Paper / live",
+            previous.runMode === "paper"
+              ? "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first."
+              : "Start live needs Dhan LIVE — real CE/PE and futures orders only.",
+          );
+          return;
+        }
+        const status = nextEnabled ? (previous.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
+        pendingToggles.current.set(id, { enabled: nextEnabled, status });
+        snapshotGen.current += 1;
+        patchAlgo(id, { enabled: nextEnabled, status });
         try {
-          await toggleAlgo(id);
-          await refresh();
+          const result = await toggleAlgo(id, nextEnabled);
+          const next = result.algo;
+          if (next?.id) patchAlgo(next.id, { ...next, enabled: nextEnabled, status });
         } catch (err) {
+          pendingToggles.current.delete(id);
+          patchAlgo(id, previous);
           Alert.alert("Paper / live", err instanceof Error ? err.message : "Could not start");
-          await refresh();
         }
       },
       order: async (payload: Record<string, unknown>) => {
         try {
           const result = await placeOrder(payload);
-          if (result.snapshot) setData(result.snapshot);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
           const status = String(result.order?.status || "").toUpperCase();
           if (result.error || result.ok === false || status === "REJECTED") {
@@ -82,44 +209,44 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       connect: async (id: string, payload: { clientId: string; apiKey?: string; accessToken?: string }) => {
         const result = await connectBroker(id, payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       disconnect: async (id: string) => {
         const result = await disconnectBroker(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       activate: async (id: string) => {
         const result = await activateBroker(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       selectChain: async (symbol: string, expiry?: string) => {
         const result = await selectOptionChain(symbol, expiry);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       saveAlgo: async (payload: Record<string, unknown>) => {
         const id = String(payload.id || "");
         const result = id ? await updateAlgo(id, payload) : await createAlgo(payload);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       removeAlgo: async (id: string) => {
         const result = await deleteAlgo(id);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       backtest: async (id: string, options?: BacktestOptions) => {
         const result = await backtestAlgo(id, options);
-        if (result.snapshot) setData(result.snapshot);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
       cancel: async (id: string) => {
         try {
           const result = await cancelOrder(id);
-          if (result.snapshot) setData(result.snapshot);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
         } catch {
           /* offline */
@@ -128,7 +255,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       closePosition: async (id: string) => {
         try {
           const result = await squareOff(id);
-          if (result.snapshot) setData(result.snapshot);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
         } catch {
           /* offline */

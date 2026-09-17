@@ -14,7 +14,7 @@ fs.writeFileSync(
   process.env.T2S_USERS_FILE,
   `${JSON.stringify(
     [
-      { id: "avinash", name: "Avinash", email: "demo@t2s.app", role: "admin", password: "demo123" },
+      { id: "admin", name: "Trade2Smart", email: "trades2smart@gmail.com", role: "admin", password: "demo123" },
       { id: "u-arpit", name: "ARPIT", email: "arpit@gmail.com", role: "user" },
       { id: "u-sunita", name: "sunita", email: "sunita@gmail.com", role: "user" },
     ],
@@ -94,7 +94,7 @@ test("accounts table lists every member with assigned IP or server default", () 
   assert.equal(arpit.staticIp, "136.243.168.130");
   assert.equal(arpit.status, "active");
   assert.equal(
-    assigned.accounts.some((row) => row.userId === "avinash"),
+    assigned.accounts.some((row) => row.userId === "admin"),
     false,
   );
   const sunita = assigned.accounts.find((row) => row.userId === "u-sunita");

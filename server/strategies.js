@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,11 +8,16 @@ import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
 
+function newAlgoId() {
+  return `a${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`;
+}
+
 const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
   { id: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", lot: 60 },
   { id: "SENSEX", lot: 20 },
+  { id: "CRUDEOIL", lot: 100 },
 ];
 
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
@@ -341,7 +347,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         lots: cfg.lots,
         lotSize: cfg.lotSize,
       }),
-      id: existing.id || `a${Date.now()}`,
+      id: existing.id || newAlgoId(),
       kind: NIFTY_VWAP_HEDGE_KIND,
       slPct: 0,
       initialSlPct: 0,
@@ -386,7 +392,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         lots: cfg.lots,
         lotSize: cfg.lotSize,
       }),
-      id: existing.id || `a${Date.now()}`,
+      id: existing.id || newAlgoId(),
       kind: NIFTY_VWAP_REVERSAL_KIND,
       slPct: cfg.initialSlPct,
       initialSlPct: cfg.initialSlPct,
@@ -432,7 +438,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         lots: cfg.lots,
         lotSize: cfg.lotSize,
       }),
-      id: existing.id || `a${Date.now()}`,
+      id: existing.id || newAlgoId(),
       kind: NIFTY_VWAP_KIND,
       slPct: cfg.initialSlPct,
       initialSlPct: cfg.initialSlPct,
@@ -524,7 +530,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
   const next = {
     ...existing,
-    id: existing.id || `a${Date.now()}`,
+    id: existing.id || newAlgoId(),
     name,
     kind,
     tag: kind === "indicator" ? "Indicator" : "Price action",
@@ -563,6 +569,22 @@ export function normalizeAlgo(input = {}, existing = {}) {
   return withMapping(next, input, existing);
 }
 
+function seedCrudeAlgo(input, existing) {
+  return normalizeAlgo(
+    {
+      kind: "indicator",
+      symbol: "CRUDEOIL",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      lots: 1,
+      runMode: "live",
+      ...input,
+    },
+    { pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live", ...existing },
+  );
+}
+
 export function seedAlgos() {
   return [
     normalizeAlgo(
@@ -586,6 +608,39 @@ export function seedAlgos() {
       }),
       { id: "a6", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
+    seedCrudeAlgo(
+      {
+        name: "CRUDE OIL VWAP ATM",
+        indicator: "VWAP",
+        timeframe: "5m",
+        side: "BUY",
+        slPct: 0.4,
+        targetPct: 0.8,
+      },
+      { id: "a7" },
+    ),
+    seedCrudeAlgo(
+      {
+        name: "CRUDE OIL 15m VWAP reversal",
+        indicator: "VWAP",
+        timeframe: "15m",
+        side: "BOTH",
+        slPct: 0.4,
+        targetPct: 0.8,
+      },
+      { id: "a8" },
+    ),
+    seedCrudeAlgo(
+      {
+        name: "CRUDE OIL Supertrend ATM",
+        indicator: "SUPERTREND",
+        timeframe: "5m",
+        side: "BUY",
+        slPct: 0.4,
+        targetPct: 0.8,
+      },
+      { id: "a9" },
+    ),
   ];
 }
 
@@ -593,9 +648,18 @@ function uniqueIds(ids = []) {
   return [...new Set((ids || []).map((id) => String(id || "").trim()).filter(Boolean))];
 }
 
-function pauseLiveAlgo(algo) {
-  if (!algo || algo.runMode !== "live") return algo;
-  return { ...algo, enabled: false, status: algo.status === "LIVE" ? "PAUSED" : algo.status || "PAUSED" };
+function restoreRunStatus(algo) {
+  if (!algo) return algo;
+  if (algo.runMode === "backtest") {
+    return { ...algo, enabled: false, status: "BACKTEST" };
+  }
+  if (algo.enabled && algo.runMode === "paper") {
+    return { ...algo, enabled: true, status: "PAPER" };
+  }
+  if (algo.enabled) {
+    return { ...algo, enabled: true, status: "LIVE" };
+  }
+  return { ...algo, enabled: false, status: algo.status === "BACKTEST" ? "BACKTEST" : "PAUSED" };
 }
 
 function readAlgoFile() {
@@ -617,7 +681,7 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
     for (const row of stored.algos) {
       const id = String(row?.id || "").trim();
       if (!id || removed.has(id) || seen.has(id)) continue;
-      const next = pauseLiveAlgo(normalizeAlgo(row, { ...row, id }));
+      const next = restoreRunStatus(normalizeAlgo(row, { ...row, id }));
       next.id = id;
       algos.push(next);
       seen.add(id);
@@ -638,10 +702,7 @@ export function loadAlgoStore(catalog = seedAlgos()) {
 
 export function saveAlgoStore(algos = [], removedIds = []) {
   fs.mkdirSync(path.dirname(ALGOS_FILE), { recursive: true });
-  fs.writeFileSync(
-    ALGOS_FILE,
-    `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) }, null, 2)}\n`,
-  );
+  fs.writeFileSync(ALGOS_FILE, `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) })}\n`);
 }
 
 export const STRATEGY_META = { SYMBOLS, INDICATORS, PATTERNS, TIMEFRAMES, OPERATORS, SOURCES, OP_LABEL, SRC_LABEL };

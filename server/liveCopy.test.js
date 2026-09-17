@@ -10,8 +10,8 @@ process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
-const { getMemberDesk, installMemberBroker, recordMemberCopyFill, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
-const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
+const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
+const { dispatchMemberCopies, dispatchMemberExitCopies, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
 savePaymentSettings({
@@ -91,6 +91,103 @@ test("paper members get a book fill only", () => {
   assert.equal(mine.brokerToken, "");
 });
 
+test("copy master clients receive admin orders without enrollment or algo mapping", () => {
+  const user = { id: "u-copy-master", name: "Copy Master", email: "copymaster@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    subscriptionUntil: "2026-12-31",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.equal(targets.some((row) => row.userId === user.id), true);
+});
+
+test("users mapped strategy on All clients copies that strategy without enrollment", () => {
+  const user = { id: "u-user-map", name: "User Map", email: "usermap@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "User Map VWAP",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: "User Map VWAP",
+    strategyId: "a-user-map",
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.deepEqual(
+    targets.filter((row) => row.userId === user.id).map((row) => row.userId),
+    [user.id],
+  );
+});
+
+test("expired subscriptionUntil is not a copy target", () => {
+  const user = { id: "u-expired", name: "Expired", email: "expired@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    subscriptionUntil: "2020-01-01",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.equal(targets.some((row) => row.userId === user.id), false);
+});
+
+test("mapped clients copy without a paid enrollment when scope is clients", () => {
+  const user = { id: "u-mapped-only", name: "Mapped Only", email: "mappedonly@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  assert.deepEqual(targets.map((row) => row.userId), [user.id]);
+  assert.equal(targets[0].paper, true);
+});
+
+test("mappingScope both with mapped ids does not copy unmapped paid members", () => {
+  const keep = { id: "u-mapped", name: "Mapped", email: "mapped@t2s.app", role: "user" };
+  const skip = { id: "u-other", name: "Other", email: "other@t2s.app", role: "user" };
+  for (const user of [keep, skip]) {
+    selectMemberBroker({ user, brokerId: "paper" });
+    payMember(user);
+  }
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    mappingScope: "both",
+    mappedClientIds: [keep.id],
+  });
+  assert.deepEqual(targets.map((row) => row.userId), [keep.id]);
+});
+
 test("mappingScope master sends no copies and clients filters mapped ids", () => {
   const keep = { id: "u-mapped", name: "Mapped", email: "mapped@t2s.app", role: "user" };
   const skip = { id: "u-other", name: "Other", email: "other@t2s.app", role: "user" };
@@ -148,6 +245,92 @@ test("recordMemberCopyFill writes the member book used by My plan", () => {
   assert.equal(fill.status, "FILLED");
   const desk = getMemberDesk({ user, enrollments: [paid], algos: [algo], quote: () => 0 });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24600 CE" && row.qty === 65));
+});
+
+test("dispatchMemberCopies writes paper fills for mapped clients", () => {
+  const user = { id: "u-dispatch", name: "Dispatch", email: "dispatch@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 24800 CE", qty: 65, price: 55, brokerId: "paper" },
+    { ...algo, mappingScope: "clients", mappedClientIds: [user.id] },
+  );
+  const desk = getMemberDesk({
+    user,
+    enrollments: [],
+    algos: [algo],
+    quote: () => 0,
+  });
+  assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24800 CE"));
+  assert.ok((desk.orders || []).some((row) => row.symbol === "NIFTY 24800 CE" && row.status === "FILLED"));
+});
+
+test("memberExitPayload is the opposite market side of the master open", () => {
+  const exit = memberExitPayload(
+    { symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, ltp: 88, strategy: algo.name, product: "MIS" },
+    { strategy: algo.name },
+  );
+  assert.equal(exit.side, "SELL");
+  assert.equal(exit.symbol, "NIFTY 24600 CE");
+  assert.equal(exit.qty, 65);
+  assert.equal(exit.type, "MARKET");
+  assert.equal(exit.strategy, algo.name);
+});
+
+test("dispatchMemberExitCopies closes mapped paper positions on master exit", () => {
+  const user = { id: "u-exit-map", name: "Exit Map", email: "exitmap@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [user.id] };
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 24900 CE", qty: 65, price: 70, brokerId: "paper" },
+    mapped,
+  );
+  const open = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.ok(open.positions.some((row) => row.symbol === "NIFTY 24900 CE" && row.qty === 65));
+  dispatchMemberExitCopies(
+    { symbol: "NIFTY 24900 CE", type: "BUY", qty: 65, strategy: algo.name, ltp: 90, brokerId: "paper" },
+    mapped,
+  );
+  const closed = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.equal(closed.positions.some((row) => row.symbol === "NIFTY 24900 CE"), false);
+  assert.ok((closed.orders || []).some((row) => row.symbol === "NIFTY 24900 CE" && row.side === "SELL" && row.status === "FILLED"));
+});
+
+test("dispatchMemberExitCopies queues a live SELL on mapped real accounts", () => {
+  const user = { id: "u-exit-live", name: "Exit Live", email: "exitlive@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100888", accessToken: "exit-live-token" });
+  payMember(user);
+  const queued = [];
+  dispatchMemberExitCopies(
+    { symbol: "NIFTY 25000 PE", type: "BUY", qty: 65, strategy: algo.name, securityId: "12345" },
+    algo,
+    { enqueueLiveOrder: (copy) => queued.push(copy) },
+  );
+  const mine = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.side, "SELL");
+  assert.equal(mine.symbol, "NIFTY 25000 PE");
+  assert.equal(mine.account.accessToken, "exit-live-token");
+});
+
+test("master exit closes every mapped paper client on that strategy", () => {
+  const a = { id: "u-exit-a", name: "Exit A", email: "exita@t2s.app", role: "user" };
+  const b = { id: "u-exit-b", name: "Exit B", email: "exitb@t2s.app", role: "user" };
+  for (const user of [a, b]) selectMemberBroker({ user, brokerId: "paper" });
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [a.id, b.id] };
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 25100 CE", qty: 65, price: 42, brokerId: "paper" },
+    mapped,
+  );
+  dispatchMemberExitCopies(
+    { symbol: "NIFTY 25100 CE", type: "BUY", qty: 65, strategy: algo.name, ltp: 50, brokerId: "paper" },
+    mapped,
+  );
+  for (const user of [a, b]) {
+    const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+    assert.equal(desk.positions.some((row) => row.symbol === "NIFTY 25100 CE"), false);
+    assert.ok((desk.orders || []).some((row) => row.side === "SELL" && row.symbol === "NIFTY 25100 CE"));
+  }
 });
 
 test("sendMemberCopyOrder paper path writes the member book", async () => {

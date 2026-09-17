@@ -2,12 +2,26 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { brokerName } from "../../lib/brokers";
-import { cn, formatInr, formatNumber } from "../../lib/format";
+import { cn, formatInr, formatNumber, hasDhanQuotes } from "../../lib/format";
 
 export function Positions() {
   const { data } = useMarket();
   const [filter, setFilter] = useState("all");
-  const rows = data.positions.filter((row) => filter === "all" || row.brokerId === filter);
+  const open = (data.positions || []).map((row) => ({ ...row, closed: false }));
+  const closed = (data.closedTrades || []).map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    type: (row.type || row.side || "BUY") as "BUY" | "SELL",
+    qty: row.qty,
+    avg: row.entry,
+    ltp: row.exit,
+    pnl: row.pnl,
+    product: row.product,
+    strategy: row.strategy,
+    brokerId: row.brokerId,
+    closed: true,
+  }));
+  const rows = [...open, ...closed].filter((row) => filter === "all" || row.brokerId === filter);
   const total = rows.reduce((sum, row) => sum + row.pnl, 0);
   const brokers = [{ id: "all", name: "All brokers" }, ...(data.brokers || []).filter((item) => item.connected)];
 
@@ -15,7 +29,7 @@ export function Positions() {
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <Link to="/positions" className="text-sm font-bold hover:text-brand-500">
-          Positions
+          Position
         </Link>
         <select
           className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] font-semibold"
@@ -52,10 +66,14 @@ export function Positions() {
                     <span
                       className={cn(
                         "rounded px-1.5 py-0.5 text-[10px] font-bold",
-                        row.type === "BUY" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-rose-50 text-down dark:bg-rose-950/40",
+                        row.closed
+                          ? "bg-slate-100 text-slate-500 dark:bg-slate-800"
+                          : row.type === "BUY"
+                            ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
+                            : "bg-rose-50 text-down dark:bg-rose-950/40",
                       )}
                     >
-                      {row.type}
+                      {row.closed ? "CLOSED" : row.type}
                     </span>
                   </td>
                   <td className="py-2.5 text-right">{row.qty}</td>
@@ -69,7 +87,7 @@ export function Positions() {
             ) : (
               <tr>
                 <td className="py-6 text-center text-slate-400" colSpan={7}>
-                  {data.dhanFeed?.live ? "No live Dhan or paper positions" : "No open positions"}
+                  {hasDhanQuotes(data) ? "No live Dhan, paper, or closed positions" : "No open or closed positions"}
                 </td>
               </tr>
             )}
@@ -77,7 +95,7 @@ export function Positions() {
         </table>
       </div>
       <div className="mt-3 flex items-center justify-between rounded-lg bg-[var(--bg)] px-3 py-2 text-sm">
-        <span className="text-xs font-semibold text-slate-400">Total P&L</span>
+        <span className="text-xs font-semibold text-slate-400">Total P&L · MTM</span>
         <span className={`font-extrabold ${total >= 0 ? "text-up" : "text-down"}`}>{formatInr(total)}</span>
       </div>
     </section>

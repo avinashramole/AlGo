@@ -14,12 +14,10 @@ const UserHome = lazyPage(() => import("./pages/UserHome"), "UserHome");
 const Profile = lazyPage(() => import("./pages/Profile"), "Profile");
 const MemberPlans = lazyPage(() => import("./pages/MemberPlans"), "MemberPlans");
 const Options = lazyPage(() => import("./pages/Options"), "Options");
-const Signals = lazyPage(() => import("./pages/Signals"), "Signals");
 const Algo = lazyPage(() => import("./pages/Algo"), "Algo");
 const Orders = lazyPage(() => import("./pages/Orders"), "Orders");
 const PositionsDesk = lazyPage(() => import("./pages/PositionsDesk"), "PositionsDesk");
 const Reports = lazyPage(() => import("./pages/Reports"), "Reports");
-const Portfolio = lazyPage(() => import("./pages/Portfolio"), "Portfolio");
 const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
 const Users = lazyPage(() => import("./pages/Users"), "Users");
@@ -71,12 +69,12 @@ export default function App() {
           <Route path="plans" element={<MemberPlans />} />
           <Route path="markets" element={<Navigate to="/options" replace />} />
           <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
-          <Route path="signals" element={<AdminOnly><Signals /></AdminOnly>} />
+          <Route path="signals" element={<Navigate to="/algo" replace />} />
           <Route path="algo" element={<AdminOnly><Algo /></AdminOnly>} />
           <Route path="orders" element={<AdminOnly><Orders /></AdminOnly>} />
           <Route path="positions" element={<AdminOnly><PositionsDesk /></AdminOnly>} />
           <Route path="reports" element={<AdminOnly><Reports /></AdminOnly>} />
-          <Route path="portfolio" element={<AdminOnly><Portfolio /></AdminOnly>} />
+          <Route path="portfolio" element={<Navigate to="/positions" replace />} />
           <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
           <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
           <Route path="users" element={<AdminOnly><Users /></AdminOnly>} />

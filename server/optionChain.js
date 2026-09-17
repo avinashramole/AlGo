@@ -3,10 +3,38 @@ export const UNDERLYINGS = [
   { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 30, expiryWeekday: "Tue", weekly: false },
   { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 60, expiryWeekday: "Tue", weekly: false },
   { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 20, expiryWeekday: "Thu", weekly: true },
+  { id: "CRUDEOIL", label: "CRUDE OIL", indexSymbol: "CRUDEOIL", step: 50, scrip: 565899, segment: "MCX_COMM", lot: 100, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
 ];
+
+export function exchangeSegmentFor(symbol) {
+  const upper = String(symbol || "").toUpperCase();
+  if (upper.includes("CRUDEOIL")) return "MCX_COMM";
+  if (upper.includes("SENSEX")) return "BSE_FNO";
+  return "NSE_FNO";
+}
+
+export function isMcxSymbol(symbol) {
+  return String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .includes("CRUDEOIL");
+}
 
 export function getUnderlying(id) {
   return UNDERLYINGS.find((row) => row.id === id) || UNDERLYINGS[0];
+}
+
+/** Dhan MCX quantity is lots (1), not barrel lot-size (100). NSE F&O stays in units. */
+export function dhanOrderQuantity(payload = {}) {
+  const qty = Math.max(0, Math.round(Number(payload.qty || payload.quantity) || 0));
+  const segment = String(payload.exchangeSegment || exchangeSegmentFor(payload.symbol) || "");
+  const mcx = segment === "MCX_COMM" || isMcxSymbol(payload.symbol);
+  if (!mcx) return qty;
+  const lotSize = Math.max(1, Math.round(Number(payload.lotSize) || getUnderlying("CRUDEOIL").lot || 100));
+  const lots = Math.max(0, Math.round(Number(payload.lots) || 0));
+  if (qty >= lotSize) return Math.max(1, Math.round(qty / lotSize));
+  if (lots > 0) return lots;
+  return Math.max(1, qty);
 }
 
 function kolkataParts(date = new Date()) {
@@ -75,18 +103,30 @@ export function formatExpiryLabel(ymd) {
   return `${weekday}, ${day} ${month} ${year}`;
 }
 
-function afterExpiryCutoff() {
-  const parts = kolkataParts();
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return minutes >= 15 * 60 + 30;
+export function expiryCutoffMins(symbol) {
+  return isMcxSymbol(symbol) ? 23 * 60 + 30 : 15 * 60 + 30;
 }
 
-export function dropExpired(dates) {
-  const today = ymdKolkata(new Date());
-  const skipToday = afterExpiryCutoff();
+function afterExpiryCutoff(date = new Date(), closeMins = 15 * 60 + 30) {
+  const parts = kolkataParts(date);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= closeMins;
+}
+
+export function dropExpired(dates, options = {}) {
+  const now = options.date instanceof Date ? options.date : new Date();
+  const today = ymdKolkata(now);
+  const keep = normalizeExpiry(options.keep);
+  const closeMins = Number.isFinite(Number(options.closeMins))
+    ? Number(options.closeMins)
+    : expiryCutoffMins(options.symbol);
+  // Keep today's expiry on the desk after NSE 15:30 / MCX 23:30 so last live
+  // quotes still show. Only drop a date once the next IST calendar day starts,
+  // unless a live desk expiry is explicitly kept.
+  const skipToday = options.rollToday === true && afterExpiryCutoff(now, closeMins);
   return [...new Set((dates || []).map(normalizeExpiry))]
     .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
-    .filter((date) => date > today || (date === today && !skipToday))
+    .filter((date) => date > today || (date === today && !skipToday) || (keep && date === keep))
     .sort();
 }
 
@@ -133,11 +173,42 @@ function lastWeekdayOfMonth(year, month, weekday) {
   return null;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function mcxContractDay(year, month) {
+  let day = 19;
+  while (day > 1) {
+    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
+    const weekday = weekdayNameIST(ymd);
+    if (weekday !== "Sat" && weekday !== "Sun") return ymd;
+    day -= 1;
+  }
+  return `${year}-${pad2(month)}-19`;
+}
+
 export function upcomingExpiries(symbol = "NIFTY", count = 8) {
   const und = getUnderlying(symbol);
   const today = ymdKolkata(new Date());
   const skipToday = afterExpiryCutoff();
   const dates = [];
+
+  if (und.expiryKind === "mcx" || und.segment === "MCX_COMM") {
+    const now = kolkataParts();
+    let year = Number(now.year);
+    let month = Number(now.month);
+    while (dates.length < count) {
+      const ymd = mcxContractDay(year, month);
+      if (ymd >= today && !(ymd === today && skipToday)) dates.push(ymd);
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+    return dates;
+  }
 
   if (und.weekly) {
     for (let i = 0; i < 120 && dates.length < count; i += 1) {
@@ -322,6 +393,21 @@ export function trimAroundAtm(rows, wings = 12) {
   return rows.slice(Math.max(0, atmIndex - wings), atmIndex + wings + 1);
 }
 
+export function keepStrikeWindow(previous = [], incoming = []) {
+  const prev = Array.isArray(previous) ? previous : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  if (!prev.length) return next;
+  if (!next.length) return prev;
+  const byStrike = new Map(next.map((row) => [Number(row.strike), row]));
+  const patched = [];
+  for (const row of prev) {
+    const fresh = byStrike.get(Number(row.strike));
+    if (fresh) patched.push({ ...row, ...fresh });
+  }
+  if (patched.length >= Math.min(11, prev.length)) return patched;
+  return next;
+}
+
 export function chainStats(rows, spot) {
   const callOi = rows.reduce((sum, row) => sum + (row.callOi || 0), 0);
   const putOi = rows.reduce((sum, row) => sum + (row.putOi || 0), 0);
@@ -350,9 +436,9 @@ export function chainStats(rows, spot) {
   };
 }
 
-export function nearestExpiries(dates, count = 4, keep) {
-  const live = dropExpired(dates);
+export function nearestExpiries(dates, count = 4, keep, options = {}) {
   const wanted = normalizeExpiry(keep);
+  const live = dropExpired(dates, { ...options, keep: wanted });
   const next = live.slice(0, count);
   if (wanted && live.includes(wanted) && !next.includes(wanted)) {
     return [...next.slice(0, Math.max(0, count - 1)), wanted];
@@ -362,13 +448,15 @@ export function nearestExpiries(dates, count = 4, keep) {
 
 export function withExpiryLabels(meta) {
   const expiry = normalizeExpiry(meta.expiry);
-  const expiries = nearestExpiries(meta.expiries || [], 4, expiry);
-  const chosen = expiries.includes(expiry) ? expiry : expiries[0] || expiry;
+  const expiries = nearestExpiries(meta.expiries || [], 4, expiry, { symbol: meta.symbol });
+  const keepLast = Boolean(expiry) && (expiries.includes(expiry) || String(meta.source || "") === "dhan");
+  const chosen = keepLast ? expiry : expiries[0] || expiry;
+  const listed = expiries.includes(chosen) || !chosen ? expiries : [chosen, ...expiries.filter((day) => day !== chosen)].slice(0, 4);
   return {
     ...meta,
     expiry: chosen,
-    expiries,
+    expiries: listed,
     expiryLabel: formatExpiryLabel(chosen),
-    expiryLabels: Object.fromEntries(expiries.map((date) => [date, formatExpiryLabel(date)])),
+    expiryLabels: Object.fromEntries(listed.map((date) => [date, formatExpiryLabel(date)])),
   };
 }

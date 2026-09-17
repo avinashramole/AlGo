@@ -7,13 +7,13 @@ import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { isAdminUser, pageTitleForPath } from "../../lib/roles";
-import { cn, formatIstClock, formatMobile, isNseSessionOpen } from "../../lib/format";
+import { cn, formatIstClock, formatMobile, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
   const admin = isAdminUser(user);
-  const { live, data } = useMarket();
+  const { data } = useMarket();
   const location = useLocation();
   const pageTitle = pageTitleForPath(location.pathname, user);
   const [now, setNow] = useState(() => new Date());
@@ -37,8 +37,13 @@ export function Header() {
     document.title = `${pageTitle} · Trade 2 Smart`;
   }, [pageTitle]);
 
-  const marketOpen = isNseSessionOpen(now);
-  const dhanLive = Boolean(data.dhanFeed?.live);
+  const nseOpen = isNseSessionOpen(now);
+  const mcxOpen = isMcxSessionOpen(now);
+  const marketOpen = nseOpen || mcxOpen;
+  const dhanQuotes = hasDhanQuotes(data);
+  const feedLabel = dhanQuotes ? "DHAN" : "";
+  const sessionLabel = nseOpen && mcxOpen ? "Open" : nseOpen ? "NSE Open" : mcxOpen ? "MCX Open" : "Closed";
+  const sessionTitle = `NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST. Last Dhan quotes stay after close.`;
   const lastTick = data.dhanFeed?.lastTickAt
     ? new Date(data.dhanFeed.lastTickAt).toLocaleTimeString("en-IN", {
         timeZone: "Asia/Kolkata",
@@ -75,15 +80,15 @@ export function Header() {
               ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
               : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
           )}
-          title={marketOpen ? "NSE cash/F&O session 09:15–15:30 IST" : "NSE is closed. Session 09:15–15:30 IST, Mon–Fri."}
+          title={sessionTitle}
         >
           <span className={cn("h-2 w-2 shrink-0 rounded-full", marketOpen ? "pulse-dot bg-up" : "bg-slate-400")} />
-          <span className="truncate">{marketOpen ? "Open" : "Closed"}</span>
-          <span className="hidden truncate sm:inline">{dhanLive ? " · DHAN" : live ? " · LIVE" : " · DEMO"}</span>
+          <span className="truncate">{sessionLabel}</span>
+          {feedLabel ? <span className="hidden truncate sm:inline">{` · ${feedLabel}`}</span> : null}
           <span className={cn("hidden font-medium md:inline", marketOpen ? "text-emerald-600/80 dark:text-emerald-400" : "text-slate-500")}>
             {formatIstClock(now)}
           </span>
-          {dhanLive && lastTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
+          {dhanQuotes && lastTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
         {admin ? (
           <Link to="/users" className="icon-btn hidden md:flex" title="Users">

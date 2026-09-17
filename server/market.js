@@ -1,24 +1,27 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { liveAutoTradeBrokers } from "./memberDesk.js";
-import { memberCopyPayloads } from "./liveCopy.js";
+import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
   UNDERLYINGS,
   atmStrike,
   buildSyntheticChain,
   chainStats,
   dropExpired,
+  exchangeSegmentFor,
   getUnderlying,
   nearestWeeklyExpiry,
   normalizeExpiry,
   isWeeklyOptionExpiry,
   upcomingExpiries,
   withExpiryLabels,
+  keepStrikeWindow,
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
+import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
@@ -63,7 +66,7 @@ let removedAlgoIds = [...(algoStore.removedIds || [])];
 
 function persistAlgos() {
   try {
-    saveAlgoStore(state.algos || [], removedAlgoIds);
+    saveAlgoStore(clone(state.algos || []), [...removedAlgoIds]);
   } catch (error) {
     console.log(`Could not save strategies: ${error.message || error}`);
   }
@@ -120,8 +123,8 @@ export function ymdIST(date = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-export function nseMarketSession(date = new Date()) {
-  const parts = Object.fromEntries(
+function sessionParts(date = new Date()) {
+  return Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
       weekday: "short",
@@ -134,12 +137,12 @@ export function nseMarketSession(date = new Date()) {
       .filter((part) => part.type !== "literal")
       .map((part) => [part.type, part.value]),
   );
-  const hour = Number(parts.hour);
-  const minute = Number(parts.minute);
-  const minutes = hour * 60 + minute;
+}
+
+function clockSession(date, openMins, closeMins, hours) {
+  const parts = sessionParts(date);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
-  const openMins = 9 * 60 + 15;
-  const closeMins = 15 * 60 + 30;
   const inHours = minutes >= openMins && minutes < closeMins;
   const open = !weekend && inHours;
   let reason = "session";
@@ -150,10 +153,56 @@ export function nseMarketSession(date = new Date()) {
     status: open ? "OPEN" : "CLOSED",
     open,
     reason,
-    hours: "09:15–15:30 IST",
+    hours,
     weekday: parts.weekday,
     ist: `${parts.hour}:${parts.minute}:${parts.second}`,
   };
+}
+
+export function nseMarketSession(date = new Date()) {
+  return clockSession(date, 9 * 60 + 15, 15 * 60 + 30, "09:15–15:30 IST");
+}
+
+export function mcxMarketSession(date = new Date()) {
+  return clockSession(date, 9 * 60, 23 * 60 + 30, "09:00–23:30 IST");
+}
+
+export function isCrudeSymbol(symbol) {
+  return String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .includes("CRUDEOIL");
+}
+
+export function candleSymbol(symbol) {
+  const raw = String(symbol || "NIFTY")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
+  if (raw.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (raw.includes("FINNIFTY")) return "FINNIFTY";
+  if (raw.includes("SENSEX")) return "SENSEX";
+  return "NIFTY";
+}
+
+function sessionOpenForAlgo(algo) {
+  return isCrudeSymbol(algo?.symbol) ? mcxMarketSession().open : nseMarketSession().open;
+}
+
+export function liveSessionOpenForOrder(payload = {}, date = new Date()) {
+  const segment = String(payload.exchangeSegment || exchangeSegmentFor(payload.symbol) || "");
+  if (segment === "MCX_COMM" || isCrudeSymbol(payload.symbol)) return mcxMarketSession(date).open;
+  return nseMarketSession(date).open;
+}
+
+export function routeManualOrderBrokerId(payload = {}, options = {}) {
+  const requested = String(payload.brokerId || options.activeBrokerId || "dhan");
+  const chainClick =
+    String(payload.kind || "") === "option" ||
+    String(payload.kind || "") === "future" ||
+    Boolean(String(payload.securityId || "").trim());
+  if (options.dhanLive === true && chainClick && requested === "paper") return "dhan";
+  return requested;
 }
 
 export function shiftYmd(ymd, days) {
@@ -281,63 +330,44 @@ function inferTimeframe(candles, fallback = "1H") {
 
 const state = {
   indices: [
-    withDeskQuotes({ symbol: "NIFTY 50", name: "NIFTY", price: 24580.25, change: 125.4, changePct: 0.51, spark: [24420, 24455, 24410, 24480, 24510, 24490, 24540, 24580] }),
-    withDeskQuotes({ symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52140.8, change: 210.15, changePct: 0.4, spark: [51880, 51940, 51910, 52020, 52080, 52040, 52110, 52141] }),
-    withDeskQuotes({ symbol: "FINNIFTY", name: "FINNIFTY", price: 24890.5, change: 98.2, changePct: 0.4, spark: [24740, 24780, 24755, 24810, 24840, 24820, 24870, 24891] }),
-    withDeskQuotes({ symbol: "SENSEX", name: "SENSEX", price: 80642.3, change: 312.8, changePct: 0.39, spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642] }),
-    withDeskQuotes({ symbol: "INDIA VIX", name: "VIX", price: 13.24, change: -0.42, changePct: -3.07, spark: [13.9, 13.72, 13.8, 13.55, 13.48, 13.4, 13.3, 13.24] }),
+    emptyDeskIndex("NIFTY 50", "NIFTY"),
+    emptyDeskIndex("BANKNIFTY", "BANKNIFTY"),
+    emptyDeskIndex("FINNIFTY", "FINNIFTY"),
+    emptyDeskIndex("SENSEX", "SENSEX"),
+    emptyDeskIndex("CRUDEOIL", "CRUDE OIL"),
+    emptyDeskIndex("INDIA VIX", "VIX"),
   ],
-  ohlc: { open: 24462.1, high: 24612.8, low: 24418.35, close: 24580.25 },
+  ohlc: { open: 0, high: 0, low: 0, close: 0 },
   dnaScores: [
-    { label: "Trend", value: 86 },
-    { label: "Momentum", value: 78 },
-    { label: "Buy Pressure", value: 91 },
-    { label: "Volatility", value: 34 },
-    { label: "OI Build", value: 72 },
-    { label: "PCR", value: 64 },
+    { label: "Trend", value: 0 },
+    { label: "Momentum", value: 0 },
+    { label: "Buy Pressure", value: 0 },
+    { label: "Volatility", value: 0 },
+    { label: "OI Build", value: 0 },
+    { label: "PCR", value: 0 },
   ],
-  optionChain: buildSyntheticChain(24580.25, 50, 10),
+  optionChain: [],
   optionMeta: withExpiryLabels({
     symbol: "NIFTY",
-    expiry: upcomingExpiries("NIFTY")[0] || "2026-08-25",
+    expiry: upcomingExpiries("NIFTY")[0] || "",
     expiries: upcomingExpiries("NIFTY"),
-    spot: 24580.25,
-    pcr: 0.86,
-    maxPain: 24500,
-    atmIv: 12.4,
-    source: "demo",
+    spot: 0,
+    pcr: 0,
+    maxPain: 0,
+    atmIv: 0,
+    source: "idle",
     lastAt: null,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   }),
   algos: algoStore.algos,
   positions: [],
   signals: [],
-  watchlist: [
-    { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12 },
-    { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64 },
-    { symbol: "ICICIBANK", ltp: 1238.9, chg: 0.41 },
-    { symbol: "INFY", ltp: 1864.15, chg: -0.28 },
-    { symbol: "TCS", ltp: 4128.6, chg: -0.14 },
-    { symbol: "SBIN", ltp: 812.35, chg: 1.04 },
-    { symbol: "BHARTIARTL", ltp: 1542.8, chg: 0.72 },
-    { symbol: "ITC", ltp: 492.15, chg: -0.36 },
-  ],
+  watchlist: [],
   fiiDii: {
-    fii: { buy: 12480, sell: 10840, net: 1640 },
-    dii: { buy: 9860, sell: 8420, net: 1440 },
+    fii: { buy: 0, sell: 0, net: 0 },
+    dii: { buy: 0, sell: 0, net: 0 },
   },
-  marketWatch: [
-    { symbol: "NIFTY 50", ltp: 24580.25, chg: 0.51, volume: "182.4 Cr" },
-    { symbol: "BANKNIFTY", ltp: 52140.8, chg: 0.4, volume: "96.1 Cr" },
-    { symbol: "RELIANCE", ltp: 2984.2, chg: 1.12, volume: "48.2 L" },
-    { symbol: "HDFCBANK", ltp: 1672.4, chg: 0.64, volume: "62.8 L" },
-    { symbol: "ICICIBANK", ltp: 1238.9, chg: 0.41, volume: "54.1 L" },
-    { symbol: "INFY", ltp: 1864.15, chg: -0.28, volume: "31.6 L" },
-    { symbol: "TCS", ltp: 4128.6, chg: -0.14, volume: "18.4 L" },
-    { symbol: "SBIN", ltp: 812.35, chg: 1.04, volume: "71.2 L" },
-    { symbol: "LT", ltp: 3612.4, chg: 0.88, volume: "12.9 L" },
-    { symbol: "AXISBANK", ltp: 1174.5, chg: 0.22, volume: "28.7 L" },
-  ],
+  marketWatch: [],
   featuredSignal: {
     action: "BUY",
     symbol: "",
@@ -387,6 +417,7 @@ const state = {
 };
 
 const optionChainCache = new Map();
+const liveCandleCache = new Map();
 const pendingLiveAlgoOrders = [];
 
 function rememberOptionChain(symbol, rows, meta) {
@@ -395,12 +426,28 @@ function rememberOptionChain(symbol, rows, meta) {
   optionChainCache.set(id, { rows, meta, at: Date.now() });
 }
 
+function seedCachedChains() {
+  if (Array.isArray(state.optionChain) && state.optionChain.length) {
+    rememberOptionChain(state.optionMeta.symbol, state.optionChain, state.optionMeta);
+  }
+}
+
+seedCachedChains();
+
 function chainForSymbol(symbol) {
   const id = String(symbol || "").toUpperCase();
   if (String(state.optionMeta?.symbol || "").toUpperCase() === id && Array.isArray(state.optionChain) && state.optionChain.length) {
     return { rows: state.optionChain, meta: state.optionMeta };
   }
   return optionChainCache.get(id) || null;
+}
+
+export function optionRowsForSymbol(symbol) {
+  return chainForSymbol(candleSymbol(symbol))?.rows || [];
+}
+
+export function peekOptionChain(symbol) {
+  return optionChainCache.get(String(symbol || "").toUpperCase()) || null;
 }
 
 export function drainPendingLiveAlgoOrders() {
@@ -435,7 +482,7 @@ function enqueueLiveAlgoOrder(payload) {
       sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === side && sameLiveContract(payload, row),
   );
   if (sameContractPending) {
-    return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    return { ok: true, queued: false, status: "PENDING", duplicate: true };
   }
   const sameStrategyRole = pendingLiveAlgoOrders.some((row) => {
     if (!sameCopy(row)) return false;
@@ -445,7 +492,7 @@ function enqueueLiveAlgoOrder(payload) {
     return String(row.role || "") === role;
   });
   if (sameStrategyRole) {
-    return { ok: true, queued: true, status: "PENDING", duplicate: true };
+    return { ok: true, queued: false, status: "PENDING", duplicate: true };
   }
   if (side === "BUY" && allowHedge) {
     const pendingStrategyBuy = pendingLiveAlgoOrders.some(
@@ -453,7 +500,7 @@ function enqueueLiveAlgoOrder(payload) {
         sameCopy(row) && orderBrokerId(row) === brokerId && row.strategy === strategy && liveOrderSide(row) === "BUY",
     );
     if (pendingStrategyBuy) {
-      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+      return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
     const openNifty = (state.positions || []).some(
@@ -463,7 +510,7 @@ function enqueueLiveAlgoOrder(payload) {
       (row) => sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === "BUY",
     );
     if (openNifty || pendingBuy) {
-      return { ok: true, queued: true, status: "PENDING", duplicate: true };
+      return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId, copyUserId });
@@ -485,6 +532,32 @@ export function queueLiveAlgoOrder(payload) {
     last = enqueueLiveAlgoOrder(copy);
   }
   return last;
+}
+
+export function queueLivePositionExit(pos) {
+  if (!pos) return { error: "Position not found" };
+  const strategy =
+    resolveOrderStrategy(pos, {
+      previous: state.orders || [],
+      algos: state.algos || [],
+      positions: state.positions || [],
+    }) || realStrategyName(pos.strategy);
+  return queueLiveAlgoOrder({
+    symbol: pos.symbol,
+    name: pos.symbol,
+    side: pos.type === "BUY" ? "SELL" : "BUY",
+    qty: Math.abs(Number(pos.qty) || 0),
+    product: pos.product || "MIS",
+    type: "MARKET",
+    securityId: pos.securityId,
+    strategy,
+    brokerId: pos.brokerId && pos.brokerId !== "paper" ? pos.brokerId : "dhan",
+    strike: pos.strike,
+    option: pos.option,
+    expiry: pos.expiry,
+    kind: pos.kind || (pos.option ? "option" : undefined),
+    exchangeSegment: exchangeSegmentFor(pos.symbol),
+  });
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
@@ -622,6 +695,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       algo.lastSignal = "WAIT WEEKLY EXPIRY";
       return;
     }
+  }
+  if (feedLive && !open && !futuresBars.length) {
+    algo.lastSignal = "WAIT CANDLES";
+    return;
   }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
@@ -773,6 +850,8 @@ function algoOrderFields(algo, side, trade) {
     symbol: trade.symbol,
     side,
     qty: algo.qty || 65,
+    lots: algo.lots || 1,
+    lotSize: algo.lotSize,
     price: trade.ltp || 0,
     kind: trade.kind,
     option: trade.option,
@@ -781,7 +860,7 @@ function algoOrderFields(algo, side, trade) {
     product: "MIS",
     type: "MARKET",
     strategy: algo.name,
-    exchangeSegment: String(algo.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+    exchangeSegment: exchangeSegmentFor(algo.symbol),
   };
 }
 
@@ -941,6 +1020,7 @@ const INDEX_ALIASES = {
   BANKNIFTY: "BANKNIFTY",
   FINNIFTY: "FINNIFTY",
   SENSEX: "SENSEX",
+  CRUDEOIL: "CRUDEOIL",
   "INDIA VIX": "INDIA VIX",
 };
 
@@ -952,15 +1032,11 @@ function withDeskQuotes(item) {
   const price = Number(item.price) || 0;
   const change = Number(item.change) || 0;
   const isVix = item.symbol === "INDIA VIX";
-  const future = Number(item.future) > 0 ? Number(item.future) : round2(isVix ? price : price + Math.max(6, price * 0.00085));
+  const future = Number(item.future) > 0 ? Number(item.future) : isVix && price > 0 ? round2(price) : 0;
   const vwap =
-    Number(item.futureVwap) > 0
-      ? Number(item.futureVwap)
-      : Number(item.vwap) > 0
-        ? Number(item.vwap)
-        : round2(isVix ? price : price - Math.max(2, price * 0.00032));
-  const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : round2(price - change);
-  const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, "INDIA VIX": 21 };
+    Number(item.futureVwap) > 0 ? Number(item.futureVwap) : Number(item.vwap) > 0 ? Number(item.vwap) : isVix && price > 0 ? round2(price) : 0;
+  const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : price > 0 && change ? round2(price - change) : 0;
+  const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, CRUDEOIL: 565899, "INDIA VIX": 21 };
   return {
     ...item,
     future,
@@ -968,6 +1044,21 @@ function withDeskQuotes(item) {
     prevClose,
     securityId: item.securityId || ids[item.symbol] || undefined,
   };
+}
+
+function emptyDeskIndex(symbol, name) {
+  return withDeskQuotes({
+    symbol,
+    name,
+    price: 0,
+    change: 0,
+    changePct: 0,
+    spark: [],
+    future: 0,
+    vwap: 0,
+    futureVwap: 0,
+    prevClose: 0,
+  });
 }
 
 function sanePrevClose(ltp, prev) {
@@ -985,8 +1076,24 @@ export function isDhanFeedLive() {
   return Boolean(state.dhanFeed.live);
 }
 
-function jitter(price, magnitude) {
-  return Number((price + (Math.random() - 0.48) * magnitude).toFixed(2));
+export function hasLastLiveBook() {
+  if (state.dhanFeed.live) return true;
+  if (state.optionMeta?.source === "dhan") return true;
+  if (state.dhanFeed.lastTickAt) return true;
+  const source = String(state.dhanFeed.source || "");
+  if (source === "rest" || source === "websocket") return true;
+  for (const pack of optionChainCache.values()) {
+    if (pack?.meta?.source === "dhan") return true;
+  }
+  return false;
+}
+
+function dhanTapeReady() {
+  return Boolean(state.dhanFeed.live) || hasLastLiveBook();
+}
+
+function publicDhanFeed() {
+  return { ...clone(state.dhanFeed), hasQuotes: hasLastLiveBook() };
 }
 
 function isSimRow(row) {
@@ -1012,7 +1119,6 @@ export function clearSimulatedDesk() {
   state.orders = state.orders.filter((row) => row.paper || row.brokerId === "paper");
   state.positions = state.positions.filter((row) => row.paper || row.brokerId === "paper");
   state.closedTrades = (state.closedTrades || []).filter((row) => row.paper || row.brokerId === "paper");
-  state.liveCandles = [];
   state.algos = (state.algos || []).map((algo) =>
     algo.runMode === "paper" ? algo : { ...algo, pnl: algo.runMode === "backtest" ? algo.pnl : 0 },
   );
@@ -1028,7 +1134,6 @@ export function restoreSimulatedDesk() {
   state.closedTrades = (state.closedTrades || []).filter(isPaperRow);
   state.signals = [];
   state.notifications = [];
-  applySyntheticOptionChain();
   syncPaperLedger();
 }
 
@@ -1038,82 +1143,14 @@ export function tickMarket() {
   if (tickBusy) return;
   tickBusy = true;
   try {
-    tickMarketBody();
+    if (dhanTapeReady()) runLiveAlgos();
+    runPaperAlgos();
+    markPaperToMarket();
   } catch (error) {
     console.error(`tickMarket failed: ${error.message || error}`);
   } finally {
     tickBusy = false;
   }
-}
-
-function tickMarketBody() {
-  if (state.dhanFeed.live) {
-    runPaperAlgos();
-    runLiveAlgos();
-    markPaperToMarket();
-    return;
-  }
-
-  state.indices = state.indices.map((item) => {
-    const next = jitter(item.price, item.symbol === "INDIA VIX" ? 0.04 : item.price * 0.00012);
-    const spark = item.spark.slice(1).concat(next);
-    const change = Number((item.change + (next - item.price)).toFixed(2));
-    const prevClose = item.prevClose > 0 ? item.prevClose : round2(next - change);
-    const changePct = Number(((change / (prevClose || next - change || 1)) * 100).toFixed(2));
-    const future = item.symbol === "INDIA VIX" ? next : jitter((item.future || next) + (next - item.price), 0.35);
-    const futureVwap = item.symbol === "INDIA VIX" ? next : item.futureVwap > 0 ? jitter(item.futureVwap, item.price * 0.00004) : 0;
-    const vwap =
-      item.symbol === "INDIA VIX" ? next : futureVwap > 0 ? futureVwap : jitter(item.vwap || next, item.price * 0.00004);
-    return withDeskQuotes({ ...item, price: next, change, changePct, spark, future, vwap, futureVwap, prevClose });
-  });
-
-  const nifty = state.indices[0];
-  state.ohlc.close = nifty.price;
-  state.ohlc.high = Math.max(state.ohlc.high, nifty.price);
-  state.ohlc.low = Math.min(state.ohlc.low, nifty.price);
-
-  state.positions = state.positions.map((row) => {
-    if (isPaperRow(row)) return row;
-    const ltp = jitter(row.ltp, 0.35);
-    const dir = row.type === "BUY" ? 1 : -1;
-    const pnl = Number(((ltp - row.avg) * row.qty * dir).toFixed(2));
-    return { ...row, ltp, pnl };
-  });
-
-  state.algos = state.algos.map((algo) => {
-    if (!algo.enabled) return algo;
-    if (algo.runMode === "paper" || algo.runMode === "backtest") return algo;
-    const pnl = Number((algo.pnl + (Math.random() - 0.35) * 12).toFixed(2));
-    return { ...algo, pnl };
-  });
-
-  const spot = getChainSpot(state.optionMeta.symbol);
-  const und = getUnderlying(state.optionMeta.symbol);
-  const atm = atmStrike(spot, und.step);
-  const currentAtm = state.optionChain.find((row) => row.atm)?.strike;
-  if (atm !== currentAtm) {
-    applySyntheticOptionChain(state.optionMeta.symbol, state.optionMeta.expiry);
-    return;
-  }
-  state.optionChain = state.optionChain.map((row) => ({
-    ...row,
-    callLtp: jitter(row.callLtp, 0.55),
-    putLtp: jitter(row.putLtp, 0.55),
-    callOi: Math.max(1000, Math.round((row.callOi || 0) + (Math.random() - 0.45) * 8000)),
-    putOi: Math.max(1000, Math.round((row.putOi || 0) + (Math.random() - 0.45) * 8000)),
-    callVol: Math.max(0, Math.round((row.callVol || 0) + (Math.random() - 0.4) * 4000)),
-    putVol: Math.max(0, Math.round((row.putVol || 0) + (Math.random() - 0.4) * 4000)),
-    callBuy: Math.max(0, Math.round((row.callBuy || 0) + (Math.random() - 0.45) * 120)),
-    callSell: Math.max(0, Math.round((row.callSell || 0) + (Math.random() - 0.45) * 120)),
-    putBuy: Math.max(0, Math.round((row.putBuy || 0) + (Math.random() - 0.45) * 120)),
-    putSell: Math.max(0, Math.round((row.putSell || 0) + (Math.random() - 0.45) * 120)),
-    callVwap: jitter(row.callVwap || row.callLtp, 0.25),
-    putVwap: jitter(row.putVwap || row.putLtp, 0.25),
-    atm: row.strike === atm,
-  }));
-  const stats = chainStats(state.optionChain, spot);
-  state.optionMeta = withExpiryLabels({ ...state.optionMeta, ...stats, source: "demo" });
-  runPaperAlgos();
 }
 
 export function quoteSymbol(symbol) {
@@ -1122,7 +1159,7 @@ export function quoteSymbol(symbol) {
 
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
+  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
   const option = named || raw.match(/(\d{3,6})\s*(CE|PE)\b/);
   if (option) {
     const strike = Number(named ? named[2] : option[1]);
@@ -1202,7 +1239,7 @@ export function livePositionQuoteTargets() {
     .filter((row) => row.securityId && (row.live || row.brokerId === "dhan") && !isPaperRow(row))
     .map((row) => ({
       symbol: row.symbol,
-      segment: String(row.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+      segment: exchangeSegmentFor(row.symbol),
       securityId: Number(row.securityId) || row.securityId,
       kind: isOptionContract(row.symbol, row.option) ? "option" : "future",
     }));
@@ -1213,12 +1250,7 @@ export function snapshot() {
   const brokers = publicBrokers();
   const active = getActiveBroker();
   const { orders, positions, closedTrades } = liveDesk();
-  const totalPnl = positions.reduce((sum, row) => sum + row.pnl, 0);
-  const byBroker = {};
-  for (const row of positions) {
-    const key = row.brokerId || "dhan";
-    byBroker[key] = Number(((byBroker[key] || 0) + row.pnl).toFixed(2));
-  }
+  const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
   const { liveCandles: _liveCandles, closedTrades: _closedTrades, ...publicState } = clone(state);
   const liveState = { ...publicState, orders, positions, closedTrades };
   liveState.algos = (liveState.algos || []).map((algo) => ({ ...algo, trade: resolveAlgoTrade(algo) }));
@@ -1241,7 +1273,7 @@ export function snapshot() {
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
-    dhanFeed: clone(state.dhanFeed),
+    dhanFeed: publicDhanFeed(),
     futures: publicFutures(),
     contracts: {
       indices: listIndexContracts().map(({ securityId, ...row }) => row),
@@ -1253,6 +1285,50 @@ export function snapshot() {
     settings: { ...state.settings, broker: active.name },
     marketStatus: nseMarketSession().status,
     marketSession: nseMarketSession(),
+    mcxSession: mcxMarketSession(),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+export function deskFeed() {
+  markPaperToMarket();
+  const { orders, positions, closedTrades } = liveDesk();
+  const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
+  const dnaScores = buildLiveDna({ indices: state.indices, optionChain: state.optionChain });
+  const algos = (state.algos || []).map((algo) => ({
+    id: algo.id,
+    enabled: algo.enabled,
+    status: algo.status,
+    pnl: algo.pnl,
+    winRate: algo.winRate,
+    lastSignal: algo.lastSignal,
+    trade: resolveAlgoTrade(algo),
+  }));
+  const signalAlgos = (state.algos || []).map((algo, index) => ({ ...algo, ...algos[index] }));
+  const signals = buildLiveSignals({ algos: signalAlgos, orders });
+  const watch = indexWatchRows(state.indices);
+  return {
+    indices: publicIndices(state.indices),
+    ohlc: state.ohlc,
+    optionChain: publicOptionRows(state.optionChain),
+    optionMeta: clone(state.optionMeta),
+    futures: publicFutures(),
+    dhanFeed: publicDhanFeed(),
+    positions,
+    orders,
+    closedTrades,
+    algos,
+    signals,
+    featuredSignal: buildFeaturedSignal(signals, state.optionMeta, dnaScores),
+    dnaScores,
+    sentiment: liveSentiment(dnaScores),
+    totalPnl: Number(totalPnl.toFixed(2)),
+    pnlByBroker: byBroker,
+    marketWatch: watch,
+    watchlist: watch.map(({ volume: _volume, ...row }) => row),
+    marketStatus: nseMarketSession().status,
+    marketSession: nseMarketSession(),
+    mcxSession: mcxMarketSession(),
     serverTime: new Date().toISOString(),
   };
 }
@@ -1311,7 +1387,7 @@ export function armNiftyVwapHedgeDailyLive(now = new Date()) {
   return result;
 }
 
-export function toggleAlgo(id) {
+export function toggleAlgo(id, patch = {}) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;
   if (algo.runMode === "backtest") {
@@ -1319,7 +1395,19 @@ export function toggleAlgo(id) {
     algo.status = "BACKTEST";
     return { error: "Backtest strategies do not go live. Use Run backtest." };
   }
-  const starting = !algo.enabled;
+  const wantEnabled =
+    patch.enabled === true ? true : patch.enabled === false ? false : !algo.enabled;
+  const starting = wantEnabled && !algo.enabled;
+  const stopping = !wantEnabled && algo.enabled;
+  if (!starting && !stopping) {
+    if (algo.runMode === "paper") {
+      algo.brokerId = "paper";
+      algo.status = algo.enabled ? "PAPER" : "PAUSED";
+    } else {
+      algo.status = algo.enabled ? "LIVE" : "PAUSED";
+    }
+    return clone(algo);
+  }
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
   }
@@ -1331,7 +1419,7 @@ export function toggleAlgo(id) {
       return { error: `Start live needs ${name} LIVE — connect that broker on Brokers first.` };
     }
   }
-  algo.enabled = !algo.enabled;
+  algo.enabled = wantEnabled;
   if (starting) {
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
@@ -1393,13 +1481,16 @@ export function deleteAlgo(id) {
   return { ok: true, id };
 }
 
-function candlesForBacktest(tf, allowSample = true) {
-  const live = getCandles(tf || "5m");
+function candlesForBacktest(tf, allowSample = true, symbol = "NIFTY") {
+  const live = getCandles(tf || "5m", symbol);
   if (live.length >= 40) return { candles: live, sample: false };
   if (!allowSample) return { candles: live, sample: false };
-  const price = Number(state.indices[0]?.price || 24580);
+  const key = candleSymbol(symbol);
+  const index =
+    state.indices.find((item) => candleSymbol(item.symbol) === key || candleSymbol(item.name) === key) || state.indices[0];
+  const price = Number(index?.price || (key === "CRUDEOIL" ? 6124 : 24580));
   const count = tf === "1m" ? 180 : tf === "15m" ? 96 : tf === "1H" ? 80 : 120;
-  return { candles: generateCandles(count, price, 91), sample: true };
+  return { candles: generateCandles(count, price, key === "CRUDEOIL" ? 73 : 91), sample: true };
 }
 
 export function getAlgo(id) {
@@ -1496,7 +1587,7 @@ export function backtestAlgo(id, options = {}) {
 }
 
 function runPaperAlgos() {
-  const feedLive = Boolean(state.dhanFeed.live);
+  const feedLive = dhanTapeReady();
   noteNiftyVwapFeed(feedLive);
   const now = Date.now();
   for (const algo of state.algos) {
@@ -1511,7 +1602,7 @@ function runPaperAlgos() {
     }
     if (!feedLive) continue;
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
-    const pack = candlesForBacktest(algo.timeframe, false);
+    const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
     if (pack.candles.length < 32) continue;
     const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
     const open = state.positions.find((row) => (row.paper || row.brokerId === "paper") && row.strategy === algo.name);
@@ -1544,8 +1635,7 @@ function runPaperAlgos() {
 }
 
 function runLiveAlgos() {
-  const feedLive = Boolean(state.dhanFeed.live);
-  const sessionOpen = nseMarketSession().open;
+  const feedLive = dhanTapeReady();
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;
@@ -1557,10 +1647,20 @@ function runLiveAlgos() {
       tickNiftyVwapAlgo(algo, "live", feedLive);
       continue;
     }
-    if (!feedLive || !sessionOpen) continue;
+    if (!feedLive) {
+      algo.lastSignal = "FEED DOWN";
+      continue;
+    }
+    if (!sessionOpenForAlgo(algo)) {
+      algo.lastSignal = "WAIT SESSION";
+      continue;
+    }
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
-    const pack = candlesForBacktest(algo.timeframe, false);
-    if (pack.candles.length < 32) continue;
+    const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
+    if (pack.candles.length < 32) {
+      algo.lastSignal = "WAIT CANDLES";
+      continue;
+    }
     const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
     const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
     const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
@@ -1569,7 +1669,10 @@ function runLiveAlgos() {
       continue;
     }
     const side = wantBuy ? "BUY" : "SELL";
-    if (algo.lastLiveSide === side) continue;
+    const openLive = (state.positions || []).find(
+      (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
+    );
+    if (algo.lastLiveSide === side && openLive) continue;
     const trade = resolveAlgoTrade(algo);
     if (!trade) continue;
     if (trade.kind === "option" && !(trade.strike && trade.expiry)) {
@@ -1617,13 +1720,15 @@ function liveRejectReason(live, fallback) {
 }
 
 export function bookRejectedLiveOrder(payload, error) {
-  const live = error?.live;
-  if (!live?.orderId) return null;
+  if (!isDhanBrokerReject(error)) return null;
+  const live = error?.live && typeof error.live === "object" ? error.live : {};
+  const orderId = String(live.orderId || error.correlationId || payload.correlationId || `rej${Date.now()}`);
   return placeOrder({
     ...payload,
     brokerId: payload.brokerId || "dhan",
     live: {
       ...live,
+      orderId,
       status: live.status || "REJECTED",
       reason: live.reason || error?.message,
     },
@@ -1761,6 +1866,10 @@ export function placeOrder(payload) {
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
   );
   if (isPaper) markPaperToMarket();
+  if (isPaper && order.strategy && !payload.copyUserId) {
+    const algo = (state.algos || []).find((row) => String(row.name || "") === String(order.strategy || ""));
+    dispatchMemberCopies({ ...payload, strategy: order.strategy }, algo || {}, { enqueueLiveOrder: enqueueLiveAlgoOrder });
+  }
   return order;
 }
 
@@ -1774,6 +1883,61 @@ export function cancelOrder(id) {
   order.filledQty = Number(order.filledQty || 0);
   state.notifications.unshift(`Cancelled ${order.side} ${order.symbol}`);
   return clone(order);
+}
+
+function bookPnl(positions = [], closedTrades = []) {
+  const byBroker = {};
+  let unrealized = 0;
+  let realized = 0;
+  for (const row of positions || []) {
+    const pnl = Number(row.pnl || 0);
+    unrealized += pnl;
+    const key = row.brokerId || "dhan";
+    byBroker[key] = Number(((byBroker[key] || 0) + pnl).toFixed(2));
+  }
+  for (const row of closedTrades || []) {
+    const pnl = Number(row.pnl || 0);
+    realized += pnl;
+    const key = row.brokerId || "dhan";
+    byBroker[key] = Number(((byBroker[key] || 0) + pnl).toFixed(2));
+  }
+  return { totalPnl: Number((unrealized + realized).toFixed(2)), pnlByBroker: byBroker };
+}
+
+function rememberClosedFromPosition(pos, extra = {}) {
+  if (!pos) return null;
+  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
+  const sourceId = String(extra.sourcePositionId || pos.id || "");
+  if (sourceId && state.closedTrades.some((row) => String(row.sourcePositionId || "") === sourceId)) {
+    return state.closedTrades.find((row) => String(row.sourcePositionId || "") === sourceId);
+  }
+  const paper = isPaperRow(pos);
+  const dir = String(pos.type || "BUY").toUpperCase() === "SELL" ? -1 : 1;
+  const qty = Math.abs(Number(extra.qty || pos.qty) || 0);
+  const entry = Number(pos.avg || 0);
+  const exit = Number(extra.exit || pos.ltp || entry);
+  const marked = Number(extra.pnl);
+  const pnl = Number.isFinite(marked) ? Number(marked.toFixed(2)) : Number(((exit - entry) * qty * dir).toFixed(2));
+  const closed = {
+    id: extra.id || `t${Date.now()}`,
+    sourcePositionId: sourceId,
+    symbol: pos.symbol,
+    side: pos.type,
+    type: pos.type,
+    qty,
+    entry,
+    exit,
+    pnl,
+    product: pos.product || "MIS",
+    strategy: extra.strategy || pos.strategy || "",
+    brokerId: extra.brokerId || pos.brokerId || "dhan",
+    closedAt: extra.closedAt || new Date().toISOString(),
+    sim: !paper && Boolean(pos.sim),
+    live: !paper && pos.live !== false,
+    paper,
+  };
+  state.closedTrades.unshift(closed);
+  return closed;
 }
 
 export function squareOff(id) {
@@ -1812,26 +1976,23 @@ export function squareOff(id) {
   };
   state.orders.unshift(order);
   if (order.strategy) rememberOrderStrategy(order, order.strategy);
-  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
-  state.closedTrades.unshift({
+  rememberClosedFromPosition(pos, {
     id: `t${Date.now()}`,
-    symbol: pos.symbol,
-    side: pos.type,
-    qty: pos.qty,
-    entry: pos.avg,
     exit,
     pnl,
-    product: pos.product || "MIS",
     strategy: order.strategy,
     brokerId: account.id,
     closedAt: order.createdAt,
-    sim: !pos.paper,
-    live: false,
-    paper: Boolean(pos.paper || pos.brokerId === "paper"),
   });
   state.positions.splice(index, 1);
   state.notifications.unshift(`Squared off ${pos.symbol} · ${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toFixed(2)}`);
   if (isPaperRow(pos)) markPaperToMarket();
+  if (order.strategy) {
+    const algo = (state.algos || []).find((row) => String(row.name || "") === String(order.strategy || ""));
+    dispatchMemberExitCopies({ ...pos, strategy: order.strategy, qty: pos.qty }, algo || {}, {
+      enqueueLiveOrder: enqueueLiveAlgoOrder,
+    });
+  }
   return { ok: true, order, pnl };
 }
 
@@ -1915,6 +2076,16 @@ export function replaceDhanBook(rows) {
   });
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
   const previousDhan = new Map(state.positions.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]));
+  const incomingIds = new Set(incoming.map((row) => String(row.id)));
+  if (!Array.isArray(state.closedTrades)) state.closedTrades = [];
+  state.closedTrades = state.closedTrades.filter((row) => {
+    const source = String(row.sourcePositionId || "");
+    return !source || !incomingIds.has(source);
+  });
+  for (const [id, prev] of previousDhan) {
+    if (incomingIds.has(id)) continue;
+    rememberClosedFromPosition(prev);
+  }
   state.positions = [
     ...incoming.map((row) => {
       const prev = previousDhan.get(String(row.id));
@@ -1928,8 +2099,11 @@ export function replaceDhanBook(rows) {
   if (typeof onLiveBookChange === "function") onLiveBookChange();
 }
 
-export function setLiveCandles(candles) {
+export function setLiveCandles(candles, symbol = "NIFTY") {
   if (!Array.isArray(candles) || !candles.length) return;
+  const key = candleSymbol(symbol);
+  liveCandleCache.set(key, candles);
+  if (key !== "NIFTY") return;
   state.liveCandles = candles;
   const last = candles[candles.length - 1];
   state.ohlc = {
@@ -1948,7 +2122,14 @@ export function setLiveCandles(candles) {
 export function getChainSpot(symbol = state.optionMeta.symbol) {
   const meta = getUnderlying(symbol);
   const index = state.indices.find((item) => item.symbol === meta.indexSymbol);
-  return Number(index?.price || state.optionMeta.spot || 24580);
+  if (Number(index?.price) > 0) return Number(index.price);
+  if (Number(index?.future) > 0) return Number(index.future);
+  const pack = chainForSymbol(meta.id);
+  if (Number(pack?.meta?.spot) > 0) return Number(pack.meta.spot);
+  if (String(state.optionMeta?.symbol || "").toUpperCase() === meta.id && Number(state.optionMeta.spot) > 0) {
+    return Number(state.optionMeta.spot);
+  }
+  return 0;
 }
 
 export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expiry = state.optionMeta.expiry) {
@@ -1959,7 +2140,8 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
     expiries = [...expiries, wanted].sort();
   }
   const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
-  const spot = getChainSpot(meta.id);
+  const liveSpot = getChainSpot(meta.id);
+  const spot = liveSpot > 0 ? liveSpot : meta.id === "CRUDEOIL" ? 6100 : 24500;
   const rows = buildSyntheticChain(spot, meta.step, 10);
   const stats = chainStats(rows, spot);
   state.optionChain = rows;
@@ -1979,23 +2161,54 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
 
 export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const meta = getUnderlying(symbol || state.optionMeta.symbol);
-  const nextRows = Array.isArray(rows) && rows.length ? rows : state.optionChain;
-  const nextSpot = Number(spot) || getChainSpot(meta.id);
+  const sameSymbol = String(state.optionMeta?.symbol || "").toUpperCase() === meta.id;
+  const cached = optionChainCache.get(meta.id);
+  const nextExpiry = expiry || cached?.meta?.expiry || (sameSymbol ? state.optionMeta.expiry : upcomingExpiries(meta.id)[0] || "");
+  const sameExpiry = normalizeExpiry(nextExpiry) === normalizeExpiry(state.optionMeta.expiry);
+  let nextRows = Array.isArray(rows) && rows.length
+    ? rows
+    : sameSymbol
+      ? state.optionChain
+      : cached?.rows?.length
+        ? cached.rows
+        : [];
+  if (sameSymbol && sameExpiry) nextRows = keepStrikeWindow(state.optionChain, nextRows);
+  const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
   state.optionChain = nextRows;
   state.optionMeta = withExpiryLabels({
     ...state.optionMeta,
+    ...(cached?.meta || {}),
     symbol: meta.id,
-    expiry: expiry || state.optionMeta.expiry,
-    expiries: expiries?.length ? expiries : state.optionMeta.expiries,
+    expiry: nextExpiry,
+    expiries: expiries?.length ? expiries : cached?.meta?.expiries || (sameSymbol ? state.optionMeta.expiries : upcomingExpiries(meta.id)),
     ...stats,
-    source: source || state.optionMeta.source,
+    source: source || cached?.meta?.source || state.optionMeta.source,
     lastAt: Date.now(),
     contractIds: nextRows.filter((row) => row.callId || row.putId).length,
     underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
   });
-  rememberOptionChain(meta.id, nextRows, state.optionMeta);
+  if (nextRows.length) rememberOptionChain(meta.id, nextRows, state.optionMeta);
   return clone(state.optionMeta);
+}
+
+export function cacheOptionDesk({ symbol, expiry, expiries, rows, spot, source } = {}) {
+  const meta = getUnderlying(symbol || "CRUDEOIL");
+  const nextRows = Array.isArray(rows) && rows.length ? rows : [];
+  const nextSpot = Number(spot) || getChainSpot(meta.id);
+  const stats = chainStats(nextRows, nextSpot);
+  const nextMeta = withExpiryLabels({
+    symbol: meta.id,
+    expiry: expiry || upcomingExpiries(meta.id)[0] || "",
+    expiries: expiries?.length ? expiries : upcomingExpiries(meta.id),
+    ...stats,
+    source: source || "dhan",
+    lastAt: Date.now(),
+    contractIds: nextRows.filter((row) => row.callId || row.putId).length,
+    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+  });
+  rememberOptionChain(meta.id, nextRows, nextMeta);
+  return clone(nextMeta);
 }
 
 export function currentOptionRows() {
@@ -2017,6 +2230,7 @@ function relatedIndex(symbol) {
   if (upper.includes("BANKNIFTY") || upper.includes("BANK NIFTY")) return "BANKNIFTY";
   if (upper.includes("FINNIFTY")) return "FINNIFTY";
   if (upper.includes("SENSEX")) return "SENSEX";
+  if (upper.includes("CRUDEOIL")) return "CRUDEOIL";
   if (upper.includes("NIFTY")) return "NIFTY 50";
   return null;
 }
@@ -2029,7 +2243,7 @@ function pushSpark(spark, value) {
 
 function seedLiveCandles(price) {
   const now = Date.now();
-  state.liveCandles = [
+  const candles = [
     {
       time: now,
       open: price,
@@ -2039,6 +2253,8 @@ function seedLiveCandles(price) {
       volume: 0,
     },
   ];
+  state.liveCandles = candles;
+  liveCandleCache.set("NIFTY", candles);
 }
 
 function updateLiveCandle(price) {
@@ -2091,8 +2307,6 @@ function dayChange(index, quote, ltp) {
 }
 
 export function applyLiveQuotes(quotes) {
-  const indexPrev = Object.fromEntries(state.indices.map((item) => [item.symbol, item.price]));
-
   for (const quote of quotes) {
     const indexSymbol = INDEX_ALIASES[quote.parent || quote.symbol] || quote.symbol;
     const index = state.indices.find((item) => item.symbol === indexSymbol);
@@ -2105,6 +2319,14 @@ export function applyLiveQuotes(quotes) {
       if (futVwap > 0) {
         index.futureVwap = round2(futVwap);
         index.vwap = round2(futVwap);
+      }
+      if (index.symbol === "CRUDEOIL") {
+        const day = dayChange(index, quote, ltp);
+        index.price = round2(ltp);
+        index.change = day.change;
+        index.changePct = day.changePct;
+        index.prevClose = day.prevClose;
+        index.spark = pushSpark(index.spark, ltp);
       }
       continue;
     }
@@ -2134,15 +2356,7 @@ export function applyLiveQuotes(quotes) {
       index.change = day.change;
       index.changePct = day.changePct;
       index.prevClose = day.prevClose;
-      if (!(index.futureVwap > 0)) {
-        if (vwap > 0) index.vwap = round2(vwap);
-        else if (!(index.vwap > 0) || Math.abs(index.vwap - ltp) / ltp > 0.012) {
-          index.vwap = round2(ltp - Math.max(2, ltp * 0.00032));
-        }
-      }
-      if (!(index.future > 0) || Math.abs(index.future - ltp) / ltp > 0.012) {
-        index.future = round2(ltp + Math.max(6, ltp * 0.00085));
-      }
+      if (vwap > 0 && !(index.futureVwap > 0)) index.vwap = round2(vwap);
       if (quote.securityId) index.securityId = Number(quote.securityId) || index.securityId;
       index.spark = pushSpark(index.spark, ltp);
       if (index.symbol === "NIFTY 50") {
@@ -2184,45 +2398,24 @@ export function applyLiveQuotes(quotes) {
       const dir = row.type === "BUY" ? 1 : -1;
       return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir), ticked: true };
     }
-    if (state.dhanFeed.live) return row;
-    const equity = quotes.find((quote) => quote.symbol === row.symbol && quote.kind === "equity");
-    if (equity) {
-      const ltp = round2(equity.ltp);
-      const dir = row.type === "BUY" ? 1 : -1;
-      return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
-    }
-    const indexName = relatedIndex(row.symbol);
-    if (!indexName || !indexPrev[indexName]) return row;
-    const nextIndex = state.indices.find((item) => item.symbol === indexName);
-    if (!nextIndex) return row;
-    const movePct = (nextIndex.price - indexPrev[indexName]) / indexPrev[indexName];
-    if (!Number.isFinite(movePct) || movePct === 0) return row;
-    const ltp = round2(Math.max(0.05, row.ltp * (1 + movePct * 8)));
-    const dir = row.type === "BUY" ? 1 : -1;
-    return { ...row, ltp, pnl: round2((ltp - row.avg) * row.qty * dir) };
+    return row;
   });
 
-  const nifty = state.indices.find((item) => item.symbol === "NIFTY 50");
-  if (nifty && indexPrev["NIFTY 50"] && state.optionMeta?.source !== "dhan") {
-    const move = nifty.price - indexPrev["NIFTY 50"];
-    state.optionChain = state.optionChain.map((row) => ({
-      ...row,
-      callLtp: round2(Math.max(0.05, row.callLtp + move * 0.08)),
-      putLtp: round2(Math.max(0.05, row.putLtp - move * 0.08)),
-    }));
-  }
   runPaperAlgos();
   runLiveAlgos();
   markPaperToMarket();
 }
 
-export function getCandles(tf = "5m") {
-  if (state.dhanFeed.live) {
-    if (!state.liveCandles.length) return [];
-    const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
-    if (minutes <= 1) return clone(state.liveCandles);
-    return VwapSignalEngine.aggregateSessionBars(state.liveCandles, minutes);
-  }
-  const count = tf === "1m" ? 90 : tf === "5m" ? 80 : tf === "15m" ? 64 : tf === "1H" ? 48 : 36;
-  return generateCandles(count, 24420, tf.length * 17);
+export function getCandles(tf = "5m", symbol = "NIFTY") {
+  const key = candleSymbol(symbol);
+  const liveRows =
+    key === "NIFTY"
+      ? state.liveCandles.length
+        ? state.liveCandles
+        : liveCandleCache.get("NIFTY") || []
+      : liveCandleCache.get(key) || [];
+  if (!liveRows.length) return [];
+  const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  if (minutes <= 1) return clone(liveRows);
+  return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
 }

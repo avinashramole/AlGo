@@ -156,7 +156,7 @@ If certbot asks questions: type your email, agree to terms, then choose to redir
 
 Chrome: **https://trade2smart.com**
 
-Login: `demo@t2s.app` / `demo123`
+Login: `trades2smart@gmail.com` / `demo123`
 
 If Chrome cannot open the domain, the hosting panel is still blocking 80/443. **http://66.116.248.198:4000** can still work.
 

@@ -1,8 +1,7 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useMemo } from "react";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
-import { colors, formatNumber, formatPct, vwapColor } from "../theme";
+import { colors, formatNumber, formatPct, hasDhanQuotes, vwapColor } from "../theme";
 
 export function OptionsScreen() {
   const { data, selectChain, order } = useMarket();
@@ -12,18 +11,14 @@ export function OptionsScreen() {
     { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
     { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
     { id: "SENSEX", label: "SENSEX", lot: 20 },
+    { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
   ];
   const lot = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
   const futures = (data.futures || []).filter(
     (row) =>
       row.front && (!meta?.symbol || row.root === meta.symbol || row.symbol.startsWith(meta.symbol)),
   );
-  const visibleRows = useMemo(() => {
-    const rows = data.optionChain || [];
-    const atm = rows.findIndex((row) => row.atm);
-    if (atm < 0) return rows.slice(0, 21);
-    return rows.slice(Math.max(0, atm - 10), atm + 11);
-  }, [data.optionChain]);
+  const chainRows = data.optionChain || [];
 
   const trade = async (option: "CE" | "PE", action: "BUY" | "SELL", row: (typeof data.optionChain)[number]) => {
     const symbol = `${meta?.symbol || "NIFTY"} ${row.strike} ${option}`;
@@ -33,15 +28,22 @@ export function OptionsScreen() {
         symbol,
         side: action,
         qty: lot,
+        lots: 1,
+        lotSize: lot,
         price: ltp,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         kind: "option",
         option,
         strike: row.strike,
         expiry: meta?.expiry,
-        exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+        exchangeSegment: String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL")
+          ? "MCX_COMM"
+          : String(meta?.symbol || "").toUpperCase().includes("SENSEX")
+            ? "BSE_FNO"
+            : "NSE_FNO",
+        securityId: option === "CE" ? row.callId : row.putId,
       });
       if (result.live) {
         Alert.alert("Sent to Dhan", `${action} ${symbol} · ${lot} qty`);
@@ -63,9 +65,10 @@ export function OptionsScreen() {
         qty: row.qty || row.lot || lot,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         expiry: row.expiry,
         exchangeSegment: row.segment,
+        securityId: row.securityId,
       });
       Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${row.name || row.symbol}`);
     } catch (err) {
@@ -79,10 +82,11 @@ export function OptionsScreen() {
       <Text style={styles.title}>Option Chain</Text>
       <Text style={styles.muted}>
         {meta?.symbol || "NIFTY"} · {meta?.expiryLabel || meta?.expiry || "expiry"} · Spot {formatNumber(meta?.spot || data.indices[0]?.price || 0)} · PCR{" "}
-        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"} · 1 lot = {lot}
+        {meta?.pcr != null ? meta.pcr.toFixed(2) : "—"}
         {"\n"}
-        {data.dhanFeed?.live ? "Orders go to Dhan. The desk looks up the live contract." : "Desk fill only until Access Token on Brokers"}
+        {hasDhanQuotes(data) ? "Last Dhan quotes stay after NSE and MCX close. Orders go to Dhan when LIVE." : "Desk fill only until Access Token on Brokers"}
         {" · ATM ±10"}
+        {String(meta?.symbol || "").toUpperCase().includes("CRUDEOIL") ? " · 1 lot = Dhan qty 1 (size 100)" : ` · 1 lot = ${lot}`}
       </Text>
       <View style={styles.chips}>
         {underlyings.map((item) => (
@@ -134,7 +138,7 @@ export function OptionsScreen() {
       })}
       </View>
       <ScrollView style={styles.chain} contentContainerStyle={styles.chainContent}>
-      {visibleRows.map((row) => (
+      {chainRows.map((row) => (
         <Card key={row.strike}>
           <Text style={styles.strike}>
             {row.strike} {row.atm ? "ATM" : ""}

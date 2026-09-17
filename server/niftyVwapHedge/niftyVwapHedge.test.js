@@ -103,11 +103,12 @@ test("hedge algo seeds paused and never auto-enables LIVE", () => {
 
 test("seed includes paused NIFTY 15m VWAP hedge", () => {
   const seeded = seedAlgos();
-  assert.equal(seeded.length, 3);
+  assert.ok(seeded.length >= 6);
   assert.equal(seeded[2].name, "NIFTY 15m VWAP hedge");
   assert.equal(isNiftyVwapHedgeAlgo(seeded[2]), true);
   assert.equal(seeded[2].enabled, false);
   assert.equal(seeded[2].status, "PAUSED");
+  assert.equal(isNiftyVwapHedgeAlgo(seeded.find((row) => row.id === "a7") || {}), false);
 });
 
 test("no hedge entry before the 09:15-09:30 bar closes", () => {

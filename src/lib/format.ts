@@ -1,3 +1,7 @@
+export function formatQuote(value: number, digits = 2) {
+  return Number(value) > 0 ? formatNumber(value, digits) : "—";
+}
+
 export function formatNumber(value: number, digits = 2) {
   return value.toLocaleString("en-IN", {
     minimumFractionDigits: digits,
@@ -57,6 +61,47 @@ export function isNseSessionOpen(date = new Date()) {
   return !weekend && minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
 }
 
+export function isMcxSessionOpen(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
+  return !weekend && minutes >= 9 * 60 && minutes < 23 * 60 + 30;
+}
+
+export function hasDhanQuotes(data?: {
+  dhanFeed?: { live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };
+  optionMeta?: { source?: string };
+}) {
+  return Boolean(
+    data?.dhanFeed?.live ||
+      data?.dhanFeed?.hasQuotes ||
+      data?.dhanFeed?.lastTickAt ||
+      data?.optionMeta?.source === "dhan",
+  );
+}
+
+export function dhanFeedLabel(
+  data?: { dhanFeed?: { live?: boolean; hasQuotes?: boolean }; optionMeta?: { source?: string } },
+  sessionOpen?: boolean,
+) {
+  if (!hasDhanQuotes(data)) return "WAIT";
+  if (data?.dhanFeed?.live && (sessionOpen == null || sessionOpen)) {
+    return data?.optionMeta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain";
+  }
+  return sessionOpen === false ? "DHAN · last" : "DHAN";
+}
+
 export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?: boolean; funds: number }) {
   const amount = `₹${formatNumber(broker.funds, 0)}`;
   if (broker.virtual || broker.id === "paper") return `${amount} virtual`;
@@ -64,10 +109,14 @@ export function fundsCaption(broker: { id?: string; virtual?: boolean; liveFeed?
   return amount;
 }
 
-export function liveBookCopy(live?: boolean) {
-  return live
-    ? "LIVE feed · Dhan actual + Paper virtual fills. No simulated book or simulated balance."
-    : "Demo book until Dhan is LIVE. Paper trading uses the live feed only.";
+export function liveBookCopy(live?: boolean, hasQuotes?: boolean) {
+  if (live) {
+    return "LIVE feed · Dhan actual + Paper virtual fills. No simulated book or simulated balance.";
+  }
+  if (hasQuotes) {
+    return "Last Dhan quotes stay on the desk after NSE and MCX close. Paper trading uses the live feed only.";
+  }
+  return "Waiting for Dhan quotes. No simulated tape.";
 }
 
 export function deskStrategyName(strategy?: string, algos?: Array<{ id?: string; name?: string }>) {

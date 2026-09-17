@@ -1,5 +1,6 @@
 import { useMarket } from "../../context/MarketContext";
 import { Gauge } from "../charts/Gauge";
+import { hasDhanQuotes } from "../../lib/format";
 
 export function SentimentGauge() {
   const { data } = useMarket();
@@ -12,7 +13,7 @@ export function SentimentGauge() {
         {bullish ? "BULLISH" : "BEARISH"}
       </div>
       <p className="mt-1 text-center text-[11px] text-slate-400">
-        {data.dhanFeed?.live ? "From live index change and option buy pressure" : "From the current desk tape"}
+        {hasDhanQuotes(data) ? "From live index change and option buy pressure" : "From the current desk tape"}
       </p>
     </section>
   );

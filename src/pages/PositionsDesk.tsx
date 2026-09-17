@@ -1,6 +1,7 @@
 import { Activity, Crown, Inbox, RefreshCw, TrendingUp, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getPositionsDesk, type LedgerPosition, type PositionLedger, type PositionsDeskSnapshot } from "../api/client";
+import { PortfolioSummary } from "../components/dashboard/PortfolioSummary";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber } from "../lib/format";
 
@@ -59,6 +60,10 @@ function showLedger(ledger: PositionLedger, mode: ModeFilter) {
   return ledger.tradeMode === mode;
 }
 
+function isClosedLedger(row: LedgerPosition) {
+  return Boolean(row.closed) || Number(row.netQty || 0) === 0;
+}
+
 function asLiveLedgerPosition(row: {
   id: string;
   symbol: string;
@@ -90,6 +95,46 @@ function asLiveLedgerPosition(row: {
     paper: row.brokerId === "paper",
     segment: /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(row.symbol || "")) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
+    closed: false,
+  };
+}
+
+function asClosedLiveLedgerPosition(row: {
+  id: string;
+  symbol: string;
+  side?: "BUY" | "SELL";
+  type?: "BUY" | "SELL";
+  qty: number;
+  entry: number;
+  exit: number;
+  pnl: number;
+  product?: string;
+  strategy?: string;
+  brokerId?: string;
+  paper?: boolean;
+}): LedgerPosition {
+  const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  const qty = Math.abs(Number(row.qty) || 0);
+  const entry = Number(row.entry) || 0;
+  const exit = Number(row.exit) || entry;
+  const pnl = Number(row.pnl) || 0;
+  return {
+    id: String(row.id || ""),
+    symbol: String(row.symbol || ""),
+    product: String(row.product || "MIS").toUpperCase(),
+    type,
+    buyQty: qty,
+    buyPrice: type === "BUY" ? entry : exit,
+    sellQty: qty,
+    sellPrice: type === "BUY" ? exit : entry,
+    netQty: 0,
+    ltp: exit,
+    realized: pnl,
+    mtm: pnl,
+    paper: Boolean(row.paper || row.brokerId === "paper"),
+    segment: /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(row.symbol || "")) ? "crypto" : "indian",
+    strategy: String(row.strategy || ""),
+    closed: true,
   };
 }
 
@@ -137,18 +182,29 @@ export function PositionsDesk() {
   };
 
   const liveMaster = useMemo(() => (data.positions || []).map(asLiveLedgerPosition), [data.positions]);
+  const liveClosed = useMemo(
+    () => (data.closedTrades || []).map(asClosedLiveLedgerPosition),
+    [data.closedTrades],
+  );
 
   const ledgers = useMemo(() => {
     const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number }> = [];
-    const masterLedger: PositionLedger = liveMaster.length
-      ? {
-          ...desk.master,
-          positions: liveMaster,
-          mtm: liveMaster.reduce((sum, row) => sum + Number(row.mtm || 0), 0),
-          open: liveMaster.length,
-          tradeMode: liveMaster.some((row) => !row.paper) ? "real" : desk.master.tradeMode,
-        }
-      : desk.master;
+    const closedById = new Map<string, LedgerPosition>();
+    for (const row of [...(desk.master.positions || []).filter(isClosedLedger), ...liveClosed]) {
+      closedById.set(row.id, row);
+    }
+    const closedMaster = [...closedById.values()];
+    const deskOpen = (desk.master.positions || []).filter((row) => !isClosedLedger(row));
+    const openMaster = liveMaster.length ? liveMaster : deskOpen;
+    const masterPositions = [...openMaster, ...closedMaster];
+    const masterLedger: PositionLedger = {
+      ...desk.master,
+      positions: masterPositions,
+      mtm: masterPositions.reduce((sum, row) => sum + Number(row.mtm || 0), 0),
+      realized: closedMaster.reduce((sum, row) => sum + Number(row.realized || 0), 0),
+      open: openMaster.length,
+      tradeMode: [...openMaster, ...closedMaster].some((row) => !row.paper) ? "real" : desk.master.tradeMode,
+    };
     const books = [masterLedger, ...(desk.clients || [])].filter((item) => showLedger(item, mode));
     for (const ledger of books) {
       const positions = filterRows(ledger, mode, segment);
@@ -159,15 +215,18 @@ export function PositionsDesk() {
       });
     }
     return rows;
-  }, [desk, mode, segment, liveMaster]);
+  }, [desk, mode, segment, liveMaster, liveClosed]);
 
   const masterBlock = ledgers.find((row) => row.ledger.kind === "master");
   const clientBlocks = ledgers.filter((row) => row.ledger.kind === "client");
   const masterMtm = masterBlock?.mtm || 0;
   const clientMtm = clientBlocks.reduce((sum, row) => sum + row.mtm, 0);
   const totalMtm = masterMtm + clientMtm;
-  const openCount = ledgers.reduce((sum, row) => sum + row.positions.length, 0);
-  const exitIds = (masterBlock?.positions || []).map((row) => row.id).filter(Boolean);
+  const openCount = ledgers.reduce(
+    (sum, row) => sum + row.positions.filter((item) => !isClosedLedger(item)).length,
+    0,
+  );
+  const exitIds = (masterBlock?.positions || []).filter((row) => !isClosedLedger(row)).map((row) => row.id).filter(Boolean);
 
   const close = async (id: string, symbol: string) => {
     if (!window.confirm(`Square off ${symbol} at LTP?`)) return;
@@ -198,8 +257,8 @@ export function PositionsDesk() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Positions</h1>
-          <p className="text-sm text-slate-400">Master first, followed by a separate live position ledger for every client</p>
+          <h1 className="text-xl font-bold">Position</h1>
+          <p className="text-sm text-slate-400">Portfolio, master book, and a live ledger for every client</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <ChipGroup>
@@ -231,6 +290,8 @@ export function PositionsDesk() {
           </button>
         </div>
       </div>
+
+      <PortfolioSummary />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<TrendingUp size={18} />} label="Master MTM" value={rupee(masterMtm)} tone={moneyClass(masterMtm)} />
@@ -304,6 +365,8 @@ function LedgerCard({
   onExit?: (id: string, symbol: string) => void;
 }) {
   const initial = (ledger.title || "?").trim().charAt(0).toUpperCase();
+  const openRows = positions.filter((row) => !isClosedLedger(row));
+  const closedRows = positions.filter(isClosedLedger);
   return (
     <section className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
@@ -319,7 +382,9 @@ function LedgerCard({
         <div className="text-right">
           <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Account MTM</div>
           <div className={cn("text-lg font-bold", moneyClass(mtm))}>{rupee(mtm)}</div>
-          <div className="text-[11px] text-slate-400">{positions.length} open</div>
+          <div className="text-[11px] text-slate-400">
+            {openRows.length} open{closedRows.length ? ` · ${closedRows.length} closed` : ""}
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -354,7 +419,7 @@ function LedgerCard({
                   <td className={cn("px-4 py-3 text-right", moneyClass(row.realized))}>{rupee(row.realized)}</td>
                   <td className={cn("px-4 py-3 text-right font-semibold", moneyClass(row.mtm))}>{rupee(row.mtm)}</td>
                   <td className="px-4 py-3 text-right">
-                    {onExit ? (
+                    {onExit && !isClosedLedger(row) ? (
                       <button
                         type="button"
                         disabled={busy === row.id || busy === "all"}
@@ -364,7 +429,7 @@ function LedgerCard({
                         {busy === row.id ? "..." : "Exit"}
                       </button>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-400">{isClosedLedger(row) ? "Closed" : "—"}</span>
                     )}
                   </td>
                 </tr>

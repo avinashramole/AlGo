@@ -17,9 +17,9 @@ fs.writeFileSync(
   `${JSON.stringify(
     [
       {
-        id: "avinash",
-        name: "Avinash",
-        email: "demo@t2s.app",
+        id: "admin",
+        name: "Trade2Smart",
+        email: "trades2smart@gmail.com",
         desk: "Index Options",
         role: "admin",
         password: "demo123",
@@ -52,7 +52,7 @@ savePaymentSettings({
 });
 
 const member = { id: "u-view", name: "View Member", email: "view.member@gmail.com", role: "user" };
-const admin = { id: "avinash", name: "Avinash", role: "admin" };
+const admin = { id: "admin", name: "Trade2Smart", role: "admin" };
 const algo = { id: "a4", name: "NIFTY VWAP ATM" };
 
 test("getClientDetail returns profile, subscription, transaction, and P&L", () => {
@@ -122,7 +122,7 @@ test("getClientDetail returns profile, subscription, transaction, and P&L", () =
 });
 
 test("getClientDetail rejects admins and unknown ids", () => {
-  assert.throws(() => getClientDetail({ userId: "avinash", users: listPublicUsers() }), /Client not found/);
+  assert.throws(() => getClientDetail({ userId: "admin", users: listPublicUsers() }), /Client not found/);
   assert.throws(() => getClientDetail({ userId: "missing", users: listPublicUsers() }), /Client not found/);
 });
 

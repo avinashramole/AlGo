@@ -11,28 +11,26 @@ const GMAIL_FILE = process.env.T2S_GMAIL_FILE || path.join(__dirname, "data", "g
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
 const MAX_ATTEMPTS = 5;
+export const GMAIL_SMTP_TIMEOUT_MS = 4000;
+
+export const SOLE_ADMIN_ID = "admin";
+export const SOLE_ADMIN_EMAIL = "trades2smart@gmail.com";
+const RETIRED_ADMIN_IDS = new Set(["avinash", "segin"]);
+const RETIRED_ADMIN_EMAILS = new Set(["demo@t2s.app", "avinash.ramole86@gmail.com"]);
 
 const SEED_USERS = [
   {
-    id: "avinash",
-    name: "Avinash",
-    email: "demo@t2s.app",
+    id: SOLE_ADMIN_ID,
+    name: "Trade2Smart",
+    email: SOLE_ADMIN_EMAIL,
     mobile: "",
     desk: "Index Options",
     password: "demo123",
     role: "admin",
   },
-  {
-    id: "segin",
-    name: "Segin",
-    email: "",
-    mobile: "",
-    desk: "Index Options",
-    role: "admin",
-  },
 ];
 
-const DEFAULT_ADMIN_EMAILS = ["demo@t2s.app", "avinash.ramole86@gmail.com"];
+const DEFAULT_ADMIN_EMAILS = [SOLE_ADMIN_EMAIL];
 
 const otps = new Map();
 const sessions = loadSessions();
@@ -168,15 +166,16 @@ export function adminEmailsFromEnv(env = process.env) {
 
 export function resolveUserRole(user, env = process.env) {
   if (!user) return "user";
-  if (user.id === "avinash" || user.id === "segin") return "admin";
+  const email = normalizeEmail(user.email);
+  if (user.id === SOLE_ADMIN_ID || (email && adminEmailsFromEnv(env).has(email))) return "admin";
+  if (RETIRED_ADMIN_IDS.has(user.id) || RETIRED_ADMIN_EMAILS.has(email)) return "user";
   if (user.role === "admin" || user.role === "user") return user.role;
-  if (user.email && adminEmailsFromEnv(env).has(normalizeEmail(user.email))) return "admin";
   return "user";
 }
 
 function isRegisteredUser(user) {
   if (!user) return false;
-  if (user.id === "avinash" || user.id === "segin") return false;
+  if (user.id === SOLE_ADMIN_ID) return Boolean(user.email || user.mobile || user.googleId);
   return Boolean(user.email || user.mobile || user.googleId);
 }
 
@@ -235,16 +234,30 @@ function loadUsers() {
       password: row.password ? String(row.password) : undefined,
       thumbHash: row.thumbHash ? String(row.thumbHash) : undefined,
     };
+    if (RETIRED_ADMIN_IDS.has(id) && normalizeEmail(next.email) !== SOLE_ADMIN_EMAIL) continue;
+    if (RETIRED_ADMIN_EMAILS.has(normalizeEmail(next.email)) && normalizeEmail(next.email) !== SOLE_ADMIN_EMAIL) {
+      continue;
+    }
     const seed = byId.get(id);
     byId.set(id, seed ? { ...seed, ...next, password: next.password || seed.password } : next);
   }
-  const users = [...byId.values()];
-  const seginGmail = normalizeEmail(process.env.SEGIN_GMAIL || process.env.SEGIN_EMAIL || "");
-  if (seginGmail && isGmail(seginGmail)) {
-    const segin = users.find((row) => row.id === "segin") || { id: "segin", name: "Segin", desk: "Index Options" };
-    segin.email = segin.email || seginGmail;
-    segin.name = segin.name || "Segin";
-    if (!users.includes(segin)) users.push(segin);
+  const users = [...byId.values()].map((row) => {
+    const email = normalizeEmail(row.email);
+    if (row.id === SOLE_ADMIN_ID || email === SOLE_ADMIN_EMAIL) {
+      return { ...row, id: row.id || SOLE_ADMIN_ID, email: email || SOLE_ADMIN_EMAIL, role: "admin" };
+    }
+    if (row.role === "admin" && !(email && adminEmailsFromEnv().has(email))) {
+      return { ...row, role: "user" };
+    }
+    return row;
+  });
+  const duplicate = users.find((row) => row.id !== SOLE_ADMIN_ID && normalizeEmail(row.email) === SOLE_ADMIN_EMAIL);
+  if (duplicate) {
+    const seed = users.find((row) => row.id === SOLE_ADMIN_ID);
+    if (seed) {
+      Object.assign(seed, duplicate, { id: SOLE_ADMIN_ID, email: SOLE_ADMIN_EMAIL, role: "admin" });
+    }
+    return rebuildIndexes(users.filter((row) => row === seed || row.id !== duplicate.id));
   }
   return rebuildIndexes(users);
 }
@@ -269,6 +282,11 @@ function saveUsers(users) {
 }
 
 let store = loadUsers();
+try {
+  saveUsers(store.users);
+} catch {
+  /* keep memory copy if the users file is not writable */
+}
 
 function persist() {
   saveUsers(store.users);
@@ -279,7 +297,7 @@ export function findUser(identifier) {
   const raw = String(identifier || "").trim();
   const email = normalizeEmail(raw);
   const mobile = normalizeMobile(raw);
-  if (email === "demo") return store.byEmail.get("demo@t2s.app") || null;
+  if (email === "demo") return store.byEmail.get(SOLE_ADMIN_EMAIL) || null;
   if (isGmail(email) || email.includes("@")) return store.byEmail.get(email) || null;
   if (isMobile(mobile)) return store.byMobile.get(mobile) || null;
   return store.byEmail.get(email) || null;
@@ -413,16 +431,25 @@ export async function notifyLogin(user) {
   if (!isGmail(email) || !gmailReady()) return { delivered: false };
   const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   try {
-    return await sendMail({
-      to: email,
-      subject: `T2S login · ${user.name || "desk"}`,
-      text: `Hi ${user.name || "there"},\n\nYou signed in to T2S Algo Desk at ${when} IST.\nAccount: ${email}${user.mobile ? ` / ${user.mobile}` : ""}\n\nIf this was not you, change your password.\n`,
-      html: `<p>Hi ${user.name || "there"},</p><p>You signed in to <strong>T2S Algo Desk</strong> at <strong>${when} IST</strong>.</p><p>Account: ${email}${user.mobile ? ` · ${user.mobile}` : ""}</p>`,
-    });
+    return await Promise.race([
+      sendMail({
+        to: email,
+        subject: `T2S login · ${user.name || "desk"}`,
+        text: `Hi ${user.name || "there"},\n\nYou signed in to T2S Algo Desk at ${when} IST.\nAccount: ${email}${user.mobile ? ` / ${user.mobile}` : ""}\n\nIf this was not you, change your password.\n`,
+        html: `<p>Hi ${user.name || "there"},</p><p>You signed in to <strong>T2S Algo Desk</strong> at <strong>${when} IST</strong>.</p><p>Account: ${email}${user.mobile ? ` · ${user.mobile}` : ""}</p>`,
+      }),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("login-mail-timeout")), GMAIL_SMTP_TIMEOUT_MS);
+      }),
+    ]);
   } catch (err) {
     console.log(`Login mail failed: ${err.message || err}`);
     return { delivered: false, error: err.message };
   }
+}
+
+export function queueLoginNotice(user) {
+  void notifyLogin(user).catch((err) => console.log(`Login mail failed: ${err.message || err}`));
 }
 
 function otpKey(channel, identifier) {
@@ -485,7 +512,7 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
     }
     if (extraMobile) {
       const mobileUser = findUser(extraMobile);
-      if (mobileUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+      if (mobileUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === SOLE_ADMIN_ID)) {
         throw fail("That mobile number already has an account. Sign in instead.");
       }
     }
@@ -500,7 +527,7 @@ export async function requestOtp({ email, mobile, identifier, name, channel, pur
   const code = String(crypto.randomInt(100000, 1000000));
   otps.set(key, {
     code,
-    name: displayName || existing?.name || "Segin",
+    name: displayName || existing?.name || "Trader",
     channel: wanted,
     identifier: target,
     purpose: intent,
@@ -601,13 +628,12 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
   if (emailUser?.password || (emailUser && isRegisteredUser(emailUser))) {
     throw fail("That email already has an account. Sign in instead.");
   }
-  if (mobileUser && mobileUser !== emailUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === "avinash")) {
+  if (mobileUser && mobileUser !== emailUser && (mobileUser.password || isRegisteredUser(mobileUser) || mobileUser.id === SOLE_ADMIN_ID)) {
     throw fail("That mobile number already has an account. Sign in instead.");
   }
   let user = emailUser && !isRegisteredUser(emailUser) ? emailUser : null;
   if (!user) {
-    const pendingSegin = displayName.toLowerCase() === "segin" ? store.users.find((row) => row.id === "segin") : null;
-    user = pendingSegin || {
+    user = {
       id: `u${crypto.randomBytes(6).toString("hex")}`,
       name: displayName,
       email: "",
@@ -724,7 +750,9 @@ export function deleteRegisteredUser(id, { actorId } = {}) {
   const user = store.byId.get(userId);
   if (!user) throw fail("Client not found.", 404);
   if (userId === actorId) throw fail("You cannot delete the signed-in account.");
-  if (userId === "avinash" || userId === "segin") throw fail("The desk admin accounts cannot be deleted.");
+  if (userId === SOLE_ADMIN_ID || normalizeEmail(user.email) === SOLE_ADMIN_EMAIL) {
+    throw fail("The desk admin account cannot be deleted.");
+  }
   if (resolveUserRole(user) === "admin") throw fail("Delete a member from All clients, not an admin.");
   store.users = store.users.filter((row) => row.id !== userId);
   persist();

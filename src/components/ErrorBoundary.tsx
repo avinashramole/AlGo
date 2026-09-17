@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import { apiDownMessage, isTrade2SmartHost } from "../lib/liveSite";
+import { apiDownMessage, isTrade2SmartHost, publicDeskError } from "../lib/liveSite";
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { message: string }> {
   state = { message: "" };
@@ -13,9 +13,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { message:
     return (
       <div style={{ minHeight: "100vh", padding: 24, fontFamily: "sans-serif", background: "#fff7ed", color: "#9a3412" }}>
         <h1 style={{ fontSize: 20, margin: 0 }}>T2S could not load</h1>
-        <p style={{ marginTop: 12, lineHeight: 1.5 }}>{this.state.message}</p>
+        <p style={{ marginTop: 12, lineHeight: 1.5 }}>{publicDeskError(this.state.message)}</p>
         <p style={{ marginTop: 12, lineHeight: 1.5 }}>
-          {isTrade2SmartHost() ? apiDownMessage() : "In Chrome type http://localhost:5173 and press Enter. Keep npm start open. Then refresh."}
+          {isTrade2SmartHost()
+            ? apiDownMessage()
+            : "In Chrome type http://localhost:5173 and press Enter. Keep npm start open. Then refresh."}
         </p>
       </div>
     );

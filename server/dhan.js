@@ -4,27 +4,32 @@ import { WebSocket } from "ws";
 import { markDhanLive } from "./brokers.js";
 import {
   applyLiveQuotes,
-  applySyntheticOptionChain,
+  cacheOptionDesk,
   clearSimulatedDesk,
   currentOptionRows,
   getChainSpot,
   getOptionMeta,
+  hasLastLiveBook,
+  optionRowsForSymbol,
+  peekOptionChain,
   quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
   restoreSimulatedDesk,
   livePositionQuoteTargets,
+  liveSessionOpenForOrder,
   onDhanBookChanged,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
   snapshot,
 } from "./market.js";
-import { buildScripChain, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries } from "./frontFutures.js";
+import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
+import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
-import { dropExpired, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import { dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -77,6 +82,7 @@ let pollTimer = null;
 let accountTimer = null;
 let chainTimer = null;
 let candleTimer = null;
+let crudeChainTimer = null;
 let tokenTimer = null;
 let tokenWatchdogTimer = null;
 const persistedBackoff = loadTokenBackoff();
@@ -233,24 +239,6 @@ function isClosedMarketError(error) {
   return /market is closed|offline order|after[\s-]?market order/i.test(errorBlob(error));
 }
 
-function nseSessionOpen(date = new Date()) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Kolkata",
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    })
-      .formatToParts(date)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  const weekend = parts.weekday === "Sat" || parts.weekday === "Sun";
-  return !weekend && minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
-}
-
 function withAmo(body) {
   return {
     ...body,
@@ -262,17 +250,20 @@ function withAmo(body) {
 
 function formatPlaceError(error, ip, body) {
   if (isClosedMarketError(error)) {
+    const mcx = String(body?.exchangeSegment || "") === "MCX_COMM";
+    const hours = mcx ? "MCX is closed (09:00–23:30 IST)" : "NSE is closed (09:15–15:30 IST)";
     return body?.afterMarketOrder
-      ? "NSE is closed (09:15–15:30 IST). Dhan did not accept this after-market order. Place it when the market opens."
-      : "NSE is closed (09:15–15:30 IST). Dhan asked for an offline/AMO order.";
+      ? `${hours}. Dhan did not accept this after-market order. Place it when the market opens.`
+      : `${hours}. Dhan asked for an offline/AMO order.`;
   }
-  const raw = error?.body ? JSON.stringify(error.body).slice(0, 280) : "";
-  const sent = body
-    ? `sent ${body.transactionType} ${body.exchangeSegment} ${body.productType} ${body.orderType} qty ${body.quantity}`
-    : "";
-  return [String(error?.message || "Dhan order failed"), describeIp(ip), sent, raw ? `raw ${raw}` : ""]
-    .filter(Boolean)
-    .join(" · ");
+  return dhanPlaceErrorMessage(error, describeIp(ip), body);
+}
+
+function stampPlaceError(error, ip, body, extra = {}) {
+  attachPlaceLive(error, extra);
+  error.status = error.status || 400;
+  error.message = formatPlaceError(error, ip, body);
+  if (error.live) error.live.reason = error.message;
 }
 
 function authHeaders(token, id) {
@@ -656,13 +647,28 @@ function niftyChartTarget() {
   return { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" };
 }
 
-async function pullNiftyCandles() {
+function crudeChartTarget() {
+  const front = listFutures().find((row) => row.root === "CRUDEOIL" && row.front && row.securityId);
+  if (front?.securityId) {
+    return {
+      securityId: String(front.securityId),
+      exchangeSegment: front.segment || "MCX_COMM",
+      instrument: "FUTCOM",
+    };
+  }
+  return { securityId: "565899", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" };
+}
+
+async function pullChartCandles(symbol = "NIFTY") {
   if (!accessToken) return;
   if (Date.now() < quoteBackoffUntil) return;
+  const crude = String(symbol || "").toUpperCase().includes("CRUDEOIL");
   try {
-    const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:15:00");
+    const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), crude ? "09:00:00" : "09:15:00");
     const to = kolkataStamp(new Date());
-    const targets = [niftyChartTarget(), { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" }];
+    const targets = crude
+      ? [crudeChartTarget()]
+      : [niftyChartTarget(), { securityId: "13", exchangeSegment: "IDX_I", instrument: "INDEX" }];
     for (const inst of targets) {
       try {
         const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
@@ -676,16 +682,20 @@ async function pullNiftyCandles() {
         });
         const candles = mapChartCandles(payload);
         if (candles.length) {
-          setLiveCandles(candles);
+          setLiveCandles(candles, crude ? "CRUDEOIL" : "NIFTY");
           return;
         }
       } catch {
-        /* try index fallback */
+        /* try next instrument */
       }
     }
   } catch {
     /* quotes still drive the last bar */
   }
+}
+
+async function pullNiftyCandles() {
+  return pullChartCandles("NIFTY");
 }
 
 async function pullQuotes() {
@@ -863,13 +873,12 @@ function startSocket() {
 async function loadExpiryList(und) {
   await resolveFrontFutures().catch(() => []);
   const fromScrip = scripExpiries(und.id);
+  const chain = chainUnderlyingRequest(und.id);
+  const keep = normalizeExpiry(getOptionMeta().expiry);
   if (!accessToken) return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
   try {
-    const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, {
-      UnderlyingScrip: und.scrip,
-      UnderlyingSeg: und.segment,
-    });
-    const dates = dropExpired(Array.isArray(list?.data) ? list.data : []);
+    const list = await dhanPost("/optionchain/expirylist", accessToken, clientId, chain);
+    const dates = dropExpired(Array.isArray(list?.data) ? list.data : [], { symbol: und.id, keep });
     const merged = [...new Set([...dates, ...fromScrip].map(normalizeExpiry).filter(Boolean))].sort();
     if (merged.length) return merged;
   } catch {
@@ -878,13 +887,22 @@ async function loadExpiryList(und) {
   return fromScrip.length ? fromScrip : upcomingExpiries(und.id);
 }
 
+function lastChainRows(und, sameSymbol, cached) {
+  if (sameSymbol && Array.isArray(currentOptionRows()) && currentOptionRows().length) return currentOptionRows();
+  if (Array.isArray(cached?.rows) && cached.rows.length) return cached.rows;
+  return [];
+}
+
 function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
   const desk = getOptionMeta();
   const und = getUnderlying(symbol || desk.symbol);
-  const chosen = expiry || desk.expiry;
-  const nextSpot = Number(spot) || getChainSpot(und.id);
-  const liveOnly = Boolean(accessToken);
-  const liveRows = rows !== undefined ? rows : liveOnly ? currentOptionRows() : currentOptionRows();
+  const sameSymbol = String(desk.symbol || "").toUpperCase() === und.id;
+  const cached = peekOptionChain(und.id);
+  const chosen = expiry || cached?.meta?.expiry || desk.expiry;
+  const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(und.id);
+  const liveOnly = true;
+  const fallback = lastChainRows(und, sameSymbol, cached);
+  const liveRows = Array.isArray(rows) && rows.length ? rows : fallback;
   const next = buildScripChain({
     symbol: und.id,
     expiry: chosen,
@@ -893,38 +911,64 @@ function paintDesk({ symbol, expiry, expiries, rows, spot, source }) {
     liveRows,
     liveOnly,
   });
-  setOptionDesk({ symbol: und.id, expiry: chosen, expiries, rows: next, spot: nextSpot, source: liveOnly ? source || "dhan" : source });
-  return next;
+  const keepLast = liveOnly || hasLastLiveBook() || String(cached?.meta?.source || desk.source || "") === "dhan";
+  setOptionDesk({
+    symbol: und.id,
+    expiry: chosen,
+    expiries,
+    rows: next.length ? next : fallback,
+    spot: nextSpot,
+    source: keepLast ? source || cached?.meta?.source || "dhan" : source,
+  });
+  return next.length ? next : fallback;
 }
 
 async function refreshOptionChain() {
-  if (!accessToken) {
-    applySyntheticOptionChain();
-    paintDesk({
-      symbol: getOptionMeta().symbol,
-      expiry: getOptionMeta().expiry,
-      source: "demo",
-    });
-    return;
-  }
+  if (!accessToken) return;
   const desk = getOptionMeta();
   const und = getUnderlying(desk.symbol);
-  let expiries = dropExpired(desk.expiries || []);
+  const currentExpiry = normalizeExpiry(desk.expiry);
+  let expiries = dropExpired(desk.expiries || [], { symbol: und.id, keep: currentExpiry });
   if (!expiries.length) expiries = await loadExpiryList(und);
-  let expiry = normalizeExpiry(desk.expiry);
-  if (!expiry || !expiries.includes(expiry)) expiry = expiries[0];
+  let expiry = currentExpiry;
+  if (!expiry || !expiries.includes(expiry)) expiry = expiries[0] || currentExpiry;
   const payload = await dhanPost("/optionchain", accessToken, clientId, {
-    UnderlyingScrip: und.scrip,
-    UnderlyingSeg: und.segment,
+    ...chainUnderlyingRequest(und.id),
     Expiry: expiry,
   });
   const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
   if (!parsed.rows.length) {
-    setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}.` });
-    paintDesk({ symbol: und.id, expiry, expiries, rows: [], source: "dhan" });
+    setDhanFeed({ error: `No option strikes for ${und.id} ${expiry}. Last live chain kept.` });
+    paintDesk({ symbol: und.id, expiry: currentExpiry || expiry, expiries, source: "dhan" });
     return;
   }
   paintDesk({
+    symbol: und.id,
+    expiry,
+    expiries,
+    rows: parsed.rows,
+    spot: parsed.spot || getChainSpot(und.id),
+    source: "dhan",
+  });
+}
+
+async function refreshCachedOptionChain(symbol) {
+  if (!accessToken) return;
+  const und = getUnderlying(symbol);
+  if (!und?.id) return;
+  if (String(getOptionMeta().symbol || "").toUpperCase() === und.id) {
+    await refreshOptionChain();
+    return;
+  }
+  let expiries = await loadExpiryList(und);
+  let expiry = expiries[0];
+  const payload = await dhanPost("/optionchain", accessToken, clientId, {
+    ...chainUnderlyingRequest(und.id),
+    Expiry: expiry,
+  });
+  const parsed = parseDhanChain(payload, getChainSpot(und.id), und.step);
+  if (!parsed.rows.length) return;
+  cacheOptionDesk({
     symbol: und.id,
     expiry,
     expiries,
@@ -939,17 +983,42 @@ export async function selectOptionDesk({ symbol, expiry }) {
   const und = getUnderlying(symbol);
   const expiries = await loadExpiryList(und);
   const wanted = normalizeExpiry(expiry);
-  const chosen = wanted && expiries.includes(wanted) ? wanted : expiries[0];
+  const cached = peekOptionChain(und.id);
+  const chosen =
+    wanted && expiries.includes(wanted)
+      ? wanted
+      : cached?.meta?.expiry && expiries.includes(normalizeExpiry(cached.meta.expiry))
+        ? normalizeExpiry(cached.meta.expiry)
+        : expiries[0];
   if (!accessToken) {
-    applySyntheticOptionChain(und.id, chosen);
-    paintDesk({ symbol: und.id, expiry: chosen, expiries, source: "demo" });
+    if (cached?.rows?.length && cached?.meta?.source === "dhan") {
+      paintDesk({
+        symbol: und.id,
+        expiry: chosen,
+        expiries,
+        rows: cached.rows,
+        source: "dhan",
+      });
+    }
     return getOptionMeta();
   }
-  paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
+  paintDesk({
+    symbol: und.id,
+    expiry: chosen,
+    expiries,
+    rows: cached?.rows || undefined,
+    source: cached?.meta?.source || "dhan",
+  });
   try {
     await refreshOptionChain();
   } catch (error) {
-    paintDesk({ symbol: und.id, expiry: chosen, expiries, rows: [], source: "dhan" });
+    paintDesk({
+      symbol: und.id,
+      expiry: chosen,
+      expiries,
+      rows: cached?.rows || undefined,
+      source: "dhan",
+    });
     handleDhanPollError("option chain", error);
   }
   return getOptionMeta();
@@ -969,6 +1038,8 @@ function startLiveLoop() {
     void pullQuotes();
     await sleep(400);
     void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
+    await sleep(400);
+    void refreshCachedOptionChain("CRUDEOIL").catch(() => undefined);
   })();
   setTimeout(() => {
     void pullAccount();
@@ -976,9 +1047,19 @@ function startLiveLoop() {
   setTimeout(() => {
     void pullNiftyCandles();
   }, 1400);
+  setTimeout(() => {
+    void pullChartCandles("CRUDEOIL");
+  }, 2200);
   candleTimer = setInterval(() => {
     void pullNiftyCandles();
   }, 15_000);
+  crudeChainTimer = setInterval(() => {
+    if (Date.now() < quoteBackoffUntil) return;
+    void pullChartCandles("CRUDEOIL");
+    void refreshCachedOptionChain("CRUDEOIL").catch((error) => {
+      handleDhanPollError("crude option chain", error);
+    });
+  }, 18_000);
   pollTimer = setInterval(() => {
     void pullQuotes();
   }, 2500);
@@ -1015,6 +1096,10 @@ function stopLiveLoop(clearCreds) {
   if (candleTimer) {
     clearInterval(candleTimer);
     candleTimer = null;
+  }
+  if (crudeChainTimer) {
+    clearInterval(crudeChainTimer);
+    crudeChainTimer = null;
   }
   stopSocket();
   if (clearCreds) {
@@ -1054,6 +1139,7 @@ const CHART_UNDERLYINGS = {
   "BANK NIFTY": { securityId: "25", exchangeSegment: "IDX_I", instrument: "INDEX" },
   FINNIFTY: { securityId: "27", exchangeSegment: "IDX_I", instrument: "INDEX" },
   SENSEX: { securityId: "51", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  CRUDEOIL: { securityId: "565899", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
 };
 
 function chartInstrument(symbol) {
@@ -1084,7 +1170,13 @@ export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
   const toDate = dateOnly(to);
   if (!fromDate || !toDate) return [];
   const interval = intradayInterval(timeframe);
-  const days = Math.max(1, Math.round((Date.parse(`${toDate}T15:30:00+05:30`) - Date.parse(`${fromDate}T09:15:00+05:30`)) / 86_400_000));
+  const crude = String(symbol || "").toUpperCase().includes("CRUDEOIL");
+  const openStamp = crude ? "09:00:00" : "09:15:00";
+  const closeStamp = crude ? "23:30:00" : "15:30:00";
+  const days = Math.max(
+    1,
+    Math.round((Date.parse(`${toDate}T${closeStamp}+05:30`) - Date.parse(`${fromDate}T${openStamp}+05:30`)) / 86_400_000),
+  );
 
   const historical = async () => {
     const payload = await dhanPost("/charts/historical", accessToken, clientId, {
@@ -1108,8 +1200,8 @@ export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
         instrument: inst.instrument,
         interval,
         oi: false,
-        fromDate: `${fromDate} 09:15:00`,
-        toDate: `${toDate} 15:30:00`,
+        fromDate: `${fromDate} ${openStamp}`,
+        toDate: `${toDate} ${closeStamp}`,
       });
       const candles = mapChartCandles(payload);
       if (candles.length >= 40) return candles;
@@ -1126,7 +1218,7 @@ export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {
 }
 
 function fnoSegment(symbol) {
-  return String(symbol || "").toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO";
+  return exchangeSegmentFor(symbol);
 }
 
 function productType(product) {
@@ -1142,7 +1234,8 @@ function securityIdFromOpenChain(payload = {}) {
   const option = String(payload.option || parsed?.option || "").toUpperCase();
   const opt = option === "PUT" || option === "P" ? "PE" : option === "CALL" || option === "C" ? "CE" : option;
   if (!strike || (opt !== "CE" && opt !== "PE")) return "";
-  const row = currentOptionRows().find((item) => Number(item.strike) === strike);
+  const rows = optionRowsForSymbol(payload.symbol || parsed?.root) || currentOptionRows() || [];
+  const row = rows.find((item) => Number(item.strike) === strike);
   if (!row) return "";
   return String((opt === "PE" ? row.putId : row.callId) || "");
 }
@@ -1187,8 +1280,19 @@ function dhanOrderLiveFromBody(result, extra = {}) {
 }
 
 function attachPlaceLive(error, extra = {}) {
-  const live = dhanOrderLiveFromBody(error?.body, extra);
-  if (live) error.live = live;
+  const fromBody = dhanOrderLiveFromBody(error?.body, extra);
+  const orderId = String(fromBody?.orderId || extra.orderId || extra.correlationId || `rej${Date.now()}`);
+  error.live = {
+    orderId,
+    status: fromBody?.status || extra.defaultStatus || "REJECTED",
+    securityId: String(extra.securityId || fromBody?.securityId || ""),
+    filledQty: fromBody?.filledQty || 0,
+    price: fromBody?.price || 0,
+    afterMarketOrder: Boolean(extra.afterMarketOrder ?? fromBody?.afterMarketOrder),
+    correlationId: extra.correlationId || fromBody?.correlationId || "",
+    raw: error?.body || fromBody?.raw || {},
+    reason: dhanErrorText(error?.body, error?.message || "Dhan rejected this order"),
+  };
 }
 
 export async function placeDhanOrder(payload = {}) {
@@ -1205,7 +1309,8 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   const desk = getOptionMeta();
-  let securityId = securityIdFromOpenChain(payload);
+  let securityId = String(payload.securityId || "").trim();
+  if (!securityId || securityId === "0") securityId = securityIdFromOpenChain(payload);
   if (!securityId || securityId === "0") {
     securityId = await resolveTradableSecurityId({
       symbol: payload.symbol,
@@ -1215,7 +1320,7 @@ export async function placeDhanOrder(payload = {}) {
       kind: payload.kind,
     });
   }
-  if (!securityId || securityId === "0") {
+  if ((!securityId || securityId === "0") && !scripMasterLoaded()) {
     await reloadScripMaster();
     securityId = await resolveTradableSecurityId({
       symbol: payload.symbol,
@@ -1236,15 +1341,15 @@ export async function placeDhanOrder(payload = {}) {
     error.status = 400;
     throw error;
   }
-  const qty = Math.max(0, Math.round(Number(payload.qty) || 0));
+  const qty = dhanOrderQuantity(payload);
   if (!qty) {
     const error = new Error("Quantity must be at least 1 lot.");
     error.status = 400;
     throw error;
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
-  const ip = await fetchDhanIp();
-  const useAmo = payload.afterMarketOrder === true || payload.amo === true || !nseSessionOpen();
+  const useAmo = payload.afterMarketOrder === true || payload.amo === true || !liveSessionOpenForOrder(payload);
+  const ipPromise = fetchDhanIp();
   let algos = [];
   try {
     algos = snapshot().algos || [];
@@ -1294,39 +1399,31 @@ export async function placeDhanOrder(payload = {}) {
       try {
         result = await submit(body);
       } catch (retryError) {
-        attachPlaceLive(retryError, { ...liveExtra, afterMarketOrder: true });
-        retryError.message = formatPlaceError(retryError, ip, body);
+        stampPlaceError(retryError, await ipPromise, body, { ...liveExtra, afterMarketOrder: true });
         throw retryError;
       }
     } else {
-      attachPlaceLive(error, liveExtra);
-      error.message = formatPlaceError(error, ip, body);
+      stampPlaceError(error, await ipPromise, body, liveExtra);
       throw error;
     }
   }
   const data = result?.data && typeof result.data === "object" ? result.data : result || {};
   const orderId = String(data.orderId || data.order_id || result?.orderId || "");
   const status = String(data.orderStatus || data.order_status || result?.orderStatus || "");
-  const live = dhanOrderLiveFromBody(result, {
-    ...liveExtra,
-    orderId,
-    status: status || "TRANSIT",
-    defaultStatus: "TRANSIT",
-  });
   if (!orderId || status.toUpperCase() === "REJECTED") {
     const error = new Error(dhanErrorText(result, "Dhan did not place this order."));
     error.status = 400;
     error.body = result;
-    if (live) error.live = live;
-    error.message = formatPlaceError(error, ip, body);
+    stampPlaceError(error, await ipPromise, body, {
+      ...liveExtra,
+      orderId,
+      status: status || "REJECTED",
+      defaultStatus: "REJECTED",
+    });
     throw error;
   }
   if (!account) {
-    try {
-      await pullAccount();
-    } catch {
-      /* order is still at Dhan */
-    }
+    void pullAccount();
   }
   return {
     orderId,

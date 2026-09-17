@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatNumber, formatOi, formatPct, vwapTone } from "../../lib/format";
+import { exchangeSegmentFor, isCrudeUnderlying } from "../../lib/markets";
 
 export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const { data, selectChain, order } = useMarket();
@@ -12,15 +13,10 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
   const [note, setNote] = useState("");
   const [noteFail, setNoteFail] = useState(false);
 
-  const visible = useMemo(() => {
-    const atmIndex = rows.findIndex((row) => row.atm);
-    const next =
-      atmIndex < 0 ? rows.slice(0, 21) : rows.slice(Math.max(0, atmIndex - 10), atmIndex + 11);
-    return next;
-  }, [rows]);
-
   const lot = meta?.underlyings?.find((item) => item.id === symbol)?.lot || 65;
+  const crude = isCrudeUnderlying(symbol);
   const qty = Math.max(1, lots) * lot;
+  const dhanQty = crude ? Math.max(1, lots) : qty;
 
   const trade = async (option: "CE" | "PE", side: "BUY" | "SELL", row: (typeof rows)[number]) => {
     const key = `${row.strike}-${option}-${side}`;
@@ -33,26 +29,27 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         side,
         qty,
         lots: Math.max(1, lots),
+        lotSize: lot,
         price: option === "CE" ? row.callLtp : row.putLtp,
         product: "MIS",
         type: "MARKET",
-        brokerId: data.activeBrokerId,
+        brokerId: data.dhanFeed?.live ? "dhan" : data.activeBrokerId,
         kind: "option",
         option,
         strike: row.strike,
         expiry: meta?.expiry,
-        exchangeSegment: String(symbol).toUpperCase().includes("SENSEX") ? "BSE_FNO" : "NSE_FNO",
+        exchangeSegment: exchangeSegmentFor(symbol),
+        securityId: option === "CE" ? row.callId : row.putId,
       });
       setNote(
         result.live
-          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`
-          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot × ${lot} = ${qty} qty`,
+          ? `${result.afterMarketOrder ? "Queued at Dhan for next open (AMO)" : "Sent to Dhan"} · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`
+          : result.warning || `Desk fill · ${side} ${symbol} ${row.strike} ${option} · ${lots} lot · Dhan qty ${dhanQty}${crude ? ` (size ${lot})` : ""}`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order failed";
       setNoteFail(true);
       setNote(message);
-      window.alert(message);
     } finally {
       setBusy("");
     }
@@ -62,7 +59,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
     <section className="card p-3 md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden md:p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2 md:shrink-0">
         <div>
-          <div className="text-sm font-bold">Index options · next 4 expiries</div>
+          <div className="text-sm font-bold">Options · next 4 expiries</div>
           <p className="text-xs text-slate-400">
             ATM ±10. Phone shows LTP, VWAP, and BUY/SELL on each strike. VWAP colour is the same as desktop.
           </p>
@@ -87,7 +84,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
         <div className={cn("mb-2 break-words text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
       ) : null}
       <div className="space-y-2 md:hidden">
-        {visible.map((row) => {
+        {rows.map((row) => {
           const callVwap = row.callVwap || row.callLtp;
           const putVwap = row.putVwap || row.putLtp;
           return (
@@ -157,7 +154,7 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
           </tr>
         </thead>
         <tbody>
-          {visible.map((row) => (
+          {rows.map((row) => (
             <tr key={row.strike} className={cn("soft-row", row.atm && "bg-brand-50/80 dark:bg-brand-500/10")}>
               <td className="py-2">
                 <SideButton busy={busy} id={`${row.strike}-CE`} side="BUY" onClick={() => void trade("CE", "BUY", row)} />

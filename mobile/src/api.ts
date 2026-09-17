@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { apiDownMessage, publicDeskError } from "./liveSite";
 
 export function apiBase() {
   const env = process.env.EXPO_PUBLIC_API_URL;
@@ -17,29 +18,36 @@ export function setApiToken(token: string) {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
-  const response = await fetch(`${apiBase()}/api${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-      ...(extraHeaders || {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}/api${path}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        ...(extraHeaders || {}),
+      },
+    });
+  } catch {
+    throw new Error(apiDownMessage());
+  }
   const text = await response.text();
   let body: { error?: string } = {};
   try {
     body = text ? (JSON.parse(text) as { error?: string }) : {};
   } catch {
-    /* HTML 404 from an old Express process */
+    /* nginx 504 HTML when Node is down */
   }
   if (!response.ok) {
     throw new Error(
-      body.error ||
-        (response.status === 404
-          ? "API route missing. Stop the old process on port 4000 and run npm start again."
-          : response.status === 502 || response.status === 503 || response.status === 504
-            ? "API is not running. Keep npm start open. Open http://localhost:5173"
-            : `Request failed ${response.status}`),
+      publicDeskError(
+        body.error ||
+          (response.status === 404
+            ? "API route missing. On the VPS run: systemctl restart t2s."
+            : response.status === 502 || response.status === 503 || response.status === 504
+              ? apiDownMessage()
+              : `Request failed ${response.status}`),
+      ),
     );
   }
   return (body as T) || ({} as T);
@@ -177,6 +185,21 @@ export type Snapshot = {
     brokerId?: string;
     securityId?: string;
   }>;
+  closedTrades?: Array<{
+    id: string;
+    symbol: string;
+    side?: "BUY" | "SELL";
+    type?: "BUY" | "SELL";
+    qty: number;
+    entry: number;
+    exit: number;
+    pnl: number;
+    product?: string;
+    strategy?: string;
+    brokerId?: string;
+    closedAt?: string;
+    paper?: boolean;
+  }>;
   orders?: Array<{
     id: string;
     symbol: string;
@@ -253,6 +276,7 @@ export type Snapshot = {
       ipMatchStatus: string;
       ordersAllowed: boolean | null;
     } | null;
+    hasQuotes?: boolean;
     autoMode?: string;
     needsFresh?: boolean;
   };
@@ -266,6 +290,7 @@ export type Snapshot = {
     lot: number;
     qty: number;
     front?: boolean;
+    securityId?: string;
   }>;
 };
 
@@ -505,6 +530,7 @@ export type MemberDesk = {
     }>;
   };
   positions: Array<{ id: string; symbol: string; pnl: number; strategy?: string; ltp: number; qty: number }>;
+  orders?: Array<{ id: string; symbol: string; side?: string; qty?: number; price?: number; status?: string; strategy?: string; createdAt?: string }>;
   payments: PaymentPublic;
   copyReady?: boolean;
 };
@@ -583,6 +609,10 @@ export function getSnapshot() {
   return request<Snapshot>("/snapshot");
 }
 
+export function getDeskFeed() {
+  return request<Partial<Snapshot>>("/feed");
+}
+
 export function getContracts(symbol?: string, expiry?: string) {
   const query = new URLSearchParams();
   if (symbol) query.set("symbol", symbol);
@@ -596,8 +626,11 @@ export function getContracts(symbol?: string, expiry?: string) {
   }>(`/contracts${suffix}`);
 }
 
-export function toggleAlgo(id: string) {
-  return request(`/algos/${id}/toggle`, { method: "POST" });
+export function toggleAlgo(id: string, enabled?: boolean) {
+  return request<{ ok: boolean; algo?: Snapshot["algos"][number]; snapshot?: Snapshot | null }>(`/algos/${id}/toggle`, {
+    method: "POST",
+    body: JSON.stringify(enabled === undefined ? {} : { enabled }),
+  });
 }
 
 export function createAlgo(payload: Record<string, unknown>) {

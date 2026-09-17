@@ -17,9 +17,9 @@ fs.writeFileSync(
   `${JSON.stringify(
     [
       {
-        id: "avinash",
-        name: "Avinash",
-        email: "demo@t2s.app",
+        id: "admin",
+        name: "Trade2Smart",
+        email: "trades2smart@gmail.com",
         desk: "Index Options",
         role: "admin",
         password: "demo123",
@@ -40,12 +40,12 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings } = await import("./memberDesk.js");
-const { asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk } = await import("./memberDesk.js");
+const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
   const rows = listClients(listPublicUsers());
-  assert.equal(rows.some((row) => row.role === "admin" || row.name === "Avinash"), false);
+  assert.equal(rows.some((row) => row.role === "admin" || row.name === "Trade2Smart"), false);
   const arpit = rows.find((row) => row.id === "u-arpit");
   assert.equal(arpit.brokerName, "PAPER");
   assert.equal(arpit.linked, false);
@@ -156,6 +156,47 @@ test("saveClient can install API key and access token on an existing user", () =
   assert.equal(String(next.apiKeyHint).includes("kite-api-key-value"), false);
 });
 
+test("createClient keeps client ID on paper and requires it with an access token", () => {
+  assert.throws(
+    () =>
+      createClient({
+        name: "Token No Id",
+        mobile: "9000000099",
+        brokerId: "dhan",
+        brokerToken: "dhan-access-token-value",
+      }),
+    /client ID/,
+  );
+  const row = createClient({
+    name: "Paper With Token",
+    mobile: "9000000088",
+    brokerId: "dhan",
+    accountId: "11004567",
+    brokerToken: "dhan-access-token-value",
+    tradeMode: "paper",
+  });
+  assert.equal(row.accountId, "11004567");
+  assert.equal(row.credentialsInstalled, true);
+  assert.equal(row.tradeMode, "paper");
+});
+
+test("member install and admin save share the same client ID and token hint", () => {
+  const member = { id: "u-arpit", name: "ARPIT", email: "arpit@gmail.com", role: "user" };
+  const installed = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "99887766",
+    accessToken: "member-dhan-access-token",
+  });
+  assert.equal(installed.install.accountId, "99887766");
+  const adminView = listClients(listPublicUsers()).find((row) => row.id === "u-arpit");
+  assert.equal(adminView.accountId, "99887766");
+  assert.equal(adminView.credentialsInstalled, true);
+  const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(desk.install.accountId, "99887766");
+  assert.equal(desk.install.installed, true);
+});
+
 test("createClient refuses a broker IP already used on that broker", () => {
   saveClient("u-arpit", { brokerId: "dhan", staticIp: "10.1.1.8" });
   assert.throws(
@@ -191,16 +232,58 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(desk.master.positions[0].buyQty, 65);
   assert.equal(desk.master.positions[0].netQty, 65);
   assert.equal(desk.master.positions[0].segment, "indian");
+  assert.equal(desk.master.positions[1].closed, true);
+  assert.equal(desk.master.positions[1].netQty, 0);
+  assert.equal(desk.master.positions[1].realized, 200);
+  assert.equal(desk.master.positions[1].mtm, 200);
+  assert.equal(desk.master.realized, 200);
   assert.equal(desk.clients.some((row) => row.name === "Avinash"), false);
   const arpit = desk.clients.find((row) => row.id === "u-arpit");
   assert.equal(arpit.subtitle, "CLIENT ACCOUNT");
   assert.equal(arpit.open, 0);
   assert.equal(desk.openPositions, 1);
-  assert.equal(desk.masterMtm, 650);
+  assert.equal(desk.masterMtm, 850);
+  assert.equal(desk.totalMtm, 850);
   const crypto = asLedgerPosition({ symbol: "BTCUSDT", type: "SELL", qty: 1, avg: 100, ltp: 90, pnl: 10 });
   assert.equal(crypto.segment, "crypto");
   assert.equal(crypto.sellQty, 1);
   assert.equal(crypto.netQty, -1);
+});
+
+test("closed trades stay on the position desk with live P&L and MTM", () => {
+  const closed = asClosedLedgerPosition({
+    id: "t-close",
+    symbol: "NIFTY 24600 CE",
+    side: "BUY",
+    qty: 65,
+    entry: 100,
+    exit: 112.4,
+    pnl: 806,
+    product: "MIS",
+    brokerId: "dhan",
+  });
+  assert.equal(closed.netQty, 0);
+  assert.equal(closed.buyQty, 65);
+  assert.equal(closed.sellQty, 65);
+  assert.equal(closed.buyPrice, 100);
+  assert.equal(closed.sellPrice, 112.4);
+  assert.equal(closed.ltp, 112.4);
+  assert.equal(closed.realized, 806);
+  assert.equal(closed.mtm, 806);
+  assert.equal(closed.closed, true);
+
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [],
+    [{ id: "t-close", symbol: "NIFTY 24600 CE", side: "BUY", qty: 65, entry: 100, exit: 112.4, pnl: 806, brokerId: "dhan" }],
+  );
+  assert.equal(desk.master.open, 0);
+  assert.equal(desk.master.positions.length, 1);
+  assert.equal(desk.master.positions[0].realized, 806);
+  assert.equal(desk.master.mtm, 806);
+  assert.equal(desk.master.realized, 806);
+  assert.equal(desk.totalMtm, 806);
+  assert.equal(desk.openPositions, 0);
 });
 
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
@@ -224,8 +307,8 @@ test("saveClient stores the client mobile on the user record", () => {
 });
 
 test("deleteClient removes a member and refuses the desk admin", () => {
-  assert.throws(() => deleteClient("avinash", { actorId: "segin" }), /admin/);
-  const gone = deleteClient("u-arpit", { actorId: "avinash" });
+  assert.throws(() => deleteClient("admin", { actorId: "u-arpit" }), /admin/);
+  const gone = deleteClient("u-arpit", { actorId: "admin" });
   assert.equal(gone.ok, true);
   assert.equal(listClients(listPublicUsers()).some((row) => row.id === "u-arpit"), false);
 });

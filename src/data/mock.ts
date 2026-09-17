@@ -132,6 +132,17 @@ export const indices: IndexQuote[] = [
     spark: [80210, 80340, 80280, 80420, 80510, 80470, 80590, 80642],
   },
   {
+    symbol: "CRUDEOIL",
+    name: "CRUDE OIL",
+    price: 6124.5,
+    change: 18.4,
+    changePct: 0.3,
+    future: 6128.0,
+    vwap: 6116.4,
+    prevClose: 6106.1,
+    spark: [6088, 6096, 6082, 6104, 6112, 6106, 6118, 6124],
+  },
+  {
     symbol: "INDIA VIX",
     name: "VIX",
     price: 13.24,

@@ -22,6 +22,8 @@ const {
   loginWithGoogleCode,
   loginWithPassword,
   listPublicUsers,
+  notifyLogin,
+  GMAIL_SMTP_TIMEOUT_MS,
   requestOtp,
   resolveUserRole,
   safeFrontendOrigin,
@@ -32,22 +34,24 @@ const {
   verifyOtp,
 } = await import("./auth.js");
 
-test("resolveUserRole treats seed ids and admin emails as admin", () => {
-  assert.equal(resolveUserRole({ id: "avinash", email: "x@y.com" }), "admin");
-  assert.equal(resolveUserRole({ id: "segin" }), "admin");
-  assert.equal(resolveUserRole({ id: "u1", email: "demo@t2s.app" }), "admin");
+test("resolveUserRole treats only the trades2smart admin email as admin", () => {
+  assert.equal(resolveUserRole({ id: "admin", email: "trades2smart@gmail.com" }), "admin");
+  assert.equal(resolveUserRole({ id: "avinash", email: "x@y.com" }), "user");
+  assert.equal(resolveUserRole({ id: "segin" }), "user");
+  assert.equal(resolveUserRole({ id: "u1", email: "demo@t2s.app" }), "user");
   assert.equal(resolveUserRole({ id: "u1", email: "friend@gmail.com" }), "user");
   assert.equal(
     resolveUserRole({ id: "u1", email: "boss@gmail.com" }, { ADMIN_EMAILS: "boss@gmail.com" }),
     "admin",
   );
-  assert.equal(resolveUserRole({ id: "u1", email: "demo@t2s.app", role: "user" }), "user");
+  assert.equal(resolveUserRole({ id: "u1", email: "trades2smart@gmail.com", role: "user" }), "admin");
 });
 
-test("adminEmailsFromEnv always includes demo and the owner Gmail", () => {
+test("adminEmailsFromEnv always includes the sole admin Gmail", () => {
   const set = adminEmailsFromEnv({ ADMIN_EMAILS: "extra@gmail.com" });
-  assert.equal(set.has("demo@t2s.app"), true);
-  assert.equal(set.has("avinash.ramole86@gmail.com"), true);
+  assert.equal(set.has("trades2smart@gmail.com"), true);
+  assert.equal(set.has("demo@t2s.app"), false);
+  assert.equal(set.has("avinash.ramole86@gmail.com"), false);
   assert.equal(set.has("extra@gmail.com"), true);
 });
 
@@ -129,12 +133,12 @@ test("upsertGoogleUser adds a member and keeps admin emails as admin", () => {
   assert.match(member.token, /^t2s-/);
 
   const admin = upsertGoogleUser({
-    email: "demo@t2s.app",
-    name: "Avinash",
+    email: "trades2smart@gmail.com",
+    name: "Trade2Smart",
     googleId: "gid-admin",
   });
   assert.equal(admin.user.role, "admin");
-  assert.equal(admin.user.id, "avinash");
+  assert.equal(admin.user.id, "admin");
 });
 
 test("upsertGoogleUser rejects non-Gmail accounts", () => {
@@ -208,7 +212,8 @@ test("listPublicUsers includes registered Gmail members for admin", () => {
   assert.equal(member?.role, "user");
   assert.equal(member?.registered, true);
   assert.equal(member?.authProvider, "google");
-  assert.ok(users.some((row) => row.id === "avinash" && row.role === "admin"));
+  assert.ok(users.some((row) => row.id === "admin" && row.role === "admin"));
+  assert.equal(users.some((row) => row.id === "avinash" || row.id === "segin"), false);
 });
 
 test("sign-in session is saved so a restart does not ask to sign in again", () => {
@@ -241,13 +246,13 @@ test("login OTP for a member can be verified from the emailed code", async () =>
 
 test("admin can sign in with password and with email OTP", async () => {
   process.env.T2S_SHOW_OTP = "1";
-  const passwordSession = loginWithPassword("demo@t2s.app", "demo123");
-  assert.equal(passwordSession.user.email, "demo@t2s.app");
+  const passwordSession = loginWithPassword("trades2smart@gmail.com", "demo123");
+  assert.equal(passwordSession.user.email, "trades2smart@gmail.com");
   assert.equal(passwordSession.user.role, "admin");
-  const sent = await requestOtp({ identifier: "demo@t2s.app", purpose: "login", channel: "gmail" });
+  const sent = await requestOtp({ identifier: "trades2smart@gmail.com", purpose: "login", channel: "gmail" });
   assert.match(String(sent.devOtp || ""), /^\d{6}$/);
-  const otpSession = verifyOtp({ identifier: "demo@t2s.app", otp: sent.devOtp, purpose: "login" });
-  assert.equal(otpSession.user.email, "demo@t2s.app");
+  const otpSession = verifyOtp({ identifier: "trades2smart@gmail.com", otp: sent.devOtp, purpose: "login" });
+  assert.equal(otpSession.user.email, "trades2smart@gmail.com");
   assert.equal(otpSession.user.role, "admin");
   assert.ok(otpSession.token);
 });
@@ -372,15 +377,15 @@ test("login OTP without Gmail connected does not leak the code", async () => {
 });
 
 test("admin and member mobile numbers persist on the user record", () => {
-  const session = loginWithPassword("demo@t2s.app", "demo123");
+  const session = loginWithPassword("trades2smart@gmail.com", "demo123");
   const saved = updateProfile(session.token, {
-    name: "Avinash",
-    email: "demo@t2s.app",
+    name: "Trade2Smart",
+    email: "trades2smart@gmail.com",
     mobile: "9876500001",
   });
   assert.equal(saved.user.role, "admin");
   assert.equal(saved.user.mobile, "9876500001");
-  const reloaded = listPublicUsers().find((row) => row.id === "avinash");
+  const reloaded = listPublicUsers().find((row) => row.id === "admin");
   assert.equal(reloaded.mobile, "9876500001");
 
   const member = completeSignup({
@@ -395,13 +400,25 @@ test("admin and member mobile numbers persist on the user record", () => {
 });
 
 test("name-only profile update keeps the saved admin mobile after disk reload", () => {
-  const session = loginWithPassword("demo@t2s.app", "demo123");
-  updateProfile(session.token, { name: "Avinash", mobile: "9876508881" });
-  const named = updateProfile(session.token, { name: "Avinash Ramole" });
+  const session = loginWithPassword("trades2smart@gmail.com", "demo123");
+  updateProfile(session.token, { name: "Trade2Smart", mobile: "9876508881" });
+  const named = updateProfile(session.token, { name: "Trade 2 Smart" });
   assert.equal(named.user.mobile, "9876508881");
-  assert.equal(listPublicUsers().find((row) => row.id === "avinash").mobile, "9876508881");
-  const fromUsers = adminUpdateUser("avinash", { mobile: "9876508882" });
+  assert.equal(listPublicUsers().find((row) => row.id === "admin").mobile, "9876508881");
+  const fromUsers = adminUpdateUser("admin", { mobile: "9876508882" });
   assert.equal(fromUsers.mobile, "9876508882");
-  const afterReload = updateProfile(session.token, { name: "Avinash Ramole" });
+  const afterReload = updateProfile(session.token, { name: "Trade 2 Smart" });
   assert.equal(afterReload.user.mobile, "9876508882");
+});
+
+test("notifyLogin returns quickly when Gmail is not configured", async () => {
+  const started = Date.now();
+  const result = await notifyLogin({ name: "Trade2Smart", email: "trades2smart@gmail.com" });
+  assert.ok(Date.now() - started < 500);
+  assert.equal(result.delivered, false);
+});
+
+test("Gmail SMTP timeout is short enough to beat an nginx 504", () => {
+  assert.equal(GMAIL_SMTP_TIMEOUT_MS, 4000);
+  assert.ok(GMAIL_SMTP_TIMEOUT_MS < 15_000);
 });

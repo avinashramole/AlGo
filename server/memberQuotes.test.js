@@ -25,3 +25,21 @@ test("memberIndexQuote drops VWAP and VIX", () => {
   assert.equal(row.futureVwap, undefined);
   assert.equal(row.securityId, undefined);
 });
+
+test("memberIndexQuote keeps Crude Oil cards", () => {
+  const row = memberIndexQuote({
+    symbol: "CRUDEOIL",
+    name: "CRUDE OIL",
+    price: 6124.5,
+    change: 18.4,
+    changePct: 0.3,
+    spark: [6088, 6124],
+    future: 6128,
+    lot: 100,
+    vwap: 6116.4,
+  });
+  assert.equal(row.symbol, "CRUDEOIL");
+  assert.equal(row.future, 6128);
+  assert.equal(row.lot, 100);
+  assert.equal(row.vwap, undefined);
+});

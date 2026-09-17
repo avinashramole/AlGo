@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
-import { Alert, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
+import { ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api";
 import { useAuth } from "../AuthContext";
 import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { BrandMark } from "../components/BrandMark";
-import { colors, formatInr, formatIst, formatNumber, formatPct, isNseSessionOpen, vwapColor } from "../theme";
+import { colors, formatInr, formatIst, formatNumber, formatPct, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen, vwapColor } from "../theme";
 
 function MemberHome() {
   const navigation = useNavigation<any>();
@@ -116,30 +116,11 @@ function MemberHome() {
 export function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { data, live, order } = useMarket();
+  const { data } = useMarket();
   const signal = data.featuredSignal;
   if (user?.role !== "admin") {
     return <MemberHome />;
   }
-  const tradeFuture = async (item: (typeof data.indices)[number], side: "BUY" | "SELL") => {
-    const root = item.symbol === "NIFTY 50" ? "NIFTY" : item.symbol;
-    try {
-      const result = await order({
-        symbol: `${root} FUT`,
-        kind: "future",
-        side,
-        qty: item.lot || 65,
-        price: item.future || item.price,
-        product: "MIS",
-        type: "MARKET",
-        brokerId: data.activeBrokerId,
-        expiry: item.futureExpiry,
-      });
-      Alert.alert(result.live ? "Sent to Dhan" : "Desk fill", `${side} ${root} FUT`);
-    } catch (err) {
-      Alert.alert("Order failed", err instanceof Error ? err.message : "Try again");
-    }
-  };
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -148,9 +129,15 @@ export function HomeScreen() {
           <BrandMark variant="horizontal" />
           <Text style={styles.user}>{user?.name || "Trader"} · {user?.email || user?.mobile || "Profile"}</Text>
         </Pressable>
-        <Text style={[styles.live, !isNseSessionOpen() && { color: colors.muted }]}>
-          {isNseSessionOpen() ? "Market Open" : "Market Closed"}
-          {data.dhanFeed?.live ? " · DHAN LIVE" : live ? " · LIVE" : " · DEMO"}
+        <Text style={[styles.live, !(isNseSessionOpen() || isMcxSessionOpen()) && { color: colors.muted }]}>
+          {isNseSessionOpen() && isMcxSessionOpen()
+            ? "Market Open"
+            : isNseSessionOpen()
+              ? "NSE Open"
+              : isMcxSessionOpen()
+                ? "MCX Open"
+                : "Market Closed"}
+          {hasDhanQuotes(data) ? (data.dhanFeed?.live ? " · DHAN LIVE" : " · DHAN") : ""}
         </Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
@@ -161,7 +148,7 @@ export function HomeScreen() {
             <Card key={item.symbol}>
               <View style={{ width: 200 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
-                <Text style={styles.price}>{formatNumber(item.price)}</Text>
+                <Text style={styles.price}>{item.price > 0 ? formatNumber(item.price) : "—"}</Text>
                 <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
                   {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
                 </Text>
@@ -169,7 +156,7 @@ export function HomeScreen() {
                   <View style={styles.deskRow}>
                     <View>
                       <Text style={styles.tiny}>FUT</Text>
-                      <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                      <Text style={styles.deskVal}>{(item.future || item.price) > 0 ? formatNumber(item.future || item.price) : "—"}</Text>
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>
@@ -181,16 +168,6 @@ export function HomeScreen() {
                       <Text style={styles.tiny}>LOT</Text>
                       <Text style={styles.deskVal}>{item.lot ? `1 = ${item.lot}` : "—"}</Text>
                     </View>
-                  </View>
-                ) : null}
-                {showDeriv ? (
-                  <View style={styles.deskRow}>
-                    <Pressable style={styles.buy} onPress={() => void tradeFuture(item, "BUY")}>
-                      <Text style={styles.ctaText}>BUY</Text>
-                    </Pressable>
-                    <Pressable style={styles.sell} onPress={() => void tradeFuture(item, "SELL")}>
-                      <Text style={styles.ctaText}>SELL</Text>
-                    </Pressable>
                   </View>
                 ) : null}
               </View>
@@ -226,8 +203,17 @@ export function HomeScreen() {
         </View>
       </Card>
       <Card>
-        <Text style={styles.heading}>Positions · {formatInr(data.totalPnl)}</Text>
-        {data.positions.slice(0, 4).map((row) => (
+        <Text style={styles.heading}>Position · {formatInr(data.totalPnl)}</Text>
+        {[
+          ...(data.positions || []),
+          ...(data.closedTrades || []).map((row) => ({
+            id: row.id,
+            symbol: row.symbol,
+            pnl: row.pnl,
+          })),
+        ]
+          .slice(0, 4)
+          .map((row) => (
           <View key={row.id} style={styles.row}>
             <Text style={styles.rowTitle}>{row.symbol}</Text>
             <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "700" }}>{formatInr(row.pnl)}</Text>
@@ -255,8 +241,6 @@ const styles = StyleSheet.create({
   metricVal: { color: colors.brand, fontWeight: "800", marginTop: 4 },
   cta: { marginTop: 12, height: 44, borderRadius: 12, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   ctaText: { color: "#fff", fontWeight: "700" },
-  buy: { flex: 1, height: 32, borderRadius: 8, backgroundColor: colors.up, alignItems: "center", justifyContent: "center" },
-  sell: { flex: 1, height: 32, borderRadius: 8, backgroundColor: colors.down, alignItems: "center", justifyContent: "center" },
   barBg: { height: 8, backgroundColor: "#e5e7eb", borderRadius: 99, overflow: "hidden" },
   barFill: { height: 8, backgroundColor: colors.up },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },

@@ -1,13 +1,14 @@
-import { buildSyntheticChain, dropExpired, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
+import { buildSyntheticChain, dropExpired, exchangeSegmentFor, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
 
 const SCRIP_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const CACHE_MS = 12 * 60 * 60 * 1000;
 
 const UNDERLYINGS = [
-  { parent: "NIFTY 50", root: "NIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 65, indexId: 13, indexSegment: "IDX_I" },
-  { parent: "BANKNIFTY", root: "BANKNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 30, indexId: 25, indexSegment: "IDX_I" },
-  { parent: "FINNIFTY", root: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 60, indexId: 27, indexSegment: "IDX_I" },
-  { parent: "SENSEX", root: "SENSEX", exchange: "BSE", segment: "BSE_FNO", lot: 20, indexId: 51, indexSegment: "IDX_I" },
+  { parent: "NIFTY 50", root: "NIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 65, indexId: 13, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
+  { parent: "BANKNIFTY", root: "BANKNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 30, indexId: 25, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
+  { parent: "FINNIFTY", root: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 60, indexId: 27, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
+  { parent: "SENSEX", root: "SENSEX", exchange: "BSE", segment: "BSE_FNO", lot: 20, indexId: 51, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
+  { parent: "CRUDEOIL", root: "CRUDEOIL", exchange: "MCX", segment: "MCX_COMM", lot: 100, indexId: 565899, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
 ];
 
 const FALLBACK = [
@@ -15,6 +16,7 @@ const FALLBACK = [
   { parent: "BANKNIFTY", symbol: "BANKNIFTY FUT", kind: "future", segment: "NSE_FNO", securityId: 58067 },
   { parent: "FINNIFTY", symbol: "FINNIFTY FUT", kind: "future", segment: "NSE_FNO", securityId: 58070 },
   { parent: "SENSEX", symbol: "SENSEX FUT", kind: "future", segment: "BSE_FNO", securityId: 825622 },
+  { parent: "CRUDEOIL", symbol: "CRUDEOIL FUT", kind: "future", segment: "MCX_COMM", securityId: 565899 },
 ];
 
 const ROOTS = new Set(UNDERLYINGS.map((row) => row.root));
@@ -60,6 +62,8 @@ export function optionRoot(symbol) {
   if (raw.includes("BANKNIFTY") || raw.includes("BANK NIFTY")) return "BANKNIFTY";
   if (raw.includes("FINNIFTY")) return "FINNIFTY";
   if (raw.includes("SENSEX")) return "SENSEX";
+  if (raw.includes("CRUDEOILM")) return "CRUDEOILM";
+  if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
   if (raw.includes("NIFTY")) return "NIFTY";
   return raw.trim().split(/\s+/)[0] || "";
 }
@@ -67,11 +71,13 @@ export function optionRoot(symbol) {
 export function parseOptionContract(symbol) {
   const clean = String(symbol || "").replace(/,/g, "").toUpperCase();
   const match = clean.match(
-    /\b(BANKNIFTY|FINNIFTY|SENSEX|NIFTY)\b(?:[\s-]+[A-Z0-9]+)*[\s-]+(\d{4,6})[\s-]*(CE|PE)\b/,
+    /\b(BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NIFTY)\b(?:[\s-]+[A-Z0-9]+)*[\s-]+(\d{3,6})[\s-]*(CE|PE)\b/,
   );
   if (!match) return null;
   return { root: match[1], strike: Number(match[2]), option: match[3] };
 }
+
+export { exchangeSegmentFor };
 
 function optionKey(root, expiry, strike, option) {
   return `${optionRoot(root)}|${normalizeExpiry(expiry)}|${Number(strike)}|${String(option || "").toUpperCase()}`;
@@ -107,8 +113,8 @@ async function loadScripMaster() {
 
       for (let i = 1; i < lines.length; i += 1) {
         const line = lines[i];
-        const isFut = line.includes("FUTIDX");
-        const isOpt = line.includes("OPTIDX");
+        const isFut = line.includes("FUTIDX") || line.includes("FUTCOM");
+        const isOpt = line.includes("OPTIDX") || line.includes("OPTFUT");
         if (!isFut && !isOpt) continue;
         const parts = splitCsvLine(line);
         const instrument = parts[idx.SEM_INSTRUMENT_NAME];
@@ -119,15 +125,19 @@ async function loadScripMaster() {
         const expiry = normalizeExpiry(parts[idx.SEM_EXPIRY_DATE]);
         const securityId = Number(parts[idx.SEM_SMST_SECURITY_ID]);
         if (!expiry || !Number.isFinite(securityId) || securityId <= 0) continue;
-        if (instrument === "FUTIDX") {
+        const futName = und.futInstrument || "FUTIDX";
+        const optName = und.optInstrument || "OPTIDX";
+        const parsedLot = Number(parts[idx.SEM_LOT_UNITS]);
+        const lot = parsedLot > 1 ? parsedLot : und.lot;
+        if (instrument === futName) {
           grouped[root].push({
             expiry,
             securityId,
             trading,
-            lot: Number(parts[idx.SEM_LOT_UNITS]) || und.lot,
+            lot,
             segment: und.segment,
           });
-        } else if (instrument === "OPTIDX") {
+        } else if (instrument === optName) {
           const option = optionType(parts[idx.SEM_OPTION_TYPE]);
           const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
           if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
@@ -212,14 +222,30 @@ export function listFutures() {
         expiry: row.expiry || "",
         securityId: String(row.securityId),
         segment: row.segment || und.segment,
-        lot: Number(row.lot) || und.lot,
-        qty: Number(row.lot) || und.lot,
+        lot: Number(row.lot) > 1 ? Number(row.lot) : und.lot,
+        qty: Number(row.lot) > 1 ? Number(row.lot) : und.lot,
         front: Boolean(front && row.securityId === front.securityId),
         tradable: true,
       });
     }
   }
   return out;
+}
+
+export function frontFutureForRoot(root) {
+  const wanted = optionRoot(root);
+  return listFutures().find((row) => row.root === wanted && row.front) || null;
+}
+
+export function chainUnderlyingRequest(symbol) {
+  const root = optionRoot(symbol);
+  const und = UNDERLYINGS.find((row) => row.root === root);
+  if (!und) return { UnderlyingScrip: 13, UnderlyingSeg: "IDX_I" };
+  const front = und.segment === "MCX_COMM" ? frontFutureForRoot(und.root) : null;
+  return {
+    UnderlyingScrip: Number(front?.securityId || und.indexId),
+    UnderlyingSeg: und.indexSegment || und.segment,
+  };
 }
 
 export function listIndexContracts() {
@@ -383,6 +409,10 @@ export function attachContractIds(indices) {
   });
 }
 
+export function scripMasterLoaded() {
+  return Number(cache.at) > 0;
+}
+
 export async function reloadScripMaster() {
   if (loading) return loading;
   cache.at = 0;
@@ -444,7 +474,7 @@ export function scripExpiries(symbol) {
   return dropExpired([...new Set(dates)].sort());
 }
 
-export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10, liveOnly = false } = {}) {
+export function buildScripChain({ symbol, expiry, spot, step = 50, liveRows = [], wings = 10, liveOnly = true } = {}) {
   const root = optionRoot(symbol);
   const exp = normalizeExpiry(expiry);
   const bucket = cache.byExpiry.get(expiryKey(root, exp));

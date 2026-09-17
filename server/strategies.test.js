@@ -61,8 +61,8 @@ test("normalizeAlgo keeps mapped clients and mapping scope", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 3);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6");
+  assert.equal(next.algos.length, 6);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -73,7 +73,7 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a6"), false);
   assert.equal(next.algos.some((row) => row.name === "NIFTY 15m VWAP hedge"), false);
   assert.deepEqual(next.removedIds, ["a6"]);
-  assert.equal(next.algos.length, 2);
+  assert.equal(next.algos.length, 5);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
@@ -81,9 +81,12 @@ test("hydrate still adds a new catalog strategy that was never deleted", () => {
   const next = hydrateAlgos({ algos: catalog.slice(0, 2), removedIds: [] }, catalog);
   assert.equal(next.algos.some((row) => row.id === "a6"), true);
   assert.equal(next.algos.find((row) => row.id === "a6").enabled, false);
+  assert.equal(next.algos.some((row) => row.id === "a7"), true);
+  assert.equal(next.algos.find((row) => row.id === "a7").symbol, "CRUDEOIL");
+  assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
 });
 
-test("hydrate keeps a user-created strategy and pauses a saved LIVE algo", () => {
+test("hydrate keeps a user-created strategy and a started LIVE algo after reload", () => {
   const catalog = seedAlgos();
   const custom = normalizeAlgo({ name: "My RSI", kind: "indicator" }, { id: "a99" });
   const liveAtm = { ...catalog[0], enabled: true, status: "LIVE" };
@@ -91,8 +94,36 @@ test("hydrate keeps a user-created strategy and pauses a saved LIVE algo", () =>
   assert.equal(next.algos.some((row) => row.id === "a99"), true);
   assert.equal(next.algos.some((row) => row.id === "a5"), false);
   const atm = next.algos.find((row) => row.id === "a4");
+  assert.equal(atm.enabled, true);
+  assert.equal(atm.status, "LIVE");
+  assert.equal(next.algos.some((row) => row.id === "a6"), true);
+  assert.equal(next.algos.some((row) => row.id === "a7"), true);
+  assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
+});
+
+test("hydrate does not start a paused strategy from the catalog", () => {
+  const catalog = seedAlgos();
+  const paused = { ...catalog[0], enabled: false, status: "PAUSED" };
+  const next = hydrateAlgos({ algos: [paused], removedIds: [] }, catalog);
+  const atm = next.algos.find((row) => row.id === "a4");
   assert.equal(atm.enabled, false);
   assert.equal(atm.status, "PAUSED");
-  assert.equal(next.algos.some((row) => row.id === "a6"), true);
+});
+
+test("seed includes paused CRUDE OIL option strategies", () => {
+  const seeded = seedAlgos();
+  const crude = seeded.filter((row) => row.symbol === "CRUDEOIL");
+  assert.equal(crude.length, 3);
+  assert.equal(crude.every((row) => row.enabled === false), true);
+  assert.equal(crude.every((row) => row.status === "PAUSED"), true);
+  assert.equal(crude.every((row) => row.instrument === "option"), true);
+  assert.equal(crude.every((row) => row.lotSize === 100), true);
+  assert.equal(crude.every((row) => row.kind === "indicator"), true);
+  assert.equal(seeded.find((row) => row.id === "a7").name, "CRUDE OIL VWAP ATM");
+  assert.equal(seeded.find((row) => row.id === "a8").name, "CRUDE OIL 15m VWAP reversal");
+  assert.equal(seeded.find((row) => row.id === "a8").timeframe, "15m");
+  assert.equal(seeded.find((row) => row.id === "a9").name, "CRUDE OIL Supertrend ATM");
+  assert.equal(seeded.find((row) => row.id === "a9").indicator, "SUPERTREND");
+  assert.equal(seeded.find((row) => row.id === "a6").symbol, "NIFTY");
 });
 

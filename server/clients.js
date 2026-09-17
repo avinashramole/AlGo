@@ -43,7 +43,7 @@ function asClient(user, desk, handle = {}) {
     brokerId: desk.brokerId,
     brokerName: brokerLabel(desk.brokerId),
     brokerColor: broker?.color || "#64748b",
-    accountId: paper ? "" : desk.accountId,
+    accountId: desk.accountId,
     linked: !paper,
     sizingKind: desk.sizingKind,
     sizingValue: desk.sizingValue,
@@ -120,6 +120,12 @@ export function createClient(patch = {}) {
   if (tradeMode === "real" && (brokerId === "paper" || !brokerId)) {
     throw fail("Add a broker before enabling real orders. New clients stay PAPER.");
   }
+  if (String(patch.brokerToken || "").trim() && !String(patch.accountId || "").trim()) {
+    throw fail("Paste the client ID with the access token.");
+  }
+  if (tradeMode === "real" && !String(patch.accountId || "").trim()) {
+    throw fail("Paste the client ID before enabling real orders.");
+  }
   if (tradeMode === "real" && !String(patch.brokerToken || "").trim()) {
     throw fail("Paste the broker access token before enabling real orders.");
   }
@@ -158,6 +164,9 @@ export function saveClient(userId, patch = {}) {
   const existing = getPublicUser(userId);
   if (!existing) throw fail("Client not found.", 404);
   if (existing.role === "admin") throw fail("Desk admins are not edited on All clients.");
+  if (String(patch.brokerToken || "").trim() && !String(patch.accountId || peekClientSettings(userId).accountId || "").trim()) {
+    throw fail("Paste the client ID with the access token.");
+  }
   if (patch.name != null || patch.mobile != null) {
     adminUpdateUser(userId, {
       ...(patch.name != null ? { name: patch.name } : {}),
@@ -220,16 +229,48 @@ export function asLedgerPosition(row = {}) {
     paper: Boolean(row.paper || row.brokerId === "paper"),
     segment: isCryptoSymbol(row.symbol) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
+    closed: false,
   };
 }
 
-function bookTotals(positions = [], closedTrades = []) {
-  const rows = positions || [];
+export function asClosedLedgerPosition(row = {}) {
+  const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  const qty = Math.abs(Number(row.qty) || 0);
+  const entry = Number(row.entry ?? row.avg ?? 0);
+  const exit = Number(row.exit ?? row.ltp ?? entry);
+  const marked = Number(row.pnl);
+  const realized = Number.isFinite(marked)
+    ? round2(marked)
+    : round2((exit - entry) * qty * (type === "SELL" ? -1 : 1));
   return {
-    positions: rows,
-    mtm: round2(rows.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
-    realized: round2((closedTrades || []).reduce((sum, row) => sum + Number(row.pnl || 0), 0)),
-    open: rows.length,
+    id: String(row.id || ""),
+    symbol: String(row.symbol || ""),
+    product: String(row.product || "MIS").toUpperCase(),
+    type,
+    buyQty: qty,
+    buyPrice: type === "BUY" ? entry : exit,
+    sellQty: qty,
+    sellPrice: type === "BUY" ? exit : entry,
+    netQty: 0,
+    ltp: exit,
+    realized,
+    mtm: realized,
+    paper: Boolean(row.paper || row.brokerId === "paper"),
+    segment: isCryptoSymbol(row.symbol) ? "crypto" : "indian",
+    strategy: String(row.strategy || ""),
+    closed: true,
+  };
+}
+
+function ledgerBook(openRows = [], closedTrades = []) {
+  const open = (openRows || []).map(asLedgerPosition);
+  const closed = (closedTrades || []).map(asClosedLedgerPosition);
+  const positions = [...open, ...closed];
+  return {
+    positions,
+    mtm: round2(positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
+    realized: round2(closed.reduce((sum, row) => sum + Number(row.realized || 0), 0)),
+    open: open.length,
   };
 }
 
@@ -281,19 +322,18 @@ export function getClientDetail({ userId, users = [], algos = [], quote, admins 
 }
 
 export function listPositionDesk(users = [], masterPositions = [], masterClosed = []) {
-  const masterRows = (masterPositions || []).map(asLedgerPosition);
+  const masterBook = ledgerBook(masterPositions, masterClosed);
   const master = {
     id: "master",
     name: "Master",
     kind: "master",
     title: "Master",
     subtitle: "PRIMARY MASTER ACCOUNT",
-    tradeMode: masterRows.some((row) => !row.paper) ? "real" : "paper",
-    ...bookTotals(masterRows, masterClosed),
+    tradeMode: masterBook.positions.some((row) => !row.paper) ? "real" : "paper",
+    ...masterBook,
   };
   const clients = listClients(users).map((client) => {
     const book = peekClientBook(client.id);
-    const positions = (book.positions || []).map(asLedgerPosition);
     return {
       id: client.id,
       name: client.name,
@@ -301,7 +341,7 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
       title: client.name,
       subtitle: "CLIENT ACCOUNT",
       tradeMode: client.tradeMode,
-      ...bookTotals(positions, book.closedTrades),
+      ...ledgerBook(book.positions, book.closedTrades),
     };
   });
   return {
