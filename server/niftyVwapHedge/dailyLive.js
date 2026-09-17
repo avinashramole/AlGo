@@ -1,13 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isNiftyVwapReversalAlgo } from "../niftyVwap/config.js";
 import { isNiftyVwapHedgeAlgo } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const HEDGE_DAILY_LIVE_HOUR_IST = 9;
-export const HEDGE_DAILY_LIVE_MINUTE_IST = 30;
-export const HEDGE_DAILY_LIVE_LABEL = "09:30 IST";
+export const HEDGE_DAILY_LIVE_MINUTE_IST = 20;
+export const HEDGE_DAILY_LIVE_LABEL = "09:20 IST";
+
+export function isNiftyDailyLiveAlgo(algo = {}) {
+  return isNiftyVwapHedgeAlgo(algo) || isNiftyVwapReversalAlgo(algo);
+}
 
 function hedgeDailyLiveFile() {
   return process.env.T2S_HEDGE_DAILY_LIVE_FILE || path.join(__dirname, "..", "data", "hedge-daily-live.json");
@@ -114,7 +119,7 @@ export function applyHedgeDailyLive(algos = [], { now = new Date(), feedLive = f
   }
   const armedIds = [];
   const next = (algos || []).map((algo) => {
-    if (!isNiftyVwapHedgeAlgo(algo) || algo.runMode !== "live" || algo.enabled) return algo;
+    if (!isNiftyDailyLiveAlgo(algo) || algo.runMode !== "live" || algo.enabled) return algo;
     armedIds.push(algo.id);
     return {
       ...algo,
@@ -155,7 +160,7 @@ export function startHedgeDailyLiveScheduler({
     try {
       result = typeof arm === "function" ? await arm(new Date(getNow())) : null;
     } catch (error) {
-      console.log(`NIFTY 15m VWAP hedge 09:30 LIVE arm failed: ${error.message || error}`);
+      console.log(`NIFTY 15m VWAP daily LIVE arm failed: ${error.message || error}`);
     }
     if (!stopped && result?.reason === "dhan-not-live" && isHedgeDailyLiveWindow(new Date(getNow()))) {
       timer = setTimeoutFn(onFire, 5_000);
@@ -167,7 +172,7 @@ export function startHedgeDailyLiveScheduler({
   scheduleNext();
   const next = nextHedgeDailyLiveAt(getNow());
   console.log(
-    `NIFTY 15m VWAP hedge daily LIVE is set: ${HEDGE_DAILY_LIVE_LABEL} on session days · next ${new Date(next).toISOString()} · restart does not start LIVE`,
+    `NIFTY 15m VWAP hedge + reversal daily LIVE is set: ${HEDGE_DAILY_LIVE_LABEL} on session days · next ${new Date(next).toISOString()} · restart does not start LIVE`,
   );
   return () => {
     stopped = true;

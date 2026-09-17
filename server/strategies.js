@@ -270,12 +270,12 @@ export function summarizeAlgo(algo) {
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
   const contract = contractLabel(algo);
   if (isNiftyVwapHedgeAlgo(algo)) {
-    return `NIFTY 15m VWAP hedge · weekly ATM · open below VWAP + close above → BUY 1 lot CE · open above VWAP + close below → BUY 1 lot PE · primary +40% · −20% buys 2 lots opposite once · +5% account P&L exits all · daily LIVE 09:30 IST · ${size}`;
+    return `NIFTY 15m VWAP hedge · weekly ATM · open below VWAP + close above → BUY 1 lot CE · open above VWAP + close below → BUY 1 lot PE · primary +40% · −20% buys 2 lots opposite once · +5% account P&L exits all · daily LIVE 09:20 IST · ${size}`;
   }
   if (isNiftyVwapReversalAlgo(algo)) {
     const sl = algo.initialSlPct || 15;
     const tgt = algo.targetPct || 30;
-    return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · ${size}`;
+    return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · daily LIVE 09:20 IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

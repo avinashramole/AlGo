@@ -93,7 +93,7 @@ export function defaultNiftyVwapHedgeAlgo(patch = {}) {
     sellRight: "vwap",
     runMode: ["live", "paper", "backtest"].includes(patch.runMode) ? patch.runMode : "live",
     brokerId: patch.runMode === "paper" || patch.runMode === "backtest" ? "paper" : "dhan",
-    dailyLiveIst: "09:30",
+    dailyLiveIst: "09:20",
     enabled: false,
     status: patch.runMode === "backtest" ? "BACKTEST" : "PAUSED",
     ...patch,
