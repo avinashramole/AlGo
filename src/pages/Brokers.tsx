@@ -271,7 +271,7 @@ export function Brokers() {
           </label>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Save writes <code>/root/download/algo/.env</code> (or <code>/opt/t2s/.env</code>) and <code>tokan.env</code>. Do not rely on the hosting file manager for hidden <code>.env</code> files — they often do not save. Use the Dhan PIN and the long Setup TOTP secret from web.dhan.co, not the 6-digit code.
+          Save writes <code>/opt/t2s/.env</code> and <code>tokan.env</code> on the VPS. Do not rely on the hosting file manager for hidden <code>.env</code> files — they often do not save. Use the Dhan PIN and the long Setup TOTP secret from web.dhan.co, not the 6-digit code.
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <button

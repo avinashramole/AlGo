@@ -48,13 +48,12 @@ npm -v
 
 ## Step 2 — Download T2S
 
-The live checkout is **`/root/download/algo`**. `systemctl start t2s` must use this folder (not the old `/opt/t2s` path).
+The live checkout on the **VPS** is **`/opt/t2s`**. `download/algo` is the folder on the **PC**, not on this server. `systemctl start t2s` must use `/opt/t2s`.
 
 ```bash
-mkdir -p /root/download/algo
-cd /root/download/algo
-git clone https://github.com/avinashramole/AlGo.git /root/download/algo
-cd /root/download/algo
+mkdir -p /opt/t2s
+git clone https://github.com/avinashramole/AlGo.git /opt/t2s
+cd /opt/t2s
 git checkout main
 git pull origin main
 ```
@@ -62,7 +61,7 @@ git pull origin main
 If clone says the folder is not empty:
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 git checkout main
 git pull origin main
 ```
@@ -72,7 +71,7 @@ git pull origin main
 ## Step 3 — Build
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 npm run setup:vps
 npm run build
 ```
@@ -99,7 +98,7 @@ iptables -I INPUT -p tcp --dport 4000 -j ACCEPT
 ## Step 5 — Test
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 PORT=4000 npm run start:vps
 ```
 
@@ -108,8 +107,8 @@ On your PC, Chrome: **http://66.116.248.198:4000**
 Stop the test with Ctrl+C, then keep it running:
 
 ```bash
-cp /root/download/algo/deploy/t2s.service /etc/systemd/system/t2s.service
-bash /root/download/algo/deploy/install-t2s-service.sh
+cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
+bash /opt/t2s/deploy/install-t2s-service.sh
 systemctl daemon-reload
 systemctl enable --now t2s
 systemctl status t2s
@@ -141,12 +140,12 @@ You must see **66.116.248.198**. If you still see an old IP, wait and try again.
 T2S must already be running (`systemctl status t2s` shows **active**). Open TCP **80** and **443** in the VPS **hosting panel**. Then in SSH:
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 git pull origin main
 dnf -y install epel-release
 dnf -y install nginx certbot python3-certbot-nginx
 setsebool -P httpd_can_network_connect 1
-cp /root/download/algo/deploy/nginx-trade2smart.conf /etc/nginx/conf.d/trade2smart.conf
+cp /opt/t2s/deploy/nginx-trade2smart.conf /etc/nginx/conf.d/trade2smart.conf
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
@@ -211,11 +210,11 @@ Restart does **not** turn LIVE on. Do **not** open localhost.
 On the VPS as root:
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main
-bash /root/download/algo/deploy/fix-connection-reset-vps.sh
+bash /opt/t2s/deploy/fix-connection-reset-vps.sh
 ```
 
 You want `nginx` **active**, `t2s` **active**, `http80:301` or `200`, and `https443:200`. Then Chrome **https://trade2smart.com** and Ctrl+Shift+R.
@@ -236,24 +235,44 @@ ss -tlnp | grep -E ':80|:443|:4000'
 
 Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
 
-On the **VPS** the checkout is usually **`/opt/t2s`**. `download/algo` is the PC folder. If you already cloned on the VPS into some `algo` directory, stay in that folder.
+On the **VPS** the checkout is **`/opt/t2s`**. `download/algo` is the **PC** folder. Do not `cd` into `/root/download/algo` on the server.
 
-If logs show `Cannot find package 'cors'`, the API packages were never installed. Restart does **not** turn LIVE on. Do **not** open localhost.
+If logs show `Cannot find package 'cors'` from `/root/download/algo/server/index.js`, systemd is pointed at the PC path. Restart does **not** turn LIVE on. Do **not** open localhost.
 
-On the VPS as root (you can paste this from `/root/download/algo` or `/opt/t2s`):
+On the VPS as root (even if the prompt says `algo`):
 
 ```bash
-pwd
-npm --prefix server install --omit=dev
+systemctl stop t2s || true
+if [ ! -f /opt/t2s/server/index.js ] && [ -f server/index.js ]; then
+  mkdir -p /opt/t2s
+  tar -C . --exclude=node_modules --exclude=.git -cf - . | tar -C /opt/t2s -xf -
+  mkdir -p /opt/t2s/server
+  [ -d server/node_modules ] && cp -a server/node_modules /opt/t2s/server/ || true
+  [ -f .env ] && [ ! -f /opt/t2s/.env ] && cp -a .env /opt/t2s/.env
+  [ -f tokan.env ] && [ ! -f /opt/t2s/tokan.env ] && cp -a tokan.env /opt/t2s/tokan.env
+fi
+cd /opt/t2s
+NODE_OPTIONS=--max-old-space-size=256 npm --prefix server install --omit=dev
+mkdir -p /etc/systemd/system/t2s.service.d
+cat > /etc/systemd/system/t2s.service.d/home.conf <<'EOF'
+[Service]
+WorkingDirectory=/opt/t2s
+EnvironmentFile=-/opt/t2s/.env
+EnvironmentFile=-/opt/t2s/tokan.env
+Environment=T2S_HOME=/opt/t2s
+EOF
+systemctl daemon-reload
 systemctl start t2s
 sleep 4
 systemctl is-active t2s
+systemctl show t2s -p WorkingDirectory
 curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health
 ```
 
 Then:
 
 ```bash
+cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main
@@ -278,11 +297,11 @@ Something accepted TCP **4000** and then died (Node crash loop / OOM while loadi
 On the VPS as root:
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main
-bash /root/download/algo/deploy/fix-connection-reset-vps.sh
+bash /opt/t2s/deploy/fix-connection-reset-vps.sh
 ```
 
 Skip `npm run build` unless you also want the website JS rebuilt. This fix is the Node process on port 4000.
@@ -361,7 +380,7 @@ You must see **Swap** with about **2.0Gi** before continuing.
 Do **not** stop `t2s` first. Skip `npm run setup:vps`. Restarting `t2s` does **not** turn LIVE on.
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 git fetch origin cursor/ip-management-1488
 git checkout cursor/ip-management-1488
 git pull origin cursor/ip-management-1488
@@ -390,7 +409,7 @@ systemctl start t2s
 ## Later updates
 
 ```bash
-cd /root/download/algo
+cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main

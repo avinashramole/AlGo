@@ -1,5 +1,5 @@
 #!/bin/bash
-# Permanent 504 / API-down fix on the VPS. Points t2s at download/algo.
+# Permanent 504 / API-down fix on the VPS. Points t2s at /opt/t2s.
 # Does NOT git merge. Does NOT touch users/tokens/.env.
 # Restart does NOT turn LIVE on.
 set -euo pipefail

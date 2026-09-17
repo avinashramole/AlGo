@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bring t2s back when Chrome says the API is down, or curl 4000 resets.
-# Uses download/algo if that is where the repo lives. Falls back to /opt/t2s.
+# VPS checkout is /opt/t2s. download/algo is the PC folder.
 # Does NOT git merge. Does NOT touch users/tokens/.env.
 # Restart does NOT turn LIVE on.
 set -euo pipefail

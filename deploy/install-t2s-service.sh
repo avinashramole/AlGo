@@ -1,6 +1,6 @@
 #!/bin/bash
-# Point systemd t2s at download/algo, publish dist where nginx can read it,
-# restore HTTP+HTTPS, and start Node + nginx.
+# Point systemd t2s at /opt/t2s (VPS). download/algo is the PC folder.
+# Publish dist where nginx can read it, restore HTTP+HTTPS, start Node + nginx.
 # Restart does NOT turn LIVE on. Does not touch users/tokens/.env.
 set -euo pipefail
 
@@ -11,10 +11,22 @@ WEBROOT=/var/www/trade2smart
 T2S_SCRIPT_HOME=$(cd "$SCRIPT_DIR/.." && pwd)
 export T2S_SCRIPT_HOME
 
-HOME_DIR=$(t2s_find_home) || {
-  echo "Could not find T2S. On the VPS use /opt/t2s. download/algo is the PC folder."
+FOUND=$(t2s_find_home) || {
+  echo "Could not find T2S. On the VPS clone to /opt/t2s. download/algo is the PC folder."
   exit 1
 }
+echo "found=$FOUND"
+if t2s_is_pc_path "$FOUND"; then
+  echo "That path is a PC-style folder. VPS home is /opt/t2s."
+fi
+if ! t2s_is_home "$(t2s_vps_home)"; then
+  t2s_seed_opt_t2s "$FOUND" || true
+fi
+HOME_DIR=$(t2s_vps_home)
+if ! t2s_is_home "$HOME_DIR"; then
+  echo "Could not use $HOME_DIR; staying on $FOUND only until /opt/t2s exists."
+  HOME_DIR=$FOUND
+fi
 echo "T2S_HOME=$HOME_DIR"
 t2s_ensure_server_modules "$HOME_DIR"
 
