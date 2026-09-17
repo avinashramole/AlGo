@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Split nginx location / proxy-to-4000 into static dist + /api/ proxy. Idempotent."""
-from __future__ import annotations
-
 import pathlib
 import re
 import sys

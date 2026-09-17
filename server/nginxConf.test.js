@@ -82,3 +82,21 @@ test("nginx conf can force listen 443 with an explicit cert pair", () => {
   assert.match(result.stdout, /force\.crt/);
   fs.rmSync(certDir, { recursive: true, force: true });
 });
+
+test("nginx writer is safe on Python 3.6 (AlmaLinux 8)", () => {
+  const src = fs.readFileSync(path.join(deployDir, "write_nginx_trade2smart.py"), "utf8");
+  assert.doesNotMatch(src, /^from __future__ import annotations/m);
+  const parsed = spawnSync(
+    "python3",
+    ["-c", "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read())", path.join(deployDir, "write_nginx_trade2smart.py")],
+    { encoding: "utf8" },
+  );
+  assert.equal(parsed.status, 0, parsed.stderr || parsed.stdout);
+});
+
+test("install-t2s-service still restarts t2s if the nginx writer fails", () => {
+  const src = fs.readFileSync(path.join(deployDir, "install-t2s-service.sh"), "utf8");
+  assert.match(src, /if ! python3 .*write_nginx_trade2smart\.py/s);
+  assert.match(src, /Leaving \/etc\/nginx\/conf\.d as-is and still restarting t2s/);
+  assert.match(src, /systemctl start t2s/);
+});

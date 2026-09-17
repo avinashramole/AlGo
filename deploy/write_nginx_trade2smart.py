@@ -6,9 +6,8 @@ which returns 500 and makes https://trade2smart.com look like a refused tab.
 Static files go to /var/www/trade2smart. /api/ goes to Node on 127.0.0.1:4000.
 main() always writes listen 443 ssl (Let's Encrypt, or a 30-day self-signed cert)
 so Chrome HSTS does not show ERR_CONNECTION_REFUSED.
+AlmaLinux 8 ships Python 3.6 — keep this file 3.6-safe (no future annotations).
 """
-from __future__ import annotations
-
 import argparse
 import subprocess
 from pathlib import Path

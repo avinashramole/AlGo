@@ -68,7 +68,9 @@ chmod -R a+rX "$WEBROOT" || true
 chown -R nginx:nginx "$WEBROOT" 2>/dev/null || true
 
 echo "== nginx HTTP+HTTPS, not root /root/... =="
-python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf
+if ! python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf; then
+  echo "python nginx writer failed. Leaving /etc/nginx/conf.d as-is and still restarting t2s."
+fi
 # Extra copies that still `root /root/...` make Chrome 500 / ERR_CONNECTION_REFUSED.
 if [ -d /etc/nginx/conf.d ]; then
   for f in /etc/nginx/conf.d/*.conf; do
