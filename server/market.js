@@ -1016,11 +1016,18 @@ export function resolveAlgoTrade(algo) {
 
 const INDEX_ALIASES = {
   "NIFTY 50": "NIFTY 50",
+  "NIFTY FUT": "NIFTY 50",
+  NIFTY: "NIFTY 50",
   "BANK NIFTY": "BANKNIFTY",
   BANKNIFTY: "BANKNIFTY",
+  "BANKNIFTY FUT": "BANKNIFTY",
   FINNIFTY: "FINNIFTY",
+  "FINNIFTY FUT": "FINNIFTY",
   SENSEX: "SENSEX",
+  "SENSEX FUT": "SENSEX",
   CRUDEOIL: "CRUDEOIL",
+  "CRUDEOIL FUT": "CRUDEOIL",
+  "CRUDE OIL": "CRUDEOIL",
   "INDIA VIX": "INDIA VIX",
 };
 
@@ -1061,10 +1068,11 @@ function emptyDeskIndex(symbol, name) {
   });
 }
 
-function sanePrevClose(ltp, prev) {
+function sanePrevClose(ltp, prev, { loose = false } = {}) {
   const close = Number(prev);
   if (!(close > 0) || !(ltp > 0)) return null;
-  if (Math.abs(ltp - close) / close > 0.08) return null;
+  const maxMove = loose ? 0.35 : 0.08;
+  if (Math.abs(ltp - close) / close > maxMove) return null;
   return round2(close);
 }
 
@@ -2290,9 +2298,10 @@ function dayChange(index, quote, ltp) {
   const close = Number(quote.close);
   const open = Number(quote.open);
   const high = Number(quote.high);
-  const quotedPrev = sanePrevClose(ltp, quote.prevClose);
-  const storedPrev = sanePrevClose(ltp, index.prevClose);
-  const ohlcPrev = close > 0 && Math.abs(close - ltp) > 0.05 ? sanePrevClose(ltp, close) : null;
+  const loose = index.symbol === "CRUDEOIL";
+  const quotedPrev = sanePrevClose(ltp, quote.prevClose, { loose });
+  const storedPrev = sanePrevClose(ltp, index.prevClose, { loose });
+  const ohlcPrev = close > 0 && Math.abs(close - ltp) > 0.05 ? sanePrevClose(ltp, close, { loose }) : null;
   const hasSession = open > 0 || high > 0 || Number(quote.low) > 0;
 
   const last = Number(index.price);
@@ -2314,7 +2323,10 @@ function dayChange(index, quote, ltp) {
 
 export function applyLiveQuotes(quotes) {
   for (const quote of quotes) {
-    const indexSymbol = INDEX_ALIASES[quote.parent || quote.symbol] || quote.symbol;
+    const indexSymbol =
+      INDEX_ALIASES[quote.parent] ||
+      INDEX_ALIASES[quote.symbol] ||
+      relatedIndex(quote.parent || quote.symbol);
     const index = state.indices.find((item) => item.symbol === indexSymbol);
     const ltp = Number(quote.ltp);
     if (index && quote.kind === "future" && Number.isFinite(ltp) && ltp > 0) {

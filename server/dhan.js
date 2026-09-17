@@ -59,11 +59,11 @@ const DHAN_API = "https://api.dhan.co/v2";
 const DHAN_FEED_WS = "wss://api-feed.dhan.co";
 
 const INSTRUMENTS = [
-  { symbol: "NIFTY 50", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 13, kind: "index" },
-  { symbol: "BANK NIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 25, kind: "index" },
-  { symbol: "FINNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 27, kind: "index" },
-  { symbol: "SENSEX", segment: "IDX_I", fallbackSegment: "BSE_EQ", securityId: 51, kind: "index" },
-  { symbol: "INDIA VIX", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 21, kind: "index" },
+  { symbol: "NIFTY 50", parent: "NIFTY 50", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 13, kind: "index" },
+  { symbol: "BANK NIFTY", parent: "BANKNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 25, kind: "index" },
+  { symbol: "FINNIFTY", parent: "FINNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 27, kind: "index" },
+  { symbol: "SENSEX", parent: "SENSEX", segment: "IDX_I", securityId: 51, kind: "index" },
+  { symbol: "INDIA VIX", parent: "INDIA VIX", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 21, kind: "index" },
   { symbol: "RELIANCE", segment: "NSE_EQ", securityId: 2885, kind: "equity" },
   { symbol: "HDFCBANK", segment: "NSE_EQ", securityId: 1333, kind: "equity" },
   { symbol: "ICICIBANK", segment: "NSE_EQ", securityId: 4963, kind: "equity" },
@@ -126,8 +126,47 @@ function requestKind(path) {
   return "other";
 }
 
+const SEGMENT_BY_CODE = {
+  0: "IDX_I",
+  1: "NSE_EQ",
+  2: "NSE_FNO",
+  3: "NSE_CURRENCY",
+  4: "BSE_EQ",
+  5: "MCX_COMM",
+  7: "BSE_CURRENCY",
+  8: "BSE_FNO",
+};
+
+export function normalizeFeedSegment(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return SEGMENT_BY_CODE[Number(raw)] || raw;
+  return raw.toUpperCase();
+}
+
+export function matchLiveInstrument(instruments, securityId, segment) {
+  const id = Number(securityId);
+  if (!Number.isFinite(id)) return null;
+  const rows = (instruments || []).filter((row) => Number(row.securityId) === id);
+  if (!rows.length) return null;
+  const wanted = normalizeFeedSegment(segment);
+  if (wanted) {
+    const exact = rows.find(
+      (row) => normalizeFeedSegment(row.segment) === wanted || normalizeFeedSegment(row.fallbackSegment) === wanted,
+    );
+    if (exact) return exact;
+    return null;
+  }
+  return rows.length === 1 ? rows[0] : null;
+}
+
 function liveInstruments() {
-  return INSTRUMENTS.concat(futureInstruments, livePositionQuoteTargets());
+  const futs = (futureInstruments || []).filter((row) => row?.securityId && !row.stale);
+  return INSTRUMENTS.concat(futs, livePositionQuoteTargets());
+}
+
+function quoteFamily(segment) {
+  return normalizeFeedSegment(segment) === "MCX_COMM" ? "mcx" : "nse";
 }
 
 function feedInstrumentList() {
@@ -386,27 +425,33 @@ function quoteBody(useFallback, instruments = liveInstruments()) {
   const body = {};
   for (const row of instruments) {
     const segment = useFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
+    const id = Number(row.securityId);
+    if (!segment || !Number.isFinite(id) || id <= 0) continue;
     if (!body[segment]) body[segment] = [];
-    if (!body[segment].includes(row.securityId)) body[segment].push(row.securityId);
+    if (!body[segment].includes(id)) body[segment].push(id);
   }
   return body;
 }
 
-function flattenQuotes(payload) {
+function quoteBodies(useFallback, instruments = liveInstruments()) {
+  const nse = [];
+  const mcx = [];
+  for (const row of instruments) {
+    const segment = useFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
+    if (quoteFamily(segment) === "mcx") mcx.push(row);
+    else nse.push(row);
+  }
+  return [quoteBody(useFallback, nse), quoteBody(useFallback, mcx)].filter((body) => Object.keys(body).length);
+}
+
+export function flattenQuotes(payload, instruments = liveInstruments()) {
   const quotes = [];
   const data = payload?.data || payload || {};
-  const instruments = liveInstruments();
   for (const [segment, securities] of Object.entries(data)) {
     if (!securities || typeof securities !== "object") continue;
     for (const [id, quote] of Object.entries(securities)) {
       if (!quote || typeof quote !== "object") continue;
-      const securityId = Number(id);
-      const instrument =
-        instruments.find(
-          (row) =>
-            Number(row.securityId) === securityId &&
-            (row.segment === segment || row.fallbackSegment === segment),
-        ) || instruments.find((row) => Number(row.securityId) === securityId);
+      const instrument = matchLiveInstrument(instruments, id, segment);
       if (!instrument) continue;
       const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
@@ -415,6 +460,7 @@ function flattenQuotes(payload) {
         parent: instrument.parent || instrument.symbol,
         kind: instrument.kind,
         securityId: instrument.securityId,
+        segment: instrument.segment,
         expiry: instrument.expiry,
         ltp,
         open: Number(quote.ohlc?.open ?? quote.open),
@@ -703,37 +749,32 @@ async function pullQuotes() {
   if (Date.now() < quoteBackoffUntil) return;
   if (socket?.readyState === 1 && lastTickAt && Date.now() - lastTickAt < 5000) return;
   try {
-    let payload = null;
-    try {
-      payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(usedFallback));
-    } catch (error) {
-      if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
-      payload = null;
-    }
-    let quotes = payload ? flattenQuotes(payload) : [];
-    if (!quotes.length) {
+    const quotes = [];
+    let sawQuotes = false;
+    let lastError = null;
+    for (const body of quoteBodies(usedFallback)) {
       try {
-        payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(usedFallback));
-        quotes = flattenQuotes(payload);
+        const batch = await pullQuoteBody(body);
+        if (batch.length) {
+          sawQuotes = true;
+          quotes.push(...batch);
+        }
       } catch (error) {
+        lastError = error;
         if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
       }
     }
     if (!quotes.length && !usedFallback) {
       usedFallback = true;
-      try {
-        payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(true));
-        quotes = payload ? flattenQuotes(payload) : [];
-      } catch (error) {
-        if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+      for (const body of quoteBodies(true)) {
+        try {
+          const batch = await pullQuoteBody(body);
+          if (batch.length) quotes.push(...batch);
+        } catch (error) {
+          lastError = error;
+          if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+        }
       }
-    }
-    if (!quotes.length) {
-      payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, quoteBody(usedFallback));
-      quotes = flattenQuotes(payload);
-    }
-    if (payload?.status && payload.status !== "success" && !quotes.length) {
-      throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");
     }
     if (quotes.length) {
       lastTickAt = Date.now();
@@ -745,15 +786,43 @@ async function pullQuotes() {
         error: null,
         quoteCount: quotes.length,
       });
-    } else {
+    } else if (sawQuotes === false) {
       setDhanFeed({
         live: Boolean(accessToken),
-        error: "Dhan returned no quotes for mapped instruments.",
+        error: lastError?.message || "Dhan returned no quotes for mapped NSE/MCX instruments.",
       });
     }
   } catch (error) {
     handleDhanPollError("quotes", error);
   }
+}
+
+async function pullQuoteBody(body) {
+  if (!body || !Object.keys(body).length) return [];
+  let payload = null;
+  try {
+    payload = await dhanPost("/marketfeed/quote", accessToken, clientId, body);
+  } catch (error) {
+    if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+    payload = null;
+  }
+  let quotes = payload ? flattenQuotes(payload) : [];
+  if (!quotes.length) {
+    try {
+      payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, body);
+      quotes = flattenQuotes(payload);
+    } catch (error) {
+      if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+    }
+  }
+  if (!quotes.length) {
+    payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, body);
+    quotes = flattenQuotes(payload);
+  }
+  if (payload?.status && payload.status !== "success" && !quotes.length) {
+    throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");
+  }
+  return quotes;
 }
 
 function stopSocket() {
@@ -772,17 +841,17 @@ function stopSocket() {
   }
 }
 
-function parseFeedPackets(buffer) {
+export function parseFeedPackets(buffer, instruments = liveInstruments()) {
   const quotes = [];
-  const instruments = liveInstruments();
   let offset = 0;
   while (offset + 16 <= buffer.length) {
     const code = buffer.readUInt8(offset);
     const length = buffer.readUInt16LE(offset + 1);
+    const segment = SEGMENT_BY_CODE[buffer.readUInt8(offset + 3)] || "";
     const securityId = buffer.readInt32LE(offset + 4);
-    const instrument = instruments.find((row) => Number(row.securityId) === Number(securityId));
+    const instrument = matchLiveInstrument(instruments, securityId, segment);
     const packetLen = Math.max(length >= 16 ? length : length + 8, 16);
-    if (instrument && (code === 2 || code === 4 || code === 8)) {
+    if (instrument && (code === 1 || code === 2 || code === 4 || code === 8)) {
       const ltp = buffer.readFloatLE(offset + 8);
       if (Number.isFinite(ltp) && ltp > 0) {
         const quote = {
@@ -790,6 +859,8 @@ function parseFeedPackets(buffer) {
           parent: instrument.parent || instrument.symbol,
           kind: instrument.kind,
           securityId: instrument.securityId,
+          segment: instrument.segment,
+          expiry: instrument.expiry,
           ltp,
         };
         if (code === 4 && offset + 50 <= buffer.length) {
@@ -813,6 +884,8 @@ function parseFeedPackets(buffer) {
           symbol: instrument.symbol,
           parent: instrument.parent || instrument.symbol,
           kind: instrument.kind,
+          securityId: instrument.securityId,
+          segment: instrument.segment,
           prevClose,
         });
       }

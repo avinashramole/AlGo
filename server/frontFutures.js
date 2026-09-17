@@ -1,4 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildSyntheticChain, dropExpired, exchangeSegmentFor, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCRIP_FRONT_FILE = process.env.T2S_SCRIP_CACHE || path.join(__dirname, "data", "scrip-front.json");
 
 const SCRIP_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const CACHE_MS = 12 * 60 * 60 * 1000;
@@ -188,6 +194,40 @@ export async function parseScripMasterText(text, env = process.env) {
   };
 }
 
+function loadScripFrontDisk() {
+  try {
+    const row = JSON.parse(fs.readFileSync(SCRIP_FRONT_FILE, "utf8"));
+    if (!row || !Array.isArray(row.instruments) || !row.instruments.length) return null;
+    return row;
+  } catch {
+    return null;
+  }
+}
+
+function saveScripFrontDisk(parsed) {
+  try {
+    fs.mkdirSync(path.dirname(SCRIP_FRONT_FILE), { recursive: true });
+    fs.writeFileSync(
+      SCRIP_FRONT_FILE,
+      `${JSON.stringify(
+        {
+          at: Date.now(),
+          instruments: parsed.instruments,
+          futures: parsed.futures || {},
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  } catch (error) {
+    console.log(`Could not save scrip front cache: ${error.message || error}`);
+  }
+}
+
+function withStaleFlag(instruments, stale) {
+  return (instruments || []).map((row) => ({ ...row, stale: Boolean(stale) }));
+}
+
 async function loadScripMaster() {
   if (cache.at && Date.now() - cache.at < CACHE_MS) return cache;
   if (loading) return loading;
@@ -200,17 +240,30 @@ async function loadScripMaster() {
       const parsed = await parseScripMasterText(text);
       cache = {
         at: Date.now(),
-        instruments: parsed.instruments,
+        instruments: withStaleFlag(parsed.instruments, false),
         options: parsed.options,
         byExpiry: parsed.byExpiry,
         futures: parsed.futures,
       };
+      saveScripFrontDisk(cache);
       return cache;
     } catch (error) {
       console.log(`Dhan scrip master failed: ${error.message || error}`);
+      const disk = loadScripFrontDisk();
+      if (disk?.instruments?.length) {
+        console.log("Using last saved NSE/MCX front contracts so quotes stay on the live expiry.");
+        cache = {
+          at: Number(disk.at) || Date.now(),
+          instruments: withStaleFlag(disk.instruments, false),
+          options: cache.options instanceof Map ? cache.options : new Map(),
+          byExpiry: cache.byExpiry instanceof Map ? cache.byExpiry : new Map(),
+          futures: disk.futures || cache.futures || {},
+        };
+        return cache;
+      }
       cache = {
         at: 0,
-        instruments: cache.instruments.length ? cache.instruments : FALLBACK,
+        instruments: withStaleFlag(cache.instruments.length ? cache.instruments : FALLBACK, true),
         options: cache.options instanceof Map && cache.options.size ? cache.options : new Map(),
         byExpiry: cache.byExpiry instanceof Map && cache.byExpiry.size ? cache.byExpiry : new Map(),
         futures: cache.futures || {},
