@@ -99,9 +99,9 @@ t2s_seed_opt_t2s() {
   echo "Seeding $vps from $src (download/algo is the PC folder; VPS is $vps)"
   mkdir -p "$vps"
   if command -v rsync >/dev/null 2>&1; then
-    rsync -a --exclude node_modules --exclude .git "$src"/ "$vps"/
+    rsync -a --exclude node_modules "$src"/ "$vps"/
   else
-    tar -C "$src" --exclude=node_modules --exclude=.git -cf - . | tar -C "$vps" -xf -
+    tar -C "$src" --exclude=node_modules -cf - . | tar -C "$vps" -xf -
   fi
   mkdir -p "$vps/server"
   if [ -d "$src/server/node_modules" ] && [ ! -d "$vps/server/node_modules/cors" ]; then

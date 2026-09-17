@@ -245,7 +245,7 @@ On the VPS as root (even if the prompt says `algo`):
 systemctl stop t2s || true
 if [ ! -f /opt/t2s/server/index.js ] && [ -f server/index.js ]; then
   mkdir -p /opt/t2s
-  tar -C . --exclude=node_modules --exclude=.git -cf - . | tar -C /opt/t2s -xf -
+  tar -C . --exclude=node_modules -cf - . | tar -C /opt/t2s -xf -
   mkdir -p /opt/t2s/server
   [ -d server/node_modules ] && cp -a server/node_modules /opt/t2s/server/ || true
   [ -f .env ] && [ ! -f /opt/t2s/.env ] && cp -a .env /opt/t2s/.env

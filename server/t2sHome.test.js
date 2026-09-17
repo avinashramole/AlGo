@@ -105,10 +105,13 @@ test("t2s_seed_opt_t2s copies a PC-style checkout to the VPS home", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-home-"));
   const algo = makeCheckout(root, path.join("download", "algo"));
   fs.writeFileSync(path.join(algo, ".env"), "PORT=4000\n");
+  fs.mkdirSync(path.join(algo, ".git"));
+  fs.writeFileSync(path.join(algo, ".git", "HEAD"), "ref: refs/heads/main\n");
   const vps = path.join(root, "opt-t2s");
   const seeded = runFinder({ T2S_VPS_HOME: vps }, `t2s_seed_opt_t2s "${algo}"; echo $?`);
   assert.match(seeded.out, /0$/);
   assert.ok(fs.existsSync(path.join(vps, "server", "index.js")));
   assert.equal(fs.readFileSync(path.join(vps, ".env"), "utf8"), "PORT=4000\n");
+  assert.equal(fs.readFileSync(path.join(vps, ".git", "HEAD"), "utf8"), "ref: refs/heads/main\n");
   fs.rmSync(root, { recursive: true, force: true });
 });
