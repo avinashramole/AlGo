@@ -214,28 +214,117 @@ Port **80** is nginx. Port **443** is HTTPS. Node on **4000** is only for the AP
 1. nginx `root` was `/root/download/algo/dist`. The nginx user cannot read `/root`, so **trade2smart.com returned 500**.
 2. The HTTP-only nginx file replaced Let's Encrypt, so **HTTPS closed during the handshake** (Chrome reports that as refused).
 
-Restart does **not** turn LIVE on. Do **not** open localhost.
+The **VPS** folder is **`/opt/t2s`**. The **PC** folder is **`C:\Users\SHIVAMFINTECH\Desktop\AlGo`**. Restart does **not** turn LIVE on. Do **not** open localhost.
 
-On the VPS as root:
+On the VPS as root (even if the prompt says `algo`):
 
 ```bash
+systemctl stop t2s || true
+if [ ! -f /opt/t2s/server/index.js ] && [ -f server/index.js ]; then
+  mkdir -p /opt/t2s
+  tar -C . --exclude=node_modules -cf - . | tar -C /opt/t2s -xf -
+  mkdir -p /opt/t2s/server
+  [ -d server/node_modules ] && cp -a server/node_modules /opt/t2s/server/ || true
+  [ -f .env ] && [ ! -f /opt/t2s/.env ] && cp -a .env /opt/t2s/.env
+  [ -f tokan.env ] && [ ! -f /opt/t2s/tokan.env ] && cp -a tokan.env /opt/t2s/tokan.env
+fi
 cd /opt/t2s
-git fetch origin main
-git checkout main
-git pull origin main
-bash /opt/t2s/deploy/fix-connection-reset-vps.sh
+NODE_OPTIONS=--max-old-space-size=256 npm --prefix server install --omit=dev
+mkdir -p /etc/systemd/system/t2s.service.d
+cat > /etc/systemd/system/t2s.service.d/home.conf <<'EOF'
+[Service]
+WorkingDirectory=/opt/t2s
+EnvironmentFile=-/opt/t2s/.env
+EnvironmentFile=-/opt/t2s/tokan.env
+Environment=T2S_HOME=/opt/t2s
+EOF
+systemctl daemon-reload
+systemctl start t2s
+mkdir -p /var/www/trade2smart
+if [ -f /opt/t2s/dist/index.html ]; then cp -a /opt/t2s/dist/. /var/www/trade2smart/; fi
+chmod -R a+rX /var/www/trade2smart || true
+restorecon -Rv /var/www/trade2smart 2>/dev/null || true
+python3 - <<'PY'
+from pathlib import Path
+webroot = "/var/www/trade2smart"
+cert = Path("/etc/letsencrypt/live/trade2smart.com/fullchain.pem")
+key = Path("/etc/letsencrypt/live/trade2smart.com/privkey.pem")
+locs = f"""
+    client_max_body_size 2m;
+    location /api/ {{
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }}
+    location / {{
+        root {webroot};
+        try_files $uri $uri/ /index.html @node;
+    }}
+    location @node {{
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+    }}
+"""
+if cert.is_file() and key.is_file():
+    text = f"""
+server {{
+    listen 80;
+    listen [::]:80;
+    server_name trade2smart.com www.trade2smart.com;
+    return 301 https://$host$request_uri;
+}}
+server {{
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name trade2smart.com www.trade2smart.com;
+    ssl_certificate {cert};
+    ssl_certificate_key {key};
+    ssl_protocols TLSv1.2;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+{locs}
+}}
+"""
+else:
+    text = f"""
+server {{
+    listen 80;
+    listen [::]:80;
+    server_name trade2smart.com www.trade2smart.com;
+{locs}
+}}
+"""
+Path("/etc/nginx/conf.d/trade2smart.conf").write_text(text)
+print("wrote /etc/nginx/conf.d/trade2smart.conf certs", cert.is_file())
+PY
+for f in /etc/nginx/conf.d/*.conf; do
+  [ "$f" = /etc/nginx/conf.d/trade2smart.conf ] && continue
+  if grep -qE 'root[[:space:]]+/root/|server_name[[:space:]]+trade2smart' "$f"; then mv "$f" "$f.bak-https-refused"; fi
+done
+nginx -t && (systemctl reload nginx || systemctl restart nginx || systemctl start nginx)
+sleep 4
+systemctl is-active t2s nginx
+systemctl show t2s -p WorkingDirectory
+ss -tlnp | grep -E ':80|:443|:4000'
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health
+curl -sS -o /dev/null -w "http80:%{http_code}\n" --max-time 8 -H "Host: trade2smart.com" http://127.0.0.1/
+curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 8 --resolve trade2smart.com:443:127.0.0.1 https://trade2smart.com/ || true
 ```
 
-You want `nginx` **active**, `t2s` **active**, `http80:301` or `200`, and `https443:200`. Then Chrome **https://trade2smart.com** and Ctrl+Shift+R.
+You want `t2s` **active**, `nginx` **active**, WorkingDirectory=`/opt/t2s`, `api:200`, `http80:301` or `200`, and `https443:200`. Then Chrome **https://trade2smart.com** and Ctrl+Shift+R.
 
-If Chrome still refuses, also allow **80** and **443** in the VPS hosting-panel firewall, then:
+If Chrome still refuses, allow **80** and **443** in the VPS hosting-panel firewall, then paste:
 
 ```bash
-systemctl start nginx t2s
-firewall-cmd --permanent --add-service=http
-firewall-cmd --permanent --add-service=https
-firewall-cmd --reload
 ss -tlnp | grep -E ':80|:443|:4000'
+ls -l /etc/letsencrypt/live/trade2smart.com
+nginx -T 2>/dev/null | grep -E 'listen |root |ssl_certificate|server_name' | head -n 80
+journalctl -u t2s -n 40 --no-pager
 ```
 
 ---

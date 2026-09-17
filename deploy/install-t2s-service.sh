@@ -55,16 +55,29 @@ echo "== publish dist to $WEBROOT (nginx cannot read /root) =="
 mkdir -p "$WEBROOT"
 if [ -f "$HOME_DIR/dist/index.html" ]; then
   cp -a "$HOME_DIR/dist/." "$WEBROOT/"
+elif [ -n "${FOUND:-}" ] && [ -f "$FOUND/dist/index.html" ]; then
+  cp -a "$FOUND/dist/." "$WEBROOT/"
 else
-  echo "No $HOME_DIR/dist yet — nginx will proxy the website to Node on 4000."
+  echo "No dist yet — nginx will proxy the website to Node on 4000."
 fi
 chmod -R a+rX "$WEBROOT" || true
 
 echo "== nginx HTTP+HTTPS, not root /root/... =="
 python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf
-# Old HTTP-only copies under /root made Chrome 500 / connection refused on HTTPS.
-if [ -f /etc/nginx/conf.d/trade2smart.conf.bak-t2shome ]; then
-  echo "left backup /etc/nginx/conf.d/trade2smart.conf.bak-t2shome"
+# Extra copies that still `root /root/...` make Chrome 500 / ERR_CONNECTION_REFUSED.
+if [ -d /etc/nginx/conf.d ]; then
+  for f in /etc/nginx/conf.d/*.conf; do
+    [ -f "$f" ] || continue
+    [ "$f" = /etc/nginx/conf.d/trade2smart.conf ] && continue
+    if grep -qE 'root[[:space:]]+/root/|server_name[[:space:]]+trade2smart' "$f"; then
+      echo "moving aside $f (was pointing Chrome at /root or duplicating the vhost)"
+      mv "$f" "$f.bak-https-refused"
+    fi
+  done
+fi
+restorecon -Rv "$WEBROOT" 2>/dev/null || true
+if [ ! -f /etc/letsencrypt/live/trade2smart.com/fullchain.pem ]; then
+  echo "WARN: no Let's Encrypt cert. Chrome HSTS will keep showing ERR_CONNECTION_REFUSED on https:// until certbot runs."
 fi
 
 if command -v setsebool >/dev/null 2>&1; then

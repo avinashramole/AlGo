@@ -38,6 +38,8 @@ test("nginx conf enables HTTPS when Let's Encrypt files exist", () => {
   const text = render(certDir);
   assert.match(text, /listen 443 ssl/);
   assert.match(text, /return 301 https:\/\//);
+  assert.match(text, /ssl_protocols TLSv1\.2/);
+  assert.doesNotMatch(text, /options-ssl-nginx/);
   assert.equal(text.includes(certDir), true);
   assert.doesNotMatch(text, /root \/root\//);
   fs.rmSync(certDir, { recursive: true, force: true });

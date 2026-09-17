@@ -66,12 +66,7 @@ def render_nginx_conf(webroot: str = DEFAULT_WEBROOT, cert_dir: Path = CERT_DIR)
     certs = cert_files(cert_dir)
     if certs:
         fullchain, privkey = certs
-        ssl_include = ""
-        if Path("/etc/letsencrypt/options-ssl-nginx.conf").is_file():
-            ssl_include = "    include /etc/letsencrypt/options-ssl-nginx.conf;\n"
-        dh = ""
-        if Path("/etc/letsencrypt/ssl-dhparams.pem").is_file():
-            dh = "    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;\n"
+        # nginx 1.14 on AlmaLinux rejects certbot's TLSv1.3 options-ssl-nginx.conf.
         http_server = """
 server {
     listen 80;
@@ -87,7 +82,10 @@ server {{
     server_name trade2smart.com www.trade2smart.com;
     ssl_certificate {fullchain};
     ssl_certificate_key {privkey};
-{ssl_include}{dh}{locations}
+    ssl_protocols TLSv1.2;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+{locations}
 }}
 """.rstrip()
     else:
