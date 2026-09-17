@@ -1,4 +1,4 @@
-import { cn, formatChange, formatPct, formatQuote } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote, indexTapeLabel } from "../../lib/format";
 import type { MemberIndexQuote } from "../../api/client";
 import { Sparkline } from "../charts/Sparkline";
 
@@ -17,7 +17,10 @@ export function MemberIndexBoard({ indices }: { indices: MemberIndexQuote[] }) {
           <article key={item.symbol} className="card px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{indexTapeLabel(item.symbol)}</div>
+                </div>
                 <div className="mt-1 text-lg font-bold leading-none">{formatQuote(item.price)}</div>
                 <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today

@@ -79,6 +79,18 @@ export function isMcxSessionOpen(date = new Date()) {
   return !weekend && minutes >= 9 * 60 && minutes < 23 * 60 + 30;
 }
 
+export function isIndexTapeOpen(symbol: string, date = new Date()) {
+  return String(symbol || "")
+    .toUpperCase()
+    .includes("CRUDE")
+    ? isMcxSessionOpen(date)
+    : isNseSessionOpen(date);
+}
+
+export function indexTapeLabel(symbol: string, date = new Date()) {
+  return isIndexTapeOpen(symbol, date) ? "Live" : "Last";
+}
+
 export function hasDhanQuotes(data?: {
   dhanFeed?: { live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };
   optionMeta?: { source?: string };

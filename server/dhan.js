@@ -23,6 +23,8 @@ import {
   setLiveCandles,
   setOptionDesk,
   snapshot,
+  nseMarketSession,
+  mcxMarketSession,
 } from "./market.js";
 import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
@@ -92,6 +94,7 @@ let reconnectTimer = null;
 let usedFallback = false;
 let futureInstruments = [];
 let lastTickAt = 0;
+const lastTickAtByFamily = { nse: 0, mcx: 0 };
 let keepAlivePromise = null;
 let lastKeepAliveAt = 0;
 let credentialsBlockedUntil = persistedBackoff.credentialsBlockedUntil;
@@ -167,6 +170,36 @@ function liveInstruments() {
 
 function quoteFamily(segment) {
   return normalizeFeedSegment(segment) === "MCX_COMM" ? "mcx" : "nse";
+}
+
+export function staleQuoteFamilies({
+  now = Date.now(),
+  nseTickAt = lastTickAtByFamily.nse,
+  mcxTickAt = lastTickAtByFamily.mcx,
+  nseOpen = nseMarketSession(new Date(now)).open,
+  mcxOpen = mcxMarketSession(new Date(now)).open,
+  openMaxAgeMs = 4_000,
+  closedMaxAgeMs = 15_000,
+} = {}) {
+  const families = [];
+  if (!nseTickAt || now - nseTickAt > (nseOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("nse");
+  if (!mcxTickAt || now - mcxTickAt > (mcxOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("mcx");
+  return families;
+}
+
+function noteFamilyTicks(quotes, at = Date.now()) {
+  let sawLtp = false;
+  for (const quote of quotes || []) {
+    if (!(Number(quote.ltp) > 0)) continue;
+    sawLtp = true;
+    lastTickAtByFamily[quoteFamily(quote.segment)] = at;
+  }
+  if (sawLtp) lastTickAt = at;
+}
+
+function instrumentsForFamilies(families, instruments = liveInstruments()) {
+  const wanted = new Set(families);
+  return instruments.filter((row) => wanted.has(quoteFamily(row.segment)));
 }
 
 function feedInstrumentList() {
@@ -453,7 +486,11 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
       if (!quote || typeof quote !== "object") continue;
       const instrument = matchLiveInstrument(instruments, id, segment);
       if (!instrument) continue;
-      const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
+      const ltpRaw = Number(
+        quote.last_price ?? quote.ltp ?? quote.lastPrice ?? quote.last_traded_price ?? quote.lastTradedPrice ?? quote.LTP,
+      );
+      const close = Number(quote.ohlc?.close ?? quote.close);
+      const ltp = Number.isFinite(ltpRaw) && ltpRaw > 0 ? ltpRaw : close;
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
       quotes.push({
         symbol: instrument.symbol,
@@ -466,7 +503,7 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
         open: Number(quote.ohlc?.open ?? quote.open),
         high: Number(quote.ohlc?.high ?? quote.high),
         low: Number(quote.ohlc?.low ?? quote.low),
-        close: Number(quote.ohlc?.close ?? quote.close),
+        close,
         vwap: Number(quote.average_price ?? quote.averagePrice ?? quote.vwap),
         netChange: quote.net_change ?? quote.netChange,
         volume: Number(quote.volume ?? quote.vol),
@@ -747,18 +784,16 @@ async function pullNiftyCandles() {
 async function pullQuotes() {
   if (!accessToken || !clientId) return;
   if (Date.now() < quoteBackoffUntil) return;
-  if (socket?.readyState === 1 && lastTickAt && Date.now() - lastTickAt < 5000) return;
+  const families = staleQuoteFamilies();
+  if (!families.length) return;
   try {
     const quotes = [];
-    let sawQuotes = false;
     let lastError = null;
-    for (const body of quoteBodies(usedFallback)) {
+    const rows = instrumentsForFamilies(families);
+    for (const body of quoteBodies(usedFallback, rows)) {
       try {
         const batch = await pullQuoteBody(body);
-        if (batch.length) {
-          sawQuotes = true;
-          quotes.push(...batch);
-        }
+        if (batch.length) quotes.push(...batch);
       } catch (error) {
         lastError = error;
         if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
@@ -766,7 +801,7 @@ async function pullQuotes() {
     }
     if (!quotes.length && !usedFallback) {
       usedFallback = true;
-      for (const body of quoteBodies(true)) {
+      for (const body of quoteBodies(true, rows)) {
         try {
           const batch = await pullQuoteBody(body);
           if (batch.length) quotes.push(...batch);
@@ -777,7 +812,7 @@ async function pullQuotes() {
       }
     }
     if (quotes.length) {
-      lastTickAt = Date.now();
+      noteFamilyTicks(quotes);
       applyLiveQuotes(quotes);
       setDhanFeed({
         live: true,
@@ -786,10 +821,10 @@ async function pullQuotes() {
         error: null,
         quoteCount: quotes.length,
       });
-    } else if (sawQuotes === false) {
+    } else if (lastError) {
       setDhanFeed({
         live: Boolean(accessToken),
-        error: lastError?.message || "Dhan returned no quotes for mapped NSE/MCX instruments.",
+        error: lastError.message || "Dhan returned no quotes for mapped NSE/MCX instruments.",
       });
     }
   } catch (error) {
@@ -918,6 +953,7 @@ function startSocket() {
     const quotes = pendingQuotes;
     pendingQuotes = [];
     if (!quotes.length) return;
+    noteFamilyTicks(quotes);
     applyLiveQuotes(quotes);
     setDhanFeed({
       live: true,
@@ -932,7 +968,6 @@ function startSocket() {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       const quotes = parseFeedPackets(buffer);
       if (!quotes.length) return;
-      lastTickAt = Date.now();
       pendingQuotes.push(...quotes);
       if (quotesScheduled) return;
       quotesScheduled = true;

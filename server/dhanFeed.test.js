@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { flattenQuotes, matchLiveInstrument, parseFeedPackets } from "./dhan.js";
+import { flattenQuotes, matchLiveInstrument, parseFeedPackets, staleQuoteFamilies } from "./dhan.js";
 import { applyLiveQuotes, snapshot } from "./market.js";
 
 const BOTH = [
@@ -69,4 +69,93 @@ test("desk shows NSE spot/future and MCX crude separately", () => {
   assert.equal(nifty.future, 25200);
   assert.equal(crude.price, 5840);
   assert.equal(crude.future, 5840);
+});
+
+test("staleQuoteFamilies still REST-fetches NSE after close while MCX ticks", () => {
+  const now = Date.parse("2026-09-18T10:31:00.000Z");
+  assert.deepEqual(
+    staleQuoteFamilies({
+      now,
+      nseTickAt: 0,
+      mcxTickAt: now - 400,
+      nseOpen: false,
+      mcxOpen: true,
+    }),
+    ["nse"],
+  );
+  assert.deepEqual(
+    staleQuoteFamilies({
+      now,
+      nseTickAt: now - 2_000,
+      mcxTickAt: now - 400,
+      nseOpen: false,
+      mcxOpen: true,
+    }),
+    [],
+  );
+  assert.deepEqual(
+    staleQuoteFamilies({
+      now,
+      nseTickAt: now - 20_000,
+      mcxTickAt: now - 400,
+      nseOpen: false,
+      mcxOpen: true,
+    }),
+    ["nse"],
+  );
+  assert.deepEqual(
+    staleQuoteFamilies({
+      now,
+      nseTickAt: now - 1_000,
+      mcxTickAt: now - 1_000,
+      nseOpen: true,
+      mcxOpen: true,
+    }),
+    [],
+  );
+});
+
+test("flattenQuotes uses official close when last_price is 0 after NSE close", () => {
+  const quotes = flattenQuotes(
+    {
+      data: {
+        IDX_I: { 13: { last_price: 0, ohlc: { open: 25000, close: 25080.4 } } },
+        NSE_FNO: { 565899: { last_price: 0, close: 25110 } },
+        MCX_COMM: { 565899: { last_price: 5840 } },
+      },
+    },
+    BOTH,
+  );
+  const crude = quotes.find((row) => row.parent === "CRUDEOIL");
+  const niftyFut = quotes.find((row) => row.kind === "future" && row.parent === "NIFTY 50");
+  const nifty = quotes.find((row) => row.kind === "index");
+  assert.equal(nifty.ltp, 25080.4);
+  assert.equal(niftyFut.ltp, 25110);
+  assert.equal(crude.ltp, 5840);
+});
+
+test("flattenQuotes prefers last_price over previous close", () => {
+  const quotes = flattenQuotes(
+    {
+      data: {
+        IDX_I: { 13: { last_price: 25091.2, ohlc: { close: 24980 } } },
+      },
+    },
+    BOTH,
+  );
+  assert.equal(quotes[0].ltp, 25091.2);
+  assert.equal(quotes[0].close, 24980);
+});
+
+test("prev-close websocket packets do not invent an NSE last price", () => {
+  const buf = Buffer.alloc(16);
+  buf.writeUInt8(6, 0);
+  buf.writeUInt16LE(16, 1);
+  buf.writeUInt8(0, 3);
+  buf.writeInt32LE(13, 4);
+  buf.writeFloatLE(24980, 8);
+  const quotes = parseFeedPackets(buf, BOTH);
+  assert.equal(quotes.length, 1);
+  assert.equal(quotes[0].prevClose, 24980);
+  assert.equal(quotes[0].ltp, undefined);
 });
