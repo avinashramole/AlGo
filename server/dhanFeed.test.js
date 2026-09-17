@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { flattenQuotes, matchLiveInstrument, parseFeedPackets, staleQuoteFamilies } from "./dhan.js";
-import { applyLiveQuotes, snapshot } from "./market.js";
+import { fallbackFrontFutures } from "./frontFutures.js";
+import { applyLiveQuotes, persistLastIndexQuotes, restoreLastIndexQuotes, snapshot } from "./market.js";
 
 const BOTH = [
   { symbol: "NIFTY FUT", parent: "NIFTY 50", segment: "NSE_FNO", securityId: 565899, kind: "future" },
@@ -80,6 +84,8 @@ test("staleQuoteFamilies still REST-fetches NSE after close while MCX ticks", ()
       mcxTickAt: now - 400,
       nseOpen: false,
       mcxOpen: true,
+      nseHasTape: true,
+      mcxHasTape: true,
     }),
     ["nse"],
   );
@@ -90,6 +96,8 @@ test("staleQuoteFamilies still REST-fetches NSE after close while MCX ticks", ()
       mcxTickAt: now - 400,
       nseOpen: false,
       mcxOpen: true,
+      nseHasTape: true,
+      mcxHasTape: true,
     }),
     [],
   );
@@ -100,6 +108,8 @@ test("staleQuoteFamilies still REST-fetches NSE after close while MCX ticks", ()
       mcxTickAt: now - 400,
       nseOpen: false,
       mcxOpen: true,
+      nseHasTape: true,
+      mcxHasTape: true,
     }),
     ["nse"],
   );
@@ -110,8 +120,22 @@ test("staleQuoteFamilies still REST-fetches NSE after close while MCX ticks", ()
       mcxTickAt: now - 1_000,
       nseOpen: true,
       mcxOpen: true,
+      nseHasTape: true,
+      mcxHasTape: true,
     }),
     [],
+  );
+  assert.deepEqual(
+    staleQuoteFamilies({
+      now,
+      nseTickAt: now - 400,
+      mcxTickAt: now - 400,
+      nseOpen: false,
+      mcxOpen: true,
+      nseHasTape: false,
+      mcxHasTape: true,
+    }),
+    ["nse"],
   );
 });
 
@@ -158,4 +182,32 @@ test("prev-close websocket packets do not invent an NSE last price", () => {
   assert.equal(quotes.length, 1);
   assert.equal(quotes[0].prevClose, 24980);
   assert.equal(quotes[0].ltp, undefined);
+});
+
+test("fallback front futures still quote Crude after scrip master is stale", () => {
+  const rows = fallbackFrontFutures();
+  assert.equal(rows.find((row) => row.parent === "CRUDEOIL").segment, "MCX_COMM");
+  assert.equal(rows.find((row) => row.parent === "NIFTY 50").kind, "future");
+});
+
+test("last NSE and MCX quotes restore after a blank restart", () => {
+  applyLiveQuotes([
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25080.4 },
+    { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 25110 },
+    { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 5840 },
+  ]);
+  const file = path.join(os.tmpdir(), `t2s-last-quotes-${Date.now()}.json`);
+  assert.equal(persistLastIndexQuotes(file), true);
+  applyLiveQuotes([
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 },
+    { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 1 },
+    { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 1 },
+  ]);
+  restoreLastIndexQuotes(file);
+  const nifty = snapshot().indices.find((row) => row.symbol === "NIFTY 50");
+  const crude = snapshot().indices.find((row) => row.symbol === "CRUDEOIL");
+  assert.equal(nifty.price, 25080.4);
+  assert.equal(nifty.future, 25110);
+  assert.equal(crude.price, 5840);
+  fs.unlinkSync(file);
 });

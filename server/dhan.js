@@ -23,10 +23,12 @@ import {
   setLiveCandles,
   setOptionDesk,
   snapshot,
+  restoreLastIndexQuotes,
+  indexFamilyHasTape,
   nseMarketSession,
   mcxMarketSession,
 } from "./market.js";
-import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
+import { buildScripChain, chainUnderlyingRequest, fallbackFrontFutures, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
@@ -164,8 +166,9 @@ export function matchLiveInstrument(instruments, securityId, segment) {
 }
 
 function liveInstruments() {
-  const futs = (futureInstruments || []).filter((row) => row?.securityId && !row.stale);
-  return INSTRUMENTS.concat(futs, livePositionQuoteTargets());
+  const allFuts = (futureInstruments || []).filter((row) => row?.securityId);
+  const liveFuts = allFuts.filter((row) => !row.stale);
+  return INSTRUMENTS.concat(liveFuts.length ? liveFuts : allFuts, livePositionQuoteTargets());
 }
 
 function quoteFamily(segment) {
@@ -178,12 +181,16 @@ export function staleQuoteFamilies({
   mcxTickAt = lastTickAtByFamily.mcx,
   nseOpen = nseMarketSession(new Date(now)).open,
   mcxOpen = mcxMarketSession(new Date(now)).open,
+  nseHasTape,
+  mcxHasTape,
   openMaxAgeMs = 4_000,
   closedMaxAgeMs = 15_000,
 } = {}) {
+  const nseTape = nseHasTape ?? indexFamilyHasTape("nse");
+  const mcxTape = mcxHasTape ?? indexFamilyHasTape("mcx");
   const families = [];
-  if (!nseTickAt || now - nseTickAt > (nseOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("nse");
-  if (!mcxTickAt || now - mcxTickAt > (mcxOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("mcx");
+  if (!nseTape || !nseTickAt || now - nseTickAt > (nseOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("nse");
+  if (!mcxTape || !mcxTickAt || now - mcxTickAt > (mcxOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("mcx");
   return families;
 }
 
@@ -1145,16 +1152,26 @@ export async function selectOptionDesk({ symbol, expiry }) {
 
 function startLiveLoop() {
   stopLiveLoop(false);
+  restoreLastIndexQuotes();
+  if (!(futureInstruments || []).some((row) => row?.securityId)) {
+    futureInstruments = fallbackFrontFutures();
+  }
   onDhanBookChanged(subscribeFeedInstruments);
+  startSocket();
+  void pullQuotes();
   void (async () => {
     try {
-      futureInstruments = await resolveFrontFutures();
+      const next = await resolveFrontFutures();
+      if (Array.isArray(next) && next.some((row) => row?.securityId && !row.stale)) {
+        futureInstruments = next;
+        subscribeFeedInstruments();
+        void pullQuotes();
+      }
     } catch {
-      futureInstruments = [];
+      if (!(futureInstruments || []).some((row) => row?.securityId)) {
+        futureInstruments = fallbackFrontFutures();
+      }
     }
-    startSocket();
-    await sleep(400);
-    void pullQuotes();
     await sleep(400);
     void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
     await sleep(400);

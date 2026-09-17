@@ -28,5 +28,6 @@ server/data/hedge-daily-live.json
 server/data/egress-ips.json
 server/data/broker-sessions.json
 server/data/scrip-front.json
+server/data/last-quotes.json
 *.zip
 deploy/__pycache__/

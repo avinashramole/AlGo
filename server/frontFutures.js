@@ -25,6 +25,10 @@ const FALLBACK = [
   { parent: "CRUDEOIL", symbol: "CRUDEOIL FUT", kind: "future", segment: "MCX_COMM", securityId: 565899 },
 ];
 
+export function fallbackFrontFutures() {
+  return FALLBACK.map((row) => ({ ...row }));
+}
+
 const ROOTS = new Set(UNDERLYINGS.map((row) => row.root));
 
 let cache = { at: 0, instruments: FALLBACK, options: new Map(), byExpiry: new Map(), futures: {} };

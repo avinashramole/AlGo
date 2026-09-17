@@ -30,7 +30,7 @@ import {
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
-import { keepStrikeWindow, patchById } from "../lib/deskFeed";
+import { keepLastIndexPrices, keepStrikeWindow, patchById } from "../lib/deskFeed";
 
 const fallback: Snapshot = {
   indices: indices.map((item) => ({
@@ -151,6 +151,9 @@ function writeCachedDesk(next: Snapshot) {
         positions: next.positions,
         closedTrades: next.closedTrades || [],
         orders: next.orders,
+        indices: next.indices,
+        optionMeta: next.optionMeta,
+        marketWatch: next.marketWatch,
       }),
     );
   } catch {
@@ -241,7 +244,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     const optionChain = sameDesk
       ? keepStrikeWindow(current.optionChain || [], incoming.optionChain || [])
       : incoming.optionChain || [];
-    const next = { ...incoming, algos, optionChain };
+    const next = {
+      ...incoming,
+      algos,
+      optionChain,
+      indices: keepLastIndexPrices(current.indices || [], incoming.indices || []),
+    };
     dataRef.current = next;
     writeCachedDesk(next);
     setData(next);
@@ -278,6 +286,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         algos,
         optionChain,
         optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
+        indices: keepLastIndexPrices(current.indices || [], feed.indices || current.indices || []),
         positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
         orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
         closedTrades: feed.closedTrades ? patchById(current.closedTrades || [], feed.closedTrades) : current.closedTrades,
