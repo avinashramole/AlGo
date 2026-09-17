@@ -194,6 +194,41 @@ Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443
 
 ---
 
+## Connection reset by peer (`app:000`)
+
+`curl` to `http://127.0.0.1:4000/` printed:
+
+```
+app:000
+curl: (56) Recv failure: Connection reset by peer
+```
+
+Something accepted TCP **4000** and then died (Node crash loop / OOM while loading Dhan). Nginx then shows 502. Restarting `t2s` does **not** turn LIVE on. Do **not** paste Block A again.
+
+On the VPS as root:
+
+```bash
+cd /opt/t2s
+git fetch origin cursor/connection-reset-4000-0a8c
+git checkout cursor/connection-reset-4000-0a8c
+git pull origin cursor/connection-reset-4000-0a8c
+bash /opt/t2s/deploy/fix-connection-reset-vps.sh
+```
+
+Skip `npm run build` unless you also want the website JS rebuilt. This fix is the Node process on port 4000.
+
+You want `t2s` **active**, `app:200`, and `api:200`. Then Chrome: **https://trade2smart.com**
+
+If it still prints `app:000`, paste:
+
+```bash
+journalctl -u t2s -n 40 --no-pager
+free -h
+ss -tlnp | grep 4000
+```
+
+---
+
 ## 502 Bad Gateway (nginx)
 
 Nginx is running. Node on **127.0.0.1:4000** is not. This happens if Block A stopped `t2s` and Block B did not finish (`npm run build` OOM). Restarting `t2s` does **not** turn LIVE on.
@@ -207,7 +242,8 @@ echo 3 > /proc/sys/vm/drop_caches
 systemctl start t2s
 sleep 2
 systemctl is-active t2s
-curl -sS -o /dev/null -w "app:%{http_code}\n" http://127.0.0.1:4000/
+curl -sS -o /dev/null -w "app:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health
 systemctl start nginx
 systemctl is-active nginx
 ```
@@ -265,7 +301,8 @@ grep -l "All account assignments" dist/assets/*.js
 systemctl restart t2s
 sleep 2
 systemctl is-active t2s
-curl -sS -o /dev/null -w "app:%{http_code}\n" http://127.0.0.1:4000/
+curl -sS -o /dev/null -w "app:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health
 ```
 
 `grep` must print a `dist/assets/index-….js` file. If it prints nothing, the table is not in the build — do not restart yet; send `free -h` and the npm error.

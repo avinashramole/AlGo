@@ -1,3 +1,5 @@
+import { apiDownMessage, publicDeskError } from "../lib/liveSite";
+
 const API = "/api";
 
 function authHeaders(): HeadersInit {
@@ -11,29 +13,36 @@ function authHeaders(): HeadersInit {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
-  const response = await fetch(`${API}${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(extraHeaders || {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API}${path}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(extraHeaders || {}),
+      },
+    });
+  } catch {
+    throw new Error(apiDownMessage());
+  }
   const text = await response.text();
   let body: { error?: string } = {};
   try {
     body = text ? (JSON.parse(text) as { error?: string }) : {};
   } catch {
-    /* HTML 404 from an old Express process */
+    /* nginx HTML when Node reset the connection */
   }
   if (!response.ok) {
     throw new Error(
-      body.error ||
-        (response.status === 404
-          ? "API route missing. Stop the old process on port 4000 and run npm start again."
-          : response.status === 502 || response.status === 503 || response.status === 504
-            ? "API is not running. Keep the npm start window open (both [api] and [web]). Open http://localhost:5173"
-            : `Request failed (${response.status})`),
+      publicDeskError(
+        body.error ||
+          (response.status === 404
+            ? "API route missing. Stop the old process on port 4000 and run npm start again."
+            : response.status === 502 || response.status === 503 || response.status === 504
+              ? apiDownMessage()
+              : `Request failed (${response.status})`),
+      ),
     );
   }
   return (body as T) || ({} as T);
