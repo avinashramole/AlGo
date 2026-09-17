@@ -73,6 +73,11 @@ test("t2s_is_pc_path detects download/algo", () => {
   assert.match(no.out, /1$/);
 });
 
+test("t2s_is_pc_path detects Desktop/AlGo", () => {
+  const yes = runFinder({}, `t2s_is_pc_path /mnt/c/Users/SHIVAMFINTECH/Desktop/AlGo; echo $?`);
+  assert.match(yes.out, /0$/);
+});
+
 test("canonical VPS home wins over T2S_SCRIPT_HOME download/algo", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-home-"));
   const algo = makeCheckout(root, path.join("download", "algo"));

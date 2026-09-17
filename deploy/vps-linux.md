@@ -8,6 +8,15 @@ This machine is **not Ubuntu**. If `apt` is missing, use **dnf** or **yum** (Roc
 
 Do **not** run these commands in Windows PowerShell. SSH first until you see `[root@trade2smart ~]#`.
 
+**Paths (two different machines):**
+
+| Machine | Folder |
+| --- | --- |
+| **PC** | `C:\Users\SHIVAMFINTECH\Desktop\AlGo` |
+| **VPS** | `/opt/t2s` |
+
+Do not `cd` into the Windows path over SSH. Do not clone `download/algo` on the VPS. `systemctl start t2s` must use `/opt/t2s`.
+
 Live Dhan BUY/SELL from this VPS uses **66.116.248.198**. Dhan Static IP 1 is your home PC **150.129.129.108**. Quotes can run on the VPS. Live orders stay on the PC desk (`http://localhost:5173`) unless Dhan Static IP 1 is already the VPS address.
 
 ---
@@ -48,7 +57,7 @@ npm -v
 
 ## Step 2 — Download T2S
 
-The live checkout on the **VPS** is **`/opt/t2s`**. `download/algo` is the folder on the **PC**, not on this server. `systemctl start t2s` must use `/opt/t2s`.
+The live checkout on the **VPS** is **`/opt/t2s`**. The **PC** folder is **`C:\Users\SHIVAMFINTECH\Desktop\AlGo`**. Those are not the same path. `systemctl start t2s` must use `/opt/t2s`.
 
 ```bash
 mkdir -p /opt/t2s
@@ -192,7 +201,7 @@ fail2ban-client set sshd unbanip YOUR.HOME.IP
 Get **YOUR.HOME.IP** on the PC Chrome: https://api.ipify.org  
 Also allow TCP **22** in the same hosting-panel firewall where you opened 80/443/4000.
 
-6. `C:\opt\t2s` is Windows. Linux commands belong in SSH or the web console, not in `PS C:\opt\t2s>`.
+6. `C:\Users\SHIVAMFINTECH\Desktop\AlGo` is the Windows PC folder. Linux commands belong in SSH or the web console, not in that Command Prompt.
 
 ---
 
@@ -235,7 +244,7 @@ ss -tlnp | grep -E ':80|:443|:4000'
 
 Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
 
-On the **VPS** the checkout is **`/opt/t2s`**. `download/algo` is the **PC** folder. Do not `cd` into `/root/download/algo` on the server.
+On the **VPS** the checkout is **`/opt/t2s`**. The **PC** folder is **`C:\Users\SHIVAMFINTECH\Desktop\AlGo`**. Do not `cd` into `/root/download/algo` or any Windows path on the server.
 
 If logs show `Cannot find package 'cors'` from `/root/download/algo/server/index.js`, systemd is pointed at the PC path. Restart does **not** turn LIVE on. Do **not** open localhost.
 

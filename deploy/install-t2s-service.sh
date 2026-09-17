@@ -1,5 +1,5 @@
 #!/bin/bash
-# Point systemd t2s at /opt/t2s (VPS). download/algo is the PC folder.
+# Point systemd t2s at /opt/t2s (VPS). PC path is C:\Users\SHIVAMFINTECH\Desktop\AlGo.
 # Publish dist where nginx can read it, restore HTTP+HTTPS, start Node + nginx.
 # Restart does NOT turn LIVE on. Does not touch users/tokens/.env.
 set -euo pipefail
@@ -12,7 +12,7 @@ T2S_SCRIPT_HOME=$(cd "$SCRIPT_DIR/.." && pwd)
 export T2S_SCRIPT_HOME
 
 FOUND=$(t2s_find_home) || {
-  echo "Could not find T2S. On the VPS clone to /opt/t2s. download/algo is the PC folder."
+  echo "Could not find T2S. On the VPS clone to /opt/t2s. PC path is C:\\Users\\SHIVAMFINTECH\\Desktop\\AlGo."
   exit 1
 }
 echo "found=$FOUND"

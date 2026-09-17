@@ -1,6 +1,7 @@
 #!/bin/bash
 # Locate the T2S checkout on the VPS.
-# Canonical VPS path is /opt/t2s. download/algo is the PC folder — never prefer it.
+# Canonical VPS path is /opt/t2s.
+# PC path is C:\Users\SHIVAMFINTECH\Desktop\AlGo — never prefer Windows/PC folder names.
 
 t2s_is_home() {
   [ -f "${1:-}/server/index.js" ]
@@ -10,12 +11,12 @@ t2s_has_server_modules() {
   [ -d "${1:-}/server/node_modules/cors" ]
 }
 
-# Windows / PC clone names. Do not treat these as the live VPS home when /opt/t2s exists.
+# Windows / PC clone names (Desktop\AlGo, download\algo). Never the live VPS home when /opt/t2s exists.
 t2s_is_pc_path() {
   local p=${1:-}
   p=${p%/}
   case "$p" in
-    */download/algo|*/Download/algo|*/downloads/algo|*/Downloads/algo|*/download/AlGo|*/Downloads/AlGo)
+    */download/algo|*/Download/algo|*/downloads/algo|*/Downloads/algo|*/download/AlGo|*/Downloads/AlGo|*/Desktop/AlGo|*/Desktop/algo|*/Desktop/Algo)
       return 0
       ;;
   esac
@@ -96,7 +97,7 @@ t2s_seed_opt_t2s() {
     echo "Cannot seed $vps (no server/index.js in $src)"
     return 1
   fi
-  echo "Seeding $vps from $src (download/algo is the PC folder; VPS is $vps)"
+  echo "Seeding $vps from $src (PC is C:\\Users\\SHIVAMFINTECH\\Desktop\\AlGo; VPS is $vps)"
   mkdir -p "$vps"
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --exclude node_modules "$src"/ "$vps"/

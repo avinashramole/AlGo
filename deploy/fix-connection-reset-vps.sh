@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bring t2s back when Chrome says the API is down, or curl 4000 resets.
-# VPS checkout is /opt/t2s. download/algo is the PC folder.
+# VPS checkout is /opt/t2s. PC checkout is C:\Users\SHIVAMFINTECH\Desktop\AlGo.
 # Does NOT git merge. Does NOT touch users/tokens/.env.
 # Restart does NOT turn LIVE on.
 set -euo pipefail

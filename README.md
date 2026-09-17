@@ -22,11 +22,11 @@ Demo login: **trades2smart@gmail.com** / **demo123**
 2. Install **Git** from https://git-scm.com  
 3. Open Command Prompt (Windows) or Terminal (Mac) and run:
 
-```bash
-cd Desktop
+```bat
+cd /d C:\Users\SHIVAMFINTECH\Desktop
 git clone https://github.com/avinashramole/AlGo.git
 cd AlGo
-git checkout cursor/t2s-algo-dashboard-00e8
+git checkout main
 npm install
 npm --prefix server install
 npm --prefix mobile install
@@ -36,9 +36,9 @@ npm --prefix mobile install
 
 ## Start the web app (computer)
 
-In the `AlGo` folder:
+In `C:\Users\SHIVAMFINTECH\Desktop\AlGo`:
 
-```bash
+```bat
 npm start
 ```
 
@@ -74,9 +74,8 @@ The phone app is one Expo project. It runs on **both** iPhone and Android.
 
 Open a **second** terminal:
 
-```bash
-cd Desktop
-cd AlGo
+```bat
+cd /d C:\Users\SHIVAMFINTECH\Desktop\AlGo
 npm run dev:mobile
 ```
 
