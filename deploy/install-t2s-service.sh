@@ -53,14 +53,17 @@ EOF
 
 echo "== publish dist to $WEBROOT (nginx cannot read /root) =="
 mkdir -p "$WEBROOT"
+chmod 755 /var /var/www "$WEBROOT" || true
 if [ -f "$HOME_DIR/dist/index.html" ]; then
   cp -a "$HOME_DIR/dist/." "$WEBROOT/"
 elif [ -n "${FOUND:-}" ] && [ -f "$FOUND/dist/index.html" ]; then
   cp -a "$FOUND/dist/." "$WEBROOT/"
-else
-  echo "No dist yet — nginx will proxy the website to Node on 4000."
+fi
+if [ ! -f "$WEBROOT/index.html" ]; then
+  printf '%s\n' '<!doctype html><html><head><meta charset="utf-8"><title>Trade 2 Smart</title></head><body><p>Trade 2 Smart</p></body></html>' > "$WEBROOT/index.html"
 fi
 chmod -R a+rX "$WEBROOT" || true
+chown -R nginx:nginx "$WEBROOT" 2>/dev/null || true
 
 echo "== nginx HTTP+HTTPS, not root /root/... =="
 python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf

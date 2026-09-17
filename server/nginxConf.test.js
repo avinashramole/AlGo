@@ -28,7 +28,7 @@ test("nginx conf never roots files under /root and proxies API", () => {
   assert.match(text, /root \/var\/www\/trade2smart/);
   assert.doesNotMatch(text, /root \/root\//);
   assert.match(text, /proxy_pass http:\/\/127\.0\.0\.1:4000/);
-  assert.match(text, /@node/);
+  assert.doesNotMatch(text, /@node/);
 });
 
 test("nginx conf enables HTTPS when Let's Encrypt files exist", () => {
@@ -42,5 +42,15 @@ test("nginx conf enables HTTPS when Let's Encrypt files exist", () => {
   assert.doesNotMatch(text, /options-ssl-nginx/);
   assert.equal(text.includes(certDir), true);
   assert.doesNotMatch(text, /root \/root\//);
+  fs.rmSync(certDir, { recursive: true, force: true });
+});
+
+test("nginx conf finds archive fullchain1.pem", () => {
+  const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-archive-"));
+  fs.writeFileSync(path.join(certDir, "fullchain1.pem"), "cert\n");
+  fs.writeFileSync(path.join(certDir, "privkey1.pem"), "key\n");
+  const text = render(certDir);
+  assert.match(text, /listen 443 ssl/);
+  assert.match(text, /fullchain1\.pem/);
   fs.rmSync(certDir, { recursive: true, force: true });
 });

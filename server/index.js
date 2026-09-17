@@ -83,17 +83,6 @@ function isPreviewRequest(req) {
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 
-setInterval(() => {
-  try {
-    tickMarket();
-  } catch (error) {
-    console.error(`tickMarket failed: ${error.message || error}`);
-  }
-}, 1500);
-setInterval(() => {
-  void flushLiveAlgoOrders();
-}, 1500);
-
 let flushingLiveAlgos = false;
 
 async function sendLiveBrokerOrder(payload) {
@@ -1194,8 +1183,36 @@ const server = app.listen(port, "0.0.0.0", () => {
     console.log("Open the website at http://localhost:5173  (not a Cursor preview if you are on your PC)");
   }
   void bootBackground();
+  startDeskTimers();
 });
 attachHttpServerGuards(server);
+
+function startDeskTimers() {
+  if (/^(1|true|yes)$/i.test(String(process.env.T2S_SKIP_TICK || ""))) {
+    console.log("Desk ticks skipped (T2S_SKIP_TICK). API is answering on this port.");
+    return;
+  }
+  const delay = Number(process.env.T2S_TICK_DELAY_MS || 8000);
+  const wait = Number.isFinite(delay) && delay >= 0 ? delay : 8000;
+  const kick = () => {
+    setInterval(() => {
+      try {
+        tickMarket();
+      } catch (error) {
+        console.error(`tickMarket failed: ${error.message || error}`);
+      }
+    }, 1500);
+    setInterval(() => {
+      void flushLiveAlgoOrders();
+    }, 1500);
+  };
+  if (wait === 0) {
+    kick();
+    return;
+  }
+  console.log(`Desk ticks start in ${wait}ms so /api/health can answer first`);
+  setTimeout(kick, wait);
+}
 
 async function bootBackground() {
   startHedgeDailyLiveScheduler({

@@ -16,11 +16,41 @@ DEFAULT_WEBROOT = "/var/www/trade2smart"
 CERT_DIR = Path("/etc/letsencrypt/live/trade2smart.com")
 
 
-def cert_files(cert_dir: Path = CERT_DIR) -> Optional[Tuple[Path, Path]]:
-    fullchain = cert_dir / "fullchain.pem"
-    privkey = cert_dir / "privkey.pem"
-    if fullchain.is_file() and privkey.is_file():
+def _pair_in(folder: Path) -> Optional[Tuple[Path, Path]]:
+    if not folder:
+        return None
+    fullchain = folder / "fullchain.pem"
+    privkey = folder / "privkey.pem"
+    if fullchain.exists() and privkey.exists():
         return fullchain, privkey
+    chains = sorted(folder.glob("fullchain*.pem"))
+    keys = sorted(folder.glob("privkey*.pem"))
+    if chains and keys:
+        return chains[-1], keys[-1]
+    return None
+
+
+def cert_files(cert_dir: Path = CERT_DIR) -> Optional[Tuple[Path, Path]]:
+    direct = _pair_in(Path(cert_dir))
+    if direct:
+        return direct
+    if Path(cert_dir) != CERT_DIR:
+        return None
+    live = Path("/etc/letsencrypt/live")
+    if live.is_dir():
+        named = _pair_in(live / "trade2smart.com") or _pair_in(live / "www.trade2smart.com")
+        if named:
+            return named
+        for folder in sorted(live.iterdir()):
+            found = _pair_in(folder)
+            if found:
+                return found
+    archive = Path("/etc/letsencrypt/archive")
+    if archive.is_dir():
+        for folder in sorted(archive.iterdir()):
+            found = _pair_in(folder)
+            if found:
+                return found
     return None
 
 
@@ -43,20 +73,7 @@ def server_locations(webroot: str) -> str:
 
     location / {{
         root {webroot};
-        try_files $uri $uri/ /index.html @node;
-    }}
-
-    location @node {{
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Connection "";
-        proxy_connect_timeout 2s;
-        proxy_send_timeout 15s;
-        proxy_read_timeout 15s;
+        try_files $uri $uri/ /index.html;
     }}
 """.rstrip()
 
@@ -122,7 +139,8 @@ def main() -> None:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
-    print(f"wrote {out}")
+    certs = cert_files(Path(args.cert_dir))
+    print(f"wrote {out} certs={bool(certs)} {certs[0] if certs else ''}")
 
 
 if __name__ == "__main__":

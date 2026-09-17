@@ -262,7 +262,7 @@ locs = f"""
     }}
     location / {{
         root {webroot};
-        try_files $uri $uri/ /index.html @node;
+        try_files $uri $uri/ /index.html;
     }}
     location @node {{
         proxy_pass http://127.0.0.1:4000;
@@ -318,13 +318,40 @@ curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 8 --resolve trade
 
 You want `t2s` **active**, `nginx` **active**, WorkingDirectory=`/opt/t2s`, `api:200`, `http80:301` or `200`, and `https443:200`. Then Chrome **https://trade2smart.com** and Ctrl+Shift+R.
 
-If Chrome still refuses, allow **80** and **443** in the VPS hosting-panel firewall, then paste:
+If that output is `http80:500`, no `:443` in `ss`, and `api:000`:
+
+- **500** = nginx still cannot read the website files (`/var` or `/var/www` is often `700`).
+- **no 443** = Let's Encrypt was not found, so nginx never listened on HTTPS. Chrome HSTS then shows ERR_CONNECTION_REFUSED.
+- **api:000** = Node accepted port 4000 but the desk tick blocked `/api/health`. Pull `main` so ticks start after health can answer.
 
 ```bash
+tail -n 40 /var/log/nginx/error.log
+cat /etc/nginx/conf.d/trade2smart.conf
+find /etc/letsencrypt /etc/nginx -name 'fullchain*.pem' 2>/dev/null
+ls -la /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null
+mkdir -p /var/www/trade2smart
+chmod 755 /var /var/www /var/www/trade2smart
+if [ -f /opt/t2s/dist/index.html ]; then cp -a /opt/t2s/dist/. /var/www/trade2smart/; fi
+if [ ! -f /var/www/trade2smart/index.html ]; then
+  printf '%s\n' '<!doctype html><title>Trade 2 Smart</title><p>Trade 2 Smart</p>' > /var/www/trade2smart/index.html
+fi
+chmod -R a+rX /var/www/trade2smart
+chown -R nginx:nginx /var/www/trade2smart
+restorecon -Rv /var/www/trade2smart 2>/dev/null || true
+cd /opt/t2s
+git fetch origin main
+git checkout main
+git pull origin main
+python3 /opt/t2s/deploy/write_nginx_trade2smart.py --webroot /var/www/trade2smart --out /etc/nginx/conf.d/trade2smart.conf
+nginx -t && (systemctl reload nginx || systemctl restart nginx)
+systemctl daemon-reload
+systemctl restart t2s
+sleep 2
+systemctl is-active t2s nginx
 ss -tlnp | grep -E ':80|:443|:4000'
-ls -l /etc/letsencrypt/live/trade2smart.com
-nginx -T 2>/dev/null | grep -E 'listen |root |ssl_certificate|server_name' | head -n 80
-journalctl -u t2s -n 40 --no-pager
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000/api/health
+curl -sS -o /dev/null -w "http80:%{http_code}\n" --max-time 5 -H "Host: trade2smart.com" http://127.0.0.1/
+curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 5 --resolve trade2smart.com:443:127.0.0.1 https://trade2smart.com/ || true
 ```
 
 ---
