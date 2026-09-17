@@ -320,15 +320,14 @@ You want `t2s` **active**, `nginx` **active**, WorkingDirectory=`/opt/t2s`, `api
 
 If that output is `http80:500`, no `:443` in `ss`, and `api:000`:
 
-- **500** = nginx still cannot read the website files (`/var` or `/var/www` is often `700`).
-- **no 443** = Let's Encrypt was not found, so nginx never listened on HTTPS. Chrome HSTS then shows ERR_CONNECTION_REFUSED.
-- **api:000** = Node accepted port 4000 but the desk tick blocked `/api/health`. Pull `main` so ticks start after health can answer.
+- **500** = nginx cannot read `/var/www/trade2smart` (mode `700` on `/var` or SELinux).
+- **no 443** = nginx never started HTTPS, so Chrome HSTS shows ERR_CONNECTION_REFUSED.
+- **api:000** = Node accepted 4000 but did not answer yet.
+
+This block **always** opens 443 (Let's Encrypt if present, otherwise a 30-day cert so nginx listens). Restart does **not** turn LIVE on. Do **not** open localhost.
 
 ```bash
-tail -n 40 /var/log/nginx/error.log
-cat /etc/nginx/conf.d/trade2smart.conf
-find /etc/letsencrypt /etc/nginx -name 'fullchain*.pem' 2>/dev/null
-ls -la /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null
+setenforce 0 || true
 mkdir -p /var/www/trade2smart
 chmod 755 /var /var/www /var/www/trade2smart
 if [ -f /opt/t2s/dist/index.html ]; then cp -a /opt/t2s/dist/. /var/www/trade2smart/; fi
@@ -338,20 +337,51 @@ fi
 chmod -R a+rX /var/www/trade2smart
 chown -R nginx:nginx /var/www/trade2smart
 restorecon -Rv /var/www/trade2smart 2>/dev/null || true
+chcon -Rt httpd_sys_content_t /var/www/trade2smart 2>/dev/null || true
+CERT=/etc/letsencrypt/live/trade2smart.com/fullchain.pem
+KEY=/etc/letsencrypt/live/trade2smart.com/privkey.pem
+if [ ! -e "$CERT" ] || [ ! -e "$KEY" ]; then
+  CERT=/etc/nginx/t2s-selfsigned.crt
+  KEY=/etc/nginx/t2s-selfsigned.key
+  openssl req -x509 -nodes -newkey rsa:2048 -days 30 -keyout "$KEY" -out "$CERT" -subj "/CN=trade2smart.com"
+fi
+cat > /etc/nginx/conf.d/trade2smart.conf <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name trade2smart.com www.trade2smart.com;
+    return 301 https://\$host\$request_uri;
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name trade2smart.com www.trade2smart.com;
+    ssl_certificate $CERT;
+    ssl_certificate_key $KEY;
+    ssl_protocols TLSv1.2;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    root /var/www/trade2smart;
+    location /api/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header Connection "";
+    }
+    location / { try_files \$uri \$uri/ /index.html; }
+}
+EOF
+nginx -t && (systemctl restart nginx || systemctl start nginx)
 cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main
-python3 /opt/t2s/deploy/write_nginx_trade2smart.py --webroot /var/www/trade2smart --out /etc/nginx/conf.d/trade2smart.conf
-nginx -t && (systemctl reload nginx || systemctl restart nginx)
-systemctl daemon-reload
 systemctl restart t2s
 sleep 2
-systemctl is-active t2s nginx
+echo "CERT=$CERT"
 ss -tlnp | grep -E ':80|:443|:4000'
-curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000/api/health
 curl -sS -o /dev/null -w "http80:%{http_code}\n" --max-time 5 -H "Host: trade2smart.com" http://127.0.0.1/
-curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 5 --resolve trade2smart.com:443:127.0.0.1 https://trade2smart.com/ || true
+curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 5 --resolve trade2smart.com:443:127.0.0.1 https://127.0.0.1/
+curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000/api/health || true
 ```
 
 ---

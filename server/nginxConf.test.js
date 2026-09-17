@@ -54,3 +54,23 @@ test("nginx conf finds archive fullchain1.pem", () => {
   assert.match(text, /fullchain1\.pem/);
   fs.rmSync(certDir, { recursive: true, force: true });
 });
+
+test("nginx conf can force listen 443 with an explicit cert pair", () => {
+  const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-forced-"));
+  const crt = path.join(certDir, "force.crt");
+  const key = path.join(certDir, "force.key");
+  fs.writeFileSync(crt, "cert\n");
+  fs.writeFileSync(key, "key\n");
+  const py = [
+    "import sys",
+    "from pathlib import Path",
+    "sys.path.insert(0, sys.argv[1])",
+    "from write_nginx_trade2smart import render_nginx_conf",
+    "print(render_nginx_conf(sys.argv[2], Path('/tmp/t2s-no-certs'), (Path(sys.argv[3]), Path(sys.argv[4]))))",
+  ].join("\n");
+  const result = spawnSync("python3", ["-c", py, deployDir, "/var/www/trade2smart", crt, key], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /listen 443 ssl/);
+  assert.match(result.stdout, /force\.crt/);
+  fs.rmSync(certDir, { recursive: true, force: true });
+});

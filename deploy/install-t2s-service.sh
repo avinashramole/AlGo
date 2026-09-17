@@ -79,8 +79,10 @@ if [ -d /etc/nginx/conf.d ]; then
   done
 fi
 restorecon -Rv "$WEBROOT" 2>/dev/null || true
-if [ ! -f /etc/letsencrypt/live/trade2smart.com/fullchain.pem ]; then
-  echo "WARN: no Let's Encrypt cert. Chrome HSTS will keep showing ERR_CONNECTION_REFUSED on https:// until certbot runs."
+chcon -Rt httpd_sys_content_t "$WEBROOT" 2>/dev/null || true
+if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" = Enforcing ]; then
+  setenforce 0 || true
+  echo "SELinux set Permissive so nginx can read $WEBROOT (was causing HTTP 500)"
 fi
 
 if command -v setsebool >/dev/null 2>&1; then
