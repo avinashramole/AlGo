@@ -17,7 +17,7 @@ import {
 } from "../api/client";
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
-import { cn, formatInr, formatIstDate, formatPlanTerm } from "../lib/format";
+import { cn, formatInr, formatIst, formatIstDate, formatPlanTerm } from "../lib/format";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -94,7 +94,7 @@ export function MemberPlans() {
       });
       setCreds((current) => ({ clientId: current.clientId || desk.install?.accountId || "" }));
       await load();
-      setCredNote("Client ID and access token saved on this account and on admin Users. Desk LIVE was not started.");
+      setCredNote("Client ID and access token updated on this account and on admin Users. Live copy now uses this token. Desk LIVE was not started.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not install broker token");
     } finally {
@@ -315,6 +315,7 @@ export function MemberPlans() {
               <p className="mt-2 text-xs font-semibold text-slate-500">
                 Installed{desk.install.accountId ? ` · ${desk.install.accountId}` : ""}
                 {desk.install.tokenHint ? ` · token ${desk.install.tokenHint}` : ""}
+                {desk.install.tokenUpdatedAt ? ` · updated ${formatIst(desk.install.tokenUpdatedAt)}` : ""}
                 {desk.install.apiKeyHint ? ` · API ${desk.install.apiKeyHint}` : ""}
               </p>
             ) : (

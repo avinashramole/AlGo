@@ -27,7 +27,7 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
     const mappedHit =
       Boolean(mappedName) && (sameStrategy(mappedName, name) || mappedName === id || sameStrategy(mappedName, id));
     if (mappedHit) mapped.add(row.userId);
-    if (row.copy && (mode === "copy" || mode === "both") && row.subscriptionUntil && subscriptionOpen(row.subscriptionUntil)) {
+    if (row.copy && (mode === "copy" || mode === "both") && subscriptionOpen(row.subscriptionUntil)) {
       copyMaster.add(row.userId);
     }
   }
@@ -38,7 +38,6 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "paper").trim().toLowerCase();
   const paper = brokerId === "paper" || desk.tradeMode !== "real";
-  if (!paper && desk.copy === false) return null;
   const token = String(desk.brokerToken || "").trim();
   if (!paper && !token) return null;
   return {

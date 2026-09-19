@@ -59,6 +59,7 @@ function asClient(user, desk, handle = {}) {
     tokenHint: desk.tokenHint,
     apiKeyHint: desk.apiKeyHint,
     credentialsInstalled: Boolean(desk.credentialsInstalled),
+    tokenUpdatedAt: desk.tokenUpdatedAt || "",
     notes: desk.notes,
     margin: desk.margin,
     createdAt: user.createdAt || "",

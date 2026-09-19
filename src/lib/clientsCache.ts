@@ -17,6 +17,20 @@ export function applyClientList(result: ClientsList) {
   return result;
 }
 
+export function upsertCachedClient(client: ClientsList["clients"][number]) {
+  if (!cached || !client?.id) return client;
+  const clients = cached.clients.some((row) => row.id === client.id)
+    ? cached.clients.map((row) => (row.id === client.id ? client : row))
+    : [...cached.clients, client].sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  cached = {
+    ...cached,
+    clients,
+    live: clients.filter((row) => row.status === "LIVE").length,
+    paper: clients.filter((row) => row.status !== "LIVE").length,
+  };
+  return client;
+}
+
 export function refreshClientList() {
   if (inflight) return inflight;
   inflight = (async () => {

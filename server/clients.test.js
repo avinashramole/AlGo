@@ -40,8 +40,9 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings, installMemberBroker, getMemberDesk } = await import("./memberDesk.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk, peekClientSecrets } = await import("./memberDesk.js");
 const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
+const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
   const rows = listClients(listPublicUsers());
@@ -178,6 +179,54 @@ test("createClient keeps client ID on paper and requires it with an access token
   assert.equal(row.accountId, "11004567");
   assert.equal(row.credentialsInstalled, true);
   assert.equal(row.tradeMode, "paper");
+});
+
+test("saveClient installing a token on a signed-up member turns REAL copy on and replaces the token", () => {
+  const created = createClient({
+    name: "Token Update",
+    mobile: "9000000077",
+    brokerId: "dhan",
+    tradeMode: "paper",
+    copy: false,
+  });
+  assert.equal(created.tradeMode, "paper");
+  assert.equal(created.copy, false);
+  assert.equal(created.credentialsInstalled, false);
+  const first = saveClient(created.id, {
+    brokerId: "dhan",
+    accountId: "11005501",
+    brokerToken: "dhan-member-token-v1",
+  });
+  assert.equal(first.credentialsInstalled, true);
+  assert.equal(first.accountId, "11005501");
+  assert.equal(first.tradeMode, "real");
+  assert.equal(first.copy, true);
+  assert.equal(first.status, "LIVE");
+  assert.ok(first.subscriptionUntil);
+  assert.ok(first.tokenUpdatedAt);
+  assert.equal(peekClientSecrets(created.id).brokerToken, "dhan-member-token-v1");
+  const second = saveClient(created.id, { brokerToken: "dhan-member-token-v2-replaced" });
+  assert.equal(second.credentialsInstalled, true);
+  assert.equal(peekClientSecrets(created.id).brokerToken, "dhan-member-token-v2-replaced");
+  assert.notEqual(second.tokenHint, first.tokenHint);
+  const targets = listLiveCopyTargets({
+    strategyName: "NIFTY VWAP ATM",
+    strategyId: "a4",
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  const mine = targets.find((row) => row.userId === created.id);
+  assert.ok(mine);
+  assert.equal(mine.paper, false);
+  assert.equal(mine.brokerToken, "dhan-member-token-v2-replaced");
+  const copies = memberCopyPayloads(
+    { strategy: "NIFTY VWAP ATM", side: "BUY", symbol: "NIFTY 24600 CE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    { id: "a4", name: "NIFTY VWAP ATM", mappingScope: "both" },
+  );
+  const copy = copies.find((row) => row.copyUserId === created.id);
+  assert.equal(copy.account.accessToken, "dhan-member-token-v2-replaced");
 });
 
 test("member install and admin save share the same client ID and token hint", () => {

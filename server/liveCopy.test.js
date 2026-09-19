@@ -91,6 +91,53 @@ test("paper members get a book fill only", () => {
   assert.equal(mine.brokerToken, "");
 });
 
+test("copy master clients without a through date still receive admin orders", () => {
+  const user = { id: "u-copy-open", name: "Copy Open", email: "copyopen@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100666", accessToken: "open-copy-token" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    subscriptionUntil: "",
+    tradeMode: "real",
+    brokerId: "dhan",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: algo.name,
+    strategyId: algo.id,
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  const mine = targets.find((row) => row.userId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.paper, false);
+  assert.equal(mine.brokerToken, "open-copy-token");
+});
+
+test("mapped real members with copy off still get that strategy on their new token", () => {
+  const user = { id: "u-map-real", name: "Map Real", email: "mapreal@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100771", accessToken: "map-old-token" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100771", accessToken: "map-new-token" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "User Map VWAP",
+    tradeMode: "real",
+    brokerId: "dhan",
+  });
+  const copies = memberCopyPayloads(
+    { strategy: "User Map VWAP", side: "BUY", symbol: "NIFTY 24600 CE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    { id: "a-user-map", name: "User Map VWAP", mappingScope: "both", mappedClientIds: [] },
+  );
+  const mine = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.paper, false);
+  assert.equal(mine.account.accessToken, "map-new-token");
+});
+
 test("copy master clients receive admin orders without enrollment or algo mapping", () => {
   const user = { id: "u-copy-master", name: "Copy Master", email: "copymaster@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "paper" });
@@ -331,6 +378,41 @@ test("master exit closes every mapped paper client on that strategy", () => {
     assert.equal(desk.positions.some((row) => row.symbol === "NIFTY 25100 CE"), false);
     assert.ok((desk.orders || []).some((row) => row.side === "SELL" && row.symbol === "NIFTY 25100 CE"));
   }
+});
+
+test("member live BUY still queues when the master desk already has a Nifty option", async () => {
+  const user = { id: "u-nifty-copy", name: "Nifty Copy", email: "niftycopy@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100777", accessToken: "member-buy-token" });
+  payMember(user);
+  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook } = await import("./market.js");
+  replaceDhanBook([
+    {
+      id: "p-master-nifty",
+      symbol: "NIFTY 24600 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 80,
+      ltp: 90,
+      product: "MIS",
+      brokerId: "dhan",
+      live: true,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  queueLiveAlgoOrder({
+    strategy: algo.name,
+    side: "BUY",
+    symbol: "NIFTY 24700 CE",
+    qty: 65,
+    lotSize: 65,
+    brokerId: "dhan",
+  });
+  const queued = drainPendingLiveAlgoOrders();
+  const copy = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(copy);
+  assert.equal(copy.account.accessToken, "member-buy-token");
+  replaceDhanBook([]);
 });
 
 test("sendMemberCopyOrder paper path writes the member book", async () => {

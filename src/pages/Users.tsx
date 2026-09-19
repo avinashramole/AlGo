@@ -13,8 +13,8 @@ import {
   type ClientRow,
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { loadClientList, peekClientList } from "../lib/clientsCache";
-import { cn, formatMobile, formatNumber } from "../lib/format";
+import { loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
+import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
@@ -76,6 +76,7 @@ export function Users() {
     setError("");
     try {
       const result = await saveClient(id, payload);
+      upsertCachedClient(result.client);
       setClients((current) => current.map((row) => (row.id === id ? result.client : row)));
       if (payload.group) {
         setGroups((current) => (current.includes(payload.group as string) ? current : [...current, String(payload.group)]));
@@ -328,6 +329,7 @@ export function Users() {
           defaultUntil={defaultUntil}
           onClose={() => setShowAdd(false)}
           onSaved={(client) => {
+            upsertCachedClient(client);
             setClients((current) => [...current, client].sort((a, b) => a.name.localeCompare(b.name)));
             setShowAdd(false);
             void load();
@@ -341,6 +343,7 @@ export function Users() {
           groups={groups}
           onClose={() => setEdit(null)}
           onSaved={(client) => {
+            upsertCachedClient(client);
             setClients((current) => current.map((row) => (row.id === client.id ? client : row)));
             setEdit(null);
           }}
@@ -352,6 +355,7 @@ export function Users() {
           groups={groups}
           onClose={() => setGroupFor(null)}
           onSaved={(client) => {
+            upsertCachedClient(client);
             setClients((current) => current.map((row) => (row.id === client.id ? client : row)));
             if (!groups.includes(client.group)) setGroups((current) => [...current, client.group]);
             setGroupFor(null);
@@ -470,7 +474,9 @@ function BrokerCell({ row }: { row: ClientRow }) {
         <span className="block text-[11px] font-extrabold tracking-wide">{row.brokerName}</span>
         <span className="block text-[11px] text-slate-500">
           {row.accountId || "Not linked"}
-          {row.credentialsInstalled || row.tokenHint ? ` · token ${row.tokenHint || "saved"}` : " · no access token"}
+          {row.credentialsInstalled || row.tokenHint
+            ? ` · token ${row.tokenHint || "saved"}${row.tokenUpdatedAt ? ` · ${formatIst(row.tokenUpdatedAt)}` : ""}`
+            : " · no access token"}
         </span>
       </span>
     </div>
@@ -994,7 +1000,10 @@ function EditModal({
                 autoComplete="off"
               />
               <span className="font-normal text-[11px] text-slate-500">
-                {row.tokenHint ? `Installed ${row.tokenHint}. Leave blank to keep it.` : "No access token installed yet."} This does not start Dhan LIVE.
+                {row.tokenHint
+                  ? `Installed ${row.tokenHint}${row.tokenUpdatedAt ? ` · ${formatIst(row.tokenUpdatedAt)}` : ""}. Paste a new token to replace it.`
+                  : "No access token installed yet."}{" "}
+                Saving a token turns REAL and Copy on so this client can receive live orders. This does not start Dhan LIVE.
               </span>
             </Field>
           </>

@@ -114,7 +114,24 @@ function maskSecret(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   if (raw.length <= 8) return "••••";
-  return `${raw.slice(0, 2)}••••${raw.slice(-2)}`;
+  return `${raw.slice(0, 2)}••••${raw.slice(-4)}`;
+}
+
+function enableLiveCopyFromToken(desk, patch = {}) {
+  if (!desk?.brokerId || desk.brokerId === "paper") return;
+  if (patch.tradeMode == null) desk.tradeMode = "real";
+  if (patch.copy == null) desk.copy = true;
+  if (patch.subscriptionUntil == null && !String(desk.subscriptionUntil || "").trim()) {
+    desk.subscriptionUntil = defaultSubscriptionUntil();
+  }
+}
+
+function writeBrokerToken(desk, token) {
+  const next = String(token || "").trim();
+  if (!next) return false;
+  desk.brokerToken = next;
+  desk.brokerTokenUpdatedAt = new Date().toISOString();
+  return true;
 }
 
 function asGroups(value, fallback = "ALL") {
@@ -216,6 +233,7 @@ export function normalizeClientSettings(desk = {}) {
     tokenHint: maskSecret(desk.brokerToken),
     apiKeyHint: maskSecret(desk.brokerApiKey),
     credentialsInstalled: Boolean(String(desk.brokerToken || "").trim()),
+    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
     notes: String(desk.notes || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
   };
@@ -248,6 +266,7 @@ export function publicBrokerInstall(desk = {}) {
     tokenHint: maskSecret(desk.brokerToken),
     apiKeyHint: maskSecret(desk.brokerApiKey),
     installed: Boolean(String(desk.brokerToken || "").trim()),
+    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
     fields: brokerInstallFields(brokerId),
     help:
       brokerId === "paper"
@@ -332,9 +351,7 @@ export function saveClientSettings(userId, patch = {}) {
   if (patch.notifications != null && typeof patch.notifications === "object") {
     desk.notifications = asNotifications({ ...asNotifications(desk.notifications), ...patch.notifications });
   }
-  if (patch.brokerToken != null && String(patch.brokerToken).trim()) {
-    desk.brokerToken = String(patch.brokerToken).trim();
-  }
+  const tokenWritten = writeBrokerToken(desk, patch.brokerToken);
   if (patch.brokerApiKey != null && String(patch.brokerApiKey).trim()) {
     desk.brokerApiKey = String(patch.brokerApiKey).trim();
   }
@@ -342,6 +359,7 @@ export function saveClientSettings(userId, patch = {}) {
     desk.brokerSessionToken = String(patch.brokerSessionToken).trim();
   }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
+  if (tokenWritten) enableLiveCopyFromToken(desk, patch);
   persist();
   return normalizeClientSettings(desk);
 }
@@ -700,11 +718,7 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   }
   if (wanted === "paper") throw fail("Paper is virtual. No API key or access token.");
   const fields = brokerInstallFields(wanted);
-  if (wanted !== desk.brokerId) {
-    desk.brokerId = wanted;
-    desk.tradeMode = "real";
-    desk.copy = true;
-  }
+  desk.brokerId = wanted;
   const nextClientId = clientId != null ? String(clientId || "").trim() : String(desk.accountId || "").trim();
   if (!nextClientId) throw fail("Paste the client ID.");
   desk.accountId = nextClientId;
@@ -712,8 +726,9 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (!token && !desk.brokerToken) throw fail("Paste the access token.");
   if (token) {
     if (token.length < 6) throw fail("Access token is too short.");
-    desk.brokerToken = token;
+    writeBrokerToken(desk, token);
   }
+  enableLiveCopyFromToken(desk);
   const needsApi = fields.some((row) => row.id === "apiKey");
   const key = String(apiKey || "").trim();
   if (needsApi && !key && !desk.brokerApiKey) throw fail("Paste the API key.");

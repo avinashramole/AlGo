@@ -18,6 +18,7 @@ const {
   listTopups,
   liveAutoTradeBrokers,
   markTopupPaid,
+  peekClientSecrets,
   saveClientSettings,
   selectMemberBroker,
   startWalletTopup,
@@ -254,6 +255,33 @@ test("installMemberBroker stores API key and access token hints without secrets"
     () => installMemberBroker({ user: { id: "u-empty", name: "Empty", role: "user" }, brokerId: "dhan", accessToken: "dhan-token-value" }),
     /client ID/,
   );
+});
+
+test("installMemberBroker on an already selected broker replaces the token and enables live copy", () => {
+  const member = { id: "u-token-replace", name: "Token Replace", email: "replace@t2s.app", role: "user" };
+  saveClientSettings(member.id, { brokerId: "dhan", tradeMode: "paper", copy: false, subscriptionUntil: "" });
+  const first = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "1100333",
+    accessToken: "dhan-first-token-1111",
+  });
+  assert.equal(first.install.installed, true);
+  assert.ok(first.install.tokenUpdatedAt);
+  const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(desk.tradeMode, "real");
+  assert.equal(desk.autoTrade, true);
+  assert.equal(desk.copyReady, true);
+  assert.equal(desk.install.accountId, "1100333");
+  const second = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "1100333",
+    accessToken: "dhan-replaced-token-9999",
+  });
+  assert.notEqual(second.install.tokenHint, first.install.tokenHint);
+  assert.ok(second.install.tokenUpdatedAt);
+  assert.equal(peekClientSecrets(member.id).brokerToken, "dhan-replaced-token-9999");
 });
 
 test("queueLiveAlgoOrder queues a sized copy on the member token", async () => {
