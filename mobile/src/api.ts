@@ -490,6 +490,7 @@ export type MemberBrokerInstall = {
   tokenHint?: string;
   apiKeyHint?: string;
   installed?: boolean;
+  tokenUpdatedAt?: string;
   fields?: Array<{ id: string; label: string; secret?: boolean; placeholder?: string }>;
   help?: string;
 };

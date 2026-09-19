@@ -15,7 +15,7 @@ import {
   type PlanTerm,
 } from "../api";
 import { Card } from "../components/Ui";
-import { colors, formatInr, formatIstDate, formatPlanTerm } from "../theme";
+import { colors, formatInr, formatIst, formatIstDate, formatPlanTerm } from "../theme";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -177,7 +177,7 @@ export function MemberPlansScreen() {
           <View style={{ marginTop: 12, gap: 8 }}>
             <Text style={styles.muted}>
               {desk.install?.installed
-                ? `Saved ${desk.install.accountId || "client ID"} · token ${desk.install.tokenHint || ""}`
+                ? `Saved ${desk.install.accountId || "client ID"} · token ${desk.install.tokenHint || ""}${desk.install.tokenUpdatedAt ? ` · ${formatIst(desk.install.tokenUpdatedAt)}` : ""}`
                 : "Install client ID and access token. This does not start LIVE."}
             </Text>
             <TextInput style={styles.input} value={clientId} onChangeText={setClientId} placeholder="Client ID" autoCapitalize="none" />

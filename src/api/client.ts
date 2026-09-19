@@ -630,6 +630,7 @@ export type ClientRow = {
   tokenHint?: string;
   apiKeyHint?: string;
   credentialsInstalled?: boolean;
+  tokenUpdatedAt?: string;
   notes?: string;
   margin: number;
   createdAt?: string;
@@ -968,6 +969,7 @@ export type MemberBrokerInstall = {
   tokenHint?: string;
   apiKeyHint?: string;
   installed?: boolean;
+  tokenUpdatedAt?: string;
   fields: BrokerInstallField[];
   help?: string;
 };
