@@ -30,17 +30,17 @@ test("member Dhan quotes are fetched with the member client ID and token", async
   const seen = [];
   const mine = await memberQuotesForUser(user, {
     now: Date.now() + 10_000,
-    fetchQuotes: async ({ accessToken, clientId }) => {
-      seen.push({ accessToken, clientId });
+    fetchQuotes: async (creds) => {
+      seen.push(creds);
       return [
         { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25111.25, close: 25000 },
         { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 25140.5, expiry: "2026-09-29" },
       ];
     },
   });
-  assert.equal(seen[0].accessToken, "member-dhan-quote-token");
-  assert.equal(seen[0].clientId, "1100333");
-  assert.equal(seen[0].brokerId, "dhan");
+  assert.deepEqual(seen, [
+    { brokerId: "dhan", accessToken: "member-dhan-quote-token", clientId: "1100333", apiKey: "" },
+  ]);
   assert.equal(mine.brokerId, "dhan");
   assert.equal(mine.source, "member");
   const nifty = mine.indices.find((row) => row.symbol === "NIFTY 50");
