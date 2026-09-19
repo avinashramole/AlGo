@@ -60,7 +60,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
           <div className="text-lg font-bold">Run backtest</div>
           <div className="text-xs text-slate-400">{name || "Strategy"} · pick a date range</div>
           <div className="mt-1 text-[11px] leading-snug text-slate-500">
-            Nifty option premiums download from the admin Dhan account and replace any stored data for the selected dates.
+            Replay uses the strategy timeframe. Stored Dhan history for these dates is reused for every strategy; missing days download once and stay on disk.
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -150,7 +150,7 @@ export function BacktestRangeInline({ busy, error, onCancel, onRun }: InlineProp
     <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
       <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
       <div className="mt-1 text-[11px] leading-snug text-slate-500">
-        Downloads Dhan option history for these dates and overwrites any already stored chain data in that range.
+        Uses stored index and option history when this date range is already downloaded. Timeframe follows the strategy.
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button

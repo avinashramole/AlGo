@@ -18,6 +18,7 @@ import {
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { optionBacktestWindow } from "./niftyOptionHistory.js";
+import { aggregateIndexBars } from "./indexHistory.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
@@ -260,10 +261,17 @@ export function resolveBacktestWindow(options = {}) {
 
 export function pickBacktestTimeframe(requested, days) {
   const tf = String(requested || "5m");
-  if (days <= 14) return tf;
-  if (days <= 45) return tf === "1m" ? "5m" : tf;
-  if (tf === "1H" || tf === "1h") return "1H";
-  return "1H";
+  if (tf === "1m" && Number(days) > 14) return "5m";
+  return tf;
+}
+
+function tfMinutesForSample(tf) {
+  const raw = String(tf || "5m");
+  if (raw === "1m") return 1;
+  if (raw === "15m") return 15;
+  if (raw === "1H" || raw === "1h") return 60;
+  if (raw === "1D" || raw === "1d") return 390;
+  return 5;
 }
 
 function sessionSlots(tf) {
@@ -289,15 +297,9 @@ function tradingDays(from, to) {
 }
 
 export function generateRangeCandles({ from, to, timeframe = "1H", startPrice = 24580, seed = 42 }) {
-  const rand = seeded(seed);
+  const rand = seeded(Number(seed) + tfMinutesForSample(timeframe));
   const days = tradingDays(from, to);
-  let slots = sessionSlots(timeframe);
-  if (days.length * slots.length > 2200) {
-    slots = sessionSlots("1H");
-  }
-  if (days.length * slots.length > 2200) {
-    slots = sessionSlots("1D");
-  }
+  const slots = sessionSlots(timeframe);
   const candles = [];
   let price = startPrice;
   const driftScale = slots.length <= 1 ? 90 : slots.length <= 8 ? 42 : 18;
@@ -1666,6 +1668,9 @@ export function backtestAlgo(id, options = {}) {
   const vwapFromMs = Date.parse(`${vwapFrom}T09:15:00+05:30`);
   const wantedTf = niftyVwap ? cfg.timeframe : pickBacktestTimeframe(algo.timeframe, window.days);
   let candles = usableCandles(options.candles, niftyVwap ? vwapFromMs : window.fromMs, window.toMs);
+  if (!niftyVwap && candles.length) {
+    candles = usableCandles(aggregateIndexBars(candles, wantedTf), niftyVwap ? vwapFromMs : window.fromMs, window.toMs);
+  }
   let sample = false;
   let source = "dhan";
   if (candles.length < 40) {
@@ -1686,7 +1691,7 @@ export function backtestAlgo(id, options = {}) {
   if (candles.length < 32) {
     return { error: "Not enough bars in that date range" };
   }
-  const usedTf = niftyVwap ? cfg.timeframe : inferTimeframe(candles, wantedTf);
+  const usedTf = niftyVwap ? cfg.timeframe : wantedTf;
   const result = {
     ...(niftyVwap
       ? hedge
@@ -1694,7 +1699,8 @@ export function backtestAlgo(id, options = {}) {
         : runNiftyVwapBacktest({ ...algo, vwapState: undefined }, candles)
       : runBacktest({ ...algo, timeframe: usedTf }, candles)),
     sample,
-    source,
+    source: options.candleSource || source,
+    reused: Boolean(options.reused),
     range: window.range,
     from: niftyVwap ? vwapFrom : window.from,
     to: window.to,

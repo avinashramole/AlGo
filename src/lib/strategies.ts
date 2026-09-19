@@ -96,6 +96,7 @@ export type AlgoStrategy = {
     to?: string;
     optionSource?: "stored" | "mixed" | "synth" | string;
     optionHits?: number;
+    reused?: boolean;
     optionHistory?: { overwritten?: string[]; days?: number; contracts?: number; source?: string; error?: string };
     book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
   };

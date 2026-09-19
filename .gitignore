@@ -30,5 +30,6 @@ server/data/broker-sessions.json
 server/data/scrip-front.json
 server/data/last-quotes.json
 server/data/nifty-option-history/
+server/data/index-history/
 *.zip
 deploy/__pycache__/

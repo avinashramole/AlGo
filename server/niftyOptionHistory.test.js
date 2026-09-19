@@ -98,6 +98,36 @@ test("backtest download overwrites already stored days in the selected range", a
   assert.notEqual(optionLtpAt({ symbol: "NIFTY", time: T0, strike: 24800, side: "CE" }), 40);
 });
 
+test("later strategy backtests reuse stored option days instead of downloading again", async () => {
+  wipeOptionHistory();
+  recordLiveChainSnapshot({
+    symbol: "NIFTY",
+    expiry: "2026-08-25",
+    spot: 24800,
+    rows: [{ strike: 24800, callLtp: 55, putLtp: 44, atm: true }],
+    at: T0,
+  });
+  let fetches = 0;
+  const result = await downloadOptionHistoryRange({
+    symbol: "NIFTY",
+    from: "2026-08-21",
+    to: "2026-08-21",
+    candles: [bar(0, 24800)],
+    overwrite: false,
+    lookupId: async () => {
+      fetches += 1;
+      return "opt-1";
+    },
+    fetchBars: async () => {
+      fetches += 1;
+      return [{ time: T0, open: 9, high: 9, low: 9, close: 9, volume: 1 }];
+    },
+  });
+  assert.equal(result.reused, true);
+  assert.equal(fetches, 0);
+  assert.equal(optionLtpAt({ symbol: "NIFTY", time: T0, strike: 24800, side: "CE" }), 55);
+});
+
 test("download leaves days outside the selected range untouched", async () => {
   wipeOptionHistory();
   const later = Date.parse("2026-08-24T03:45:00.000Z");

@@ -419,14 +419,19 @@ function AlgoCard({
       <div className="mt-4 text-xs text-slate-400">
         <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>
         <div className="mt-1">{activity}</div>
-        {algo.lastBacktest?.optionSource ? (
+        {algo.lastBacktest?.timeframe || algo.lastBacktest?.optionSource ? (
           <div className="mt-1 text-[11px] text-slate-500">
-            Option premiums:{" "}
-            {algo.lastBacktest.optionSource === "stored"
-              ? "stored Dhan history"
-              : algo.lastBacktest.optionSource === "mixed"
-                ? "stored Dhan history + synth gaps"
-                : "synthesized from index"}
+            {algo.lastBacktest.timeframe ? `Replay ${algo.lastBacktest.timeframe}` : ""}
+            {algo.lastBacktest.reused ? " · reused stored Dhan history" : ""}
+            {algo.lastBacktest.optionSource
+              ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${
+                  algo.lastBacktest.optionSource === "stored"
+                    ? "stored Dhan history"
+                    : algo.lastBacktest.optionSource === "mixed"
+                      ? "stored Dhan history + synth gaps"
+                      : "synthesized from index"
+                }`
+              : ""}
             {algo.lastBacktest.optionHistory?.overwritten?.length
               ? ` · replaced ${algo.lastBacktest.optionHistory.overwritten.length} day${algo.lastBacktest.optionHistory.overwritten.length === 1 ? "" : "s"}`
               : ""}
