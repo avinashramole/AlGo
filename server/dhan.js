@@ -1318,7 +1318,7 @@ export async function ensureDhanLiveFromSavedToken() {
   const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
   if (!token || !id) return { live: false, reason: "no-token" };
   try {
-    await startDhanLive({ accessToken: token, clientId: id });
+    await startDhanLive({ accessToken: token, clientId: id, loginId: session.loginId || id });
     return { live: true, started: true };
   } catch (error) {
     console.log(`09:20 daily LIVE Dhan start failed: ${error.message || error}`);
@@ -1653,9 +1653,10 @@ export async function validateDhan(token, id) {
   return { profile, funds };
 }
 
-export async function startDhanLive({ accessToken: token, clientId: id }) {
+export async function startDhanLive({ accessToken: token, clientId: id, loginId } = {}) {
   const cleanToken = String(token || "").trim();
-  const cleanId = String(id || "").trim();
+  const enteredId = String(loginId || id || "").trim();
+  const cleanId = enteredId;
   if (!cleanToken) {
     const error = new Error("Dhan Access Token is required. Copy it from web.dhan.co → My Profile → Access DhanHQ APIs.");
     error.status = 400;
@@ -1674,9 +1675,10 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     throw error;
   }
   accessToken = cleanToken;
-  clientId = String(profile.dhanClientId || profile.data?.dhanClientId || cleanId).trim();
+  const apiId = String(profile.dhanClientId || profile.data?.dhanClientId || enteredId).trim();
+  clientId = apiId;
   usedFallback = false;
-  console.log(`Dhan live client ${clientId}`);
+  console.log(`Dhan live client ${enteredId || apiId}`);
 
   const fundsNum = (value) => {
     const n = Number(value);
@@ -1689,14 +1691,15 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     fundsNum(funds?.sodLimit);
   const used = fundsNum(funds?.utilizedAmount) || fundsNum(funds?.usedMargin);
   markDhanLive({
-    clientId,
+    clientId: enteredId || apiId,
     funds: avail,
     marginUsed: used,
     keyHint: tokenHint(accessToken),
     displayName: profile.dhanClientName ? `Dhan · ${profile.dhanClientName}` : "Dhan",
   });
   persistPastedToken({
-    clientId,
+    clientId: apiId,
+    loginId: enteredId || apiId,
     accessToken,
     expiryTime: resolveTokenExpiry({
       accessToken,
@@ -1713,7 +1716,7 @@ export async function startDhanLive({ accessToken: token, clientId: id }) {
     error: null,
     tokenHint: tokenHint(accessToken),
     profileName: profile.dhanClientName || null,
-    clientId,
+    clientId: enteredId || apiId,
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
@@ -1785,7 +1788,11 @@ export async function rotateDhanAccessToken({
     );
     return { rotated: true, live: false, expiryTime: generated.expiryTime, method: generated.method, ...dhanTokenStatus() };
   }
-  const live = await startDhanLive({ accessToken: generated.accessToken, clientId: generated.clientId });
+  const live = await startDhanLive({
+    accessToken: generated.accessToken,
+    clientId: generated.clientId,
+    loginId: loginId || clientId || generated.clientId,
+  });
   console.log(`Dhan LIVE token changed with ${how} (${reason}) · expires ${generated.expiryTime}`);
   return { ...live, rotated: true, expiryTime: generated.expiryTime, method: generated.method };
 }
@@ -1911,7 +1918,7 @@ async function keepDhanTokenFresh(reason = "schedule") {
       }
       if (plan.action === "reuse") {
         if (session.accessToken && session.clientId) {
-          await startDhanLive({ accessToken: session.accessToken, clientId: session.clientId });
+          await startDhanLive({ accessToken: session.accessToken, clientId: session.clientId, loginId: session.loginId });
           lastKeepAliveAt = Date.now();
           console.log(`Dhan LIVE restarted after ${reason} without minting a new token`);
         }
@@ -1966,7 +1973,7 @@ async function startDhanWithRetry(token, id, attempts = 4) {
   let lastError = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      await startDhanLive({ accessToken: token, clientId: id });
+      await startDhanLive({ accessToken: token, clientId: id, loginId: loadDhanSession().loginId || id });
       return true;
     } catch (error) {
       lastError = error;

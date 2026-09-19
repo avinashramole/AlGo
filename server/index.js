@@ -603,6 +603,7 @@ app.post("/api/brokers/:id/connect", async (req, res) => {
       const result = await startDhanLive({
         accessToken: req.body?.accessToken || req.body?.apiKey,
         clientId: req.body?.clientId,
+        loginId: req.body?.loginId || req.body?.clientId,
       });
       res.json({
         ok: true,

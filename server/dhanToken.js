@@ -13,6 +13,7 @@ const API = "https://api.dhan.co/v2";
 function emptySession() {
   return {
     clientId: "",
+    loginId: "",
     accessToken: "",
     pin: "",
     totpSecret: "",
@@ -655,12 +656,14 @@ export async function resetDhanAccessToken(input = {}, deps = {}) {
   return { ...generated, method: "generate" };
 }
 
-export function persistPastedToken({ clientId, accessToken, expiryTime, tokenValidity }) {
+export function persistPastedToken({ clientId, loginId, accessToken, expiryTime, tokenValidity }) {
   const session = loadDhanSession();
   const token = String(accessToken || "").trim();
   const tokenChanged = token !== String(session.accessToken || "").trim();
+  const entered = String(loginId || clientId || session.loginId || session.clientId || "").trim();
   saveDhanSession({
     clientId: String(clientId || session.clientId || "").trim(),
+    loginId: entered,
     accessToken: token,
     expiryTime: resolveTokenExpiry({
       accessToken: token,

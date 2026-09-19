@@ -909,26 +909,39 @@ function EditModal({
   const [name, setName] = useState(row.name);
   const [mobile, setMobile] = useState(row.mobile || "");
   const [telegramId, setTelegramId] = useState(row.telegramId || "");
+  const accountFor = (id: string, source = row) => {
+    const slot = source.brokerAccounts?.[id];
+    if (slot) return slot;
+    if (id === source.brokerId) {
+      return {
+        accountId: source.accountId || "",
+        tokenHint: source.tokenHint || "",
+        apiKeyHint: source.apiKeyHint || "",
+        tokenUpdatedAt: source.tokenUpdatedAt || "",
+      };
+    }
+    return { accountId: "", tokenHint: "", apiKeyHint: "", tokenUpdatedAt: "" };
+  };
   const [brokerId, setBrokerId] = useState(row.brokerId);
-  const [accountId, setAccountId] = useState(row.accountId || "");
+  const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
   const [tokenFocused, setTokenFocused] = useState(false);
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
-
-  const accountFor = (id: string) => {
-    const slot = row.brokerAccounts?.[id];
-    if (slot) return slot;
-    if (id === row.brokerId) {
-      return { accountId: row.accountId || "", tokenHint: row.tokenHint || "", apiKeyHint: row.apiKeyHint || "", tokenUpdatedAt: row.tokenUpdatedAt || "" };
-    }
-    return { accountId: "", tokenHint: "", apiKeyHint: "", tokenUpdatedAt: "" };
-  };
   const selectedAccount = accountFor(brokerId);
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setBrokerId(row.brokerId);
+    setAccountId(accountFor(row.brokerId, row).accountId || "");
+    setBrokerToken("");
+    setBrokerApiKey("");
+    setTokenFocused(false);
+    setApiKeyFocused(false);
+  }, [row.id, row.brokerId, row.accountId, row.tokenHint]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -950,7 +963,7 @@ function EditModal({
       });
       setBrokerToken("");
       setBrokerApiKey("");
-      setAccountId(result.client.accountId || accountId);
+      setAccountId(String(result.client.accountId || "").trim());
       setTokenFocused(false);
       setApiKeyFocused(false);
       onSaved(result.client);
