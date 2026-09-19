@@ -103,6 +103,8 @@ export function hasDhanQuotes(data?: {
   );
 }
 
+export { brokerChipName, headerBrokerLabel } from "./headerBroker";
+
 export function dhanFeedLabel(
   data?: { dhanFeed?: { live?: boolean; hasQuotes?: boolean }; optionMeta?: { source?: string } },
   sessionOpen?: boolean,

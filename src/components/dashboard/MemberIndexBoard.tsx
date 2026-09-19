@@ -12,9 +12,10 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {indices.map((item) => {
         const up = item.change >= 0;
+        const showDeriv = item.symbol !== "INDIA VIX";
         return (
           <article key={item.symbol} className="card px-4 py-3">
             <div className="flex items-start justify-between gap-3">
@@ -30,17 +31,19 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
               </div>
               <Sparkline data={item.spark?.length ? item.spark : [item.price]} up={up} />
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Future</div>
-                <div className="text-sm font-bold">{formatQuote(item.future || item.price)}</div>
-                <div className="text-[10px] text-slate-400">{item.futureExpiry || ""}</div>
+            {showDeriv ? (
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Future</div>
+                  <div className="text-sm font-bold">{formatQuote(item.future || item.price)}</div>
+                  <div className="text-[10px] text-slate-400">{item.futureExpiry || ""}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Lot</div>
+                  <div className="text-sm font-bold">{item.lot ? `1 lot = ${item.lot}` : "—"}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Lot</div>
-                <div className="text-sm font-bold">{item.lot ? `1 lot = ${item.lot}` : "—"}</div>
-              </div>
-            </div>
+            ) : null}
           </article>
         );
       })}

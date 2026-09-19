@@ -7,7 +7,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { isAdminUser, pageTitleForPath } from "../../lib/roles";
-import { cn, formatIstClock, formatMobile, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../../lib/format";
+import { getMemberQuotes } from "../../api/client";
+import { cn, formatIstClock, formatMobile, hasDhanQuotes, headerBrokerLabel, isMcxSessionOpen, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -37,21 +38,79 @@ export function Header() {
     document.title = `${pageTitle} · Trade 2 Smart`;
   }, [pageTitle]);
 
+  const [memberFeed, setMemberFeed] = useState<{
+    brokerId?: string;
+    brokerName?: string;
+    live?: boolean;
+    lastTickAt?: number | null;
+    hasQuotes?: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (admin) {
+      setMemberFeed(null);
+      return;
+    }
+    let alive = true;
+    const load = () => {
+      void getMemberQuotes()
+        .then((quotes) => {
+          if (!alive) return;
+          setMemberFeed({
+            brokerId: quotes.brokerId,
+            brokerName: quotes.brokerName,
+            live: Boolean(quotes.live),
+            lastTickAt: quotes.lastTickAt || null,
+            hasQuotes: Boolean(quotes.indices?.length),
+          });
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const id = window.setInterval(load, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [admin]);
+
   const nseOpen = isNseSessionOpen(now);
   const mcxOpen = isMcxSessionOpen(now);
   const marketOpen = nseOpen || mcxOpen;
+  const active = (data.brokers || []).find((item) => item.id === data.activeBrokerId) || (data.brokers || [])[0];
+  const adminBrokerId = active?.id || data.activeBrokerId || "dhan";
   const dhanQuotes = hasDhanQuotes(data);
-  const feedLabel = dhanQuotes ? "DHAN" : "";
+  const feedLabel = admin
+    ? headerBrokerLabel({
+        brokerId: adminBrokerId,
+        brokerName: active?.name,
+        live: adminBrokerId === "dhan" ? Boolean(data.dhanFeed?.live) : Boolean(active?.liveFeed || active?.status === "LIVE"),
+        hasQuotes: adminBrokerId === "dhan" ? dhanQuotes : Boolean(active?.connected || active?.liveFeed),
+      })
+    : headerBrokerLabel({
+        brokerId: memberFeed?.brokerId,
+        brokerName: memberFeed?.brokerName,
+        live: memberFeed?.live,
+        hasQuotes: memberFeed?.hasQuotes,
+      });
   const sessionLabel = nseOpen && mcxOpen ? "Open" : nseOpen ? "NSE Open" : mcxOpen ? "MCX Open" : "Closed";
-  const sessionTitle = `NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST. Last Dhan quotes stay after close.`;
-  const lastTick = data.dhanFeed?.lastTickAt
-    ? new Date(data.dhanFeed.lastTickAt).toLocaleTimeString("en-IN", {
+  const sessionTitle = admin
+    ? `Selected broker ${feedLabel || adminBrokerId}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
+    : `Your selected broker ${feedLabel || memberFeed?.brokerId || ""}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`;
+  const tickAt = admin
+    ? adminBrokerId === "dhan"
+      ? data.dhanFeed?.lastTickAt
+      : null
+    : memberFeed?.lastTickAt;
+  const lastTick = tickAt
+    ? new Date(tickAt).toLocaleTimeString("en-IN", {
         timeZone: "Asia/Kolkata",
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
       })
     : null;
+  const showTick = Boolean(feedLabel && lastTick);
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 md:h-16 md:gap-4 md:px-5">
@@ -88,7 +147,7 @@ export function Header() {
           <span className={cn("hidden font-medium md:inline", marketOpen ? "text-emerald-600/80 dark:text-emerald-400" : "text-slate-500")}>
             {formatIstClock(now)}
           </span>
-          {dhanQuotes && lastTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
+          {showTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
         {admin ? (
           <Link to="/users" className="icon-btn hidden md:flex" title="Users">

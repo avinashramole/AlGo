@@ -66,7 +66,19 @@ test("member Upstox quotes are fetched with the member token, not the admin feed
   assert.equal(mine.source, "member");
   assert.equal(mine.reason, "");
   assert.equal(mine.indices[0].price, 25100.5);
+  assert.equal(mine.brokerName, "UPSTOX");
+  assert.equal(mine.live, true);
+  assert.equal(typeof mine.lastTickAt, "number");
   assert.equal(String(JSON.stringify(mine)).includes("upstox-quote-token"), false);
+});
+
+test("member cards include Crude Oil and India VIX when the selected broker returns them", () => {
+  const rows = cardsFromMemberQuotes("u-vix-crude", [
+    { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6124.5, close: 6100 },
+    { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index", ltp: 12.75, close: 12.4 },
+  ]);
+  assert.equal(rows.find((row) => row.symbol === "CRUDEOIL").price, 6124.5);
+  assert.equal(rows.find((row) => row.symbol === "INDIA VIX").price, 12.75);
 });
 
 test("cardsFromMemberQuotes never copies admin-only fields onto the member board", () => {

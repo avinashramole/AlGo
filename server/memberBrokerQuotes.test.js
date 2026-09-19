@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  crudeInstrumentKey,
   fetchMemberBrokerQuotes,
+  frontMonthFutCode,
   quotesFromAngelPayload,
   quotesFromFyersPayload,
   quotesFromUpstoxPayload,
@@ -14,6 +16,7 @@ test("Upstox quote payload maps index LTP without using a Dhan token", () => {
     data: {
       "NSE_INDEX:Nifty 50": { last_price: 25111.25, ohlc: { close: 25000 }, instrument_token: "NSE_INDEX|Nifty 50" },
       "NSE_INDEX:Nifty Bank": { last_price: 52100.5, ohlc: { close: 52000 } },
+      "NSE_INDEX:India VIX": { last_price: 12.8, ohlc: { close: 12.4 } },
     },
   });
   const nifty = quotes.find((row) => row.symbol === "NIFTY 50");
@@ -22,6 +25,13 @@ test("Upstox quote payload maps index LTP without using a Dhan token", () => {
   assert.equal(nifty.close, 25000);
   assert.equal(nifty.kind, "index");
   assert.equal(bank.ltp, 52100.5);
+  assert.equal(quotes.find((row) => row.symbol === "INDIA VIX").ltp, 12.8);
+});
+
+test("front-month Crude key is isolated from the index batch", () => {
+  assert.equal(frontMonthFutCode("CRUDEOIL", "2026-10-16"), "CRUDEOIL26OCTFUT");
+  assert.equal(crudeInstrumentKey("upstox", "2026-10-16"), "MCX_FO|CRUDEOIL26OCTFUT");
+  assert.equal(crudeInstrumentKey("zerodha", "2026-10-16"), "MCX:CRUDEOIL26OCTFUT");
 });
 
 test("Zerodha quote payload maps NSE/BSE index keys", () => {

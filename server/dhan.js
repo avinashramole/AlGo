@@ -500,7 +500,7 @@ function quoteBodies(useFallback, instruments = liveInstruments()) {
 }
 
 export function memberQuoteInstruments() {
-  const indices = INSTRUMENTS.filter((row) => row.kind === "index" && row.symbol !== "INDIA VIX");
+  const indices = INSTRUMENTS.filter((row) => row.kind === "index");
   const futs = fallbackFrontFutures().map((row) => ({
     symbol: row.symbol,
     parent: row.parent,

@@ -1439,7 +1439,7 @@ export function deskFeed() {
 }
 
 export function memberIndexQuote(row) {
-  if (!row?.symbol || row.symbol === "INDIA VIX") return null;
+  if (!row?.symbol) return null;
   return {
     symbol: row.symbol,
     name: row.name || row.symbol,
