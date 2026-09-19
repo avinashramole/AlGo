@@ -1,17 +1,26 @@
 import { fetchDhanTapeQuotes } from "./dhan.js";
+import { upcomingExpiries } from "./optionChain.js";
+
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 export const INDEX_INSTRUMENTS = [
   { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index" },
   { symbol: "BANKNIFTY", parent: "BANKNIFTY", kind: "index" },
   { symbol: "FINNIFTY", parent: "FINNIFTY", kind: "index" },
   { symbol: "SENSEX", parent: "SENSEX", kind: "index" },
+  { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index" },
 ];
+
+export const CRUDE_INSTRUMENT = { symbol: "CRUDEOIL", parent: "CRUDEOIL", kind: "future" };
+
+export const CARD_INSTRUMENTS = INDEX_INSTRUMENTS.concat(CRUDE_INSTRUMENT);
 
 const UPSTOX_KEYS = {
   "NIFTY 50": "NSE_INDEX|Nifty 50",
   BANKNIFTY: "NSE_INDEX|Nifty Bank",
   FINNIFTY: "NSE_INDEX|Nifty Fin Service",
   SENSEX: "BSE_INDEX|SENSEX",
+  "INDIA VIX": "NSE_INDEX|India VIX",
 };
 
 const ZERODHA_KEYS = {
@@ -19,6 +28,7 @@ const ZERODHA_KEYS = {
   BANKNIFTY: "NSE:NIFTY BANK",
   FINNIFTY: "NSE:NIFTY FIN SERVICE",
   SENSEX: "BSE:SENSEX",
+  "INDIA VIX": "NSE:INDIA VIX",
 };
 
 const FYERS_KEYS = {
@@ -26,6 +36,7 @@ const FYERS_KEYS = {
   BANKNIFTY: "NSE:NIFTYBANK-INDEX",
   FINNIFTY: "NSE:FINNIFTY-INDEX",
   SENSEX: "BSE:SENSEX-INDEX",
+  "INDIA VIX": "NSE:INDIAVIX-INDEX",
 };
 
 const ANGEL_TOKENS = {
@@ -33,7 +44,23 @@ const ANGEL_TOKENS = {
   BANKNIFTY: { exchange: "NSE", token: "99926009" },
   FINNIFTY: { exchange: "NSE", token: "99926037" },
   SENSEX: { exchange: "BSE", token: "99919000" },
+  "INDIA VIX": { exchange: "NSE", token: "99926017" },
 };
+
+export function frontMonthFutCode(root, ymd) {
+  const match = String(ymd || "").match(/^(\d{4})-(\d{2})/);
+  if (!match) return "";
+  return `${root}${match[1].slice(-2)}${MONTHS[Number(match[2]) - 1]}FUT`;
+}
+
+export function crudeInstrumentKey(brokerId, ymd = upcomingExpiries("CRUDEOIL", 1)[0]) {
+  const code = frontMonthFutCode("CRUDEOIL", ymd);
+  if (!code) return "";
+  const id = String(brokerId || "").toLowerCase();
+  if (id === "upstox") return `MCX_FO|${code}`;
+  if (id === "zerodha" || id === "fyers") return `MCX:${code}`;
+  return "";
+}
 
 export function brokerNeedsApiKey(brokerId) {
   return ["zerodha", "fyers", "kotak", "angelone"].includes(String(brokerId || "").toLowerCase());
@@ -84,8 +111,9 @@ export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close } = {}) {
     if (row.n) byNorm.set(normKey(row.n), row);
   }
   const quotes = [];
-  for (const instrument of INDEX_INSTRUMENTS) {
+  for (const instrument of CARD_INSTRUMENTS) {
     const key = keyBySymbol[instrument.symbol];
+    if (!key) continue;
     const row = byNorm.get(normKey(key));
     if (!row) continue;
     const inner = row.v && typeof row.v === "object" ? row.v : row;
@@ -121,8 +149,9 @@ export function quotesFromAngelPayload(payload) {
   const rows = payload?.data?.fetched || payload?.data || [];
   const list = Array.isArray(rows) ? rows : [];
   const quotes = [];
-  for (const instrument of INDEX_INSTRUMENTS) {
+  for (const instrument of CARD_INSTRUMENTS) {
     const spec = ANGEL_TOKENS[instrument.symbol];
+    if (!spec) continue;
     const row = list.find((item) => String(item?.symbolToken || item?.symboltoken || "") === spec.token);
     if (!row) continue;
     const next = quoteRow(instrument, pickNumber(row.ltp, row.last_price), pickNumber(row.close, row.close_price));
@@ -150,17 +179,35 @@ async function readJson(fetchImpl, url, options) {
 }
 
 async function fetchUpstoxQuotes({ accessToken, fetchImpl }) {
-  const keys = INDEX_INSTRUMENTS.map((row) => UPSTOX_KEYS[row.symbol]).join(",");
+  const keys = INDEX_INSTRUMENTS.map((row) => UPSTOX_KEYS[row.symbol]).filter(Boolean).join(",");
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
+  let quotes = [];
   try {
     const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(keys)}`, { headers });
-    const quotes = quotesFromUpstoxPayload(payload);
-    if (quotes.length) return quotes;
+    quotes = quotesFromUpstoxPayload(payload);
   } catch {
-    /* fall through to LTP */
+    quotes = [];
   }
-  const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(keys)}`, { headers });
-  return quotesFromUpstoxPayload(payload);
+  if (!quotes.length) {
+    const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(keys)}`, { headers });
+    quotes = quotesFromUpstoxPayload(payload);
+  }
+  return quotes.concat(await fetchUpstoxCrude({ accessToken, fetchImpl }));
+}
+
+async function fetchUpstoxCrude({ accessToken, fetchImpl }) {
+  const key = crudeInstrumentKey("upstox");
+  if (!key) return [];
+  try {
+    const payload = await readJson(
+      fetchImpl,
+      `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(key)}`,
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } },
+    );
+    return quotesFromKeyedPayload(payload?.data || payload, { CRUDEOIL: key });
+  } catch {
+    return [];
+  }
 }
 
 async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
@@ -168,7 +215,17 @@ async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
   const payload = await readJson(fetchImpl, `https://api.kite.trade/quote?${query}`, {
     headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` },
   });
-  return quotesFromZerodhaPayload(payload);
+  const quotes = quotesFromZerodhaPayload(payload);
+  const crudeKey = crudeInstrumentKey("zerodha");
+  if (!crudeKey) return quotes;
+  try {
+    const extra = await readJson(fetchImpl, `https://api.kite.trade/quote?i=${encodeURIComponent(crudeKey)}`, {
+      headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` },
+    });
+    return quotes.concat(quotesFromKeyedPayload(extra?.data || extra, { CRUDEOIL: crudeKey }));
+  } catch {
+    return quotes;
+  }
 }
 
 async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
@@ -176,7 +233,26 @@ async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
   const payload = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(symbols)}`, {
     headers: { Authorization: `${apiKey}:${accessToken}` },
   });
-  return quotesFromFyersPayload(payload);
+  const quotes = quotesFromFyersPayload(payload);
+  const crudeKey = crudeInstrumentKey("fyers");
+  if (!crudeKey) return quotes;
+  try {
+    const extra = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(crudeKey)}`, {
+      headers: { Authorization: `${apiKey}:${accessToken}` },
+    });
+    const keyed = {};
+    for (const row of extra?.d || []) {
+      if (row?.n) keyed[row.n] = row;
+    }
+    return quotes.concat(
+      quotesFromKeyedPayload(keyed, { CRUDEOIL: crudeKey }, {
+        ltp: (row) => pickNumber(row.lp, row.last_price, row.ltp),
+        close: (row) => pickNumber(row.prev_close_price, row.close, row.ohlc?.close),
+      }),
+    );
+  } catch {
+    return quotes;
+  }
 }
 
 async function fetchAngelQuotes({ accessToken, apiKey, clientId, fetchImpl }) {

@@ -1007,6 +1007,9 @@ export function getMemberQuotes() {
     indices: MemberIndexQuote[];
     source?: string;
     brokerId?: string;
+    brokerName?: string;
+    live?: boolean;
+    lastTickAt?: number | null;
     reason?: string;
   }>("/member/quotes");
 }

@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { memberIndexQuote } from "./market.js";
 
-test("memberIndexQuote drops VWAP and VIX", () => {
-  assert.equal(memberIndexQuote({ symbol: "INDIA VIX", price: 13 }), null);
+test("memberIndexQuote drops VWAP but keeps India VIX", () => {
+  const vix = memberIndexQuote({ symbol: "INDIA VIX", name: "VIX", price: 13.2, change: 0.1, changePct: 0.76 });
+  assert.equal(vix.symbol, "INDIA VIX");
+  assert.equal(vix.price, 13.2);
+  assert.equal(vix.vwap, undefined);
   const row = memberIndexQuote({
     symbol: "NIFTY 50",
     name: "NIFTY",

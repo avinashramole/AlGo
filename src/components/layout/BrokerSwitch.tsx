@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
-import { hasDhanQuotes } from "../../lib/format";
+import { headerBrokerLabel } from "../../lib/format";
 
 export function BrokerSwitch() {
   const { data, activate } = useMarket();
@@ -23,11 +23,16 @@ export function BrokerSwitch() {
           </option>
         ))}
       </select>
-      {hasDhanQuotes(data) && (
+      {active ? (
         <span className="hidden rounded bg-emerald-50 px-1.5 py-1 text-[10px] font-extrabold text-up dark:bg-emerald-950/40 sm:inline">
-          {data.dhanFeed?.live ? "DHAN LIVE" : "DHAN"}
+          {headerBrokerLabel({
+            brokerId: active.id,
+            brokerName: active.name,
+            live: active.id === "dhan" ? Boolean(data.dhanFeed?.live) : Boolean(active.liveFeed || active.status === "LIVE"),
+            hasQuotes: true,
+          })}
         </span>
-      )}
+      ) : null}
       <Link to="/brokers" className="hidden text-[11px] font-semibold text-brand-500 lg:inline">
         Brokers
       </Link>

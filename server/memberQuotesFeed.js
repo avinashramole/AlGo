@@ -13,7 +13,22 @@ const CARDS = [
   { symbol: "FINNIFTY", name: "FINNIFTY", keys: ["FINNIFTY", "FINNIFTY FUT"], lot: 60 },
   { symbol: "SENSEX", name: "SENSEX", keys: ["SENSEX", "SENSEX FUT"], lot: 20 },
   { symbol: "CRUDEOIL", name: "CRUDE OIL", keys: ["CRUDEOIL", "CRUDE OIL", "CRUDEOIL FUT"], lot: 100 },
+  { symbol: "INDIA VIX", name: "VIX", keys: ["INDIA VIX", "INDIAVIX", "VIX"], lot: 0 },
 ];
+
+const BROKER_NAMES = {
+  dhan: "DHAN",
+  upstox: "UPSTOX",
+  zerodha: "ZERODHA",
+  fyers: "FYERS",
+  kotak: "KOTAK",
+  angelone: "ANGEL",
+  paper: "PAPER",
+};
+
+function brokerNameOf(brokerId) {
+  return BROKER_NAMES[String(brokerId || "").toLowerCase()] || String(brokerId || "").toUpperCase();
+}
 
 function round2(value) {
   return Number(Number(value).toFixed(2));
@@ -64,6 +79,9 @@ function emptyQuotes(brokerId, reason) {
     indices: [],
     source: "member",
     brokerId: brokerId || "paper",
+    brokerName: brokerNameOf(brokerId || "paper"),
+    live: false,
+    lastTickAt: null,
     reason,
   };
 }
@@ -106,6 +124,9 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
       indices: cardsFromMemberQuotes(user.id, quotes),
       source: "member",
       brokerId,
+      brokerName: brokerNameOf(brokerId),
+      live: quotes.length > 0,
+      lastTickAt: quotes.length ? now : null,
       reason: quotes.length
         ? ""
         : `Your ${brokerId} token did not return index quotes yet. Check the token on My plan.`,
