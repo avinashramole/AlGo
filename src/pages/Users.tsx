@@ -915,6 +915,16 @@ function EditModal({
   const [brokerToken, setBrokerToken] = useState("");
   const [tokenFocused, setTokenFocused] = useState(false);
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
+
+  const accountFor = (id: string) => {
+    const slot = row.brokerAccounts?.[id];
+    if (slot) return slot;
+    if (id === row.brokerId) {
+      return { accountId: row.accountId || "", tokenHint: row.tokenHint || "", apiKeyHint: row.apiKeyHint || "", tokenUpdatedAt: row.tokenUpdatedAt || "" };
+    }
+    return { accountId: "", tokenHint: "", apiKeyHint: "", tokenUpdatedAt: "" };
+  };
+  const selectedAccount = accountFor(brokerId);
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
   const [error, setError] = useState("");
@@ -941,6 +951,8 @@ function EditModal({
       setBrokerToken("");
       setBrokerApiKey("");
       setAccountId(result.client.accountId || accountId);
+      setTokenFocused(false);
+      setApiKeyFocused(false);
       onSaved(result.client);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -969,7 +981,20 @@ function EditModal({
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="Chat id from BotFather /start" />
         </Field>
         <Field label="Broker">
-          <select className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={brokerId} onChange={(event) => setBrokerId(event.target.value)}>
+          <select
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            value={brokerId}
+            onChange={(event) => {
+              const next = event.target.value;
+              setBrokerId(next);
+              const slot = accountFor(next);
+              setAccountId(slot.accountId || "");
+              setBrokerToken("");
+              setBrokerApiKey("");
+              setTokenFocused(false);
+              setApiKeyFocused(false);
+            }}
+          >
             <option value="paper">PAPER</option>
             <option value="dhan">DHAN</option>
             <option value="upstox">UPSTOX</option>
@@ -980,9 +1005,25 @@ function EditModal({
             <option value="sharekhan">SHAREKHAN</option>
             <option value="fyers">FYERS</option>
           </select>
+          <span className="font-normal text-[11px] text-slate-500">
+            This user can keep a client ID and token on each broker. Selecting DHAN edits only the DHAN slot.
+          </span>
         </Field>
+        {Object.keys(row.brokerAccounts || {}).length ? (
+          <p className="text-[11px] text-slate-500">
+            Saved:{" "}
+            {Object.entries(row.brokerAccounts || {})
+              .map(([id, slot]) => `${id.toUpperCase()}${slot.accountId ? ` ${slot.accountId}` : ""}${slot.installed ? " · token" : ""}`)
+              .join(" · ")}
+          </p>
+        ) : null}
         <Field label="Client ID">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Dhan / broker client ID" />
+          <input
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            value={accountId}
+            onChange={(event) => setAccountId(event.target.value)}
+            placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
+          />
         </Field>
         {brokerId !== "paper" ? (
           <>
@@ -991,11 +1032,11 @@ function EditModal({
                 <input
                   className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
                   type="password"
-                  value={apiKeyFocused ? brokerApiKey : displaySavedSecret(brokerApiKey, row.apiKeyHint)}
+                  value={apiKeyFocused ? brokerApiKey : displaySavedSecret(brokerApiKey, selectedAccount.apiKeyHint)}
                   onFocus={() => setApiKeyFocused(true)}
                   onBlur={() => setApiKeyFocused(false)}
                   onChange={(event) => setBrokerApiKey(event.target.value)}
-                  placeholder={row.apiKeyHint || "Paste API key to replace"}
+                  placeholder={selectedAccount.apiKeyHint || "Paste API key to replace"}
                   autoComplete="off"
                 />
               </Field>
@@ -1004,17 +1045,17 @@ function EditModal({
                 <input
                   className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
                   type="password"
-                  value={tokenFocused ? brokerToken : displaySavedSecret(brokerToken, row.tokenHint)}
+                  value={tokenFocused ? brokerToken : displaySavedSecret(brokerToken, selectedAccount.tokenHint)}
                   onFocus={() => setTokenFocused(true)}
                   onBlur={() => setTokenFocused(false)}
                   onChange={(event) => setBrokerToken(event.target.value)}
-                  placeholder={row.tokenHint || "Paste access token to replace"}
+                  placeholder={selectedAccount.tokenHint || "Paste access token to replace"}
                   autoComplete="off"
                 />
               <span className="font-normal text-[11px] text-slate-500">
-                {row.tokenHint
-                  ? `Installed ${row.tokenHint}${row.tokenUpdatedAt ? ` · ${formatIst(row.tokenUpdatedAt)}` : ""}. Paste a new token to replace it.`
-                  : "No access token installed yet."}{" "}
+                {selectedAccount.tokenHint
+                  ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
+                  : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
                 Saving a token turns REAL and Copy on so this client can receive live orders. This does not start Dhan LIVE.
               </span>
             </Field>

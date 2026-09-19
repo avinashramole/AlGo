@@ -631,6 +631,16 @@ export type ClientRow = {
   apiKeyHint?: string;
   credentialsInstalled?: boolean;
   tokenUpdatedAt?: string;
+  brokerAccounts?: Record<
+    string,
+    {
+      accountId?: string;
+      tokenHint?: string;
+      apiKeyHint?: string;
+      installed?: boolean;
+      tokenUpdatedAt?: string;
+    }
+  >;
   notes?: string;
   margin: number;
   createdAt?: string;
@@ -914,6 +924,8 @@ export type MemberBrokerChoice = {
   selectable?: boolean;
   selected?: boolean;
   autoTrade?: boolean;
+  installed?: boolean;
+  accountId?: string;
   mode?: string;
   note?: string;
 };

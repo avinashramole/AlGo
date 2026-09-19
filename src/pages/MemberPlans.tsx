@@ -277,8 +277,8 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Broker selection</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose the broker used for your live copies. Paper stays on this plan book only. Live brokers use your own API key
-          and access token — not the desk token. Saving a token does not start desk LIVE.
+          Choose the broker used for your live copies. Each live broker keeps its own client ID and access token — selecting
+          DHAN does not overwrite UPSTOX. Paper stays on this plan book only. Saving a token does not start desk LIVE.
         </p>
         <p className="mt-2 text-xs font-semibold text-slate-500">
           {desk.copyReady
@@ -304,7 +304,11 @@ export function MemberPlans() {
                 {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Selected</span> : null}
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
-                {row.virtual ? "Virtual paper" : row.live ? "Live auto trading" : "Desk managed"}
+                {row.virtual
+                  ? "Virtual paper"
+                  : row.installed
+                    ? `Token saved${row.accountId ? ` · ${row.accountId}` : ""}`
+                    : "Needs this broker's ID and token"}
               </div>
             </button>
           ))}

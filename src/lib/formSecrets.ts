@@ -24,8 +24,10 @@ export function hintsFromInstall(install?: InstallHints | null): Record<string, 
 }
 
 export function credsAfterInstall(install?: InstallHints | null, current: Record<string, string> = {}): Record<string, string> {
-  const clientId = String(install?.accountId || current.clientId || "").trim();
-  return clientId ? { clientId } : {};
+  const installed = String(install?.accountId || "").trim();
+  if (installed) return { clientId: installed };
+  const typed = String(current.clientId || "").trim();
+  return typed ? { clientId: typed } : {};
 }
 
 export function displayInstallValue(
