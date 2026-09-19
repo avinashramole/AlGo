@@ -30,7 +30,7 @@ export function Brokers() {
     setSelected(broker);
     setError("");
     if (broker.id === "dhan") {
-      setClientId(dhanClientId || broker.clientId || feed?.clientId || "");
+      setClientId(broker.clientId || feed?.clientId || dhanClientId || "");
       setSecret("");
     } else if (broker.connected) {
       setClientId(broker.clientId || "");
@@ -341,7 +341,7 @@ export function Brokers() {
             </div>
             {broker.id === "dhan" && broker.liveFeed ? (
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <Mini label="Client" value={broker.clientId || "—"} />
+                <Mini label="Client ID" value={broker.clientId || "—"} />
                 <Mini label="Funds" value={fundsCaption(broker)} />
                 <Mini label="Margin" value={`₹${formatNumber(broker.marginUsed, 0)}`} />
               </div>
@@ -461,7 +461,7 @@ export function Brokers() {
             </div>
             <p className="mt-1 text-xs text-slate-400">
               {selected.id === "dhan"
-                ? "Client ID stays the value you entered. Paste a new Access Token if you need to refresh it."
+                ? "Client ID is the live DhanHQ client id from this account. Login ID is only for PIN + TOTP."
                 : selected.help || "Paste the live API credentials from that broker. This does not start algos."}
             </p>
             <label className="mt-3 block text-xs font-semibold">

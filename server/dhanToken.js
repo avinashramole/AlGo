@@ -23,6 +23,11 @@ function emptySession() {
   };
 }
 
+/** Live Dhan Client ID from the profile — not the login id used for PIN + TOTP. */
+export function configuredDhanClientId(profile, fallback = "") {
+  return String(profile?.dhanClientId || profile?.data?.dhanClientId || fallback || "").trim();
+}
+
 /** Dhan token APIs take the 4–6 digit PIN, never the web.dhan.co password. */
 export function asDhanPin(value) {
   const raw = String(value || "").trim();
