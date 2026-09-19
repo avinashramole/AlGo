@@ -872,6 +872,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     } else if (hist.option && optionCoverage === "stored") {
       optionHistory = { source: "stored", reused: true, days: 0, overwritten: [] };
     }
+    await new Promise((resolve) => setImmediate(resolve));
     const result = backtestAlgo(id, {
       range: window.range,
       from: window.from,
