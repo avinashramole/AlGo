@@ -20,17 +20,26 @@ function fail(message) {
   return error;
 }
 
+export function sanitizeAccessToken(value) {
+  let raw = String(value || "").trim();
+  raw = raw.replace(/^Bearer\s+/i, "").trim();
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    raw = raw.slice(1, -1).trim().replace(/^Bearer\s+/i, "").trim();
+  }
+  return raw;
+}
+
 export function dhanOrderCredentials(payload = {}, desk = {}) {
   if (isMemberScopedOrder(payload)) {
     const account = payload.account && typeof payload.account === "object" ? payload.account : null;
-    const token = String(account?.accessToken || "").trim();
+    const token = sanitizeAccessToken(account?.accessToken);
     const clientId = String(account?.clientId || "").trim();
     if (!token || !clientId) {
       throw fail("This member has no Dhan Client ID + Access Token. Install them on My plan.");
     }
     return { lane: "member", token, clientId, account };
   }
-  const token = String(desk.accessToken || "").trim();
+  const token = sanitizeAccessToken(desk.accessToken);
   const clientId = String(desk.clientId || "").trim();
   if (!token || !clientId) {
     throw fail("Dhan live is off. Open Brokers and paste Client ID + Access Token.");
@@ -48,13 +57,14 @@ export function annotateMemberLiveAuthError(error, session = {}, { brokerName = 
   const status = Number(error?.status || 0);
   const message = String(error?.message || error || "broker error");
   if (/used this member's/.test(message)) return error instanceof Error ? error : new Error(message);
-  if (status !== 401 && !/unauthorized|invalid.?token|expired.?token|\b401\b/i.test(message)) {
+  if (status !== 401 && !/unauthorized|invalid.?token|expired.?token|extended_token|UDAPI1000|\b401\b/i.test(message)) {
     return error instanceof Error ? error : new Error(message);
   }
   const clientId = String(session.clientId || "").trim();
   const who = clientId ? `client ID ${clientId}` : "no client ID";
+  const tokenHint = `Paste today's ${brokerName} OAuth access_token on My plan — not an Analytics/extended token, and not the admin login.`;
   const next = new Error(
-    `${message}. ${brokerName} used this member's ${who} and access token ${credentialHint(session.accessToken)} — not the admin login. Paste a fresh daily ${brokerName} token on My plan if it expired.`,
+    `${message}. ${brokerName} used this member's ${who} and access token ${credentialHint(session.accessToken)} — not the admin login. ${tokenHint}`,
   );
   next.status = 401;
   return next;
@@ -66,7 +76,7 @@ export function liveOrderSession(payload = {}, adminSession = null, { brokerName
   if (isMemberScopedOrder(payload)) {
     const leftover = Boolean(payload.leftoverSlot || override?.leftoverSlot || account?.leftoverSlot);
     const session = {
-      accessToken: String(override?.accessToken || account?.accessToken || "").trim(),
+      accessToken: sanitizeAccessToken(override?.accessToken || account?.accessToken),
       apiKey: String(override?.apiKey || account?.apiKey || "").trim(),
       clientId: String(override?.clientId || account?.clientId || "").trim(),
       sessionToken: String(override?.sessionToken || account?.sessionToken || "").trim(),

@@ -16,6 +16,7 @@ const {
   parseDeskOptionSymbol,
   pickUpstoxOptionHit,
   placeLiveBrokerOrder,
+  upstoxErrorMessage,
   upstoxInstrumentKeyFromPayload,
 } = await import("./liveBrokers.js");
 
@@ -101,11 +102,12 @@ test("placeLiveBrokerOrder searches Upstox for NIFTY 22850 CE instead of using a
   assert.equal(live.orderId, "upx-1");
   assert.match(calls[0].url, /search\/instruments/);
   assert.match(calls[0].url, /NIFTY%2022850%20CE/);
-  assert.match(calls[1].url, /api-hft\.upstox\.com\/v2\/order\/place/);
+  assert.match(calls[1].url, /api-hft\.upstox\.com\/v3\/order\/place/);
   const placed = JSON.parse(calls[1].body);
   assert.equal(placed.instrument_token, "NSE_FO|98765");
   assert.equal(placed.transaction_type, "BUY");
   assert.equal(placed.quantity, 65);
+  assert.equal(placed.slice, false);
 });
 
 test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on the HFT host", async () => {
@@ -152,7 +154,7 @@ test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on th
   assert.equal(live.orderId, "upx-pe-1");
   assert.match(calls[0].url, /search\/instruments/);
   assert.match(calls[0].url, /NIFTY%2022850%20PE/);
-  assert.match(calls[1].url, /api-hft\.upstox\.com\/v2\/order\/place/);
+  assert.match(calls[1].url, /api-hft\.upstox\.com\/v3\/order\/place/);
   assert.equal(String(calls[1].url).includes("api.upstox.com/v2/order/place"), false);
   const placed = JSON.parse(calls[1].body);
   assert.equal(placed.instrument_token, "NSE_FO|426269");
@@ -334,6 +336,75 @@ test("member Upstox 401 names the member client ID and token hint", async () => 
       return true;
     },
   );
+});
+
+test("Upstox 401 reads errors[] and says analytics tokens cannot place", async () => {
+  assert.match(
+    upstoxErrorMessage(
+      { errors: [{ errorCode: "UDAPI100067", message: "not permitted with an extended_token" }] },
+      { status: 401 },
+    ),
+    /UDAPI100067.*extended_token/,
+  );
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 401,
+    statusText: "",
+    text: async () =>
+      JSON.stringify({
+        status: "error",
+        errors: [{ errorCode: "UDAPI100067", message: "not permitted with an extended_token" }],
+      }),
+  });
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "upstox",
+        {
+          copyUserId: "u-upstox-analytics",
+          brokerSession: { accessToken: "member-upstox-token", clientId: "393216" },
+          symbol: "NIFTY 22950 PE",
+          side: "BUY",
+          qty: 65,
+          instrumentKey: "NSE_FO|426270",
+        },
+        fetchImpl,
+      ),
+    (error) => {
+      assert.match(error.message, /UDAPI100067/);
+      assert.match(error.message, /extended_token|Analytics/);
+      assert.match(error.message, /access_token/);
+      assert.equal(error.message.includes("401 broker error"), false);
+      assert.equal(error.status, 401);
+      return true;
+    },
+  );
+});
+
+test("Upstox place falls back to HFT v2 when v3 is gone", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push(String(url));
+    if (String(url).includes("/v3/order/place")) {
+      return { ok: false, status: 404, statusText: "Not Found", text: async () => JSON.stringify({ message: "UDAPI10000" }) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ data: { order_id: "upx-v2-fallback" } }) };
+  };
+  const live = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-v2",
+      brokerSession: { accessToken: "member-upstox-token", clientId: "393216" },
+      symbol: "NIFTY 22950 PE",
+      side: "BUY",
+      qty: 65,
+      instrumentKey: "NSE_FO|426270",
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "upx-v2-fallback");
+  assert.match(calls[0], /v3\/order\/place/);
+  assert.match(calls[1], /v2\/order\/place/);
 });
 
 test("member Zerodha copy uses the member token, not the admin session", async () => {
