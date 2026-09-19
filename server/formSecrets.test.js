@@ -22,6 +22,11 @@ test("after save the client ID stays visible and the token field shows a mask, n
   assert.equal(installValueForSubmit({ id: "clientId" }, creds, hints), "1100333");
 });
 
+test("saved Dhan client ID replaces a leftover Upstox value after broker switch", () => {
+  assert.deepEqual(credsAfterInstall({ accountId: "11008802" }, { clientId: "UPX1001" }), { clientId: "11008802" });
+  assert.deepEqual(credsAfterInstall({ accountId: "" }, {}), {});
+});
+
 test("a masked token is never submitted as a replacement secret", () => {
   assert.equal(savedSecretForSubmit(""), "");
   assert.equal(savedSecretForSubmit(SECRET_FIELD_MASK), "");

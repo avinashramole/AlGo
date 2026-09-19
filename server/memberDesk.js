@@ -134,6 +134,116 @@ function writeBrokerToken(desk, token) {
   return true;
 }
 
+function emptyBrokerAccount() {
+  return { accountId: "", brokerToken: "", brokerApiKey: "", brokerSessionToken: "", tokenUpdatedAt: "" };
+}
+
+function brokerAccountsMap(desk = {}) {
+  const raw = desk.brokerAccounts && typeof desk.brokerAccounts === "object" && !Array.isArray(desk.brokerAccounts) ? desk.brokerAccounts : {};
+  const next = {};
+  for (const [id, row] of Object.entries(raw)) {
+    const brokerId = String(id || "").trim().toLowerCase();
+    if (!brokerId || brokerId === "paper" || !knownBroker(brokerId)) continue;
+    next[brokerId] = {
+      accountId: String(row?.accountId || "").trim(),
+      brokerToken: String(row?.brokerToken || "").trim(),
+      brokerApiKey: String(row?.brokerApiKey || "").trim(),
+      brokerSessionToken: String(row?.brokerSessionToken || "").trim(),
+      tokenUpdatedAt: String(row?.tokenUpdatedAt || "").trim(),
+    };
+  }
+  return next;
+}
+
+function snapshotSelectedBrokerAccount(desk) {
+  return {
+    accountId: String(desk.accountId || "").trim(),
+    brokerToken: String(desk.brokerToken || "").trim(),
+    brokerApiKey: String(desk.brokerApiKey || "").trim(),
+    brokerSessionToken: String(desk.brokerSessionToken || "").trim(),
+    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
+  };
+}
+
+function syncSelectedBrokerAccount(desk) {
+  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  desk.brokerAccounts = brokerAccountsMap(desk);
+  if (!brokerId || brokerId === "paper") return desk.brokerAccounts;
+  desk.brokerAccounts[brokerId] = snapshotSelectedBrokerAccount(desk);
+  return desk.brokerAccounts;
+}
+
+function migrateLegacyBrokerAccount(desk) {
+  desk.brokerAccounts = brokerAccountsMap(desk);
+  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  if (!brokerId || brokerId === "paper") return;
+  const slot = desk.brokerAccounts[brokerId];
+  const snap = snapshotSelectedBrokerAccount(desk);
+  if (!slot && (snap.accountId || snap.brokerToken || snap.brokerApiKey || snap.brokerSessionToken)) {
+    desk.brokerAccounts[brokerId] = snap;
+  }
+}
+
+function hydrateBrokerAccount(desk, brokerId) {
+  const id = String(brokerId || "").trim().toLowerCase();
+  desk.brokerAccounts = brokerAccountsMap(desk);
+  if (!id || id === "paper" || !knownBroker(id)) {
+    desk.accountId = "";
+    desk.brokerToken = "";
+    desk.brokerApiKey = "";
+    desk.brokerSessionToken = "";
+    desk.brokerTokenUpdatedAt = "";
+    return;
+  }
+  const slot = desk.brokerAccounts[id] || emptyBrokerAccount();
+  desk.accountId = slot.accountId;
+  desk.brokerToken = slot.brokerToken;
+  desk.brokerApiKey = slot.brokerApiKey;
+  desk.brokerSessionToken = slot.brokerSessionToken;
+  desk.brokerTokenUpdatedAt = slot.tokenUpdatedAt;
+}
+
+function switchDeskBroker(desk, brokerId) {
+  const wanted = String(brokerId || "").trim().toLowerCase();
+  if (!knownBroker(wanted)) throw fail("Unknown broker.");
+  migrateLegacyBrokerAccount(desk);
+  syncSelectedBrokerAccount(desk);
+  desk.brokerId = wanted;
+  hydrateBrokerAccount(desk, wanted);
+  return wanted;
+}
+
+export function publicBrokerAccounts(desk = {}) {
+  const map = brokerAccountsMap(desk);
+  const selected = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  if (selected && selected !== "paper") {
+    const snap = snapshotSelectedBrokerAccount(desk);
+    if (!map[selected] && (snap.accountId || snap.brokerToken || snap.brokerApiKey)) {
+      map[selected] = snap;
+    }
+  }
+  const out = {};
+  for (const [id, slot] of Object.entries(map)) {
+    if (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey) continue;
+    out[id] = {
+      accountId: slot.accountId,
+      tokenHint: maskSecret(slot.brokerToken),
+      apiKeyHint: maskSecret(slot.brokerApiKey),
+      installed: Boolean(slot.brokerToken),
+      tokenUpdatedAt: slot.tokenUpdatedAt,
+    };
+  }
+  return out;
+}
+
+export function peekBrokerAccount(userId, brokerId) {
+  const desk = store[userId] || emptyDesk(userId);
+  migrateLegacyBrokerAccount(desk);
+  const id = String(brokerId || desk.brokerId || "").trim().toLowerCase();
+  if (!id || id === "paper") return emptyBrokerAccount();
+  return desk.brokerAccounts[id] || emptyBrokerAccount();
+}
+
 function asGroups(value, fallback = "ALL") {
   const rows = Array.isArray(value)
     ? value
@@ -184,6 +294,7 @@ function emptyDesk(userId) {
     brokerToken: "",
     brokerApiKey: "",
     brokerSessionToken: "",
+    brokerAccounts: {},
     notes: "",
     wallet: { balance: 0, updatedAt: new Date().toISOString() },
     topups: [],
@@ -234,6 +345,7 @@ export function normalizeClientSettings(desk = {}) {
     apiKeyHint: maskSecret(desk.brokerApiKey),
     credentialsInstalled: Boolean(String(desk.brokerToken || "").trim()),
     tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
+    brokerAccounts: publicBrokerAccounts(desk),
     notes: String(desk.notes || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
   };
@@ -271,7 +383,7 @@ export function publicBrokerInstall(desk = {}) {
     help:
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
-        : "Install this account client ID and access token. Saving does not start desk LIVE. Admin Users and My plan share the same saved values.",
+        : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };
 }
 
@@ -330,12 +442,12 @@ export function saveClientSettings(userId, patch = {}) {
     }
     desk.staticIp = nextIp;
   }
-  if (patch.accountId != null) desk.accountId = String(patch.accountId || "").trim();
   if (patch.brokerId != null) {
     const id = String(patch.brokerId || "").trim().toLowerCase();
     if (!knownBroker(id)) throw fail("Unknown broker.");
-    desk.brokerId = id;
+    if (id !== desk.brokerId) switchDeskBroker(desk, id);
   }
+  if (patch.accountId != null) desk.accountId = String(patch.accountId || "").trim();
   if (patch.subscriptionMode != null) {
     const mode = String(patch.subscriptionMode || "").trim().toLowerCase();
     if (!SUBSCRIPTION_MODES.includes(mode)) throw fail("Subscription must be Copy Master, mapped strategies, or both.");
@@ -360,6 +472,7 @@ export function saveClientSettings(userId, patch = {}) {
   }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   if (tokenWritten) enableLiveCopyFromToken(desk, patch);
+  syncSelectedBrokerAccount(desk);
   persist();
   return normalizeClientSettings(desk);
 }
@@ -418,14 +531,17 @@ function loadDesk(userId) {
   desk.seededPlans = Array.isArray(desk.seededPlans) ? desk.seededPlans : [];
   if (!desk.wallet || typeof desk.wallet !== "object") desk.wallet = { balance: 0, updatedAt: new Date().toISOString() };
   if (!knownBroker(desk.brokerId)) desk.brokerId = "paper";
+  migrateLegacyBrokerAccount(desk);
   return desk;
 }
 
-export function memberBrokerCatalog(selectedId = "paper") {
+export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
+  const accounts = publicBrokerAccounts(desk);
   return catalog.map((row) => {
     const virtual = row.id === "paper";
     const live = deskBrokerLive(row.id);
     const selected = row.id === selectedId;
+    const saved = accounts[row.id] || {};
     return {
       id: row.id,
       name: row.name,
@@ -437,12 +553,14 @@ export function memberBrokerCatalog(selectedId = "paper") {
       selectable: true,
       selected,
       autoTrade: selected && !virtual,
+      installed: Boolean(saved.installed),
+      accountId: saved.accountId || "",
       mode: virtual ? "paper" : live ? "live" : "desk-managed",
       note: virtual
         ? "Virtual paper book. Signals stay on the T2S desk."
-        : live
-          ? "Live auto trading uses the desk account. You do not enter API keys."
-          : "Desk-managed. Auto trading starts on this broker when the desk is LIVE. You do not enter API keys.",
+        : saved.installed
+          ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}. Select it to update the ID or token.`
+          : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.",
     };
   });
 }
@@ -678,7 +796,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     tradeMode: autoTrade ? "real" : "paper",
     autoTrade,
     install: publicBrokerInstall(desk),
-    brokers: memberBrokerCatalog(brokerId),
+    brokers: memberBrokerCatalog(brokerId, desk),
     plans: planRows(book, enrollments),
     report,
     positions: book.positions,
@@ -694,7 +812,7 @@ export function selectMemberBroker({ user, brokerId } = {}) {
   const wanted = String(brokerId || "").trim().toLowerCase();
   if (!catalog.some((row) => row.id === wanted)) throw fail("Unknown broker.");
   const desk = loadDesk(user.id);
-  desk.brokerId = wanted;
+  switchDeskBroker(desk, wanted);
   desk.tradeMode = wanted === "paper" ? "paper" : "real";
   desk.copy = wanted !== "paper";
   desk.positions = desk.positions.map((row) => ({ ...row, brokerId: wanted }));
@@ -705,7 +823,7 @@ export function selectMemberBroker({ user, brokerId } = {}) {
     tradeMode: desk.tradeMode,
     autoTrade,
     install: publicBrokerInstall(desk),
-    brokers: memberBrokerCatalog(wanted),
+    brokers: memberBrokerCatalog(wanted, desk),
   };
 }
 
@@ -718,12 +836,14 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   }
   if (wanted === "paper") throw fail("Paper is virtual. No API key or access token.");
   const fields = brokerInstallFields(wanted);
-  desk.brokerId = wanted;
-  const nextClientId = clientId != null ? String(clientId || "").trim() : String(desk.accountId || "").trim();
+  if (wanted !== desk.brokerId) switchDeskBroker(desk, wanted);
+  else syncSelectedBrokerAccount(desk);
+  const slot = peekBrokerAccount(user.id, wanted);
+  const nextClientId = clientId != null ? String(clientId || "").trim() : String(slot.accountId || desk.accountId || "").trim();
   if (!nextClientId) throw fail("Paste the client ID.");
   desk.accountId = nextClientId;
   const token = String(accessToken || "").trim();
-  if (!token && !desk.brokerToken) throw fail("Paste the access token.");
+  if (!token && !slot.brokerToken && !desk.brokerToken) throw fail("Paste the access token.");
   if (token) {
     if (token.length < 6) throw fail("Access token is too short.");
     writeBrokerToken(desk, token);
@@ -731,11 +851,12 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   desk.tradeMode = "real";
   const needsApi = fields.some((row) => row.id === "apiKey");
   const key = String(apiKey || "").trim();
-  if (needsApi && !key && !desk.brokerApiKey) throw fail("Paste the API key.");
+  if (needsApi && !key && !slot.brokerApiKey && !desk.brokerApiKey) throw fail("Paste the API key.");
   if (key) desk.brokerApiKey = key;
   if (sessionToken != null && String(sessionToken).trim()) {
     desk.brokerSessionToken = String(sessionToken).trim();
   }
+  syncSelectedBrokerAccount(desk);
   persist();
   return { ok: true, install: publicBrokerInstall(desk), brokerId: desk.brokerId };
 }

@@ -60,6 +60,7 @@ function asClient(user, desk, handle = {}) {
     apiKeyHint: desk.apiKeyHint,
     credentialsInstalled: Boolean(desk.credentialsInstalled),
     tokenUpdatedAt: desk.tokenUpdatedAt || "",
+    brokerAccounts: desk.brokerAccounts || {},
     notes: desk.notes,
     margin: desk.margin,
     createdAt: user.createdAt || "",
@@ -165,7 +166,13 @@ export function saveClient(userId, patch = {}) {
   const existing = getPublicUser(userId);
   if (!existing) throw fail("Client not found.", 404);
   if (existing.role === "admin") throw fail("Desk admins are not edited on All clients.");
-  if (String(patch.brokerToken || "").trim() && !String(patch.accountId || peekClientSettings(userId).accountId || "").trim()) {
+  const current = peekClientSettings(userId);
+  const targetBroker = String(patch.brokerId || current.brokerId || "").trim().toLowerCase();
+  const targetAccount =
+    String(patch.accountId || "").trim() ||
+    (targetBroker && targetBroker === current.brokerId ? String(current.accountId || "").trim() : "") ||
+    String(current.brokerAccounts?.[targetBroker]?.accountId || "").trim();
+  if (String(patch.brokerToken || "").trim() && !targetAccount) {
     throw fail("Paste the client ID with the access token.");
   }
   if (patch.name != null || patch.mobile != null) {

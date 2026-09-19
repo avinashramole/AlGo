@@ -18,6 +18,7 @@ const {
   listTopups,
   liveAutoTradeBrokers,
   markTopupPaid,
+  peekBrokerAccount,
   peekClientSecrets,
   saveClientSettings,
   selectMemberBroker,
@@ -304,4 +305,44 @@ test("queueLiveAlgoOrder queues a sized copy on the member token", async () => {
   assert.equal(copy.qty, 60);
   assert.equal(copy.account.accessToken, "kite-access-token-value");
   assert.equal(copy.brokerSession.accessToken, "kite-access-token-value");
+});
+
+test("a member can keep Dhan and Upstox tokens and update Dhan without losing Upstox", () => {
+  const member = { id: "u-multi-broker", name: "Multi Broker", email: "multi@t2s.app", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "upstox",
+    clientId: "UPX1001",
+    accessToken: "upstox-member-token-keep",
+  });
+  const selected = selectMemberBroker({ user: member, brokerId: "dhan" });
+  assert.equal(selected.brokerId, "dhan");
+  assert.equal(selected.install.accountId, "");
+  assert.equal(selected.install.installed, false);
+  const dhan = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "11008801",
+    accessToken: "dhan-member-token-first",
+  });
+  assert.equal(dhan.install.accountId, "11008801");
+  assert.equal(peekClientSecrets(member.id).brokerToken, "dhan-member-token-first");
+  assert.equal(peekClientSecrets(member.id).accountId, "11008801");
+  const updated = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "11008802",
+    accessToken: "dhan-member-token-updated",
+  });
+  assert.equal(updated.install.accountId, "11008802");
+  assert.equal(peekClientSecrets(member.id).brokerToken, "dhan-member-token-updated");
+  assert.equal(peekBrokerAccount(member.id, "upstox").accountId, "UPX1001");
+  assert.equal(peekBrokerAccount(member.id, "upstox").brokerToken, "upstox-member-token-keep");
+  assert.equal(peekBrokerAccount(member.id, "dhan").brokerToken, "dhan-member-token-updated");
+  selectMemberBroker({ user: member, brokerId: "upstox" });
+  assert.equal(peekClientSecrets(member.id).brokerToken, "upstox-member-token-keep");
+  assert.equal(peekClientSecrets(member.id).accountId, "UPX1001");
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  assert.equal(peekClientSecrets(member.id).brokerToken, "dhan-member-token-updated");
+  assert.equal(peekClientSecrets(member.id).accountId, "11008802");
 });

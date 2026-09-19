@@ -39,7 +39,7 @@ export function MemberPlansScreen() {
         setDesk(nextDesk);
         setStrategies(catalog.strategies || []);
         setEnrollments(mine.enrollments || []);
-        setClientId((current) => current || nextDesk.install?.accountId || "");
+        setClientId(nextDesk.install?.accountId || "");
       })
       .catch((err) => {
         if (gen !== loadGen.current) return;
@@ -167,11 +167,14 @@ export function MemberPlansScreen() {
             <Pressable
               key={row.id}
               style={[styles.chip, row.selected && styles.chipOn]}
-              onPress={() =>
+              onPress={() => {
+                setClientId("");
+                setApiKey("");
+                setAccessToken("");
                 void selectMemberBroker(row.id)
                   .then(load)
-                  .catch((err) => Alert.alert("Broker", err instanceof Error ? err.message : "Could not select"))
-              }
+                  .catch((err) => Alert.alert("Broker", err instanceof Error ? err.message : "Could not select"));
+              }}
             >
               <Text style={[styles.chipText, row.selected && styles.chipTextOn]}>
                 {row.name}

@@ -40,7 +40,7 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings, installMemberBroker, getMemberDesk, peekClientSecrets } = await import("./memberDesk.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk, peekBrokerAccount, peekClientSecrets } = await import("./memberDesk.js");
 const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
 
@@ -347,6 +347,33 @@ test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-tim
   assert.equal(row.buyPrice, 96.71);
   assert.equal(row.ltp, 90);
   assert.ok(row.mtm < 0);
+});
+
+test("saveClient can add a Dhan ID and token without wiping the Upstox slot", () => {
+  const created = createClient({
+    name: "Both Brokers",
+    mobile: "9000000066",
+    brokerId: "upstox",
+    accountId: "UPX4400",
+    brokerToken: "upstox-keep-token-value",
+    tradeMode: "real",
+  });
+  const dhan = saveClient(created.id, {
+    brokerId: "dhan",
+    accountId: "11007701",
+    brokerToken: "dhan-new-token-value",
+  });
+  assert.equal(dhan.brokerId, "dhan");
+  assert.equal(dhan.accountId, "11007701");
+  assert.equal(dhan.brokerAccounts.dhan.accountId, "11007701");
+  assert.equal(dhan.brokerAccounts.upstox.accountId, "UPX4400");
+  assert.equal(dhan.brokerAccounts.upstox.installed, true);
+  assert.equal(String(JSON.stringify(dhan)).includes("upstox-keep-token-value"), false);
+  assert.equal(peekBrokerAccount(created.id, "upstox").brokerToken, "upstox-keep-token-value");
+  assert.equal(peekClientSecrets(created.id).brokerToken, "dhan-new-token-value");
+  const switched = saveClient(created.id, { brokerId: "upstox" });
+  assert.equal(switched.accountId, "UPX4400");
+  assert.equal(peekClientSecrets(created.id).brokerToken, "upstox-keep-token-value");
 });
 
 test("saveClient stores the client mobile on the user record", () => {
