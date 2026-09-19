@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMarket } from "../context/MarketContext";
 import { formatNumber, fundsCaption } from "../lib/format";
 import type { BrokerAccount } from "../api/client";
@@ -25,6 +25,12 @@ export function Brokers() {
   const paper = brokers.find((item) => item.id === "paper");
   const actualFunds = dhan?.liveFeed ? dhan.funds : 0;
   const clientLocked = Boolean(selected && selected.id !== "dhan" && (selected.liveFeed || selected.connected));
+  const savedDhanClientId = String(feed?.clientId || dhan?.clientId || "").trim();
+
+  useEffect(() => {
+    if (dhanClientId) return;
+    if (savedDhanClientId) setDhanClientId(savedDhanClientId);
+  }, [savedDhanClientId, dhanClientId]);
 
   const openForm = (broker: BrokerAccount) => {
     setSelected(broker);
@@ -161,7 +167,8 @@ export function Brokers() {
             label="Last tick"
             value={feed?.lastTickAt ? new Date(feed.lastTickAt).toLocaleTimeString("en-IN") : "—"}
           />
-          <Mini label="Profile" value={feed?.profileName || feed?.clientId || "—"} />
+          <Mini label="Client ID" value={savedDhanClientId || "—"} />
+          <Mini label="Profile" value={feed?.profileName || "—"} />
           <Mini
             label="Auto token"
             value={
@@ -237,12 +244,12 @@ export function Brokers() {
         ) : null}
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <label className="block text-xs font-semibold">
-            Login ID (Client ID)
+            Client ID
             <input
               className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
               value={dhanClientId}
               onChange={(event) => setDhanClientId(event.target.value)}
-              placeholder={feed?.clientId || "Dhan login / Client ID"}
+              placeholder={savedDhanClientId || "Dhan client ID, not your T2S login"}
               autoComplete="off"
             />
           </label>
@@ -339,13 +346,13 @@ export function Brokers() {
                 {broker.active ? "ACTIVE" : broker.status}
               </span>
             </div>
-            {broker.id === "dhan" && broker.liveFeed ? (
+            {broker.id === "dhan" ? (
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <Mini label="Client ID" value={broker.clientId || "—"} />
-                <Mini label="Funds" value={fundsCaption(broker)} />
-                <Mini label="Margin" value={`₹${formatNumber(broker.marginUsed, 0)}`} />
+                <Mini label="Client ID" value={broker.clientId || savedDhanClientId || "—"} />
+                <Mini label="Funds" value={broker.liveFeed ? fundsCaption(broker) : "—"} />
+                <Mini label="Margin" value={broker.liveFeed ? `₹${formatNumber(broker.marginUsed, 0)}` : "—"} />
               </div>
-            ) : broker.id !== "dhan" && broker.connected ? (
+            ) : broker.connected ? (
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <Mini label="Client" value={broker.clientId || "—"} />
                 <Mini label="Funds" value={fundsCaption(broker)} />
@@ -355,12 +362,12 @@ export function Brokers() {
             {broker.id === "dhan" && !broker.liveFeed ? (
               <div className="mt-3 space-y-2">
                 <label className="block text-xs font-semibold">
-                  Login ID (Client ID)
+                  Client ID
                   <input
                     className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
                     value={dhanClientId}
                     onChange={(event) => setDhanClientId(event.target.value)}
-                    placeholder="Dhan login / Client ID from web.dhan.co"
+                    placeholder={savedDhanClientId || "Dhan client ID from web.dhan.co"}
                     autoComplete="off"
                   />
                 </label>

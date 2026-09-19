@@ -138,7 +138,8 @@ test("mergeDhanCredentials accepts DHAN_LOGIN_ID and a 4–6 digit DHAN_PASSWORD
     { clientId: "old-id", pin: "1111", totpSecret: "", accessToken: "" },
     { DHAN_LOGIN_ID: "1000561739", DHAN_PASSWORD: "9999" },
   );
-  assert.equal(merged.clientId, "1000561739");
+  assert.equal(merged.clientId, "old-id");
+  assert.equal(merged.loginId, "1000561739");
   assert.equal(merged.pin, "9999");
 });
 
@@ -161,6 +162,16 @@ test("mergeDhanCredentials lets .env PIN and TOTP override a stale session file"
   assert.equal(merged.pin, "9999");
   assert.equal(merged.totpSecret, "JBSWY3DPEHPK3PXP");
   assert.equal(merged.accessToken, "session-token");
+});
+
+test("mergeDhanCredentials does not replace a saved client ID with the login id", () => {
+  const merged = mergeDhanCredentials(
+    { clientId: "1100333", loginId: "dhan-login", accessToken: "desk-token" },
+    { DHAN_LOGIN_ID: "dhan-login", DHAN_ACCESS_TOKEN: "env-token" },
+  );
+  assert.equal(merged.clientId, "1100333");
+  assert.equal(merged.loginId, "dhan-login");
+  assert.equal(merged.accessToken, "desk-token");
 });
 
 test("isDhanInvalidTotpError is not treated as an expired access token", () => {

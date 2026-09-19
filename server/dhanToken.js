@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { upsertDhanEnv } from "./env.js";
+import { persistAdminBrokerSecrets } from "./memberDesk.js";
 import { ipv4Request } from "./ipv4.js";
 import { normalizeTotpSecret, totpCodes } from "./totp.js";
 
@@ -36,10 +37,13 @@ export function asDhanPin(value) {
 
 export function mergeDhanCredentials(session = {}, env = process.env) {
   const next = { ...emptySession(), ...session };
-  const clientId = String(env.DHAN_CLIENT_ID || env.DHAN_LOGIN_ID || "").trim();
+  const envClientId = String(env.DHAN_CLIENT_ID || "").trim();
+  const envLoginId = String(env.DHAN_LOGIN_ID || "").trim();
   const pin = asDhanPin(env.DHAN_PIN) || asDhanPin(env.DHAN_PASSWORD);
   const totp = normalizeTotpSecret(env.DHAN_TOTP_SECRET);
-  if (clientId) next.clientId = clientId;
+  if (envClientId) next.clientId = envClientId;
+  else if (!next.clientId && envLoginId) next.clientId = envLoginId;
+  if (envLoginId) next.loginId = envLoginId;
   if (pin) next.pin = pin;
   next.pin = asDhanPin(next.pin);
   if (totp) next.totpSecret = totp;
@@ -83,11 +87,13 @@ export function saveDhanSession(patch = {}) {
   } catch {
     /* windows */
   }
-  if (patch.clientId || patch.pin || patch.totpSecret) {
+  if (patch.clientId || patch.loginId || patch.pin || patch.totpSecret || patch.accessToken) {
     upsertDhanEnv({
       clientId: next.clientId,
+      loginId: next.loginId,
       pin: next.pin,
       totpSecret: next.totpSecret,
+      accessToken: next.accessToken,
     });
   }
   return next;
@@ -289,6 +295,7 @@ export function dhanTokenStatus() {
   const backoff = loadTokenBackoff();
   const blockedUntil = Math.max(backoff.generateBackoffUntil, backoff.credentialsBlockedUntil);
   const nextMs = staleAfterReset ? Date.now() : nextDailyRenewalAt();
+  const token = String(session.accessToken || "").trim();
   return {
     autoRenew: autoGenerate || Boolean(session.accessToken && session.source === "web"),
     autoMode: autoGenerate ? "generate" : session.source === "web" ? "renew" : "off",
@@ -297,6 +304,8 @@ export function dhanTokenStatus() {
     autoStart: session.autoStart !== false,
     needsFresh: staleAfterReset,
     renewalBlockedUntil: blockedUntil > Date.now() ? new Date(blockedUntil).toISOString() : null,
+    clientId: String(session.clientId || "").trim() || null,
+    tokenHint: token ? (token.length <= 8 ? "••••" : `${token.slice(0, 2)}••••${token.slice(-4)}`) : null,
   };
 }
 
@@ -665,10 +674,11 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
   const session = loadDhanSession();
   const token = String(accessToken || "").trim();
   const tokenChanged = token !== String(session.accessToken || "").trim();
-  const entered = String(loginId || clientId || session.loginId || session.clientId || "").trim();
+  const savedClientId = String(clientId || session.clientId || "").trim();
+  const entered = String(loginId || session.loginId || "").trim();
   saveDhanSession({
-    clientId: String(clientId || session.clientId || "").trim(),
-    loginId: entered,
+    clientId: savedClientId,
+    loginId: entered && entered !== savedClientId ? entered : session.loginId || entered,
     accessToken: token,
     expiryTime: resolveTokenExpiry({
       accessToken: token,
@@ -679,6 +689,11 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
     generatedAt: tokenChanged ? new Date().toISOString() : session.generatedAt,
     source: session.pin && session.totpSecret ? session.source || "totp" : "web",
     autoStart: true,
+  });
+  persistAdminBrokerSecrets({
+    brokerId: "dhan",
+    accountId: savedClientId,
+    accessToken: token,
   });
 }
 

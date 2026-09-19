@@ -7,7 +7,7 @@ export const REPO_ROOT = path.join(__dirname, "..");
 
 export const ENV_FILE_NAMES = [".env", "tokan.env", "token.env", "dhan.env"];
 
-const DHAN_KEYS = ["DHAN_CLIENT_ID", "DHAN_PIN", "DHAN_TOTP_SECRET"];
+const DHAN_KEYS = ["DHAN_CLIENT_ID", "DHAN_LOGIN_ID", "DHAN_PIN", "DHAN_TOTP_SECRET", "DHAN_ACCESS_TOKEN"];
 
 export function parseEnvText(text) {
   const map = {};
@@ -67,6 +67,7 @@ export function loadDotEnvFiles({ root = REPO_ROOT, env = process.env } = {}) {
 function serializeEnvMap(map) {
   const order = [
     "DHAN_CLIENT_ID",
+    "DHAN_LOGIN_ID",
     "DHAN_PIN",
     "DHAN_TOTP_SECRET",
     "DHAN_ACCESS_TOKEN",
@@ -92,15 +93,19 @@ function serializeEnvMap(map) {
 
 export function upsertDhanEnv(patch = {}, { root = REPO_ROOT, env = process.env } = {}) {
   const updates = {};
-  if (patch.DHAN_CLIENT_ID || patch.clientId || patch.loginId) {
-    updates.DHAN_CLIENT_ID = String(patch.DHAN_CLIENT_ID || patch.clientId || patch.loginId || "").trim();
-  }
+  const clientId = String(patch.DHAN_CLIENT_ID || patch.clientId || "").trim();
+  const loginId = String(patch.DHAN_LOGIN_ID || patch.loginId || "").trim();
+  if (clientId) updates.DHAN_CLIENT_ID = clientId;
+  else if (loginId && !String(patch.clientId || "").trim()) updates.DHAN_CLIENT_ID = loginId;
+  if (loginId) updates.DHAN_LOGIN_ID = loginId;
   const pin = String(patch.DHAN_PIN || patch.pin || "").trim();
   const passwordPin = /^\d{4,6}$/.test(String(patch.password || "").trim()) ? String(patch.password).trim() : "";
   if (pin || passwordPin) updates.DHAN_PIN = pin || passwordPin;
   if (patch.DHAN_TOTP_SECRET || patch.totpSecret) {
     updates.DHAN_TOTP_SECRET = String(patch.DHAN_TOTP_SECRET || patch.totpSecret || "").trim();
   }
+  const accessToken = String(patch.DHAN_ACCESS_TOKEN || patch.accessToken || "").trim();
+  if (accessToken) updates.DHAN_ACCESS_TOKEN = accessToken;
   const targets = [path.join(root, ".env"), path.join(root, "tokan.env")];
   for (const file of targets) {
     const current = readEnvFile(file)?.map || {};

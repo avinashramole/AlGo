@@ -19,8 +19,10 @@ const {
   liveAutoTradeBrokers,
   markTopupPaid,
   brokerAccountForLiveCopy,
+  peekAdminBrokerSecrets,
   peekBrokerAccount,
   peekClientSecrets,
+  persistAdminBrokerSecrets,
   saveClientSettings,
   selectMemberBroker,
   startWalletTopup,
@@ -423,4 +425,24 @@ test("Upstox API key and secret stay on the public install before a trading toke
   assert.equal(card.oauthReady, true);
   assert.equal(card.installed, false);
   assert.match(card.note, /Generate today's trading token/);
+});
+
+test("admin Dhan client ID and access token persist on the admin desk, not the login id", () => {
+  persistAdminBrokerSecrets({
+    brokerId: "dhan",
+    accountId: "1100333",
+    accessToken: "admin-dhan-token-persist",
+  });
+  const saved = peekAdminBrokerSecrets("dhan");
+  assert.equal(saved.accountId, "1100333");
+  assert.equal(saved.brokerToken, "admin-dhan-token-persist");
+  assert.notEqual(saved.accountId, "admin");
+  assert.notEqual(saved.accountId, "trades2smart@gmail.com");
+  persistAdminBrokerSecrets({
+    brokerId: "dhan",
+    accountId: "1100333",
+    accessToken: "admin-dhan-token-replaced",
+  });
+  assert.equal(peekAdminBrokerSecrets("dhan").brokerToken, "admin-dhan-token-replaced");
+  assert.equal(peekAdminBrokerSecrets("dhan").accountId, "1100333");
 });
