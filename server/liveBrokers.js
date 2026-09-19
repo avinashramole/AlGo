@@ -198,18 +198,54 @@ export function isUpstoxInstrumentKey(value) {
   return /^(NSE|BSE|MCX)_[A-Z]+\|/.test(String(value || "").trim());
 }
 
+function parseSymbolExpiry(token) {
+  const raw = String(token || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  const hit = raw.match(/^(?:(\d{1,2}))?([A-Z]{3})(\d{2}|\d{4})$/);
+  if (!hit) return "";
+  const mon = MONTHS.indexOf(hit[2]);
+  if (mon < 0) return "";
+  const year = hit[3].length === 2 ? `20${hit[3]}` : hit[3];
+  const month = String(mon + 1).padStart(2, "0");
+  if (hit[1]) return `${year}-${month}-${String(Number(hit[1])).padStart(2, "0")}`;
+  return `${year}-${month}`;
+}
+
 export function parseDeskOptionSymbol(symbol, extras = {}) {
   const raw = String(symbol || "")
     .toUpperCase()
     .replace(/,/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  const compact = raw.replace(/\s+/g, "-");
+  const dhan = compact.match(
+    /^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)-(?:(\d{1,2}[A-Z]{3}\d{2,4}|[A-Z]{3}\d{2,4})-)?(\d{3,6})-(CE|PE)$/,
+  );
+  if (dhan) {
+    const expiry = parseSymbolExpiry(dhan[2]);
+    return expiry
+      ? { root: dhan[1], strike: Number(dhan[3]), option: dhan[4], expiry }
+      : { root: dhan[1], strike: Number(dhan[3]), option: dhan[4] };
+  }
   const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)\s+(\d{3,6})\s*(CE|PE)$/);
   if (named) return { root: named[1], strike: Number(named[2]), option: named[3] };
+  const spaced = raw.match(
+    /^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)\s+(\d{1,2})\s+([A-Z]{3})(?:\s+(\d{2,4}))?\s+(\d{3,6})\s*(CE|PE)$/,
+  );
+  if (spaced) {
+    const expiry = parseSymbolExpiry(`${spaced[2]}${spaced[3]}${spaced[4] || ""}`);
+    return expiry
+      ? { root: spaced[1], strike: Number(spaced[5]), option: spaced[6], expiry }
+      : { root: spaced[1], strike: Number(spaced[5]), option: spaced[6] };
+  }
   const strike = Number(extras.strike || 0);
   const option = String(extras.option || "").toUpperCase();
   if (strike && (option === "CE" || option === "PE")) {
-    return { root: String(extras.root || "NIFTY").toUpperCase(), strike, option };
+    const expiry = parseSymbolExpiry(extras.expiry) || String(extras.expiry || "").slice(0, 10);
+    return expiry
+      ? { root: String(extras.root || "NIFTY").toUpperCase(), strike, option, expiry }
+      : { root: String(extras.root || "NIFTY").toUpperCase(), strike, option };
   }
   return null;
 }
@@ -228,7 +264,9 @@ export function pickUpstoxOptionHit(rows = [], { root, strike, option, expiry } 
   const wantStrike = Number(strike);
   const wantOpt = String(option || "").toUpperCase();
   const wantRoot = String(root || "").toUpperCase();
-  const wantDay = String(expiry || "").slice(0, 10);
+  const wantExpiry = String(expiry || "").trim();
+  const wantDay = wantExpiry.length >= 10 ? wantExpiry.slice(0, 10) : "";
+  const wantMonth = wantExpiry.length >= 7 ? wantExpiry.slice(0, 7) : "";
   const scored = [];
   for (const row of Array.isArray(rows) ? rows : []) {
     const key = String(row.instrument_key || row.instrumentKey || row.instrument_token || "").trim();
@@ -245,16 +283,23 @@ export function pickUpstoxOptionHit(rows = [], { root, strike, option, expiry } 
     if (wantOpt === "PE" && !isPe) continue;
     if (wantRoot && !upstoxRootMatches(wantRoot, under, name)) continue;
     const exp = String(row.expiry || row.expiry_date || row.expiryDate || "").slice(0, 10);
-    scored.push({ key, exp, exact: Boolean(wantDay && exp === wantDay) });
+    scored.push({
+      key,
+      exp,
+      exact: Boolean(wantDay && exp === wantDay),
+      month: Boolean(wantMonth && exp.startsWith(wantMonth)),
+    });
   }
   if (!scored.length) return "";
   if (wantDay) {
     const exact = scored.find((row) => row.exact);
     if (exact) return exact.key;
   }
-  scored.sort((a, b) => String(a.exp).localeCompare(String(b.exp)));
+  const monthHits = wantMonth ? scored.filter((row) => row.month) : [];
+  const pool = monthHits.length ? monthHits : scored;
+  pool.sort((a, b) => String(a.exp).localeCompare(String(b.exp)));
   const today = new Date().toISOString().slice(0, 10);
-  return (scored.find((row) => !row.exp || row.exp >= today) || scored[0]).key;
+  return (pool.find((row) => !row.exp || row.exp >= today) || pool[0]).key;
 }
 
 export function upstoxInstrumentKeyFromPayload(payload = {}) {
@@ -266,22 +311,32 @@ export function upstoxInstrumentKeyFromPayload(payload = {}) {
   return isUpstoxInstrumentKey(sid) ? sid : "";
 }
 
+function isAuthError(error) {
+  return Number(error?.status) === 401 || /unauthorized|\b401\b/i.test(String(error?.message || ""));
+}
+
 async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl }) {
-  const parsed = parseDeskOptionSymbol(symbol, { strike, option });
+  const parsed = parseDeskOptionSymbol(symbol, { strike, option, expiry });
   if (!parsed || !accessToken) return "";
+  const wantedExpiry = String(expiry || parsed.expiry || "").trim();
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
   const queries = [`${parsed.root} ${parsed.strike} ${parsed.option}`, `${parsed.root}${parsed.strike}${parsed.option}`];
+  if (wantedExpiry) queries.push(`${parsed.root} ${wantedExpiry} ${parsed.strike} ${parsed.option}`);
+  const original = String(symbol || "").trim();
+  if (original && !queries.includes(original)) queries.push(original);
+  let authError = null;
   for (const query of queries) {
     try {
       const body = await httpJson(fetchImpl, `https://api.upstox.com/v2/search/instruments?query=${encodeURIComponent(query)}`, { headers });
-      const key = pickUpstoxOptionHit(body.data || body, { ...parsed, expiry });
+      const key = pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: wantedExpiry });
       if (key) return key;
-    } catch {
-      /* try the next query or the option-contract list */
+    } catch (error) {
+      if (isAuthError(error)) authError = error;
     }
   }
+  if (authError) throw authError;
   const indexKey = UPSTOX_INDEX_KEYS[parsed.root];
-  const day = String(expiry || "").slice(0, 10);
+  const day = wantedExpiry.length >= 10 ? wantedExpiry.slice(0, 10) : "";
   if (!indexKey || !day) return "";
   try {
     const body = await httpJson(
@@ -290,7 +345,8 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
       { headers },
     );
     return pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: day });
-  } catch {
+  } catch (error) {
+    if (isAuthError(error)) throw error;
     return "";
   }
 }
@@ -526,27 +582,42 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       });
     }
     if (!instrument) throw fail("Upstox live orders need an instrument key or security id.");
-    const body = await httpJson(fetchImpl, "https://api.upstox.com/v2/order/place", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        quantity: qty,
-        product: product === "NRML" ? "D" : "I",
-        validity: "DAY",
-        price: 0,
-        instrument_token: instrument,
-        order_type: "MARKET",
-        transaction_type: side,
-        disclosed_quantity: 0,
-        trigger_price: 0,
-        is_amo: false,
-      }),
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    const placeBody = JSON.stringify({
+      quantity: qty,
+      product: product === "NRML" ? "D" : "I",
+      validity: "DAY",
+      price: 0,
+      instrument_token: instrument,
+      order_type: "MARKET",
+      transaction_type: side,
+      disclosed_quantity: 0,
+      trigger_price: 0,
+      is_amo: false,
+      market_protection: -1,
     });
-    return { orderId: String(body.data?.order_id || body.order_id || ""), status: "PENDING", brokerId: "upstox" };
+    const placeUrls = ["https://api-hft.upstox.com/v2/order/place", "https://api-hft.upstox.com/v3/order/place"];
+    let lastError = null;
+    for (const url of placeUrls) {
+      try {
+        const body = await httpJson(fetchImpl, url, { method: "POST", headers, body: placeBody });
+        return {
+          orderId: String(body.data?.order_id || body.data?.order_ids?.[0] || body.order_id || ""),
+          status: "PENDING",
+          brokerId: "upstox",
+        };
+      } catch (error) {
+        lastError = error;
+        const message = String(error?.message || "");
+        const retry = error.status === 404 || error.status === 410 || /UDAPI10000|not supported|does not exist/i.test(message);
+        if (!retry) throw error;
+      }
+    }
+    throw lastError || fail("Upstox live order place failed.");
   }
 
   if (id === "fyers") {
