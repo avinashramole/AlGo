@@ -20,6 +20,7 @@ import { listIndexContracts, optionCount, parseOptionContract, publicFutures, pu
 import { optionBacktestWindow } from "./niftyOptionHistory.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
+import { evaluateSignals, runBacktest } from "./backtest.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";

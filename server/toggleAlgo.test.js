@@ -7,7 +7,7 @@ import test from "node:test";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
-const { createAlgo, deleteAlgo, listAlgos, setDhanFeed, toggleAlgo } = await import("./market.js");
+const { backtestAlgo, createAlgo, deleteAlgo, listAlgos, setDhanFeed, toggleAlgo } = await import("./market.js");
 const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
@@ -95,5 +95,25 @@ test("a started strategy stays LIVE after the saved file is reloaded", () => {
   } finally {
     deleteAlgo(created.id);
     setDhanFeed({ live: false });
+  }
+});
+
+test("indicator Run backtest uses runBacktest instead of throwing not defined", () => {
+  const stamp = Date.now();
+  const created = createAlgo({
+    name: `Indicator BT ${stamp}`,
+    kind: "indicator",
+    indicator: "VWAP",
+    runMode: "backtest",
+    timeframe: "5m",
+  });
+  try {
+    const result = backtestAlgo(created.id, { range: "custom", from: "2026-08-01", to: "2026-08-21" });
+    assert.equal(result.error, undefined);
+    assert.equal(result.ok, true);
+    assert.ok(result.backtest.bars >= 32);
+    assert.equal(typeof result.backtest.pnl, "number");
+  } finally {
+    deleteAlgo(created.id);
   }
 });
