@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { liveOrderSession } from "./brokerIsolation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
@@ -364,22 +365,9 @@ function orderSide(payload) {
 }
 
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
-  const override = payload.brokerSession && typeof payload.brokerSession === "object" ? payload.brokerSession : null;
-  const session = override?.accessToken
-    ? {
-        accessToken: String(override.accessToken || "").trim(),
-        apiKey: String(override.apiKey || "").trim(),
-        clientId: String(override.clientId || "").trim(),
-        sessionToken: String(override.sessionToken || "").trim(),
-      }
-    : liveBrokerSession(id);
-  if (!session?.accessToken) {
-    throw fail(
-      override
-        ? `This member has no ${liveBrokerMeta(id)?.name || id} access token. Install it on My plan.`
-        : `Connect ${liveBrokerMeta(id)?.name || id} on Brokers first.`,
-    );
-  }
+  const { session } = liveOrderSession(payload, liveBrokerSession(id), {
+    brokerName: liveBrokerMeta(id)?.name || id,
+  });
   const qty = orderQty(payload);
   const side = orderSide(payload);
   const symbol = String(payload.symbol || "").trim();

@@ -5,6 +5,7 @@ import { peekClientSecrets } from "./memberDesk.js";
 const CACHE_MS = 4_000;
 const cache = new Map();
 const sparks = new Map();
+const inflight = new Map();
 
 const CARDS = [
   { symbol: "NIFTY 50", name: "NIFTY", keys: ["NIFTY 50", "NIFTY", "NIFTY FUT"], lot: 65 },
@@ -87,22 +88,32 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
   }
   const hit = cache.get(user.id);
   if (hit && now - hit.at < CACHE_MS) return hit.payload;
-  let quotes = [];
+  const pending = inflight.get(user.id);
+  if (pending) return pending;
+  const job = (async () => {
+    let quotes = [];
+    try {
+      quotes = await (typeof fetchQuotes === "function"
+        ? fetchQuotes({ accessToken: token, clientId: accountId })
+        : fetchDhanTapeQuotes({ accessToken: token, clientId: accountId }));
+    } catch {
+      quotes = [];
+    }
+    const payload = {
+      indices: cardsFromMemberQuotes(user.id, quotes),
+      source: "member",
+      brokerId: "dhan",
+      reason: quotes.length
+        ? ""
+        : "Your Dhan token did not return index quotes yet. Check the token on My plan.",
+    };
+    cache.set(user.id, { at: now, payload });
+    return payload;
+  })();
+  inflight.set(user.id, job);
   try {
-    quotes = await (typeof fetchQuotes === "function"
-      ? fetchQuotes({ accessToken: token, clientId: accountId })
-      : fetchDhanTapeQuotes({ accessToken: token, clientId: accountId }));
-  } catch {
-    quotes = [];
+    return await job;
+  } finally {
+    inflight.delete(user.id);
   }
-  const payload = {
-    indices: cardsFromMemberQuotes(user.id, quotes),
-    source: "member",
-    brokerId: "dhan",
-    reason: quotes.length
-      ? ""
-      : "Your Dhan token did not return index quotes yet. Check the token on My plan.",
-  };
-  cache.set(user.id, { at: now, payload });
-  return payload;
 }

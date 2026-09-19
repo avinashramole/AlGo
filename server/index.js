@@ -24,6 +24,7 @@ import {
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
+import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -88,12 +89,13 @@ app.use(express.json({ limit: "1mb" }));
 let flushingLiveAlgos = false;
 
 async function sendLiveBrokerOrder(payload) {
-  const brokerId = String(payload.brokerId || "dhan");
+  const adminPayload = adminLiveOrderPayload(payload);
+  const brokerId = String(adminPayload.brokerId || "dhan");
   if (brokerId === "dhan") {
     if (!isDhanLive()) throw Object.assign(new Error("Dhan is not LIVE. Connect Access Token on Brokers."), { status: 400 });
-    return placeDhanOrder(payload);
+    return placeDhanOrder(adminPayload);
   }
-  return placeLiveBrokerOrder(brokerId, payload);
+  return placeLiveBrokerOrder(brokerId, adminPayload);
 }
 
 async function flushLiveAlgoOrders() {

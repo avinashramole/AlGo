@@ -71,6 +71,57 @@ test("connectLiveBroker rejects missing Angel jwt", async () => {
   );
 });
 
+test("member copy does not use the admin Zerodha session when the member token is missing", async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ data: { order_id: "should-not-place" } }),
+  });
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "zerodha",
+        {
+          copyUserId: "u-isolation",
+          brokerSession: { accessToken: "" },
+          symbol: "NIFTY 24500 CE",
+          expiry: "2026-09-15",
+          side: "BUY",
+          qty: 65,
+        },
+        fetchImpl,
+      ),
+    /My plan/,
+  );
+});
+
+test("member Zerodha copy uses the member token, not the admin session", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, auth: options.headers?.Authorization });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { order_id: "m-member-1" } }),
+    };
+  };
+  const live = await placeLiveBrokerOrder(
+    "zerodha",
+    {
+      copyUserId: "u-isolation",
+      brokerSession: { accessToken: "member-kite-token", apiKey: "member-kite-key", clientId: "MEM1" },
+      symbol: "NIFTY 24500 CE",
+      expiry: "2026-09-15",
+      side: "BUY",
+      qty: 65,
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "m-member-1");
+  assert.match(String(calls[0].auth), /member-kite-key:member-kite-token/);
+  assert.equal(String(calls[0].auth).includes("kite-access-token"), false);
+});
+
 test("disconnectLiveBroker clears the saved live session", () => {
   assert.equal(disconnectLiveBroker("zerodha"), true);
   assert.equal(isLiveBrokerReady("zerodha"), false);

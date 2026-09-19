@@ -34,6 +34,7 @@ import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -102,26 +103,38 @@ let lastKeepAliveAt = 0;
 let credentialsBlockedUntil = persistedBackoff.credentialsBlockedUntil;
 let quoteBackoffUntil = 0;
 let chainBusy = false;
-let requestSlot = Promise.resolve();
-let nextAnyRequestAt = 0;
-let nextOptionChainAt = 0;
-let nextQuoteAt = 0;
+const dhanLanes = {
+  admin: { requestSlot: Promise.resolve(), nextAnyRequestAt: 0, nextOptionChainAt: 0, nextQuoteAt: 0 },
+  member: { requestSlot: Promise.resolve(), nextAnyRequestAt: 0, nextOptionChainAt: 0, nextQuoteAt: 0 },
+};
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
-function waitForDhanSlot(kind) {
-  const job = requestSlot.then(async () => {
+function laneState(lane) {
+  return dhanLanes[lane] || dhanLanes.admin;
+}
+
+function waitForDhanSlot(kind, lane = "admin") {
+  const state = laneState(lane);
+  const anyGap = lane === "member" ? 450 : 220;
+  const quoteGap = lane === "member" ? 2200 : 1100;
+  const job = state.requestSlot.then(async () => {
     const now = Date.now();
-    const wait = Math.max(0, nextAnyRequestAt - now, kind === "optionchain" ? nextOptionChainAt - now : 0, kind === "quote" ? nextQuoteAt - now : 0);
+    const wait = Math.max(
+      0,
+      state.nextAnyRequestAt - now,
+      kind === "optionchain" ? state.nextOptionChainAt - now : 0,
+      kind === "quote" ? state.nextQuoteAt - now : 0,
+    );
     if (wait) await sleep(wait);
     const t = Date.now();
-    nextAnyRequestAt = t + 220;
-    if (kind === "optionchain") nextOptionChainAt = t + 3500;
-    if (kind === "quote") nextQuoteAt = t + 1100;
+    state.nextAnyRequestAt = t + anyGap;
+    if (kind === "optionchain") state.nextOptionChainAt = t + 3500;
+    if (kind === "quote") state.nextQuoteAt = t + quoteGap;
   });
-  requestSlot = job.catch(() => undefined);
+  state.requestSlot = job.catch(() => undefined);
   return job;
 }
 
@@ -424,11 +437,13 @@ async function readDhanJson(res) {
   return json;
 }
 
-async function dhanSend(method, path, token, id, body) {
+async function dhanSend(method, path, token, id, body, opts = {}) {
+  const lane = opts.lane === "member" ? "member" : "admin";
+  const maxAttempts = Number.isFinite(Number(opts.attempts)) ? Math.max(1, Number(opts.attempts)) : lane === "member" ? 1 : 4;
   const kind = requestKind(path);
   let lastError = null;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    await waitForDhanSlot(kind);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await waitForDhanSlot(kind, lane);
     const headers = authHeaders(token, id);
     if (body != null) headers["Content-Type"] = "application/json";
     const res = await ipv4Request(`${DHAN_API}${path}`, {
@@ -440,7 +455,7 @@ async function dhanSend(method, path, token, id, body) {
       return await readDhanJson(res);
     } catch (error) {
       lastError = error;
-      if (!isDhanRateLimitError(error) || attempt === 3) throw error;
+      if (!isDhanRateLimitError(error) || attempt === maxAttempts - 1) throw error;
       const wait = Math.min(20_000, error.retryAfterMs || 1500 * 2 ** attempt);
       console.log(`Dhan ${path} 429 · retry in ${wait}ms`);
       await sleep(wait);
@@ -449,16 +464,16 @@ async function dhanSend(method, path, token, id, body) {
   throw lastError;
 }
 
-async function dhanGet(path, token, id) {
-  return dhanSend("GET", path, token, id);
+async function dhanGet(path, token, id, opts) {
+  return dhanSend("GET", path, token, id, undefined, opts);
 }
 
-async function dhanPost(path, token, id, body) {
-  return dhanSend("POST", path, token, id, body);
+async function dhanPost(path, token, id, body, opts) {
+  return dhanSend("POST", path, token, id, body, opts);
 }
 
-async function dhanDelete(path, token, id) {
-  return (await dhanSend("DELETE", path, token, id)) || { ok: true };
+async function dhanDelete(path, token, id, opts) {
+  return (await dhanSend("DELETE", path, token, id, undefined, opts)) || { ok: true };
 }
 
 function quoteBody(useFallback, instruments = liveInstruments()) {
@@ -505,7 +520,7 @@ export async function fetchDhanTapeQuotes({ accessToken: token, clientId: id, fe
   const pull =
     typeof fetchQuotes === "function"
       ? fetchQuotes
-      : async (path, body) => dhanPost(path, cleanToken, cleanId, body);
+      : async (path, body) => dhanPost(path, cleanToken, cleanId, body, dhanSendOptions("member"));
   const quotes = [];
   for (const useFallback of [false, true]) {
     for (const body of quoteBodies(useFallback, instruments)) {
@@ -1470,18 +1485,10 @@ function attachPlaceLive(error, extra = {}) {
 }
 
 export async function placeDhanOrder(payload = {}) {
-  const account = payload.account && typeof payload.account === "object" ? payload.account : null;
-  const token = String(account?.accessToken || accessToken || "").trim();
-  const id = String(account?.clientId || clientId || "").trim();
-  if (!token || !id) {
-    const error = new Error(
-      account
-        ? "This member has no Dhan Client ID + Access Token. Install them on My plan."
-        : "Dhan live is off. Open Brokers and paste Client ID + Access Token.",
-    );
-    error.status = 400;
-    throw error;
-  }
+  const creds = dhanOrderCredentials(payload, { accessToken, clientId });
+  const { token, account } = creds;
+  const id = creds.clientId;
+  const sendOpts = dhanSendOptions(creds.lane);
   const desk = getOptionMeta();
   let securityId = String(payload.securityId || "").trim();
   if (!securityId || securityId === "0") securityId = securityIdFromOpenChain(payload);
@@ -1523,7 +1530,7 @@ export async function placeDhanOrder(payload = {}) {
   }
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
   const useAmo = payload.afterMarketOrder === true || payload.amo === true || !liveSessionOpenForOrder(payload);
-  const ipPromise = fetchDhanIp();
+  const ipPromise = creds.lane === "admin" ? fetchDhanIp() : Promise.resolve(null);
   let algos = [];
   try {
     algos = snapshot().algos || [];
@@ -1561,7 +1568,7 @@ export async function placeDhanOrder(payload = {}) {
     console.log(
       `Dhan ${orderBody.afterMarketOrder ? "AMO " : ""}${orderBody.transactionType} ${orderBody.exchangeSegment} ${orderBody.productType} ${orderBody.orderType} qty ${orderBody.quantity} security ${orderBody.securityId}${orderBody.amoTime ? ` ${orderBody.amoTime}` : ""}`,
     );
-    return dhanPost("/orders", token, id, orderBody);
+    return dhanPost("/orders", token, id, orderBody, sendOpts);
   };
 
   let result;
