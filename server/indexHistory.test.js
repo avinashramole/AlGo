@@ -102,14 +102,16 @@ test("90-day first download uses 30-day chunks then the next backtest reuses dis
       while (cur <= to) {
         const weekday = new Date(`${cur}T12:00:00+05:30`).getUTCDay();
         if (weekday !== 0 && weekday !== 6) {
-          rows.push({
-            time: Date.parse(`${cur}T03:45:00.000Z`),
-            open: 24000,
-            high: 24010,
-            low: 23990,
-            close: 24005,
-            volume: 1000,
-          });
+          for (let i = 0; i < 6; i += 1) {
+            rows.push({
+              time: Date.parse(`${cur}T03:45:00.000Z`) + i * 5 * 60_000,
+              open: 24000 + i,
+              high: 24010 + i,
+              low: 23990 + i,
+              close: 24005 + i,
+              volume: 1000,
+            });
+          }
         }
         cur = shiftYmd(cur, 1);
       }
