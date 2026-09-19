@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "test": "node --experimental-strip-types --test auth.test.js dhanToken.test.js dhanOrderPrice.test.js dhanPlaceError.test.js dhanFeed.test.js positionMark.test.js totp.test.js env.test.js backtest.test.js strategies.test.js toggleAlgo.test.js optionChain.test.js crudeStrategy.test.js niftyVwap/niftyVwap.test.js niftyVwapHedge/niftyVwapHedge.test.js niftyVwapHedge/dailyLive.test.js subscriptions.test.js memberDesk.test.js memberQuotes.test.js memberQuotesFeed.test.js orderStrategy.test.js messaging.test.js clients.test.js clientDetail.test.js ipManagement.test.js liveSignals.test.js liveBrokers.test.js liveCopy.test.js copyFlow.test.js closedPosition.test.js httpReady.test.js t2sHome.test.js nginxConf.test.js loginGate.test.js formSecrets.test.js brokerIsolation.test.js"
+    "test": "node --experimental-strip-types --test auth.test.js dhanToken.test.js dhanOrderPrice.test.js dhanPlaceError.test.js dhanFeed.test.js positionMark.test.js totp.test.js env.test.js backtest.test.js strategies.test.js toggleAlgo.test.js optionChain.test.js crudeStrategy.test.js niftyVwap/niftyVwap.test.js niftyVwapHedge/niftyVwapHedge.test.js niftyVwapHedge/dailyLive.test.js subscriptions.test.js memberDesk.test.js memberQuotes.test.js memberQuotesFeed.test.js memberBrokerQuotes.test.js orderStrategy.test.js messaging.test.js clients.test.js clientDetail.test.js ipManagement.test.js liveSignals.test.js liveBrokers.test.js liveCopy.test.js copyFlow.test.js closedPosition.test.js httpReady.test.js t2sHome.test.js nginxConf.test.js loginGate.test.js formSecrets.test.js brokerIsolation.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
