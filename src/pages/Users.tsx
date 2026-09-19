@@ -14,6 +14,7 @@ import {
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
+import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
 import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
@@ -345,7 +346,7 @@ export function Users() {
           onSaved={(client) => {
             upsertCachedClient(client);
             setClients((current) => current.map((row) => (row.id === client.id ? client : row)));
-            setEdit(null);
+            setEdit(client);
           }}
         />
       ) : null}
@@ -912,6 +913,8 @@ function EditModal({
   const [accountId, setAccountId] = useState(row.accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
+  const [tokenFocused, setTokenFocused] = useState(false);
+  const [apiKeyFocused, setApiKeyFocused] = useState(false);
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
   const [error, setError] = useState("");
@@ -922,6 +925,8 @@ function EditModal({
     setBusy(true);
     setError("");
     try {
+      const nextApiKey = savedSecretForSubmit(brokerApiKey);
+      const nextToken = savedSecretForSubmit(brokerToken);
       const result = await saveClient(row.id, {
         name,
         mobile,
@@ -930,9 +935,12 @@ function EditModal({
         accountId,
         staticIp,
         group,
-        ...(brokerApiKey.trim() ? { brokerApiKey: brokerApiKey.trim() } : {}),
-        ...(brokerToken.trim() ? { brokerToken: brokerToken.trim() } : {}),
+        ...(nextApiKey ? { brokerApiKey: nextApiKey } : {}),
+        ...(nextToken ? { brokerToken: nextToken } : {}),
       });
+      setBrokerToken("");
+      setBrokerApiKey("");
+      setAccountId(result.client.accountId || accountId);
       onSaved(result.client);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -983,7 +991,9 @@ function EditModal({
                 <input
                   className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
                   type="password"
-                  value={brokerApiKey}
+                  value={apiKeyFocused ? brokerApiKey : displaySavedSecret(brokerApiKey, row.apiKeyHint)}
+                  onFocus={() => setApiKeyFocused(true)}
+                  onBlur={() => setApiKeyFocused(false)}
                   onChange={(event) => setBrokerApiKey(event.target.value)}
                   placeholder={row.apiKeyHint || "Paste API key to replace"}
                   autoComplete="off"
@@ -991,14 +1001,16 @@ function EditModal({
               </Field>
             ) : null}
             <Field label="Access token">
-              <input
-                className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                type="password"
-                value={brokerToken}
-                onChange={(event) => setBrokerToken(event.target.value)}
-                placeholder={row.tokenHint || "Paste access token to replace"}
-                autoComplete="off"
-              />
+                <input
+                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                  type="password"
+                  value={tokenFocused ? brokerToken : displaySavedSecret(brokerToken, row.tokenHint)}
+                  onFocus={() => setTokenFocused(true)}
+                  onBlur={() => setTokenFocused(false)}
+                  onChange={(event) => setBrokerToken(event.target.value)}
+                  placeholder={row.tokenHint || "Paste access token to replace"}
+                  autoComplete="off"
+                />
               <span className="font-normal text-[11px] text-slate-500">
                 {row.tokenHint
                   ? `Installed ${row.tokenHint}${row.tokenUpdatedAt ? ` · ${formatIst(row.tokenUpdatedAt)}` : ""}. Paste a new token to replace it.`

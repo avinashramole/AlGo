@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   abandonEnrollment,
   claimEnrollmentPaid,
@@ -17,6 +17,7 @@ import {
 } from "../api/client";
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
+import { credsAfterInstall, hintsFromInstall, installValueForSubmit } from "../lib/formSecrets";
 import { cn, formatInr, formatIst, formatIstDate, formatPlanTerm } from "../lib/format";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
@@ -38,20 +39,24 @@ export function MemberPlans() {
   const [creds, setCreds] = useState<Record<string, string>>({});
   const [credNote, setCredNote] = useState("");
   const [utr, setUtr] = useState("");
+  const loadGen = useRef(0);
 
   const load = useCallback(async () => {
+    const gen = ++loadGen.current;
     try {
       const [nextDesk, catalog, mine] = await Promise.all([getMemberDesk(), strategyCatalog(), listEnrollments()]);
+      if (gen !== loadGen.current) return;
       setDesk(nextDesk);
       setStrategies(catalog.strategies || []);
       setPayments(catalog.payments);
       setEnrollments(mine.enrollments || []);
       setCreds((current) => ({
         ...current,
-        clientId: current.clientId || nextDesk.install?.accountId || "",
+        ...credsAfterInstall(nextDesk.install, current),
       }));
       setError("");
     } catch (err) {
+      if (gen !== loadGen.current) return;
       setError(err instanceof Error ? err.message : "Could not load plan report");
     }
   }, []);
@@ -85,14 +90,19 @@ export function MemberPlans() {
     setError("");
     setCredNote("");
     try {
-      await installMemberBroker({
+      const hints = hintsFromInstall(desk.install);
+      const result = await installMemberBroker({
         brokerId: desk.brokerId,
-        clientId: creds.clientId || desk.install?.accountId,
-        apiKey: creds.apiKey,
-        accessToken: creds.accessToken,
-        sessionToken: creds.sessionToken,
+        clientId: installValueForSubmit({ id: "clientId" }, creds, hints) || desk.install?.accountId,
+        apiKey: installValueForSubmit({ id: "apiKey", secret: true }, creds, hints),
+        accessToken: installValueForSubmit({ id: "accessToken", secret: true }, creds, hints),
+        sessionToken: installValueForSubmit({ id: "sessionToken", secret: true }, creds, hints),
       });
-      setCreds((current) => ({ clientId: current.clientId || desk.install?.accountId || "" }));
+      loadGen.current += 1;
+      setDesk((current) =>
+        current ? { ...current, brokerId: result.brokerId || current.brokerId, install: result.install } : current,
+      );
+      setCreds(credsAfterInstall(result.install, creds));
       await load();
       setCredNote("Client ID and access token updated on this account and on admin Users. Live copy now uses this token. Desk LIVE was not started.");
     } catch (err) {
@@ -325,6 +335,7 @@ export function MemberPlans() {
               <BrokerInstallFields
                 fields={desk.install?.fields || []}
                 values={creds}
+                hints={hintsFromInstall(desk.install)}
                 disabled={busy === "creds"}
                 onChange={(id, value) => setCreds((current) => ({ ...current, [id]: value }))}
               />
