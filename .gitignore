@@ -29,5 +29,6 @@ server/data/egress-ips.json
 server/data/broker-sessions.json
 server/data/scrip-front.json
 server/data/last-quotes.json
+server/data/nifty-option-history/
 *.zip
 deploy/__pycache__/

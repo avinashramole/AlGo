@@ -59,6 +59,9 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
         <div className="mb-4">
           <div className="text-lg font-bold">Run backtest</div>
           <div className="text-xs text-slate-400">{name || "Strategy"} · pick a date range</div>
+          <div className="mt-1 text-[11px] leading-snug text-slate-500">
+            Nifty option premiums download from the admin Dhan account and replace any stored data for the selected dates.
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -146,6 +149,9 @@ export function BacktestRangeInline({ busy, error, onCancel, onRun }: InlineProp
   return (
     <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
       <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
+      <div className="mt-1 text-[11px] leading-snug text-slate-500">
+        Downloads Dhan option history for these dates and overwrites any already stored chain data in that range.
+      </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button
           type="button"

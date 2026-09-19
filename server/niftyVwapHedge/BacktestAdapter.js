@@ -1,3 +1,5 @@
+import { optionLtpAt } from "../niftyOptionHistory.js";
+import { OptionStrikeSelector } from "../niftyVwap/OptionStrikeSelector.js";
 import { sessionKeyIST } from "../niftyVwap/VwapSignalEngine.js";
 import { niftyVwapHedgeConfig } from "./config.js";
 import { NiftyVwapHedgeStrategy } from "./NiftyVwapHedgeStrategy.js";
@@ -80,13 +82,30 @@ export function runNiftyVwapHedgeBacktest(algo, candles = []) {
   }
   let ceLtp = 100;
   let peLtp = 100;
+  let storedHits = 0;
+  let synthHits = 0;
   for (const [, session] of days) {
     for (let i = 0; i < session.length; i += 1) {
       const bar = session[i];
       const slice = session.slice(0, i + 1);
       const now = Number(bar.time) + cfg.barMinutes * 60 * 1000;
-      ceLtp = synthOptionLtp(bar, "CE", ceLtp);
-      peLtp = synthOptionLtp(bar, "PE", peLtp);
+      const strike = OptionStrikeSelector.atmStrike(Number(bar.close), 50);
+      const storedCe = optionLtpAt({ symbol: cfg.symbol, time: bar.time, strike, side: "CE" });
+      const storedPe = optionLtpAt({ symbol: cfg.symbol, time: bar.time, strike, side: "PE" });
+      if (storedCe > 0) {
+        ceLtp = storedCe;
+        storedHits += 1;
+      } else {
+        ceLtp = synthOptionLtp(bar, "CE", ceLtp);
+        synthHits += 1;
+      }
+      if (storedPe > 0) {
+        peLtp = storedPe;
+        storedHits += 1;
+      } else {
+        peLtp = synthOptionLtp(bar, "PE", peLtp);
+        synthHits += 1;
+      }
       book.mark("CE", ceLtp);
       book.mark("PE", peLtp);
       NiftyVwapHedgeStrategy.tick({
@@ -122,6 +141,8 @@ export function runNiftyVwapHedgeBacktest(algo, candles = []) {
     winRate: trades.length ? Math.round((wins / trades.length) * 100) : 0,
     pnl: Number(pnl.toFixed(2)),
     maxDrawdown: 0,
+    optionSource: storedHits && synthHits ? "mixed" : storedHits ? "stored" : "synth",
+    optionHits: storedHits,
     book: trades.slice(-12).map((row) => ({
       side: "BUY",
       entry: Number(row.avg),
