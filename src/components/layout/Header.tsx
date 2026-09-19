@@ -154,11 +154,9 @@ export function Header() {
             <Users size={17} />
           </Link>
         ) : null}
-        {admin ? (
-          <Link to="/notifications" className="icon-btn hidden md:flex" title="Notifications">
-            <Bell size={17} />
-          </Link>
-        ) : null}
+        <Link to="/notifications" className="icon-btn hidden md:flex" title="Notifications">
+          <Bell size={17} />
+        </Link>
         {admin ? (
           <Link to="/chat" className="icon-btn hidden md:flex" title="Messages">
             <MessageSquare size={17} />

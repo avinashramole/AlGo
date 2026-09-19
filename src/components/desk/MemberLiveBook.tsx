@@ -39,7 +39,9 @@ export function MemberLiveBook({
 
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Copied orders</div>
-        <p className="px-4 pt-1 text-xs text-slate-400">Orders copied from the admin desk after mapping.</p>
+        <p className="px-4 pt-1 text-xs text-slate-400">
+          Same side and contract as the admin desk, sized and sent from this account when Copy is on.
+        </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
             <tr>

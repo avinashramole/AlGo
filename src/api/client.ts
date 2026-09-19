@@ -986,6 +986,19 @@ export type MemberBrokerInstall = {
   help?: string;
 };
 
+export type MemberCopyAlert = {
+  id: string;
+  kind?: string;
+  text: string;
+  symbol?: string;
+  side?: string;
+  qty?: number;
+  status?: string;
+  strategy?: string;
+  brokerId?: string;
+  createdAt?: string;
+};
+
 export type MemberDesk = {
   wallet: MemberWallet;
   brokerId: string;
@@ -1000,6 +1013,7 @@ export type MemberDesk = {
   topups: WalletTopup[];
   payments: PaymentPublic;
   copyReady?: boolean;
+  alerts?: MemberCopyAlert[];
 };
 
 export type MemberIndexQuote = {

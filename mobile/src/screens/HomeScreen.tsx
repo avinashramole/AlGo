@@ -69,6 +69,18 @@ function MemberHome() {
         </Text>
       </Card>
       <Card>
+        <Text style={styles.heading}>Copied order alerts</Text>
+        {(desk?.alerts || []).slice(0, 5).map((row) => (
+          <View key={row.id} style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>{row.text}</Text>
+              <Text style={styles.tiny}>{row.createdAt ? formatIst(row.createdAt) : row.status || ""}</Text>
+            </View>
+          </View>
+        ))}
+        {!(desk?.alerts || []).length ? <Text style={styles.muted}>When Copy is on, admin orders appear here and go out from your broker.</Text> : null}
+      </Card>
+      <Card>
         <Text style={styles.heading}>Open positions · MTM</Text>
         {(desk?.positions || []).map((row) => (
           <View key={row.id} style={styles.row}>

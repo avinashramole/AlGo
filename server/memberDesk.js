@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport } from "./desk.js";
 import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
+import { buildCopyAlertText, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -328,8 +329,27 @@ function emptyDesk(userId) {
     positions: [],
     closedTrades: [],
     orders: [],
+    alerts: [],
     seededPlans: [],
   };
+}
+
+function publicAlerts(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      id: String(row.id || ""),
+      kind: String(row.kind || "copy_order"),
+      text: String(row.text || ""),
+      symbol: String(row.symbol || ""),
+      side: row.side === "SELL" ? "SELL" : "BUY",
+      qty: Number(row.qty || 0),
+      status: String(row.status || ""),
+      strategy: String(row.strategy || ""),
+      brokerId: String(row.brokerId || ""),
+      createdAt: String(row.createdAt || ""),
+    }))
+    .filter((row) => row.id && row.text)
+    .slice(0, 40);
 }
 
 export function isStaticIp(value) {
@@ -457,7 +477,12 @@ export function saveClientSettings(userId, patch = {}) {
     if (!TRADE_MODES.includes(mode)) throw fail("Mode must be PAPER or REAL.");
     desk.tradeMode = mode;
   }
-  if (patch.copy != null) desk.copy = Boolean(patch.copy);
+  if (patch.copy != null) {
+    desk.copy = Boolean(patch.copy);
+    if (desk.copy && !String(desk.subscriptionUntil || "").trim()) {
+      desk.subscriptionUntil = defaultSubscriptionUntil();
+    }
+  }
   if (patch.staticIp != null) {
     const ip = String(patch.staticIp || "").trim();
     if (!isStaticIp(ip)) throw fail("Enter an IPv4 or IPv6 address, or leave Default.");
@@ -555,6 +580,7 @@ function loadDesk(userId) {
   desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
   desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
   desk.seededPlans = Array.isArray(desk.seededPlans) ? desk.seededPlans : [];
   if (!desk.wallet || typeof desk.wallet !== "object") desk.wallet = { balance: 0, updatedAt: new Date().toISOString() };
   if (!knownBroker(desk.brokerId)) desk.brokerId = "paper";
@@ -676,6 +702,33 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
   desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
   desk.orders.unshift(order);
+  const alert = {
+    id: `na${crypto.randomBytes(6).toString("hex")}`,
+    kind: error ? "copy_rejected" : "copy_order",
+    text: buildCopyAlertText({
+      side,
+      qty,
+      symbol: order.symbol,
+      strategy: order.strategy,
+      status: mapped,
+      error,
+    }),
+    symbol: order.symbol,
+    side,
+    qty,
+    status: mapped,
+    strategy: order.strategy,
+    brokerId,
+    createdAt: now,
+  };
+  desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
+  desk.alerts.unshift(alert);
+  if (desk.alerts.length > 40) desk.alerts = desk.alerts.slice(0, 40);
+  queueMemberCopyNotify({
+    userId,
+    text: alert.text,
+    notifications: asNotifications(desk.notifications),
+  });
   if (!error && (paper || mapped === "FILLED" || mapped === "PENDING")) {
     applyMemberPosition(desk, {
       symbol: order.symbol,
@@ -831,6 +884,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     topups: desk.topups.map(publicTopup),
     payments: publicPayments(admins),
     copyReady: Boolean(autoTrade && String(desk.brokerToken || "").trim()),
+    alerts: publicAlerts(desk.alerts),
   };
 }
 

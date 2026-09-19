@@ -80,7 +80,7 @@ export default function App() {
           <Route path="users" element={<AdminOnly><Users /></AdminOnly>} />
           <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
           <Route path="settings/ips" element={<AdminOnly><IpManagement /></AdminOnly>} />
-          <Route path="notifications" element={<AdminOnly><Notifications /></AdminOnly>} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="chat" element={<AdminOnly><Chat /></AdminOnly>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

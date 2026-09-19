@@ -521,6 +521,25 @@ function enqueueLiveAlgoOrder(payload) {
   return { ok: true, queued: true, status: "PENDING" };
 }
 
+export function fanOutAdminOrderCopies(payload = {}, order = {}) {
+  if (payload.copyUserId || payload.copiedToMembers) return { queued: false };
+  const strategy = String(order.strategy || payload.strategy || "").trim();
+  const algo = (state.algos || []).find((row) => String(row.name || "") === strategy);
+  dispatchMemberCopies(
+    {
+      ...payload,
+      strategy,
+      qty: order.qty || payload.qty,
+      side: order.side || payload.side,
+      symbol: order.symbol || payload.symbol,
+      price: order.price || payload.price,
+    },
+    algo || {},
+    { enqueueLiveOrder: enqueueLiveAlgoOrder },
+  );
+  return { queued: true };
+}
+
 export function queueLiveAlgoOrder(payload) {
   const brokers = liveAutoTradeBrokers({
     strategyName: payload?.strategy,
@@ -1973,9 +1992,8 @@ export function placeOrder(payload) {
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
   );
   if (isPaper) markPaperToMarket();
-  if (isPaper && order.strategy && !payload.copyUserId) {
-    const algo = (state.algos || []).find((row) => String(row.name || "") === String(order.strategy || ""));
-    dispatchMemberCopies({ ...payload, strategy: order.strategy }, algo || {}, { enqueueLiveOrder: enqueueLiveAlgoOrder });
+  if (isPaper || live) {
+    fanOutAdminOrderCopies({ ...payload, strategy: order.strategy }, order);
   }
   return order;
 }

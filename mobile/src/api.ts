@@ -534,6 +534,17 @@ export type MemberDesk = {
   orders?: Array<{ id: string; symbol: string; side?: string; qty?: number; price?: number; status?: string; strategy?: string; createdAt?: string }>;
   payments: PaymentPublic;
   copyReady?: boolean;
+  alerts?: Array<{
+    id: string;
+    kind?: string;
+    text: string;
+    symbol?: string;
+    side?: string;
+    qty?: number;
+    status?: string;
+    strategy?: string;
+    createdAt?: string;
+  }>;
 };
 
 export type MemberIndexQuote = {

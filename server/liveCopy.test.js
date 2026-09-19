@@ -135,6 +135,25 @@ test("mapped real members with copy off still get that strategy on their new tok
   assert.equal(mine.account.accessToken, "map-new-token");
 });
 
+test("copy ON without a through date still receives Copy Master orders", () => {
+  const user = { id: "u-copy-no-until", name: "Copy No Until", email: "copynountil@t2s.app", role: "user" };
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    subscriptionUntil: "",
+    tradeMode: "paper",
+    brokerId: "paper",
+  });
+  const targets = listLiveCopyTargets({
+    strategyName: "",
+    masterQty: 50,
+    lotSize: 50,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  assert.equal(targets.some((row) => row.userId === user.id), true);
+});
+
 test("copy master clients receive admin orders without enrollment or algo mapping", () => {
   const user = { id: "u-copy-master", name: "Copy Master", email: "copymaster@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "paper" });
@@ -289,6 +308,42 @@ test("recordMemberCopyFill writes the member book used by My plan", () => {
   assert.equal(fill.status, "FILLED");
   const desk = getMemberDesk({ user, enrollments: [paid], algos: [algo], quote: () => 0 });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24600 CE" && row.qty === 65));
+  assert.ok((desk.alerts || []).some((row) => row.kind === "copy_order" && row.symbol === "NIFTY 24600 CE"));
+  assert.match((desk.alerts || []).find((row) => row.symbol === "NIFTY 24600 CE").text, /Copied BUY 65 NIFTY 24600 CE/);
+});
+
+test("admin live desk order copies onto the member token and notifies them", async () => {
+  const user = { id: "u-admin-live-copy", name: "Admin Live Copy", email: "adminlivecopy@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100888", accessToken: "admin-live-copy-token" });
+  saveClientSettings(user.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    tradeMode: "real",
+    brokerId: "dhan",
+  });
+  const { drainPendingLiveAlgoOrders, fanOutAdminOrderCopies, placeOrder } = await import("./market.js");
+  drainPendingLiveAlgoOrders();
+  const booked = placeOrder({
+    symbol: "NIFTY 25200 CE",
+    side: "BUY",
+    qty: 65,
+    price: 91,
+    strategy: "Desk BUY",
+    brokerId: "dhan",
+    live: { orderId: "adm-copy-1", status: "TRADED", price: 91, filledQty: 65 },
+  });
+  assert.equal(booked.error, undefined);
+  assert.equal(booked.symbol, "NIFTY 25200 CE");
+  const queued = drainPendingLiveAlgoOrders();
+  const copy = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(copy, "copy-on member should receive the admin live order");
+  assert.equal(copy.brokerId, "dhan");
+  assert.equal(copy.account.accessToken, "admin-live-copy-token");
+  assert.equal(copy.symbol, "NIFTY 25200 CE");
+  assert.equal(copy.side, "BUY");
+  const again = fanOutAdminOrderCopies({ copiedToMembers: true, symbol: "NIFTY 25200 CE" }, booked);
+  assert.equal(again.queued, false);
 });
 
 test("dispatchMemberCopies writes paper fills for mapped clients", () => {

@@ -51,6 +51,7 @@ import {
   pickBacktestTimeframe,
   resolveBacktestWindow,
   drainPendingLiveAlgoOrders,
+  fanOutAdminOrderCopies,
   noteLiveAlgoOrderResult,
   bookRejectedLiveOrder,
   queueLivePositionExit,
@@ -113,7 +114,7 @@ async function flushLiveAlgoOrders() {
           continue;
         }
         const live = await sendLiveBrokerOrder(payload);
-        const order = placeOrder({ ...payload, brokerId, live });
+        const order = placeOrder({ ...payload, brokerId, live, copiedToMembers: true });
         noteLiveAlgoOrderResult(payload, live, order?.error);
         if (order?.error) {
           console.log(`Strategy live fill book: ${order.error}`);
@@ -816,7 +817,10 @@ app.post("/api/orders", async (req, res) => {
           res.status(400).json({ error: order.error });
           return;
         }
+      } else {
+        fanOutAdminOrderCopies({ ...body, brokerId, live }, order);
       }
+      await flushLiveAlgoOrders();
       res.status(201).json({
         ok: true,
         live: true,
@@ -831,6 +835,7 @@ app.post("/api/orders", async (req, res) => {
       res.status(400).json({ error: order.error });
       return;
     }
+    await flushLiveAlgoOrders();
     res.status(201).json({
       ok: true,
       live: false,
