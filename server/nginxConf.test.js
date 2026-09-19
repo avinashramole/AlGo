@@ -31,6 +31,13 @@ test("nginx conf never roots files under /root and proxies API", () => {
   assert.doesNotMatch(text, /@node/);
 });
 
+test("nginx keeps Run backtest open for 180s so the 15s API timeout cannot 504 t2s", () => {
+  const text = render("/tmp/t2s-no-certs");
+  assert.match(text, /location ~ \^\/api\/algos\/\[\^\/\]\+\/backtest\$/);
+  assert.match(text, /proxy_read_timeout 180s/);
+  assert.match(text, /proxy_send_timeout 180s/);
+});
+
 test("nginx conf sends login and health to the 3999 gate", () => {
   const text = render("/tmp/t2s-no-certs");
   assert.match(text, /location = \/api\/login/);

@@ -98,7 +98,7 @@ test("a started strategy stays LIVE after the saved file is reloaded", () => {
   }
 });
 
-test("indicator Run backtest uses runBacktest instead of throwing not defined", () => {
+test("indicator Run backtest uses runBacktest instead of throwing not defined", async () => {
   const stamp = Date.now();
   const created = createAlgo({
     name: `Indicator BT ${stamp}`,
@@ -108,7 +108,7 @@ test("indicator Run backtest uses runBacktest instead of throwing not defined", 
     timeframe: "5m",
   });
   try {
-    const result = backtestAlgo(created.id, { range: "custom", from: "2026-08-01", to: "2026-08-21" });
+    const result = await backtestAlgo(created.id, { range: "custom", from: "2026-08-01", to: "2026-08-21" });
     assert.equal(result.error, undefined);
     assert.equal(result.ok, true);
     assert.ok(result.backtest.bars >= 32);

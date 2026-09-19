@@ -5,14 +5,18 @@ import { optionRoot } from "./frontFutures.js";
 import { sessionKeyIST, aggregateSessionBars } from "./niftyVwap/VwapSignalEngine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const memory = new Map();
+const manifests = new Map();
+
+function yieldLoop() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
 
 export function indexHistoryDir() {
   return process.env.T2S_INDEX_HISTORY_DIR || path.join(__dirname, "data", "index-history");
 }
 
 export function resetIndexHistoryCache() {
-  memory.clear();
+  manifests.clear();
 }
 
 export function wipeIndexHistory() {
@@ -91,8 +95,8 @@ function dayFile(symbol, ymd) {
   return path.join(symbolDir(symbol), `${ymd}.json`);
 }
 
-function dayKey(symbol, ymd) {
-  return `${historySymbol(symbol)}|${ymd}`;
+function manifestFile(symbol) {
+  return path.join(symbolDir(symbol), "manifest.json");
 }
 
 function compactBars(rows = []) {
@@ -128,16 +132,68 @@ export function inferBarTimeframe(candles = []) {
 }
 
 export function loadIndexDay(symbol, ymd) {
-  const key = dayKey(symbol, ymd);
-  if (memory.has(key)) return memory.get(key);
   try {
     const row = JSON.parse(fs.readFileSync(dayFile(symbol, ymd), "utf8"));
     if (!row || row.ymd !== ymd) return null;
-    memory.set(key, row);
     return row;
   } catch {
     return null;
   }
+}
+
+function saveManifest(symbol, row) {
+  const root = historySymbol(symbol);
+  manifests.set(root, row);
+  try {
+    fs.mkdirSync(symbolDir(root), { recursive: true });
+    fs.writeFileSync(manifestFile(root), `${JSON.stringify(row)}\n`);
+  } catch {
+    /* next backtest rebuilds */
+  }
+}
+
+function rememberDay(symbol, ymd, tf, n) {
+  const root = historySymbol(symbol);
+  const row = manifests.get(root) || { days: {} };
+  row.days = row.days || {};
+  row.days[ymd] = { tf: normalizeTimeframe(tf), n: Number(n) || 0 };
+  saveManifest(root, row);
+}
+
+async function ensureManifest(symbol) {
+  const root = historySymbol(symbol);
+  if (manifests.has(root)) return manifests.get(root);
+  try {
+    const row = JSON.parse(fs.readFileSync(manifestFile(root), "utf8"));
+    if (row && row.days && typeof row.days === "object") {
+      manifests.set(root, row);
+      return row;
+    }
+  } catch {
+    /* rebuild from files */
+  }
+  const days = {};
+  let names = [];
+  try {
+    names = fs.readdirSync(symbolDir(root));
+  } catch {
+    const empty = { days: {} };
+    manifests.set(root, empty);
+    return empty;
+  }
+  let n = 0;
+  for (const name of names) {
+    if (!/^\d{4}-\d{2}-\d{2}\.json$/.test(name)) continue;
+    const ymd = name.slice(0, 10);
+    const day = loadIndexDay(root, ymd);
+    if (!day?.bars?.length) continue;
+    days[ymd] = { tf: normalizeTimeframe(day.tf || inferBarTimeframe(day.bars)), n: day.bars.length };
+    n += 1;
+    if (n % 15 === 0) await yieldLoop();
+  }
+  const row = { days };
+  saveManifest(root, row);
+  return row;
 }
 
 export function writeIndexDay(symbol, ymd, payload) {
@@ -151,7 +207,7 @@ export function writeIndexDay(symbol, ymd, payload) {
   };
   fs.mkdirSync(symbolDir(root), { recursive: true });
   fs.writeFileSync(dayFile(root, ymd), `${JSON.stringify(next)}\n`);
-  memory.set(dayKey(root, ymd), next);
+  rememberDay(root, ymd, next.tf, next.bars.length);
   return next;
 }
 
@@ -177,12 +233,15 @@ export function saveIndexBars(symbol, candles = [], { overwrite = false } = {}) 
   return written;
 }
 
-export function loadIndexBars(symbol, from, to) {
+export async function loadIndexBars(symbol, from, to) {
   const out = [];
+  let n = 0;
   for (const ymd of listYmds(from, to)) {
     const day = loadIndexDay(symbol, ymd);
     if (!day?.bars?.length) continue;
     out.push(...compactBars(day.bars));
+    n += 1;
+    if (n % 20 === 0) await yieldLoop();
   }
   return out.sort((a, b) => a.time - b.time);
 }
@@ -213,15 +272,16 @@ export function aggregateIndexBars(candles = [], timeframe = "5m") {
   return aggregateSessionBars(rows, tfMinutes(tf), now);
 }
 
-export function storedIndexCoverage(symbol, from, to, timeframe = "5m") {
+export async function storedIndexCoverage(symbol, from, to, timeframe = "5m") {
   const wanted = tfMinutes(timeframe);
   const days = tradingYmds(from, to);
   if (!days.length) return { stored: [], missing: [], fineEnough: true };
+  const man = await ensureManifest(symbol);
   const stored = [];
   const missing = [];
   for (const ymd of days) {
-    const day = loadIndexDay(symbol, ymd);
-    if (day?.bars?.length && tfMinutes(day.tf) <= wanted) stored.push(ymd);
+    const meta = man.days?.[ymd];
+    if (meta && Number(meta.n) > 0 && tfMinutes(meta.tf) <= wanted) stored.push(ymd);
     else missing.push(ymd);
   }
   return { stored, missing, fineEnough: missing.length === 0 };
@@ -238,26 +298,45 @@ function chunkRange(from, to, size = 30) {
   return chunks;
 }
 
-async function fetchChunked(fetchRange, { symbol, from, to, timeframe }) {
+async function fetchWindow(fetchRange, { symbol, from, to, timeframe }) {
+  try {
+    return compactBars(
+      await fetchRange({
+        symbol,
+        from,
+        to,
+        timeframe,
+      }),
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function fetchAndStoreChunks(fetchRange, { symbol, from, to, timeframe, overwrite }) {
   if (typeof fetchRange !== "function") return [];
   const days = Math.max(1, listYmds(from, to).length);
   const windows = days > 45 ? chunkRange(from, to, 30) : [{ from, to }];
-  const out = [];
-  for (const window of windows) {
-    try {
-      const rows = await fetchRange({
-        symbol,
-        from: window.from,
-        to: window.to,
-        timeframe,
-      });
-      out.push(...compactBars(rows));
-    } catch {
-      /* keep what we have */
+  const written = [];
+  const parallel = 3;
+  for (let i = 0; i < windows.length; i += parallel) {
+    const batch = windows.slice(i, i + parallel);
+    const packs = await Promise.all(
+      batch.map((window) =>
+        fetchWindow(fetchRange, {
+          symbol,
+          from: window.from,
+          to: window.to,
+          timeframe,
+        }),
+      ),
+    );
+    for (const rows of packs) {
+      if (rows.length) written.push(...saveIndexBars(symbol, rows, { overwrite }));
     }
-    await new Promise((resolve) => setImmediate(resolve));
+    await yieldLoop();
   }
-  return compactBars(out);
+  return [...new Set(written)];
 }
 
 export async function ensureIndexHistory({
@@ -270,10 +349,10 @@ export async function ensureIndexHistory({
 } = {}) {
   const root = historySymbol(symbol);
   const tf = normalizeTimeframe(timeframe);
-  const coverage = storedIndexCoverage(root, from, to, tf);
+  const coverage = await storedIndexCoverage(root, from, to, tf);
   if (!overwrite && coverage.fineEnough) {
     return {
-      candles: aggregateIndexBars(loadIndexBars(root, from, to), tf),
+      candles: aggregateIndexBars(await loadIndexBars(root, from, to), tf),
       source: "stored",
       reused: true,
       written: [],
@@ -281,15 +360,15 @@ export async function ensureIndexHistory({
     };
   }
   const fetchFrom = overwrite || !coverage.stored.length ? from : coverage.missing[0] || from;
-  const fetched = await fetchChunked(fetchRange, {
+  const written = await fetchAndStoreChunks(fetchRange, {
     symbol: root,
     from: fetchFrom,
     to,
     timeframe: tf,
+    overwrite,
   });
-  const written = fetched.length ? saveIndexBars(root, fetched, { overwrite }) : [];
-  const candles = aggregateIndexBars(loadIndexBars(root, from, to), tf);
-  const after = storedIndexCoverage(root, from, to, tf);
+  const candles = aggregateIndexBars(await loadIndexBars(root, from, to), tf);
+  const after = await storedIndexCoverage(root, from, to, tf);
   return {
     candles,
     source: candles.length ? (written.length ? "dhan" : "stored") : "",

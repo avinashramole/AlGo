@@ -12,6 +12,7 @@ const {
   ensureIndexHistory,
   inferBarTimeframe,
   saveIndexBars,
+  shiftYmd,
   storedIndexCoverage,
   wipeIndexHistory,
 } = await import("./indexHistory.js");
@@ -61,7 +62,7 @@ test("stored 5m bars aggregate to 15m and a second backtest reuses disk", async 
   assert.equal(first.source, "stored");
   assert.ok(first.candles.length > 0);
   assert.ok(first.candles.length < raw.length);
-  assert.equal(storedIndexCoverage("NIFTY", "2026-08-21", "2026-08-21", "5m").fineEnough, true);
+  assert.equal((await storedIndexCoverage("NIFTY", "2026-08-21", "2026-08-21", "5m")).fineEnough, true);
 
   let fetches = 0;
   const second = await ensureIndexHistory({
@@ -80,7 +81,63 @@ test("stored 5m bars aggregate to 15m and a second backtest reuses disk", async 
   assert.equal(second.candles.length, raw.length);
 });
 
-test("EMA 5m and 15m backtests on the same stored year do not match", () => {
+test("90-day first download uses 30-day chunks then the next backtest reuses disk", async () => {
+  wipeIndexHistory();
+  let calls = 0;
+  const inflight = { now: 0, peak: 0 };
+  const first = await ensureIndexHistory({
+    symbol: "NIFTY",
+    from: "2026-01-05",
+    to: "2026-04-04",
+    timeframe: "5m",
+    overwrite: false,
+    fetchRange: async ({ from, to }) => {
+      calls += 1;
+      inflight.now += 1;
+      inflight.peak = Math.max(inflight.peak, inflight.now);
+      await new Promise((resolve) => setImmediate(resolve));
+      inflight.now -= 1;
+      const rows = [];
+      let cur = from;
+      while (cur <= to) {
+        const weekday = new Date(`${cur}T12:00:00+05:30`).getUTCDay();
+        if (weekday !== 0 && weekday !== 6) {
+          rows.push({
+            time: Date.parse(`${cur}T03:45:00.000Z`),
+            open: 24000,
+            high: 24010,
+            low: 23990,
+            close: 24005,
+            volume: 1000,
+          });
+        }
+        cur = shiftYmd(cur, 1);
+      }
+      return rows;
+    },
+  });
+  assert.equal(calls, 3);
+  assert.ok(inflight.peak >= 2);
+  assert.equal(first.reused, false);
+  assert.ok(first.candles.length > 0);
+  let extra = 0;
+  const second = await ensureIndexHistory({
+    symbol: "NIFTY",
+    from: "2026-01-05",
+    to: "2026-04-04",
+    timeframe: "15m",
+    overwrite: false,
+    fetchRange: async () => {
+      extra += 1;
+      throw new Error("should reuse stored 5m");
+    },
+  });
+  assert.equal(extra, 0);
+  assert.equal(second.reused, true);
+  assert.equal((await storedIndexCoverage("NIFTY", "2026-01-05", "2026-04-04", "5m")).fineEnough, true);
+});
+
+test("EMA 5m and 15m backtests on the same stored year do not match", async () => {
   wipeIndexHistory();
   const raw = bars(240, 5);
   const five = aggregateIndexBars(raw, "5m");
@@ -106,7 +163,7 @@ test("EMA 5m and 15m backtests on the same stored year do not match", () => {
     slow: 21,
   });
   try {
-    const a = backtestAlgo(ema5.id, {
+    const a = await backtestAlgo(ema5.id, {
       range: "custom",
       from: "2026-08-21",
       to: "2026-08-24",
@@ -114,7 +171,7 @@ test("EMA 5m and 15m backtests on the same stored year do not match", () => {
       candleSource: "stored",
       reused: true,
     });
-    const b = backtestAlgo(ema15.id, {
+    const b = await backtestAlgo(ema15.id, {
       range: "custom",
       from: "2026-08-21",
       to: "2026-08-24",

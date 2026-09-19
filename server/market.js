@@ -19,6 +19,7 @@ import {
 import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { optionBacktestWindow } from "./niftyOptionHistory.js";
 import { aggregateIndexBars } from "./indexHistory.js";
+import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
@@ -1655,7 +1656,7 @@ function usableCandles(rows, fromMs, toMs) {
     .sort((a, b) => a.time - b.time);
 }
 
-export function backtestAlgo(id, options = {}) {
+export async function backtestAlgo(id, options = {}) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Strategy not found" };
   const window = resolveBacktestWindow(options);
@@ -1692,12 +1693,15 @@ export function backtestAlgo(id, options = {}) {
     return { error: "Not enough bars in that date range" };
   }
   const usedTf = niftyVwap ? cfg.timeframe : wantedTf;
+  const kind = hedge ? "hedge" : niftyVwap ? "vwap" : "indicator";
+  const replayAlgo = hedge
+    ? { ...algo, hedgeState: undefined, timeframe: usedTf }
+    : niftyVwap
+      ? { ...algo, vwapState: undefined, timeframe: usedTf }
+      : { ...algo, timeframe: usedTf };
+  const replay = await runReplayInWorker({ kind, algo: replayAlgo, candles });
   const result = {
-    ...(niftyVwap
-      ? hedge
-        ? runNiftyVwapHedgeBacktest({ ...algo, hedgeState: undefined }, candles)
-        : runNiftyVwapBacktest({ ...algo, vwapState: undefined }, candles)
-      : runBacktest({ ...algo, timeframe: usedTf }, candles)),
+    ...replay,
     sample,
     source: options.candleSource || source,
     reused: Boolean(options.reused),
