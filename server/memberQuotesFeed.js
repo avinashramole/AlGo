@@ -1,4 +1,4 @@
-import { fetchDhanTapeQuotes } from "./dhan.js";
+import { brokerNeedsApiKey, fetchMemberBrokerQuotes, supportedMemberQuoteBroker } from "./memberBrokerQuotes.js";
 import { memberIndexQuote } from "./market.js";
 import { peekClientSecrets } from "./memberDesk.js";
 
@@ -74,38 +74,41 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
   const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
   const token = String(secrets.brokerToken || "").trim();
   const accountId = String(secrets.accountId || "").trim();
+  const apiKey = String(secrets.brokerApiKey || "").trim();
   if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
     return emptyQuotes(
       brokerId,
       "Install your broker client ID and access token on My plan. Index quotes use your token, not the desk token.",
     );
   }
-  if (brokerId !== "dhan") {
+  if (!supportedMemberQuoteBroker(brokerId)) {
     return emptyQuotes(
       brokerId,
-      `Your selected broker is ${brokerId}. Index cards pull live LTP with a Dhan token — select DHAN and install your access token.`,
+      `Your selected broker is ${brokerId}. Index cards are wired for Dhan, Upstox, Zerodha, Fyers, and Angel — install that broker token on My plan.`,
     );
+  }
+  if (brokerNeedsApiKey(brokerId) && !apiKey) {
+    return emptyQuotes(brokerId, `Install your ${brokerId} API key and access token on My plan. Index cards use your token, not the desk token.`);
   }
   const hit = cache.get(user.id);
   if (hit && now - hit.at < CACHE_MS) return hit.payload;
   const pending = inflight.get(user.id);
   if (pending) return pending;
+  const creds = { brokerId, accessToken: token, clientId: accountId, apiKey };
   const job = (async () => {
     let quotes = [];
     try {
-      quotes = await (typeof fetchQuotes === "function"
-        ? fetchQuotes({ accessToken: token, clientId: accountId })
-        : fetchDhanTapeQuotes({ accessToken: token, clientId: accountId }));
+      quotes = await (typeof fetchQuotes === "function" ? fetchQuotes(creds) : fetchMemberBrokerQuotes(creds));
     } catch {
       quotes = [];
     }
     const payload = {
       indices: cardsFromMemberQuotes(user.id, quotes),
       source: "member",
-      brokerId: "dhan",
+      brokerId,
       reason: quotes.length
         ? ""
-        : "Your Dhan token did not return index quotes yet. Check the token on My plan.",
+        : `Your ${brokerId} token did not return index quotes yet. Check the token on My plan.`,
     };
     cache.set(user.id, { at: now, payload });
     return payload;

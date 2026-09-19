@@ -30,15 +30,17 @@ test("member Dhan quotes are fetched with the member client ID and token", async
   const seen = [];
   const mine = await memberQuotesForUser(user, {
     now: Date.now() + 10_000,
-    fetchQuotes: async ({ accessToken, clientId }) => {
-      seen.push({ accessToken, clientId });
+    fetchQuotes: async (creds) => {
+      seen.push(creds);
       return [
         { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25111.25, close: 25000 },
         { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 25140.5, expiry: "2026-09-29" },
       ];
     },
   });
-  assert.deepEqual(seen, [{ accessToken: "member-dhan-quote-token", clientId: "1100333" }]);
+  assert.deepEqual(seen, [
+    { brokerId: "dhan", accessToken: "member-dhan-quote-token", clientId: "1100333", apiKey: "" },
+  ]);
   assert.equal(mine.brokerId, "dhan");
   assert.equal(mine.source, "member");
   const nifty = mine.indices.find((row) => row.symbol === "NIFTY 50");
@@ -47,21 +49,24 @@ test("member Dhan quotes are fetched with the member client ID and token", async
   assert.equal(String(JSON.stringify(mine)).includes("member-dhan-quote-token"), false);
 });
 
-test("a non-Dhan member broker does not fall back to the admin feed", async () => {
+test("member Upstox quotes are fetched with the member token, not the admin feed", async () => {
   const other = { id: "u-upstox-quotes", name: "Upstox Quotes", email: "upxquotes@t2s.app", role: "user" };
   selectMemberBroker({ user: other, brokerId: "upstox" });
   installMemberBroker({ user: other, brokerId: "upstox", clientId: "UPX1", accessToken: "upstox-quote-token" });
-  let fetched = false;
+  const seen = [];
   const mine = await memberQuotesForUser(other, {
-    fetchQuotes: async () => {
-      fetched = true;
-      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 }];
+    now: Date.now() + 10_000,
+    fetchQuotes: async (creds) => {
+      seen.push(creds);
+      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100.5, close: 25000 }];
     },
   });
-  assert.equal(fetched, false);
+  assert.deepEqual(seen, [{ brokerId: "upstox", accessToken: "upstox-quote-token", clientId: "UPX1", apiKey: "" }]);
   assert.equal(mine.brokerId, "upstox");
-  assert.deepEqual(mine.indices, []);
-  assert.match(mine.reason, /dhan/i);
+  assert.equal(mine.source, "member");
+  assert.equal(mine.reason, "");
+  assert.equal(mine.indices[0].price, 25100.5);
+  assert.equal(String(JSON.stringify(mine)).includes("upstox-quote-token"), false);
 });
 
 test("cardsFromMemberQuotes never copies admin-only fields onto the member board", () => {
