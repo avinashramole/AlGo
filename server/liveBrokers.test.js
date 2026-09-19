@@ -21,6 +21,18 @@ const {
 
 test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
   assert.deepEqual(parseDeskOptionSymbol("NIFTY 22850 CE"), { root: "NIFTY", strike: 22850, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("NIFTY-Sep2026-22850-PE"), {
+    root: "NIFTY",
+    strike: 22850,
+    option: "PE",
+    expiry: "2026-09",
+  });
+  assert.deepEqual(parseDeskOptionSymbol("NIFTY-23Sep2026-22850-PE"), {
+    root: "NIFTY",
+    strike: 22850,
+    option: "PE",
+    expiry: "2026-09-23",
+  });
   assert.equal(upstoxInstrumentKeyFromPayload({ securityId: "55123" }), "");
   assert.equal(upstoxInstrumentKeyFromPayload({ instrumentKey: "NSE_FO|426268" }), "NSE_FO|426268");
   assert.equal(
@@ -32,6 +44,16 @@ test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
       { root: "NIFTY", strike: 22850, option: "CE", expiry: "2026-09-23" },
     ),
     "NSE_FO|98765",
+  );
+  assert.equal(
+    pickUpstoxOptionHit(
+      [
+        { trading_symbol: "NIFTY 30 JUN 26 22850 PE", instrument_type: "PE", strike_price: 22850, expiry: "2026-06-30", instrument_key: "NSE_FO|june" },
+        { trading_symbol: "NIFTY 29 SEP 26 22850 PE", instrument_type: "PE", strike_price: 22850, expiry: "2026-09-29", instrument_key: "NSE_FO|426269" },
+      ],
+      { root: "NIFTY", strike: 22850, option: "PE", expiry: "2026-09" },
+    ),
+    "NSE_FO|426269",
   );
 });
 
@@ -79,10 +101,61 @@ test("placeLiveBrokerOrder searches Upstox for NIFTY 22850 CE instead of using a
   assert.equal(live.orderId, "upx-1");
   assert.match(calls[0].url, /search\/instruments/);
   assert.match(calls[0].url, /NIFTY%2022850%20CE/);
+  assert.match(calls[1].url, /api-hft\.upstox\.com\/v2\/order\/place/);
   const placed = JSON.parse(calls[1].body);
   assert.equal(placed.instrument_token, "NSE_FO|98765");
   assert.equal(placed.transaction_type, "BUY");
   assert.equal(placed.quantity, 65);
+});
+
+test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on the HFT host", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), body: options.body });
+    if (String(url).includes("search/instruments")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                trading_symbol: "NIFTY 29 SEP 26 22850 PE",
+                underlying_symbol: "NIFTY",
+                instrument_type: "PE",
+                strike_price: 22850,
+                expiry: "2026-09-29",
+                instrument_key: "NSE_FO|426269",
+              },
+            ],
+          }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { order_id: "upx-pe-1" } }),
+    };
+  };
+  const live = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-dhan-sym",
+      brokerSession: { accessToken: "member-upstox-token", clientId: "393216" },
+      symbol: "NIFTY-Sep2026-22850-PE",
+      side: "BUY",
+      qty: 65,
+      securityId: "55123",
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "upx-pe-1");
+  assert.match(calls[0].url, /search\/instruments/);
+  assert.match(calls[0].url, /NIFTY%2022850%20PE/);
+  assert.match(calls[1].url, /api-hft\.upstox\.com\/v2\/order\/place/);
+  assert.equal(String(calls[1].url).includes("api.upstox.com/v2/order/place"), false);
+  const placed = JSON.parse(calls[1].body);
+  assert.equal(placed.instrument_token, "NSE_FO|426269");
 });
 
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {
