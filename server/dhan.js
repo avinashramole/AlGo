@@ -30,6 +30,7 @@ import {
 } from "./market.js";
 import { buildScripChain, chainUnderlyingRequest, fallbackFrontFutures, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { recordLiveChainSnapshot } from "./niftyOptionHistory.js";
+import { recordLiveIndexHistory } from "./indexHistory.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
@@ -839,6 +840,11 @@ async function pullChartCandles(symbol = "NIFTY") {
         const candles = mapChartCandles(payload);
         if (candles.length) {
           setLiveCandles(candles, crude ? "CRUDEOIL" : "NIFTY");
+          try {
+            recordLiveIndexHistory(crude ? "CRUDEOIL" : "NIFTY", candles);
+          } catch {
+            /* live quotes still paint */
+          }
           return;
         }
       } catch {

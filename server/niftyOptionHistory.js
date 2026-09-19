@@ -331,16 +331,20 @@ export function optionLtpAt({ symbol, time, strike, side, expiry } = {}) {
   return ltp > 0 ? ltp : null;
 }
 
+export function hasStoredOptionDay(symbol, ymd) {
+  const day = loadDay(symbol, ymd);
+  if (!day) return false;
+  const hasSlots = (day.slots || []).some((slot) => (slot.rows || []).some((row) => row.ce > 0 || row.pe > 0));
+  const hasBars = (day.contracts || []).some((row) => (row.bars || []).length);
+  return hasSlots || hasBars;
+}
+
 export function optionHistoryCoverage(symbol, from, to) {
   const days = listYmds(from, to);
   if (!days.length) return "synth";
   let stored = 0;
   for (const ymd of days) {
-    const day = loadDay(symbol, ymd);
-    if (!day) continue;
-    const hasSlots = (day.slots || []).some((slot) => (slot.rows || []).some((row) => row.ce > 0 || row.pe > 0));
-    const hasBars = (day.contracts || []).some((row) => (row.bars || []).length);
-    if (hasSlots || hasBars) stored += 1;
+    if (hasStoredOptionDay(symbol, ymd)) stored += 1;
   }
   if (!stored) return "synth";
   if (stored >= days.length) return "stored";
@@ -477,7 +481,21 @@ export async function downloadOptionHistoryRange({
     return { symbol: root, from, to, overwritten: [], days: 0, contracts: 0 };
   }
   const und = getUnderlying(root);
-  const days = uniqueSessionDays(from, to, candles);
+  const allDays = uniqueSessionDays(from, to, candles);
+  const days =
+    overwrite === false ? allDays.filter((ymd) => !hasStoredOptionDay(root, ymd)) : allDays;
+  if (!days.length) {
+    return {
+      symbol: root,
+      from,
+      to,
+      overwritten: [],
+      days: 0,
+      contracts: 0,
+      source: "stored",
+      reused: true,
+    };
+  }
   const wanted = new Map();
   for (const ymd of days) {
     const spot = spotForDay(candles, ymd);

@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
-import { downloadOptionHistoryRange, optionBacktestWindow } from "./niftyOptionHistory.js";
+import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
+import { ensureIndexHistory } from "./indexHistory.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
@@ -823,35 +824,53 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     }
     const timeframe = pickBacktestTimeframe(algo.timeframe, window.days);
     let candles = [];
-    if (isDhanLive()) {
-      try {
-        candles = await fetchDhanHistory({
-          symbol: algo.symbol,
-          from: window.from,
-          to: window.to,
-          timeframe,
-        });
-      } catch {
-        candles = [];
-      }
+    let candleSource = "";
+    let reused = false;
+    try {
+      const packed = await ensureIndexHistory({
+        symbol: algo.symbol,
+        from: window.from,
+        to: window.to,
+        timeframe,
+        overwrite: false,
+        fetchRange: isDhanLive()
+          ? (args) =>
+              fetchDhanHistory({
+                symbol: args.symbol,
+                from: args.from,
+                to: args.to,
+                timeframe: args.timeframe,
+              })
+          : undefined,
+      });
+      candles = packed.candles || [];
+      candleSource = packed.source || "";
+      reused = Boolean(packed.reused);
+    } catch {
+      candles = [];
     }
     const hist = optionBacktestWindow(algo, window);
     let optionHistory;
-    if (isDhanLive() && hist.option && candles.length >= 40) {
-      try {
-        optionHistory = await downloadOptionHistoryRange({
-          symbol: hist.symbol || algo.symbol,
-          from: hist.from,
-          to: hist.to,
-          candles,
-          overwrite: true,
-          fetchBars: fetchDhanSecurityHistory,
-          lookupId: lookupOptionSecurityId,
-          delayMs: 40,
-        });
-      } catch (error) {
-        optionHistory = { error: error.message || "option-history-failed" };
+    const optionCoverage = hist.option ? optionHistoryCoverage(hist.symbol || algo.symbol, hist.from, hist.to) : "synth";
+    if (hist.option && candles.length >= 40 && optionCoverage !== "stored") {
+      if (isDhanLive()) {
+        try {
+          optionHistory = await downloadOptionHistoryRange({
+            symbol: hist.symbol || algo.symbol,
+            from: hist.from,
+            to: hist.to,
+            candles,
+            overwrite: false,
+            fetchBars: fetchDhanSecurityHistory,
+            lookupId: lookupOptionSecurityId,
+            delayMs: 40,
+          });
+        } catch (error) {
+          optionHistory = { error: error.message || "option-history-failed" };
+        }
       }
+    } else if (hist.option && optionCoverage === "stored") {
+      optionHistory = { source: "stored", reused: true, days: 0, overwritten: [] };
     }
     const result = backtestAlgo(id, {
       range: window.range,
@@ -859,6 +878,8 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
       to: window.to,
       candles,
       optionHistory,
+      candleSource,
+      reused,
     });
     if (result.error) {
       res.status(400).json({ error: result.error });
