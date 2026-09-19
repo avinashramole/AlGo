@@ -12,6 +12,7 @@ function MemberHome() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
+  const [quoteNote, setQuoteNote] = useState("");
   const [desk, setDesk] = useState<MemberDesk | null>(null);
 
   useEffect(() => {
@@ -19,6 +20,7 @@ function MemberHome() {
       void Promise.all([getMemberQuotes(), getMemberDesk()])
         .then(([quotes, nextDesk]) => {
           setIndices(quotes.indices || []);
+          setQuoteNote(quotes.reason || "");
           setDesk(nextDesk);
         })
         .catch(() => undefined);
@@ -32,7 +34,8 @@ function MemberHome() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <BrandMark variant="horizontal" />
       <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
-      <Text style={styles.muted}>Price and future only. VWAP is hidden. Open positions, MTM, and closed trades are below.</Text>
+      <Text style={styles.muted}>Price and future only. VWAP is hidden. Quotes use your broker token, not the desk token.</Text>
+      {!indices.length ? <Text style={styles.muted}>{quoteNote || "Install your access token on My plan to load index quotes."}</Text> : null}
       {indices.map((item) => {
         const up = item.change >= 0;
         return (

@@ -23,6 +23,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
+import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
   addChat,
@@ -35,7 +36,6 @@ import {
   getOptionMeta,
   getAlgo,
   listAlgos,
-  memberQuotes,
   quoteSymbol,
   placeOrder,
   snapshot,
@@ -271,10 +271,10 @@ function memberAuth(req) {
   return user;
 }
 
-app.get("/api/member/quotes", (req, res) => {
+app.get("/api/member/quotes", async (req, res) => {
   try {
-    memberAuth(req);
-    res.json(memberQuotes());
+    const user = memberAuth(req);
+    res.json(await memberQuotesForUser(user));
   } catch (error) {
     res.status(error.status || 401).json({ error: error.message || "Sign in first." });
   }

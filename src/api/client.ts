@@ -1003,7 +1003,12 @@ export type MemberIndexQuote = {
 };
 
 export function getMemberQuotes() {
-  return request<{ indices: MemberIndexQuote[] }>("/member/quotes");
+  return request<{
+    indices: MemberIndexQuote[];
+    source?: string;
+    brokerId?: string;
+    reason?: string;
+  }>("/member/quotes");
 }
 
 export function getMemberDesk() {

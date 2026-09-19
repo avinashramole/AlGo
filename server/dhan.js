@@ -484,6 +484,44 @@ function quoteBodies(useFallback, instruments = liveInstruments()) {
   return [quoteBody(useFallback, nse), quoteBody(useFallback, mcx)].filter((body) => Object.keys(body).length);
 }
 
+export function memberQuoteInstruments() {
+  const indices = INSTRUMENTS.filter((row) => row.kind === "index" && row.symbol !== "INDIA VIX");
+  const futs = fallbackFrontFutures().map((row) => ({
+    symbol: row.symbol,
+    parent: row.parent,
+    segment: row.segment,
+    securityId: row.securityId,
+    kind: "future",
+    expiry: row.expiry,
+  }));
+  return indices.concat(futs);
+}
+
+export async function fetchDhanTapeQuotes({ accessToken: token, clientId: id, fetchQuotes } = {}) {
+  const cleanToken = String(token || "").trim();
+  const cleanId = String(id || "").trim();
+  if (!cleanToken || !cleanId) return [];
+  const instruments = memberQuoteInstruments();
+  const pull =
+    typeof fetchQuotes === "function"
+      ? fetchQuotes
+      : async (path, body) => dhanPost(path, cleanToken, cleanId, body);
+  const quotes = [];
+  for (const useFallback of [false, true]) {
+    for (const body of quoteBodies(useFallback, instruments)) {
+      if (!body || !Object.keys(body).length) continue;
+      try {
+        const payload = await pull("/marketfeed/ltp", body);
+        quotes.push(...flattenQuotes(payload, instruments));
+      } catch {
+        /* try the next segment / fallback body */
+      }
+    }
+    if (quotes.length) break;
+  }
+  return quotes;
+}
+
 export function flattenQuotes(payload, instruments = liveInstruments()) {
   const quotes = [];
   const data = payload?.data || payload || {};

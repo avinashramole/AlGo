@@ -2,10 +2,12 @@ import { cn, formatChange, formatPct, formatQuote, indexTapeLabel } from "../../
 import type { MemberIndexQuote } from "../../api/client";
 import { Sparkline } from "../charts/Sparkline";
 
-export function MemberIndexBoard({ indices }: { indices: MemberIndexQuote[] }) {
+export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[]; note?: string }) {
   if (!indices.length) {
     return (
-      <div className="card px-4 py-6 text-sm text-slate-400">Index quotes will show here after the desk feed starts.</div>
+      <div className="card px-4 py-6 text-sm text-slate-400">
+        {note || "Index quotes use your broker token. Install client ID and access token on My plan."}
+      </div>
     );
   }
 

@@ -10,6 +10,7 @@ import { cn, formatInr } from "../lib/format";
 export function UserHome() {
   const { user } = useAuth();
   const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
+  const [quoteNote, setQuoteNote] = useState("");
   const [desk, setDesk] = useState<MemberDesk | null>(null);
 
   useEffect(() => {
@@ -19,6 +20,7 @@ export function UserHome() {
         .then(([quotes, nextDesk]) => {
           if (!alive) return;
           setIndices(quotes.indices || []);
+          setQuoteNote(quotes.reason || "");
           setDesk(nextDesk);
         })
         .catch(() => undefined);
@@ -48,7 +50,7 @@ export function UserHome() {
         </div>
       </section>
 
-      <MemberIndexBoard indices={indices} />
+      <MemberIndexBoard indices={indices} note={quoteNote} />
 
       <div className="grid gap-3 md:grid-cols-3">
         <Stat label="Open MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
