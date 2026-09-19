@@ -1,7 +1,9 @@
 import { listClients, type ClientsList } from "../api/client";
+import { mergeClientIntoList, shouldApplyFetchedList } from "./clientListState";
 
 let cached: ClientsList | null = null;
 let inflight: Promise<ClientsList> | null = null;
+let epoch = 0;
 
 function isAuthMiss(error: unknown) {
   const msg = error instanceof Error ? error.message : String(error || "");
@@ -12,40 +14,40 @@ export function peekClientList() {
   return cached;
 }
 
-export function applyClientList(result: ClientsList) {
+export function applyClientList(result: ClientsList, fromEpoch?: number) {
+  if (fromEpoch != null && !shouldApplyFetchedList(fromEpoch, epoch)) {
+    return cached || result;
+  }
   cached = result;
-  return result;
+  return cached;
 }
 
 export function upsertCachedClient(client: ClientsList["clients"][number]) {
+  epoch += 1;
+  inflight = null;
   if (!cached || !client?.id) return client;
-  const clients = cached.clients.some((row) => row.id === client.id)
-    ? cached.clients.map((row) => (row.id === client.id ? client : row))
-    : [...cached.clients, client].sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-  cached = {
-    ...cached,
-    clients,
-    live: clients.filter((row) => row.status === "LIVE").length,
-    paper: clients.filter((row) => row.status !== "LIVE").length,
-  };
+  cached = mergeClientIntoList(cached, client) as ClientsList;
   return client;
 }
 
 export function refreshClientList() {
   if (inflight) return inflight;
-  inflight = (async () => {
+  const started = epoch;
+  let request!: Promise<ClientsList>;
+  request = (async () => {
     try {
       try {
-        return applyClientList(await listClients());
+        return applyClientList(await listClients(), started);
       } catch (error) {
         if (!isAuthMiss(error)) throw error;
         await new Promise((resolve) => window.setTimeout(resolve, 400));
-        return applyClientList(await listClients());
+        return applyClientList(await listClients(), started);
       }
     } finally {
-      inflight = null;
+      if (inflight === request) inflight = null;
     }
   })();
+  inflight = request;
   return inflight;
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   abandonEnrollment,
@@ -28,16 +28,23 @@ export function MemberPlansScreen() {
   const [clientId, setClientId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  const [tokenFocused, setTokenFocused] = useState(false);
+  const loadGen = useRef(0);
 
   const load = useCallback(() => {
+    const gen = ++loadGen.current;
     void Promise.all([getMemberDesk(), strategyCatalog(), listEnrollments()])
       .then(([nextDesk, catalog, mine]) => {
+        if (gen !== loadGen.current) return;
         setDesk(nextDesk);
         setStrategies(catalog.strategies || []);
         setEnrollments(mine.enrollments || []);
         setClientId((current) => current || nextDesk.install?.accountId || "");
       })
-      .catch((err) => Alert.alert("My plan", err instanceof Error ? err.message : "Could not load"));
+      .catch((err) => {
+        if (gen !== loadGen.current) return;
+        Alert.alert("My plan", err instanceof Error ? err.message : "Could not load");
+      });
   }, []);
 
   useEffect(() => {
@@ -180,21 +187,56 @@ export function MemberPlansScreen() {
                 ? `Saved ${desk.install.accountId || "client ID"} · token ${desk.install.tokenHint || ""}${desk.install.tokenUpdatedAt ? ` · ${formatIst(desk.install.tokenUpdatedAt)}` : ""}`
                 : "Install client ID and access token. This does not start LIVE."}
             </Text>
-            <TextInput style={styles.input} value={clientId} onChangeText={setClientId} placeholder="Client ID" autoCapitalize="none" />
-            <TextInput style={styles.input} value={apiKey} onChangeText={setApiKey} placeholder="API key" autoCapitalize="none" secureTextEntry />
-            <TextInput style={styles.input} value={accessToken} onChangeText={setAccessToken} placeholder="Access token" autoCapitalize="none" secureTextEntry />
+            <TextInput
+              style={styles.input}
+              value={clientId}
+              onChangeText={setClientId}
+              placeholder="Client ID"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              value={apiKey}
+              onChangeText={setApiKey}
+              placeholder={desk.install?.apiKeyHint || "API key"}
+              autoCapitalize="none"
+              secureTextEntry
+            />
+            <TextInput
+              style={styles.input}
+              value={tokenFocused || accessToken ? accessToken : desk.install?.tokenHint ? "••••••••" : ""}
+              onChangeText={setAccessToken}
+              onFocus={() => setTokenFocused(true)}
+              onBlur={() => setTokenFocused(false)}
+              placeholder={desk.install?.tokenHint || "Access token"}
+              autoCapitalize="none"
+              secureTextEntry
+            />
             <Pressable
               style={styles.btn}
               disabled={busy === "creds"}
-              onPress={() =>
-                void installMemberBroker({ brokerId: desk.brokerId, clientId, apiKey, accessToken })
-                  .then(() => {
+              onPress={() => {
+                const nextToken = accessToken.trim() && accessToken !== "••••••••" ? accessToken.trim() : "";
+                void installMemberBroker({
+                  brokerId: desk.brokerId,
+                  clientId: clientId || desk.install?.accountId,
+                  apiKey,
+                  accessToken: nextToken,
+                })
+                  .then((result) => {
+                    loadGen.current += 1;
                     setAccessToken("");
                     setApiKey("");
+                    setClientId(result.install?.accountId || clientId);
+                    setDesk((current) =>
+                      current
+                        ? { ...current, brokerId: result.brokerId || current.brokerId, install: result.install }
+                        : current,
+                    );
                     load();
                   })
-                  .catch((err) => Alert.alert("Broker token", err instanceof Error ? err.message : "Could not save"))
-              }
+                  .catch((err) => Alert.alert("Broker token", err instanceof Error ? err.message : "Could not save"));
+              }}
             >
               <Text style={styles.btnText}>{busy === "creds" ? "Saving..." : "Save client ID and access token"}</Text>
             </Pressable>
