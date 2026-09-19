@@ -45,6 +45,7 @@ test("claimed payment is not a live copy target", () => {
   const user = { id: "u-claimed", name: "Claimed", email: "claimed@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   installMemberBroker({ user, brokerId: "dhan", clientId: "1100000001", accessToken: "dhan-member-token" });
+  saveClientSettings(user.id, { copy: false, subscriptionMode: "strategy", subscriptionUntil: "" });
   const enrolled = enrollStrategy({
     user,
     algo,
@@ -133,6 +134,44 @@ test("mapped real members with copy off still get that strategy on their new tok
   assert.ok(mine);
   assert.equal(mine.paper, false);
   assert.equal(mine.account.accessToken, "map-new-token");
+});
+
+test("Copy ON + installed token copies admin orders with no login session and no through date", () => {
+  const user = { id: "u-copy-logged-off", name: "Logged Off", email: "loggedoff@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100555", accessToken: "logged-off-token" });
+  saveClientSettings(user.id, { copy: true, subscriptionMode: "copy", subscriptionUntil: "" });
+  const targets = listLiveCopyTargets({
+    strategyName: "",
+    masterQty: 65,
+    lotSize: 65,
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  const mine = targets.find((row) => row.userId === user.id);
+  assert.ok(mine, "Copy ON must copy while the member is logged off");
+  assert.equal(mine.paper, false);
+  assert.equal(mine.brokerToken, "logged-off-token");
+  assert.equal(mine.accountId, "1100555");
+});
+
+test("manual admin order copies a Copy ON member with no login and no through date", async () => {
+  const user = { id: "u-copy-ignore-scope", name: "Ignore Scope", email: "ignorescope@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100666", accessToken: "ignore-scope-token" });
+  saveClientSettings(user.id, { copy: true, subscriptionMode: "copy", subscriptionUntil: "" });
+  const { drainPendingLiveAlgoOrders, fanOutAdminOrderCopies } = await import("./market.js");
+  drainPendingLiveAlgoOrders();
+  const result = fanOutAdminOrderCopies(
+    { symbol: "NIFTY 25300 CE", side: "BUY", qty: 65, price: 80, strategy: "Desk BUY", brokerId: "dhan" },
+    { symbol: "NIFTY 25300 CE", side: "BUY", qty: 65, strategy: "Desk BUY" },
+  );
+  assert.ok(result.copies >= 1);
+  const queued = drainPendingLiveAlgoOrders();
+  const copy = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(copy, "admin ticket must copy from the saved member token while they are logged off");
+  assert.equal(copy.account.accessToken, "ignore-scope-token");
+  assert.equal(copy.account.clientId, "1100666");
 });
 
 test("turning Copy on without a through date opens Copy Master for admin orders", () => {

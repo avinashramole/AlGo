@@ -657,7 +657,11 @@ function AddClientModal({
             <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
               <div>
                 <div className="text-sm font-semibold">Copy trading</div>
-                <div className="text-xs text-slate-400">{copy ? "ON · Master orders will be copied" : "OFF · This client will not copy desk orders"}</div>
+                <div className="text-xs text-slate-400">
+                  {copy
+                    ? "ON · Admin orders copy from this account even when the client is logged off"
+                    : "OFF · This client will not copy desk orders"}
+                </div>
               </div>
               <CopySwitch on={copy} onChange={setCopy} />
             </div>
