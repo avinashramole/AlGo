@@ -73,6 +73,25 @@ test("cardsFromMemberQuotes never copies admin-only fields onto the member board
   assert.equal(rows[0].securityId, undefined);
 });
 
+test("concurrent member quote polls share one broker fetch", async () => {
+  const busy = { id: "u-inflight-quotes", name: "Inflight", email: "inflight@t2s.app", role: "user" };
+  selectMemberBroker({ user: busy, brokerId: "dhan" });
+  installMemberBroker({ user: busy, brokerId: "dhan", clientId: "1100444", accessToken: "inflight-token" });
+  let fetches = 0;
+  const fetchQuotes = () =>
+    new Promise((resolve) => {
+      fetches += 1;
+      setTimeout(() => resolve([{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25001, close: 25000 }]), 20);
+    });
+  const [a, b] = await Promise.all([
+    memberQuotesForUser(busy, { now: Date.now() + 20_000, fetchQuotes }),
+    memberQuotesForUser(busy, { now: Date.now() + 20_000, fetchQuotes }),
+  ]);
+  assert.equal(fetches, 1);
+  assert.equal(a.indices[0].price, 25001);
+  assert.equal(b.indices[0].price, 25001);
+});
+
 test("paper members stay on an empty board even if admin quotes exist", async () => {
   const paper = { id: "u-paper-quotes", name: "Paper Quotes", email: "paperq@t2s.app", role: "user" };
   selectMemberBroker({ user: paper, brokerId: "paper" });
