@@ -60,7 +60,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
           <div className="text-lg font-bold">Run backtest</div>
           <div className="text-xs text-slate-400">{name || "Strategy"} · pick a date range</div>
           <div className="mt-1 text-[11px] leading-snug text-slate-500">
-            Replay uses the strategy timeframe. Stored Dhan history for these dates is reused for every strategy; missing days download once and stay on disk.
+            Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first 1-year download happens once.
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -150,7 +150,7 @@ export function BacktestRangeInline({ busy, error, onCancel, onRun }: InlineProp
     <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
       <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
       <div className="mt-1 text-[11px] leading-snug text-slate-500">
-        Uses stored index and option history when this date range is already downloaded. Timeframe follows the strategy.
+        Uses stored index and option history when this range is already downloaded. Replay stays off the API thread.
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button

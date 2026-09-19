@@ -1402,9 +1402,10 @@ export type BacktestOptions = {
 };
 
 export function backtestAlgo(id: string, options: BacktestOptions = {}) {
-  return request<{ snapshot: Snapshot; backtest?: Record<string, unknown>; algo?: Snapshot["algos"][number] }>(
+  return request<{ snapshot: Snapshot | null; backtest?: Record<string, unknown>; algo?: Snapshot["algos"][number] }>(
     `/algos/${id}/backtest`,
     { method: "POST", body: JSON.stringify(options) },
+    { retries: 1 },
   );
 }
 

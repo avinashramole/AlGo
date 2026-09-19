@@ -10,6 +10,7 @@ import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureIndexHistory } from "./indexHistory.js";
+import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
@@ -810,6 +811,14 @@ app.post("/api/algos/:id/broker", (req, res) => {
 });
 
 app.post("/api/algos/:id/backtest", async (req, res) => {
+  if (isBacktestBusy()) {
+    res.status(429).json({ error: "A backtest is already running. Wait for it to finish." });
+    return;
+  }
+  extendRequestTimeout(req, 180_000);
+  markBacktestBusy();
+  const heartbeat = setInterval(() => markBacktestBusy(), 20_000);
+  if (typeof heartbeat.unref === "function") heartbeat.unref();
   try {
     const id = String(req.params.id || "");
     const algo = getAlgo(id);
@@ -872,8 +881,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     } else if (hist.option && optionCoverage === "stored") {
       optionHistory = { source: "stored", reused: true, days: 0, overwritten: [] };
     }
-    await new Promise((resolve) => setImmediate(resolve));
-    const result = backtestAlgo(id, {
+    const result = await backtestAlgo(id, {
       range: window.range,
       from: window.from,
       to: window.to,
@@ -886,9 +894,12 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.json({ ...result, snapshot: snapshot() });
+    res.json({ ...result, snapshot: null });
   } catch (error) {
     res.status(400).json({ error: error.message || "Backtest failed" });
+  } finally {
+    clearInterval(heartbeat);
+    clearBacktestBusy();
   }
 });
 
