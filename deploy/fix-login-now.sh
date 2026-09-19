@@ -29,7 +29,7 @@ if [ -f /opt/t2s/package.json ]; then
   (cd /opt/t2s && npm run build) || echo "build skipped (npm run build failed). Login gate still installed."
   if [ -f /opt/t2s/dist/index.html ]; then
     mkdir -p /var/www/trade2smart
-    cp -a /opt/t2s/dist/. /var/www/trade2smart/
+    /bin/cp -af /opt/t2s/dist/. /var/www/trade2smart/
     chmod -R a+rX /var/www/trade2smart
   fi
 fi

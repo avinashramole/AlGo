@@ -245,7 +245,7 @@ EOF
 systemctl daemon-reload
 systemctl start t2s
 mkdir -p /var/www/trade2smart
-if [ -f /opt/t2s/dist/index.html ]; then cp -a /opt/t2s/dist/. /var/www/trade2smart/; fi
+if [ -f /opt/t2s/dist/index.html ]; then /bin/cp -af /opt/t2s/dist/. /var/www/trade2smart/; fi
 chmod -R a+rX /var/www/trade2smart || true
 restorecon -Rv /var/www/trade2smart 2>/dev/null || true
 python3 - <<'PY'
@@ -334,7 +334,7 @@ This block **always** opens 443 (Let's Encrypt if present, otherwise a 30-day ce
 setenforce 0 || true
 mkdir -p /var/www/trade2smart
 chmod 755 /var /var/www /var/www/trade2smart
-if [ -f /opt/t2s/dist/index.html ]; then cp -a /opt/t2s/dist/. /var/www/trade2smart/; fi
+if [ -f /opt/t2s/dist/index.html ]; then /bin/cp -af /opt/t2s/dist/. /var/www/trade2smart/; fi
 if [ ! -f /var/www/trade2smart/index.html ]; then
   printf '%s\n' '<!doctype html><title>Trade 2 Smart</title><p>Trade 2 Smart</p>' > /var/www/trade2smart/index.html
 fi
