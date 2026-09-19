@@ -135,15 +135,15 @@ test("mapped real members with copy off still get that strategy on their new tok
   assert.equal(mine.account.accessToken, "map-new-token");
 });
 
-test("copy ON without a through date still receives Copy Master orders", () => {
+test("turning Copy on without a through date opens Copy Master for admin orders", () => {
   const user = { id: "u-copy-no-until", name: "Copy No Until", email: "copynountil@t2s.app", role: "user" };
-  saveClientSettings(user.id, {
+  const saved = saveClientSettings(user.id, {
     copy: true,
     subscriptionMode: "copy",
-    subscriptionUntil: "",
     tradeMode: "paper",
     brokerId: "paper",
   });
+  assert.match(String(saved.subscriptionUntil || ""), /^\d{4}-\d{2}-\d{2}$/);
   const targets = listLiveCopyTargets({
     strategyName: "",
     masterQty: 50,
