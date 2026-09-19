@@ -18,6 +18,7 @@ const {
   listTopups,
   liveAutoTradeBrokers,
   markTopupPaid,
+  brokerAccountForLiveCopy,
   peekBrokerAccount,
   peekClientSecrets,
   saveClientSettings,
@@ -367,4 +368,35 @@ test("Dhan does not keep showing another broker's client ID after a leftover cop
   assert.equal(peekClientSecrets(member.id).accountId, "11009901");
   assert.equal(getMemberDesk({ user: member, enrollments: [], quote: () => 0 }).install.accountId, "11009901");
   assert.equal(peekBrokerAccount(member.id, "upstox").accountId, "UPX1001");
+});
+
+test("live copy account rejects a leftover token copied onto another broker", () => {
+  const member = { id: "u-live-copy-slot", name: "Live Copy Slot", email: "livecopyslot@t2s.app", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "11008801",
+    accessToken: "dhan-leftover-token",
+  });
+  saveClientSettings(member.id, {
+    brokerId: "upstox",
+    accountId: "11008801",
+    brokerToken: "dhan-leftover-token",
+  });
+  const leftover = brokerAccountForLiveCopy(member.id, "upstox");
+  assert.equal(leftover.leftoverToken, true);
+  assert.equal(leftover.brokerToken, "");
+  assert.equal(leftover.accountId, "");
+  const own = installMemberBroker({
+    user: member,
+    brokerId: "upstox",
+    clientId: "UPX-MEM-1",
+    accessToken: "upstox-member-own-token",
+  });
+  assert.equal(own.install.accountId, "UPX-MEM-1");
+  const live = brokerAccountForLiveCopy(member.id, "upstox");
+  assert.equal(live.leftoverToken, false);
+  assert.equal(live.accountId, "UPX-MEM-1");
+  assert.equal(live.brokerToken, "upstox-member-own-token");
+  assert.equal(brokerAccountForLiveCopy(member.id, "dhan").brokerToken, "dhan-leftover-token");
 });

@@ -330,6 +330,63 @@ test("mappingScope master sends no copies and clients filters mapped ids", () =>
   assert.deepEqual(clients.map((row) => row.userId), [keep.id]);
 });
 
+test("Copy ON Upstox does not send a leftover Dhan token or client id", () => {
+  const user = { id: "u-leftover-upx", name: "Leftover Upx", email: "leftoverupx@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11008801", accessToken: "dhan-leftover-token" });
+  saveClientSettings(user.id, {
+    copy: true,
+    brokerId: "upstox",
+    accountId: "11008801",
+    brokerToken: "dhan-leftover-token",
+    subscriptionUntil: "",
+  });
+  const copies = memberCopyPayloads(
+    { strategy: "Desk BUY", side: "BUY", symbol: "NIFTY 22850 PE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    { mappingScope: "both", mappedClientIds: [] },
+  );
+  const mine = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(mine, "Copy ON leftover Upstox still notifies instead of silently skipping");
+  assert.equal(mine.brokerId, "upstox");
+  assert.equal(mine.leftoverSlot, true);
+  assert.equal(mine.account.accessToken, "");
+  assert.equal(mine.account.clientId, "");
+  assert.notEqual(mine.account.accessToken, "dhan-leftover-token");
+  assert.notEqual(mine.account.clientId, "11008801");
+});
+
+test("Copy ON Upstox uses the member Upstox token and client id after a leftover slot", () => {
+  const user = { id: "u-upx-own", name: "Upx Own", email: "upxown@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11008899", accessToken: "dhan-keep-token" });
+  saveClientSettings(user.id, {
+    copy: true,
+    brokerId: "upstox",
+    accountId: "11008899",
+    brokerToken: "dhan-keep-token",
+    subscriptionUntil: "",
+  });
+  installMemberBroker({
+    user,
+    brokerId: "upstox",
+    clientId: "UPX-MEM-9",
+    accessToken: "upstox-member-own-token",
+  });
+  const copies = memberCopyPayloads(
+    { strategy: "Desk BUY", side: "BUY", symbol: "NIFTY 22850 PE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    { mappingScope: "both", mappedClientIds: [] },
+  );
+  const mine = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.brokerId, "upstox");
+  assert.equal(mine.leftoverSlot, false);
+  assert.equal(mine.account.clientId, "UPX-MEM-9");
+  assert.equal(mine.account.accessToken, "upstox-member-own-token");
+  assert.equal(mine.brokerSession.accessToken, "upstox-member-own-token");
+  assert.notEqual(mine.account.accessToken, "dhan-keep-token");
+  assert.notEqual(mine.account.clientId, "11008899");
+});
+
 test("memberCopyPayloads attach copyUserId and member credentials", () => {
   const user = { id: "u-payload", name: "Payload", email: "payload@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });

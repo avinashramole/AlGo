@@ -196,6 +196,15 @@ function slotCopiedFromAnotherBroker(map, brokerId) {
   });
 }
 
+function slotTokenCopiedFromAnotherBroker(map, brokerId) {
+  const slot = map[brokerId];
+  if (!slot?.brokerToken) return false;
+  return Object.entries(map).some(([id, other]) => {
+    if (id === brokerId) return false;
+    return Boolean(slot.brokerToken && other.brokerToken && slot.brokerToken === other.brokerToken);
+  });
+}
+
 function selectedBrokerAccount(desk = {}) {
   const map = brokerAccountsMap(desk);
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
@@ -270,6 +279,17 @@ export function peekBrokerAccount(userId, brokerId) {
   const id = String(brokerId || desk.brokerId || "").trim().toLowerCase();
   if (!id || id === "paper") return emptyBrokerAccount();
   return desk.brokerAccounts[id] || emptyBrokerAccount();
+}
+
+export function brokerAccountForLiveCopy(userId, brokerId) {
+  const desk = store[userId] || emptyDesk(userId);
+  migrateLegacyBrokerAccount(desk);
+  const id = String(brokerId || desk.brokerId || "").trim().toLowerCase();
+  if (!id || id === "paper") return { ...emptyBrokerAccount(), leftoverToken: false };
+  const map = brokerAccountsMap(desk);
+  const leftoverToken = slotTokenCopiedFromAnotherBroker(map, id);
+  if (leftoverToken) return { ...emptyBrokerAccount(), leftoverToken: true };
+  return { ...(map[id] || emptyBrokerAccount()), leftoverToken: false };
 }
 
 function asGroups(value, fallback = "ALL") {

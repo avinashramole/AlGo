@@ -38,15 +38,44 @@ export function dhanOrderCredentials(payload = {}, desk = {}) {
   return { lane: "admin", token, clientId, account: null };
 }
 
+export function credentialHint(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "not set";
+  return raw.length >= 4 ? `••••${raw.slice(-4)}` : "set";
+}
+
+export function annotateMemberLiveAuthError(error, session = {}, { brokerName = "broker" } = {}) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || error || "broker error");
+  if (/used this member's/.test(message)) return error instanceof Error ? error : new Error(message);
+  if (status !== 401 && !/unauthorized|invalid.?token|expired.?token|\b401\b/i.test(message)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+  const clientId = String(session.clientId || "").trim();
+  const who = clientId ? `client ID ${clientId}` : "no client ID";
+  const next = new Error(
+    `${message}. ${brokerName} used this member's ${who} and access token ${credentialHint(session.accessToken)} — not the admin login. Paste a fresh daily ${brokerName} token on My plan if it expired.`,
+  );
+  next.status = 401;
+  return next;
+}
+
 export function liveOrderSession(payload = {}, adminSession = null, { brokerName = "broker" } = {}) {
   const override = payload.brokerSession && typeof payload.brokerSession === "object" ? payload.brokerSession : null;
+  const account = payload.account && typeof payload.account === "object" ? payload.account : null;
   if (isMemberScopedOrder(payload)) {
+    const leftover = Boolean(payload.leftoverSlot || override?.leftoverSlot || account?.leftoverSlot);
     const session = {
-      accessToken: String(override?.accessToken || "").trim(),
-      apiKey: String(override?.apiKey || payload.account?.apiKey || "").trim(),
-      clientId: String(override?.clientId || payload.account?.clientId || "").trim(),
-      sessionToken: String(override?.sessionToken || payload.account?.sessionToken || "").trim(),
+      accessToken: String(override?.accessToken || account?.accessToken || "").trim(),
+      apiKey: String(override?.apiKey || account?.apiKey || "").trim(),
+      clientId: String(override?.clientId || account?.clientId || "").trim(),
+      sessionToken: String(override?.sessionToken || account?.sessionToken || "").trim(),
     };
+    if (leftover) {
+      throw fail(
+        `This member's ${brokerName} slot still has another broker's token. Paste this member's ${brokerName} client ID and daily access token on My plan.`,
+      );
+    }
     if (!session.accessToken) {
       throw fail(`This member has no ${brokerName} access token. Install it on My plan.`);
     }

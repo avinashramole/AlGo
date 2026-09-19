@@ -1,5 +1,5 @@
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
-import { listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
+import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { exchangeSegmentFor } from "./optionChain.js";
 
@@ -39,11 +39,12 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
 function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyName, enrollment } = {}) {
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "paper").trim().toLowerCase();
-  const slot = peekBrokerAccount(userId, brokerId);
-  const token = String(slot.brokerToken || desk.brokerToken || "").trim();
-  const accountId = String(slot.accountId || desk.accountId || "").trim();
+  const slot = brokerAccountForLiveCopy(userId, brokerId);
+  const leftoverSlot = Boolean(slot.leftoverToken);
+  const token = leftoverSlot ? "" : String(slot.brokerToken || desk.brokerToken || "").trim();
+  const accountId = leftoverSlot ? "" : String(slot.accountId || desk.accountId || "").trim();
   const paper = brokerId === "paper";
-  if (!paper && !token) return null;
+  if (!paper && !token && !leftoverSlot) return null;
   return {
     userId,
     enrollmentId: enrollment?.id || "",
@@ -51,9 +52,10 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     strategyName: enrollment?.strategyName || strategyName || "",
     brokerId: paper ? "paper" : brokerId,
     accountId,
+    leftoverSlot,
     brokerToken: paper ? "" : token,
-    brokerApiKey: paper ? "" : slot.brokerApiKey || desk.brokerApiKey,
-    brokerSessionToken: paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
+    brokerApiKey: leftoverSlot || paper ? "" : slot.brokerApiKey || desk.brokerApiKey,
+    brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
     paper,
     qty: sizeCopyQty(masterQty, { sizingKind: desk.sizingKind, sizingValue: desk.sizingValue, lotSize }),
   };
@@ -152,6 +154,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
     brokerId: target.brokerId,
     copyUserId: target.userId,
     paper: target.paper,
+    leftoverSlot: Boolean(target.leftoverSlot),
     account: target.paper
       ? undefined
       : {
@@ -159,6 +162,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           accessToken: target.brokerToken,
           apiKey: target.brokerApiKey,
           sessionToken: target.brokerSessionToken,
+          leftoverSlot: Boolean(target.leftoverSlot),
         },
     brokerSession: target.paper
       ? undefined
@@ -167,6 +171,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           accessToken: target.brokerToken,
           apiKey: target.brokerApiKey,
           sessionToken: target.brokerSessionToken,
+          leftoverSlot: Boolean(target.leftoverSlot),
         },
   }));
 }

@@ -164,6 +164,105 @@ test("member copy does not use the admin Zerodha session when the member token i
   );
 });
 
+test("member Upstox copy uses the member Bearer token, not the admin session", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), auth: options.headers?.Authorization, body: options.body });
+    if (String(url).includes("search/instruments")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                trading_symbol: "NIFTY 23 SEP 25 22850 PE",
+                underlying_symbol: "NIFTY",
+                instrument_type: "PE",
+                strike_price: 22850,
+                expiry: "2026-09-23",
+                instrument_key: "NSE_FO|426269",
+              },
+            ],
+          }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { order_id: "upx-member-1" } }),
+    };
+  };
+  const live = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-auth",
+      account: { accessToken: "member-upstox-token", clientId: "UPX-MEM-1" },
+      symbol: "NIFTY 22850 PE",
+      side: "BUY",
+      qty: 65,
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "upx-member-1");
+  assert.equal(calls.every((row) => row.auth === "Bearer member-upstox-token"), true);
+  assert.equal(calls.some((row) => String(row.auth).includes("admin-upstox-token")), false);
+});
+
+test("member Upstox 401 names the member client ID and token hint", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("search/instruments")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                trading_symbol: "NIFTY 23 SEP 25 22850 PE",
+                underlying_symbol: "NIFTY",
+                instrument_type: "PE",
+                strike_price: 22850,
+                expiry: "2026-09-23",
+                instrument_key: "NSE_FO|426269",
+              },
+            ],
+          }),
+      };
+    }
+    return {
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: async () => JSON.stringify({ message: "401 Unauthorized" }),
+    };
+  };
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "upstox",
+        {
+          copyUserId: "u-upstox-401",
+          brokerSession: { accessToken: "member-upstox-token", clientId: "UPX-MEM-1" },
+          symbol: "NIFTY 22850 PE",
+          side: "BUY",
+          qty: 65,
+          instrumentKey: "NSE_FO|426269",
+        },
+        fetchImpl,
+      ),
+    (error) => {
+      assert.match(error.message, /401 Unauthorized/);
+      assert.match(error.message, /client ID UPX-MEM-1/);
+      assert.match(error.message, /••••oken/);
+      assert.match(error.message, /not the admin login/);
+      assert.equal(error.message.includes("member-upstox-token"), false);
+      assert.equal(error.status, 401);
+      return true;
+    },
+  );
+});
+
 test("member Zerodha copy uses the member token, not the admin session", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
