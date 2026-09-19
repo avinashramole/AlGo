@@ -53,23 +53,22 @@ export function cardsFromMemberQuotes(userId, quotes = []) {
     const futureRaw = Number(futureQuote?.ltp || 0);
     const close = Number(indexQuote?.close || futureQuote?.close || 0);
     const price = priceRaw > 0 ? priceRaw : futureRaw;
-    if (!(price > 0)) return null;
     const prev = close > 0 && close !== price ? close : price;
-    const change = round2(price - prev);
-    const changePct = prev ? round2((change / prev) * 100) : 0;
-    sparkMap[card.symbol] = pushSpark(sparkMap[card.symbol], price);
+    const change = price > 0 && prev ? round2(price - prev) : 0;
+    const changePct = price > 0 && prev ? round2((change / prev) * 100) : 0;
+    if (price > 0) sparkMap[card.symbol] = pushSpark(sparkMap[card.symbol], price);
     return memberIndexQuote({
       symbol: card.symbol,
       name: card.name,
-      price: round2(price),
+      price: price > 0 ? round2(price) : 0,
       change,
       changePct,
-      spark: sparkMap[card.symbol],
-      future: futureRaw > 0 ? round2(futureRaw) : round2(price),
+      spark: sparkMap[card.symbol] || [],
+      future: futureRaw > 0 ? round2(futureRaw) : price > 0 ? round2(price) : 0,
       futureExpiry: futureQuote?.expiry || "",
       lot: card.lot,
     });
-  }).filter(Boolean);
+  });
   sparks.set(userId, sparkMap);
   return rows;
 }

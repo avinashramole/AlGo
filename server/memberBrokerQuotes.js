@@ -62,6 +62,54 @@ export function crudeInstrumentKey(brokerId, ymd = upcomingExpiries("CRUDEOIL", 
   return "";
 }
 
+export function crudeInstrumentKeys(brokerId, dates = upcomingExpiries("CRUDEOIL", 3)) {
+  return [...new Set((dates || []).map((ymd) => crudeInstrumentKey(brokerId, ymd)).filter(Boolean))];
+}
+
+export function pickCrudeSearchHit(rows = []) {
+  const list = Array.isArray(rows) ? rows : [];
+  const hits = list.filter((row) => {
+    const blob = `${row.trading_symbol || ""} ${row.tradingsymbol || ""} ${row.name || ""} ${row.underlying_symbol || ""} ${row.instrument_type || ""} ${row.instrument_key || ""}`.toUpperCase();
+    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
+    const type = String(row.instrument_type || row.instrumentType || "").toUpperCase();
+    return type === "FUT" || /\bFUT\b/.test(blob);
+  });
+  hits.sort((a, b) => String(a.expiry || a.expiry_date || "").localeCompare(String(b.expiry || b.expiry_date || "")));
+  return String(hits[0]?.instrument_key || hits[0]?.instrumentKey || "").trim();
+}
+
+export function rowsFromUpstoxInstrumentText(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return [];
+  try {
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      const json = JSON.parse(trimmed);
+      return Array.isArray(json) ? json : Array.isArray(json.data) ? json.data : [];
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+export function crudeQuoteFromPayload(payload) {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+  if (!data || typeof data !== "object") return null;
+  const entries = Array.isArray(data) ? data.map((row, index) => [String(index), row]) : Object.entries(data);
+  for (const [key, row] of entries) {
+    if (!row || typeof row !== "object") continue;
+    const blob = `${key} ${row.instrument_token || ""} ${row.instrument_key || ""} ${row.trading_symbol || ""} ${row.n || ""}`.toUpperCase();
+    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) continue;
+    const inner = row.v && typeof row.v === "object" ? row.v : row;
+    const next = quoteRow(CRUDE_INSTRUMENT, pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price), pickNumber(inner.ohlc?.close, inner.close, inner.prev_close_price, inner.close_price));
+    if (next) {
+      next.expiry = String(inner.expiry || row.expiry || "").slice(0, 10);
+      return next;
+    }
+  }
+  return null;
+}
+
 export function brokerNeedsApiKey(brokerId) {
   return ["zerodha", "fyers", "kotak", "angelone"].includes(String(brokerId || "").toLowerCase());
 }
@@ -195,19 +243,93 @@ async function fetchUpstoxQuotes({ accessToken, fetchImpl }) {
   return quotes.concat(await fetchUpstoxCrude({ accessToken, fetchImpl }));
 }
 
-async function fetchUpstoxCrude({ accessToken, fetchImpl }) {
-  const key = crudeInstrumentKey("upstox");
-  if (!key) return [];
-  try {
-    const payload = await readJson(
-      fetchImpl,
-      `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(key)}`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } },
-    );
-    return quotesFromKeyedPayload(payload?.data || payload, { CRUDEOIL: key });
-  } catch {
-    return [];
+const UPSTOX_CRUDE_SEARCH = [
+  "https://api.upstox.com/v2/instruments/search?query=CRUDEOIL&exchanges=MCX&segments=FUT&instrument_types=FUT&expiry=current_month",
+  "https://api.upstox.com/v2/search/instruments?query=CRUDEOIL%20FUT&exchanges=MCX&segments=FUT",
+];
+
+const UPSTOX_MCX_INSTRUMENTS = [
+  "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json",
+  "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json.gz",
+];
+
+let upstoxInstrumentCache = { at: 0, rows: [] };
+const UPSTOX_INSTRUMENT_TTL_MS = 6 * 60 * 60 * 1000;
+
+export function resetUpstoxInstrumentCache() {
+  upstoxInstrumentCache = { at: 0, rows: [] };
+}
+
+async function decodeFetchText(res) {
+  if (typeof res.arrayBuffer === "function") {
+    const buf = Buffer.from(await res.arrayBuffer());
+    const asText = buf.toString("utf8");
+    if (asText.trim().startsWith("[") || asText.trim().startsWith("{") || asText.includes("instrument_key")) {
+      return asText;
+    }
+    try {
+      const { gunzipSync } = await import("node:zlib");
+      return gunzipSync(buf).toString("utf8");
+    } catch {
+      return asText;
+    }
   }
+  if (typeof res.text === "function") return res.text();
+  return "";
+}
+
+async function fetchUpstoxInstrumentRows(fetchImpl) {
+  if (upstoxInstrumentCache.rows.length && Date.now() - upstoxInstrumentCache.at < UPSTOX_INSTRUMENT_TTL_MS) {
+    return upstoxInstrumentCache.rows;
+  }
+  for (const url of UPSTOX_MCX_INSTRUMENTS) {
+    try {
+      const res = await fetchImpl(url, { headers: { Accept: "application/json, application/gzip, */*" } });
+      if (!res?.ok) continue;
+      const rows = rowsFromUpstoxInstrumentText(await decodeFetchText(res));
+      if (rows.length) {
+        upstoxInstrumentCache = { at: Date.now(), rows };
+        return rows;
+      }
+    } catch {
+      /* next instrument file */
+    }
+  }
+  return [];
+}
+
+async function fetchUpstoxCrude({ accessToken, fetchImpl }) {
+  const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
+  const keys = [];
+  for (const url of UPSTOX_CRUDE_SEARCH) {
+    try {
+      const found = await readJson(fetchImpl, url, { headers });
+      const key = pickCrudeSearchHit(found?.data || found);
+      if (key) keys.push(key);
+    } catch {
+      /* try the public MCX instrument list, then constructed keys */
+    }
+  }
+  try {
+    const key = pickCrudeSearchHit(await fetchUpstoxInstrumentRows(fetchImpl));
+    if (key) keys.push(key);
+  } catch {
+    /* constructed tradingsymbol keys are last */
+  }
+  keys.push(...crudeInstrumentKeys("upstox"));
+  const seen = new Set();
+  for (const key of keys) {
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(key)}`, { headers });
+      const quote = crudeQuoteFromPayload(payload) || quotesFromKeyedPayload(payload?.data || payload, { CRUDEOIL: key })[0];
+      if (quote) return [quote];
+    } catch {
+      /* next key */
+    }
+  }
+  return [];
 }
 
 async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
