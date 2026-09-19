@@ -400,3 +400,27 @@ test("live copy account rejects a leftover token copied onto another broker", ()
   assert.equal(live.brokerToken, "upstox-member-own-token");
   assert.equal(brokerAccountForLiveCopy(member.id, "dhan").brokerToken, "dhan-leftover-token");
 });
+
+test("Upstox API key and secret stay on the public install before a trading token exists", () => {
+  const member = { id: "u-upx-oauth", name: "Upstox OAuth", email: "upxoauth@t2s.app", role: "user" };
+  const saved = installMemberBroker({
+    user: member,
+    brokerId: "upstox",
+    clientId: "393216",
+    apiKey: "upstox-api-key-55555555",
+    sessionToken: "upstox-api-secret-66666666",
+  });
+  assert.equal(saved.install.installed, false);
+  assert.equal(saved.install.hasApiKey, true);
+  assert.equal(saved.install.hasApiSecret, true);
+  assert.equal(saved.install.oauthReady, true);
+  assert.match(saved.install.apiKeyHint, /•/);
+  assert.match(saved.install.sessionHint, /•/);
+  assert.equal(String(saved.install.apiKeyHint).includes("upstox-api-key-55555555"), false);
+  const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(desk.install.oauthReady, true);
+  const card = desk.brokers.find((row) => row.id === "upstox");
+  assert.equal(card.oauthReady, true);
+  assert.equal(card.installed, false);
+  assert.match(card.note, /Generate today's trading token/);
+});

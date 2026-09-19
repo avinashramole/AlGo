@@ -925,6 +925,7 @@ export type MemberBrokerChoice = {
   selected?: boolean;
   autoTrade?: boolean;
   installed?: boolean;
+  oauthReady?: boolean;
   accountId?: string;
   mode?: string;
   note?: string;
@@ -981,6 +982,9 @@ export type MemberBrokerInstall = {
   tokenHint?: string;
   apiKeyHint?: string;
   sessionHint?: string;
+  hasApiKey?: boolean;
+  hasApiSecret?: boolean;
+  oauthReady?: boolean;
   installed?: boolean;
   tokenUpdatedAt?: string;
   fields: BrokerInstallField[];
@@ -1074,9 +1078,13 @@ export function installMemberBroker(payload: {
 export function requestMemberUpstoxToken() {
   return request<{
     ok: boolean;
+    asked?: boolean;
+    hasTradingToken?: boolean;
+    tokenHint?: string;
     loginUrl?: string;
     notifierUri?: string;
     redirectUri?: string;
+    expiresAt?: string;
     message?: string;
   }>("/member/broker/upstox/token", { method: "POST" });
 }

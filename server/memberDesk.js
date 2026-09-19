@@ -271,7 +271,9 @@ export function publicBrokerAccounts(desk = {}) {
       accountId: copied ? "" : slot.accountId,
       tokenHint: maskSecret(slot.brokerToken),
       apiKeyHint: maskSecret(slot.brokerApiKey),
+      sessionHint: maskSecret(slot.brokerSessionToken),
       installed: Boolean(slot.brokerToken),
+      oauthReady: Boolean(slot.brokerApiKey && slot.brokerSessionToken),
       tokenUpdatedAt: slot.tokenUpdatedAt,
     };
   }
@@ -485,6 +487,9 @@ export function publicBrokerInstall(desk = {}) {
     tokenHint: maskSecret(desk.brokerToken),
     apiKeyHint: maskSecret(desk.brokerApiKey),
     sessionHint: maskSecret(desk.brokerSessionToken),
+    hasApiKey: Boolean(String(desk.brokerApiKey || "").trim()),
+    hasApiSecret: Boolean(String(desk.brokerSessionToken || "").trim()),
+    oauthReady: Boolean(String(desk.brokerApiKey || "").trim() && String(desk.brokerSessionToken || "").trim()),
     installed: Boolean(String(desk.brokerToken || "").trim()),
     tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
     fields: brokerInstallFields(brokerId),
@@ -670,13 +675,16 @@ export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
       selected,
       autoTrade: selected && !virtual,
       installed: Boolean(saved.installed),
+      oauthReady: Boolean(saved.oauthReady),
       accountId: saved.accountId || "",
       mode: virtual ? "paper" : live ? "live" : "desk-managed",
       note: virtual
         ? "Virtual paper book. Signals stay on the T2S desk."
         : saved.installed
           ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}. Select it to update the ID or token.`
-          : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.",
+          : saved.oauthReady
+            ? `API key and secret saved for ${row.name}. Generate today's trading token.`
+            : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.",
     };
   });
 }
