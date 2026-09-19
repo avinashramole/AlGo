@@ -21,7 +21,11 @@ export function BrokerInstallFields({
   return (
     <div className="grid gap-3">
       {fields.map((field) => {
-        const shown = focused === field.id ? values[field.id] || "" : displayInstallValue(field, values, hints);
+        const typed = String(values[field.id] || "");
+        const shown =
+          focused === field.id && (typed || !hints?.[field.id])
+            ? typed
+            : displayInstallValue(field, values, hints);
         return (
           <label key={field.id} className="block text-xs font-semibold">
             {field.label}

@@ -18,7 +18,14 @@ import {
 } from "../api/client";
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
-import { credsAfterInstall, hintsFromInstall, installValueForSubmit } from "../lib/formSecrets";
+import {
+  credsAfterInstall,
+  describeBrokerInstall,
+  describeBrokerSave,
+  hintsFromInstall,
+  installValueForSubmit,
+  tradingTokenArrived,
+} from "../lib/formSecrets";
 import { cn, formatInr, formatIst, formatIstDate, formatPlanTerm } from "../lib/format";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
@@ -39,8 +46,10 @@ export function MemberPlans() {
   } | null>(null);
   const [creds, setCreds] = useState<Record<string, string>>({});
   const [credNote, setCredNote] = useState("");
+  const [tokenWait, setTokenWait] = useState(false);
   const [utr, setUtr] = useState("");
   const loadGen = useRef(0);
+  const tokenWaitGen = useRef(0);
 
   const load = useCallback(async () => {
     const gen = ++loadGen.current;
@@ -64,7 +73,10 @@ export function MemberPlans() {
     const id = window.setInterval(() => {
       void load();
     }, 8000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      tokenWaitGen.current += 1;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -92,18 +104,64 @@ export function MemberPlans() {
     }
   };
 
+  const waitForTradingToken = async (
+    before: { tokenHint?: string; tokenUpdatedAt?: string; installed?: boolean } | null,
+    gen: number,
+  ) => {
+    setTokenWait(true);
+    const deadline = Date.now() + 90_000;
+    try {
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        if (gen !== tokenWaitGen.current) return;
+        try {
+          const next = await getMemberDesk();
+          if (gen !== tokenWaitGen.current) return;
+          setDesk(next);
+          setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
+          if (tradingTokenArrived(before, next.install)) {
+            const hint = next.install?.tokenHint ? ` · ${next.install.tokenHint}` : "";
+            const when = next.install?.tokenUpdatedAt ? ` · ${formatIst(next.install.tokenUpdatedAt)}` : "";
+            setCredNote(`Trading token saved${hint}${when}. Live copy will use this token.`);
+            return;
+          }
+        } catch {
+          /* keep waiting through a transient desk error */
+        }
+      }
+      if (gen !== tokenWaitGen.current) return;
+      setCredNote(
+        "Still waiting for today's trading token. Approve the Upstox app or WhatsApp notification. This page updates when the token arrives.",
+      );
+    } finally {
+      if (gen === tokenWaitGen.current) setTokenWait(false);
+    }
+  };
+
   const requestUpstoxToken = async () => {
+    const gen = ++tokenWaitGen.current;
     setBusy("upstox-token");
     setError("");
     setCredNote("");
+    const before = desk?.install
+      ? {
+          tokenHint: desk.install.tokenHint,
+          tokenUpdatedAt: desk.install.tokenUpdatedAt,
+          installed: desk.install.installed,
+        }
+      : null;
     try {
       const result = await requestMemberUpstoxToken();
-      setCredNote(result.message || "Approve today's Upstox trading token in the Upstox app.");
+      if (gen !== tokenWaitGen.current) return;
+      setCredNote(result.message || "Asked Upstox for today's trading token. Approve in the Upstox app.");
       if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
+      setBusy("");
+      await waitForTradingToken(before, gen);
     } catch (err) {
+      if (gen !== tokenWaitGen.current) return;
       setError(err instanceof Error ? err.message : "Could not request Upstox trading token");
     } finally {
-      setBusy("");
+      if (gen === tokenWaitGen.current) setBusy("");
     }
   };
 
@@ -128,7 +186,7 @@ export function MemberPlans() {
       );
       setCreds({ clientId: String(result.install?.accountId || clientId || "").trim() });
       await load();
-      setCredNote("Client ID and access token updated on this account and on admin Users. Live copy now uses this token. Desk LIVE was not started.");
+      setCredNote(describeBrokerSave(result.install, desk.brokerId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not install broker token");
     } finally {
@@ -332,7 +390,9 @@ export function MemberPlans() {
                   ? "Virtual paper"
                   : row.installed
                     ? `Token saved${row.accountId ? ` · ${row.accountId}` : ""}`
-                    : "Needs this broker's ID and token"}
+                    : row.oauthReady
+                      ? "API key and secret saved · generate today's token"
+                      : "Needs this broker's ID and token"}
               </div>
             </button>
           ))}
@@ -349,16 +409,16 @@ export function MemberPlans() {
             <p className="mt-1 text-xs text-slate-400">
               {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>
-            {desk.install?.installed ? (
-              <p className="mt-2 text-xs font-semibold text-slate-500">
-                Installed{desk.install.accountId ? ` · ${desk.install.accountId}` : ""}
-                {desk.install.tokenHint ? ` · token ${desk.install.tokenHint}` : ""}
-                {desk.install.tokenUpdatedAt ? ` · updated ${formatIst(desk.install.tokenUpdatedAt)}` : ""}
-                {desk.install.apiKeyHint ? ` · API ${desk.install.apiKeyHint}` : ""}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs font-semibold text-amber-700">No access token installed yet.</p>
-            )}
+            <p
+              className={`mt-2 text-xs font-semibold ${
+                desk.install?.installed ? "text-slate-500" : "text-amber-700"
+              }`}
+            >
+              {describeBrokerInstall(desk.install, desk.brokerId)}
+              {desk.install?.installed && desk.install.tokenUpdatedAt
+                ? ` · updated ${formatIst(desk.install.tokenUpdatedAt)}`
+                : ""}
+            </p>
             <div className="mt-3">
               <BrokerInstallFields
                 fields={desk.install?.fields || []}
@@ -384,7 +444,11 @@ export function MemberPlans() {
                   onClick={() => void requestUpstoxToken()}
                   className="h-10 rounded-xl border border-brand-500 px-4 text-xs font-semibold text-brand-500 disabled:opacity-50"
                 >
-                  {busy === "upstox-token" ? "Asking Upstox..." : "Get today's trading token"}
+                  {busy === "upstox-token"
+                    ? "Asking Upstox..."
+                    : tokenWait
+                      ? "Waiting for token..."
+                      : "Get today's trading token"}
                 </button>
               ) : null}
             </div>

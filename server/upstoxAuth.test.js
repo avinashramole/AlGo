@@ -98,6 +98,29 @@ test("Get today's token asks Upstox and returns the approve URL", async () => {
   });
   const started = await startMemberUpstoxToken(member, fetchImpl);
   assert.equal(started.ok, true);
+  assert.equal(started.asked, true);
+  assert.equal(started.hasTradingToken, true);
+  assert.match(started.tokenHint, /•/);
   assert.match(started.loginUrl, /authorization\/dialog/);
-  assert.match(started.message, /Approve today's trading token/);
+  assert.match(started.message, /already has a trading token|Approve/);
+});
+
+test("Get today's token says it is waiting when no trading token exists yet", async () => {
+  const fresh = { id: "u-upx-wait", name: "Upstox Wait", email: "upxwait@t2s.app", role: "user" };
+  installMemberBroker({
+    user: fresh,
+    brokerId: "upstox",
+    clientId: "393217",
+    apiKey: "upstox-api-key-33333333",
+    sessionToken: "upstox-api-secret-44444444",
+  });
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ status: "success", data: { notifier_url: "https://trade2smart.com/api/upstox/token" } }),
+  });
+  const started = await startMemberUpstoxToken(fresh, fetchImpl);
+  assert.equal(started.hasTradingToken, false);
+  assert.equal(started.tokenHint, "");
+  assert.match(started.message, /when the token arrives/);
 });

@@ -1,5 +1,11 @@
 import { upstoxErrorMessage } from "./liveBrokers.js";
-import { findUserIdByUpstoxApiKey, peekBrokerAccount, peekClientSecrets, saveMemberUpstoxAccessToken } from "./memberDesk.js";
+import {
+  findUserIdByUpstoxApiKey,
+  peekBrokerAccount,
+  peekClientSecrets,
+  publicBrokerInstall,
+  saveMemberUpstoxAccessToken,
+} from "./memberDesk.js";
 
 const TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token";
 const REQUEST_URL = "https://api.upstox.com/v3/login/auth/token/request";
@@ -133,13 +139,19 @@ export async function startMemberUpstoxToken(user, fetchImpl = fetch, env = proc
   if (!asked.ok) throw fail("Save the Upstox API key and API secret on My plan first.");
   const desk = peekClientSecrets(user.id);
   const slot = peekBrokerAccount(user.id, "upstox");
+  const status = memberUpstoxAuthStatus(user.id);
+  const install = publicBrokerInstall({ ...desk, brokerId: "upstox" });
   return {
     ok: true,
+    asked: true,
+    hasTradingToken: status.hasTradingToken,
+    tokenHint: install.tokenHint || "",
     loginUrl: upstoxAuthorizeUrl({ apiKey: upstoxOauthCreds(slot, desk).apiKey, state: user.id }, env),
     notifierUri: upstoxNotifierUri(env),
     redirectUri: upstoxRedirectUri(env),
     expiresAt: asked.expiresAt,
-    message:
-      "Approve today's trading token in the Upstox app or WhatsApp. After you approve, this site saves the access token automatically.",
+    message: status.hasTradingToken
+      ? "Upstox already has a trading token on this account. Approve the new request to replace it."
+      : "Asked Upstox for today's trading token. Approve the Upstox app / WhatsApp notification. This page will say when the token arrives.",
   };
 }
