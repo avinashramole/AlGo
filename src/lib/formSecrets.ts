@@ -9,6 +9,7 @@ export type InstallHints = {
   accountId?: string;
   tokenHint?: string;
   apiKeyHint?: string;
+  sessionHint?: string;
 };
 
 export function hintsFromInstall(install?: InstallHints | null): Record<string, string> {
@@ -16,10 +17,12 @@ export function hintsFromInstall(install?: InstallHints | null): Record<string, 
   const accountId = String(install.accountId || "").trim();
   const tokenHint = String(install.tokenHint || "").trim();
   const apiKeyHint = String(install.apiKeyHint || "").trim();
+  const sessionHint = String(install.sessionHint || "").trim();
   return {
     ...(accountId ? { clientId: accountId } : {}),
-    ...(tokenHint ? { accessToken: tokenHint, sessionToken: tokenHint } : {}),
+    ...(tokenHint ? { accessToken: tokenHint } : {}),
     ...(apiKeyHint ? { apiKey: apiKeyHint } : {}),
+    ...(sessionHint ? { sessionToken: sessionHint } : {}),
   };
 }
 

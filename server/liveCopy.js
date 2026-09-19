@@ -40,11 +40,15 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "paper").trim().toLowerCase();
   const slot = brokerAccountForLiveCopy(userId, brokerId);
-  const leftoverSlot = Boolean(slot.leftoverToken);
-  const token = leftoverSlot ? "" : String(slot.brokerToken || desk.brokerToken || "").trim();
+  const canMintUpstox =
+    brokerId === "upstox" &&
+    Boolean(String(slot.brokerApiKey || desk.brokerApiKey || "").trim()) &&
+    Boolean(String(slot.brokerSessionToken || desk.brokerSessionToken || "").trim());
+  const leftoverSlot = Boolean(slot.leftoverToken) && !canMintUpstox;
+  const token = leftoverSlot ? "" : String(slot.brokerToken || (!slot.leftoverToken && desk.brokerToken) || "").trim();
   const accountId = leftoverSlot ? "" : String(slot.accountId || desk.accountId || "").trim();
   const paper = brokerId === "paper";
-  if (!paper && !token && !leftoverSlot) return null;
+  if (!paper && !token && !leftoverSlot && !canMintUpstox) return null;
   return {
     userId,
     enrollmentId: enrollment?.id || "",

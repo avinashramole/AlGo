@@ -23,7 +23,8 @@ import {
   unassignStaticIp,
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
-import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
+import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
+import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -172,7 +173,9 @@ function deskGuard(req, res, next) {
     pathname.startsWith("/api/auth/otp") ||
     pathname === "/api/auth/reset" ||
     pathname === "/api/auth/signup" ||
-    pathname.startsWith("/api/auth/thumb")
+    pathname.startsWith("/api/auth/thumb") ||
+    pathname === "/api/upstox/token" ||
+    pathname === "/api/upstox/callback"
   ) {
     next();
     return;
@@ -320,6 +323,46 @@ app.post("/api/member/broker", (req, res) => {
     res.json(selectMemberBroker({ user: memberAuth(req), brokerId: req.body?.brokerId }));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not select broker" });
+  }
+});
+
+app.post("/api/upstox/token", (req, res) => {
+  try {
+    res.json(receiveUpstoxAccessToken(req.body || {}));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save Upstox token" });
+  }
+});
+
+app.get("/api/upstox/callback", async (req, res) => {
+  try {
+    const userId = String(req.query?.state || "").trim();
+    if (!userId) throw Object.assign(new Error("Upstox login is missing the member state."), { status: 400 });
+    const desk = peekClientSecrets(userId);
+    const slot = peekBrokerAccount(userId, "upstox");
+    const creds = upstoxOauthCreds(slot, desk);
+    const minted = await exchangeUpstoxAuthCode({
+      code: req.query?.code,
+      apiKey: creds.apiKey,
+      apiSecret: creds.apiSecret,
+    });
+    receiveUpstoxAccessToken({
+      client_id: creds.apiKey,
+      access_token: minted.accessToken,
+      user_id: minted.userId,
+      expires_at: minted.expiresAt,
+    });
+    res.redirect(302, "/plans?upstox=connected");
+  } catch (error) {
+    res.redirect(302, `/plans?upstox=error&message=${encodeURIComponent(error.message || "Upstox login failed")}`);
+  }
+});
+
+app.post("/api/member/broker/upstox/token", async (req, res) => {
+  try {
+    res.json(await startMemberUpstoxToken(memberAuth(req)));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not request Upstox trading token" });
   }
 });
 

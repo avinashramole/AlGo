@@ -293,8 +293,43 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   if (!id || id === "paper") return { ...emptyBrokerAccount(), leftoverToken: false };
   const map = brokerAccountsMap(desk);
   const leftoverToken = slotTokenCopiedFromAnotherBroker(map, id);
-  if (leftoverToken) return { ...emptyBrokerAccount(), leftoverToken: true };
-  return { ...(map[id] || emptyBrokerAccount()), leftoverToken: false };
+  const slot = map[id] || emptyBrokerAccount();
+  if (leftoverToken) {
+    return {
+      ...emptyBrokerAccount(),
+      leftoverToken: true,
+      brokerApiKey: slot.brokerApiKey,
+      brokerSessionToken: slot.brokerSessionToken,
+    };
+  }
+  return { ...slot, leftoverToken: false };
+}
+
+export function findUserIdByUpstoxApiKey(apiKey) {
+  const wanted = String(apiKey || "").trim();
+  if (!wanted) return "";
+  for (const userId of Object.keys(store)) {
+    const slot = peekBrokerAccount(userId, "upstox");
+    if (String(slot.brokerApiKey || "").trim() === wanted) return userId;
+    const desk = store[userId];
+    if (String(desk?.brokerId || "") === "upstox" && String(desk?.brokerApiKey || "").trim() === wanted) return userId;
+  }
+  return "";
+}
+
+export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, expiresAt } = {}) {
+  const token = String(accessToken || "").trim();
+  if (!userId || !token) throw fail("Upstox access token is missing.");
+  const desk = loadDesk(userId);
+  if (desk.brokerId !== "upstox") switchDeskBroker(desk, "upstox");
+  else syncSelectedBrokerAccount(desk);
+  if (accountId && !String(desk.accountId || "").trim()) desk.accountId = String(accountId).trim();
+  writeBrokerToken(desk, token);
+  if (expiresAt) desk.brokerTokenExpiresAt = String(expiresAt);
+  desk.tradeMode = "real";
+  syncSelectedBrokerAccount(desk);
+  persist();
+  return { ok: true, userId, install: publicBrokerInstall(desk) };
 }
 
 function asGroups(value, fallback = "ALL") {
@@ -449,13 +484,16 @@ export function publicBrokerInstall(desk = {}) {
     accountId: selectedBrokerAccount(desk).accountId,
     tokenHint: maskSecret(desk.brokerToken),
     apiKeyHint: maskSecret(desk.brokerApiKey),
+    sessionHint: maskSecret(desk.brokerSessionToken),
     installed: Boolean(String(desk.brokerToken || "").trim()),
     tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
     fields: brokerInstallFields(brokerId),
     help:
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
-        : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
+        : brokerId === "upstox"
+          ? "Store API key + API secret from the Upstox developer app, then tap Get today's trading token. Approve the Upstox notification. Do not paste the Analytics token. Set the app notifier URL to this site /api/upstox/token."
+          : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };
 }
 
@@ -949,13 +987,18 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (!nextClientId) throw fail("Paste the client ID.");
   desk.accountId = nextClientId;
   const token = String(accessToken || "").trim();
-  if (!token && !slot.brokerToken && !desk.brokerToken) throw fail("Paste the access token.");
+  const nextApiKey = String(apiKey || "").trim() || slot.brokerApiKey || desk.brokerApiKey;
+  const nextSecret = String(sessionToken || "").trim() || slot.brokerSessionToken || desk.brokerSessionToken;
+  const canMintUpstox = wanted === "upstox" && nextApiKey.length >= 8 && nextSecret.length >= 8;
+  if (!token && !slot.brokerToken && !desk.brokerToken && !canMintUpstox) {
+    throw fail(wanted === "upstox" ? "Paste the trading access token, or API key + API secret to generate it." : "Paste the access token.");
+  }
   if (token) {
     if (token.length < 6) throw fail("Access token is too short.");
     writeBrokerToken(desk, token);
   }
   desk.tradeMode = "real";
-  const needsApi = fields.some((row) => row.id === "apiKey");
+  const needsApi = fields.some((row) => row.id === "apiKey") && wanted !== "upstox";
   const key = String(apiKey || "").trim();
   if (needsApi && !key && !slot.brokerApiKey && !desk.brokerApiKey) throw fail("Paste the API key.");
   if (key) desk.brokerApiKey = key;

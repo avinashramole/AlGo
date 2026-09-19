@@ -355,6 +355,28 @@ test("Copy ON Upstox does not send a leftover Dhan token or client id", () => {
   assert.notEqual(mine.account.clientId, "11008801");
 });
 
+test("Copy ON Upstox with API key and secret is a target before the daily trading token exists", () => {
+  const user = { id: "u-upx-mint", name: "Upx Mint", email: "upxmint@t2s.app", role: "user" };
+  installMemberBroker({
+    user,
+    brokerId: "upstox",
+    clientId: "393216",
+    apiKey: "upstox-api-key-mint-1111",
+    sessionToken: "upstox-api-secret-mint-2222",
+  });
+  saveClientSettings(user.id, { copy: true, subscriptionUntil: "" });
+  const copies = memberCopyPayloads(
+    { strategy: "Desk BUY", side: "BUY", symbol: "NIFTY 22950 PE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    { mappingScope: "both", mappedClientIds: [] },
+  );
+  const mine = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.brokerId, "upstox");
+  assert.equal(mine.account.accessToken, "");
+  assert.equal(mine.account.apiKey, "upstox-api-key-mint-1111");
+  assert.equal(mine.account.sessionToken, "upstox-api-secret-mint-2222");
+});
+
 test("Copy ON Upstox uses the member Upstox token and client id after a leftover slot", () => {
   const user = { id: "u-upx-own", name: "Upx Own", email: "upxown@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
