@@ -255,6 +255,7 @@ async function fetchChunked(fetchRange, { symbol, from, to, timeframe }) {
     } catch {
       /* keep what we have */
     }
+    await new Promise((resolve) => setImmediate(resolve));
   }
   return compactBars(out);
 }

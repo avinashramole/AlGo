@@ -76,6 +76,22 @@ function sessionOpenIndex(candles, i) {
 }
 
 function sourcesAt(candles, i, algo) {
+  if (i < 0 || !candles[i]) {
+    return {
+      price: 0,
+      vwap: 0,
+      ema_fast: 0,
+      ema_slow: 0,
+      rsi: 50,
+      macd: 0,
+      supertrend: 0,
+      or_high: 0,
+      or_low: 0,
+      lookback_high: 0,
+      lookback_low: 0,
+      value: 0,
+    };
+  }
   const slice = candles.slice(0, i + 1);
   const closes = slice.map((bar) => bar.close);
   const lookback = Math.max(5, Number(algo.lookback) || 20);
@@ -97,6 +113,84 @@ function sourcesAt(candles, i, algo) {
     lookback_low: Math.min(...look.map((bar) => bar.low)),
     value: 0,
   };
+}
+
+function rsiAtIndex(closes, i, period) {
+  if (i < period) return 50;
+  let gain = 0;
+  let loss = 0;
+  for (let j = i - period + 1; j <= i; j += 1) {
+    const diff = closes[j] - closes[j - 1];
+    if (diff >= 0) gain += diff;
+    else loss -= diff;
+  }
+  if (loss === 0) return 100;
+  const rs = gain / loss;
+  return 100 - 100 / (1 + rs);
+}
+
+export function precomputeSources(candles = [], algo = {}) {
+  const bars = Array.isArray(candles) ? candles : [];
+  const closes = bars.map((bar) => Number(bar.close));
+  const fast = Number(algo.fast) || 9;
+  const slow = Number(algo.slow) || 21;
+  const period = Number(algo.period) || 14;
+  const multiplier = Number(algo.multiplier) || 3;
+  const lookback = Math.max(5, Number(algo.lookback) || 20);
+  const rangeBars = Math.max(1, Math.round((Number(algo.rangeMinutes) || 15) / barMinutes(algo.timeframe)));
+  const emaFast = emaSeries(closes, fast);
+  const emaSlow = emaSeries(closes, slow);
+  const macdFast = emaSeries(closes, 12);
+  const macdSlow = emaSeries(closes, 26);
+  const macdLine = macdFast.map((value, i) => value - macdSlow[i]);
+  const macdSignal = emaSeries(macdLine, 9);
+  const cache = [];
+  let pv = 0;
+  let vol = 0;
+  let sessionStart = 0;
+  for (let i = 0; i < bars.length; i += 1) {
+    if (i > 0 && new Date(bars[i].time).toDateString() !== new Date(bars[i - 1].time).toDateString()) {
+      sessionStart = i;
+    }
+    const typical = (Number(bars[i].high) + Number(bars[i].low) + Number(bars[i].close)) / 3;
+    const barVol = Number(bars[i].volume) || 1;
+    pv += typical * barVol;
+    vol += barVol;
+    const orEnd = Math.min(i + 1, sessionStart + rangeBars);
+    let orHigh = -Infinity;
+    let orLow = Infinity;
+    for (let j = sessionStart; j < orEnd; j += 1) {
+      orHigh = Math.max(orHigh, Number(bars[j].high));
+      orLow = Math.min(orLow, Number(bars[j].low));
+    }
+    const lookFrom = Math.max(0, i - lookback + 1);
+    let lookHigh = -Infinity;
+    let lookLow = Infinity;
+    for (let j = lookFrom; j <= i; j += 1) {
+      lookHigh = Math.max(lookHigh, Number(bars[j].high));
+      lookLow = Math.min(lookLow, Number(bars[j].low));
+    }
+    cache[i] = {
+      price: closes[i],
+      vwap: vol ? pv / vol : closes[i],
+      ema_fast: emaFast[i],
+      ema_slow: emaSlow[i],
+      rsi: rsiAtIndex(closes, i, period),
+      macd: i < 34 ? 0 : macdLine[i] - macdSignal[i],
+      supertrend: supertrendAt(bars.slice(Math.max(0, i - period - 1), i + 1), period, multiplier),
+      or_high: Number.isFinite(orHigh) ? orHigh : closes[i],
+      or_low: Number.isFinite(orLow) ? orLow : closes[i],
+      lookback_high: Number.isFinite(lookHigh) ? lookHigh : closes[i],
+      lookback_low: Number.isFinite(lookLow) ? lookLow : closes[i],
+      value: 0,
+    };
+  }
+  return cache;
+}
+
+function sourceAt(candles, i, algo, cache) {
+  if (cache && i >= 0 && cache[i]) return cache[i];
+  return sourcesAt(candles, i, algo);
 }
 
 function barMinutes(tf) {
@@ -136,9 +230,9 @@ function hit(op, left, right, prevLeft, prevRight) {
   return false;
 }
 
-function evaluateRow(candles, idx, algo, row) {
-  const now = sourcesAt(candles, idx, algo);
-  const prev = sourcesAt(candles, idx - 1, algo);
+function evaluateRow(candles, idx, algo, row, cache) {
+  const now = sourceAt(candles, idx, algo, cache);
+  const prev = sourceAt(candles, idx - 1, algo, cache);
   const left = readValue(row.left || "price", now, row.value);
   const right = readValue(row.right || "vwap", now, row.value);
   const prevLeft = readValue(row.left || "price", prev, row.value);
@@ -146,8 +240,8 @@ function evaluateRow(candles, idx, algo, row) {
   return hit(row.op || "crosses_above", left, right, prevLeft, prevRight);
 }
 
-function evaluateGroup(candles, idx, algo, group) {
-  const hits = group.rows.map((row) => evaluateRow(candles, idx, algo, row));
+function evaluateGroup(candles, idx, algo, group, cache) {
+  const hits = group.rows.map((row) => evaluateRow(candles, idx, algo, row, cache));
   return group.join === "or" ? hits.some(Boolean) : hits.every(Boolean);
 }
 
@@ -168,17 +262,17 @@ function groupFromAlgo(algo, side) {
   return { join, rows };
 }
 
-export function evaluateSignals(candles, i, algo) {
+export function evaluateSignals(candles, i, algo, cache) {
   const buyGroup = groupFromAlgo(algo, "buy");
   const sellGroup = groupFromAlgo(algo, "sell");
   const closeOps = [...buyGroup.rows, ...sellGroup.rows].some((row) => isCloseOp(row.op));
   let idx = i;
   if (closeOps) idx = completedBarIndex(candles, i, algo.timeframe);
   if (idx < 2) return { buy: false, sell: false };
-  const now = sourcesAt(candles, idx, algo);
+  const now = sourceAt(candles, idx, algo, cache);
   return {
-    buy: evaluateGroup(candles, idx, algo, buyGroup),
-    sell: evaluateGroup(candles, idx, algo, sellGroup),
+    buy: evaluateGroup(candles, idx, algo, buyGroup, cache),
+    sell: evaluateGroup(candles, idx, algo, sellGroup, cache),
     price: now.price,
   };
 }
@@ -195,6 +289,7 @@ export function runBacktest(algo, candles = []) {
   let peak = 0;
   let maxDrawdown = 0;
   const start = Math.max(30, Number(algo.lookback) || 20);
+  const cache = precomputeSources(bars, algo);
 
   for (let i = start; i < bars.length; i += 1) {
     const bar = bars[i];
@@ -208,7 +303,7 @@ export function runBacktest(algo, candles = []) {
         else if (bar.high >= tgt) exit = tgt;
       } else if (bar.high >= sl) exit = sl;
       else if (bar.low <= tgt) exit = tgt;
-      const signal = evaluateSignals(bars, i, algo);
+      const signal = evaluateSignals(bars, i, algo, cache);
       if (!exit && ((open.side === "BUY" && signal.sell) || (open.side === "SELL" && signal.buy))) {
         exit = bar.close;
       }
@@ -229,7 +324,7 @@ export function runBacktest(algo, candles = []) {
       }
     }
     if (open) continue;
-    const signal = evaluateSignals(bars, i, algo);
+    const signal = evaluateSignals(bars, i, algo, cache);
     if (signal.buy && (side === "BUY" || side === "BOTH")) {
       open = { side: "BUY", entry: bar.close, bar: i };
     } else if (signal.sell && (side === "SELL" || side === "BOTH")) {

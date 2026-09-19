@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateSignals } from "./backtest.js";
+import { evaluateSignals, precomputeSources, runBacktest } from "./backtest.js";
 
 const BAR = 5 * 60 * 1000;
 const T0 = Date.parse("2026-08-21T03:45:00.000Z");
@@ -133,6 +133,28 @@ test("close_above in an AND group still ignores the forming bar", () => {
   } finally {
     Date.now = orig;
   }
+});
+
+test("precomputed sources match live EMA/VWAP reads", () => {
+  const candles = [bar(0, 100), bar(1, 110), bar(2, 90), bar(3, 130, { volume: 20 })];
+  const algo = { timeframe: "5m", fast: 3, slow: 4, lookback: 5 };
+  const cache = precomputeSources(candles, algo);
+  const live = evaluateSignals(candles, 3, { ...algo, buyLeft: "ema_fast", buyOp: "gt", buyRight: "ema_slow", sellLeft: "price", sellOp: "lt", sellRight: "value", sellValue: 0 });
+  const cached = evaluateSignals(candles, 3, { ...algo, buyLeft: "ema_fast", buyOp: "gt", buyRight: "ema_slow", sellLeft: "price", sellOp: "lt", sellRight: "value", sellValue: 0 }, cache);
+  assert.equal(cached.buy, live.buy);
+  assert.equal(cached.price, live.price);
+});
+
+test("1-year 5m EMA backtest finishes without blocking the event loop", () => {
+  const candles = Array.from({ length: 18_000 }, (_, i) => bar(i, 24500 + Math.sin(i / 12) * 40 + i * 0.02));
+  const started = Date.now();
+  const result = runBacktest(
+    { timeframe: "5m", indicator: "EMA", fast: 9, slow: 21, side: "BOTH", qty: 65, slPct: 0.4, targetPct: 0.8 },
+    candles,
+  );
+  assert.ok(Date.now() - started < 2000, `backtest took ${Date.now() - started}ms`);
+  assert.equal(result.bars, 18_000);
+  assert.equal(typeof result.pnl, "number");
 });
 
 test("close above ignores the still-forming bar", () => {
