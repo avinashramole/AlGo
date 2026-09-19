@@ -2,13 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   crudeInstrumentKey,
+  crudeQuoteFromPayload,
   fetchMemberBrokerQuotes,
   frontMonthFutCode,
+  pickCrudeSearchHit,
   quotesFromAngelPayload,
   quotesFromFyersPayload,
   quotesFromUpstoxPayload,
   quotesFromZerodhaPayload,
+  resetUpstoxInstrumentCache,
+  rowsFromUpstoxInstrumentText,
 } from "./memberBrokerQuotes.js";
+
+test("Upstox instrument master rows parse and pick the front Crude future", () => {
+  resetUpstoxInstrumentCache();
+  const rows = rowsFromUpstoxInstrumentText(
+    JSON.stringify([
+      { tradingsymbol: "CRUDEOILM26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|mini", expiry: "2026-10-16" },
+      { tradingsymbol: "CRUDEOIL26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|426268", expiry: "2026-10-16" },
+      { tradingsymbol: "CRUDEOIL26NOVFUT", instrument_type: "FUT", instrument_key: "MCX_FO|427608", expiry: "2026-11-19" },
+    ]),
+  );
+  assert.equal(pickCrudeSearchHit(rows), "MCX_FO|426268");
+});
 
 test("Upstox quote payload maps index LTP without using a Dhan token", () => {
   const quotes = quotesFromUpstoxPayload({
@@ -32,6 +48,25 @@ test("front-month Crude key is isolated from the index batch", () => {
   assert.equal(frontMonthFutCode("CRUDEOIL", "2026-10-16"), "CRUDEOIL26OCTFUT");
   assert.equal(crudeInstrumentKey("upstox", "2026-10-16"), "MCX_FO|CRUDEOIL26OCTFUT");
   assert.equal(crudeInstrumentKey("zerodha", "2026-10-16"), "MCX:CRUDEOIL26OCTFUT");
+});
+
+test("Upstox Crude search picks the nearest CRUDEOIL future instrument_key", () => {
+  assert.equal(
+    pickCrudeSearchHit([
+      { trading_symbol: "CRUDEOILM 16 OCT 26", instrument_type: "FUT", instrument_key: "MCX_FO|mini" },
+      { trading_symbol: "CRUDEOIL 16 OCT 26", instrument_type: "FUT", instrument_key: "MCX_FO|426268", expiry: "2026-10-16" },
+      { trading_symbol: "CRUDEOIL 19 NOV 26", instrument_type: "FUT", instrument_key: "MCX_FO|427608", expiry: "2026-11-19" },
+    ]),
+    "MCX_FO|426268",
+  );
+});
+
+test("Crude LTP can be read from a numeric Upstox instrument key", () => {
+  const quote = crudeQuoteFromPayload({
+    data: { "MCX_FO:426268": { last_price: 6124.5, instrument_token: "MCX_FO|CRUDEOIL26OCTFUT", ohlc: { close: 6100 } } },
+  });
+  assert.equal(quote.symbol, "CRUDEOIL");
+  assert.equal(quote.ltp, 6124.5);
 });
 
 test("Zerodha quote payload maps NSE/BSE index keys", () => {
@@ -64,6 +99,7 @@ test("Angel quote payload maps symbol tokens", () => {
 });
 
 test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async () => {
+  resetUpstoxInstrumentCache();
   const seen = [];
   const quotes = await fetchMemberBrokerQuotes({
     brokerId: "upstox",
@@ -87,7 +123,81 @@ test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async 
   assert.equal(String(JSON.stringify(quotes)).includes("upstox-member-token"), false);
 });
 
+test("fetchMemberBrokerQuotes resolves Crude from the public MCX instrument file", async () => {
+  resetUpstoxInstrumentCache();
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "upstox",
+    accessToken: "upstox-member-token",
+    clientId: "UPX1",
+    fetchImpl: async (url) => {
+      if (String(url).includes("instruments/exchange/MCX.json")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              { tradingsymbol: "CRUDEOIL26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|426268", expiry: "2026-10-16" },
+            ]),
+        };
+      }
+      if (String(url).includes("MCX_FO%7C426268") || String(url).includes("MCX_FO|426268")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: { "MCX_FO:426268": { last_price: 6131.2, instrument_token: "MCX_FO|426268" } } }),
+        };
+      }
+      if (String(url).includes("/instruments/search") || String(url).includes("/search/instruments")) {
+        return { ok: false, status: 404, text: async () => JSON.stringify({ message: "not found" }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { "NSE_INDEX:Nifty 50": { last_price: 25111 } } }),
+      };
+    },
+  });
+  assert.equal(quotes.find((row) => row.symbol === "NIFTY 50").ltp, 25111);
+  assert.equal(quotes.find((row) => row.symbol === "CRUDEOIL").ltp, 6131.2);
+});
+
+test("fetchMemberBrokerQuotes resolves Crude from the Upstox search instrument_key", async () => {
+  resetUpstoxInstrumentCache();
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "upstox",
+    accessToken: "upstox-member-token",
+    clientId: "UPX1",
+    fetchImpl: async (url) => {
+      if (String(url).includes("/instruments/search") || String(url).includes("/search/instruments")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              data: [{ trading_symbol: "CRUDEOIL 16 OCT 26", instrument_type: "FUT", instrument_key: "MCX_FO|426268", expiry: "2026-10-16" }],
+            }),
+        };
+      }
+      if (String(url).includes("MCX_FO%7C426268") || String(url).includes("MCX_FO|426268")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: { "MCX_FO:426268": { last_price: 6128.4, instrument_token: "MCX_FO|CRUDEOIL26OCTFUT" } } }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { "NSE_INDEX:Nifty 50": { last_price: 25111 } } }),
+      };
+    },
+  });
+  assert.equal(quotes.find((row) => row.symbol === "NIFTY 50").ltp, 25111);
+  assert.equal(quotes.find((row) => row.symbol === "CRUDEOIL").ltp, 6128.4);
+});
+
 test("fetchMemberBrokerQuotes never calls Dhan for an Upstox member", async () => {
+  resetUpstoxInstrumentCache();
   let dhan = false;
   const quotes = await fetchMemberBrokerQuotes({
     brokerId: "upstox",

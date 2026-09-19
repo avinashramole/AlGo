@@ -501,14 +501,23 @@ function quoteBodies(useFallback, instruments = liveInstruments()) {
 
 export function memberQuoteInstruments() {
   const indices = INSTRUMENTS.filter((row) => row.kind === "index");
-  const futs = fallbackFrontFutures().map((row) => ({
-    symbol: row.symbol,
-    parent: row.parent,
-    segment: row.segment,
-    securityId: row.securityId,
-    kind: "future",
-    expiry: row.expiry,
-  }));
+  let live = [];
+  try {
+    live = listFutures();
+  } catch {
+    live = [];
+  }
+  const futs = fallbackFrontFutures().map((row) => {
+    const hit = live.find((item) => item.parent === row.parent && item.front && item.securityId);
+    return {
+      symbol: row.symbol,
+      parent: row.parent,
+      segment: hit?.segment || row.segment,
+      securityId: Number(hit?.securityId || row.securityId),
+      kind: "future",
+      expiry: hit?.expiry || row.expiry || "",
+    };
+  });
   return indices.concat(futs);
 }
 

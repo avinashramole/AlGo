@@ -81,6 +81,15 @@ test("member cards include Crude Oil and India VIX when the selected broker retu
   assert.equal(rows.find((row) => row.symbol === "INDIA VIX").price, 12.75);
 });
 
+test("member board always keeps a Crude Oil card even when LTP is missing", () => {
+  const rows = cardsFromMemberQuotes("u-crude-empty", [
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100, close: 25000 },
+  ]);
+  assert.equal(rows.some((row) => row.symbol === "CRUDEOIL"), true);
+  assert.equal(rows.find((row) => row.symbol === "CRUDEOIL").price, 0);
+  assert.equal(rows.find((row) => row.symbol === "NIFTY 50").price, 25100);
+});
+
 test("cardsFromMemberQuotes never copies admin-only fields onto the member board", () => {
   const rows = cardsFromMemberQuotes("u-cards", [
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 24000, close: 23900, vwap: 24111, securityId: 13 },
