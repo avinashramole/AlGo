@@ -11,6 +11,7 @@ import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSav
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
@@ -828,6 +829,7 @@ app.post("/api/orders", async (req, res) => {
       } else {
         fanOutAdminOrderCopies({ ...body, brokerId, live }, order);
       }
+      await awaitMemberCopySends();
       await flushLiveAlgoOrders();
       res.status(201).json({
         ok: true,
@@ -843,6 +845,7 @@ app.post("/api/orders", async (req, res) => {
       res.status(400).json({ error: order.error });
       return;
     }
+    await awaitMemberCopySends();
     await flushLiveAlgoOrders();
     res.status(201).json({
       ok: true,
@@ -857,6 +860,7 @@ app.post("/api/orders", async (req, res) => {
   } catch (error) {
     const booked = brokerId === "dhan" ? bookRejectedLiveOrder({ ...body, brokerId }, error) : null;
     if (booked && !booked.error) {
+      await awaitMemberCopySends();
       await flushLiveAlgoOrders();
       res.status(201).json({
         ok: false,

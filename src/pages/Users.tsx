@@ -659,7 +659,7 @@ function AddClientModal({
                 <div className="text-sm font-semibold">Copy trading</div>
                 <div className="text-xs text-slate-400">
                   {copy
-                    ? "ON · Admin orders copy from this account even when the client is logged off"
+                    ? "ON · Admin orders copy from the saved token even when the client is logged off"
                     : "OFF · This client will not copy desk orders"}
                 </div>
               </div>
