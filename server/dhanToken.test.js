@@ -20,6 +20,7 @@ import {
   requirePinTotp,
   resetDhanAccessToken,
   resolveDhanLogin,
+  configuredDhanClientId,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -101,6 +102,12 @@ test("asDhanPin only accepts a 4–6 digit PIN", () => {
   assert.equal(asDhanPin("123456"), "123456");
   assert.equal(asDhanPin("MyWebsitePass"), "");
   assert.equal(asDhanPin("12"), "");
+});
+
+test("configured Dhan client id prefers the profile id over the login id", () => {
+  assert.equal(configuredDhanClientId({ dhanClientId: "1100223344" }, "login-999"), "1100223344");
+  assert.equal(configuredDhanClientId({ data: { dhanClientId: "1100223344" } }, "login-999"), "1100223344");
+  assert.equal(configuredDhanClientId({}, "1100223344"), "1100223344");
 });
 
 test("resolveDhanLogin maps loginId + PIN-password to Client ID + PIN", () => {

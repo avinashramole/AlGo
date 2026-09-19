@@ -50,6 +50,7 @@ import {
   markDhanAutoStart,
   needsFreshAccessToken,
   persistPastedToken,
+  configuredDhanClientId,
   resetDhanAccessToken,
   TOTP_BLOCK_MS,
   TOKEN_RENEW_HOUR_IST,
@@ -1675,10 +1676,10 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     throw error;
   }
   accessToken = cleanToken;
-  const apiId = String(profile.dhanClientId || profile.data?.dhanClientId || enteredId).trim();
+  const apiId = configuredDhanClientId(profile, enteredId);
   clientId = apiId;
   usedFallback = false;
-  console.log(`Dhan live client ${enteredId || apiId}`);
+  console.log(`Dhan live client ${apiId}`);
 
   const fundsNum = (value) => {
     const n = Number(value);
@@ -1691,7 +1692,7 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     fundsNum(funds?.sodLimit);
   const used = fundsNum(funds?.utilizedAmount) || fundsNum(funds?.usedMargin);
   markDhanLive({
-    clientId: enteredId || apiId,
+    clientId: apiId,
     funds: avail,
     marginUsed: used,
     keyHint: tokenHint(accessToken),
@@ -1716,7 +1717,7 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     error: null,
     tokenHint: tokenHint(accessToken),
     profileName: profile.dhanClientName || null,
-    clientId: enteredId || apiId,
+    clientId: apiId,
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
