@@ -94,6 +94,9 @@ export type AlgoStrategy = {
     range?: "1y" | "custom" | string;
     from?: string;
     to?: string;
+    optionSource?: "stored" | "mixed" | "synth" | string;
+    optionHits?: number;
+    optionHistory?: { overwritten?: string[]; days?: number; contracts?: number; source?: string; error?: string };
     book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
   };
   status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";

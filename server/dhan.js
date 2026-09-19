@@ -29,6 +29,7 @@ import {
   mcxMarketSession,
 } from "./market.js";
 import { buildScripChain, chainUnderlyingRequest, fallbackFrontFutures, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
+import { recordLiveChainSnapshot } from "./niftyOptionHistory.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
@@ -90,6 +91,7 @@ let accountTimer = null;
 let chainTimer = null;
 let candleTimer = null;
 let crudeChainTimer = null;
+let optionHistoryTimer = null;
 let tokenTimer = null;
 let tokenWatchdogTimer = null;
 const persistedBackoff = loadTokenBackoff();
@@ -1140,6 +1142,16 @@ async function refreshOptionChain() {
     spot: parsed.spot || getChainSpot(und.id),
     source: "dhan",
   });
+  void Promise.resolve()
+    .then(() =>
+      recordLiveChainSnapshot({
+        symbol: und.id,
+        expiry,
+        spot: parsed.spot || getChainSpot(und.id),
+        rows: parsed.rows,
+      }),
+    )
+    .catch(() => undefined);
 }
 
 async function refreshCachedOptionChain(symbol) {
@@ -1166,6 +1178,16 @@ async function refreshCachedOptionChain(symbol) {
     spot: parsed.spot || getChainSpot(und.id),
     source: "dhan",
   });
+  void Promise.resolve()
+    .then(() =>
+      recordLiveChainSnapshot({
+        symbol: und.id,
+        expiry,
+        spot: parsed.spot || getChainSpot(und.id),
+        rows: parsed.rows,
+      }),
+    )
+    .catch(() => undefined);
 }
 
 export async function selectOptionDesk({ symbol, expiry }) {
@@ -1277,6 +1299,14 @@ function startLiveLoop() {
         chainBusy = false;
       });
   }, 6000);
+  optionHistoryTimer = setInterval(() => {
+    if (Date.now() < quoteBackoffUntil) return;
+    const desk = String(getOptionMeta().symbol || "").toUpperCase();
+    if (desk === "NIFTY") return;
+    void refreshCachedOptionChain("NIFTY").catch((error) => {
+      handleDhanPollError("nifty option history", error);
+    });
+  }, 5 * 60 * 1000);
   scheduleTokenKeepAlive();
 }
 
@@ -1300,6 +1330,10 @@ function stopLiveLoop(clearCreds) {
   if (crudeChainTimer) {
     clearInterval(crudeChainTimer);
     crudeChainTimer = null;
+  }
+  if (optionHistoryTimer) {
+    clearInterval(optionHistoryTimer);
+    optionHistoryTimer = null;
   }
   stopSocket();
   if (clearCreds) {
@@ -1362,6 +1396,67 @@ function intradayInterval(timeframe) {
   if (tf === "15m") return "15";
   if (tf === "1H" || tf === "1h") return "60";
   return null;
+}
+
+export async function fetchDhanSecurityHistory({
+  securityId,
+  exchangeSegment = "NSE_FNO",
+  instrument = "OPTIDX",
+  from,
+  to,
+  timeframe,
+  oi = true,
+} = {}) {
+  if (!accessToken || !securityId) return [];
+  const fromDate = dateOnly(from);
+  const toDate = dateOnly(to);
+  if (!fromDate || !toDate) return [];
+  const interval = intradayInterval(timeframe);
+  const openStamp = "09:15:00";
+  const closeStamp = "15:30:00";
+  const days = Math.max(
+    1,
+    Math.round((Date.parse(`${toDate}T${closeStamp}+05:30`) - Date.parse(`${fromDate}T${openStamp}+05:30`)) / 86_400_000),
+  );
+  const id = String(securityId).trim();
+  const bodyBase = {
+    securityId: id,
+    exchangeSegment,
+    instrument,
+    oi: oi !== false,
+  };
+
+  const historical = async () => {
+    const payload = await dhanPost("/charts/historical", accessToken, clientId, {
+      ...bodyBase,
+      expiryCode: 0,
+      fromDate,
+      toDate,
+    });
+    return mapChartCandles(payload);
+  };
+
+  const tryIntraday = days <= 45 && interval;
+  if (tryIntraday) {
+    try {
+      const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
+        ...bodyBase,
+        interval,
+        fromDate: `${fromDate} ${openStamp}`,
+        toDate: `${toDate} ${closeStamp}`,
+      });
+      const candles = mapChartCandles(payload);
+      if (candles.length) return candles;
+    } catch {
+      /* daily option history is the fallback */
+    }
+  }
+
+  try {
+    return await historical();
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchDhanHistory({ symbol, from, to, timeframe } = {}) {

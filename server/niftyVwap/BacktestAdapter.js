@@ -1,3 +1,4 @@
+import { optionLtpAt } from "../niftyOptionHistory.js";
 import { optionEngineConfig } from "./config.js";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { sessionKeyIST, sessionVwap } from "./VwapSignalEngine.js";
@@ -15,7 +16,24 @@ function synthOptionBar(futBar, side, base = 120) {
     low: Math.min(open, close) - 1,
     close,
     volume: Number(futBar.volume || 1000),
+    source: "synth",
   };
+}
+
+function optionBarAt(futBar, side, { symbol, strike, expiry, base = 120 } = {}) {
+  const stored = optionLtpAt({ symbol, time: futBar.time, strike, side, expiry });
+  if (stored > 0) {
+    return {
+      time: futBar.time,
+      open: stored,
+      high: stored,
+      low: stored,
+      close: stored,
+      volume: Number(futBar.volume || 1000),
+      source: "stored",
+    };
+  }
+  return synthOptionBar(futBar, side, base);
 }
 
 function replayFillBook() {
@@ -118,17 +136,26 @@ export function runNiftyVwapBacktest(algo, candles = []) {
   }
 
   const futAll = [];
+  let storedHits = 0;
+  let synthHits = 0;
   for (const [, session] of days) {
     ceBars.length = 0;
     peBars.length = 0;
     for (let i = 0; i < session.length; i += 1) {
       const bar = session[i];
       futAll.push(bar);
-      ceBars.push(synthOptionBar(bar, "CE"));
-      peBars.push(synthOptionBar(bar, "PE"));
-      const slice = session.slice(0, i + 1);
       const spot = Number(bar.close);
       const strike = OptionStrikeSelector.atmStrike(spot, 50);
+      const expiry = sessionKeyIST(bar.time);
+      const ceBar = optionBarAt(bar, "CE", { symbol: cfg.symbol, strike });
+      const peBar = optionBarAt(bar, "PE", { symbol: cfg.symbol, strike });
+      if (ceBar.source === "stored") storedHits += 1;
+      else synthHits += 1;
+      if (peBar.source === "stored") storedHits += 1;
+      else synthHits += 1;
+      ceBars.push(ceBar);
+      peBars.push(peBar);
+      const slice = session.slice(0, i + 1);
       const now = Number(bar.time) + cfg.barMinutes * 60 * 1000;
       const ceLtp = ceBars[ceBars.length - 1].close;
       const peLtp = peBars[peBars.length - 1].close;
@@ -150,7 +177,7 @@ export function runNiftyVwapBacktest(algo, candles = []) {
         peBars: [...peBars],
         spot,
         step: 50,
-        expiry: sessionKeyIST(bar.time),
+        expiry,
         ceLtp,
         peLtp,
         ceVwap: sessionVwap(ceBars),
@@ -175,6 +202,8 @@ export function runNiftyVwapBacktest(algo, candles = []) {
     winRate: trades.length ? Math.round((wins / trades.length) * 100) : 0,
     pnl: Number(pnl.toFixed(2)),
     maxDrawdown: 0,
+    optionSource: storedHits && synthHits ? "mixed" : storedHits ? "stored" : "synth",
+    optionHits: storedHits,
     book: trades.slice(-12).map((row) => ({
       side: "BUY",
       entry: Number(row.avg),

@@ -17,6 +17,7 @@ import {
   keepStrikeWindow,
 } from "./optionChain.js";
 import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { optionBacktestWindow } from "./niftyOptionHistory.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
 import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
@@ -1659,8 +1660,8 @@ export function backtestAlgo(id, options = {}) {
   const hedge = isNiftyVwapHedgeAlgo(algo);
   const niftyVwap = isNiftyOptionEngineAlgo(algo) || hedge;
   const cfg = hedge ? niftyVwapHedgeConfig(algo) : niftyVwap ? optionEngineConfig(algo) : null;
-  const maxVwapDays = cfg?.barMinutes >= 15 ? 60 : 25;
-  const vwapFrom = niftyVwap && window.days > maxVwapDays ? shiftYmd(window.to, -(maxVwapDays - 1)) : window.from;
+  const hist = optionBacktestWindow(algo, window);
+  const vwapFrom = hist.option ? hist.from : window.from;
   const vwapFromMs = Date.parse(`${vwapFrom}T09:15:00+05:30`);
   const wantedTf = niftyVwap ? cfg.timeframe : pickBacktestTimeframe(algo.timeframe, window.days);
   let candles = usableCandles(options.candles, niftyVwap ? vwapFromMs : window.fromMs, window.toMs);
@@ -1696,7 +1697,8 @@ export function backtestAlgo(id, options = {}) {
     range: window.range,
     from: niftyVwap ? vwapFrom : window.from,
     to: window.to,
-    truncated: niftyVwap && window.days > maxVwapDays ? `${cfg.timeframe} replay last ${maxVwapDays} days` : "",
+    truncated: niftyVwap && window.from !== vwapFrom ? `${cfg.timeframe} replay last ${cfg.barMinutes >= 15 ? 60 : 25} days` : "",
+    optionHistory: options.optionHistory || undefined,
   };
   result.timeframe = usedTf;
   algo.lastBacktest = result;
