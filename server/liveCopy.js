@@ -27,7 +27,7 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
     const mappedHit =
       Boolean(mappedName) && (sameStrategy(mappedName, name) || mappedName === id || sameStrategy(mappedName, id));
     if (mappedHit) mapped.add(row.userId);
-    if (row.copy && (mode === "copy" || mode === "both") && subscriptionOpen(row.subscriptionUntil)) {
+    if (row.copy && (mode === "copy" || mode === "both") && row.subscriptionUntil && subscriptionOpen(row.subscriptionUntil)) {
       copyMaster.add(row.userId);
     }
   }

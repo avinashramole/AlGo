@@ -685,7 +685,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     orders: book.orders || [],
     topups: desk.topups.map(publicTopup),
     payments: publicPayments(admins),
-    copyReady: Boolean(autoTrade && desk.copy !== false && String(desk.brokerToken || "").trim()),
+    copyReady: Boolean(autoTrade && String(desk.brokerToken || "").trim()),
   };
 }
 
@@ -728,7 +728,7 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
     if (token.length < 6) throw fail("Access token is too short.");
     writeBrokerToken(desk, token);
   }
-  enableLiveCopyFromToken(desk);
+  desk.tradeMode = "real";
   const needsApi = fields.some((row) => row.id === "apiKey");
   const key = String(apiKey || "").trim();
   if (needsApi && !key && !desk.brokerApiKey) throw fail("Paste the API key.");

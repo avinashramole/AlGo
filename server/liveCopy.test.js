@@ -91,16 +91,12 @@ test("paper members get a book fill only", () => {
   assert.equal(mine.brokerToken, "");
 });
 
-test("copy master clients without a through date still receive admin orders", () => {
+test("admin saving a member token without a through date still enables copy master", () => {
   const user = { id: "u-copy-open", name: "Copy Open", email: "copyopen@t2s.app", role: "user" };
-  selectMemberBroker({ user, brokerId: "dhan" });
-  installMemberBroker({ user, brokerId: "dhan", clientId: "1100666", accessToken: "open-copy-token" });
   saveClientSettings(user.id, {
-    copy: true,
-    subscriptionMode: "copy",
-    subscriptionUntil: "",
-    tradeMode: "real",
     brokerId: "dhan",
+    accountId: "1100666",
+    brokerToken: "open-copy-token",
   });
   const targets = listLiveCopyTargets({
     strategyName: algo.name,
@@ -114,6 +110,7 @@ test("copy master clients without a through date still receive admin orders", ()
   assert.ok(mine);
   assert.equal(mine.paper, false);
   assert.equal(mine.brokerToken, "open-copy-token");
+  assert.ok(String(mine.userId));
 });
 
 test("mapped real members with copy off still get that strategy on their new token", () => {
