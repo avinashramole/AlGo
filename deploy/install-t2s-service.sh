@@ -57,9 +57,9 @@ echo "== publish dist to $WEBROOT (nginx cannot read /root) =="
 mkdir -p "$WEBROOT"
 chmod 755 /var /var/www "$WEBROOT" || true
 if [ -f "$HOME_DIR/dist/index.html" ]; then
-  cp -a "$HOME_DIR/dist/." "$WEBROOT/"
+  /bin/cp -af "$HOME_DIR/dist/." "$WEBROOT/"
 elif [ -n "${FOUND:-}" ] && [ -f "$FOUND/dist/index.html" ]; then
-  cp -a "$FOUND/dist/." "$WEBROOT/"
+  /bin/cp -af "$FOUND/dist/." "$WEBROOT/"
 fi
 if [ ! -f "$WEBROOT/index.html" ]; then
   printf '%s\n' '<!doctype html><html><head><meta charset="utf-8"><title>Trade 2 Smart</title></head><body><p>Trade 2 Smart</p></body></html>' > "$WEBROOT/index.html"

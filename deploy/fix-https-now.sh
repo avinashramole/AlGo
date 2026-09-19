@@ -18,7 +18,7 @@ setenforce 0 2>/dev/null || true
 mkdir -p "$WEBROOT"
 chmod 755 /var /var/www "$WEBROOT"
 if [ -f /opt/t2s/dist/index.html ]; then
-  cp -a /opt/t2s/dist/. "$WEBROOT/"
+  /bin/cp -af /opt/t2s/dist/. "$WEBROOT/"
 fi
 if [ ! -f "$WEBROOT/index.html" ]; then
   printf '%s\n' '<!doctype html><title>Trade 2 Smart</title><p>Trade 2 Smart</p>' > "$WEBROOT/index.html"
