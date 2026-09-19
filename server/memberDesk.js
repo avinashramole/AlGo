@@ -307,6 +307,49 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   return { ...slot, leftoverToken: false };
 }
 
+export function listUpstoxOauthTargets() {
+  const out = [];
+  for (const userId of Object.keys(store)) {
+    const desk = store[userId] || {};
+    const slot = peekBrokerAccount(userId, "upstox");
+    const apiKey = String(slot.brokerApiKey || "").trim() || (desk.brokerId === "upstox" ? String(desk.brokerApiKey || "").trim() : "");
+    const apiSecret = String(slot.brokerSessionToken || "").trim() || (desk.brokerId === "upstox" ? String(desk.brokerSessionToken || "").trim() : "");
+    if (apiKey.length < 8 || apiSecret.length < 8) continue;
+    const leftover = Boolean(brokerAccountForLiveCopy(userId, "upstox").leftoverToken);
+    const token = leftover ? "" : String(slot.brokerToken || (desk.brokerId === "upstox" ? desk.brokerToken : "") || "").trim();
+    out.push({
+      userId,
+      accountId: leftover ? "" : String(slot.accountId || (desk.brokerId === "upstox" ? desk.accountId : "") || "").trim(),
+      hasTradingToken: Boolean(token),
+      tokenUpdatedAt: leftover ? "" : String(slot.tokenUpdatedAt || (desk.brokerId === "upstox" ? desk.brokerTokenUpdatedAt : "") || "").trim(),
+    });
+  }
+  return out;
+}
+
+export function noteMemberUpstoxTokenAsk(userId, { text } = {}) {
+  if (!userId) return null;
+  const desk = loadDesk(userId);
+  const message = String(text || "Approve today's Upstox trading token in the Upstox app or WhatsApp notification.").trim();
+  const alert = {
+    id: `ut${crypto.randomBytes(6).toString("hex")}`,
+    kind: "upstox_token",
+    text: message,
+    brokerId: "upstox",
+    createdAt: new Date().toISOString(),
+  };
+  desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
+  desk.alerts.unshift(alert);
+  if (desk.alerts.length > 40) desk.alerts = desk.alerts.slice(0, 40);
+  queueMemberCopyNotify({
+    userId,
+    text: message,
+    notifications: asNotifications(desk.notifications),
+  });
+  persist();
+  return alert;
+}
+
 export function findUserIdByUpstoxApiKey(apiKey) {
   const wanted = String(apiKey || "").trim();
   if (!wanted) return "";
@@ -497,7 +540,7 @@ export function publicBrokerInstall(desk = {}) {
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
         : brokerId === "upstox"
-          ? "Store API key + API secret from the Upstox developer app, then tap Get today's trading token. Approve the Upstox notification. Do not paste the Analytics token. Set the app notifier URL to this site /api/upstox/token."
+          ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to this site /api/upstox/token."
           : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };
 }
