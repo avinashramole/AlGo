@@ -35,6 +35,7 @@ import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
+import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -1315,8 +1316,9 @@ export function isDhanLive() {
 export async function ensureDhanLiveFromSavedToken() {
   if (isDhanLive()) return { live: true, started: false };
   const session = loadDhanSession();
-  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || "").trim();
-  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
+  const desk = peekAdminBrokerSecrets("dhan");
+  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || desk.brokerToken || "").trim();
+  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || desk.accountId || "").trim();
   if (!token || !id) return { live: false, reason: "no-token" };
   try {
     await startDhanLive({ accessToken: token, clientId: id, loginId: session.loginId || id });
@@ -1656,7 +1658,8 @@ export async function validateDhan(token, id) {
 
 export async function startDhanLive({ accessToken: token, clientId: id, loginId } = {}) {
   const cleanToken = String(token || "").trim();
-  const enteredId = String(loginId || id || "").trim();
+  const enteredId = String(id || loginId || "").trim();
+  const login = String(loginId || "").trim();
   const cleanId = enteredId;
   if (!cleanToken) {
     const error = new Error("Dhan Access Token is required. Copy it from web.dhan.co → My Profile → Access DhanHQ APIs.");
@@ -1668,6 +1671,12 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     error.status = 400;
     throw error;
   }
+
+  persistPastedToken({
+    clientId: cleanId,
+    loginId: login && login !== cleanId ? login : "",
+    accessToken: cleanToken,
+  });
 
   const { profile, funds } = await validateDhan(cleanToken, cleanId);
   if (profile?.dataPlan && String(profile.dataPlan).toLowerCase() === "deactive") {
@@ -1996,9 +2005,10 @@ export async function bootDhanFromEnv() {
   credentialsBlockedUntil = Math.max(credentialsBlockedUntil, persisted.credentialsBlockedUntil);
 
   const session = loadDhanSession();
-  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || "").trim();
-  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || "").trim();
-  if (session.autoStart === false && !process.env.DHAN_ACCESS_TOKEN) {
+  const desk = peekAdminBrokerSecrets("dhan");
+  const token = String(process.env.DHAN_ACCESS_TOKEN || session.accessToken || desk.brokerToken || "").trim();
+  const id = String(process.env.DHAN_CLIENT_ID || session.clientId || desk.accountId || "").trim();
+  if (session.autoStart === false && !process.env.DHAN_ACCESS_TOKEN && !desk.brokerToken) {
     scheduleTokenKeepAlive();
     return false;
   }

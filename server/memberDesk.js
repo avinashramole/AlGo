@@ -677,6 +677,44 @@ export function listDeskRecords() {
   return Object.keys(store).map((id) => ({ userId: id, ...normalizeClientSettings(store[id] || emptyDesk(id)) }));
 }
 
+const ADMIN_DESK_ID = "admin";
+
+export function persistAdminBrokerSecrets({ brokerId = "dhan", accountId, accessToken } = {}) {
+  const wanted = String(brokerId || "dhan").trim().toLowerCase() || "dhan";
+  const id = String(accountId || "").trim();
+  const token = String(accessToken || "").trim();
+  if (!id && !token) return peekBrokerAccount(ADMIN_DESK_ID, wanted);
+  const desk = loadDesk(ADMIN_DESK_ID);
+  migrateLegacyBrokerAccount(desk);
+  desk.brokerAccounts = brokerAccountsMap(desk);
+  const slot = { ...(desk.brokerAccounts[wanted] || emptyBrokerAccount()) };
+  if (id) slot.accountId = id;
+  if (token) {
+    slot.brokerToken = token;
+    slot.tokenUpdatedAt = new Date().toISOString();
+  }
+  desk.brokerAccounts[wanted] = slot;
+  if (!desk.brokerId || desk.brokerId === "paper" || desk.brokerId === wanted) {
+    desk.brokerId = wanted;
+    if (id) desk.accountId = id;
+    if (token) writeBrokerToken(desk, token);
+    if (token) desk.tradeMode = "real";
+  }
+  persist();
+  return slot;
+}
+
+export function peekAdminBrokerSecrets(brokerId = "dhan") {
+  const slot = peekBrokerAccount(ADMIN_DESK_ID, brokerId);
+  const desk = store[ADMIN_DESK_ID] || {};
+  const selected = String(desk.brokerId || "").trim().toLowerCase() === String(brokerId || "dhan").trim().toLowerCase();
+  return {
+    accountId: String(slot.accountId || (selected ? desk.accountId : "") || "").trim(),
+    brokerToken: String(slot.brokerToken || (selected ? desk.brokerToken : "") || "").trim(),
+    tokenUpdatedAt: String(slot.tokenUpdatedAt || (selected ? desk.brokerTokenUpdatedAt : "") || "").trim(),
+  };
+}
+
 export function removeDesk(userId) {
   if (!userId || !store[userId]) return false;
   delete store[userId];

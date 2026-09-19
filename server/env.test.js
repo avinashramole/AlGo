@@ -56,3 +56,19 @@ test("upsertDhanEnv maps loginId and a 4–6 digit password onto Client ID + PIN
   assert.doesNotMatch(text, /DHAN_PASSWORD=/);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("upsertDhanEnv keeps client ID separate from login id and stores the access token", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-env-"));
+  const env = {};
+  upsertDhanEnv(
+    { clientId: "1100333", loginId: "dhan-login", accessToken: "admin-dhan-token-9999" },
+    { root, env },
+  );
+  const text = fs.readFileSync(path.join(root, ".env"), "utf8");
+  assert.match(text, /DHAN_CLIENT_ID=1100333/);
+  assert.match(text, /DHAN_LOGIN_ID=dhan-login/);
+  assert.match(text, /DHAN_ACCESS_TOKEN=admin-dhan-token-9999/);
+  assert.equal(env.DHAN_CLIENT_ID, "1100333");
+  assert.equal(env.DHAN_ACCESS_TOKEN, "admin-dhan-token-9999");
+  fs.rmSync(root, { recursive: true, force: true });
+});
