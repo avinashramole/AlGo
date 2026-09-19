@@ -506,15 +506,14 @@ function enqueueLiveAlgoOrder(payload) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
+    const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
     const openNifty =
       !copyUserId &&
+      niftyBuy &&
       (state.positions || []).some(
         (row) => !isPaperRow(row) && orderBrokerId(row) === brokerId && PositionManager.isOpenNiftyOption(row),
       );
-    const pendingBuy = pendingLiveAlgoOrders.some(
-      (row) => sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === "BUY",
-    );
-    if (openNifty || pendingBuy) {
+    if (openNifty) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   }
