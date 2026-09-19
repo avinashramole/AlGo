@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Bell, Shield, UserRound, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api/client";
+import { getMemberDesk, getMemberQuotes, type MemberCopyAlert, type MemberDesk, type MemberIndexQuote } from "../api/client";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { useAuth } from "../context/AuthContext";
-import { cn, formatInr } from "../lib/format";
+import { cn, formatInr, formatIst } from "../lib/format";
 
 export function UserHome() {
   const { user } = useAuth();
@@ -80,8 +80,12 @@ export function UserHome() {
           <Bell size={18} className="text-brand-500" />
           <h2 className="mt-3 text-sm font-bold">Updates</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Desk alerts for members will land here. Admin trading tools stay on the admin portal.
+            Copied admin orders land here and in Alerts. The same order is sent from your selected broker.
           </p>
+          <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
+          <Link to="/notifications" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+            Open alerts
+          </Link>
         </article>
         <article className="card p-5">
           <UserRound size={18} className="text-brand-500" />
@@ -100,6 +104,22 @@ export function UserHome() {
         </article>
       </div>
     </div>
+  );
+}
+
+function CopyAlerts({ alerts }: { alerts: MemberCopyAlert[] }) {
+  if (!alerts.length) {
+    return <p className="mt-3 text-xs text-slate-400">No copied orders yet.</p>;
+  }
+  return (
+    <ul className="mt-3 space-y-2">
+      {alerts.map((row) => (
+        <li key={row.id} className="rounded-lg bg-[var(--bg)] px-3 py-2 text-xs leading-5 text-slate-600 dark:text-slate-300">
+          <div className="font-semibold text-slate-800 dark:text-slate-100">{row.text}</div>
+          <div className="text-[11px] text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
