@@ -359,19 +359,52 @@ function jsonOf(res, text) {
   }
 }
 
+export function upstoxErrorMessage(body = {}, res = {}) {
+  const row = Array.isArray(body.errors) ? body.errors[0] : body.errors || body.data?.errors?.[0];
+  const nested = row && typeof row === "object" ? row : {};
+  const parts = [
+    nested.errorCode || nested.error_code || nested.code,
+    nested.message || nested.errorMessage || nested.error_message,
+    body.message,
+    typeof body.error === "string" ? body.error : body.error?.message,
+    body.emsg,
+    body.statusMessage,
+    body.data?.message,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const unique = [...new Set(parts)];
+  if (unique.length) return unique.join(" · ");
+  return `${res.status || 400} ${res.statusText || "broker error"}`;
+}
+
+function decorateUpstoxPlaceError(error) {
+  const message = String(error?.message || error || "broker error");
+  if (/OAuth access_token|Analytics\/extended/i.test(message)) {
+    return error instanceof Error ? error : fail(message, error?.status || 401);
+  }
+  if (/UDAPI100067|extended_token|analytics token/i.test(message)) {
+    const next = fail(
+      `${message}. This is an Analytics/extended token. Paste today's Upstox OAuth access_token on My plan — analytics tokens can search but cannot place orders.`,
+      401,
+    );
+    return next;
+  }
+  if (Number(error?.status) === 401 || /unauthorized|\b401\b|UDAPI100050|invalid token/i.test(message)) {
+    return fail(
+      `${message}. Search can accept a read-only token; order place needs today's Upstox OAuth access_token (not the 1-year Analytics token).`,
+      401,
+    );
+  }
+  return error instanceof Error ? error : fail(message, error?.status || 400);
+}
+
 async function httpJson(fetchImpl, url, options = {}) {
   const res = await fetchImpl(url, options);
   const text = await res.text();
   const body = jsonOf(res, text);
   if (!res.ok) {
-    const message =
-      body.message ||
-      body.error ||
-      body.emsg ||
-      body.statusMessage ||
-      body.data?.message ||
-      `${res.status} ${res.statusText || "broker error"}`;
-    throw fail(String(message), res.status === 401 ? 401 : 400);
+    throw fail(upstoxErrorMessage(body, res), res.status === 401 ? 401 : 400);
   }
   return body;
 }
@@ -587,7 +620,7 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
-    const placeBody = JSON.stringify({
+    const baseOrder = {
       quantity: qty,
       product: product === "NRML" ? "D" : "I",
       validity: "DAY",
@@ -598,13 +631,19 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       disclosed_quantity: 0,
       trigger_price: 0,
       is_amo: false,
-      market_protection: -1,
-    });
-    const placeUrls = ["https://api-hft.upstox.com/v2/order/place", "https://api-hft.upstox.com/v3/order/place"];
+    };
+    const attempts = [
+      { url: "https://api-hft.upstox.com/v3/order/place", body: { ...baseOrder, slice: false, market_protection: -1 } },
+      { url: "https://api-hft.upstox.com/v2/order/place", body: { ...baseOrder, market_protection: -1 } },
+    ];
     let lastError = null;
-    for (const url of placeUrls) {
+    for (const attempt of attempts) {
       try {
-        const body = await httpJson(fetchImpl, url, { method: "POST", headers, body: placeBody });
+        const body = await httpJson(fetchImpl, attempt.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(attempt.body),
+        });
         return {
           orderId: String(body.data?.order_id || body.data?.order_ids?.[0] || body.order_id || ""),
           status: "PENDING",
@@ -613,11 +652,15 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       } catch (error) {
         lastError = error;
         const message = String(error?.message || "");
-        const retry = error.status === 404 || error.status === 410 || /UDAPI10000|not supported|does not exist/i.test(message);
-        if (!retry) throw error;
+        const retry =
+          error.status === 401 ||
+          error.status === 404 ||
+          error.status === 410 ||
+          /UDAPI10000|UDAPI100015|not supported|does not exist/i.test(message);
+        if (!retry) throw decorateUpstoxPlaceError(error);
       }
     }
-    throw lastError || fail("Upstox live order place failed.");
+    throw decorateUpstoxPlaceError(lastError || fail("Upstox live order place failed."));
   }
 
   if (id === "fyers") {

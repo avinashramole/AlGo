@@ -128,7 +128,12 @@ function enableLiveCopyFromToken(desk, patch = {}) {
 }
 
 function writeBrokerToken(desk, token) {
-  const next = String(token || "").trim();
+  const next = String(token || "")
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
   if (!next) return false;
   desk.brokerToken = next;
   desk.brokerTokenUpdatedAt = new Date().toISOString();

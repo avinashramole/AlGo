@@ -15,6 +15,7 @@ const {
   annotateMemberLiveAuthError,
   credentialHint,
   dhanOrderCredentials,
+  sanitizeAccessToken,
   dhanSendOptions,
   isMemberScopedOrder,
   liveOrderSession,
@@ -154,6 +155,7 @@ test("leftover broker token is not sent as a live member session", () => {
 });
 
 test("401 copy errors name this member's client ID and token hint", () => {
+  assert.equal(sanitizeAccessToken('Bearer "upstox-member-token"'), "upstox-member-token");
   assert.equal(credentialHint("upstox-member-token"), "••••oken");
   const wrapped = annotateMemberLiveAuthError(
     Object.assign(new Error("401 Unauthorized"), { status: 401 }),
@@ -164,6 +166,7 @@ test("401 copy errors name this member's client ID and token hint", () => {
   assert.match(wrapped.message, /client ID UPX-MEM-1/);
   assert.match(wrapped.message, /••••oken/);
   assert.match(wrapped.message, /not the admin login/);
+  assert.match(wrapped.message, /OAuth access_token|Analytics/);
   assert.equal(wrapped.message.includes("upstox-member-token"), false);
   assert.equal(wrapped.status, 401);
 });
