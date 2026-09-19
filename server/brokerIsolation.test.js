@@ -12,6 +12,8 @@ process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
 
 const {
   adminLiveOrderPayload,
+  annotateMemberLiveAuthError,
+  credentialHint,
   dhanOrderCredentials,
   dhanSendOptions,
   isMemberScopedOrder,
@@ -119,6 +121,53 @@ test("member live broker copy uses the member session only", () => {
   assert.notEqual(session.accessToken, adminZerodha.accessToken);
 });
 
+test("member live broker copy falls back to account.accessToken", () => {
+  const { lane, session } = liveOrderSession(
+    {
+      copyUserId: "u-upx",
+      account: { accessToken: "member-upstox-token", clientId: "UPX-MEM-1" },
+    },
+    { accessToken: "admin-upstox-token", clientId: "ADMIN-UPX" },
+    { brokerName: "Upstox" },
+  );
+  assert.equal(lane, "member");
+  assert.equal(session.accessToken, "member-upstox-token");
+  assert.equal(session.clientId, "UPX-MEM-1");
+  assert.notEqual(session.accessToken, "admin-upstox-token");
+});
+
+test("leftover broker token is not sent as a live member session", () => {
+  assert.throws(
+    () =>
+      liveOrderSession(
+        {
+          copyUserId: "u-leftover",
+          leftoverSlot: true,
+          account: { leftoverSlot: true, accessToken: "", clientId: "" },
+          brokerSession: { leftoverSlot: true, accessToken: "", clientId: "" },
+        },
+        { accessToken: "admin-upstox-token", clientId: "ADMIN-UPX" },
+        { brokerName: "Upstox" },
+      ),
+    /another broker's token/,
+  );
+});
+
+test("401 copy errors name this member's client ID and token hint", () => {
+  assert.equal(credentialHint("upstox-member-token"), "••••oken");
+  const wrapped = annotateMemberLiveAuthError(
+    Object.assign(new Error("401 Unauthorized"), { status: 401 }),
+    { accessToken: "upstox-member-token", clientId: "UPX-MEM-1" },
+    { brokerName: "Upstox" },
+  );
+  assert.match(wrapped.message, /401 Unauthorized/);
+  assert.match(wrapped.message, /client ID UPX-MEM-1/);
+  assert.match(wrapped.message, /••••oken/);
+  assert.match(wrapped.message, /not the admin login/);
+  assert.equal(wrapped.message.includes("upstox-member-token"), false);
+  assert.equal(wrapped.status, 401);
+});
+
 test("admin live broker orders use the Brokers session", () => {
   const { lane, session } = liveOrderSession({ brokerId: "zerodha", side: "BUY" }, adminZerodha, {
     brokerName: "Zerodha Kite",
@@ -159,5 +208,22 @@ test("sendMemberCopyOrder refuses a Zerodha copy when the member token is missin
         brokerSession: { accessToken: "", apiKey: "admin-looking-key" },
       }),
     /My plan/,
+  );
+});
+
+test("sendMemberCopyOrder refuses leftover credentials instead of calling Upstox", async () => {
+  await assert.rejects(
+    () =>
+      sendMemberCopyOrder({
+        copyUserId: "u-leftover-upx",
+        brokerId: "upstox",
+        leftoverSlot: true,
+        side: "BUY",
+        qty: 65,
+        symbol: "NIFTY 22850 PE",
+        account: { leftoverSlot: true, accessToken: "", clientId: "" },
+        brokerSession: { leftoverSlot: true, accessToken: "", clientId: "" },
+      }),
+    /another broker's token/,
   );
 });

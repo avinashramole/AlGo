@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { liveOrderSession } from "./brokerIsolation.js";
+import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
@@ -473,9 +473,17 @@ function orderSide(payload) {
 }
 
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
-  const { session } = liveOrderSession(payload, liveBrokerSession(id), {
-    brokerName: liveBrokerMeta(id)?.name || id,
-  });
+  const brokerName = liveBrokerMeta(id)?.name || id;
+  const { lane, session } = liveOrderSession(payload, liveBrokerSession(id), { brokerName });
+  try {
+    return await placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl);
+  } catch (error) {
+    if (lane === "member") throw annotateMemberLiveAuthError(error, session, { brokerName });
+    throw error;
+  }
+}
+
+async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
   const qty = orderQty(payload);
   const side = orderSide(payload);
   const symbol = String(payload.symbol || "").trim();
