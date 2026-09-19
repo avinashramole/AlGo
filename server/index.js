@@ -60,6 +60,7 @@ import {
   routeManualOrderBrokerId,
 } from "./market.js";
 import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
+import { startUpstoxDailyTokenScheduler } from "./upstoxDailyToken.js";
 import {
   attachHttpServerGuards,
   attachProcessGuards,
@@ -1155,6 +1156,7 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
+  startUpstoxDailyTokenScheduler();
   if (skipLiveAlgos()) {
     console.log("NIFTY 15m VWAP daily LIVE scheduler off (T2S_SKIP_LIVE_ALGOS). Login stays answering.");
   } else {
