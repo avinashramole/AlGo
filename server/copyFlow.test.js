@@ -151,6 +151,7 @@ test("different strategies flow together: admin Dhan Nifty+Crude, members on Dha
   const crudeUser = { id: "u-flow-crude-upstox", name: "Crude Upstox", email: "crudeu@t2s.app", role: "user" };
   installLive(niftyUser, "dhan", "1100444", "nifty-dhan-token");
   payMember(niftyUser, nifty);
+  saveClientSettings(niftyUser.id, { copy: false, subscriptionMode: "strategy" });
   installLive(crudeUser, "upstox", "UPX2200", "crude-upstox-token");
   saveClientSettings(crudeUser.id, {
     copy: false,

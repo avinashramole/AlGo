@@ -522,22 +522,24 @@ function enqueueLiveAlgoOrder(payload) {
 }
 
 export function fanOutAdminOrderCopies(payload = {}, order = {}) {
-  if (payload.copyUserId || payload.copiedToMembers) return { queued: false };
-  const strategy = String(order.strategy || payload.strategy || "").trim();
-  const algo = (state.algos || []).find((row) => String(row.name || "") === strategy);
-  dispatchMemberCopies(
-    {
-      ...payload,
-      strategy,
-      qty: order.qty || payload.qty,
-      side: order.side || payload.side,
-      symbol: order.symbol || payload.symbol,
-      price: order.price || payload.price,
-    },
-    algo || {},
-    { enqueueLiveOrder: enqueueLiveAlgoOrder },
-  );
-  return { queued: true };
+  if (payload.copyUserId || payload.copiedToMembers || order?.copiedToMembers) return { queued: false, copies: 0 };
+  const next = {
+    ...payload,
+    strategy: String(order.strategy || payload.strategy || "").trim(),
+    qty: order.qty || payload.qty,
+    side: order.side || payload.side,
+    symbol: order.symbol || payload.symbol,
+    price: order.price || payload.price,
+  };
+  const copies = memberCopyPayloads(next, { mappingScope: "both", mappedClientIds: [] });
+  if (!copies.length) {
+    console.log(
+      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — Copy ON + saved token copies even if the user is logged off`,
+    );
+  }
+  dispatchMemberCopies(next, { mappingScope: "both", mappedClientIds: [] }, { enqueueLiveOrder: enqueueLiveAlgoOrder });
+  if (order && typeof order === "object") order.copiedToMembers = true;
+  return { queued: true, copies: copies.length };
 }
 
 export function queueLiveAlgoOrder(payload) {
@@ -1901,6 +1903,7 @@ export function placeOrder(payload) {
       const filledQty = Number(live.filledQty || 0);
       if (filledQty > 0) existing.filledQty = filledQty;
       if (live.reason || live.raw) existing.reason = liveRejectReason(live, existing.reason);
+      if (isPaper || live) fanOutAdminOrderCopies({ ...payload, strategy: existing.strategy }, existing);
       return existing;
     }
   }
@@ -1992,7 +1995,7 @@ export function placeOrder(payload) {
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
   );
   if (isPaper) markPaperToMarket();
-  if (isPaper || live) {
+  if (isPaper || live || demoDhan) {
     fanOutAdminOrderCopies({ ...payload, strategy: order.strategy }, order);
   }
   return order;

@@ -1,5 +1,5 @@
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
-import { listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
+import { listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
 import { exchangeSegmentFor } from "./optionChain.js";
 
 function sameStrategy(left, right) {
@@ -27,7 +27,7 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
     const mappedHit =
       Boolean(mappedName) && (sameStrategy(mappedName, name) || mappedName === id || sameStrategy(mappedName, id));
     if (mappedHit) mapped.add(row.userId);
-    if (row.copy && (mode === "copy" || mode === "both") && row.subscriptionUntil && subscriptionOpen(row.subscriptionUntil)) {
+    if (row.copy && (mode === "copy" || mode === "both") && subscriptionOpen(row.subscriptionUntil)) {
       copyMaster.add(row.userId);
     }
   }
@@ -37,8 +37,10 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
 function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyName, enrollment } = {}) {
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "paper").trim().toLowerCase();
+  const slot = peekBrokerAccount(userId, brokerId);
   const paper = brokerId === "paper" || desk.tradeMode !== "real";
-  const token = String(desk.brokerToken || "").trim();
+  const token = String(slot.brokerToken || desk.brokerToken || "").trim();
+  const accountId = String(slot.accountId || desk.accountId || "").trim();
   if (!paper && !token) return null;
   return {
     userId,
@@ -46,10 +48,10 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     strategyId: enrollment?.strategyId || strategyId || "",
     strategyName: enrollment?.strategyName || strategyName || "",
     brokerId: paper ? "paper" : brokerId,
-    accountId: desk.accountId || "",
+    accountId,
     brokerToken: paper ? "" : token,
-    brokerApiKey: paper ? "" : desk.brokerApiKey,
-    brokerSessionToken: paper ? "" : desk.brokerSessionToken,
+    brokerApiKey: paper ? "" : slot.brokerApiKey || desk.brokerApiKey,
+    brokerSessionToken: paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
     paper,
     qty: sizeCopyQty(masterQty, { sizingKind: desk.sizingKind, sizingValue: desk.sizingValue, lotSize }),
   };

@@ -88,6 +88,7 @@ app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 
 let flushingLiveAlgos = false;
+let flushAgain = false;
 
 async function sendLiveBrokerOrder(payload) {
   const adminPayload = adminLiveOrderPayload(payload);
@@ -100,7 +101,10 @@ async function sendLiveBrokerOrder(payload) {
 }
 
 async function flushLiveAlgoOrders() {
-  if (flushingLiveAlgos) return;
+  if (flushingLiveAlgos) {
+    flushAgain = true;
+    return;
+  }
   const queued = drainPendingLiveAlgoOrders();
   if (!queued.length) return;
   flushingLiveAlgos = true;
@@ -135,6 +139,10 @@ async function flushLiveAlgoOrders() {
     }
   } finally {
     flushingLiveAlgos = false;
+    if (flushAgain) {
+      flushAgain = false;
+      await flushLiveAlgoOrders();
+    }
   }
 }
 
@@ -849,6 +857,7 @@ app.post("/api/orders", async (req, res) => {
   } catch (error) {
     const booked = brokerId === "dhan" ? bookRejectedLiveOrder({ ...body, brokerId }, error) : null;
     if (booked && !booked.error) {
+      await flushLiveAlgoOrders();
       res.status(201).json({
         ok: false,
         live: true,
