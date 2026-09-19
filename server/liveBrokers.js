@@ -187,6 +187,114 @@ export function fyersSymbol(symbol, expiry) {
   return `NSE:${nfo}`;
 }
 
+const UPSTOX_INDEX_KEYS = {
+  NIFTY: "NSE_INDEX|Nifty 50",
+  BANKNIFTY: "NSE_INDEX|Nifty Bank",
+  FINNIFTY: "NSE_INDEX|Nifty Fin Service",
+  SENSEX: "BSE_INDEX|SENSEX",
+};
+
+export function isUpstoxInstrumentKey(value) {
+  return /^(NSE|BSE|MCX)_[A-Z]+\|/.test(String(value || "").trim());
+}
+
+export function parseDeskOptionSymbol(symbol, extras = {}) {
+  const raw = String(symbol || "")
+    .toUpperCase()
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)\s+(\d{3,6})\s*(CE|PE)$/);
+  if (named) return { root: named[1], strike: Number(named[2]), option: named[3] };
+  const strike = Number(extras.strike || 0);
+  const option = String(extras.option || "").toUpperCase();
+  if (strike && (option === "CE" || option === "PE")) {
+    return { root: String(extras.root || "NIFTY").toUpperCase(), strike, option };
+  }
+  return null;
+}
+
+function upstoxRootMatches(root, under, name) {
+  const u = String(under || "").toUpperCase().replace(/\s+50$/, "").replace(/50$/, "");
+  const n = String(name || "").toUpperCase();
+  if (root === "NIFTY") {
+    if (u === "NIFTY" || u === "NIFTY50") return true;
+    return /^NIFTY(\s|$)/.test(n) && !/BANKNIFTY|FINNIFTY|MIDCP/.test(n);
+  }
+  return u.includes(root) || n.includes(root);
+}
+
+export function pickUpstoxOptionHit(rows = [], { root, strike, option, expiry } = {}) {
+  const wantStrike = Number(strike);
+  const wantOpt = String(option || "").toUpperCase();
+  const wantRoot = String(root || "").toUpperCase();
+  const wantDay = String(expiry || "").slice(0, 10);
+  const scored = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = String(row.instrument_key || row.instrumentKey || row.instrument_token || "").trim();
+    if (!isUpstoxInstrumentKey(key)) continue;
+    const type = String(row.instrument_type || row.option_type || row.instrumentType || "").toUpperCase();
+    const strikeN = Number(row.strike_price || row.strikePrice || row.strike || 0);
+    const under = String(row.underlying_symbol || row.underlying || "").toUpperCase();
+    const name = String(row.trading_symbol || row.tradingsymbol || row.name || "").toUpperCase();
+    if (wantStrike && strikeN && strikeN !== wantStrike) continue;
+    if (wantStrike && !strikeN && !name.includes(String(wantStrike))) continue;
+    const isCe = type === "CE" || type === "CALL" || /\bCE\b/.test(name);
+    const isPe = type === "PE" || type === "PUT" || /\bPE\b/.test(name);
+    if (wantOpt === "CE" && !isCe) continue;
+    if (wantOpt === "PE" && !isPe) continue;
+    if (wantRoot && !upstoxRootMatches(wantRoot, under, name)) continue;
+    const exp = String(row.expiry || row.expiry_date || row.expiryDate || "").slice(0, 10);
+    scored.push({ key, exp, exact: Boolean(wantDay && exp === wantDay) });
+  }
+  if (!scored.length) return "";
+  if (wantDay) {
+    const exact = scored.find((row) => row.exact);
+    if (exact) return exact.key;
+  }
+  scored.sort((a, b) => String(a.exp).localeCompare(String(b.exp)));
+  const today = new Date().toISOString().slice(0, 10);
+  return (scored.find((row) => !row.exp || row.exp >= today) || scored[0]).key;
+}
+
+export function upstoxInstrumentKeyFromPayload(payload = {}) {
+  for (const value of [payload.instrumentKey, payload.instrument_key, payload.instrument_token]) {
+    const raw = String(value || "").trim();
+    if (isUpstoxInstrumentKey(raw)) return raw;
+  }
+  const sid = String(payload.securityId || "").trim();
+  return isUpstoxInstrumentKey(sid) ? sid : "";
+}
+
+async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl }) {
+  const parsed = parseDeskOptionSymbol(symbol, { strike, option });
+  if (!parsed || !accessToken) return "";
+  const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
+  const queries = [`${parsed.root} ${parsed.strike} ${parsed.option}`, `${parsed.root}${parsed.strike}${parsed.option}`];
+  for (const query of queries) {
+    try {
+      const body = await httpJson(fetchImpl, `https://api.upstox.com/v2/search/instruments?query=${encodeURIComponent(query)}`, { headers });
+      const key = pickUpstoxOptionHit(body.data || body, { ...parsed, expiry });
+      if (key) return key;
+    } catch {
+      /* try the next query or the option-contract list */
+    }
+  }
+  const indexKey = UPSTOX_INDEX_KEYS[parsed.root];
+  const day = String(expiry || "").slice(0, 10);
+  if (!indexKey || !day) return "";
+  try {
+    const body = await httpJson(
+      fetchImpl,
+      `https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(indexKey)}&expiry_date=${encodeURIComponent(day)}`,
+      { headers },
+    );
+    return pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: day });
+  } catch {
+    return "";
+  }
+}
+
 function jsonOf(res, text) {
   try {
     return text ? JSON.parse(text) : {};
@@ -398,7 +506,17 @@ export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) 
   }
 
   if (id === "upstox") {
-    const instrument = String(payload.instrumentKey || payload.securityId || "").trim();
+    let instrument = upstoxInstrumentKeyFromPayload(payload);
+    if (!instrument) {
+      instrument = await resolveUpstoxInstrumentKey({
+        symbol,
+        expiry,
+        strike: payload.strike,
+        option: payload.option,
+        accessToken: session.accessToken,
+        fetchImpl,
+      });
+    }
     if (!instrument) throw fail("Upstox live orders need an instrument key or security id.");
     const body = await httpJson(fetchImpl, "https://api.upstox.com/v2/order/place", {
       method: "POST",

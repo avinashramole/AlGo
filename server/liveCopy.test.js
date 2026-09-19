@@ -11,7 +11,7 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
-const { dispatchMemberCopies, dispatchMemberExitCopies, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
+const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
 savePaymentSettings({
@@ -160,18 +160,30 @@ test("manual admin order copies a Copy ON member with no login and no through da
   selectMemberBroker({ user, brokerId: "dhan" });
   installMemberBroker({ user, brokerId: "dhan", clientId: "1100666", accessToken: "ignore-scope-token" });
   saveClientSettings(user.id, { copy: true, subscriptionMode: "copy", subscriptionUntil: "" });
-  const { drainPendingLiveAlgoOrders, fanOutAdminOrderCopies } = await import("./market.js");
-  drainPendingLiveAlgoOrders();
+  const { fanOutAdminOrderCopies } = await import("./market.js");
   const result = fanOutAdminOrderCopies(
     { symbol: "NIFTY 25300 CE", side: "BUY", qty: 65, price: 80, strategy: "Desk BUY", brokerId: "dhan" },
     { symbol: "NIFTY 25300 CE", side: "BUY", qty: 65, strategy: "Desk BUY" },
   );
   assert.ok(result.copies >= 1);
-  const queued = drainPendingLiveAlgoOrders();
-  const copy = queued.find((row) => row.copyUserId === user.id);
-  assert.ok(copy, "admin ticket must copy from the saved member token while they are logged off");
-  assert.equal(copy.account.accessToken, "ignore-scope-token");
-  assert.equal(copy.account.clientId, "1100666");
+  await awaitMemberCopySends();
+  const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.ok(
+    (desk.orders || []).some((row) => row.symbol === "NIFTY 25300 CE"),
+    "admin ticket must copy from the saved member token while they are logged off",
+  );
+});
+
+test("Copy ON with a saved token is a live target even in paper mode", () => {
+  const user = { id: "u-copy-paper-token", name: "Paper Token", email: "papertoken@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100444", accessToken: "paper-mode-token" });
+  saveClientSettings(user.id, { copy: true, tradeMode: "paper", subscriptionMode: "strategy", subscriptionUntil: "" });
+  const mine = listCopyOnTargets({ masterQty: 65, lotSize: 65 }).find((row) => row.userId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.paper, false);
+  assert.equal(mine.brokerToken, "paper-mode-token");
+  assert.equal(mine.accountId, "1100444");
 });
 
 test("turning Copy on without a through date opens Copy Master for admin orders", () => {
@@ -357,12 +369,11 @@ test("admin live desk order copies onto the member token and notifies them", asy
   installMemberBroker({ user, brokerId: "dhan", clientId: "1100888", accessToken: "admin-live-copy-token" });
   saveClientSettings(user.id, {
     copy: true,
-    subscriptionMode: "copy",
-    tradeMode: "real",
+    subscriptionMode: "strategy",
+    tradeMode: "paper",
     brokerId: "dhan",
   });
-  const { drainPendingLiveAlgoOrders, fanOutAdminOrderCopies, placeOrder } = await import("./market.js");
-  drainPendingLiveAlgoOrders();
+  const { fanOutAdminOrderCopies, placeOrder } = await import("./market.js");
   const booked = placeOrder({
     symbol: "NIFTY 25200 CE",
     side: "BUY",
@@ -374,13 +385,13 @@ test("admin live desk order copies onto the member token and notifies them", asy
   });
   assert.equal(booked.error, undefined);
   assert.equal(booked.symbol, "NIFTY 25200 CE");
-  const queued = drainPendingLiveAlgoOrders();
-  const copy = queued.find((row) => row.copyUserId === user.id);
-  assert.ok(copy, "copy-on member should receive the admin live order");
-  assert.equal(copy.brokerId, "dhan");
-  assert.equal(copy.account.accessToken, "admin-live-copy-token");
-  assert.equal(copy.symbol, "NIFTY 25200 CE");
-  assert.equal(copy.side, "BUY");
+  await awaitMemberCopySends();
+  const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.ok(
+    (desk.orders || []).some((row) => row.symbol === "NIFTY 25200 CE" && row.side === "BUY"),
+    "copied order must land on the member dashboard without a login session",
+  );
+  assert.ok((desk.alerts || []).some((row) => row.symbol === "NIFTY 25200 CE"));
   const again = fanOutAdminOrderCopies({ copiedToMembers: true, symbol: "NIFTY 25200 CE" }, booked);
   assert.equal(again.queued, false);
 });

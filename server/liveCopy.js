@@ -1,6 +1,9 @@
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
 import { listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
+import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { exchangeSegmentFor } from "./optionChain.js";
+
+let pendingCopySends = [];
 
 function sameStrategy(left, right) {
   const a = String(left || "").trim().toLowerCase();
@@ -22,12 +25,11 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
   for (const row of listDeskRecords()) {
     if (!row.userId || row.userId === "admin") continue;
     if (!subscriptionOpen(row.subscriptionUntil)) continue;
-    const mode = row.subscriptionMode || "copy";
     const mappedName = String(row.mappedStrategy || "").trim();
     const mappedHit =
       Boolean(mappedName) && (sameStrategy(mappedName, name) || mappedName === id || sameStrategy(mappedName, id));
     if (mappedHit) mapped.add(row.userId);
-    if (row.copy && (mode === "copy" || mode === "both") && subscriptionOpen(row.subscriptionUntil)) {
+    if (row.copy && subscriptionOpen(row.subscriptionUntil)) {
       copyMaster.add(row.userId);
     }
   }
@@ -38,9 +40,9 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "paper").trim().toLowerCase();
   const slot = peekBrokerAccount(userId, brokerId);
-  const paper = brokerId === "paper" || desk.tradeMode !== "real";
   const token = String(slot.brokerToken || desk.brokerToken || "").trim();
   const accountId = String(slot.accountId || desk.accountId || "").trim();
+  const paper = brokerId === "paper";
   if (!paper && !token) return null;
   return {
     userId,
@@ -108,15 +110,42 @@ export function listLiveCopyTargets({
   return targets;
 }
 
+export function listCopyOnTargets({ masterQty, lotSize } = {}) {
+  const targets = [];
+  for (const row of listDeskRecords()) {
+    if (!row.userId || row.userId === "admin") continue;
+    if (!row.copy || !subscriptionOpen(row.subscriptionUntil)) continue;
+    const target = copyTargetForUser(row.userId, { masterQty, lotSize });
+    if (target) targets.push(target);
+  }
+  return targets;
+}
+
+function mergeCopyTargets(...lists) {
+  const byUser = new Map();
+  for (const list of lists) {
+    for (const row of list || []) {
+      if (row?.userId) byUser.set(row.userId, row);
+    }
+  }
+  return [...byUser.values()];
+}
+
 export function memberCopyPayloads(payload = {}, algo = {}) {
-  const targets = listLiveCopyTargets({
-    strategyName: payload.strategy,
-    strategyId: algo.id,
-    masterQty: payload.qty,
-    lotSize: payload.lotSize || payload.qty,
-    mappedClientIds: algo.mappedClientIds,
-    mappingScope: algo.mappingScope,
-  });
+  const targets = mergeCopyTargets(
+    listLiveCopyTargets({
+      strategyName: payload.strategy,
+      strategyId: algo.id,
+      masterQty: payload.qty,
+      lotSize: payload.lotSize || payload.qty,
+      mappedClientIds: algo.mappedClientIds,
+      mappingScope: algo.mappingScope,
+    }),
+    listCopyOnTargets({
+      masterQty: payload.qty,
+      lotSize: payload.lotSize || payload.qty,
+    }),
+  );
   return targets.map((target) => ({
     ...payload,
     qty: target.qty,
@@ -148,8 +177,23 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
       recordMemberCopyFill({ userId: copy.copyUserId, payload: copy, paper: true });
       continue;
     }
-    if (typeof enqueueLiveOrder === "function") enqueueLiveOrder(copy);
+    if (typeof enqueueLiveOrder === "function") {
+      enqueueLiveOrder(copy);
+      continue;
+    }
+    pendingCopySends.push(
+      sendMemberCopyOrder(copy).catch((error) => {
+        console.log(`Member copy order failed: ${error.message || error}`);
+        return null;
+      }),
+    );
   }
+}
+
+export function awaitMemberCopySends() {
+  const jobs = pendingCopySends;
+  pendingCopySends = [];
+  return Promise.allSettled(jobs);
 }
 
 export function memberExitPayload(pos = {}, extras = {}) {
