@@ -175,13 +175,38 @@ function syncSelectedBrokerAccount(desk) {
 
 function migrateLegacyBrokerAccount(desk) {
   desk.brokerAccounts = brokerAccountsMap(desk);
+  if (Object.keys(desk.brokerAccounts).length) return;
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   if (!brokerId || brokerId === "paper") return;
-  const slot = desk.brokerAccounts[brokerId];
   const snap = snapshotSelectedBrokerAccount(desk);
-  if (!slot && (snap.accountId || snap.brokerToken || snap.brokerApiKey || snap.brokerSessionToken)) {
+  if (snap.accountId || snap.brokerToken || snap.brokerApiKey || snap.brokerSessionToken) {
     desk.brokerAccounts[brokerId] = snap;
   }
+}
+
+function slotCopiedFromAnotherBroker(map, brokerId) {
+  const slot = map[brokerId];
+  if (!slot || (!slot.accountId && !slot.brokerToken)) return false;
+  return Object.entries(map).some(([id, other]) => {
+    if (id === brokerId) return false;
+    const sameId = slot.accountId && slot.accountId === other.accountId;
+    const sameToken = slot.brokerToken && slot.brokerToken === other.brokerToken;
+    return Boolean(sameId || sameToken);
+  });
+}
+
+function selectedBrokerAccount(desk = {}) {
+  const map = brokerAccountsMap(desk);
+  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  if (!brokerId || brokerId === "paper") return emptyBrokerAccount();
+  const slot = map[brokerId] || emptyBrokerAccount();
+  if (slotCopiedFromAnotherBroker(map, brokerId)) {
+    return { ...slot, accountId: "" };
+  }
+  if (slot.accountId || slot.brokerToken) return slot;
+  const snap = snapshotSelectedBrokerAccount(desk);
+  if (snap.accountId || snap.brokerToken) return snap;
+  return slot;
 }
 
 function hydrateBrokerAccount(desk, brokerId) {
@@ -196,7 +221,8 @@ function hydrateBrokerAccount(desk, brokerId) {
     return;
   }
   const slot = desk.brokerAccounts[id] || emptyBrokerAccount();
-  desk.accountId = slot.accountId;
+  const copied = slotCopiedFromAnotherBroker(desk.brokerAccounts, id);
+  desk.accountId = copied ? "" : slot.accountId;
   desk.brokerToken = slot.brokerToken;
   desk.brokerApiKey = slot.brokerApiKey;
   desk.brokerSessionToken = slot.brokerSessionToken;
@@ -225,8 +251,9 @@ export function publicBrokerAccounts(desk = {}) {
   const out = {};
   for (const [id, slot] of Object.entries(map)) {
     if (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey) continue;
+    const copied = slotCopiedFromAnotherBroker(map, id);
     out[id] = {
-      accountId: slot.accountId,
+      accountId: copied ? "" : slot.accountId,
       tokenHint: maskSecret(slot.brokerToken),
       apiKeyHint: maskSecret(slot.brokerApiKey),
       installed: Boolean(slot.brokerToken),
@@ -334,7 +361,7 @@ export function normalizeClientSettings(desk = {}) {
     tradeMode,
     copy: Boolean(desk.copy),
     staticIp: String(desk.staticIp || "").trim(),
-    accountId: String(desk.accountId || "").trim(),
+    accountId: selectedBrokerAccount(desk).accountId,
     brokerId,
     subscriptionMode,
     subscriptionUntil: String(desk.subscriptionUntil || "").trim(),
@@ -374,7 +401,7 @@ export function publicBrokerInstall(desk = {}) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   return {
     brokerId,
-    accountId: String(desk.accountId || "").trim(),
+    accountId: selectedBrokerAccount(desk).accountId,
     tokenHint: maskSecret(desk.brokerToken),
     apiKeyHint: maskSecret(desk.brokerApiKey),
     installed: Boolean(String(desk.brokerToken || "").trim()),

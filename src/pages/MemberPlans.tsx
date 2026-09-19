@@ -50,10 +50,7 @@ export function MemberPlans() {
       setStrategies(catalog.strategies || []);
       setPayments(catalog.payments);
       setEnrollments(mine.enrollments || []);
-      setCreds((current) => ({
-        ...current,
-        ...credsAfterInstall(nextDesk.install, current),
-      }));
+      setCreds((current) => credsAfterInstall(nextDesk.install, current, { keepTyped: true }));
       setError("");
     } catch (err) {
       if (gen !== loadGen.current) return;
@@ -91,9 +88,10 @@ export function MemberPlans() {
     setCredNote("");
     try {
       const hints = hintsFromInstall(desk.install);
+      const clientId = installValueForSubmit({ id: "clientId" }, creds, hints);
       const result = await installMemberBroker({
         brokerId: desk.brokerId,
-        clientId: installValueForSubmit({ id: "clientId" }, creds, hints) || desk.install?.accountId,
+        clientId,
         apiKey: installValueForSubmit({ id: "apiKey", secret: true }, creds, hints),
         accessToken: installValueForSubmit({ id: "accessToken", secret: true }, creds, hints),
         sessionToken: installValueForSubmit({ id: "sessionToken", secret: true }, creds, hints),
@@ -102,7 +100,7 @@ export function MemberPlans() {
       setDesk((current) =>
         current ? { ...current, brokerId: result.brokerId || current.brokerId, install: result.install } : current,
       );
-      setCreds(credsAfterInstall(result.install, creds));
+      setCreds({ clientId: String(result.install?.accountId || clientId || "").trim() });
       await load();
       setCredNote("Client ID and access token updated on this account and on admin Users. Live copy now uses this token. Desk LIVE was not started.");
     } catch (err) {

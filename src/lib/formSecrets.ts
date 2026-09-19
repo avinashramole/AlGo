@@ -23,10 +23,15 @@ export function hintsFromInstall(install?: InstallHints | null): Record<string, 
   };
 }
 
-export function credsAfterInstall(install?: InstallHints | null, current: Record<string, string> = {}): Record<string, string> {
+export function credsAfterInstall(
+  install?: InstallHints | null,
+  current: Record<string, string> = {},
+  { keepTyped = false }: { keepTyped?: boolean } = {},
+): Record<string, string> {
   const installed = String(install?.accountId || "").trim();
-  if (installed) return { clientId: installed };
   const typed = String(current.clientId || "").trim();
+  if (keepTyped && typed && typed !== installed) return { clientId: typed };
+  if (installed) return { clientId: installed };
   return typed ? { clientId: typed } : {};
 }
 

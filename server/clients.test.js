@@ -349,6 +349,27 @@ test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-tim
   assert.ok(row.mtm < 0);
 });
 
+test("admin Users shows the Dhan client ID the member saved, not another broker's id", () => {
+  const created = createClient({
+    name: "Entered Dhan Id",
+    mobile: "9000000055",
+    brokerId: "upstox",
+    accountId: "UPX5500",
+    brokerToken: "upstox-keep-token-value",
+    tradeMode: "real",
+  });
+  const dhan = saveClient(created.id, {
+    brokerId: "dhan",
+    accountId: "11006601",
+    brokerToken: "dhan-entered-client-token",
+  });
+  assert.equal(dhan.accountId, "11006601");
+  assert.equal(dhan.brokerAccounts.dhan.accountId, "11006601");
+  const listed = listClients(listPublicUsers()).find((row) => row.id === created.id);
+  assert.equal(listed.accountId, "11006601");
+  assert.equal(listed.brokerAccounts.upstox.accountId, "UPX5500");
+});
+
 test("saveClient can add a Dhan ID and token without wiping the Upstox slot", () => {
   const created = createClient({
     name: "Both Brokers",

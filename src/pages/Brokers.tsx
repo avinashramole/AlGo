@@ -24,13 +24,13 @@ export function Brokers() {
   const dhan = brokers.find((item) => item.id === "dhan");
   const paper = brokers.find((item) => item.id === "paper");
   const actualFunds = dhan?.liveFeed ? dhan.funds : 0;
-  const clientLocked = Boolean(selected?.liveFeed || (selected && selected.id !== "dhan" && selected.connected));
+  const clientLocked = Boolean(selected && selected.id !== "dhan" && (selected.liveFeed || selected.connected));
 
   const openForm = (broker: BrokerAccount) => {
     setSelected(broker);
     setError("");
     if (broker.id === "dhan") {
-      setClientId(broker.liveFeed ? broker.clientId || feed?.clientId || "" : dhanClientId || broker.clientId || "");
+      setClientId(dhanClientId || broker.clientId || feed?.clientId || "");
       setSecret("");
     } else if (broker.connected) {
       setClientId(broker.clientId || "");
@@ -461,9 +461,7 @@ export function Brokers() {
             </div>
             <p className="mt-1 text-xs text-slate-400">
               {selected.id === "dhan"
-                ? clientLocked
-                  ? "Client ID stays on the live Dhan account. Paste a new Access Token only."
-                  : "Paste Client ID and Access Token from web.dhan.co → My Profile → Access DhanHQ APIs."
+                ? "Client ID stays the value you entered. Paste a new Access Token if you need to refresh it."
                 : selected.help || "Paste the live API credentials from that broker. This does not start algos."}
             </p>
             <label className="mt-3 block text-xs font-semibold">

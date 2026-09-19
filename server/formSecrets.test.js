@@ -27,6 +27,13 @@ test("saved Dhan client ID replaces a leftover Upstox value after broker switch"
   assert.deepEqual(credsAfterInstall({ accountId: "" }, {}), {});
 });
 
+test("a poll does not overwrite a Dhan client ID the user is typing", () => {
+  assert.deepEqual(
+    credsAfterInstall({ accountId: "UPX1001" }, { clientId: "11008802" }, { keepTyped: true }),
+    { clientId: "11008802" },
+  );
+});
+
 test("a masked token is never submitted as a replacement secret", () => {
   assert.equal(savedSecretForSubmit(""), "");
   assert.equal(savedSecretForSubmit(SECRET_FIELD_MASK), "");

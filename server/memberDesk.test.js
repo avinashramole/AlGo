@@ -346,3 +346,25 @@ test("a member can keep Dhan and Upstox tokens and update Dhan without losing Up
   assert.equal(peekClientSecrets(member.id).brokerToken, "dhan-member-token-updated");
   assert.equal(peekClientSecrets(member.id).accountId, "11008802");
 });
+
+test("Dhan does not keep showing another broker's client ID after a leftover copy", () => {
+  const member = { id: "u-dhan-id-display", name: "Dhan Id", email: "dhanid@t2s.app", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "upstox",
+    clientId: "UPX1001",
+    accessToken: "upstox-member-token-keep",
+  });
+  saveClientSettings(member.id, { brokerId: "dhan", accountId: "UPX1001", brokerToken: "upstox-member-token-keep" });
+  assert.equal(peekClientSecrets(member.id).accountId, "");
+  const installed = installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "11009901",
+    accessToken: "dhan-entered-token-value",
+  });
+  assert.equal(installed.install.accountId, "11009901");
+  assert.equal(peekClientSecrets(member.id).accountId, "11009901");
+  assert.equal(getMemberDesk({ user: member, enrollments: [], quote: () => 0 }).install.accountId, "11009901");
+  assert.equal(peekBrokerAccount(member.id, "upstox").accountId, "UPX1001");
+});
