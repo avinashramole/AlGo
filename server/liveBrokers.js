@@ -45,10 +45,12 @@ export const LIVE_BROKER_CATALOG = [
     auth: "oauth",
     segments: ["EQ", "FNO"],
     fields: [
-      { id: "clientId", label: "Client ID", placeholder: "Upstox client id (optional)" },
-      { id: "accessToken", label: "Access token", secret: true, placeholder: "Daily Upstox access token" },
+      { id: "clientId", label: "Client ID / UCC", placeholder: "Upstox client id (393216)" },
+      { id: "apiKey", label: "API key", secret: true, placeholder: "Developer app API key" },
+      { id: "sessionToken", label: "API secret", secret: true, placeholder: "Developer app API secret" },
+      { id: "accessToken", label: "Trading access token", secret: true, placeholder: "Filled after Get today's token" },
     ],
-    help: "Generate a daily token from the Upstox developer app. Orders use POST /v2/order/place.",
+    help: "Upstox needs a daily trading access token, not the Analytics token. Save API key + API secret, then Get today's trading token and approve the Upstox app notification.",
   },
   {
     id: "fyers",

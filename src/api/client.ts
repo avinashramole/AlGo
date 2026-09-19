@@ -980,6 +980,7 @@ export type MemberBrokerInstall = {
   accountId?: string;
   tokenHint?: string;
   apiKeyHint?: string;
+  sessionHint?: string;
   installed?: boolean;
   tokenUpdatedAt?: string;
   fields: BrokerInstallField[];
@@ -1068,6 +1069,16 @@ export function installMemberBroker(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function requestMemberUpstoxToken() {
+  return request<{
+    ok: boolean;
+    loginUrl?: string;
+    notifierUri?: string;
+    redirectUri?: string;
+    message?: string;
+  }>("/member/broker/upstox/token", { method: "POST" });
 }
 
 export function startWalletTopup(amount: number, channel: "gpay" | "phonepe") {

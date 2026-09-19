@@ -6,6 +6,7 @@ import {
   getMemberDesk,
   installMemberBroker,
   listEnrollments,
+  requestMemberUpstoxToken,
   selectMemberBroker,
   strategyCatalog,
   type CatalogStrategy,
@@ -66,6 +67,16 @@ export function MemberPlans() {
     return () => window.clearInterval(id);
   }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upstox") === "connected") {
+      setCredNote("Upstox trading access token saved. Live copy will use this token.");
+    }
+    if (params.get("upstox") === "error") {
+      setError(params.get("message") || "Upstox login failed");
+    }
+  }, []);
+
   const pickBroker = async (brokerId: string) => {
     setBusy(brokerId);
     setError("");
@@ -76,6 +87,21 @@ export function MemberPlans() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not select broker");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const requestUpstoxToken = async () => {
+    setBusy("upstox-token");
+    setError("");
+    setCredNote("");
+    try {
+      const result = await requestMemberUpstoxToken();
+      setCredNote(result.message || "Approve today's Upstox trading token in the Upstox app.");
+      if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not request Upstox trading token");
     } finally {
       setBusy("");
     }
@@ -319,7 +345,7 @@ export function MemberPlans() {
               void saveCredentials();
             }}
           >
-            <div className="text-sm font-bold">Client ID and access token</div>
+            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : "Client ID and access token"}</div>
             <p className="mt-1 text-xs text-slate-400">
               {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>
@@ -343,13 +369,25 @@ export function MemberPlans() {
               />
             </div>
             {credNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{credNote}</p> : null}
-            <button
-              type="submit"
-              disabled={busy === "creds"}
-              className="mt-3 h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
-            >
-              {busy === "creds" ? "Saving..." : "Save client ID and access token"}
-            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={busy === "creds"}
+                className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : "Save client ID and access token"}
+              </button>
+              {desk.brokerId === "upstox" ? (
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void requestUpstoxToken()}
+                  className="h-10 rounded-xl border border-brand-500 px-4 text-xs font-semibold text-brand-500 disabled:opacity-50"
+                >
+                  {busy === "upstox-token" ? "Asking Upstox..." : "Get today's trading token"}
+                </button>
+              ) : null}
+            </div>
           </form>
         ) : null}
       </section>
