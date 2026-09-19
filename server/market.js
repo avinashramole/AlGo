@@ -60,6 +60,9 @@ import {
   indexWatchRows,
   liveSentiment,
 } from "./liveSignals.js";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const algoStore = loadAlgoStore();
 let removedAlgoIds = [...(algoStore.removedIds || [])];
@@ -1018,11 +1021,18 @@ export function resolveAlgoTrade(algo) {
 
 const INDEX_ALIASES = {
   "NIFTY 50": "NIFTY 50",
+  "NIFTY FUT": "NIFTY 50",
+  NIFTY: "NIFTY 50",
   "BANK NIFTY": "BANKNIFTY",
   BANKNIFTY: "BANKNIFTY",
+  "BANKNIFTY FUT": "BANKNIFTY",
   FINNIFTY: "FINNIFTY",
+  "FINNIFTY FUT": "FINNIFTY",
   SENSEX: "SENSEX",
+  "SENSEX FUT": "SENSEX",
   CRUDEOIL: "CRUDEOIL",
+  "CRUDEOIL FUT": "CRUDEOIL",
+  "CRUDE OIL": "CRUDEOIL",
   "INDIA VIX": "INDIA VIX",
 };
 
@@ -1063,15 +1073,105 @@ function emptyDeskIndex(symbol, name) {
   });
 }
 
-function sanePrevClose(ltp, prev) {
+function sanePrevClose(ltp, prev, { loose = false } = {}) {
   const close = Number(prev);
   if (!(close > 0) || !(ltp > 0)) return null;
-  if (Math.abs(ltp - close) / close > 0.08) return null;
+  const maxMove = loose ? 0.35 : 0.08;
+  if (Math.abs(ltp - close) / close > maxMove) return null;
   return round2(close);
 }
 
 export function setDhanFeed(patch) {
   state.dhanFeed = { ...state.dhanFeed, ...patch };
+}
+
+const LAST_QUOTES_FILE = process.env.T2S_QUOTE_CACHE || path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "last-quotes.json");
+
+function underNodeTest() {
+  return process.execArgv.includes("--test") || process.argv.includes("--test") || process.env.NODE_TEST === "1";
+}
+
+export function indexFamilyHasTape(family) {
+  const rows = state.indices || [];
+  if (family === "mcx") {
+    const crude = rows.find((row) => row.symbol === "CRUDEOIL");
+    return Number(crude?.price) > 0 || Number(crude?.future) > 0;
+  }
+  return rows.some((row) => row.symbol !== "CRUDEOIL" && Number(row.price) > 0);
+}
+
+export function persistLastIndexQuotes(file = LAST_QUOTES_FILE) {
+  const indices = (state.indices || [])
+    .filter((row) => Number(row.price) > 0 || Number(row.future) > 0)
+    .map((row) => ({
+      symbol: row.symbol,
+      price: row.price,
+      future: row.future,
+      change: row.change,
+      changePct: row.changePct,
+      prevClose: row.prevClose,
+      spark: row.spark,
+      futureExpiry: row.futureExpiry,
+      vwap: row.vwap,
+      futureVwap: row.futureVwap,
+    }));
+  if (!indices.length) return false;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify({ at: Date.now(), indices }, null, 2)}\n`);
+    return true;
+  } catch (error) {
+    console.log(`Could not save last NSE/MCX quotes: ${error.message || error}`);
+    return false;
+  }
+}
+
+export function restoreLastIndexQuotes(file = LAST_QUOTES_FILE) {
+  try {
+    const row = JSON.parse(fs.readFileSync(file, "utf8"));
+    const indices = Array.isArray(row?.indices) ? row.indices : [];
+    let restored = 0;
+    for (const saved of indices) {
+      const index = state.indices.find((item) => item.symbol === saved.symbol);
+      if (!index) continue;
+      const price = Number(saved.price);
+      const future = Number(saved.future);
+      if (!(price > 0) && !(future > 0)) continue;
+      if (price > 0) {
+        index.price = round2(price);
+        index.change = round2(Number(saved.change) || index.change || 0);
+        index.changePct = round2(Number(saved.changePct) || index.changePct || 0);
+        if (Number(saved.prevClose) > 0) index.prevClose = round2(saved.prevClose);
+        if (Array.isArray(saved.spark) && saved.spark.length) index.spark = saved.spark;
+        if (Number(saved.vwap) > 0) index.vwap = round2(saved.vwap);
+      }
+      if (future > 0) {
+        index.future = round2(future);
+        if (saved.futureExpiry) index.futureExpiry = saved.futureExpiry;
+        if (Number(saved.futureVwap) > 0) index.futureVwap = round2(saved.futureVwap);
+      }
+      restored += 1;
+    }
+    if (restored && Number(row.at) > 0 && !state.dhanFeed.lastTickAt) {
+      setDhanFeed({
+        source: state.dhanFeed.source === "idle" ? "last" : state.dhanFeed.source,
+        lastTickAt: Number(row.at),
+      });
+    }
+    return restored;
+  } catch {
+    return 0;
+  }
+}
+
+let saveQuotesTimer = null;
+function schedulePersistLastQuotes() {
+  if (underNodeTest()) return;
+  if (saveQuotesTimer) return;
+  saveQuotesTimer = setTimeout(() => {
+    saveQuotesTimer = null;
+    persistLastIndexQuotes();
+  }, 400);
 }
 
 export function isDhanFeedLive() {
@@ -1083,7 +1183,7 @@ export function hasLastLiveBook() {
   if (state.optionMeta?.source === "dhan") return true;
   if (state.dhanFeed.lastTickAt) return true;
   const source = String(state.dhanFeed.source || "");
-  if (source === "rest" || source === "websocket") return true;
+  if (source === "rest" || source === "websocket" || source === "last") return true;
   for (const pack of optionChainCache.values()) {
     if (pack?.meta?.source === "dhan") return true;
   }
@@ -2292,9 +2392,10 @@ function dayChange(index, quote, ltp) {
   const close = Number(quote.close);
   const open = Number(quote.open);
   const high = Number(quote.high);
-  const quotedPrev = sanePrevClose(ltp, quote.prevClose);
-  const storedPrev = sanePrevClose(ltp, index.prevClose);
-  const ohlcPrev = close > 0 && Math.abs(close - ltp) > 0.05 ? sanePrevClose(ltp, close) : null;
+  const loose = index.symbol === "CRUDEOIL";
+  const quotedPrev = sanePrevClose(ltp, quote.prevClose, { loose });
+  const storedPrev = sanePrevClose(ltp, index.prevClose, { loose });
+  const ohlcPrev = close > 0 && Math.abs(close - ltp) > 0.05 ? sanePrevClose(ltp, close, { loose }) : null;
   const hasSession = open > 0 || high > 0 || Number(quote.low) > 0;
 
   const last = Number(index.price);
@@ -2316,7 +2417,10 @@ function dayChange(index, quote, ltp) {
 
 export function applyLiveQuotes(quotes) {
   for (const quote of quotes) {
-    const indexSymbol = INDEX_ALIASES[quote.parent || quote.symbol] || quote.symbol;
+    const indexSymbol =
+      INDEX_ALIASES[quote.parent] ||
+      INDEX_ALIASES[quote.symbol] ||
+      relatedIndex(quote.parent || quote.symbol);
     const index = state.indices.find((item) => item.symbol === indexSymbol);
     const ltp = Number(quote.ltp);
     if (index && quote.kind === "future" && Number.isFinite(ltp) && ltp > 0) {
@@ -2412,6 +2516,7 @@ export function applyLiveQuotes(quotes) {
   runPaperAlgos();
   runLiveAlgos();
   markPaperToMarket();
+  schedulePersistLastQuotes();
 }
 
 export function getCandles(tf = "5m", symbol = "NIFTY") {
@@ -2427,3 +2532,5 @@ export function getCandles(tf = "5m", symbol = "NIFTY") {
   if (minutes <= 1) return clone(liveRows);
   return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
 }
+
+if (!underNodeTest()) restoreLastIndexQuotes();

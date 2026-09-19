@@ -23,8 +23,12 @@ import {
   setLiveCandles,
   setOptionDesk,
   snapshot,
+  restoreLastIndexQuotes,
+  indexFamilyHasTape,
+  nseMarketSession,
+  mcxMarketSession,
 } from "./market.js";
-import { buildScripChain, chainUnderlyingRequest, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
+import { buildScripChain, chainUnderlyingRequest, fallbackFrontFutures, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
@@ -59,11 +63,11 @@ const DHAN_API = "https://api.dhan.co/v2";
 const DHAN_FEED_WS = "wss://api-feed.dhan.co";
 
 const INSTRUMENTS = [
-  { symbol: "NIFTY 50", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 13, kind: "index" },
-  { symbol: "BANK NIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 25, kind: "index" },
-  { symbol: "FINNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 27, kind: "index" },
-  { symbol: "SENSEX", segment: "IDX_I", fallbackSegment: "BSE_EQ", securityId: 51, kind: "index" },
-  { symbol: "INDIA VIX", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 21, kind: "index" },
+  { symbol: "NIFTY 50", parent: "NIFTY 50", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 13, kind: "index" },
+  { symbol: "BANK NIFTY", parent: "BANKNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 25, kind: "index" },
+  { symbol: "FINNIFTY", parent: "FINNIFTY", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 27, kind: "index" },
+  { symbol: "SENSEX", parent: "SENSEX", segment: "IDX_I", securityId: 51, kind: "index" },
+  { symbol: "INDIA VIX", parent: "INDIA VIX", segment: "IDX_I", fallbackSegment: "NSE_IDX", securityId: 21, kind: "index" },
   { symbol: "RELIANCE", segment: "NSE_EQ", securityId: 2885, kind: "equity" },
   { symbol: "HDFCBANK", segment: "NSE_EQ", securityId: 1333, kind: "equity" },
   { symbol: "ICICIBANK", segment: "NSE_EQ", securityId: 4963, kind: "equity" },
@@ -92,6 +96,7 @@ let reconnectTimer = null;
 let usedFallback = false;
 let futureInstruments = [];
 let lastTickAt = 0;
+const lastTickAtByFamily = { nse: 0, mcx: 0 };
 let keepAlivePromise = null;
 let lastKeepAliveAt = 0;
 let credentialsBlockedUntil = persistedBackoff.credentialsBlockedUntil;
@@ -126,8 +131,82 @@ function requestKind(path) {
   return "other";
 }
 
+const SEGMENT_BY_CODE = {
+  0: "IDX_I",
+  1: "NSE_EQ",
+  2: "NSE_FNO",
+  3: "NSE_CURRENCY",
+  4: "BSE_EQ",
+  5: "MCX_COMM",
+  7: "BSE_CURRENCY",
+  8: "BSE_FNO",
+};
+
+export function normalizeFeedSegment(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return SEGMENT_BY_CODE[Number(raw)] || raw;
+  return raw.toUpperCase();
+}
+
+export function matchLiveInstrument(instruments, securityId, segment) {
+  const id = Number(securityId);
+  if (!Number.isFinite(id)) return null;
+  const rows = (instruments || []).filter((row) => Number(row.securityId) === id);
+  if (!rows.length) return null;
+  const wanted = normalizeFeedSegment(segment);
+  if (wanted) {
+    const exact = rows.find(
+      (row) => normalizeFeedSegment(row.segment) === wanted || normalizeFeedSegment(row.fallbackSegment) === wanted,
+    );
+    if (exact) return exact;
+    return null;
+  }
+  return rows.length === 1 ? rows[0] : null;
+}
+
 function liveInstruments() {
-  return INSTRUMENTS.concat(futureInstruments, livePositionQuoteTargets());
+  const allFuts = (futureInstruments || []).filter((row) => row?.securityId);
+  const liveFuts = allFuts.filter((row) => !row.stale);
+  return INSTRUMENTS.concat(liveFuts.length ? liveFuts : allFuts, livePositionQuoteTargets());
+}
+
+function quoteFamily(segment) {
+  return normalizeFeedSegment(segment) === "MCX_COMM" ? "mcx" : "nse";
+}
+
+export function staleQuoteFamilies({
+  now = Date.now(),
+  nseTickAt = lastTickAtByFamily.nse,
+  mcxTickAt = lastTickAtByFamily.mcx,
+  nseOpen = nseMarketSession(new Date(now)).open,
+  mcxOpen = mcxMarketSession(new Date(now)).open,
+  nseHasTape,
+  mcxHasTape,
+  openMaxAgeMs = 4_000,
+  closedMaxAgeMs = 15_000,
+} = {}) {
+  const nseTape = nseHasTape ?? indexFamilyHasTape("nse");
+  const mcxTape = mcxHasTape ?? indexFamilyHasTape("mcx");
+  const families = [];
+  if (!nseTape || !nseTickAt || now - nseTickAt > (nseOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("nse");
+  if (!mcxTape || !mcxTickAt || now - mcxTickAt > (mcxOpen ? openMaxAgeMs : closedMaxAgeMs)) families.push("mcx");
+  return families;
+}
+
+function noteFamilyTicks(quotes, at = Date.now()) {
+  let sawLtp = false;
+  for (const quote of quotes || []) {
+    if (!(Number(quote.ltp) > 0)) continue;
+    sawLtp = true;
+    lastTickAtByFamily[quoteFamily(quote.segment)] = at;
+  }
+  if (sawLtp) lastTickAt = at;
+}
+
+function instrumentsForFamilies(families, instruments = liveInstruments()) {
+  const wanted = new Set(families);
+  return instruments.filter((row) => wanted.has(quoteFamily(row.segment)));
 }
 
 function feedInstrumentList() {
@@ -386,41 +465,52 @@ function quoteBody(useFallback, instruments = liveInstruments()) {
   const body = {};
   for (const row of instruments) {
     const segment = useFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
+    const id = Number(row.securityId);
+    if (!segment || !Number.isFinite(id) || id <= 0) continue;
     if (!body[segment]) body[segment] = [];
-    if (!body[segment].includes(row.securityId)) body[segment].push(row.securityId);
+    if (!body[segment].includes(id)) body[segment].push(id);
   }
   return body;
 }
 
-function flattenQuotes(payload) {
+function quoteBodies(useFallback, instruments = liveInstruments()) {
+  const nse = [];
+  const mcx = [];
+  for (const row of instruments) {
+    const segment = useFallback && row.fallbackSegment ? row.fallbackSegment : row.segment;
+    if (quoteFamily(segment) === "mcx") mcx.push(row);
+    else nse.push(row);
+  }
+  return [quoteBody(useFallback, nse), quoteBody(useFallback, mcx)].filter((body) => Object.keys(body).length);
+}
+
+export function flattenQuotes(payload, instruments = liveInstruments()) {
   const quotes = [];
   const data = payload?.data || payload || {};
-  const instruments = liveInstruments();
   for (const [segment, securities] of Object.entries(data)) {
     if (!securities || typeof securities !== "object") continue;
     for (const [id, quote] of Object.entries(securities)) {
       if (!quote || typeof quote !== "object") continue;
-      const securityId = Number(id);
-      const instrument =
-        instruments.find(
-          (row) =>
-            Number(row.securityId) === securityId &&
-            (row.segment === segment || row.fallbackSegment === segment),
-        ) || instruments.find((row) => Number(row.securityId) === securityId);
+      const instrument = matchLiveInstrument(instruments, id, segment);
       if (!instrument) continue;
-      const ltp = Number(quote.last_price ?? quote.ltp ?? quote.lastPrice);
+      const ltpRaw = Number(
+        quote.last_price ?? quote.ltp ?? quote.lastPrice ?? quote.last_traded_price ?? quote.lastTradedPrice ?? quote.LTP,
+      );
+      const close = Number(quote.ohlc?.close ?? quote.close);
+      const ltp = Number.isFinite(ltpRaw) && ltpRaw > 0 ? ltpRaw : close;
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
       quotes.push({
         symbol: instrument.symbol,
         parent: instrument.parent || instrument.symbol,
         kind: instrument.kind,
         securityId: instrument.securityId,
+        segment: instrument.segment,
         expiry: instrument.expiry,
         ltp,
         open: Number(quote.ohlc?.open ?? quote.open),
         high: Number(quote.ohlc?.high ?? quote.high),
         low: Number(quote.ohlc?.low ?? quote.low),
-        close: Number(quote.ohlc?.close ?? quote.close),
+        close,
         vwap: Number(quote.average_price ?? quote.averagePrice ?? quote.vwap),
         netChange: quote.net_change ?? quote.netChange,
         volume: Number(quote.volume ?? quote.vol),
@@ -701,42 +791,35 @@ async function pullNiftyCandles() {
 async function pullQuotes() {
   if (!accessToken || !clientId) return;
   if (Date.now() < quoteBackoffUntil) return;
-  if (socket?.readyState === 1 && lastTickAt && Date.now() - lastTickAt < 5000) return;
+  const families = staleQuoteFamilies();
+  if (!families.length) return;
   try {
-    let payload = null;
-    try {
-      payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(usedFallback));
-    } catch (error) {
-      if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
-      payload = null;
-    }
-    let quotes = payload ? flattenQuotes(payload) : [];
-    if (!quotes.length) {
+    const quotes = [];
+    let lastError = null;
+    const rows = instrumentsForFamilies(families);
+    for (const body of quoteBodies(usedFallback, rows)) {
       try {
-        payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, quoteBody(usedFallback));
-        quotes = flattenQuotes(payload);
+        const batch = await pullQuoteBody(body);
+        if (batch.length) quotes.push(...batch);
       } catch (error) {
+        lastError = error;
         if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
       }
     }
     if (!quotes.length && !usedFallback) {
       usedFallback = true;
-      try {
-        payload = await dhanPost("/marketfeed/quote", accessToken, clientId, quoteBody(true));
-        quotes = payload ? flattenQuotes(payload) : [];
-      } catch (error) {
-        if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+      for (const body of quoteBodies(true, rows)) {
+        try {
+          const batch = await pullQuoteBody(body);
+          if (batch.length) quotes.push(...batch);
+        } catch (error) {
+          lastError = error;
+          if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+        }
       }
     }
-    if (!quotes.length) {
-      payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, quoteBody(usedFallback));
-      quotes = flattenQuotes(payload);
-    }
-    if (payload?.status && payload.status !== "success" && !quotes.length) {
-      throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");
-    }
     if (quotes.length) {
-      lastTickAt = Date.now();
+      noteFamilyTicks(quotes);
       applyLiveQuotes(quotes);
       setDhanFeed({
         live: true,
@@ -745,15 +828,43 @@ async function pullQuotes() {
         error: null,
         quoteCount: quotes.length,
       });
-    } else {
+    } else if (lastError) {
       setDhanFeed({
         live: Boolean(accessToken),
-        error: "Dhan returned no quotes for mapped instruments.",
+        error: lastError.message || "Dhan returned no quotes for mapped NSE/MCX instruments.",
       });
     }
   } catch (error) {
     handleDhanPollError("quotes", error);
   }
+}
+
+async function pullQuoteBody(body) {
+  if (!body || !Object.keys(body).length) return [];
+  let payload = null;
+  try {
+    payload = await dhanPost("/marketfeed/quote", accessToken, clientId, body);
+  } catch (error) {
+    if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+    payload = null;
+  }
+  let quotes = payload ? flattenQuotes(payload) : [];
+  if (!quotes.length) {
+    try {
+      payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, body);
+      quotes = flattenQuotes(payload);
+    } catch (error) {
+      if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+    }
+  }
+  if (!quotes.length) {
+    payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, body);
+    quotes = flattenQuotes(payload);
+  }
+  if (payload?.status && payload.status !== "success" && !quotes.length) {
+    throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");
+  }
+  return quotes;
 }
 
 function stopSocket() {
@@ -772,17 +883,17 @@ function stopSocket() {
   }
 }
 
-function parseFeedPackets(buffer) {
+export function parseFeedPackets(buffer, instruments = liveInstruments()) {
   const quotes = [];
-  const instruments = liveInstruments();
   let offset = 0;
   while (offset + 16 <= buffer.length) {
     const code = buffer.readUInt8(offset);
     const length = buffer.readUInt16LE(offset + 1);
+    const segment = SEGMENT_BY_CODE[buffer.readUInt8(offset + 3)] || "";
     const securityId = buffer.readInt32LE(offset + 4);
-    const instrument = instruments.find((row) => Number(row.securityId) === Number(securityId));
+    const instrument = matchLiveInstrument(instruments, securityId, segment);
     const packetLen = Math.max(length >= 16 ? length : length + 8, 16);
-    if (instrument && (code === 2 || code === 4 || code === 8)) {
+    if (instrument && (code === 1 || code === 2 || code === 4 || code === 8)) {
       const ltp = buffer.readFloatLE(offset + 8);
       if (Number.isFinite(ltp) && ltp > 0) {
         const quote = {
@@ -790,6 +901,8 @@ function parseFeedPackets(buffer) {
           parent: instrument.parent || instrument.symbol,
           kind: instrument.kind,
           securityId: instrument.securityId,
+          segment: instrument.segment,
+          expiry: instrument.expiry,
           ltp,
         };
         if (code === 4 && offset + 50 <= buffer.length) {
@@ -813,6 +926,8 @@ function parseFeedPackets(buffer) {
           symbol: instrument.symbol,
           parent: instrument.parent || instrument.symbol,
           kind: instrument.kind,
+          securityId: instrument.securityId,
+          segment: instrument.segment,
           prevClose,
         });
       }
@@ -838,21 +953,32 @@ function startSocket() {
     setDhanFeed({ live: true, source: "websocket", error: null });
   });
 
+  let pendingQuotes = [];
+  let quotesScheduled = false;
+  const flushQuotes = () => {
+    quotesScheduled = false;
+    const quotes = pendingQuotes;
+    pendingQuotes = [];
+    if (!quotes.length) return;
+    noteFamilyTicks(quotes);
+    applyLiveQuotes(quotes);
+    setDhanFeed({
+      live: true,
+      source: "websocket",
+      lastTickAt,
+      error: null,
+      quoteCount: quotes.length,
+    });
+  };
   socket.on("message", (data) => {
     try {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       const quotes = parseFeedPackets(buffer);
-      if (quotes.length) {
-        lastTickAt = Date.now();
-        applyLiveQuotes(quotes);
-        setDhanFeed({
-          live: true,
-          source: "websocket",
-          lastTickAt,
-          error: null,
-          quoteCount: quotes.length,
-        });
-      }
+      if (!quotes.length) return;
+      pendingQuotes.push(...quotes);
+      if (quotesScheduled) return;
+      quotesScheduled = true;
+      setImmediate(flushQuotes);
     } catch {
       /* ignore a bad packet */
     }
@@ -1026,16 +1152,26 @@ export async function selectOptionDesk({ symbol, expiry }) {
 
 function startLiveLoop() {
   stopLiveLoop(false);
+  restoreLastIndexQuotes();
+  if (!(futureInstruments || []).some((row) => row?.securityId)) {
+    futureInstruments = fallbackFrontFutures();
+  }
   onDhanBookChanged(subscribeFeedInstruments);
+  startSocket();
+  void pullQuotes();
   void (async () => {
     try {
-      futureInstruments = await resolveFrontFutures();
+      const next = await resolveFrontFutures();
+      if (Array.isArray(next) && next.some((row) => row?.securityId && !row.stale)) {
+        futureInstruments = next;
+        subscribeFeedInstruments();
+        void pullQuotes();
+      }
     } catch {
-      futureInstruments = [];
+      if (!(futureInstruments || []).some((row) => row?.securityId)) {
+        futureInstruments = fallbackFrontFutures();
+      }
     }
-    startSocket();
-    await sleep(400);
-    void pullQuotes();
     await sleep(400);
     void selectOptionDesk({ symbol: getOptionMeta().symbol }).catch(() => undefined);
     await sleep(400);

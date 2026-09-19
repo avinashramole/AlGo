@@ -1,4 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildSyntheticChain, dropExpired, exchangeSegmentFor, markAtmRows, normalizeExpiry, trimAroundAtm } from "./optionChain.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCRIP_FRONT_FILE = process.env.T2S_SCRIP_CACHE || path.join(__dirname, "data", "scrip-front.json");
 
 const SCRIP_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const CACHE_MS = 12 * 60 * 60 * 1000;
@@ -18,6 +24,10 @@ const FALLBACK = [
   { parent: "SENSEX", symbol: "SENSEX FUT", kind: "future", segment: "BSE_FNO", securityId: 825622 },
   { parent: "CRUDEOIL", symbol: "CRUDEOIL FUT", kind: "future", segment: "MCX_COMM", securityId: 565899 },
 ];
+
+export function fallbackFrontFutures() {
+  return FALLBACK.map((row) => ({ ...row }));
+}
 
 const ROOTS = new Set(UNDERLYINGS.map((row) => row.root));
 
@@ -95,6 +105,133 @@ function strikeBucket(byExpiry, root, expiry, strike) {
   return strikes.get(strike);
 }
 
+function scripYieldEvery(env = process.env) {
+  const n = Number(env.T2S_SCRIP_YIELD_EVERY);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return 1500;
+}
+
+export async function parseScripMasterText(text, env = process.env) {
+  const grouped = Object.fromEntries(UNDERLYINGS.map((row) => [row.root, []]));
+  const options = new Map();
+  const byExpiry = new Map();
+  const every = scripYieldEvery(env);
+  let header = true;
+  let idx = {};
+  let n = 0;
+  let start = 0;
+  while (start < text.length) {
+    let end = text.indexOf("\n", start);
+    if (end < 0) end = text.length;
+    let line = text.slice(start, end);
+    start = end + 1;
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    if (!line) continue;
+    if (header) {
+      const cols = splitCsvLine(line).map((col, i) => (i === 0 ? col.replace(/^\uFEFF/, "") : col));
+      idx = Object.fromEntries(cols.map((col, i) => [col, i]));
+      header = false;
+      continue;
+    }
+    n += 1;
+    const isFut = line.includes("FUTIDX") || line.includes("FUTCOM");
+    const isOpt = line.includes("OPTIDX") || line.includes("OPTFUT");
+    if (isFut || isOpt) {
+      const parts = splitCsvLine(line);
+      const instrument = parts[idx.SEM_INSTRUMENT_NAME];
+      const trading = parts[idx.SEM_TRADING_SYMBOL] || "";
+      const root = trading.split("-")[0];
+      const und = UNDERLYINGS.find((row) => row.root === root && parts[idx.SEM_EXM_EXCH_ID] === row.exchange);
+      if (und && ROOTS.has(root)) {
+        const expiry = normalizeExpiry(parts[idx.SEM_EXPIRY_DATE]);
+        const securityId = Number(parts[idx.SEM_SMST_SECURITY_ID]);
+        if (expiry && Number.isFinite(securityId) && securityId > 0) {
+          const futName = und.futInstrument || "FUTIDX";
+          const optName = und.optInstrument || "OPTIDX";
+          const parsedLot = Number(parts[idx.SEM_LOT_UNITS]);
+          const lot = parsedLot > 1 ? parsedLot : und.lot;
+          if (instrument === futName) {
+            grouped[root].push({
+              expiry,
+              securityId,
+              trading,
+              lot,
+              segment: und.segment,
+            });
+          } else if (instrument === optName) {
+            const option = optionType(parts[idx.SEM_OPTION_TYPE]);
+            const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
+            if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
+              options.set(optionKey(root, expiry, strike, option), String(securityId));
+              const ids = strikeBucket(byExpiry, root, expiry, strike);
+              if (option === "CE") ids.callId = securityId;
+              else ids.putId = securityId;
+            }
+          }
+        }
+      }
+    }
+    if (every > 0 && n % every === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+
+  const instruments = UNDERLYINGS.map((und) => {
+    const front = pickFront(grouped[und.root] || []);
+    const fallback = FALLBACK.find((row) => row.parent === und.parent);
+    if (!front) return fallback;
+    return {
+      parent: und.parent,
+      symbol: `${und.root} FUT`,
+      kind: "future",
+      segment: und.segment,
+      securityId: front.securityId,
+      expiry: front.expiry,
+    };
+  }).filter(Boolean);
+
+  return {
+    instruments: instruments.length ? instruments : FALLBACK,
+    options,
+    byExpiry,
+    futures: grouped,
+  };
+}
+
+function loadScripFrontDisk() {
+  try {
+    const row = JSON.parse(fs.readFileSync(SCRIP_FRONT_FILE, "utf8"));
+    if (!row || !Array.isArray(row.instruments) || !row.instruments.length) return null;
+    return row;
+  } catch {
+    return null;
+  }
+}
+
+function saveScripFrontDisk(parsed) {
+  try {
+    fs.mkdirSync(path.dirname(SCRIP_FRONT_FILE), { recursive: true });
+    fs.writeFileSync(
+      SCRIP_FRONT_FILE,
+      `${JSON.stringify(
+        {
+          at: Date.now(),
+          instruments: parsed.instruments,
+          futures: parsed.futures || {},
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  } catch (error) {
+    console.log(`Could not save scrip front cache: ${error.message || error}`);
+  }
+}
+
+function withStaleFlag(instruments, stale) {
+  return (instruments || []).map((row) => ({ ...row, stale: Boolean(stale) }));
+}
+
 async function loadScripMaster() {
   if (cache.at && Date.now() - cache.at < CACHE_MS) return cache;
   if (loading) return loading;
@@ -104,78 +241,33 @@ async function loadScripMaster() {
       const res = await fetch(SCRIP_MASTER_URL);
       if (!res.ok) throw new Error(`scrip master ${res.status}`);
       const text = await res.text();
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      const cols = splitCsvLine(lines[0] || "").map((col, i) => (i === 0 ? col.replace(/^\uFEFF/, "") : col));
-      const idx = Object.fromEntries(cols.map((col, i) => [col, i]));
-      const grouped = Object.fromEntries(UNDERLYINGS.map((row) => [row.root, []]));
-      const options = new Map();
-      const byExpiry = new Map();
-
-      for (let i = 1; i < lines.length; i += 1) {
-        const line = lines[i];
-        const isFut = line.includes("FUTIDX") || line.includes("FUTCOM");
-        const isOpt = line.includes("OPTIDX") || line.includes("OPTFUT");
-        if (!isFut && !isOpt) continue;
-        const parts = splitCsvLine(line);
-        const instrument = parts[idx.SEM_INSTRUMENT_NAME];
-        const trading = parts[idx.SEM_TRADING_SYMBOL] || "";
-        const root = trading.split("-")[0];
-        const und = UNDERLYINGS.find((row) => row.root === root && parts[idx.SEM_EXM_EXCH_ID] === row.exchange);
-        if (!und || !ROOTS.has(root)) continue;
-        const expiry = normalizeExpiry(parts[idx.SEM_EXPIRY_DATE]);
-        const securityId = Number(parts[idx.SEM_SMST_SECURITY_ID]);
-        if (!expiry || !Number.isFinite(securityId) || securityId <= 0) continue;
-        const futName = und.futInstrument || "FUTIDX";
-        const optName = und.optInstrument || "OPTIDX";
-        const parsedLot = Number(parts[idx.SEM_LOT_UNITS]);
-        const lot = parsedLot > 1 ? parsedLot : und.lot;
-        if (instrument === futName) {
-          grouped[root].push({
-            expiry,
-            securityId,
-            trading,
-            lot,
-            segment: und.segment,
-          });
-        } else if (instrument === optName) {
-          const option = optionType(parts[idx.SEM_OPTION_TYPE]);
-          const strike = Number(parts[idx.SEM_STRIKE_PRICE]);
-          if ((option === "CE" || option === "PE") && Number.isFinite(strike)) {
-            options.set(optionKey(root, expiry, strike, option), String(securityId));
-            const ids = strikeBucket(byExpiry, root, expiry, strike);
-            if (option === "CE") ids.callId = securityId;
-            else ids.putId = securityId;
-          }
-        }
-      }
-
-      const instruments = UNDERLYINGS.map((und) => {
-        const front = pickFront(grouped[und.root] || []);
-        const fallback = FALLBACK.find((row) => row.parent === und.parent);
-        if (!front) return fallback;
-        return {
-          parent: und.parent,
-          symbol: `${und.root} FUT`,
-          kind: "future",
-          segment: und.segment,
-          securityId: front.securityId,
-          expiry: front.expiry,
-        };
-      }).filter(Boolean);
-
+      const parsed = await parseScripMasterText(text);
       cache = {
         at: Date.now(),
-        instruments: instruments.length ? instruments : FALLBACK,
-        options,
-        byExpiry,
-        futures: grouped,
+        instruments: withStaleFlag(parsed.instruments, false),
+        options: parsed.options,
+        byExpiry: parsed.byExpiry,
+        futures: parsed.futures,
       };
+      saveScripFrontDisk(cache);
       return cache;
     } catch (error) {
       console.log(`Dhan scrip master failed: ${error.message || error}`);
+      const disk = loadScripFrontDisk();
+      if (disk?.instruments?.length) {
+        console.log("Using last saved NSE/MCX front contracts so quotes stay on the live expiry.");
+        cache = {
+          at: Number(disk.at) || Date.now(),
+          instruments: withStaleFlag(disk.instruments, false),
+          options: cache.options instanceof Map ? cache.options : new Map(),
+          byExpiry: cache.byExpiry instanceof Map ? cache.byExpiry : new Map(),
+          futures: disk.futures || cache.futures || {},
+        };
+        return cache;
+      }
       cache = {
         at: 0,
-        instruments: cache.instruments.length ? cache.instruments : FALLBACK,
+        instruments: withStaleFlag(cache.instruments.length ? cache.instruments : FALLBACK, true),
         options: cache.options instanceof Map && cache.options.size ? cache.options : new Map(),
         byExpiry: cache.byExpiry instanceof Map && cache.byExpiry.size ? cache.byExpiry : new Map(),
         futures: cache.futures || {},

@@ -1,4 +1,4 @@
-import { cn, formatChange, formatPct, formatQuote, vwapTone } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, vwapTone } from "../../lib/format";
 import { chainIdFromIndex } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
@@ -27,7 +27,8 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
         const chainId = chainIdFromIndex(item.symbol);
         const selectable = Boolean(onSelect && chainId);
         const selected = selectable && chainId === selectedId;
-        const volume = watchBySymbol.get(item.symbol)?.volume || (showDeriv ? "Live" : "—");
+        const tapeLabel = indexTapeLabel(item.symbol);
+        const volume = watchBySymbol.get(item.symbol)?.volume || (showDeriv ? tapeLabel : "—");
         return (
           <div
             key={item.symbol}
@@ -51,7 +52,10 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{tapeLabel}</div>
+                </div>
                 <div className="mt-1 text-lg font-bold leading-none">{formatQuote(item.price)}</div>
                 <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today

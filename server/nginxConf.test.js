@@ -31,6 +31,14 @@ test("nginx conf never roots files under /root and proxies API", () => {
   assert.doesNotMatch(text, /@node/);
 });
 
+test("nginx conf sends login and health to the 3999 gate", () => {
+  const text = render("/tmp/t2s-no-certs");
+  assert.match(text, /location = \/api\/login/);
+  assert.match(text, /location = \/api\/health/);
+  assert.match(text, /proxy_pass http:\/\/127\.0\.0\.1:3999/);
+  assert.match(text, /proxy_pass http:\/\/127\.0\.0\.1:4000/);
+});
+
 test("nginx conf enables HTTPS when Let's Encrypt files exist", () => {
   const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-certs-"));
   fs.writeFileSync(path.join(certDir, "fullchain.pem"), "cert\n");
@@ -73,4 +81,22 @@ test("nginx conf can force listen 443 with an explicit cert pair", () => {
   assert.match(result.stdout, /listen 443 ssl/);
   assert.match(result.stdout, /force\.crt/);
   fs.rmSync(certDir, { recursive: true, force: true });
+});
+
+test("nginx writer is safe on Python 3.6 (AlmaLinux 8)", () => {
+  const src = fs.readFileSync(path.join(deployDir, "write_nginx_trade2smart.py"), "utf8");
+  assert.doesNotMatch(src, /^from __future__ import annotations/m);
+  const parsed = spawnSync(
+    "python3",
+    ["-c", "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read())", path.join(deployDir, "write_nginx_trade2smart.py")],
+    { encoding: "utf8" },
+  );
+  assert.equal(parsed.status, 0, parsed.stderr || parsed.stdout);
+});
+
+test("install-t2s-service still restarts t2s if the nginx writer fails", () => {
+  const src = fs.readFileSync(path.join(deployDir, "install-t2s-service.sh"), "utf8");
+  assert.match(src, /if ! python3 .*write_nginx_trade2smart\.py/s);
+  assert.match(src, /Leaving \/etc\/nginx\/conf\.d as-is and still restarting t2s/);
+  assert.match(src, /systemctl start t2s/);
 });

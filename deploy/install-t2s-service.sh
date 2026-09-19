@@ -68,7 +68,9 @@ chmod -R a+rX "$WEBROOT" || true
 chown -R nginx:nginx "$WEBROOT" 2>/dev/null || true
 
 echo "== nginx HTTP+HTTPS, not root /root/... =="
-python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf
+if ! python3 "$SCRIPT_DIR/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf; then
+  echo "python nginx writer failed. Leaving /etc/nginx/conf.d as-is and still restarting t2s."
+fi
 # Extra copies that still `root /root/...` make Chrome 500 / ERR_CONNECTION_REFUSED.
 if [ -d /etc/nginx/conf.d ]; then
   for f in /etc/nginx/conf.d/*.conf; do
@@ -100,11 +102,24 @@ iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
 
 systemctl daemon-reload
 systemctl enable t2s >/dev/null 2>&1 || true
+if [ -f "$HOME_DIR/deploy/t2s-login.service" ]; then
+  cp "$HOME_DIR/deploy/t2s-login.service" /etc/systemd/system/t2s-login.service
+  mkdir -p /etc/systemd/system/t2s-login.service.d
+  cat > /etc/systemd/system/t2s-login.service.d/home.conf <<EOF
+[Service]
+WorkingDirectory=$HOME_DIR
+EnvironmentFile=-$HOME_DIR/.env
+EnvironmentFile=-$HOME_DIR/tokan.env
+Environment=T2S_HOME=$HOME_DIR
+EOF
+fi
 install -m 755 "$SCRIPT_DIR/t2s-health-watch.sh" /usr/local/sbin/t2s-health-watch.sh
 cp "$SCRIPT_DIR/t2s-health-watch.service" /etc/systemd/system/t2s-health-watch.service
 cp "$SCRIPT_DIR/t2s-health-watch.timer" /etc/systemd/system/t2s-health-watch.timer
 systemctl daemon-reload
 systemctl enable --now t2s-health-watch.timer >/dev/null 2>&1 || true
+systemctl enable --now t2s-login >/dev/null 2>&1 || true
+systemctl restart t2s-login || systemctl start t2s-login || true
 systemctl stop t2s || true
 sleep 1
 pkill -9 -f "node server/index.js" 2>/dev/null || true
@@ -120,16 +135,18 @@ fi
 
 echo "== service =="
 systemctl is-active t2s || true
+systemctl is-active t2s-login || true
 systemctl is-active nginx || true
 systemctl show t2s -p WorkingDirectory -p FragmentPath || true
-ss -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 ' || netstat -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 ' || true
+ss -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 |:3999 ' || netstat -tlnp 2>/dev/null | grep -E ':80 |:443 |:4000 |:3999 ' || true
 echo "== curl =="
 curl -sS -o /dev/null -w "app:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/ || true
 curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 8 http://127.0.0.1:4000/api/health || true
-curl -sS -o /dev/null -w "login:%{http_code}\n" --max-time 8 -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:4000/api/login || true
+curl -sS -o /dev/null -w "gate:%{http_code}\n" --max-time 5 http://127.0.0.1:3999/api/health || true
+curl -sS -o /dev/null -w "login:%{http_code}\n" --max-time 8 -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:3999/api/login || true
 curl -sS -o /dev/null -w "http80:%{http_code}\n" --max-time 8 -H "Host: trade2smart.com" http://127.0.0.1/ || true
 if [ -f /etc/letsencrypt/live/trade2smart.com/fullchain.pem ]; then
   curl -skS -o /dev/null -w "https443:%{http_code}\n" --max-time 8 --resolve trade2smart.com:443:127.0.0.1 https://trade2smart.com/ || true
 fi
-echo "Want t2s active, nginx active, app:200, api:200, and http80/https443 200 or 301."
+echo "Want t2s and t2s-login active, nginx active, app:200, gate:200, login:401, and http80/https443 200 or 301."
 echo "Restart did not turn LIVE on. Then hard-refresh https://trade2smart.com (Ctrl+Shift+R). Do not open localhost."

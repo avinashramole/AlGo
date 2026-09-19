@@ -1,6 +1,27 @@
 type StrikeRow = { strike: number };
 type IdRow = { id: string };
 
+export function keepLastIndexPrices<T extends { symbol: string; price?: number; future?: number }>(
+  previous: T[] = [],
+  incoming: T[] = [],
+): T[] {
+  if (!incoming.length) return previous;
+  if (!previous.length) return incoming;
+  const prevBySymbol = new Map(previous.map((row) => [row.symbol, row]));
+  return incoming.map((row) => {
+    if (Number(row.price) > 0 || Number(row.future) > 0) return row;
+    const prev = prevBySymbol.get(row.symbol);
+    if (!prev) return row;
+    if (!(Number(prev.price) > 0) && !(Number(prev.future) > 0)) return row;
+    return {
+      ...row,
+      ...prev,
+      symbol: row.symbol,
+      future: Number(row.future) > 0 ? row.future : prev.future,
+    };
+  });
+}
+
 export function keepStrikeWindow<T extends StrikeRow>(previous: T[] = [], incoming: T[] = []): T[] {
   const prev = Array.isArray(previous) ? previous : [];
   const next = Array.isArray(incoming) ? incoming : [];

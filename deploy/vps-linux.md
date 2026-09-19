@@ -394,7 +394,7 @@ curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000
 
 Chrome on **trade2smart.com** shows: *API is down on the server. On the VPS as root run: systemctl start t2s.*
 
-The website can be **200** while `/api/health` is nginx **504**. `systemctl start t2s` does nothing if Node is already listed as active but hung. Use **restart**. Restart does **not** turn LIVE on. Do **not** open localhost.
+The website can be **200** while `/api/login` is nginx **504**. `systemctl start t2s` does nothing if Node is already listed as active but hung. Login now runs on a separate process (`t2s-login` on port **3999**) so sign-in still works if quotes hang. Restart does **not** turn LIVE on. Do **not** open localhost.
 
 On the VPS as root:
 
@@ -403,29 +403,17 @@ cd /opt/t2s
 git fetch origin main
 git checkout main
 git pull origin main
-install -m 755 /opt/t2s/deploy/t2s-health-watch.sh /usr/local/sbin/t2s-health-watch.sh
-cp /opt/t2s/deploy/t2s-health-watch.service /etc/systemd/system/
-cp /opt/t2s/deploy/t2s-health-watch.timer /etc/systemd/system/
-cp /opt/t2s/deploy/t2s.service /etc/systemd/system/t2s.service
-mkdir -p /etc/systemd/system/t2s.service.d
-cat > /etc/systemd/system/t2s.service.d/home.conf <<'EOF'
-[Service]
-WorkingDirectory=/opt/t2s
-EnvironmentFile=-/opt/t2s/.env
-EnvironmentFile=-/opt/t2s/tokan.env
-Environment=T2S_HOME=/opt/t2s
-Environment=T2S_SKIP_LIVE_ALGOS=1
-Environment=T2S_DHAN_BOOT_DELAY_MS=4000
-EOF
-systemctl daemon-reload
-systemctl enable --now t2s-health-watch.timer
-systemctl restart t2s
-sleep 3
-systemctl is-active t2s
-curl -sS -o /dev/null -w "api:%{http_code}\n" --max-time 5 http://127.0.0.1:4000/api/health
-curl -sS -o /dev/null -w "login:%{http_code}\n" --max-time 5 -X POST -H "Content-Type: application/json" -d "{}" http://127.0.0.1:4000/api/login
-curl -skS -o /dev/null -w "https-api:%{http_code}\n" --max-time 8 https://trade2smart.com/api/health
+bash /opt/t2s/deploy/install-t2s-service.sh
 ```
+
+Or one line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/fix-login-now.sh | bash
+```
+
+Want `t2s-login` **active**, `gate:200`, and HTTPS login **401** (API answered). Then **Ctrl+Shift+R** on https://trade2smart.com. Do not open localhost.
+
 
 On the **VPS** the checkout is **`/opt/t2s`**. The **PC** folder is **`C:\Users\SHIVAMFINTECH\Desktop\AlGo`**. Do not `cd` into `/root/download/algo` or any Windows path on the server.
 

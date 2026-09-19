@@ -66,6 +66,13 @@ function persistSessions() {
   }
 }
 
+function mergeSessionsFromDisk() {
+  const fromDisk = loadSessions();
+  for (const [token, value] of fromDisk) {
+    if (!sessions.has(token)) sessions.set(token, value);
+  }
+}
+
 function now() {
   return Date.now();
 }
@@ -315,7 +322,13 @@ function issueSession(user) {
 }
 
 function userFromToken(token) {
-  const row = sessions.get(String(token || ""));
+  const clean = String(token || "");
+  if (!clean) return null;
+  let row = sessions.get(clean);
+  if (!row) {
+    mergeSessionsFromDisk();
+    row = sessions.get(clean);
+  }
   if (!row) return null;
   return store.byId.get(row.userId) || findUser(row.email || row.mobile);
 }
@@ -472,6 +485,7 @@ function consumeOtp(channel, identifier, otp, purpose) {
 }
 
 export function loginWithPassword(identifier, password) {
+  store = loadUsers();
   const user = findUser(identifier || "");
   if (!user?.password || !checkPassword(password, user.password)) {
     throw fail("Wrong Gmail / mobile or password. New users: Sign up first.", 401);
@@ -674,7 +688,13 @@ export function loginWithThumb(thumbToken) {
 export function sessionUser(token, { reload = false } = {}) {
   if (reload) store = loadUsers();
   const user = userFromToken(token);
-  return user ? publicUser(user) : null;
+  if (user) return publicUser(user);
+  if (!reload) {
+    store = loadUsers();
+    const again = userFromToken(token);
+    return again ? publicUser(again) : null;
+  }
+  return null;
 }
 
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {

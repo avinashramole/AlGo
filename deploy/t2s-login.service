@@ -1,0 +1,24 @@
+[Unit]
+Description=Trade 2 Smart login gate (stays up if quotes hang)
+After=network.target
+StartLimitIntervalSec=40
+StartLimitBurst=12
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/t2s
+Environment=NODE_ENV=production
+Environment=T2S_LOGIN_PORT=3999
+Environment=NODE_OPTIONS=--max-old-space-size=96
+Environment=T2S_HOME=/opt/t2s
+EnvironmentFile=-/opt/t2s/.env
+EnvironmentFile=-/opt/t2s/tokan.env
+ExecStart=/usr/bin/node server/loginGate.js
+Restart=always
+RestartSec=1
+MemoryMax=200M
+OOMPolicy=stop
+TimeoutStopSec=8
+
+[Install]
+WantedBy=multi-user.target
