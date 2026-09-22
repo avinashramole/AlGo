@@ -1472,6 +1472,7 @@ export function memberIndexQuote(row) {
     price: Number(row.price) || 0,
     change: Number(row.change) || 0,
     changePct: Number(row.changePct) || 0,
+    prevClose: Number(row.prevClose) > 0 ? Number(row.prevClose) : 0,
     spark: Array.isArray(row.spark) ? row.spark.slice(-8) : [],
     future: Number(row.future) > 0 ? Number(row.future) : Number(row.price) || 0,
     futureExpiry: row.futureExpiry || "",

@@ -88,6 +88,7 @@ test("Fyers quote payload reads lp from the d array", () => {
   assert.equal(quotes[0].symbol, "NIFTY 50");
   assert.equal(quotes[0].ltp, 25140);
   assert.equal(quotes[0].close, 25010);
+  assert.equal(quotes[0].prevClose, 25010);
 });
 
 test("Angel quote payload maps symbol tokens", () => {
@@ -96,6 +97,8 @@ test("Angel quote payload maps symbol tokens", () => {
   });
   assert.equal(quotes[0].symbol, "NIFTY 50");
   assert.equal(quotes[0].ltp, 25002);
+  assert.equal(quotes[0].close, 24900);
+  assert.equal(quotes[0].prevClose, 24900);
 });
 
 test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async () => {

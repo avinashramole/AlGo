@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { flattenQuotes, matchLiveInstrument, parseFeedPackets, staleQuoteFamilies } from "./dhan.js";
+import { fetchDhanTapeQuotes, flattenQuotes, matchLiveInstrument, parseFeedPackets, staleQuoteFamilies } from "./dhan.js";
 import { fallbackFrontFutures } from "./frontFutures.js";
 import { applyLiveQuotes, persistLastIndexQuotes, restoreLastIndexQuotes, snapshot } from "./market.js";
 
@@ -169,6 +169,40 @@ test("flattenQuotes prefers last_price over previous close", () => {
   );
   assert.equal(quotes[0].ltp, 25091.2);
   assert.equal(quotes[0].close, 24980);
+  assert.equal(quotes[0].prevClose, 24980);
+});
+
+test("flattenQuotes keeps net change and an explicit previous close", () => {
+  const quotes = flattenQuotes(
+    {
+      data: {
+        IDX_I: { 13: { last_price: 23326.8, prev_close: 23411, net_change: -84.2 } },
+      },
+    },
+    BOTH,
+  );
+  assert.equal(quotes[0].ltp, 23326.8);
+  assert.equal(quotes[0].prevClose, 23411);
+  assert.equal(quotes[0].netChange, -84.2);
+});
+
+test("member Dhan tape prefers OHLC so yesterday close is present", async () => {
+  const seen = [];
+  const quotes = await fetchDhanTapeQuotes({
+    accessToken: "member-dhan-quote-token",
+    clientId: "1100333",
+    fetchQuotes: async (path, body) => {
+      seen.push(path);
+      if (path === "/marketfeed/ohlc") {
+        return { data: { IDX_I: { 13: { last_price: 23326.8, ohlc: { close: 23200 } } } } };
+      }
+      throw new Error(`unexpected ${path} ${JSON.stringify(body)}`);
+    },
+  });
+  assert.equal(seen[0], "/marketfeed/ohlc");
+  const nifty = quotes.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.ltp, 23326.8);
+  assert.equal(nifty.prevClose, 23200);
 });
 
 test("prev-close websocket packets do not invent an NSE last price", () => {

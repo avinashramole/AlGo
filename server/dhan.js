@@ -526,6 +526,21 @@ export function memberQuoteInstruments() {
   return indices.concat(futs);
 }
 
+async function pullMemberTapeBody(pull, body, instruments) {
+  let lastError;
+  for (const path of ["/marketfeed/ohlc", "/marketfeed/quote", "/marketfeed/ltp"]) {
+    try {
+      const payload = await pull(path, body);
+      const batch = flattenQuotes(payload, instruments);
+      if (batch.length) return batch;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return [];
+}
+
 export async function fetchDhanTapeQuotes({ accessToken: token, clientId: id, fetchQuotes } = {}) {
   const cleanToken = String(token || "").trim();
   const cleanId = String(id || "").trim();
@@ -540,8 +555,7 @@ export async function fetchDhanTapeQuotes({ accessToken: token, clientId: id, fe
     for (const body of quoteBodies(useFallback, instruments)) {
       if (!body || !Object.keys(body).length) continue;
       try {
-        const payload = await pull("/marketfeed/ltp", body);
-        quotes.push(...flattenQuotes(payload, instruments));
+        quotes.push(...(await pullMemberTapeBody(pull, body, instruments)));
       } catch {
         /* try the next segment / fallback body */
       }
@@ -564,8 +578,12 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
         quote.last_price ?? quote.ltp ?? quote.lastPrice ?? quote.last_traded_price ?? quote.lastTradedPrice ?? quote.LTP,
       );
       const close = Number(quote.ohlc?.close ?? quote.close);
+      const prevCloseRaw = Number(
+        quote.prev_close ?? quote.prevClose ?? quote.previous_close ?? quote.ohlc?.previous ?? quote.ohlc?.prev_close,
+      );
       const ltp = Number.isFinite(ltpRaw) && ltpRaw > 0 ? ltpRaw : close;
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
+      const prevClose = Number.isFinite(prevCloseRaw) && prevCloseRaw > 0 ? prevCloseRaw : Number.isFinite(close) && close > 0 && close !== ltp ? close : 0;
       quotes.push({
         symbol: instrument.symbol,
         parent: instrument.parent || instrument.symbol,
@@ -578,6 +596,7 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
         high: Number(quote.ohlc?.high ?? quote.high),
         low: Number(quote.ohlc?.low ?? quote.low),
         close,
+        prevClose: prevClose || undefined,
         vwap: Number(quote.average_price ?? quote.averagePrice ?? quote.vwap),
         netChange: quote.net_change ?? quote.netChange,
         volume: Number(quote.volume ?? quote.vol),

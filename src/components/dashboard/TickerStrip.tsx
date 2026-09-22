@@ -1,4 +1,4 @@
-import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, vwapTone } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteTone, vwapTone } from "../../lib/format";
 import { chainIdFromIndex } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
@@ -20,7 +20,8 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
   return (
     <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {data.indices.map((item) => {
-        const up = item.change >= 0;
+        const tone = quoteTone(item.change);
+        const up = item.change > 0;
         const showDeriv = item.symbol !== "INDIA VIX";
         const vwap = cardVwap(item);
         const futureLtp = item.future || item.price;
@@ -56,8 +57,8 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.symbol}</div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{tapeLabel}</div>
                 </div>
-                <div className="mt-1 text-lg font-bold leading-none">{formatQuote(item.price)}</div>
-                <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
+                <div className={cn("mt-1 text-lg font-bold leading-none", tone)}>{formatQuote(item.price)}</div>
+                <div className={cn("mt-1 text-xs font-semibold", tone || "text-slate-400")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today
                 </div>
               </div>

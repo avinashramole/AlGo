@@ -10,7 +10,7 @@ process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { installMemberBroker, selectMemberBroker, saveClientSettings } = await import("./memberDesk.js");
-const { cardsFromMemberQuotes, memberQuotesForUser } = await import("./memberQuotesFeed.js");
+const { cardsFromMemberQuotes, dayChangeFromQuote, memberQuotesForUser } = await import("./memberQuotesFeed.js");
 const { memberQuotes } = await import("./market.js");
 
 const user = { id: "u-quotes", name: "Quote Member", email: "quotes@t2s.app", role: "user" };
@@ -116,6 +116,38 @@ test("concurrent member quote polls share one broker fetch", async () => {
   assert.equal(fetches, 1);
   assert.equal(a.indices[0].price, 25001);
   assert.equal(b.indices[0].price, 25001);
+});
+
+test("day change is live LTP versus yesterday close, not zero when close is missing from LTP", () => {
+  assert.deepEqual(dayChangeFromQuote(23326.8, { close: 23200 }), { change: 126.8, changePct: 0.55, prevClose: 23200 });
+  assert.deepEqual(dayChangeFromQuote(23100, { prevClose: 23200 }), { change: -100, changePct: -0.43, prevClose: 23200 });
+  assert.deepEqual(dayChangeFromQuote(23326.8, { netChange: -84.2 }), { change: -84.2, changePct: -0.36, prevClose: 23411 });
+  assert.deepEqual(dayChangeFromQuote(23326.8, {}, 23210.4), { change: 116.4, changePct: 0.5, prevClose: 23210.4 });
+  assert.deepEqual(dayChangeFromQuote(23326.8, { close: 23326.8 }), { change: 0, changePct: 0, prevClose: 0 });
+});
+
+test("member cards show daily change vs yesterday close for every index", () => {
+  const rows = cardsFromMemberQuotes("u-day-change", [
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 23326.8, close: 23200 },
+    { symbol: "BANKNIFTY", parent: "BANKNIFTY", kind: "index", ltp: 52100, prevClose: 52400 },
+    { symbol: "FINNIFTY", parent: "FINNIFTY", kind: "index", ltp: 24800, netChange: 120 },
+    { symbol: "SENSEX", parent: "SENSEX", kind: "index", ltp: 76500, close: 76000 },
+    { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6124.5, close: 6100 },
+    { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index", ltp: 12.4, close: 12.8 },
+  ]);
+  const nifty = rows.find((row) => row.symbol === "NIFTY 50");
+  const bank = rows.find((row) => row.symbol === "BANKNIFTY");
+  const vix = rows.find((row) => row.symbol === "INDIA VIX");
+  assert.equal(nifty.change, 126.8);
+  assert.equal(nifty.changePct, 0.55);
+  assert.equal(nifty.prevClose, 23200);
+  assert.ok(bank.change < 0);
+  assert.ok(vix.change < 0);
+  const again = cardsFromMemberQuotes("u-day-change", [
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 23340 },
+  ]);
+  assert.equal(again.find((row) => row.symbol === "NIFTY 50").prevClose, 23200);
+  assert.equal(again.find((row) => row.symbol === "NIFTY 50").change, 140);
 });
 
 test("paper members stay on an empty board even if admin quotes exist", async () => {

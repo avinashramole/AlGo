@@ -5,6 +5,7 @@ import { peekClientSecrets } from "./memberDesk.js";
 const CACHE_MS = 4_000;
 const cache = new Map();
 const sparks = new Map();
+const prevCloses = new Map();
 const inflight = new Map();
 
 const CARDS = [
@@ -44,25 +45,40 @@ function matchesCard(quote, card) {
   return keys.has(String(quote.parent || "")) || keys.has(String(quote.symbol || ""));
 }
 
+export function dayChangeFromQuote(price, quote = {}, storedPrev = 0) {
+  const p = Number(price) || 0;
+  const explicitPrev = Number(quote.prevClose || 0);
+  const close = Number(quote.close || 0);
+  const net = quote.netChange != null && quote.netChange !== "" ? Number(quote.netChange) : null;
+  let prev = 0;
+  if (explicitPrev > 0) prev = explicitPrev;
+  else if (net != null && Number.isFinite(net) && p > 0 && Math.abs(net) > 0.0001) prev = round2(p - net);
+  else if (close > 0 && close !== p) prev = close;
+  else if (Number(storedPrev) > 0) prev = Number(storedPrev);
+  if (!(p > 0) || !(prev > 0)) return { change: 0, changePct: 0, prevClose: prev || Number(storedPrev) || 0 };
+  const change = round2(p - prev);
+  return { change, changePct: round2((change / prev) * 100), prevClose: round2(prev) };
+}
+
 export function cardsFromMemberQuotes(userId, quotes = []) {
   const sparkMap = sparks.get(userId) || {};
+  const prevMap = prevCloses.get(userId) || {};
   const rows = CARDS.map((card) => {
     const indexQuote = quotes.find((row) => row.kind !== "future" && matchesCard(row, card));
     const futureQuote = quotes.find((row) => row.kind === "future" && matchesCard(row, card));
     const priceRaw = Number(indexQuote?.ltp || (card.symbol === "CRUDEOIL" ? futureQuote?.ltp : 0));
     const futureRaw = Number(futureQuote?.ltp || 0);
-    const close = Number(indexQuote?.close || futureQuote?.close || 0);
     const price = priceRaw > 0 ? priceRaw : futureRaw;
-    const prev = close > 0 && close !== price ? close : price;
-    const change = price > 0 && prev ? round2(price - prev) : 0;
-    const changePct = price > 0 && prev ? round2((change / prev) * 100) : 0;
+    const day = dayChangeFromQuote(price, indexQuote || futureQuote || {}, prevMap[card.symbol]);
+    if (day.prevClose > 0) prevMap[card.symbol] = day.prevClose;
     if (price > 0) sparkMap[card.symbol] = pushSpark(sparkMap[card.symbol], price);
     return memberIndexQuote({
       symbol: card.symbol,
       name: card.name,
       price: price > 0 ? round2(price) : 0,
-      change,
-      changePct,
+      change: day.change,
+      changePct: day.changePct,
+      prevClose: day.prevClose,
       spark: sparkMap[card.symbol] || [],
       future: futureRaw > 0 ? round2(futureRaw) : price > 0 ? round2(price) : 0,
       futureExpiry: futureQuote?.expiry || "",
@@ -70,6 +86,7 @@ export function cardsFromMemberQuotes(userId, quotes = []) {
     });
   });
   sparks.set(userId, sparkMap);
+  prevCloses.set(userId, prevMap);
   return rows;
 }
 

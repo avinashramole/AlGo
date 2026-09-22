@@ -37,13 +37,13 @@ function MemberHome() {
       <Text style={styles.muted}>Price and future only. VWAP is hidden. Quotes use your broker token, not the desk token.</Text>
       {!indices.length ? <Text style={styles.muted}>{quoteNote || "Install your access token on My plan to load index quotes."}</Text> : null}
       {indices.map((item) => {
-        const up = item.change >= 0;
+        const tone = item.change > 0 ? colors.up : item.change < 0 ? colors.down : colors.text;
         return (
           <Card key={item.symbol}>
             <Text style={styles.muted}>{item.symbol}</Text>
-            <Text style={styles.price}>{formatNumber(item.price)}</Text>
-            <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
-              {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
+            <Text style={[styles.price, { color: tone }]}>{formatNumber(item.price)}</Text>
+            <Text style={{ color: tone, fontWeight: "700", fontSize: 12 }}>
+              {`${item.change > 0 ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
             </Text>
             <View style={styles.deskRow}>
               <View>
@@ -157,15 +157,15 @@ export function HomeScreen() {
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         {data.indices.map((item) => {
-          const up = item.change >= 0;
+          const tone = item.change > 0 ? colors.up : item.change < 0 ? colors.down : colors.text;
           const showDeriv = item.symbol !== "INDIA VIX";
           return (
             <Card key={item.symbol}>
               <View style={{ width: 200 }}>
                 <Text style={styles.muted}>{item.symbol}</Text>
-                <Text style={styles.price}>{item.price > 0 ? formatNumber(item.price) : "—"}</Text>
-                <Text style={{ color: up ? colors.up : colors.down, fontWeight: "700", fontSize: 12 }}>
-                  {`${up ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
+                <Text style={[styles.price, { color: tone }]}>{item.price > 0 ? formatNumber(item.price) : "—"}</Text>
+                <Text style={{ color: tone, fontWeight: "700", fontSize: 12 }}>
+                  {`${item.change > 0 ? "+" : ""}${formatNumber(item.change)}`} ({formatPct(item.changePct)}) today
                 </Text>
                 {showDeriv ? (
                   <View style={styles.deskRow}>
