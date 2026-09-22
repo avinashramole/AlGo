@@ -1,24 +1,31 @@
 type StrikeRow = { strike: number };
 type IdRow = { id: string };
 
-export function keepLastIndexPrices<T extends { symbol: string; price?: number; future?: number }>(
-  previous: T[] = [],
-  incoming: T[] = [],
-): T[] {
+export function keepLastIndexPrices<
+  T extends { symbol: string; price?: number; future?: number; change?: number; changePct?: number; prevClose?: number },
+>(previous: T[] = [], incoming: T[] = []): T[] {
   if (!incoming.length) return previous;
   if (!previous.length) return incoming;
   const prevBySymbol = new Map(previous.map((row) => [row.symbol, row]));
   return incoming.map((row) => {
-    if (Number(row.price) > 0 || Number(row.future) > 0) return row;
     const prev = prevBySymbol.get(row.symbol);
-    if (!prev) return row;
-    if (!(Number(prev.price) > 0) && !(Number(prev.future) > 0)) return row;
-    return {
-      ...row,
-      ...prev,
-      symbol: row.symbol,
-      future: Number(row.future) > 0 ? row.future : prev.future,
-    };
+    if (!(Number(row.price) > 0) && !(Number(row.future) > 0)) {
+      if (!prev) return row;
+      if (!(Number(prev.price) > 0) && !(Number(prev.future) > 0)) return row;
+      return {
+        ...row,
+        ...prev,
+        symbol: row.symbol,
+        future: Number(row.future) > 0 ? row.future : prev.future,
+      };
+    }
+    const prevClose = Number(row.prevClose) > 0 ? Number(row.prevClose) : Number(prev?.prevClose) || 0;
+    if (prevClose > 0 && Number(row.price) > 0 && !(Number(row.change) || Number(row.changePct))) {
+      const change = Number((Number(row.price) - prevClose).toFixed(2));
+      const changePct = Number(((change / prevClose) * 100).toFixed(2));
+      return { ...row, change, changePct, prevClose };
+    }
+    return row;
   });
 }
 

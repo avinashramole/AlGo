@@ -933,24 +933,17 @@ async function pullQuotes() {
 async function pullQuoteBody(body) {
   if (!body || !Object.keys(body).length) return [];
   let payload = null;
-  try {
-    payload = await dhanPost("/marketfeed/quote", accessToken, clientId, body);
-  } catch (error) {
-    if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
-    payload = null;
-  }
-  let quotes = payload ? flattenQuotes(payload) : [];
-  if (!quotes.length) {
+  let quotes = [];
+  for (const path of ["/marketfeed/ohlc", "/marketfeed/quote", "/marketfeed/ltp"]) {
     try {
-      payload = await dhanPost("/marketfeed/ohlc", accessToken, clientId, body);
-      quotes = flattenQuotes(payload);
+      payload = await dhanPost(path, accessToken, clientId, body);
+      quotes = payload ? flattenQuotes(payload) : [];
+      if (quotes.length) break;
     } catch (error) {
       if (isDhanRateLimitError(error) || isDhanAuthExpiredError(error)) throw error;
+      payload = null;
+      quotes = [];
     }
-  }
-  if (!quotes.length) {
-    payload = await dhanPost("/marketfeed/ltp", accessToken, clientId, body);
-    quotes = flattenQuotes(payload);
   }
   if (payload?.status && payload.status !== "success" && !quotes.length) {
     throw new Error(payload.errorMessage || payload.message || "Dhan quote status was not success");

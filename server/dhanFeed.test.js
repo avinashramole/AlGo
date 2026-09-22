@@ -61,6 +61,23 @@ test("REST quotes keyed by MCX_COMM do not attach to NSE_FNO", () => {
   assert.equal(nifty.ltp, 25080);
 });
 
+test("admin index cards keep today's change after an LTP-only websocket tick", () => {
+  applyLiveQuotes([
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 23329, netChange: -85.3 },
+  ]);
+  let nifty = snapshot().indices.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.price, 23329);
+  assert.equal(nifty.change, -85.3);
+  assert.equal(nifty.changePct, -0.36);
+  assert.equal(nifty.prevClose, 23414.3);
+  applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 23340 }]);
+  nifty = snapshot().indices.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.price, 23340);
+  assert.equal(nifty.prevClose, 23414.3);
+  assert.equal(nifty.change, -74.3);
+  assert.ok(nifty.change !== 0);
+});
+
 test("desk shows NSE spot/future and MCX crude separately", () => {
   applyLiveQuotes([
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100 },
