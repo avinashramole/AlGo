@@ -228,6 +228,9 @@ export type Snapshot = {
     sellConditions?: { join?: "and" | "or"; rows?: Array<{ left?: string; op?: string; right?: string; value?: number }> };
     summary?: string;
     dailyLiveIst?: string;
+    firstBarStartIst?: string;
+    expiryKind?: "weekly" | "monthly";
+    maxTradesPerDay?: number;
     mappingScope?: "master" | "clients" | "both";
     mappedClientIds?: string[];
     runMode?: "live" | "paper" | "backtest";

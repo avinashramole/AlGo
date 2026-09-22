@@ -27,6 +27,7 @@ import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
+  isNiftyFirstCandleAlgo,
   isNiftyOptionEngineAlgo,
   isNiftyVwapReversalAlgo,
   LiveTradingAdapter,
@@ -648,7 +649,8 @@ function niftyListedExpiries(pack) {
 
 function expiryForNiftyVwap(algo, pack) {
   const listed = niftyListedExpiries(pack);
-  if (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo)) {
+  const weeklyFirstCandle = isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly";
+  if (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo) || weeklyFirstCandle) {
     return nearestWeeklyExpiry(listed, "NIFTY") || listed[0] || "";
   }
   return pack?.meta?.expiry || listed[0] || "";
@@ -656,7 +658,11 @@ function expiryForNiftyVwap(algo, pack) {
 
 function preferWeeklyDeskForReversal() {
   const running = (state.algos || []).some(
-    (algo) => (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo)) && algo.enabled,
+    (algo) =>
+      (isNiftyVwapReversalAlgo(algo) ||
+        isNiftyVwapHedgeAlgo(algo) ||
+        (isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly")) &&
+      algo.enabled,
   );
   if (!running) return;
   if (String(state.optionMeta?.symbol || "").toUpperCase() !== "NIFTY") return;
@@ -716,14 +722,21 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const positions = positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   if (mode === "live" && !session.open && !open) return;
-  if (isNiftyVwapReversalAlgo(algo)) preferWeeklyDeskForReversal();
+  if (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) {
+    preferWeeklyDeskForReversal();
+  }
   const futuresBars = feedLive ? getCandles(config.timeframe || "5m") : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
   const und = getUnderlying("NIFTY");
   const pack = chainForSymbol("NIFTY");
   const expiry = expiryForNiftyVwap(algo, pack);
-  if (isNiftyVwapReversalAlgo(algo) && expiry && !isWeeklyOptionExpiry(expiry, "NIFTY") && !open) {
+  if (
+    (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) &&
+    expiry &&
+    !isWeeklyOptionExpiry(expiry, "NIFTY") &&
+    !open
+  ) {
     if (!positions.some((row) => PositionManager.isOpenNiftyOption(row))) {
       algo.lastSignal = "WAIT WEEKLY EXPIRY";
       return;

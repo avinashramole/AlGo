@@ -35,6 +35,10 @@ type Draft = {
   id?: string;
   name: string;
   kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
+  dailyLiveIst?: string;
+  firstBarStartIst?: string;
+  expiryKind?: "weekly" | "monthly";
+  maxTradesPerDay?: string;
   initialSlPct?: string;
   trailingActivationPct?: string;
   trailingStepPct?: string;
@@ -195,7 +199,11 @@ export function AlgoScreen() {
       trailingStepPct: Number(draft.trailingStepPct || 3),
       vwapExitCandles: Number(draft.vwapExitCandles || 5),
       instrument: isEngineKind(draft.kind) ? "option" : draft.instrument,
-      timeframe: draft.kind === "nifty-vwap" || draft.kind === "nifty-first-candle" ? "5m" : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
+      timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.kind === "nifty-first-candle" ? (["1m", "5m", "15m"].includes(draft.timeframe) ? draft.timeframe : "5m") : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
+      dailyLiveIst: draft.kind === "nifty-first-candle" ? draft.dailyLiveIst || "09:00" : draft.dailyLiveIst,
+      firstBarStartIst: draft.kind === "nifty-first-candle" ? draft.firstBarStartIst || "09:15" : draft.firstBarStartIst,
+      expiryKind: draft.kind === "nifty-first-candle" ? draft.expiryKind || "weekly" : draft.expiryKind,
+      maxTradesPerDay: draft.kind === "nifty-first-candle" ? Math.max(1, Number(draft.maxTradesPerDay) || 1) : draft.maxTradesPerDay,
       symbol: isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
       buyValue: Number(draft.buyRows[0]?.value || draft.buyValue),
       sellValue: Number(draft.sellRows[0]?.value || draft.sellValue),
@@ -314,6 +322,10 @@ export function AlgoScreen() {
                 slPct: "20",
                 targetPct: "40",
                 initialSlPct: "20",
+                dailyLiveIst: "09:00",
+                firstBarStartIst: "09:15",
+                expiryKind: "weekly",
+                maxTradesPerDay: "1",
               })
             }
           />
@@ -385,7 +397,28 @@ export function AlgoScreen() {
         ) : draft.kind === "nifty-vwap-reversal" ? (
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-first-candle" ? (
-          <Text style={styles.muted}>First 5m Nifty green + ATM CE green → BUY ATM CE. First 5m Nifty red + ATM PE green → BUY ATM PE. SL 20% / TGT 40%. LIVE starts automatically at 09:00 IST. Saving or restart does not start live.</Text>
+          <>
+            <Text style={styles.muted}>First completed candle only. Default LIVE 09:00 IST. NSE first 5m is 09:15–09:20. Weekly ATM. Saving or restart does not start live.</Text>
+            <Field label="Start LIVE (IST)" value={draft.dailyLiveIst || "09:00"} onChange={(dailyLiveIst) => setDraft({ ...draft, dailyLiveIst })} />
+            <Field label="First candle start (IST)" value={draft.firstBarStartIst || "09:15"} onChange={(firstBarStartIst) => setDraft({ ...draft, firstBarStartIst })} />
+            <Text style={styles.muted}>Expiry</Text>
+            <View style={styles.chips}>
+              <Chip label="Weekly" on={(draft.expiryKind || "weekly") === "weekly"} onPress={() => setDraft({ ...draft, expiryKind: "weekly" })} />
+              <Chip label="Monthly" on={draft.expiryKind === "monthly"} onPress={() => setDraft({ ...draft, expiryKind: "monthly" })} />
+            </View>
+            <Text style={styles.muted}>Strike vs ATM</Text>
+            <View style={styles.chips}>
+              {[
+                ["-2", "ATM-2"],
+                ["-1", "ATM-1"],
+                ["0", "ATM"],
+                ["1", "ATM+1"],
+                ["2", "ATM+2"],
+              ].map(([id, label]) => (
+                <Chip key={id} label={label} on={draft.strikeOffset === id} onPress={() => setDraft({ ...draft, strikeOffset: id })} />
+              ))}
+            </View>
+          </>
         ) : draft.kind === "nifty-vwap" ? (
           <Text style={styles.muted}>NIFTY 5m VWAP ATM. First futures close vs VWAP picks CE or PE. Saving does not start live trading.</Text>
         ) : draft.kind === "indicator" ? (
@@ -503,6 +536,7 @@ export function AlgoScreen() {
           <>
             <Field label="Stop %" value={draft.initialSlPct || "20"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
             <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
+            <Field label="Max trades / day" value={draft.maxTradesPerDay || "1"} keyboard="numeric" onChange={(maxTradesPerDay) => setDraft({ ...draft, maxTradesPerDay })} />
           </>
         ) : draft.kind === "nifty-vwap" ? (
           <>
@@ -678,6 +712,10 @@ export function AlgoScreen() {
                   trailingActivationPct: String(algo.trailingActivationPct || 10),
                   trailingStepPct: String(algo.trailingStepPct || 3),
                   vwapExitCandles: String(algo.vwapExitCandles || 5),
+                  dailyLiveIst: String(algo.dailyLiveIst || "09:00"),
+                  firstBarStartIst: String(algo.firstBarStartIst || "09:15"),
+                  expiryKind: algo.expiryKind === "monthly" ? "monthly" : "weekly",
+                  maxTradesPerDay: String(algo.maxTradesPerDay || 1),
                   buyLeft: algo.buyLeft || "price",
                   buyOp: algo.buyOp || "close_above",
                   buyRight: algo.buyRight || "vwap",

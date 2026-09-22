@@ -1133,10 +1133,108 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(created.enabled, false);
   assert.notEqual(created.status, "LIVE");
   assert.equal(created.dailyLiveIst, "09:00");
-  const updated = normalizeAlgo({ name: "Desk first candle", runMode: "live", initialSlPct: 18, targetPct: 35, lots: 2 }, created);
+  assert.equal(created.firstBarStartIst, "09:15");
+  assert.equal(created.expiryKind, "weekly");
+  assert.equal(created.maxTradesPerDay, 1);
+  assert.equal(created.strikeOffset, 0);
+  const updated = normalizeAlgo(
+    {
+      name: "Desk first candle",
+      runMode: "live",
+      initialSlPct: 18,
+      targetPct: 35,
+      lots: 2,
+      timeframe: "15m",
+      dailyLiveIst: "09:05",
+      firstBarStartIst: "09:15",
+      expiryKind: "monthly",
+      strikeOffset: 1,
+      maxTradesPerDay: 2,
+    },
+    created,
+  );
   assert.equal(updated.enabled, false);
   assert.equal(updated.initialSlPct, 18);
   assert.equal(updated.targetPct, 35);
   assert.equal(updated.lots, 2);
   assert.equal(updated.qty, 130);
+  assert.equal(updated.timeframe, "15m");
+  assert.equal(updated.dailyLiveIst, "09:05");
+  assert.equal(updated.expiryKind, "monthly");
+  assert.equal(updated.strikeOffset, 1);
+  assert.equal(updated.maxTradesPerDay, 2);
+});
+
+test("first candle ignores later bars and caps one trade per day", () => {
+  const laterGreen = {
+    time: T0 + BAR,
+    open: 24540,
+    high: 24580,
+    low: 24530,
+    close: 24570,
+    volume: 1000,
+  };
+  const laterCe = {
+    time: T0 + BAR,
+    open: 118,
+    high: 140,
+    low: 116,
+    close: 138,
+    volume: 500,
+  };
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24500), laterGreen],
+    ceBars: [firstBar(100, 90), laterCe],
+    peBars: [firstBar(110, 96)],
+    now: T0 + 2 * BAR,
+    firstBarStartIst: "09:15",
+  });
+  assert.equal(signal.niftyColor, "doji");
+  assert.equal(signal.buyCe, false);
+  const algo = defaultNiftyFirstCandleAlgo({ name: "First candle cap" });
+  const book = bookAdapter();
+  const first = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(first.action, "entry");
+  assert.equal(algo.vwapState.sessionTrades, 1);
+  book.adapter.exit(book.positions[0]);
+  PositionManager.clearOpen(algo.vwapState);
+  algo.vwapState.lastEntryBarTime = 0;
+  const again = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), laterGreen],
+    ceBars: [firstBar(100, 118), laterCe],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 138,
+    peLtp: 90,
+    spot: 24570,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(again.reason, "max-trades");
+  assert.equal(book.places.length, 1);
+});
+
+test("first candle ATM offset is applied to the strike", () => {
+  const pick = OptionStrikeSelector.select({ spot: 24540, step: 50, option: "CE", strikeOffset: 1 });
+  assert.equal(pick.strike, 24600);
 });
