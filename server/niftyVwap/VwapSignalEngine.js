@@ -42,20 +42,29 @@ export function istWallToUtcMs(wall) {
   return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second || 0) - IST_OFFSET_MS;
 }
 
+export function sessionOpenMinutesFromIst(value, fallbackMinutes = NSE_OPEN_MINUTES) {
+  if (Number.isFinite(Number(value)) && String(value).trim() !== "" && !String(value).includes(":")) {
+    return Math.max(0, Math.min(23 * 60 + 59, Number(value)));
+  }
+  if (value == null || value === "") return fallbackMinutes;
+  return hmToMinutes(value, `${String(Math.floor(fallbackMinutes / 60)).padStart(2, "0")}:${String(fallbackMinutes % 60).padStart(2, "0")}`);
+}
+
 export function sessionBarOpenMs(ms, barMinutes = 5, opts = {}) {
   const step = Math.max(1, Number(barMinutes) || 5);
+  const sessionOpen = sessionOpenMinutesFromIst(opts.sessionOpenMinutes, NSE_OPEN_MINUTES);
   const wall = istWallTime(ms);
   let minutes = wall.hour * 60 + wall.minute;
   const onSlotClose =
     Boolean(opts.closeLabeled) &&
     wall.second === 0 &&
-    minutes > NSE_OPEN_MINUTES &&
-    ((minutes === NSE_CLOSE_MINUTES && minutes - NSE_OPEN_MINUTES >= step) ||
-      ((minutes - NSE_OPEN_MINUTES) % step === 0 && minutes < NSE_CLOSE_MINUTES));
+    minutes > sessionOpen &&
+    ((minutes === NSE_CLOSE_MINUTES && minutes - sessionOpen >= step) ||
+      ((minutes - sessionOpen) % step === 0 && minutes < NSE_CLOSE_MINUTES));
   if (onSlotClose) minutes -= 1;
-  if (minutes < NSE_OPEN_MINUTES || minutes >= NSE_CLOSE_MINUTES) return null;
-  const elapsed = minutes - NSE_OPEN_MINUTES;
-  const openMin = NSE_OPEN_MINUTES + Math.floor(elapsed / step) * step;
+  if (minutes < sessionOpen || minutes >= NSE_CLOSE_MINUTES) return null;
+  const elapsed = minutes - sessionOpen;
+  const openMin = sessionOpen + Math.floor(elapsed / step) * step;
   return istWallToUtcMs({
     year: wall.year,
     month: wall.month,
@@ -84,13 +93,14 @@ export function looksLikeOneMinuteBars(candles = [], barMinutes = 5) {
   return median > 0 && median < target / 2;
 }
 
-export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.now()) {
+export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.now(), opts = {}) {
   const step = Math.max(1, Number(barMinutes) || 5);
   const barMs = step * 60 * 1000;
   const closeLabeled = looksLikeOneMinuteBars(candles, step);
+  const sessionOpenMinutes = opts.sessionOpenMinutes;
   const buckets = new Map();
   for (const row of Array.isArray(candles) ? candles : []) {
-    const openMs = sessionBarOpenMs(row.time, step, { closeLabeled });
+    const openMs = sessionBarOpenMs(row.time, step, { closeLabeled, sessionOpenMinutes });
     if (openMs == null) continue;
     const open = Number(row.open);
     const high = Number(row.high);
@@ -208,12 +218,33 @@ export function hmToMinutes(value, fallback = "09:15") {
   return Math.min(23, Math.max(0, Number(match[1]))) * 60 + Math.min(59, Math.max(0, Number(match[2])));
 }
 
-export function firstBarAtOrAfter(bars = [], firstBarStartIst = "09:15") {
-  const startMin = hmToMinutes(firstBarStartIst, "09:15");
+export function firstBarAtOrAfter(bars = [], firstBarStartIst = "09:00") {
+  const startMin = hmToMinutes(firstBarStartIst, "09:00");
   return (Array.isArray(bars) ? bars : []).find((bar) => {
     const wall = istWallTime(bar.time);
     return wall.hour * 60 + wall.minute >= startMin;
   }) || null;
+}
+
+export function firstBarAtSlot(bars = [], firstBarStartIst = "09:00") {
+  const startMin = hmToMinutes(firstBarStartIst, "09:00");
+  return (Array.isArray(bars) ? bars : []).find((bar) => {
+    const wall = istWallTime(bar.time);
+    return wall.hour * 60 + wall.minute === startMin;
+  }) || null;
+}
+
+export function istHmOnDayMs(now, hm, fallback = "09:05") {
+  const wall = istWallTime(now);
+  const minutes = hmToMinutes(hm, fallback);
+  return istWallToUtcMs({
+    year: wall.year,
+    month: wall.month,
+    day: wall.day,
+    hour: Math.floor(minutes / 60),
+    minute: minutes % 60,
+    second: 0,
+  });
 }
 
 export function firstBarColor(bar) {
@@ -254,6 +285,9 @@ export const VwapSignalEngine = {
   lastBarVwapReversal,
   firstBarColor,
   firstBarAtOrAfter,
+  firstBarAtSlot,
+  istHmOnDayMs,
+  sessionOpenMinutesFromIst,
   hmToMinutes,
   looksLikeOneMinuteBars,
   nextCandleEntryWindow,
@@ -312,29 +346,31 @@ export const VwapSignalEngine = {
     peBars = [],
     now = Date.now(),
     barMs = BAR_MS,
-    firstBarStartIst = "09:15",
+    firstBarStartIst = "09:00",
+    entryEvaluationIst = "09:05",
   } = {}) {
     const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 5);
-    const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now);
-    const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now);
-    const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now);
-    const firstFut = firstBarAtOrAfter(futCompleted, firstBarStartIst);
-    const firstCe = firstFut
-      ? ceCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtOrAfter(ceCompleted, firstBarStartIst)
-      : null;
-    const firstPe = firstFut
-      ? peCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtOrAfter(peCompleted, firstBarStartIst)
-      : null;
+    const sessionOpenMinutes = hmToMinutes(firstBarStartIst, "09:00");
+    const evalAt = istHmOnDayMs(now, entryEvaluationIst, "09:05");
+    const waitingEval = Number(now) < evalAt;
+    const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, { sessionOpenMinutes });
+    const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, { sessionOpenMinutes });
+    const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, { sessionOpenMinutes });
+    const firstFut = firstBarAtSlot(futCompleted, firstBarStartIst);
+    const firstCe = firstFut ? ceCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtSlot(ceCompleted, firstBarStartIst) : null;
+    const firstPe = firstFut ? peCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtSlot(peCompleted, firstBarStartIst) : null;
     const niftyColor = firstBarColor(firstFut);
     const ceColor = firstBarColor(firstCe);
     const peColor = firstBarColor(firstPe);
-    const buyCe = niftyColor === "green" && ceColor === "green";
-    const buyPe = niftyColor === "red" && peColor === "green";
+    const buyCe = !waitingEval && niftyColor === "green" && ceColor === "green";
+    const buyPe = !waitingEval && niftyColor === "red" && peColor === "green";
     return {
-      ready: Boolean(firstFut && niftyColor),
+      ready: Boolean(!waitingEval && firstFut && niftyColor),
       barTime: firstFut ? Number(firstFut.time) : 0,
       futuresClose: firstFut ? Number(firstFut.close) : 0,
       futuresOpen: firstFut ? Number(firstFut.open) : 0,
+      futuresHigh: firstFut ? Number(firstFut.high) : 0,
+      futuresLow: firstFut ? Number(firstFut.low) : 0,
       futuresVwap: 0,
       bias: buyCe ? "CE" : buyPe ? "PE" : "",
       buyCe,
@@ -343,6 +379,7 @@ export const VwapSignalEngine = {
       ceColor,
       peColor,
       firstCandle: true,
+      waitingEval,
       previewFilled: Boolean(firstFut && niftyColor),
       ceAboveVwap: false,
       peAboveVwap: false,

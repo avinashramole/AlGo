@@ -77,6 +77,8 @@ export type AlgoStrategy = {
   summary?: string;
   dailyLiveIst?: string;
   firstBarStartIst?: string;
+  entryEvaluationIst?: string;
+  endTimeIst?: string;
   expiryKind?: "weekly" | "monthly";
   maxTradesPerDay?: number;
   mappingScope?: "master" | "clients" | "both";
@@ -507,9 +509,11 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       maxPositions: 1,
       maxTradesPerDay: 1,
       expiryKind: "weekly",
-      firstBarStartIst: "09:15",
+      firstBarStartIst: "09:00",
+      entryEvaluationIst: "09:05",
+      endTimeIst: "15:15",
       intradayOnly: true,
-      eodSquareOffMinutes: 10,
+      eodSquareOffMinutes: 15,
       indicator: "NIFTY_FIRST_CANDLE",
       period: 14,
       fast: 9,

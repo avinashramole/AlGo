@@ -37,6 +37,8 @@ type Draft = {
   kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
   dailyLiveIst?: string;
   firstBarStartIst?: string;
+  entryEvaluationIst?: string;
+  endTimeIst?: string;
   expiryKind?: "weekly" | "monthly";
   maxTradesPerDay?: string;
   initialSlPct?: string;
@@ -201,7 +203,9 @@ export function AlgoScreen() {
       instrument: isEngineKind(draft.kind) ? "option" : draft.instrument,
       timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.kind === "nifty-first-candle" ? (["1m", "5m", "15m"].includes(draft.timeframe) ? draft.timeframe : "5m") : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
       dailyLiveIst: draft.kind === "nifty-first-candle" ? draft.dailyLiveIst || "09:00" : draft.dailyLiveIst,
-      firstBarStartIst: draft.kind === "nifty-first-candle" ? draft.firstBarStartIst || "09:15" : draft.firstBarStartIst,
+      firstBarStartIst: draft.kind === "nifty-first-candle" ? draft.firstBarStartIst || "09:00" : draft.firstBarStartIst,
+      entryEvaluationIst: draft.kind === "nifty-first-candle" ? draft.entryEvaluationIst || "09:05" : draft.entryEvaluationIst,
+      endTimeIst: draft.kind === "nifty-first-candle" ? draft.endTimeIst || "15:15" : draft.endTimeIst,
       expiryKind: draft.kind === "nifty-first-candle" ? draft.expiryKind || "weekly" : draft.expiryKind,
       maxTradesPerDay: draft.kind === "nifty-first-candle" ? Math.max(1, Number(draft.maxTradesPerDay) || 1) : draft.maxTradesPerDay,
       symbol: isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
@@ -323,7 +327,9 @@ export function AlgoScreen() {
                 targetPct: "40",
                 initialSlPct: "20",
                 dailyLiveIst: "09:00",
-                firstBarStartIst: "09:15",
+                firstBarStartIst: "09:00",
+                entryEvaluationIst: "09:05",
+                endTimeIst: "15:15",
                 expiryKind: "weekly",
                 maxTradesPerDay: "1",
               })
@@ -398,9 +404,11 @@ export function AlgoScreen() {
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-first-candle" ? (
           <>
-            <Text style={styles.muted}>First completed candle only. Default LIVE 09:00 IST. NSE first 5m is 09:15–09:20. Weekly ATM. Saving or restart does not start live.</Text>
+            <Text style={styles.muted}>Only the completed 09:00–09:05 candle. Green Nifty + green ATM CE → BUY CE. Red Nifty + green ATM PE → BUY PE. Weekly ATM. Saving or restart does not start live.</Text>
             <Field label="Start LIVE (IST)" value={draft.dailyLiveIst || "09:00"} onChange={(dailyLiveIst) => setDraft({ ...draft, dailyLiveIst })} />
-            <Field label="First candle start (IST)" value={draft.firstBarStartIst || "09:15"} onChange={(firstBarStartIst) => setDraft({ ...draft, firstBarStartIst })} />
+            <Field label="First candle start (IST)" value={draft.firstBarStartIst || "09:00"} onChange={(firstBarStartIst) => setDraft({ ...draft, firstBarStartIst })} />
+            <Field label="Entry evaluation (IST)" value={draft.entryEvaluationIst || "09:05"} onChange={(entryEvaluationIst) => setDraft({ ...draft, entryEvaluationIst })} />
+            <Field label="End time (IST)" value={draft.endTimeIst || "15:15"} onChange={(endTimeIst) => setDraft({ ...draft, endTimeIst })} />
             <Text style={styles.muted}>Expiry</Text>
             <View style={styles.chips}>
               <Chip label="Weekly" on={(draft.expiryKind || "weekly") === "weekly"} onPress={() => setDraft({ ...draft, expiryKind: "weekly" })} />
@@ -713,7 +721,9 @@ export function AlgoScreen() {
                   trailingStepPct: String(algo.trailingStepPct || 3),
                   vwapExitCandles: String(algo.vwapExitCandles || 5),
                   dailyLiveIst: String(algo.dailyLiveIst || "09:00"),
-                  firstBarStartIst: String(algo.firstBarStartIst || "09:15"),
+                  firstBarStartIst: String(algo.firstBarStartIst || "09:00"),
+                  entryEvaluationIst: String(algo.entryEvaluationIst || "09:05"),
+                  endTimeIst: String(algo.endTimeIst || "15:15"),
                   expiryKind: algo.expiryKind === "monthly" ? "monthly" : "weekly",
                   maxTradesPerDay: String(algo.maxTradesPerDay || 1),
                   buyLeft: algo.buyLeft || "price",
