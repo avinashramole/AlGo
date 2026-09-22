@@ -12,6 +12,7 @@ import { cn, formatInr, formatNumber } from "../lib/format";
 import {
   contractLabel,
   isNiftyOptionEngineKind,
+  isNiftyFirstCandleKind,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
@@ -19,7 +20,7 @@ import {
 } from "../lib/strategies";
 
 type DeskTab = "copy" | "tradingview";
-type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "crudeoil";
+type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
 
 function rupee(value: number) {
@@ -55,6 +56,13 @@ function kindMeta(algo: AlgoStrategy) {
       kind: "nifty-vwap-reversal" as const,
       category: "SYSTEMATIC NIFTY 15M",
       config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · daily LIVE 09:20 IST`,
+    };
+  }
+  if (isNiftyFirstCandleKind(algo)) {
+    return {
+      kind: "nifty-first-candle" as const,
+      category: "SYSTEMATIC NIFTY FIRST 5M",
+      config: `ATM options · first 5m · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · daily LIVE 09:00 IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -98,6 +106,7 @@ export function Algo() {
     if (filter === "nifty-vwap") return isNiftyVwapKind(algo);
     if (filter === "nifty-vwap-reversal") return isNiftyVwapReversalKind(algo);
     if (filter === "nifty-vwap-hedge") return isNiftyVwapHedgeKind(algo);
+    if (filter === "nifty-first-candle") return isNiftyFirstCandleKind(algo);
     return (algo.kind || (algo.tag === "Price action" ? "price-action" : "indicator")) === filter;
   }) as AlgoStrategy[];
 
@@ -204,6 +213,7 @@ export function Algo() {
                 ["nifty-vwap", "NIFTY VWAP ATM"],
                 ["nifty-vwap-reversal", "15m VWAP reversal"],
                 ["nifty-vwap-hedge", "15m VWAP hedge"],
+                ["nifty-first-candle", "5m first candle"],
                 ["crudeoil", "CRUDE OIL"],
               ] as const
             ).map(([id, label]) => (

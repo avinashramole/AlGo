@@ -51,6 +51,7 @@ import {
   tickMarket,
   toggleAlgo,
   armNiftyVwapHedgeDailyLive,
+  armNiftyFirstCandleDailyLive,
   updateAlgo,
   backtestAlgo,
   pickBacktestTimeframe,
@@ -62,7 +63,7 @@ import {
   queueLivePositionExit,
   routeManualOrderBrokerId,
 } from "./market.js";
-import { startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
+import { startFirstCandleDailyLiveScheduler, startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
 import { startUpstoxDailyTokenScheduler } from "./upstoxDailyToken.js";
 import {
   attachHttpServerGuards,
@@ -1219,8 +1220,24 @@ async function bootBackground() {
   startUpstoxDailyTokenScheduler();
   startMemberDailyBookScheduler();
   if (skipLiveAlgos()) {
-    console.log("NIFTY 15m VWAP daily LIVE scheduler off (T2S_SKIP_LIVE_ALGOS). Login stays answering.");
+    console.log("NIFTY daily LIVE schedulers off (T2S_SKIP_LIVE_ALGOS). Login stays answering.");
   } else {
+    startFirstCandleDailyLiveScheduler({
+      arm: async () => {
+        if (!isDhanLive()) {
+          const dhan = await ensureDhanLiveFromSavedToken();
+          if (!dhan.live) {
+            console.log(`NIFTY 5m first candle 09:00 LIVE arm waiting for Dhan (${dhan.reason || "not-live"})`);
+          }
+        }
+        let result = armNiftyFirstCandleDailyLive();
+        if (result.reason === "dhan-not-live") {
+          const dhan = await ensureDhanLiveFromSavedToken();
+          if (dhan.live) result = armNiftyFirstCandleDailyLive();
+        }
+        return result;
+      },
+    });
     startHedgeDailyLiveScheduler({
       arm: async () => {
         if (!isDhanLive()) {

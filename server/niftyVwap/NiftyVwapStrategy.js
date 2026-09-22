@@ -80,6 +80,28 @@ export const NiftyVwapStrategy = {
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     if (!signal.buyCe && !signal.buyPe) {
+      if (config.signalMode === "first-candle") {
+        const open = Number(signal.futuresOpen || 0).toFixed(2);
+        const close = Number(signal.futuresClose || 0).toFixed(2);
+        if (signal.niftyColor === "doji") {
+          algo.lastSignal = `SKIP FIRST 5m DOJI O ${open} C ${close}`;
+          return { action: "wait", reason: "first-doji" };
+        }
+        if (signal.niftyColor === "green" && signal.ceColor !== "green") {
+          algo.lastSignal = signal.ceColor
+            ? `SKIP CE FIRST 5m ${signal.ceColor.toUpperCase()} O ${open} C ${close}`
+            : "WAIT FIRST CE 5m";
+          return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
+        }
+        if (signal.niftyColor === "red" && signal.peColor !== "green") {
+          algo.lastSignal = signal.peColor
+            ? `SKIP PE FIRST 5m ${signal.peColor.toUpperCase()} O ${open} C ${close}`
+            : "WAIT FIRST PE 5m";
+          return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
+        }
+        algo.lastSignal = "WAIT FIRST 5m";
+        return { action: "wait", reason: "wait-first-candle" };
+      }
       if (config.signalMode === "reversal") {
         const open = Number(signal.futuresOpen || 0).toFixed(2);
         const close = Number(signal.futuresClose || 0).toFixed(2);
@@ -175,7 +197,10 @@ export const NiftyVwapStrategy = {
       close: signal.futuresClose,
       vwap: signal.futuresVwap,
     });
-    algo.lastSignal = `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
+    algo.lastSignal =
+      config.signalMode === "first-candle"
+        ? `BUY ${pick.option} FIRST 5m O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}`
+        : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },
 
@@ -203,13 +228,21 @@ export const NiftyVwapStrategy = {
             now,
             barMs,
           })
-        : VwapSignalEngine.evaluate({
-            futuresBars: input.futuresBars || [],
-            ceBars: input.ceBars || [],
-            peBars: input.peBars || [],
-            now,
-            barMs,
-          });
+        : config.signalMode === "first-candle"
+          ? VwapSignalEngine.evaluateFirstCandle({
+              futuresBars: input.futuresBars || [],
+              ceBars: input.ceBars || [],
+              peBars: input.peBars || [],
+              now,
+              barMs,
+            })
+          : VwapSignalEngine.evaluate({
+              futuresBars: input.futuresBars || [],
+              ceBars: input.ceBars || [],
+              peBars: input.peBars || [],
+              now,
+              barMs,
+            });
     if (signal.barTime) state.lastProcessedBarTime = signal.barTime;
 
     const open = PositionManager.openFor(input.positions, algo.name, state);

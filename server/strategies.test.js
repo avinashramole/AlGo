@@ -61,8 +61,8 @@ test("normalizeAlgo keeps mapped clients and mapping scope", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 6);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9");
+  assert.equal(next.algos.length, 7);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9,a10");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -73,7 +73,7 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a6"), false);
   assert.equal(next.algos.some((row) => row.name === "NIFTY 15m VWAP hedge"), false);
   assert.deepEqual(next.removedIds, ["a6"]);
-  assert.equal(next.algos.length, 5);
+  assert.equal(next.algos.length, 6);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
@@ -84,6 +84,8 @@ test("hydrate still adds a new catalog strategy that was never deleted", () => {
   assert.equal(next.algos.some((row) => row.id === "a7"), true);
   assert.equal(next.algos.find((row) => row.id === "a7").symbol, "CRUDEOIL");
   assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
+  assert.equal(next.algos.some((row) => row.id === "a10"), true);
+  assert.equal(next.algos.find((row) => row.id === "a10").enabled, false);
 });
 
 test("hydrate keeps a user-created strategy and a started LIVE algo after reload", () => {
@@ -125,5 +127,13 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(seeded.find((row) => row.id === "a9").name, "CRUDE OIL Supertrend ATM");
   assert.equal(seeded.find((row) => row.id === "a9").indicator, "SUPERTREND");
   assert.equal(seeded.find((row) => row.id === "a6").symbol, "NIFTY");
+  const firstCandle = seeded.find((row) => row.id === "a10");
+  assert.equal(firstCandle.name, "NIFTY 5m first candle");
+  assert.equal(firstCandle.kind, "nifty-first-candle");
+  assert.equal(firstCandle.enabled, false);
+  assert.equal(firstCandle.status, "PAUSED");
+  assert.equal(firstCandle.initialSlPct, 20);
+  assert.equal(firstCandle.targetPct, 40);
+  assert.equal(firstCandle.dailyLiveIst, "09:00");
 });
 

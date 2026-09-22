@@ -4,7 +4,7 @@ import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
 import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
-import { defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
+import { defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyFirstCandleAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
 import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap, nextCandleEntryWindow } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 import { runtimeState, PositionManager } from "./PositionManager.js";
@@ -1021,4 +1021,122 @@ test("in-flight timeout does not punch a second lot while a NIFTY option is stil
   });
   assert.equal(book.places.length, 0);
   assert.ok(tick.action === "hold" || tick.reason === "already-open");
+});
+
+function firstBar(open, close, extras = {}) {
+  return {
+    time: T0,
+    open,
+    high: extras.high ?? Math.max(open, close) + 3,
+    low: extras.low ?? Math.min(open, close) - 3,
+    close,
+    volume: extras.volume ?? 1000,
+  };
+}
+
+test("first candle BUY CE when Nifty first 5m is green and ATM CE first 5m is green", () => {
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    now: T0 + BAR,
+  });
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.buyPe, false);
+  assert.equal(signal.niftyColor, "green");
+  assert.equal(signal.ceColor, "green");
+});
+
+test("first candle BUY PE when Nifty first 5m is red and ATM PE first 5m is green", () => {
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24540, 24500)],
+    ceBars: [firstBar(118, 100)],
+    peBars: [firstBar(96, 110)],
+    now: T0 + BAR,
+  });
+  assert.equal(signal.buyPe, true);
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.niftyColor, "red");
+  assert.equal(signal.peColor, "green");
+});
+
+test("first candle doji or option not green is no trade", () => {
+  const doji = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24500)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(96, 110)],
+    now: T0 + BAR,
+  });
+  assert.equal(doji.buyCe, false);
+  assert.equal(doji.buyPe, false);
+  assert.equal(doji.niftyColor, "doji");
+  const redCe = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(118, 100)],
+    peBars: [firstBar(96, 110)],
+    now: T0 + BAR,
+  });
+  assert.equal(redCe.buyCe, false);
+  assert.equal(redCe.buyPe, false);
+});
+
+test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "First candle CE" });
+  const cfg = niftyFirstCandleConfig(algo);
+  assert.equal(cfg.signalMode, "first-candle");
+  assert.equal(cfg.useTrail, false);
+  assert.equal(cfg.useVwapExit, false);
+  assert.equal(cfg.initialSlPct, 20);
+  assert.equal(cfg.targetPct, 40);
+  const book = bookAdapter();
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(result.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].side, "BUY");
+  assert.equal(algo.vwapState.stopPrice, TrailingStopManager.initialStop(118, 20));
+  assert.equal(algo.vwapState.targetPrice, TrailingStopManager.targetPrice(118, 40));
+  const again = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(100, 118), bar(1, 130)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 130,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(again.action, "hold");
+  assert.equal(book.places.length, 1);
+});
+
+test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
+  const created = normalizeAlgo(defaultNiftyFirstCandleAlgo({ name: "Desk first candle", runMode: "live" }));
+  assert.equal(isNiftyFirstCandleAlgo(created), true);
+  assert.equal(created.enabled, false);
+  assert.notEqual(created.status, "LIVE");
+  assert.equal(created.dailyLiveIst, "09:00");
+  const updated = normalizeAlgo({ name: "Desk first candle", runMode: "live", initialSlPct: 18, targetPct: 35, lots: 2 }, created);
+  assert.equal(updated.enabled, false);
+  assert.equal(updated.initialSlPct, 18);
+  assert.equal(updated.targetPct, 35);
+  assert.equal(updated.lots, 2);
+  assert.equal(updated.qty, 130);
 });

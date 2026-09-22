@@ -52,8 +52,11 @@ import {
 } from "./niftyVwapHedge/index.js";
 import {
   applyHedgeDailyLive,
+  applyFirstCandleDailyLive,
   loadHedgeDailyLiveArmedYmd,
   saveHedgeDailyLiveArmedYmd,
+  loadFirstCandleDailyLiveArmedYmd,
+  saveFirstCandleDailyLiveArmedYmd,
 } from "./niftyVwapHedge/dailyLive.js";
 import { dhanOrderFillPrice, mergeDhanOrderPrice, resolveLiveBookPrice } from "./dhanOrderPrice.js";
 import {
@@ -1518,6 +1521,41 @@ export function armNiftyVwapHedgeDailyLive(now = new Date()) {
   persistAlgos();
   state.notifications.unshift(`NIFTY 15m VWAP hedge + reversal · daily LIVE 09:20 IST · ${result.armedIds.join(",")}`);
   console.log(`NIFTY 15m VWAP hedge + reversal armed LIVE at 09:20 IST · ${result.armedIds.join(",")}`);
+  return result;
+}
+
+export function armNiftyFirstCandleDailyLive(now = new Date()) {
+  const lastArmedYmd = loadFirstCandleDailyLiveArmedYmd();
+  const result = applyFirstCandleDailyLive(state.algos, {
+    now,
+    feedLive: isDhanFeedLive(),
+    lastArmedYmd,
+  });
+  if (result.reason === "dhan-not-live") {
+    console.log("NIFTY 5m first candle daily LIVE 09:00 arm skipped — Dhan is not LIVE");
+    return result;
+  }
+  if (result.lastArmedYmd && result.lastArmedYmd !== lastArmedYmd) {
+    saveFirstCandleDailyLiveArmedYmd(result.lastArmedYmd);
+  }
+  if (!result.armedIds.length) return result;
+  state.algos = result.algos;
+  for (const id of result.armedIds) {
+    const algo = state.algos.find((row) => row.id === id);
+    if (!algo) continue;
+    algo.lastPaperAt = 0;
+    algo.lastLiveAt = 0;
+    algo.lastLiveSide = "";
+    algo.lastSignal = "WAIT";
+    if (isNiftyOptionEngineAlgo(algo)) {
+      const vs = runtimeState(algo);
+      vs.inFlight = false;
+      vs.exitQueued = false;
+    }
+  }
+  persistAlgos();
+  state.notifications.unshift(`NIFTY 5m first candle · daily LIVE 09:00 IST · ${result.armedIds.join(",")}`);
+  console.log(`NIFTY 5m first candle armed LIVE at 09:00 IST · ${result.armedIds.join(",")}`);
   return result;
 }
 

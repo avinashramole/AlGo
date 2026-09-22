@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -217,8 +217,16 @@ export function isNiftyVwapHedgeKind(algo?: { kind?: string; strategyType?: stri
   );
 }
 
+export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return (
+    algo?.kind === "nifty-first-candle" ||
+    algo?.strategyType === "NIFTY_FIRST_CANDLE_5M" ||
+    algo?.indicator === "NIFTY_FIRST_CANDLE"
+  );
+}
+
 export function isNiftyOptionEngineKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
-  return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo);
+  return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyFirstCandleKind(algo);
 }
 
 export function contractLabel(algo: {
@@ -231,6 +239,7 @@ export function contractLabel(algo: {
 }) {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
+  if (isNiftyFirstCandleKind(algo)) return "NIFTY ATM CE/PE first 5m";
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
@@ -466,6 +475,49 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
       runMode: "live",
       dailyLiveIst: "09:20",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "nifty-first-candle") {
+    return {
+      name: "NIFTY 5m first candle",
+      kind: "nifty-first-candle",
+      tag: "5m first",
+      strategyType: "NIFTY_FIRST_CANDLE_5M",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "5m",
+      slPct: 20,
+      initialSlPct: 20,
+      targetPct: 40,
+      trailingActivationPct: 10,
+      trailingStepPct: 3,
+      vwapExitCandles: 5,
+      maxPositions: 1,
+      intradayOnly: true,
+      eodSquareOffMinutes: 10,
+      indicator: "NIFTY_FIRST_CANDLE",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "ORB",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("indicator", "VWAP", "ORB"),
+      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
+      runMode: "live",
+      dailyLiveIst: "09:00",
       brokerId: "dhan",
       enabled: false,
       status: "PAUSED",
