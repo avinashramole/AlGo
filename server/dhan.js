@@ -38,6 +38,7 @@ import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, stra
 import { dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
+import { looksLikePrevClose } from "./quoteDayChange.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -583,7 +584,11 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
       );
       const ltp = Number.isFinite(ltpRaw) && ltpRaw > 0 ? ltpRaw : close;
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
-      const prevClose = Number.isFinite(prevCloseRaw) && prevCloseRaw > 0 ? prevCloseRaw : Number.isFinite(close) && close > 0 && close !== ltp ? close : 0;
+      const prevClose = looksLikePrevClose(ltp, prevCloseRaw)
+        ? prevCloseRaw
+        : looksLikePrevClose(ltp, close)
+          ? close
+          : 0;
       quotes.push({
         symbol: instrument.symbol,
         parent: instrument.parent || instrument.symbol,
@@ -998,6 +1003,7 @@ export function parseFeedPackets(buffer, instruments = liveInstruments()) {
           if (avg > 0) quote.vwap = avg;
           if (open > 0) quote.open = open;
           if (close > 0) quote.close = close;
+          if (looksLikePrevClose(ltp, close)) quote.prevClose = close;
           if (high > 0) quote.high = high;
           if (low > 0) quote.low = low;
         }

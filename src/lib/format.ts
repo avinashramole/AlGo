@@ -19,6 +19,16 @@ export function formatChange(value: number, digits = 2) {
   return `${sign}${formatNumber(value, digits)}`;
 }
 
+export function quoteDayChange(item: { price?: number; change?: number; changePct?: number; prevClose?: number }) {
+  const price = Number(item?.price) || 0;
+  const prev = Number(item?.prevClose) || 0;
+  if (price > 0 && prev > 0) {
+    const change = price - prev;
+    return { change, changePct: (change / prev) * 100 };
+  }
+  return { change: Number(item?.change) || 0, changePct: Number(item?.changePct) || 0 };
+}
+
 export function formatMobile(value?: string) {
   let digits = String(value || "").replace(/\D/g, "");
   if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
