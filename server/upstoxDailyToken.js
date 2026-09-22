@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const UPSTOX_DAILY_TOKEN_HOUR_IST = TOKEN_RENEW_HOUR_IST;
 export const UPSTOX_DAILY_TOKEN_LABEL = "08:00 AM IST";
-export const UPSTOX_RETRY_UNTIL_HOUR_IST = 11;
+export const UPSTOX_RETRY_UNTIL_HOUR_IST = 16;
 export const UPSTOX_RETRY_MS = 15 * 60 * 1000;
 
 function dailyTokenFile() {
@@ -57,16 +57,17 @@ export function shouldAskUpstoxDailyTokens({ now = new Date(), lastAskedYmd = ""
   return Boolean(retry) && Number(istParts(at).hour) < UPSTOX_RETRY_UNTIL_HOUR_IST;
 }
 
-export function nextUpstoxDailyTokenAt(from = Date.now(), lastAskedYmd = "", stale = false) {
+export function nextUpstoxDailyTokenAt(from = Date.now(), lastAskedYmd = "", stale = false, lastAskAt = 0) {
   const now = Number(from);
   const todayEight = todayEightAmIst(now);
   const at = new Date(now);
-  if (now >= todayEight && istYmd(at) !== String(lastAskedYmd || "")) {
-    return now + 5_000;
+  if (now < todayEight) return todayEight;
+  const inRetryHours = Number(istParts(at).hour) < UPSTOX_RETRY_UNTIL_HOUR_IST;
+  if (stale && inRetryHours) {
+    const due = Number(lastAskAt) > 0 ? Number(lastAskAt) + UPSTOX_RETRY_MS : now;
+    return Math.max(now + 5_000, due);
   }
-  if (now >= todayEight && stale && Number(istParts(at).hour) < UPSTOX_RETRY_UNTIL_HOUR_IST) {
-    return now + UPSTOX_RETRY_MS;
-  }
+  if (istYmd(at) !== String(lastAskedYmd || "")) return now + 5_000;
   return nextDailyRenewalAt(now, UPSTOX_DAILY_TOKEN_HOUR_IST);
 }
 
@@ -76,21 +77,33 @@ export function tradingTokenFreshAfterReset(tokenUpdatedAt, from = Date.now()) {
   return updated >= lastDailyResetAt(from, UPSTOX_DAILY_TOKEN_HOUR_IST);
 }
 
-export function loadUpstoxDailyAskedYmd() {
+export function loadUpstoxDailyState() {
   try {
     const row = JSON.parse(fs.readFileSync(dailyTokenFile(), "utf8"));
-    return String(row?.lastAskedYmd || "");
+    return {
+      lastAskedYmd: String(row?.lastAskedYmd || ""),
+      lastAskAt: Number(row?.lastAskAt || 0) || 0,
+    };
   } catch {
-    return "";
+    return { lastAskedYmd: "", lastAskAt: 0 };
   }
 }
 
-export function saveUpstoxDailyAskedYmd(ymd) {
+export function saveUpstoxDailyState(ymd, at = Date.now()) {
   const next = String(ymd || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return { lastAskedYmd: "", lastAskAt: 0 };
+  const lastAskAt = Number(at) || Date.now();
   fs.mkdirSync(path.dirname(dailyTokenFile()), { recursive: true });
-  fs.writeFileSync(dailyTokenFile(), `${JSON.stringify({ lastAskedYmd: next }, null, 2)}\n`);
-  return next;
+  fs.writeFileSync(dailyTokenFile(), `${JSON.stringify({ lastAskedYmd: next, lastAskAt }, null, 2)}\n`);
+  return { lastAskedYmd: next, lastAskAt };
+}
+
+export function loadUpstoxDailyAskedYmd() {
+  return loadUpstoxDailyState().lastAskedYmd;
+}
+
+export function saveUpstoxDailyAskedYmd(ymd, at = Date.now()) {
+  return saveUpstoxDailyState(ymd, at).lastAskedYmd;
 }
 
 export async function askUpstoxDailyTokens({
@@ -149,6 +162,7 @@ export function startUpstoxDailyTokenScheduler({
   ask = askUpstoxDailyTokens,
   loadAskedYmd = loadUpstoxDailyAskedYmd,
   saveAskedYmd = saveUpstoxDailyAskedYmd,
+  loadAskAt = () => loadUpstoxDailyState().lastAskAt,
   staleTargets = () =>
     listUpstoxOauthTargets().filter((row) => !tradingTokenFreshAfterReset(row.tokenUpdatedAt, getNow())),
   setTimeoutFn = setTimeout,
@@ -162,7 +176,7 @@ export function startUpstoxDailyTokenScheduler({
   const scheduleNext = (lastAskedYmd = loadAskedYmd()) => {
     if (stopped) return;
     const now = Number(getNow());
-    const next = nextUpstoxDailyTokenAt(now, lastAskedYmd, leftover());
+    const next = nextUpstoxDailyTokenAt(now, lastAskedYmd, leftover(), Number(loadAskAt()) || 0);
     timer = setTimeoutFn(onFire, Math.max(250, next - now));
   };
 
@@ -181,7 +195,7 @@ export function startUpstoxDailyTokenScheduler({
       console.log(`Upstox 08:00 IST trading-token request failed: ${error.message || error}`);
     }
     if (result?.lastAskedYmd && result.reason !== "not-window") {
-      saveAskedYmd(result.lastAskedYmd);
+      saveAskedYmd(result.lastAskedYmd, getNow());
     }
     const asked = result?.asked?.length || 0;
     const skipped = result?.skipped?.length || 0;
@@ -195,7 +209,7 @@ export function startUpstoxDailyTokenScheduler({
   };
 
   scheduleNext();
-  const next = nextUpstoxDailyTokenAt(getNow(), loadAskedYmd(), leftover());
+  const next = nextUpstoxDailyTokenAt(getNow(), loadAskedYmd(), leftover(), Number(loadAskAt()) || 0);
   console.log(
     `Upstox daily trading token is set: ${UPSTOX_DAILY_TOKEN_LABEL} for every stored API key + secret · next ${new Date(next).toISOString()} · restart does not start LIVE`,
   );

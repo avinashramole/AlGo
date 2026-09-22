@@ -62,14 +62,15 @@ test("only desks with stored Upstox API key and secret are daily-token targets",
   assert.equal(listUpstoxOauthTargets().find((item) => item.userId === "u-upx-fresh").hasTradingToken, true);
 });
 
-test("8:00 AM IST window waits until 8:00 and retries stale tokens until 11:00", () => {
+test("8:00 AM IST window waits until 8:00 and retries stale tokens until 4:00 PM", () => {
   assert.equal(shouldAskUpstoxDailyTokens({ now: SEVEN_AM, lastAskedYmd: "" }), false);
   assert.equal(shouldAskUpstoxDailyTokens({ now: EIGHT_AM, lastAskedYmd: "" }), true);
   assert.equal(shouldAskUpstoxDailyTokens({ now: EIGHT_05, lastAskedYmd: "2026-09-18" }), false);
   assert.equal(shouldAskUpstoxDailyTokens({ now: EIGHT_05, lastAskedYmd: "2026-09-18", retry: true }), true);
   assert.equal(nextUpstoxDailyTokenAt(SEVEN_AM, ""), EIGHT_AM);
   assert.equal(nextUpstoxDailyTokenAt(EIGHT_05, "2026-09-18"), NEXT_EIGHT);
-  assert.equal(nextUpstoxDailyTokenAt(EIGHT_05, "2026-09-18", true), EIGHT_05 + UPSTOX_RETRY_MS);
+  assert.equal(nextUpstoxDailyTokenAt(EIGHT_05, "2026-09-18", true), EIGHT_05 + 5_000);
+  assert.equal(nextUpstoxDailyTokenAt(EIGHT_05, "2026-09-18", true, EIGHT_AM), EIGHT_AM + UPSTOX_RETRY_MS);
   assert.equal(nextUpstoxDailyTokenAt(EIGHT_05, ""), EIGHT_05 + 5_000);
 });
 
@@ -176,6 +177,7 @@ test("scheduler retries every 15 minutes while a trading token is still missing"
     ask: async () => ({ asked: [{ userId: "u-upx-ready" }], skipped: [], failed: [], lastAskedYmd: "2026-09-18", reason: "asked" }),
     loadAskedYmd: loadUpstoxDailyAskedYmd,
     saveAskedYmd: saveUpstoxDailyAskedYmd,
+    loadAskAt: () => now,
     staleTargets: () => [{ userId: "u-upx-ready", tokenUpdatedAt: "" }],
     setTimeoutFn: (fn, ms) => {
       timers.push({ fn, ms });
