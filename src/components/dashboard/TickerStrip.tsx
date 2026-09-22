@@ -1,4 +1,4 @@
-import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteTone, vwapTone } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteDayChange, quoteTone, vwapTone } from "../../lib/format";
 import { chainIdFromIndex } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 import { Sparkline } from "../charts/Sparkline";
@@ -20,8 +20,9 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
   return (
     <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {data.indices.map((item) => {
-        const tone = quoteTone(item.change);
-        const up = item.change > 0;
+        const day = quoteDayChange(item);
+        const tone = quoteTone(day.change);
+        const up = day.change > 0;
         const showDeriv = item.symbol !== "INDIA VIX";
         const vwap = cardVwap(item);
         const futureLtp = item.future || item.price;
@@ -59,7 +60,7 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
                 </div>
                 <div className={cn("mt-1 text-lg font-bold leading-none", tone)}>{formatQuote(item.price)}</div>
                 <div className={cn("mt-1 text-xs font-semibold", tone || "text-slate-400")}>
-                  {formatChange(item.change)} ({formatPct(item.changePct)}) today
+                  {formatChange(day.change)} ({formatPct(day.changePct)}) today
                 </div>
               </div>
               <Sparkline data={item.spark || [item.price]} up={up} />

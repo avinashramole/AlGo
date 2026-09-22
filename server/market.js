@@ -1106,18 +1106,24 @@ function round2(value) {
 
 function withDeskQuotes(item) {
   const price = Number(item.price) || 0;
-  const change = Number(item.change) || 0;
   const isVix = item.symbol === "INDIA VIX";
   const future = Number(item.future) > 0 ? Number(item.future) : isVix && price > 0 ? round2(price) : 0;
   const vwap =
     Number(item.futureVwap) > 0 ? Number(item.futureVwap) : Number(item.vwap) > 0 ? Number(item.vwap) : isVix && price > 0 ? round2(price) : 0;
-  const prevClose = Number(item.prevClose) > 0 ? Number(item.prevClose) : price > 0 && change ? round2(price - change) : 0;
+  const day = dayChangeFromQuote(price, { prevClose: item.prevClose, netChange: item.change }, item.prevClose);
+  const prevClose =
+    day.prevClose ||
+    (Number(item.prevClose) > 0 ? Number(item.prevClose) : price > 0 && Number(item.change) ? round2(price - Number(item.change)) : 0);
+  const change = prevClose > 0 && price > 0 ? round2(price - prevClose) : Number(item.change) || 0;
+  const changePct = prevClose > 0 && price > 0 ? round2((change / prevClose) * 100) : Number(item.changePct) || 0;
   const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, CRUDEOIL: 565899, "INDIA VIX": 21 };
   return {
     ...item,
     future,
     vwap,
     prevClose,
+    change,
+    changePct,
     securityId: item.securityId || ids[item.symbol] || undefined,
   };
 }
@@ -1450,7 +1456,7 @@ export function snapshot() {
       futures: publicFutures(),
       optionCount: optionCount(),
     },
-    indices: publicIndices(publicState.indices),
+    indices: publicIndices(publicState.indices.map(withDeskQuotes)),
     optionChain: publicOptionRows(publicState.optionChain),
     settings: { ...state.settings, broker: active.name },
     marketStatus: nseMarketSession().status,
@@ -1478,7 +1484,7 @@ export function deskFeed() {
   const signals = buildLiveSignals({ algos: signalAlgos, orders });
   const watch = indexWatchRows(state.indices);
   return {
-    indices: publicIndices(state.indices),
+    indices: publicIndices(state.indices.map(withDeskQuotes)),
     ohlc: state.ohlc,
     optionChain: publicOptionRows(state.optionChain),
     optionMeta: clone(state.optionMeta),

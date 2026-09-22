@@ -78,6 +78,27 @@ test("admin index cards keep today's change after an LTP-only websocket tick", (
   assert.ok(nifty.change !== 0);
 });
 
+test("admin cards ignore a session close that is just the last price", () => {
+  applyLiveQuotes([
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 23329, netChange: -85.3 },
+    {
+      symbol: "NIFTY 50",
+      parent: "NIFTY 50",
+      kind: "index",
+      ltp: 23329,
+      open: 23410,
+      high: 23440,
+      low: 23310,
+      close: 23328.8,
+    },
+  ]);
+  const nifty = snapshot().indices.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.price, 23329);
+  assert.equal(nifty.prevClose, 23414.3);
+  assert.equal(nifty.change, -85.3);
+  assert.equal(nifty.changePct, -0.36);
+});
+
 test("desk shows NSE spot/future and MCX crude separately", () => {
   applyLiveQuotes([
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100 },
@@ -187,6 +208,19 @@ test("flattenQuotes prefers last_price over previous close", () => {
   assert.equal(quotes[0].ltp, 25091.2);
   assert.equal(quotes[0].close, 24980);
   assert.equal(quotes[0].prevClose, 24980);
+});
+
+test("flattenQuotes does not treat today's last as yesterday close", () => {
+  const quotes = flattenQuotes(
+    {
+      data: {
+        IDX_I: { 13: { last_price: 23329, ohlc: { open: 23410, high: 23440, low: 23310, close: 23328.8 } } },
+      },
+    },
+    BOTH,
+  );
+  assert.equal(quotes[0].ltp, 23329);
+  assert.equal(quotes[0].prevClose, undefined);
 });
 
 test("flattenQuotes keeps net change and an explicit previous close", () => {
