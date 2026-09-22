@@ -23,10 +23,13 @@ const {
   peekBrokerAccount,
   peekClientSecrets,
   persistAdminBrokerSecrets,
+  recordMemberCopyFill,
   saveClientSettings,
   selectMemberBroker,
   startWalletTopup,
+  sweepMemberDailyBooks,
 } = await import("./memberDesk.js");
+const { lastDailyResetAt, TOKEN_RENEW_HOUR_IST } = await import("./dhanToken.js");
 
 savePaymentSettings({
   mobile: "9876543210",
@@ -425,6 +428,118 @@ test("Upstox API key and secret stay on the public install before a trading toke
   assert.equal(card.oauthReady, true);
   assert.equal(card.installed, false);
   assert.match(card.note, /Generate today's trading token/);
+});
+
+test("member own book ignores the regular admin desk book", () => {
+  const member = { id: "u-own-book", name: "Own Book", email: "ownbook@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  const adminBook = {
+    positions: [
+      {
+        id: "admin-pos",
+        symbol: "NIFTY 26000 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 80,
+        ltp: 90,
+        pnl: 650,
+        strategy: "NIFTY VWAP ATM",
+        brokerId: "dhan",
+      },
+    ],
+    orders: [
+      {
+        id: "admin-ord",
+        symbol: "NIFTY 26000 CE",
+        side: "BUY",
+        qty: 65,
+        price: 80,
+        status: "FILLED",
+        strategy: "NIFTY VWAP ATM",
+        brokerId: "dhan",
+      },
+    ],
+    closedTrades: [],
+  };
+  const mirrored = getMemberDesk({
+    user: member,
+    enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
+    algos: [algo],
+    liveBook: adminBook,
+  });
+  assert.ok(mirrored.positions.some((row) => row.id === "admin-pos"));
+  const own = getMemberDesk({
+    user: member,
+    enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
+    algos: [algo],
+    liveBook: adminBook,
+    ownBookOnly: true,
+  });
+  assert.equal(own.positions.some((row) => row.id === "admin-pos"), false);
+  assert.equal(own.orders.length, 0);
+  assert.equal(own.orderHistory.length, 0);
+});
+
+test("fills rejects and failed copies go to order history, pending stays on the book", () => {
+  const member = { id: "u-book-split", name: "Book Split", email: "booksplit@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  const pending = recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 24100 CE", side: "BUY", qty: 65, price: 40, strategy: algo.name, brokerId: "dhan" },
+    live: { orderId: "ord-pending", status: "TRANSIT", price: 40, filledQty: 0 },
+  });
+  const filled = recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 24200 CE", side: "BUY", qty: 65, price: 50, strategy: algo.name, brokerId: "dhan" },
+    live: { orderId: "ord-fill", status: "TRADED", price: 50, filledQty: 65 },
+  });
+  const rejected = recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 24300 CE", side: "BUY", qty: 65, price: 60, strategy: algo.name, brokerId: "dhan" },
+    live: { orderId: "ord-rej", status: "REJECTED" },
+    error: new Error("Insufficient margin"),
+  });
+  const failed = recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 24400 CE", side: "BUY", qty: 65, price: 70, strategy: algo.name, brokerId: "dhan" },
+    live: { orderId: "ord-fail", status: "FAILED" },
+  });
+  assert.equal(pending.status, "PENDING");
+  assert.equal(filled.status, "FILLED");
+  assert.equal(rejected.status, "REJECTED");
+  assert.equal(failed.status, "FAILED");
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.deepEqual(desk.orders.map((row) => row.symbol), ["NIFTY 24100 CE"]);
+  assert.equal(desk.orders[0].status, "PENDING");
+  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24200 CE" && row.status === "FILLED"), true);
+  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24300 CE" && row.status === "REJECTED"), true);
+  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24400 CE" && row.status === "FAILED"), true);
+  assert.equal(desk.orders.some((row) => row.status === "FILLED" || row.status === "REJECTED" || row.status === "FAILED"), false);
+});
+
+test("8:00 AM IST reset clears member positions and leftover working orders into history", () => {
+  const member = { id: "u-daily-clear", name: "Daily Clear", email: "dailyclear@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 24500 CE", side: "BUY", qty: 65, price: 80, strategy: algo.name, brokerId: "dhan" },
+    paper: true,
+  });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 24550 CE", side: "BUY", qty: 65, price: 22, strategy: algo.name, brokerId: "dhan" },
+    live: { orderId: "ord-open-next-day", status: "PENDING", price: 22 },
+  });
+  const open = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.ok(open.positions.some((row) => row.symbol === "NIFTY 24500 CE"));
+  assert.ok(open.orders.some((row) => row.symbol === "NIFTY 24550 CE" && row.status === "PENDING"));
+  const nextOpen = lastDailyResetAt(Date.now(), TOKEN_RENEW_HOUR_IST) + 24 * 60 * 60 * 1000 + 1_000;
+  assert.equal(sweepMemberDailyBooks(nextOpen) >= 1, true);
+  const after = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(after.positions.length, 0);
+  assert.equal(after.orders.length, 0);
+  assert.ok(after.orderHistory.some((row) => row.symbol === "NIFTY 24500 CE" && row.status === "FILLED"));
+  assert.ok(after.orderHistory.some((row) => row.symbol === "NIFTY 24550 CE" && row.status === "EXPIRED"));
 });
 
 test("admin Dhan client ID and access token persist on the admin desk, not the login id", () => {

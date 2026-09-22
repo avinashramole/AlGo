@@ -5,16 +5,22 @@ import { cn, formatInr, formatIst, formatNumber } from "../../lib/format";
 export function MemberLiveBook({
   positions,
   orders,
+  orderHistory,
   tradeBook,
   brokerName,
 }: {
   positions: MemberPosition[];
   orders?: DeskOrder[];
+  orderHistory?: DeskOrder[];
   tradeBook?: DeskReport["tradeBook"];
   brokerName?: (id?: string) => string;
 }) {
   const closed = tradeBook || [];
-  const copied = (orders || []).slice(0, 20);
+  const working = (orders || []).filter((row) => {
+    const status = String(row.status || "").toUpperCase();
+    return status === "PENDING" || status === "PARTIAL" || status === "TRANSIT" || status === "OPEN";
+  }).slice(0, 20);
+  const history = (orderHistory || []).slice(0, 40);
   const nameOf = brokerName || ((id?: string) => id || "Paper");
 
   return (
@@ -38,9 +44,9 @@ export function MemberLiveBook({
       </section>
 
       <section className="card overflow-x-auto">
-        <div className="px-4 pt-4 text-sm font-bold">Copied orders</div>
+        <div className="px-4 pt-4 text-sm font-bold">Order book</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Same side and contract as the admin desk, sized and sent from this account when Copy is on.
+          Working copies only. Filled, rejected, and failed tickets move to order history. The book and open positions clear at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -54,7 +60,7 @@ export function MemberLiveBook({
             </tr>
           </thead>
           <tbody>
-            {copied.map((row) => (
+            {working.map((row) => (
               <tr key={row.id} className="soft-row">
                 <td className="px-4 py-3 text-xs text-slate-500">{row.createdAt ? formatIst(row.createdAt) : "—"}</td>
                 <td className="px-4 py-3 font-semibold">{row.symbol}</td>
@@ -68,7 +74,41 @@ export function MemberLiveBook({
             ))}
           </tbody>
         </table>
-        {!copied.length ? <p className="px-4 pb-4 text-xs text-slate-400">No copied orders yet.</p> : null}
+        {!working.length ? <p className="px-4 pb-4 text-xs text-slate-400">No working orders today.</p> : null}
+      </section>
+
+      <section className="card overflow-x-auto">
+        <div className="px-4 pt-4 text-sm font-bold">Order history</div>
+        <p className="px-4 pt-1 text-xs text-slate-400">
+          Executed, rejected, and failed copies from this account. This is not the admin order book.
+        </p>
+        <table className="mt-2 w-full min-w-[720px] text-left text-sm">
+          <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Time</th>
+              <th className="px-4 py-3 font-semibold">Symbol</th>
+              <th className="px-4 py-3 font-semibold">Side</th>
+              <th className="px-4 py-3 text-right font-semibold">Qty</th>
+              <th className="px-4 py-3 text-right font-semibold">Price</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((row) => (
+              <tr key={row.id} className="soft-row">
+                <td className="px-4 py-3 text-xs text-slate-500">{row.createdAt ? formatIst(row.createdAt) : "—"}</td>
+                <td className="px-4 py-3 font-semibold">{row.symbol}</td>
+                <td className="px-4 py-3">
+                  <SideBadge side={row.side} />
+                </td>
+                <td className="px-4 py-3 text-right">{row.qty}</td>
+                <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
+                <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!history.length ? <p className="px-4 pb-4 text-xs text-slate-400">No filled or rejected copies yet.</p> : null}
       </section>
 
       <section className="card overflow-x-auto">

@@ -515,6 +515,7 @@ export function MemberPlans() {
       <MemberLiveBook
         positions={desk.positions}
         orders={desk.orders || []}
+        orderHistory={desk.orderHistory || []}
         tradeBook={report.tradeBook}
         brokerName={brokerName}
       />

@@ -169,7 +169,7 @@ test("manual admin order copies a Copy ON member with no login and no through da
   await awaitMemberCopySends();
   const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
   assert.ok(
-    (desk.orders || []).some((row) => row.symbol === "NIFTY 25300 CE"),
+    [...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.symbol === "NIFTY 25300 CE"),
     "admin ticket must copy from the saved member token while they are logged off",
   );
 });
@@ -467,7 +467,7 @@ test("admin live desk order copies onto the member token and notifies them", asy
   await awaitMemberCopySends();
   const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
   assert.ok(
-    (desk.orders || []).some((row) => row.symbol === "NIFTY 25200 CE" && row.side === "BUY"),
+    [...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.symbol === "NIFTY 25200 CE" && row.side === "BUY"),
     "copied order must land on the member dashboard without a login session",
   );
   assert.ok((desk.alerts || []).some((row) => row.symbol === "NIFTY 25200 CE"));
@@ -489,7 +489,8 @@ test("dispatchMemberCopies writes paper fills for mapped clients", () => {
     quote: () => 0,
   });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24800 CE"));
-  assert.ok((desk.orders || []).some((row) => row.symbol === "NIFTY 24800 CE" && row.status === "FILLED"));
+  assert.equal((desk.orders || []).some((row) => row.symbol === "NIFTY 24800 CE"), false);
+  assert.ok((desk.orderHistory || []).some((row) => row.symbol === "NIFTY 24800 CE" && row.status === "FILLED"));
 });
 
 test("memberExitPayload is the opposite market side of the master open", () => {
@@ -520,7 +521,7 @@ test("dispatchMemberExitCopies closes mapped paper positions on master exit", ()
   );
   const closed = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
   assert.equal(closed.positions.some((row) => row.symbol === "NIFTY 24900 CE"), false);
-  assert.ok((closed.orders || []).some((row) => row.symbol === "NIFTY 24900 CE" && row.side === "SELL" && row.status === "FILLED"));
+  assert.ok((closed.orderHistory || []).some((row) => row.symbol === "NIFTY 24900 CE" && row.side === "SELL" && row.status === "FILLED"));
 });
 
 test("dispatchMemberExitCopies queues a live SELL on mapped real accounts", () => {
@@ -557,7 +558,7 @@ test("master exit closes every mapped paper client on that strategy", () => {
   for (const user of [a, b]) {
     const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
     assert.equal(desk.positions.some((row) => row.symbol === "NIFTY 25100 CE"), false);
-    assert.ok((desk.orders || []).some((row) => row.side === "SELL" && row.symbol === "NIFTY 25100 CE"));
+    assert.ok([...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.side === "SELL" && row.symbol === "NIFTY 25100 CE"));
   }
 });
 
