@@ -362,19 +362,48 @@ export function findUserIdByUpstoxApiKey(apiKey) {
   return "";
 }
 
+export function findUserIdByUpstoxAccount(accountId) {
+  const wanted = String(accountId || "").trim();
+  if (!wanted) return "";
+  for (const userId of Object.keys(store)) {
+    const slot = peekBrokerAccount(userId, "upstox");
+    if (String(slot.accountId || "").trim() === wanted) return userId;
+    const desk = store[userId];
+    if (String(desk?.brokerId || "") === "upstox" && String(desk?.accountId || "").trim() === wanted) return userId;
+  }
+  return "";
+}
+
 export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, expiresAt } = {}) {
   const token = String(accessToken || "").trim();
   if (!userId || !token) throw fail("Upstox access token is missing.");
   const desk = loadDesk(userId);
-  if (desk.brokerId !== "upstox") switchDeskBroker(desk, "upstox");
-  else syncSelectedBrokerAccount(desk);
-  if (accountId && !String(desk.accountId || "").trim()) desk.accountId = String(accountId).trim();
-  writeBrokerToken(desk, token);
-  if (expiresAt) desk.brokerTokenExpiresAt = String(expiresAt);
-  desk.tradeMode = "real";
+  migrateLegacyBrokerAccount(desk);
   syncSelectedBrokerAccount(desk);
+  desk.brokerAccounts = brokerAccountsMap(desk);
+  const slot = { ...(desk.brokerAccounts.upstox || emptyBrokerAccount()) };
+  slot.brokerToken = token;
+  slot.tokenUpdatedAt = new Date().toISOString();
+  if (accountId && !String(slot.accountId || "").trim()) slot.accountId = String(accountId).trim();
+  desk.brokerAccounts.upstox = slot;
+  if (desk.brokerId === "upstox") {
+    desk.brokerToken = token;
+    desk.brokerTokenUpdatedAt = slot.tokenUpdatedAt;
+    if (accountId && !String(desk.accountId || "").trim()) desk.accountId = String(accountId).trim();
+    if (expiresAt) desk.brokerTokenExpiresAt = String(expiresAt);
+    desk.tradeMode = "real";
+  }
   persist();
-  return { ok: true, userId, install: publicBrokerInstall(desk) };
+  const view = {
+    ...desk,
+    brokerId: "upstox",
+    accountId: slot.accountId,
+    brokerToken: slot.brokerToken,
+    brokerApiKey: slot.brokerApiKey,
+    brokerSessionToken: slot.brokerSessionToken,
+    brokerTokenUpdatedAt: slot.tokenUpdatedAt,
+  };
+  return { ok: true, userId, install: publicBrokerInstall(view) };
 }
 
 function asGroups(value, fallback = "ALL") {
@@ -540,7 +569,7 @@ export function publicBrokerInstall(desk = {}) {
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
         : brokerId === "upstox"
-          ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to this site /api/upstox/token."
+          ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token and retry until 11:00 AM if it is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
           : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };
 }

@@ -1,5 +1,6 @@
 import { upstoxErrorMessage } from "./liveBrokers.js";
 import {
+  findUserIdByUpstoxAccount,
   findUserIdByUpstoxApiKey,
   peekBrokerAccount,
   peekClientSecrets,
@@ -108,16 +109,40 @@ export async function requestUpstoxTradingTokenForUser(userId, fetchImpl = fetch
   return { ...asked, userId };
 }
 
+function parseJsonObject(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const row = JSON.parse(value);
+    return row && typeof row === "object" && !Array.isArray(row) ? row : null;
+  } catch {
+    return null;
+  }
+}
+
+export function upstoxNotifierPayload(payload = {}) {
+  const raw = typeof payload === "string" ? parseJsonObject(payload) || {} : payload && typeof payload === "object" ? payload : {};
+  const nested = raw.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? raw.data : {};
+  const row = { ...raw, ...nested };
+  return {
+    apiKey: String(row.client_id || row.apiKey || row.api_key || "").trim(),
+    accessToken: String(row.access_token || row.accessToken || "")
+      .trim()
+      .replace(/^Bearer\s+/i, "")
+      .trim(),
+    accountId: String(row.user_id || row.userId || row.ucc || "").trim(),
+    expiresAt: String(row.expires_at || row.expiresAt || "").trim(),
+  };
+}
+
 export function receiveUpstoxAccessToken(payload = {}) {
-  const apiKey = String(payload.client_id || payload.apiKey || "").trim();
-  const accessToken = String(payload.access_token || payload.accessToken || "").trim();
-  if (!accessToken) throw fail("Upstox webhook did not include an access_token.");
-  const userId = findUserIdByUpstoxApiKey(apiKey);
+  const row = upstoxNotifierPayload(payload);
+  if (!row.accessToken) throw fail("Upstox webhook did not include an access_token.");
+  const userId = findUserIdByUpstoxApiKey(row.apiKey) || findUserIdByUpstoxAccount(row.accountId);
   if (!userId) throw fail("No member saved that Upstox API key. Save API key + secret on My plan first.");
   return saveMemberUpstoxAccessToken(userId, {
-    accessToken,
-    accountId: payload.user_id,
-    expiresAt: payload.expires_at,
+    accessToken: row.accessToken,
+    accountId: row.accountId,
+    expiresAt: row.expiresAt,
   });
 }
 

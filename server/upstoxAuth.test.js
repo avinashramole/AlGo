@@ -10,13 +10,14 @@ process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_PUBLIC_URL = "https://trade2smart.com";
 
-const { installMemberBroker, peekBrokerAccount, peekClientSecrets } = await import("./memberDesk.js");
+const { installMemberBroker, peekBrokerAccount, peekClientSecrets, selectMemberBroker } = await import("./memberDesk.js");
 const {
   exchangeUpstoxAuthCode,
   receiveUpstoxAccessToken,
   requestUpstoxTradingToken,
   startMemberUpstoxToken,
   upstoxAuthorizeUrl,
+  upstoxNotifierPayload,
   upstoxNotifierUri,
   upstoxOauthCreds,
 } = await import("./upstoxAuth.js");
@@ -103,6 +104,57 @@ test("Get today's token asks Upstox and returns the approve URL", async () => {
   assert.match(started.tokenHint, /•/);
   assert.match(started.loginUrl, /authorization\/dialog/);
   assert.match(started.message, /already has a trading token|Approve/);
+});
+
+test("notifier payload reads official Upstox fields and a nested data wrapper", () => {
+  const official = upstoxNotifierPayload({
+    client_id: "upstox-api-key-11111111",
+    user_id: "393216",
+    access_token: "Bearer upstox-trading-token-64MI",
+    message_type: "access_token",
+  });
+  assert.equal(official.apiKey, "upstox-api-key-11111111");
+  assert.equal(official.accessToken, "upstox-trading-token-64MI");
+  assert.equal(official.accountId, "393216");
+  const wrapped = upstoxNotifierPayload({
+    data: { client_id: "upstox-api-key-11111111", access_token: "upstox-nested-token", user_id: "393216" },
+  });
+  assert.equal(wrapped.accessToken, "upstox-nested-token");
+});
+
+test("webhook can match a member by UCC when client_id is missing", () => {
+  const saved = receiveUpstoxAccessToken({
+    user_id: "393216",
+    access_token: "upstox-trading-token-by-ucc",
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(peekBrokerAccount(member.id, "upstox").brokerToken, "upstox-trading-token-by-ucc");
+});
+
+test("saving an Upstox webhook token does not switch the selected Dhan desk", () => {
+  const dual = { id: "u-upx-dhan", name: "Dual", email: "dual@t2s.app", role: "user" };
+  installMemberBroker({
+    user: dual,
+    brokerId: "upstox",
+    clientId: "393218",
+    apiKey: "upstox-api-key-55555555",
+    sessionToken: "upstox-api-secret-66666666",
+  });
+  installMemberBroker({
+    user: dual,
+    brokerId: "dhan",
+    clientId: "11008888",
+    accessToken: "dhan-keep-this-token",
+  });
+  selectMemberBroker({ user: dual, brokerId: "dhan" });
+  receiveUpstoxAccessToken({
+    client_id: "upstox-api-key-55555555",
+    access_token: "upstox-arrived-while-dhan-selected",
+    user_id: "393218",
+  });
+  assert.equal(peekClientSecrets(dual.id).brokerId, "dhan");
+  assert.equal(peekClientSecrets(dual.id).brokerToken, "dhan-keep-this-token");
+  assert.equal(peekBrokerAccount(dual.id, "upstox").brokerToken, "upstox-arrived-while-dhan-selected");
 });
 
 test("Get today's token says it is waiting when no trading token exists yet", async () => {
