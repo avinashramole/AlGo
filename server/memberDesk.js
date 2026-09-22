@@ -820,19 +820,13 @@ export function isWorkingMemberOrder(status) {
   return raw === "PENDING" || raw === "PARTIAL" || raw === "TRANSIT" || raw === "OPEN";
 }
 
-export function isHistoryMemberOrder(status) {
+export function isExecutedMemberOrder(status) {
   const raw = String(status || "").toUpperCase();
-  return (
-    raw === "FILLED" ||
-    raw === "TRADED" ||
-    raw === "REJECTED" ||
-    raw === "REJECT" ||
-    raw === "CANCELLED" ||
-    raw === "CANCELED" ||
-    raw === "FAILED" ||
-    raw === "FAIL" ||
-    raw === "EXPIRED"
-  );
+  return raw === "FILLED" || raw === "TRADED";
+}
+
+export function isHistoryMemberOrder(status) {
+  return isExecutedMemberOrder(status);
 }
 
 export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
@@ -851,10 +845,13 @@ function splitMemberOrderBook(desk) {
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
   desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
   const working = [];
-  const history = [...desk.orderHistory];
+  const history = [];
+  for (const row of desk.orderHistory) {
+    if (isExecutedMemberOrder(row?.status)) history.push(row);
+  }
   for (const row of desk.orders) {
     if (isWorkingMemberOrder(row?.status)) working.push(row);
-    else history.unshift(row);
+    else if (isExecutedMemberOrder(row?.status)) history.unshift(row);
   }
   desk.orders = working;
   desk.orderHistory = history.slice(0, 400);
@@ -865,15 +862,9 @@ export function clearMemberDailyBook(desk, now = Date.now()) {
   const resetAt = lastDailyResetAt(now, TOKEN_RENEW_HOUR_IST);
   if ((Number(desk.bookClearedAt) || 0) >= resetAt) return desk;
   splitMemberOrderBook(desk);
-  for (const row of desk.orders) {
-    desk.orderHistory.unshift({
-      ...row,
-      status: isWorkingMemberOrder(row.status) ? "EXPIRED" : row.status,
-    });
-  }
   desk.orders = [];
   desk.positions = [];
-  desk.orderHistory = desk.orderHistory.slice(0, 400);
+  desk.orderHistory = desk.orderHistory.filter((row) => isExecutedMemberOrder(row?.status)).slice(0, 400);
   desk.bookClearedAt = resetAt;
   return desk;
 }
@@ -930,8 +921,8 @@ function placeMemberOrder(desk, order) {
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
   desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
   if (isWorkingMemberOrder(order.status)) desk.orders.unshift(order);
-  else desk.orderHistory.unshift(order);
-  desk.orderHistory = desk.orderHistory.slice(0, 400);
+  else if (isExecutedMemberOrder(order.status)) desk.orderHistory.unshift(order);
+  desk.orderHistory = desk.orderHistory.filter((row) => isExecutedMemberOrder(row?.status)).slice(0, 400);
 }
 
 function sameStrategy(left, right) {
@@ -1162,7 +1153,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],
     orders: Array.isArray(desk.orders) ? desk.orders : [],
-    orderHistory: Array.isArray(desk.orderHistory) ? desk.orderHistory : [],
+    orderHistory: (Array.isArray(desk.orderHistory) ? desk.orderHistory : []).filter((row) => isExecutedMemberOrder(row?.status)),
     closedTrades: Array.isArray(desk.closedTrades) ? desk.closedTrades : [],
   };
   const hasOwn = own.positions.length || own.orders.length || own.orderHistory.length || own.closedTrades.length;
