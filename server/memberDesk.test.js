@@ -480,7 +480,7 @@ test("member own book ignores the regular admin desk book", () => {
   assert.equal(own.orderHistory.length, 0);
 });
 
-test("fills rejects and failed copies go to order history, pending stays on the book", () => {
+test("only executed fills go to order history; reject failed and expired stay off the book", () => {
   const member = { id: "u-book-split", name: "Book Split", email: "booksplit@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "dhan" });
   const pending = recordMemberCopyFill({
@@ -512,12 +512,11 @@ test("fills rejects and failed copies go to order history, pending stays on the 
   assert.deepEqual(desk.orders.map((row) => row.symbol), ["NIFTY 24100 CE"]);
   assert.equal(desk.orders[0].status, "PENDING");
   assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24200 CE" && row.status === "FILLED"), true);
-  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24300 CE" && row.status === "REJECTED"), true);
-  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24400 CE" && row.status === "FAILED"), true);
+  assert.equal(desk.orderHistory.some((row) => row.status === "REJECTED" || row.status === "FAILED" || row.status === "EXPIRED"), false);
   assert.equal(desk.orders.some((row) => row.status === "FILLED" || row.status === "REJECTED" || row.status === "FAILED"), false);
 });
 
-test("8:00 AM IST reset clears member positions and leftover working orders into history", () => {
+test("8:00 AM IST reset clears member positions and leftover working orders without expired history", () => {
   const member = { id: "u-daily-clear", name: "Daily Clear", email: "dailyclear@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "dhan" });
   recordMemberCopyFill({
@@ -539,7 +538,7 @@ test("8:00 AM IST reset clears member positions and leftover working orders into
   assert.equal(after.positions.length, 0);
   assert.equal(after.orders.length, 0);
   assert.ok(after.orderHistory.some((row) => row.symbol === "NIFTY 24500 CE" && row.status === "FILLED"));
-  assert.ok(after.orderHistory.some((row) => row.symbol === "NIFTY 24550 CE" && row.status === "EXPIRED"));
+  assert.equal(after.orderHistory.some((row) => row.symbol === "NIFTY 24550 CE" || row.status === "EXPIRED"), false);
 });
 
 test("admin Dhan client ID and access token persist on the admin desk, not the login id", () => {

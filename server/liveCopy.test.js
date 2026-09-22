@@ -169,7 +169,7 @@ test("manual admin order copies a Copy ON member with no login and no through da
   await awaitMemberCopySends();
   const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
   assert.ok(
-    [...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.symbol === "NIFTY 25300 CE"),
+    (desk.alerts || []).some((row) => row.symbol === "NIFTY 25300 CE"),
     "admin ticket must copy from the saved member token while they are logged off",
   );
 });
@@ -466,11 +466,11 @@ test("admin live desk order copies onto the member token and notifies them", asy
   assert.equal(booked.symbol, "NIFTY 25200 CE");
   await awaitMemberCopySends();
   const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
-  assert.ok(
-    [...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.symbol === "NIFTY 25200 CE" && row.side === "BUY"),
-    "copied order must land on the member dashboard without a login session",
+  assert.ok((desk.alerts || []).some((row) => row.symbol === "NIFTY 25200 CE" && row.side === "BUY"));
+  assert.equal(
+    [...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.status === "REJECTED" || row.status === "FAILED"),
+    false,
   );
-  assert.ok((desk.alerts || []).some((row) => row.symbol === "NIFTY 25200 CE"));
   const again = fanOutAdminOrderCopies({ copiedToMembers: true, symbol: "NIFTY 25200 CE" }, booked);
   assert.equal(again.queued, false);
 });

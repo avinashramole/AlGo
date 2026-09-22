@@ -20,7 +20,10 @@ export function MemberLiveBook({
     const status = String(row.status || "").toUpperCase();
     return status === "PENDING" || status === "PARTIAL" || status === "TRANSIT" || status === "OPEN";
   }).slice(0, 20);
-  const history = (orderHistory || []).slice(0, 40);
+  const history = (orderHistory || []).filter((row) => {
+    const status = String(row.status || "").toUpperCase();
+    return status === "FILLED" || status === "TRADED";
+  }).slice(0, 40);
   const nameOf = brokerName || ((id?: string) => id || "Paper");
 
   return (
@@ -46,7 +49,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order book</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Working copies only. Filled, rejected, and failed tickets move to order history. The book and open positions clear at 8:00 AM IST.
+          Working copies only. Executed fills move to order history. Rejected, failed, and expired tickets are not stored. The book and open positions clear at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -80,7 +83,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order history</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Executed, rejected, and failed copies from this account. This is not the admin order book.
+          Executed fills from this account only. Rejected, failed, and expired tickets are not shown. This is not the admin order book.
         </p>
         <table className="mt-2 w-full min-w-[720px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -108,7 +111,7 @@ export function MemberLiveBook({
             ))}
           </tbody>
         </table>
-        {!history.length ? <p className="px-4 pb-4 text-xs text-slate-400">No filled or rejected copies yet.</p> : null}
+        {!history.length ? <p className="px-4 pb-4 text-xs text-slate-400">No executed copies yet.</p> : null}
       </section>
 
       <section className="card overflow-x-auto">
