@@ -61,6 +61,7 @@ import {
   saveFirstCandleDailyLiveArmedYmd,
 } from "./niftyVwapHedge/dailyLive.js";
 import { dhanOrderFillPrice, mergeDhanOrderPrice, resolveLiveBookPrice } from "./dhanOrderPrice.js";
+import { dayChangeFromQuote } from "./quoteDayChange.js";
 import {
   buildFeaturedSignal,
   buildLiveDna,
@@ -2513,31 +2514,14 @@ function updateLiveCandle(price) {
 }
 
 function dayChange(index, quote, ltp) {
-  const net = Number(quote.netChange);
-  const close = Number(quote.close);
-  const open = Number(quote.open);
-  const high = Number(quote.high);
-  const loose = index.symbol === "CRUDEOIL";
-  const quotedPrev = sanePrevClose(ltp, quote.prevClose, { loose });
-  const storedPrev = sanePrevClose(ltp, index.prevClose, { loose });
-  const ohlcPrev = close > 0 && Math.abs(close - ltp) > 0.05 ? sanePrevClose(ltp, close, { loose }) : null;
-  const hasSession = open > 0 || high > 0 || Number(quote.low) > 0;
-
-  const last = Number(index.price);
-  const jumped = last > 0 && Math.abs(ltp - last) / last > 0.004;
-  let prevClose = quotedPrev || ohlcPrev || (jumped ? null : storedPrev);
-  let change = index.change;
-  if (Number.isFinite(net) && quote.netChange != null && (Math.abs(net) > 0.0001 || hasSession)) {
-    change = round2(net);
-    prevClose = round2(ltp - net);
-  } else if (prevClose) {
-    change = round2(ltp - prevClose);
-  } else {
-    change = 0;
-    prevClose = round2(ltp);
-  }
-  const changePct = round2(prevClose ? (change / prevClose) * 100 : 0);
-  return { prevClose, change, changePct };
+  const storedPrev = Number(index.prevClose) > 0 ? Number(index.prevClose) : 0;
+  const day = dayChangeFromQuote(ltp, quote, storedPrev);
+  if (day.prevClose > 0) return day;
+  return {
+    change: Number(index.change) || 0,
+    changePct: Number(index.changePct) || 0,
+    prevClose: storedPrev,
+  };
 }
 
 export function applyLiveQuotes(quotes) {
