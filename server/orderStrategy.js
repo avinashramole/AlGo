@@ -75,6 +75,14 @@ function isAtmAlgo(algo = {}) {
   return algo.kind === "nifty-vwap" || algo.strategyType === "NIFTY_VWAP_ATM" || algo.indicator === "NIFTY_VWAP_ATM";
 }
 
+function isFirstCandleAlgo(algo = {}) {
+  return (
+    algo.kind === "nifty-first-candle" ||
+    algo.strategyType === "NIFTY_FIRST_CANDLE_5M" ||
+    algo.indicator === "NIFTY_FIRST_CANDLE"
+  );
+}
+
 export function looksLikeNiftyOption(row = {}) {
   if (row.option === "CE" || row.option === "PE") {
     const symbol = String(row.symbol || "");
@@ -138,7 +146,7 @@ function ownerAlgoForOpenPosition(row = {}, algos = []) {
       continue;
     }
     const vs = algo.vwapState || {};
-    if ((isReversalAlgo(algo) || isAtmAlgo(algo)) && (vs.inFlight || vs.lockedSymbol || vs.fillPrice)) {
+    if ((isReversalAlgo(algo) || isAtmAlgo(algo) || isFirstCandleAlgo(algo)) && (vs.inFlight || vs.lockedSymbol || vs.fillPrice)) {
       if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) owners.push(namedAlgo(algo));
       else if (vs.lockedOption && row.option === vs.lockedOption && looksLikeNiftyOption(row)) owners.push(namedAlgo(algo));
     }

@@ -198,6 +198,15 @@ export function lastBarVwapReversal(completedSessionBars = []) {
   return { buyCe, buyPe, open, close, vwap, bar: last, fullFill: buyCe || buyPe };
 }
 
+export function firstBarColor(bar) {
+  const open = Number(bar?.open);
+  const close = Number(bar?.close);
+  if (!(open > 0) || !(close > 0)) return "";
+  if (close > open) return "green";
+  if (close < open) return "red";
+  return "doji";
+}
+
 export function nextCandleEntryWindow(previewTime, now, barMs) {
   const t = Number(previewTime);
   const ms = Number(barMs) || 15 * 60 * 1000;
@@ -225,6 +234,7 @@ export const VwapSignalEngine = {
   firstFuturesBias,
   optionCloseAboveVwap,
   lastBarVwapReversal,
+  firstBarColor,
   looksLikeOneMinuteBars,
   nextCandleEntryWindow,
   evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
@@ -269,6 +279,40 @@ export const VwapSignalEngine = {
       previewFilled: fullCe || fullPe,
       inNewCandle: window.inNewCandle,
       missedOpen: window.missedOpen,
+      ceAboveVwap: false,
+      peAboveVwap: false,
+      againstCount: 0,
+      againstCe: 0,
+      againstPe: 0,
+    };
+  },
+  evaluateFirstCandle({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
+    const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 5);
+    const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now);
+    const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now);
+    const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now);
+    const firstFut = futCompleted[0] || null;
+    const firstCe = ceCompleted[0] || null;
+    const firstPe = peCompleted[0] || null;
+    const niftyColor = firstBarColor(firstFut);
+    const ceColor = firstBarColor(firstCe);
+    const peColor = firstBarColor(firstPe);
+    const buyCe = niftyColor === "green" && ceColor === "green";
+    const buyPe = niftyColor === "red" && peColor === "green";
+    return {
+      ready: Boolean(firstFut && niftyColor),
+      barTime: firstFut ? Number(firstFut.time) : 0,
+      futuresClose: firstFut ? Number(firstFut.close) : 0,
+      futuresOpen: firstFut ? Number(firstFut.open) : 0,
+      futuresVwap: 0,
+      bias: buyCe ? "CE" : buyPe ? "PE" : "",
+      buyCe,
+      buyPe,
+      niftyColor,
+      ceColor,
+      peColor,
+      firstCandle: true,
+      previewFilled: Boolean(firstFut && niftyColor),
       ceAboveVwap: false,
       peAboveVwap: false,
       againstCount: 0,

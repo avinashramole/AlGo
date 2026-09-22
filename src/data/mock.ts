@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
+  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
@@ -245,6 +245,32 @@ export const initialAlgos: Algo[] = [
     targetPct: 40,
     summary: "NIFTY 15m VWAP hedge · weekly ATM · 1 lot + 2 opposite · +40% / −20% / +5% account · daily LIVE 09:20 IST",
     dailyLiveIst: "09:20",
+    status: "PAUSED",
+    pnl: 0,
+    winRate: 0,
+    enabled: false,
+    brokerId: "dhan",
+    runMode: "live",
+  },
+  {
+    id: "a10",
+    name: "NIFTY 5m first candle",
+    tag: "5m first",
+    kind: "nifty-first-candle",
+    symbol: "NIFTY",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    indicator: "NIFTY_FIRST_CANDLE",
+    timeframe: "5m",
+    side: "BUY",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    slPct: 20,
+    targetPct: 40,
+    summary: "NIFTY 5m first candle · ATM options · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL 20% / TGT 40% · daily LIVE 09:00 IST",
+    dailyLiveIst: "09:00",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

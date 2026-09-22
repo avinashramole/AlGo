@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { isNiftyVwapReversalAlgo } from "../niftyVwap/config.js";
+import { isNiftyFirstCandleAlgo, isNiftyVwapReversalAlgo } from "../niftyVwap/config.js";
 import { isNiftyVwapHedgeAlgo } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -9,6 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const HEDGE_DAILY_LIVE_HOUR_IST = 9;
 export const HEDGE_DAILY_LIVE_MINUTE_IST = 20;
 export const HEDGE_DAILY_LIVE_LABEL = "09:20 IST";
+export const FIRST_CANDLE_DAILY_LIVE_HOUR_IST = 9;
+export const FIRST_CANDLE_DAILY_LIVE_MINUTE_IST = 0;
+export const FIRST_CANDLE_DAILY_LIVE_LABEL = "09:00 IST";
 
 export function isNiftyDailyLiveAlgo(algo = {}) {
   return isNiftyVwapHedgeAlgo(algo) || isNiftyVwapReversalAlgo(algo);
@@ -16,6 +19,22 @@ export function isNiftyDailyLiveAlgo(algo = {}) {
 
 function hedgeDailyLiveFile() {
   return process.env.T2S_HEDGE_DAILY_LIVE_FILE || path.join(__dirname, "..", "data", "hedge-daily-live.json");
+}
+
+function readDailyLiveFile() {
+  try {
+    const row = JSON.parse(fs.readFileSync(hedgeDailyLiveFile(), "utf8"));
+    return row && typeof row === "object" ? row : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeDailyLiveFile(patch = {}) {
+  const next = { ...readDailyLiveFile(), ...patch };
+  fs.mkdirSync(path.dirname(hedgeDailyLiveFile()), { recursive: true });
+  fs.writeFileSync(hedgeDailyLiveFile(), `${JSON.stringify(next, null, 2)}\n`);
+  return next;
 }
 
 function pad2(value) {
@@ -89,19 +108,24 @@ export function nextHedgeDailyLiveAt(from = Date.now()) {
 }
 
 export function loadHedgeDailyLiveArmedYmd() {
-  try {
-    const row = JSON.parse(fs.readFileSync(hedgeDailyLiveFile(), "utf8"));
-    return String(row?.lastArmedYmd || "");
-  } catch {
-    return "";
-  }
+  return String(readDailyLiveFile().lastArmedYmd || "");
 }
 
 export function saveHedgeDailyLiveArmedYmd(ymd) {
   const next = String(ymd || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return "";
-  fs.mkdirSync(path.dirname(hedgeDailyLiveFile()), { recursive: true });
-  fs.writeFileSync(hedgeDailyLiveFile(), `${JSON.stringify({ lastArmedYmd: next }, null, 2)}\n`);
+  writeDailyLiveFile({ lastArmedYmd: next });
+  return next;
+}
+
+export function loadFirstCandleDailyLiveArmedYmd() {
+  return String(readDailyLiveFile().firstCandleArmedYmd || "");
+}
+
+export function saveFirstCandleDailyLiveArmedYmd(ymd) {
+  const next = String(ymd || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return "";
+  writeDailyLiveFile({ firstCandleArmedYmd: next });
   return next;
 }
 
@@ -173,6 +197,111 @@ export function startHedgeDailyLiveScheduler({
   const next = nextHedgeDailyLiveAt(getNow());
   console.log(
     `NIFTY 15m VWAP hedge + reversal daily LIVE is set: ${HEDGE_DAILY_LIVE_LABEL} on session days · next ${new Date(next).toISOString()} · restart does not start LIVE`,
+  );
+  return () => {
+    stopped = true;
+    if (timer != null) clearTimeoutFn(timer);
+  };
+}
+
+export function firstCandleDailyLiveAtYmd(ymd) {
+  return Date.parse(
+    `${ymd}T${pad2(FIRST_CANDLE_DAILY_LIVE_HOUR_IST)}:${pad2(FIRST_CANDLE_DAILY_LIVE_MINUTE_IST)}:00+05:30`,
+  );
+}
+
+export function isFirstCandleDailyLiveWindow(date = new Date()) {
+  const at = date instanceof Date ? date : new Date(date);
+  if (!isNseSessionDay(at)) return false;
+  const parts = istParts(at);
+  return Number(parts.hour) === FIRST_CANDLE_DAILY_LIVE_HOUR_IST && Number(parts.minute) === FIRST_CANDLE_DAILY_LIVE_MINUTE_IST;
+}
+
+export function shouldArmFirstCandleDailyLive({ now = new Date(), lastArmedYmd = "" } = {}) {
+  const at = now instanceof Date ? now : new Date(now);
+  if (!isFirstCandleDailyLiveWindow(at)) return false;
+  return istYmd(at) !== String(lastArmedYmd || "");
+}
+
+export function nextFirstCandleDailyLiveAt(from = Date.now()) {
+  const start = Number(from);
+  let ymd = istYmd(new Date(start));
+  for (let i = 0; i < 8; i += 1) {
+    const at = firstCandleDailyLiveAtYmd(ymd);
+    if (Number.isFinite(at) && at > start && isNseSessionDay(new Date(at))) return at;
+    ymd = shiftYmd(ymd, 1);
+  }
+  return start + 24 * 60 * 60 * 1000;
+}
+
+export function applyFirstCandleDailyLive(algos = [], { now = new Date(), feedLive = false, lastArmedYmd = "" } = {}) {
+  const at = now instanceof Date ? now : new Date(now);
+  if (!isFirstCandleDailyLiveWindow(at)) {
+    return { algos, armedIds: [], lastArmedYmd, reason: "not-window" };
+  }
+  if (!feedLive) {
+    return { algos, armedIds: [], lastArmedYmd, reason: "dhan-not-live" };
+  }
+  const ymd = istYmd(at);
+  if (lastArmedYmd === ymd) {
+    return { algos, armedIds: [], lastArmedYmd, reason: "already-armed" };
+  }
+  const armedIds = [];
+  const next = (algos || []).map((algo) => {
+    if (!isNiftyFirstCandleAlgo(algo) || algo.runMode !== "live" || algo.enabled) return algo;
+    armedIds.push(algo.id);
+    return {
+      ...algo,
+      enabled: true,
+      status: "LIVE",
+      lastLiveAt: 0,
+      lastLiveSide: "",
+      lastSignal: "WAIT",
+    };
+  });
+  return {
+    algos: next,
+    armedIds,
+    lastArmedYmd: ymd,
+    reason: armedIds.length ? "armed" : "already-live",
+  };
+}
+
+export function startFirstCandleDailyLiveScheduler({
+  getNow = () => Date.now(),
+  arm,
+  setTimeoutFn = setTimeout,
+  clearTimeoutFn = clearTimeout,
+} = {}) {
+  let timer = null;
+  let stopped = false;
+
+  const scheduleNext = () => {
+    if (stopped) return;
+    const now = Number(getNow());
+    const next = nextFirstCandleDailyLiveAt(now);
+    timer = setTimeoutFn(onFire, Math.max(250, next - now));
+  };
+
+  const onFire = async () => {
+    if (stopped) return;
+    let result;
+    try {
+      result = typeof arm === "function" ? await arm(new Date(getNow())) : null;
+    } catch (error) {
+      console.log(`NIFTY 5m first candle daily LIVE arm failed: ${error.message || error}`);
+    }
+    if (!stopped && result?.reason === "dhan-not-live" && isFirstCandleDailyLiveWindow(new Date(getNow()))) {
+      timer = setTimeoutFn(onFire, 5_000);
+      return;
+    }
+    scheduleNext();
+  };
+
+  scheduleNext();
+  const next = nextFirstCandleDailyLiveAt(getNow());
+  console.log(
+    `NIFTY 5m first candle daily LIVE is set: ${FIRST_CANDLE_DAILY_LIVE_LABEL} on session days · next ${new Date(next).toISOString()} · restart does not start LIVE`,
   );
   return () => {
     stopped = true;

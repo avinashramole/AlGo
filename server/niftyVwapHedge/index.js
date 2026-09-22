@@ -5,7 +5,10 @@ export { formatHedgeLevels, hedgePreviewTrade, hedgeReversalFromBars } from "./h
 export { runNiftyVwapHedgeBacktest, HedgeBacktestAdapter } from "./BacktestAdapter.js";
 export {
   HEDGE_DAILY_LIVE_LABEL,
+  FIRST_CANDLE_DAILY_LIVE_LABEL,
   applyHedgeDailyLive,
+  applyFirstCandleDailyLive,
   isNiftyDailyLiveAlgo,
   startHedgeDailyLiveScheduler,
+  startFirstCandleDailyLiveScheduler,
 } from "./dailyLive.js";

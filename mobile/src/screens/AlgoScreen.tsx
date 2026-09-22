@@ -34,7 +34,7 @@ type CondRow = { left: string; op: string; right: string; value: string };
 type Draft = {
   id?: string;
   name: string;
-  kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge";
+  kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
   initialSlPct?: string;
   trailingActivationPct?: string;
   trailingStepPct?: string;
@@ -66,7 +66,7 @@ type Draft = {
 };
 
 function isEngineKind(kind: Draft["kind"]) {
-  return kind === "nifty-vwap" || kind === "nifty-vwap-reversal" || kind === "nifty-vwap-hedge";
+  return kind === "nifty-vwap" || kind === "nifty-vwap-reversal" || kind === "nifty-vwap-hedge" || kind === "nifty-first-candle";
 }
 
 function lotFor(symbol: string) {
@@ -168,7 +168,7 @@ export function AlgoScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [rangeDraft, setRangeDraft] = useState<RangeDraft | null>(null);
   const [rangeBusy, setRangeBusy] = useState(false);
-  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge">("all");
+  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle">("all");
 
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
@@ -195,7 +195,7 @@ export function AlgoScreen() {
       trailingStepPct: Number(draft.trailingStepPct || 3),
       vwapExitCandles: Number(draft.vwapExitCandles || 5),
       instrument: isEngineKind(draft.kind) ? "option" : draft.instrument,
-      timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
+      timeframe: draft.kind === "nifty-vwap" || draft.kind === "nifty-first-candle" ? "5m" : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
       symbol: isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
       buyValue: Number(draft.buyRows[0]?.value || draft.buyValue),
       sellValue: Number(draft.sellRows[0]?.value || draft.sellValue),
@@ -298,6 +298,25 @@ export function AlgoScreen() {
               })
             }
           />
+          <Chip
+            label="NIFTY 5m first candle"
+            on={draft.kind === "nifty-first-candle"}
+            onPress={() =>
+              setDraft({
+                ...draft,
+                kind: "nifty-first-candle",
+                symbol: "NIFTY",
+                instrument: "option",
+                optionType: "CE",
+                strikeOffset: "0",
+                side: "BUY",
+                timeframe: "5m",
+                slPct: "20",
+                targetPct: "40",
+                initialSlPct: "20",
+              })
+            }
+          />
         </View>
         <Text style={styles.muted}>Run mode</Text>
         <View style={styles.chips}>
@@ -324,6 +343,8 @@ export function AlgoScreen() {
               ? "Contract locked: NIFTY weekly ATM. 1 lot primary, 2 lots opposite once, +40% / −20% / +5% account exit."
               : draft.kind === "nifty-vwap-reversal"
               ? "Contract locked: NIFTY weekly ATM CE/PE on 15-minute candles. Never monthly."
+              : draft.kind === "nifty-first-candle"
+              ? "Contract locked: NIFTY ATM CE/PE on the first 5-minute candle. LIVE at 09:00 IST."
               : "Contract locked: NIFTY ATM CE/PE on 5-minute candles."}
           </Text>
         ) : (
@@ -363,6 +384,8 @@ export function AlgoScreen() {
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY 1 lot weekly ATM CE. Open above and close below → BUY 1 lot PE. +40% books primary. −20% buys 2 lots opposite once. +5% account P&L exits all. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-vwap-reversal" ? (
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
+        ) : draft.kind === "nifty-first-candle" ? (
+          <Text style={styles.muted}>First 5m Nifty green + ATM CE green → BUY ATM CE. First 5m Nifty red + ATM PE green → BUY ATM PE. SL 20% / TGT 40%. LIVE starts automatically at 09:00 IST. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-vwap" ? (
           <Text style={styles.muted}>NIFTY 5m VWAP ATM. First futures close vs VWAP picks CE or PE. Saving does not start live trading.</Text>
         ) : draft.kind === "indicator" ? (
@@ -476,6 +499,11 @@ export function AlgoScreen() {
             <Field label="Stop %" value={draft.initialSlPct || "15"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
             <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
           </>
+        ) : draft.kind === "nifty-first-candle" ? (
+          <>
+            <Field label="Stop %" value={draft.initialSlPct || "20"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
+            <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
+          </>
         ) : draft.kind === "nifty-vwap" ? (
           <>
             <Field label="Initial stop %" value={draft.initialSlPct || "20"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
@@ -573,6 +601,7 @@ export function AlgoScreen() {
         <Chip label="NIFTY VWAP" on={filter === "nifty-vwap"} onPress={() => setFilter("nifty-vwap")} />
         <Chip label="15m reversal" on={filter === "nifty-vwap-reversal"} onPress={() => setFilter("nifty-vwap-reversal")} />
         <Chip label="15m hedge" on={filter === "nifty-vwap-hedge"} onPress={() => setFilter("nifty-vwap-hedge")} />
+        <Chip label="5m first candle" on={filter === "nifty-first-candle"} onPress={() => setFilter("nifty-first-candle")} />
       </View>
       {rows.map((algo) => (
         <Card key={algo.id}>
@@ -619,6 +648,8 @@ export function AlgoScreen() {
                       ? "nifty-vwap-hedge"
                       : algo.kind === "nifty-vwap-reversal"
                       ? "nifty-vwap-reversal"
+                      : algo.kind === "nifty-first-candle"
+                        ? "nifty-first-candle"
                       : algo.kind === "nifty-vwap"
                         ? "nifty-vwap"
                         : algo.kind === "price-action"
@@ -638,11 +669,11 @@ export function AlgoScreen() {
                       ? 0
                       : algo.kind === "nifty-vwap-reversal"
                       ? algo.initialSlPct || algo.slPct || 15
-                      : algo.kind === "nifty-vwap"
+                      : algo.kind === "nifty-vwap" || algo.kind === "nifty-first-candle"
                         ? algo.initialSlPct || algo.slPct || 20
                         : algo.slPct || 0.4,
                   ),
-                  targetPct: String(algo.targetPct || (algo.kind === "nifty-vwap-hedge" ? 40 : algo.kind === "nifty-vwap-reversal" ? 30 : algo.kind === "nifty-vwap" ? 40 : 0.8)),
+                  targetPct: String(algo.targetPct || (algo.kind === "nifty-vwap-hedge" ? 40 : algo.kind === "nifty-vwap-reversal" ? 30 : algo.kind === "nifty-vwap" || algo.kind === "nifty-first-candle" ? 40 : 0.8)),
                   initialSlPct: String(algo.kind === "nifty-vwap-hedge" ? 0 : algo.initialSlPct || (algo.kind === "nifty-vwap-reversal" ? 15 : 20)),
                   trailingActivationPct: String(algo.trailingActivationPct || 10),
                   trailingStepPct: String(algo.trailingStepPct || 3),
