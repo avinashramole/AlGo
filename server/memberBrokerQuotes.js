@@ -101,7 +101,8 @@ export function crudeQuoteFromPayload(payload) {
     const blob = `${key} ${row.instrument_token || ""} ${row.instrument_key || ""} ${row.trading_symbol || ""} ${row.n || ""}`.toUpperCase();
     if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) continue;
     const inner = row.v && typeof row.v === "object" ? row.v : row;
-    const next = quoteRow(CRUDE_INSTRUMENT, pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price), pickNumber(inner.ohlc?.close, inner.close, inner.prev_close_price, inner.close_price));
+    const last = pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price);
+    const next = quoteRow(CRUDE_INSTRUMENT, last, pickPrevClose(inner, last), pickSignedNumber(inner.net_change, inner.netChange));
     if (next) {
       next.expiry = String(inner.expiry || row.expiry || "").slice(0, 10);
       return next;
@@ -118,16 +119,19 @@ export function supportedMemberQuoteBroker(brokerId) {
   return ["dhan", "upstox", "zerodha", "fyers", "angelone"].includes(String(brokerId || "").toLowerCase());
 }
 
-function quoteRow(instrument, ltp, close) {
+function quoteRow(instrument, ltp, close, netChange) {
   const price = Number(ltp);
   if (!Number.isFinite(price) || price <= 0) return null;
   const prev = Number(close);
+  const net = Number(netChange);
   return {
     symbol: instrument.symbol,
     parent: instrument.parent,
     kind: instrument.kind,
     ltp: price,
-    close: Number.isFinite(prev) && prev > 0 ? prev : price,
+    close: Number.isFinite(prev) && prev > 0 ? prev : 0,
+    prevClose: Number.isFinite(prev) && prev > 0 ? prev : 0,
+    netChange: Number.isFinite(net) ? net : undefined,
     expiry: "",
   };
 }
@@ -148,6 +152,32 @@ function pickNumber(...values) {
   return 0;
 }
 
+function pickSignedNumber(...values) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function pickPrevClose(inner = {}, last = 0) {
+  const prev = pickNumber(
+    inner.prev_close,
+    inner.prevClose,
+    inner.prev_close_price,
+    inner.previous_close,
+    inner.ohlc?.prev_close,
+    inner.ohlc?.close,
+    inner.close,
+    inner.close_price,
+  );
+  const net = pickSignedNumber(inner.net_change, inner.netChange, inner.change);
+  if (prev > 0 && prev !== last) return prev;
+  if (net != null && last > 0 && Math.abs(net) > 0.0001) return Number((last - net).toFixed(2));
+  return prev > 0 ? prev : 0;
+}
+
 export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close } = {}) {
   const bag = data && typeof data === "object" ? data : {};
   const byNorm = new Map();
@@ -166,8 +196,8 @@ export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close } = {}) {
     if (!row) continue;
     const inner = row.v && typeof row.v === "object" ? row.v : row;
     const last = typeof ltp === "function" ? ltp(inner) : pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price);
-    const prev = typeof close === "function" ? close(inner) : pickNumber(inner.ohlc?.close, inner.close, inner.prev_close_price, inner.close_price);
-    const next = quoteRow(instrument, last, prev);
+    const prev = typeof close === "function" ? close(inner) : pickPrevClose(inner, last);
+    const next = quoteRow(instrument, last, prev, pickSignedNumber(inner.net_change, inner.netChange, inner.v?.net_change));
     if (next) quotes.push(next);
   }
   return quotes;
@@ -189,7 +219,7 @@ export function quotesFromFyersPayload(payload) {
   }
   return quotesFromKeyedPayload(keyed, FYERS_KEYS, {
     ltp: (row) => pickNumber(row.lp, row.last_price, row.ltp),
-    close: (row) => pickNumber(row.prev_close_price, row.close, row.ohlc?.close),
+    close: (row) => pickPrevClose(row.v && typeof row.v === "object" ? { ...row, ...row.v } : row, pickNumber(row.lp, row.last_price, row.ltp)),
   });
 }
 
@@ -202,7 +232,8 @@ export function quotesFromAngelPayload(payload) {
     if (!spec) continue;
     const row = list.find((item) => String(item?.symbolToken || item?.symboltoken || "") === spec.token);
     if (!row) continue;
-    const next = quoteRow(instrument, pickNumber(row.ltp, row.last_price), pickNumber(row.close, row.close_price));
+    const last = pickNumber(row.ltp, row.last_price);
+    const next = quoteRow(instrument, last, pickPrevClose(row, last), pickSignedNumber(row.netChange, row.net_change));
     if (next) quotes.push(next);
   }
   return quotes;
@@ -369,7 +400,7 @@ async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
     return quotes.concat(
       quotesFromKeyedPayload(keyed, { CRUDEOIL: crudeKey }, {
         ltp: (row) => pickNumber(row.lp, row.last_price, row.ltp),
-        close: (row) => pickNumber(row.prev_close_price, row.close, row.ohlc?.close),
+        close: (row) => pickPrevClose(row.v && typeof row.v === "object" ? { ...row, ...row.v } : row, pickNumber(row.lp, row.last_price, row.ltp)),
       }),
     );
   } catch {

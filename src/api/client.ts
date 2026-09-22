@@ -1032,6 +1032,7 @@ export type MemberIndexQuote = {
   price: number;
   change: number;
   changePct: number;
+  prevClose?: number;
   spark?: number[];
   future?: number;
   futureExpiry?: string;

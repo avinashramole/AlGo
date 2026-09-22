@@ -1,4 +1,4 @@
-import { cn, formatChange, formatPct, formatQuote, indexTapeLabel } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteTone } from "../../lib/format";
 import type { MemberIndexQuote } from "../../api/client";
 import { Sparkline } from "../charts/Sparkline";
 
@@ -43,7 +43,8 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {withRequiredCards(indices).map((item) => {
-        const up = item.change >= 0;
+        const tone = quoteTone(item.change);
+        const up = item.change > 0;
         const showDeriv = item.symbol !== "INDIA VIX";
         return (
           <article key={item.symbol} className="card px-4 py-3">
@@ -55,8 +56,8 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
                   </div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{indexTapeLabel(item.symbol)}</div>
                 </div>
-                <div className="mt-1 text-lg font-bold leading-none">{formatQuote(item.price)}</div>
-                <div className={cn("mt-1 text-xs font-semibold", up ? "text-up" : "text-down")}>
+                <div className={cn("mt-1 text-lg font-bold leading-none", tone)}>{formatQuote(item.price)}</div>
+                <div className={cn("mt-1 text-xs font-semibold", tone || "text-slate-400")}>
                   {formatChange(item.change)} ({formatPct(item.changePct)}) today
                 </div>
               </div>

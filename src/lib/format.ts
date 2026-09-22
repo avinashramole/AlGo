@@ -188,6 +188,13 @@ export function formatOi(value: number) {
   return Math.round(n).toLocaleString("en-IN");
 }
 
+/** LTP vs yesterday close: above is green, below is red, unchanged stays neutral. */
+export function quoteTone(change: number) {
+  const n = Number(change);
+  if (!Number.isFinite(n) || n === 0) return "";
+  return n > 0 ? "text-up" : "text-down";
+}
+
 /** VWAP vs LTP: LTP < VWAP is red, LTP > VWAP is green. Same on options and index futures. */
 export function vwapTone(vwap: number, base: number) {
   const v = Number(vwap);
