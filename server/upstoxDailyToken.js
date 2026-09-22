@@ -9,6 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const UPSTOX_DAILY_TOKEN_HOUR_IST = TOKEN_RENEW_HOUR_IST;
 export const UPSTOX_DAILY_TOKEN_LABEL = "08:00 AM IST";
+export const UPSTOX_RETRY_UNTIL_HOUR_IST = 11;
+export const UPSTOX_RETRY_MS = 15 * 60 * 1000;
 
 function dailyTokenFile() {
   return process.env.T2S_UPSTOX_DAILY_TOKEN_FILE || path.join(__dirname, "data", "upstox-daily-token.json");
@@ -47,18 +49,23 @@ export function todayEightAmIst(from = Date.now()) {
   return Number.isFinite(at) ? at : from;
 }
 
-export function shouldAskUpstoxDailyTokens({ now = new Date(), lastAskedYmd = "" } = {}) {
+export function shouldAskUpstoxDailyTokens({ now = new Date(), lastAskedYmd = "", retry = false } = {}) {
   const at = now instanceof Date ? now : new Date(now);
   const todayEight = todayEightAmIst(at.getTime());
   if (at.getTime() < todayEight) return false;
-  return istYmd(at) !== String(lastAskedYmd || "");
+  if (istYmd(at) !== String(lastAskedYmd || "")) return true;
+  return Boolean(retry) && Number(istParts(at).hour) < UPSTOX_RETRY_UNTIL_HOUR_IST;
 }
 
-export function nextUpstoxDailyTokenAt(from = Date.now(), lastAskedYmd = "") {
+export function nextUpstoxDailyTokenAt(from = Date.now(), lastAskedYmd = "", stale = false) {
   const now = Number(from);
   const todayEight = todayEightAmIst(now);
-  if (now >= todayEight && istYmd(new Date(now)) !== String(lastAskedYmd || "")) {
+  const at = new Date(now);
+  if (now >= todayEight && istYmd(at) !== String(lastAskedYmd || "")) {
     return now + 5_000;
+  }
+  if (now >= todayEight && stale && Number(istParts(at).hour) < UPSTOX_RETRY_UNTIL_HOUR_IST) {
+    return now + UPSTOX_RETRY_MS;
   }
   return nextDailyRenewalAt(now, UPSTOX_DAILY_TOKEN_HOUR_IST);
 }
@@ -89,14 +96,16 @@ export function saveUpstoxDailyAskedYmd(ymd) {
 export async function askUpstoxDailyTokens({
   now = new Date(),
   lastAskedYmd = "",
+  retry = false,
   fetchImpl = fetch,
   targets,
   notify = noteMemberUpstoxTokenAsk,
 } = {}) {
   const at = now instanceof Date ? now : new Date(now);
-  if (!shouldAskUpstoxDailyTokens({ now: at, lastAskedYmd })) {
+  if (!shouldAskUpstoxDailyTokens({ now: at, lastAskedYmd, retry })) {
     return { asked: [], skipped: [], failed: [], lastAskedYmd, reason: "not-window" };
   }
+  const firstWave = istYmd(at) !== String(lastAskedYmd || "");
   const rows = Array.isArray(targets) ? targets : listUpstoxOauthTargets();
   const asked = [];
   const skipped = [];
@@ -115,13 +124,14 @@ export async function askUpstoxDailyTokens({
         continue;
       }
       asked.push({ userId, expiresAt: result.expiresAt || "" });
-      if (typeof notify === "function") {
+      if (firstWave && typeof notify === "function") {
         notify(userId, {
           text: "Asked Upstox for today's trading token. Approve the Upstox app or WhatsApp notification.",
         });
       }
     } catch (error) {
       failed.push({ userId, error: String(error.message || error) });
+      console.log(`Upstox 08:00 IST ask failed for ${userId}: ${error.message || error}`);
     }
   }
   const ymd = istYmd(at);
@@ -139,25 +149,34 @@ export function startUpstoxDailyTokenScheduler({
   ask = askUpstoxDailyTokens,
   loadAskedYmd = loadUpstoxDailyAskedYmd,
   saveAskedYmd = saveUpstoxDailyAskedYmd,
+  staleTargets = () =>
+    listUpstoxOauthTargets().filter((row) => !tradingTokenFreshAfterReset(row.tokenUpdatedAt, getNow())),
   setTimeoutFn = setTimeout,
   clearTimeoutFn = clearTimeout,
 } = {}) {
   let timer = null;
   let stopped = false;
 
+  const leftover = () => (typeof staleTargets === "function" ? staleTargets() : []).length > 0;
+
   const scheduleNext = (lastAskedYmd = loadAskedYmd()) => {
     if (stopped) return;
     const now = Number(getNow());
-    const next = nextUpstoxDailyTokenAt(now, lastAskedYmd);
+    const next = nextUpstoxDailyTokenAt(now, lastAskedYmd, leftover());
     timer = setTimeoutFn(onFire, Math.max(250, next - now));
   };
 
   const onFire = async () => {
     if (stopped) return;
     const lastAskedYmd = loadAskedYmd();
+    const at = new Date(getNow());
     let result;
     try {
-      result = await ask({ now: new Date(getNow()), lastAskedYmd });
+      result = await ask({
+        now: at,
+        lastAskedYmd,
+        retry: lastAskedYmd === istYmd(at),
+      });
     } catch (error) {
       console.log(`Upstox 08:00 IST trading-token request failed: ${error.message || error}`);
     }
@@ -176,7 +195,7 @@ export function startUpstoxDailyTokenScheduler({
   };
 
   scheduleNext();
-  const next = nextUpstoxDailyTokenAt(getNow(), loadAskedYmd());
+  const next = nextUpstoxDailyTokenAt(getNow(), loadAskedYmd(), leftover());
   console.log(
     `Upstox daily trading token is set: ${UPSTOX_DAILY_TOKEN_LABEL} for every stored API key + secret · next ${new Date(next).toISOString()} · restart does not start LIVE`,
   );

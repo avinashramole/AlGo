@@ -27,7 +27,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
-import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxOauthCreds } from "./upstoxAuth.js";
+import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -92,6 +92,7 @@ function isPreviewRequest(req) {
 
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 let flushingLiveAlgos = false;
 let flushAgain = false;
@@ -330,10 +331,15 @@ app.post("/api/member/broker", (req, res) => {
   }
 });
 
+app.get("/api/upstox/token", (_req, res) => {
+  res.json({ ok: true, service: "upstox-notifier", notifierUri: upstoxNotifierUri() });
+});
+
 app.post("/api/upstox/token", (req, res) => {
   try {
     res.json(receiveUpstoxAccessToken(req.body || {}));
   } catch (error) {
+    console.log(`Upstox notifier rejected: ${error.message || error}`);
     res.status(error.status || 400).json({ error: error.message || "Could not save Upstox token" });
   }
 });
