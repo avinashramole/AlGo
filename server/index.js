@@ -26,7 +26,7 @@ import {
   unassignStaticIp,
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
-import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startWalletTopup } from "./memberDesk.js";
+import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
@@ -311,6 +311,7 @@ app.get("/api/member/desk", (req, res) => {
         algos: listAlgos(),
         quote: quoteSymbol,
         admins: listPublicUsers(),
+        ownBookOnly: true,
         liveBook: {
           positions: snap.positions || [],
           orders: snap.orders || [],
@@ -1216,6 +1217,7 @@ function startDeskTimers() {
 
 async function bootBackground() {
   startUpstoxDailyTokenScheduler();
+  startMemberDailyBookScheduler();
   if (skipLiveAlgos()) {
     console.log("NIFTY 15m VWAP daily LIVE scheduler off (T2S_SKIP_LIVE_ALGOS). Login stays answering.");
   } else {

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport } from "./desk.js";
+import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
 import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
 import { buildCopyAlertText, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
@@ -463,6 +464,8 @@ function emptyDesk(userId) {
     positions: [],
     closedTrades: [],
     orders: [],
+    orderHistory: [],
+    bookClearedAt: 0,
     alerts: [],
     seededPlans: [],
   };
@@ -758,7 +761,15 @@ function loadDesk(userId) {
   desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
   desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+  desk.bookClearedAt = Number(desk.bookClearedAt || 0) || 0;
   desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
+  const before = { cleared: desk.bookClearedAt, orders: desk.orders.length, history: desk.orderHistory.length };
+  splitMemberOrderBook(desk);
+  clearMemberDailyBook(desk);
+  if (desk.bookClearedAt !== before.cleared || desk.orders.length !== before.orders || desk.orderHistory.length !== before.history) {
+    persist();
+  }
   desk.seededPlans = Array.isArray(desk.seededPlans) ? desk.seededPlans : [];
   if (!desk.wallet || typeof desk.wallet !== "object") desk.wallet = { balance: 0, updatedAt: new Date().toISOString() };
   if (!knownBroker(desk.brokerId)) desk.brokerId = "paper";
@@ -804,6 +815,125 @@ export function ensurePlanLedger({ user } = {}) {
   return loadDesk(user.id);
 }
 
+export function isWorkingMemberOrder(status) {
+  const raw = String(status || "").toUpperCase();
+  return raw === "PENDING" || raw === "PARTIAL" || raw === "TRANSIT" || raw === "OPEN";
+}
+
+export function isHistoryMemberOrder(status) {
+  const raw = String(status || "").toUpperCase();
+  return (
+    raw === "FILLED" ||
+    raw === "TRADED" ||
+    raw === "REJECTED" ||
+    raw === "REJECT" ||
+    raw === "CANCELLED" ||
+    raw === "CANCELED" ||
+    raw === "FAILED" ||
+    raw === "FAIL" ||
+    raw === "EXPIRED"
+  );
+}
+
+export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
+  if (error) return "REJECTED";
+  if (paper || !live) return "FILLED";
+  const raw = String(status || live.status || "PENDING").toUpperCase();
+  if (raw === "TRANSIT" || raw === "OPEN") return "PENDING";
+  if (raw === "TRADED") return "FILLED";
+  if (raw === "REJECT" || raw === "REJECTION") return "REJECTED";
+  if (raw === "FAIL" || raw === "FAILURE") return "FAILED";
+  if (raw === "CANCELED") return "CANCELLED";
+  return raw;
+}
+
+function splitMemberOrderBook(desk) {
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+  const working = [];
+  const history = [...desk.orderHistory];
+  for (const row of desk.orders) {
+    if (isWorkingMemberOrder(row?.status)) working.push(row);
+    else history.unshift(row);
+  }
+  desk.orders = working;
+  desk.orderHistory = history.slice(0, 400);
+}
+
+export function clearMemberDailyBook(desk, now = Date.now()) {
+  if (!desk) return desk;
+  const resetAt = lastDailyResetAt(now, TOKEN_RENEW_HOUR_IST);
+  if ((Number(desk.bookClearedAt) || 0) >= resetAt) return desk;
+  splitMemberOrderBook(desk);
+  for (const row of desk.orders) {
+    desk.orderHistory.unshift({
+      ...row,
+      status: isWorkingMemberOrder(row.status) ? "EXPIRED" : row.status,
+    });
+  }
+  desk.orders = [];
+  desk.positions = [];
+  desk.orderHistory = desk.orderHistory.slice(0, 400);
+  desk.bookClearedAt = resetAt;
+  return desk;
+}
+
+export function sweepMemberDailyBooks(now = Date.now()) {
+  let cleared = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk) continue;
+    desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+    desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+    desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
+    const before = {
+      cleared: Number(desk.bookClearedAt) || 0,
+      orders: desk.orders.length,
+      history: desk.orderHistory.length,
+      positions: desk.positions.length,
+    };
+    splitMemberOrderBook(desk);
+    clearMemberDailyBook(desk, now);
+    if (
+      desk.bookClearedAt !== before.cleared ||
+      desk.orders.length !== before.orders ||
+      desk.orderHistory.length !== before.history ||
+      desk.positions.length !== before.positions
+    ) {
+      cleared += 1;
+    }
+  }
+  if (cleared) persist();
+  return cleared;
+}
+
+let bookSweepTimer = null;
+
+export function startMemberDailyBookScheduler() {
+  if (bookSweepTimer) clearTimeout(bookSweepTimer);
+  const tick = () => {
+    try {
+      sweepMemberDailyBooks();
+    } catch (error) {
+      console.log(`Member daily book clear failed: ${error.message || error}`);
+    }
+    bookSweepTimer = setTimeout(tick, msUntilDailyRenewal());
+  };
+  try {
+    sweepMemberDailyBooks();
+  } catch (error) {
+    console.log(`Member daily book clear failed: ${error.message || error}`);
+  }
+  bookSweepTimer = setTimeout(tick, msUntilDailyRenewal());
+}
+
+function placeMemberOrder(desk, order) {
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+  if (isWorkingMemberOrder(order.status)) desk.orders.unshift(order);
+  else desk.orderHistory.unshift(order);
+  desk.orderHistory = desk.orderHistory.slice(0, 400);
+}
+
 function sameStrategy(left, right) {
   const a = String(left || "").trim().toLowerCase();
   const b = String(right || "").trim().toLowerCase();
@@ -818,10 +948,11 @@ function liveBookForPlans(liveBook, enrollments = [], brokerId = "paper") {
       .filter(Boolean),
   );
   const match = (row) => names.has(String(row?.strategy || "").trim().toLowerCase()) && rowOnBroker(row, brokerId);
-  if (!liveBook || !names.size) return { positions: [], orders: [], closedTrades: [] };
+  if (!liveBook || !names.size) return { positions: [], orders: [], orderHistory: [], closedTrades: [] };
   return {
     positions: (liveBook.positions || []).filter(match),
-    orders: (liveBook.orders || []).filter(match),
+    orders: (liveBook.orders || []).filter((row) => match(row) && isWorkingMemberOrder(row.status)),
+    orderHistory: (liveBook.orders || []).filter((row) => match(row) && isHistoryMemberOrder(row.status)),
     closedTrades: (liveBook.closedTrades || []).filter(match),
   };
 }
@@ -861,8 +992,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   const price = Number(live?.price || payload.price || 0);
   const side = payload.side === "SELL" ? "SELL" : "BUY";
   const brokerId = String(payload.brokerId || desk.brokerId || "paper");
-  const status = error ? "REJECTED" : paper || !live ? "FILLED" : String(live.status || "PENDING").toUpperCase();
-  const mapped = status === "TRANSIT" || status === "OPEN" ? "PENDING" : status === "TRADED" ? "FILLED" : status;
+  const mapped = mapMemberOrderStatus(live?.status, { error, paper, live });
   const order = {
     id: live?.orderId ? String(live.orderId) : `mo${crypto.randomBytes(6).toString("hex")}`,
     userId,
@@ -880,9 +1010,10 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     createdAt: now,
   };
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
   desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
   desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
-  desk.orders.unshift(order);
+  placeMemberOrder(desk, order);
   const alert = {
     id: `na${crypto.randomBytes(6).toString("hex")}`,
     kind: error ? "copy_rejected" : "copy_order",
@@ -1024,24 +1155,25 @@ function planRows(book, enrollments = []) {
   });
 }
 
-export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook } = {}) {
+export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook, ownBookOnly = false } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],
     orders: Array.isArray(desk.orders) ? desk.orders : [],
+    orderHistory: Array.isArray(desk.orderHistory) ? desk.orderHistory : [],
     closedTrades: Array.isArray(desk.closedTrades) ? desk.closedTrades : [],
   };
-  const hasOwn = own.positions.length || own.orders.length || own.closedTrades.length;
-  const book = hasOwn ? own : liveBookForPlans(liveBook, enrollments, brokerId);
+  const hasOwn = own.positions.length || own.orders.length || own.orderHistory.length || own.closedTrades.length;
+  const book = hasOwn || ownBookOnly ? own : liveBookForPlans(liveBook, enrollments, brokerId);
   if (!book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
   const report = buildReport({
     closedTrades: book.closedTrades,
     positions: book.positions,
-    orders: book.orders,
+    orders: [...(book.orders || []), ...(book.orderHistory || [])],
   });
   const unrealized = Number(report.unrealizedPnl || 0);
   const balance = round2(desk.wallet.balance || 0);
@@ -1062,6 +1194,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     report,
     positions: book.positions,
     orders: book.orders || [],
+    orderHistory: book.orderHistory || [],
     topups: desk.topups.map(publicTopup),
     payments: publicPayments(admins),
     copyReady: Boolean(autoTrade && String(desk.brokerToken || "").trim()),

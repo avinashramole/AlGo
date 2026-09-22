@@ -1019,6 +1019,7 @@ export type MemberDesk = {
   report: DeskReport;
   positions: MemberPosition[];
   orders?: DeskOrder[];
+  orderHistory?: DeskOrder[];
   topups: WalletTopup[];
   payments: PaymentPublic;
   copyReady?: boolean;
