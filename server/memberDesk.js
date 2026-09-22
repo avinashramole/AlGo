@@ -764,10 +764,20 @@ function loadDesk(userId) {
   desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
   desk.bookClearedAt = Number(desk.bookClearedAt || 0) || 0;
   desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
-  const before = { cleared: desk.bookClearedAt, orders: desk.orders.length, history: desk.orderHistory.length };
+  const before = {
+    cleared: desk.bookClearedAt,
+    orders: desk.orders.length,
+    history: desk.orderHistory.length,
+    alerts: desk.alerts.length,
+  };
   splitMemberOrderBook(desk);
   clearMemberDailyBook(desk);
-  if (desk.bookClearedAt !== before.cleared || desk.orders.length !== before.orders || desk.orderHistory.length !== before.history) {
+  if (
+    desk.bookClearedAt !== before.cleared ||
+    desk.orders.length !== before.orders ||
+    desk.orderHistory.length !== before.history ||
+    desk.alerts.length !== before.alerts
+  ) {
     persist();
   }
   desk.seededPlans = Array.isArray(desk.seededPlans) ? desk.seededPlans : [];
@@ -864,6 +874,7 @@ export function clearMemberDailyBook(desk, now = Date.now()) {
   splitMemberOrderBook(desk);
   desk.orders = [];
   desk.positions = [];
+  desk.alerts = [];
   desk.orderHistory = desk.orderHistory.filter((row) => isExecutedMemberOrder(row?.status)).slice(0, 400);
   desk.bookClearedAt = resetAt;
   return desk;
@@ -876,11 +887,13 @@ export function sweepMemberDailyBooks(now = Date.now()) {
     desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
     desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
     desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
+    desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
     const before = {
       cleared: Number(desk.bookClearedAt) || 0,
       orders: desk.orders.length,
       history: desk.orderHistory.length,
       positions: desk.positions.length,
+      alerts: desk.alerts.length,
     };
     splitMemberOrderBook(desk);
     clearMemberDailyBook(desk, now);
@@ -888,7 +901,8 @@ export function sweepMemberDailyBooks(now = Date.now()) {
       desk.bookClearedAt !== before.cleared ||
       desk.orders.length !== before.orders ||
       desk.orderHistory.length !== before.history ||
-      desk.positions.length !== before.positions
+      desk.positions.length !== before.positions ||
+      desk.alerts.length !== before.alerts
     ) {
       cleared += 1;
     }
