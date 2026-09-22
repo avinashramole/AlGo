@@ -282,11 +282,13 @@ export function summarizeAlgo(algo) {
     const sl = algo.initialSlPct || 20;
     const tgt = algo.targetPct || 40;
     const start = algo.dailyLiveIst || "09:00";
-    const firstBar = algo.firstBarStartIst || "09:15";
+    const firstBar = algo.firstBarStartIst || "09:00";
+    const evalAt = algo.entryEvaluationIst || "09:05";
+    const endAt = algo.endTimeIst || "15:15";
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
     const maxTrades = algo.maxTradesPerDay || 1;
     const atm = strikeOffsetLabel(algo.strikeOffset);
-    return `NIFTY first candle · ${tf} · ${expiry} ${atm} · first bar ${firstBar} IST · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY first candle · ${tf} · ${expiry} ${atm} · ${firstBar}–${evalAt} IST · end ${endAt} · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -478,13 +480,16 @@ export function normalizeAlgo(input = {}, existing = {}) {
     next.summary = summarizeAlgo(next);
     return withMapping(next, input, existing);
   }
+  const switchingAwayFromFirstCandle =
+    input.kind === "price-action" ||
+    input.kind === "nifty-vwap" ||
+    input.kind === "nifty-vwap-reversal" ||
+    input.kind === "nifty-vwap-hedge";
   const keepFirstCandle =
-    isNiftyFirstCandleAlgo(merged) &&
-    input.kind !== "indicator" &&
-    input.kind !== "price-action" &&
-    input.kind !== "nifty-vwap" &&
-    input.kind !== "nifty-vwap-reversal" &&
-    input.kind !== "nifty-vwap-hedge";
+    (isNiftyFirstCandleAlgo(merged) ||
+      isNiftyFirstCandleAlgo(existing) ||
+      /5m first candle/i.test(String(merged.name || existing.name || ""))) &&
+    !switchingAwayFromFirstCandle;
   if (keepFirstCandle) {
     const cfg = niftyFirstCandleConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -517,6 +522,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
       maxTradesPerDay: cfg.maxTradesPerDay,
       dailyLiveIst: cfg.dailyLiveIst,
       firstBarStartIst: cfg.firstBarStartIst,
+      entryEvaluationIst: cfg.entryEvaluationIst,
+      endTimeIst: cfg.endTimeIst,
       lastBacktest: existing.lastBacktest || null,
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,

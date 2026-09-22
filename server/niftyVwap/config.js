@@ -54,7 +54,7 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
   maxPositions: 1,
   maxTradesPerDay: 1,
   intradayOnly: true,
-  eodSquareOffMinutes: 10,
+  eodSquareOffMinutes: 15,
   barMinutes: 5,
   symbol: "NIFTY",
   lots: 1,
@@ -65,7 +65,9 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
   expiryKind: "weekly",
   strikeOffset: 0,
   dailyLiveIst: "09:00",
-  firstBarStartIst: "09:15",
+  firstBarStartIst: "09:00",
+  entryEvaluationIst: "09:05",
+  endTimeIst: "15:15",
 };
 
 const FIRST_CANDLE_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15 };
@@ -179,6 +181,19 @@ export function niftyFirstCandleConfig(algo = {}) {
   const barMinutes = firstCandleBarMinutes(timeframe);
   const expiryKind = String(algo.expiryKind || "").toLowerCase() === "monthly" ? "monthly" : "weekly";
   const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(algo.strikeOffset, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.strikeOffset))));
+  const rawFirst = String(algo.firstBarStartIst || "").trim();
+  const firstBarStartIst = parseIstHm(
+    !rawFirst || (rawFirst === "09:15" && !String(algo.entryEvaluationIst || "").trim())
+      ? DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.firstBarStartIst
+      : rawFirst,
+    DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.firstBarStartIst,
+  );
+  const endTimeIst = parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.endTimeIst);
+  const endParts = endTimeIst.split(":").map(Number);
+  const eodFromEnd = Math.max(0, 15 * 60 + 30 - (endParts[0] * 60 + endParts[1]));
+  const eodSquareOffMinutes = String(algo.endTimeIst || "").trim()
+    ? eodFromEnd
+    : Math.max(0, Math.round(num(algo.eodSquareOffMinutes, eodFromEnd)));
   return {
     timeframe,
     initialSlPct: Math.max(1, num(algo.initialSlPct ?? algo.slPct, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.initialSlPct)),
@@ -189,7 +204,7 @@ export function niftyFirstCandleConfig(algo = {}) {
     maxPositions: 1,
     maxTradesPerDay: Math.max(1, Math.round(num(algo.maxTradesPerDay, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay))),
     intradayOnly: algo.intradayOnly !== false,
-    eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.eodSquareOffMinutes))),
+    eodSquareOffMinutes,
     barMinutes,
     symbol: "NIFTY",
     lots,
@@ -201,7 +216,9 @@ export function niftyFirstCandleConfig(algo = {}) {
     expiryKind,
     strikeOffset,
     dailyLiveIst: parseIstHm(algo.dailyLiveIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.dailyLiveIst),
-    firstBarStartIst: parseIstHm(algo.firstBarStartIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.firstBarStartIst),
+    firstBarStartIst,
+    entryEvaluationIst: parseIstHm(algo.entryEvaluationIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.entryEvaluationIst),
+    endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.endTimeIst),
   };
 }
 
@@ -328,6 +345,8 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     expiryKind: cfg.expiryKind,
     strikeOffset: cfg.strikeOffset,
     firstBarStartIst: cfg.firstBarStartIst,
+    entryEvaluationIst: cfg.entryEvaluationIst,
+    endTimeIst: cfg.endTimeIst,
     indicator: "NIFTY_FIRST_CANDLE",
     buyLeft: "price",
     buyOp: "close_above",
@@ -356,6 +375,8 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     maxTradesPerDay: cfg.maxTradesPerDay,
     dailyLiveIst: cfg.dailyLiveIst,
     firstBarStartIst: cfg.firstBarStartIst,
+    entryEvaluationIst: cfg.entryEvaluationIst,
+    endTimeIst: cfg.endTimeIst,
     enabled: false,
   };
 }

@@ -95,9 +95,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
-      const firstBar = form.firstBarStartIst || "09:15";
+      const firstBar = form.firstBarStartIst || "09:00";
+      const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · first ${form.timeframe || "5m"} at ${firstBar} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · first ${form.timeframe || "5m"} ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -511,7 +512,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : firstCandle ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              Uses only the first completed candle after the first-bar start. NSE tape begins 09:15, so the default first 5m is 09:15–09:20. Green Nifty + green CE buys CE. Red Nifty + green PE buys PE. No trade if those candles are not complete or not green. Duplicate orders are blocked. One open position.
+              Uses only the completed 09:00–09:05 candle (editable). Green Nifty + green ATM CE buys weekly ATM CE. Red Nifty + green ATM PE buys weekly ATM PE. No trade if that candle is missing, doji, or the option candle is not green. Duplicate orders and a second trade the same day are blocked.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">
@@ -520,7 +521,15 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 First candle start (IST)
-                <input className={fieldClass} value={form.firstBarStartIst || "09:15"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:15" />
+                <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Entry evaluation (IST)
+                <input className={fieldClass} value={form.entryEvaluationIst || "09:05"} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder="09:05" />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                End time (IST)
+                <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 Expiry

@@ -135,9 +135,40 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(firstCandle.initialSlPct, 20);
   assert.equal(firstCandle.targetPct, 40);
   assert.equal(firstCandle.dailyLiveIst, "09:00");
-  assert.equal(firstCandle.firstBarStartIst, "09:15");
+  assert.equal(firstCandle.firstBarStartIst, "09:00");
+  assert.equal(firstCandle.entryEvaluationIst, "09:05");
+  assert.equal(firstCandle.endTimeIst, "15:15");
   assert.equal(firstCandle.expiryKind, "weekly");
   assert.equal(firstCandle.maxTradesPerDay, 1);
   assert.equal(firstCandle.strikeOffset, 0);
+});
+
+test("hydrate rematerializes first candle saved as a generic indicator", () => {
+  const catalog = seedAlgos();
+  const next = hydrateAlgos(
+    {
+      algos: [
+        {
+          id: "a10",
+          name: "NIFTY 5m first candle",
+          kind: "indicator",
+          indicator: "NIFTY_FIRST_CANDLE",
+          timeframe: "5m",
+          symbol: "NIFTY",
+          runMode: "live",
+          enabled: false,
+          status: "PAUSED",
+        },
+      ],
+      removedIds: [],
+    },
+    catalog,
+  );
+  const row = next.algos.find((item) => item.id === "a10");
+  assert.equal(row.kind, "nifty-first-candle");
+  assert.equal(row.strategyType, "NIFTY_FIRST_CANDLE_5M");
+  assert.equal(row.firstBarStartIst, "09:00");
+  assert.equal(row.entryEvaluationIst, "09:05");
+  assert.equal(row.enabled, false);
 });
 

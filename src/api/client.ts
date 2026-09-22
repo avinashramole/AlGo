@@ -229,6 +229,8 @@ export type Snapshot = {
     summary?: string;
     dailyLiveIst?: string;
     firstBarStartIst?: string;
+    entryEvaluationIst?: string;
+    endTimeIst?: string;
     expiryKind?: "weekly" | "monthly";
     maxTradesPerDay?: number;
     mappingScope?: "master" | "clients" | "both";

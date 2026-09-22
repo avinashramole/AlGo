@@ -14,6 +14,7 @@ import { PaperTradingAdapter } from "./PaperTradingAdapter.js";
 import { LiveTradingAdapter } from "./LiveTradingAdapter.js";
 
 const T0 = Date.parse("2026-08-21T03:45:00.000Z"); // 09:15 IST
+const T0_0900 = Date.parse("2026-08-21T03:30:00.000Z"); // 09:00 IST
 const BAR = 5 * 60 * 1000;
 
 function bar(i, close, extras = {}) {
@@ -1025,7 +1026,7 @@ test("in-flight timeout does not punch a second lot while a NIFTY option is stil
 
 function firstBar(open, close, extras = {}) {
   return {
-    time: T0,
+    time: T0_0900,
     open,
     high: extras.high ?? Math.max(open, close) + 3,
     low: extras.low ?? Math.min(open, close) - 3,
@@ -1039,7 +1040,7 @@ test("first candle BUY CE when Nifty first 5m is green and ATM CE first 5m is gr
     futuresBars: [firstBar(24500, 24540)],
     ceBars: [firstBar(100, 118)],
     peBars: [firstBar(110, 96)],
-    now: T0 + BAR,
+    now: T0_0900 + BAR,
   });
   assert.equal(signal.buyCe, true);
   assert.equal(signal.buyPe, false);
@@ -1052,7 +1053,7 @@ test("first candle BUY PE when Nifty first 5m is red and ATM PE first 5m is gree
     futuresBars: [firstBar(24540, 24500)],
     ceBars: [firstBar(118, 100)],
     peBars: [firstBar(96, 110)],
-    now: T0 + BAR,
+    now: T0_0900 + BAR,
   });
   assert.equal(signal.buyPe, true);
   assert.equal(signal.buyCe, false);
@@ -1065,7 +1066,7 @@ test("first candle doji or option not green is no trade", () => {
     futuresBars: [firstBar(24500, 24500)],
     ceBars: [firstBar(100, 118)],
     peBars: [firstBar(96, 110)],
-    now: T0 + BAR,
+    now: T0_0900 + BAR,
   });
   assert.equal(doji.buyCe, false);
   assert.equal(doji.buyPe, false);
@@ -1074,10 +1075,20 @@ test("first candle doji or option not green is no trade", () => {
     futuresBars: [firstBar(24500, 24540)],
     ceBars: [firstBar(118, 100)],
     peBars: [firstBar(96, 110)],
-    now: T0 + BAR,
+    now: T0_0900 + BAR,
   });
   assert.equal(redCe.buyCe, false);
   assert.equal(redCe.buyPe, false);
+  const redPe = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24540, 24500)],
+    ceBars: [firstBar(118, 100)],
+    peBars: [firstBar(110, 96)],
+    now: T0_0900 + BAR,
+  });
+  assert.equal(redPe.buyCe, false);
+  assert.equal(redPe.buyPe, false);
+  assert.equal(redPe.niftyColor, "red");
+  assert.equal(redPe.peColor, "red");
 });
 
 test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail", () => {
@@ -1091,7 +1102,7 @@ test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail
   const book = bookAdapter();
   const result = NiftyVwapStrategy.tick({
     algo,
-    now: T0 + BAR,
+    now: T0_0900 + BAR,
     feedLive: true,
     minutesToClose: 360,
     futuresBars: [firstBar(24500, 24540)],
@@ -1110,9 +1121,11 @@ test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail
   assert.equal(book.places[0].side, "BUY");
   assert.equal(algo.vwapState.stopPrice, TrailingStopManager.initialStop(118, 20));
   assert.equal(algo.vwapState.targetPrice, TrailingStopManager.targetPrice(118, 40));
+  assert.equal(algo.vwapState.stopPrice, 94.4);
+  assert.equal(algo.vwapState.targetPrice, 165.2);
   const again = NiftyVwapStrategy.tick({
     algo,
-    now: T0 + 2 * BAR,
+    now: T0_0900 + 2 * BAR,
     feedLive: true,
     minutesToClose: 350,
     futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
@@ -1133,7 +1146,10 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(created.enabled, false);
   assert.notEqual(created.status, "LIVE");
   assert.equal(created.dailyLiveIst, "09:00");
-  assert.equal(created.firstBarStartIst, "09:15");
+  assert.equal(created.firstBarStartIst, "09:00");
+  assert.equal(created.entryEvaluationIst, "09:05");
+  assert.equal(created.endTimeIst, "15:15");
+  assert.equal(created.eodSquareOffMinutes, 15);
   assert.equal(created.expiryKind, "weekly");
   assert.equal(created.maxTradesPerDay, 1);
   assert.equal(created.strikeOffset, 0);
@@ -1146,7 +1162,9 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
       lots: 2,
       timeframe: "15m",
       dailyLiveIst: "09:05",
-      firstBarStartIst: "09:15",
+      firstBarStartIst: "09:00",
+      entryEvaluationIst: "09:05",
+      endTimeIst: "15:10",
       expiryKind: "monthly",
       strikeOffset: 1,
       maxTradesPerDay: 2,
@@ -1160,6 +1178,9 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.qty, 130);
   assert.equal(updated.timeframe, "15m");
   assert.equal(updated.dailyLiveIst, "09:05");
+  assert.equal(updated.entryEvaluationIst, "09:05");
+  assert.equal(updated.endTimeIst, "15:10");
+  assert.equal(updated.eodSquareOffMinutes, 20);
   assert.equal(updated.expiryKind, "monthly");
   assert.equal(updated.strikeOffset, 1);
   assert.equal(updated.maxTradesPerDay, 2);
@@ -1167,7 +1188,7 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
 
 test("first candle ignores later bars and caps one trade per day", () => {
   const laterGreen = {
-    time: T0 + BAR,
+    time: T0_0900 + BAR,
     open: 24540,
     high: 24580,
     low: 24530,
@@ -1175,7 +1196,7 @@ test("first candle ignores later bars and caps one trade per day", () => {
     volume: 1000,
   };
   const laterCe = {
-    time: T0 + BAR,
+    time: T0_0900 + BAR,
     open: 118,
     high: 140,
     low: 116,
@@ -1186,8 +1207,8 @@ test("first candle ignores later bars and caps one trade per day", () => {
     futuresBars: [firstBar(24500, 24500), laterGreen],
     ceBars: [firstBar(100, 90), laterCe],
     peBars: [firstBar(110, 96)],
-    now: T0 + 2 * BAR,
-    firstBarStartIst: "09:15",
+    now: T0_0900 + 2 * BAR,
+    firstBarStartIst: "09:00",
   });
   assert.equal(signal.niftyColor, "doji");
   assert.equal(signal.buyCe, false);
@@ -1195,7 +1216,7 @@ test("first candle ignores later bars and caps one trade per day", () => {
   const book = bookAdapter();
   const first = NiftyVwapStrategy.tick({
     algo,
-    now: T0 + BAR,
+    now: T0_0900 + BAR,
     feedLive: true,
     minutesToClose: 360,
     futuresBars: [firstBar(24500, 24540)],
@@ -1216,7 +1237,7 @@ test("first candle ignores later bars and caps one trade per day", () => {
   algo.vwapState.lastEntryBarTime = 0;
   const again = NiftyVwapStrategy.tick({
     algo,
-    now: T0 + 2 * BAR,
+    now: T0_0900 + 2 * BAR,
     feedLive: true,
     minutesToClose: 350,
     futuresBars: [firstBar(24500, 24540), laterGreen],
@@ -1237,4 +1258,97 @@ test("first candle ignores later bars and caps one trade per day", () => {
 test("first candle ATM offset is applied to the strike", () => {
   const pick = OptionStrikeSelector.select({ spot: 24540, step: 50, option: "CE", strikeOffset: 1 });
   assert.equal(pick.strike, 24600);
+});
+
+test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
+  assert.equal(TrailingStopManager.initialStop(100, 20), 80);
+  assert.equal(TrailingStopManager.targetPrice(100, 40), 140);
+});
+
+test("first candle uses only the 09:00-09:05 slot and waits until 09:05", () => {
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5, { sessionOpenMinutes: 9 * 60 }), T0_0900);
+  assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5), null);
+  const early = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    now: T0_0900 + BAR - 1000,
+  });
+  assert.equal(early.waitingEval, true);
+  assert.equal(early.buyCe, false);
+  const laterOnly = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [
+      {
+        time: T0,
+        open: 24500,
+        high: 24580,
+        low: 24490,
+        close: 24570,
+        volume: 1000,
+      },
+    ],
+    ceBars: [
+      {
+        time: T0,
+        open: 100,
+        high: 140,
+        low: 98,
+        close: 138,
+        volume: 500,
+      },
+    ],
+    peBars: [firstBar(110, 96)],
+    now: T0 + BAR,
+    firstBarStartIst: "09:00",
+    entryEvaluationIst: "09:05",
+  });
+  assert.equal(laterOnly.buyCe, false);
+  assert.equal(laterOnly.niftyColor, "");
+});
+
+test("first candle duplicate bar and restart do not place a second order", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "First candle once" });
+  const book = bookAdapter();
+  const input = {
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  };
+  assert.equal(NiftyVwapStrategy.tick(input).action, "entry");
+  const dup = NiftyVwapStrategy.tick(input);
+  assert.ok(dup.action === "hold" || dup.reason === "duplicate-bar" || dup.reason === "already-open");
+  assert.equal(book.places.length, 1);
+  const restored = defaultNiftyFirstCandleAlgo({ name: "First candle once" });
+  restored.vwapState = JSON.parse(JSON.stringify(algo.vwapState));
+  const afterRestart = NiftyVwapStrategy.tick({
+    ...input,
+    algo: restored,
+    positions: book.positions,
+  });
+  assert.ok(afterRestart.action === "hold" || afterRestart.reason === "duplicate-bar" || afterRestart.reason === "already-open");
+  assert.equal(book.places.length, 1);
+});
+
+test("normalizeAlgo rematerializes first candle even if kind was saved as indicator", () => {
+  const restored = normalizeAlgo({
+    id: "a10",
+    name: "NIFTY 5m first candle",
+    kind: "indicator",
+    indicator: "NIFTY_FIRST_CANDLE",
+    runMode: "live",
+  });
+  assert.equal(isNiftyFirstCandleAlgo(restored), true);
+  assert.equal(restored.kind, "nifty-first-candle");
+  assert.equal(restored.enabled, false);
 });
