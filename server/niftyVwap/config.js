@@ -310,6 +310,13 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     ...patch,
     kind: NIFTY_FIRST_CANDLE_KIND,
     strategyType: NIFTY_FIRST_CANDLE_TYPE,
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    slPct: cfg.initialSlPct,
+    initialSlPct: cfg.initialSlPct,
+    targetPct: cfg.targetPct,
+    eodSquareOffMinutes: cfg.eodSquareOffMinutes,
     enabled: false,
   };
 }
