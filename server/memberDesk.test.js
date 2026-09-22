@@ -532,11 +532,13 @@ test("8:00 AM IST reset clears member positions and leftover working orders with
   const open = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
   assert.ok(open.positions.some((row) => row.symbol === "NIFTY 24500 CE"));
   assert.ok(open.orders.some((row) => row.symbol === "NIFTY 24550 CE" && row.status === "PENDING"));
+  assert.ok((open.alerts || []).some((row) => row.symbol === "NIFTY 24500 CE"));
   const nextOpen = lastDailyResetAt(Date.now(), TOKEN_RENEW_HOUR_IST) + 24 * 60 * 60 * 1000 + 1_000;
   assert.equal(sweepMemberDailyBooks(nextOpen) >= 1, true);
   const after = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
   assert.equal(after.positions.length, 0);
   assert.equal(after.orders.length, 0);
+  assert.equal((after.alerts || []).length, 0);
   assert.ok(after.orderHistory.some((row) => row.symbol === "NIFTY 24500 CE" && row.status === "FILLED"));
   assert.equal(after.orderHistory.some((row) => row.symbol === "NIFTY 24550 CE" || row.status === "EXPIRED"), false);
 });

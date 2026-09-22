@@ -56,11 +56,11 @@ function MemberNotifications() {
     <div className="mx-auto max-w-2xl space-y-3">
       <h1 className="text-xl font-bold">Alerts</h1>
       <p className="text-sm text-slate-500">
-        When Copy is on, each admin desk order is copied to your broker account and listed here.
+        When Copy is on, each admin desk order is copied to your broker account and listed here. Alerts clear at 8:00 AM IST with the live book.
       </p>
       {!alerts.length ? (
         <div className="card px-4 py-8 text-center text-sm text-slate-400">
-          No copied orders yet. After admin places an order, the same contract appears here and on Home.
+          No copied orders today. After admin places an order, the same contract appears here and on Home.
         </div>
       ) : null}
       {alerts.map((item) => (

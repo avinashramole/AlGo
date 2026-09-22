@@ -110,7 +110,7 @@ export function UserHome() {
 
 function CopyAlerts({ alerts }: { alerts: MemberCopyAlert[] }) {
   if (!alerts.length) {
-    return <p className="mt-3 text-xs text-slate-400">No copied orders yet.</p>;
+    return <p className="mt-3 text-xs text-slate-400">No copied orders today.</p>;
   }
   return (
     <ul className="mt-3 space-y-2">
