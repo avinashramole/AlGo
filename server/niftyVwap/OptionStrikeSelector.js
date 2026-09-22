@@ -12,7 +12,7 @@ export function optionLabel(symbol, strike, option) {
 export const OptionStrikeSelector = {
   atmStrike,
   optionLabel,
-  select({ spot, step = 50, option, symbol = "NIFTY", locked } = {}) {
+  select({ spot, step = 50, option, symbol = "NIFTY", locked, strikeOffset = 0 } = {}) {
     if (locked?.strike && locked?.option) {
       return {
         strike: Number(locked.strike),
@@ -21,7 +21,8 @@ export const OptionStrikeSelector = {
         locked: true,
       };
     }
-    const strike = atmStrike(spot, step);
+    const offset = Math.max(-2, Math.min(2, Math.round(Number(strikeOffset) || 0)));
+    const strike = atmStrike(spot, step) + offset * (Number(step) || 50);
     const opt = option === "PE" ? "PE" : "CE";
     return {
       strike,

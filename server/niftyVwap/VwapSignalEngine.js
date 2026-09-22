@@ -198,6 +198,24 @@ export function lastBarVwapReversal(completedSessionBars = []) {
   return { buyCe, buyPe, open, close, vwap, bar: last, fullFill: buyCe || buyPe };
 }
 
+export function hmToMinutes(value, fallback = "09:15") {
+  const raw = String(value || fallback);
+  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    const fb = String(fallback).match(/^(\d{1,2}):(\d{2})$/);
+    return fb ? Number(fb[1]) * 60 + Number(fb[2]) : 9 * 60 + 15;
+  }
+  return Math.min(23, Math.max(0, Number(match[1]))) * 60 + Math.min(59, Math.max(0, Number(match[2])));
+}
+
+export function firstBarAtOrAfter(bars = [], firstBarStartIst = "09:15") {
+  const startMin = hmToMinutes(firstBarStartIst, "09:15");
+  return (Array.isArray(bars) ? bars : []).find((bar) => {
+    const wall = istWallTime(bar.time);
+    return wall.hour * 60 + wall.minute >= startMin;
+  }) || null;
+}
+
 export function firstBarColor(bar) {
   const open = Number(bar?.open);
   const close = Number(bar?.close);
@@ -235,6 +253,8 @@ export const VwapSignalEngine = {
   optionCloseAboveVwap,
   lastBarVwapReversal,
   firstBarColor,
+  firstBarAtOrAfter,
+  hmToMinutes,
   looksLikeOneMinuteBars,
   nextCandleEntryWindow,
   evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
@@ -286,14 +306,25 @@ export const VwapSignalEngine = {
       againstPe: 0,
     };
   },
-  evaluateFirstCandle({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
+  evaluateFirstCandle({
+    futuresBars = [],
+    ceBars = [],
+    peBars = [],
+    now = Date.now(),
+    barMs = BAR_MS,
+    firstBarStartIst = "09:15",
+  } = {}) {
     const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 5);
     const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now);
     const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now);
     const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now);
-    const firstFut = futCompleted[0] || null;
-    const firstCe = ceCompleted[0] || null;
-    const firstPe = peCompleted[0] || null;
+    const firstFut = firstBarAtOrAfter(futCompleted, firstBarStartIst);
+    const firstCe = firstFut
+      ? ceCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtOrAfter(ceCompleted, firstBarStartIst)
+      : null;
+    const firstPe = firstFut
+      ? peCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtOrAfter(peCompleted, firstBarStartIst)
+      : null;
     const niftyColor = firstBarColor(firstFut);
     const ceColor = firstBarColor(firstCe);
     const peColor = firstBarColor(firstPe);

@@ -76,6 +76,9 @@ export type AlgoStrategy = {
   sellConditions?: ConditionGroup;
   summary?: string;
   dailyLiveIst?: string;
+  firstBarStartIst?: string;
+  expiryKind?: "weekly" | "monthly";
+  maxTradesPerDay?: number;
   mappingScope?: "master" | "clients" | "both";
   mappedClientIds?: string[];
   runMode?: "live" | "paper" | "backtest";
@@ -502,6 +505,9 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       trailingStepPct: 3,
       vwapExitCandles: 5,
       maxPositions: 1,
+      maxTradesPerDay: 1,
+      expiryKind: "weekly",
+      firstBarStartIst: "09:15",
       intradayOnly: true,
       eodSquareOffMinutes: 10,
       indicator: "NIFTY_FIRST_CANDLE",

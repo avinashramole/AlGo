@@ -79,6 +79,13 @@ export const NiftyVwapStrategy = {
     const state = runtimeState(algo);
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
+    if (config.signalMode === "first-candle") {
+      const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 1);
+      if (Number(state.sessionTrades || 0) >= maxTrades) {
+        algo.lastSignal = "MAX TRADES";
+        return { action: "skip", reason: "max-trades" };
+      }
+    }
     if (!signal.buyCe && !signal.buyPe) {
       if (config.signalMode === "first-candle") {
         const open = Number(signal.futuresOpen || 0).toFixed(2);
@@ -134,6 +141,7 @@ export const NiftyVwapStrategy = {
       step,
       option,
       symbol: config.symbol,
+      strikeOffset: config.strikeOffset,
       locked: state.lockedStrike ? { strike: state.lockedStrike, option: state.lockedOption } : null,
     });
     if (!pick.strike) {
@@ -189,6 +197,9 @@ export const NiftyVwapStrategy = {
       TrailingStopManager.initialStop(fill, config.initialSlPct),
       TrailingStopManager.targetPrice(fill, config.targetPct),
     );
+    if (config.signalMode === "first-candle") {
+      state.sessionTrades = Number(state.sessionTrades || 0) + 1;
+    }
     TradeLogger.record("entry", {
       symbol: pick.symbol,
       fill,
@@ -235,6 +246,7 @@ export const NiftyVwapStrategy = {
               peBars: input.peBars || [],
               now,
               barMs,
+              firstBarStartIst: config.firstBarStartIst || "09:15",
             })
           : VwapSignalEngine.evaluate({
               futuresBars: input.futuresBars || [],

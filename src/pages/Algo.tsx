@@ -62,7 +62,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `ATM options · first 5m · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · daily LIVE 09:00 IST`,
+      config: `${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · first ${algo.timeframe || "5m"} ${algo.firstBarStartIst || "09:15"} · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay || 1}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {

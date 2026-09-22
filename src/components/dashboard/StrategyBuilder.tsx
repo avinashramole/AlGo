@@ -94,7 +94,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · last closed 15m vs VWAP · BUY at next 15m open · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}% · daily LIVE 09:20 IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
-      return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · first 5m Nifty + ATM option · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · daily LIVE 09:00 IST`;
+      const start = form.dailyLiveIst || "09:00";
+      const firstBar = form.firstBarStartIst || "09:15";
+      const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · first ${form.timeframe || "5m"} at ${firstBar} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -255,7 +258,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
               : firstCandle
-              ? "Locked to NIFTY ATM options on the 5-minute chart. After the first 5m candle closes: Nifty green + ATM CE green → BUY ATM CE. Nifty red + ATM PE green → BUY ATM PE. Doji is no trade. One trade per session. LIVE starts automatically at 09:00 IST on session days. Saving or restarting t2s does not start LIVE."
+              ? "NIFTY options on the completed first candle only. Default: LIVE at 09:00 IST, first 5m 09:15–09:20 (NSE open). Nifty green + CE green → BUY CE. Nifty red + PE green → BUY PE. Doji is no trade. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
@@ -377,8 +380,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
-            <select className={fieldClass} value={reversal || hedge ? "15m" : vwap || firstCandle ? "5m" : form.timeframe || "5m"} disabled={engine} onChange={(event) => set({ timeframe: event.target.value })}>
-              {(reversal || hedge ? ["15m"] : vwap || firstCandle ? ["5m"] : TIMEFRAMES).map((row) => (
+            <select className={fieldClass} value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine && !firstCandle} onChange={(event) => set({ timeframe: event.target.value })}>
+              {(reversal || hedge ? ["15m"] : vwap ? ["5m"] : firstCandle ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>
@@ -508,11 +511,37 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : firstCandle ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              First completed 5-minute NIFTY candle only. Green Nifty + green ATM CE buys ATM CE. Red Nifty + green ATM PE buys ATM PE. Doji is no trade. One position. Option stop and target are percentages of fill. Square-off before 15:30. LIVE starts at 09:00 IST.
+              Uses only the first completed candle after the first-bar start. NSE tape begins 09:15, so the default first 5m is 09:15–09:20. Green Nifty + green CE buys CE. Red Nifty + green PE buys PE. No trade if those candles are not complete or not green. Duplicate orders are blocked. One open position.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold text-slate-500">
+                Start LIVE (IST)
+                <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                First candle start (IST)
+                <input className={fieldClass} value={form.firstBarStartIst || "09:15"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:15" />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Expiry
+                <select className={fieldClass} value={form.expiryKind || "weekly"} onChange={(event) => set({ expiryKind: event.target.value as "weekly" | "monthly" })}>
+                  <option value="weekly">Nearest weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Strike
+                <select className={fieldClass} value={form.strikeOffset ?? 0} onChange={(event) => set({ strikeOffset: Number(event.target.value) })}>
+                  {OPTION_OFFSETS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+              <NumberField label="Max trades / day" value={form.maxTradesPerDay || 1} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>
