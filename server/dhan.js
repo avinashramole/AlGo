@@ -15,6 +15,7 @@ import {
   quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
+  setAdminBrokerBook,
   restoreSimulatedDesk,
   livePositionQuoteTargets,
   liveSessionOpenForOrder,
@@ -38,6 +39,7 @@ import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, stra
 import { chooseDeskExpiry, dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
+import { dhanMasterBook } from "./memberBrokerPnl.js";
 import { looksLikePrevClose } from "./quoteDayChange.js";
 import {
   canAutoGenerate,
@@ -807,11 +809,18 @@ async function pullAccount() {
   if (!accessToken) return;
   if (Date.now() < quoteBackoffUntil) return;
   try {
-    const [positionsRaw, holdingsRaw, ordersRaw] = await Promise.all([
-      dhanGet("/positions", accessToken, clientId).catch(() => []),
+    const [positionsPull, holdingsRaw, ordersRaw] = await Promise.all([
+      dhanGet("/positions", accessToken, clientId)
+        .then((rows) => ({ ok: true, rows }))
+        .catch(() => ({ ok: false, rows: [] })),
       dhanGet("/holdings", accessToken, clientId).catch(() => []),
       dhanGet("/orders", accessToken, clientId).catch(() => []),
     ]);
+    const positionsRaw = positionsPull.rows;
+    if (positionsPull.ok) {
+      const book = dhanMasterBook(positionsRaw);
+      if (book) setAdminBrokerBook(book);
+    }
     const positions = mapDhanPositions(positionsRaw);
     const holdings = mapDhanHoldings(holdingsRaw).filter(
       (hold) => !positions.some((pos) => pos.symbol === hold.symbol),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows } from "./memberBrokerPnl.js";
+import { applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -62,6 +62,40 @@ test("a broker payload without P&L fields is ignored", async () => {
   });
   assert.equal(desk.report.realizedPnl, -2492.75);
   assert.equal(desk.wallet.mtm, -80);
+});
+
+test("a closed admin Dhan book keeps the broker loss when nothing is open", () => {
+  const book = dhanMasterBook([
+    {
+      positionType: "CLOSED",
+      netQty: 0,
+      tradingSymbol: "NIFTY-Sep2026-23050-CE",
+      securityId: "11",
+      productType: "INTRADAY",
+      buyQty: 65,
+      sellQty: 65,
+      buyAvg: 140.3,
+      sellAvg: 136.65,
+      realizedProfit: -237.25,
+      unrealizedProfit: 0,
+    },
+  ]);
+  assert.equal(book.realizedPnl, -237.25);
+  assert.equal(book.unrealizedPnl, 0);
+  assert.equal(book.mtm, -237.25);
+  assert.equal(book.closed.length, 1);
+  assert.equal(book.closed[0].symbol, "NIFTY-Sep2026-23050-CE");
+  assert.equal(book.closed[0].realized, -237.25);
+  const day = withAdminBrokerPnl({
+    positions: [],
+    closedTrades: [],
+    byBroker: {},
+    unrealized: 0,
+    realized: 0,
+    broker: book,
+  });
+  assert.equal(day.totalPnl, -237.25);
+  assert.equal(day.pnlByBroker.dhan, -237.25);
 });
 
 test("Upstox short-term positions use realised and unrealised", () => {

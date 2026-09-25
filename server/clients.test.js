@@ -337,6 +337,41 @@ test("closed trades stay on the position desk with live P&L and MTM", () => {
   assert.equal(desk.openPositions, 0);
 });
 
+test("master account MTM uses the broker loss when the local book is empty", () => {
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [],
+    [{ id: "local-copy", symbol: "NIFTY-Oct2026-23100-CE", side: "BUY", qty: 65, entry: 200, exit: 100, pnl: -6500, brokerId: "dhan" }],
+    {
+      realizedPnl: -237.25,
+      unrealizedPnl: 0,
+      mtm: -237.25,
+      closed: [
+        {
+          id: "dhan-closed-11",
+          symbol: "NIFTY-Sep2026-23050-CE",
+          side: "BUY",
+          qty: 65,
+          entry: 140.3,
+          exit: 136.65,
+          pnl: -237.25,
+          realized: -237.25,
+          product: "INTRADAY",
+          brokerId: "dhan",
+        },
+      ],
+    },
+  );
+  assert.equal(desk.master.open, 0);
+  assert.equal(desk.master.brokerMtm, -237.25);
+  assert.equal(desk.master.mtm, -237.25);
+  assert.equal(desk.masterMtm, -237.25);
+  assert.equal(desk.master.positions.some((row) => String(row.symbol).includes("23100")), false);
+  assert.equal(desk.master.positions[0].realized, -237.25);
+  assert.equal(desk.master.positions[0].mtm, -237.25);
+  assert.equal(desk.master.positions[0].closed, true);
+});
+
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
   const row = asLedgerPosition({
     symbol: "NIFTY 23450 PE",

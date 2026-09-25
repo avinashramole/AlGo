@@ -189,8 +189,12 @@ export function PositionsDesk() {
 
   const ledgers = useMemo(() => {
     const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number }> = [];
+    const useBrokerMtm = Number.isFinite(desk.master.brokerMtm);
     const closedById = new Map<string, LedgerPosition>();
-    for (const row of [...(desk.master.positions || []).filter(isClosedLedger), ...liveClosed]) {
+    const closedSource = useBrokerMtm
+      ? (desk.master.positions || []).filter(isClosedLedger)
+      : [...(desk.master.positions || []).filter(isClosedLedger), ...liveClosed];
+    for (const row of closedSource) {
       closedById.set(row.id, row);
     }
     const closedMaster = [...closedById.values()];
@@ -208,10 +212,15 @@ export function PositionsDesk() {
     const books = [masterLedger, ...(desk.clients || [])].filter((item) => showLedger(item, mode));
     for (const ledger of books) {
       const positions = filterRows(ledger, mode, segment);
+      const summed = positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);
+      const accountMtm =
+        ledger.kind === "master" && useBrokerMtm && mode !== "paper" && segment === "all"
+          ? Number(desk.master.brokerMtm)
+          : summed;
       rows.push({
         ledger,
         positions,
-        mtm: positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0),
+        mtm: accountMtm,
       });
     }
     return rows;

@@ -347,8 +347,38 @@ export function getClientDetail({ userId, users = [], algos = [], quote, admins 
   };
 }
 
-export function listPositionDesk(users = [], masterPositions = [], masterClosed = []) {
-  const masterBook = ledgerBook(masterPositions, masterClosed);
+function isPaperLedgerRow(row) {
+  return Boolean(row?.paper || row?.brokerId === "paper");
+}
+
+function asBrokerClosedLeg(row = {}) {
+  const realized = round2(row.realized);
+  const leg = asClosedLedgerPosition({ ...row, pnl: Number.isFinite(Number(row.realized)) ? row.realized : row.pnl });
+  return {
+    ...leg,
+    realized,
+    mtm: round2(row.pnl != null ? row.pnl : realized),
+    closed: true,
+    paper: false,
+    brokerBook: true,
+  };
+}
+
+export function listPositionDesk(users = [], masterPositions = [], masterClosed = [], brokerBook = null) {
+  const useBroker = brokerBook && Number.isFinite(Number(brokerBook.mtm));
+  const localClosed = useBroker ? (masterClosed || []).filter(isPaperLedgerRow) : masterClosed;
+  const masterBook = ledgerBook(masterPositions, localClosed);
+  if (useBroker) {
+    const brokerClosed = (brokerBook.closed || []).map(asBrokerClosedLeg);
+    const paperMtm = ledgerBook(
+      (masterPositions || []).filter(isPaperLedgerRow),
+      (masterClosed || []).filter(isPaperLedgerRow),
+    ).mtm;
+    masterBook.positions = [...masterBook.positions, ...brokerClosed];
+    masterBook.mtm = round2(paperMtm + Number(brokerBook.mtm));
+    masterBook.realized = round2(brokerBook.realizedPnl);
+    masterBook.brokerMtm = masterBook.mtm;
+  }
   const master = {
     id: "master",
     name: "Master",

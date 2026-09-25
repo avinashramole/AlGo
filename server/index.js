@@ -49,6 +49,7 @@ import {
   snapshot,
   deskFeed,
   deskMtm,
+  getAdminBrokerBook,
   squareOff,
   tickMarket,
   toggleAlgo,
@@ -602,7 +603,7 @@ app.get("/api/mtm", (_req, res) => {
 app.get("/api/positions/desk", (_req, res) => {
   try {
     const snap = safeSnapshot() || {};
-    res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
+    res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || [], getAdminBrokerBook()));
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not load positions" });
   }

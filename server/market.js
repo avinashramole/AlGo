@@ -3,6 +3,7 @@ import { dhanTokenStatus } from "./dhanToken.js";
 import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
+import { withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -409,6 +410,7 @@ const state = {
   sentiment: 50,
   orders: [],
   closedTrades: [],
+  adminBrokerBook: null,
   notifications: [],
   chat: [],
   settings: {
@@ -2277,7 +2279,22 @@ function bookPnl(positions = [], closedTrades = []) {
     const key = row.brokerId || "dhan";
     byBroker[key] = Number(((byBroker[key] || 0) + pnl).toFixed(2));
   }
-  return { totalPnl: Number((unrealized + realized).toFixed(2)), pnlByBroker: byBroker };
+  return withAdminBrokerPnl({
+    positions,
+    closedTrades,
+    byBroker,
+    unrealized,
+    realized,
+    broker: state.adminBrokerBook,
+  });
+}
+
+export function setAdminBrokerBook(book) {
+  state.adminBrokerBook = book && Number.isFinite(Number(book.mtm)) ? book : state.adminBrokerBook;
+}
+
+export function getAdminBrokerBook() {
+  return state.adminBrokerBook || null;
 }
 
 function rememberClosedFromPosition(pos, extra = {}) {

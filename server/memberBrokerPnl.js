@@ -81,6 +81,64 @@ export function brokerPnlFromUpstoxRows(raw) {
   );
 }
 
+export function dhanMasterBook(raw) {
+  const pnl = brokerPnlFromDhanRows(raw);
+  if (!pnl) return null;
+  const rows = positionRows(raw) || [];
+  const closed = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const kind = String(row.positionType || row.position_type || "").toUpperCase();
+    const net = Number(row.netQty);
+    const closedLeg = kind === "CLOSED" || net === 0;
+    if (!closedLeg) continue;
+    const realized = firstFinite(row, ["realizedProfit", "realized_profit", "realised"]);
+    const unrealized = firstFinite(row, ["unrealizedProfit", "unrealized_profit", "unrealised"]);
+    if (realized == null && unrealized == null) continue;
+    if ((realized || 0) === 0 && (unrealized || 0) === 0) continue;
+    const buyQty = Math.abs(Number(row.buyQty || row.dayBuyQty) || 0);
+    const sellQty = Math.abs(Number(row.sellQty || row.daySellQty) || 0);
+    const buyAvg = Number(row.buyAvg || row.dayBuyAvg || 0);
+    const sellAvg = Number(row.sellAvg || row.daySellAvg || 0);
+    const short = sellQty > buyQty;
+    closed.push({
+      id: `dhan-closed-${row.securityId || row.tradingSymbol || closed.length}-${row.productType || "MIS"}`,
+      symbol: String(row.tradingSymbol || row.securityId || ""),
+      side: short ? "SELL" : "BUY",
+      type: short ? "SELL" : "BUY",
+      qty: Math.max(buyQty, sellQty),
+      entry: short ? sellAvg || buyAvg : buyAvg || sellAvg,
+      exit: short ? buyAvg || sellAvg : sellAvg || buyAvg,
+      pnl: round2((realized || 0) + (unrealized || 0)),
+      realized: round2(realized || 0),
+      product: row.productType || "MIS",
+      brokerId: "dhan",
+      live: true,
+      paper: false,
+      closed: true,
+    });
+  }
+  return {
+    realizedPnl: pnl.realizedPnl,
+    unrealizedPnl: pnl.unrealizedPnl,
+    mtm: round2(pnl.realizedPnl + pnl.unrealizedPnl),
+    source: "dhan",
+    closed,
+  };
+}
+
+export function withAdminBrokerPnl({ positions = [], closedTrades = [], byBroker = {}, unrealized = 0, realized = 0, broker } = {}) {
+  const next = { ...byBroker };
+  if (!broker || !Number.isFinite(Number(broker.mtm))) {
+    return { totalPnl: round2(unrealized + realized), pnlByBroker: next };
+  }
+  const liveDhan = (row) => !row?.paper && row?.brokerId !== "paper" && (row?.brokerId === "dhan" || row?.live);
+  const dhanLocal = [...positions, ...closedTrades].filter(liveDhan).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+  const brokerMtm = Number(broker.mtm);
+  next.dhan = round2((Number(next.dhan) || 0) - dhanLocal + brokerMtm);
+  return { totalPnl: round2(unrealized + realized - dhanLocal + brokerMtm), pnlByBroker: next };
+}
+
 export function applyBrokerPnl(desk, pnl) {
   if (!desk || !pnl) return desk;
   const realized = round2(pnl.realizedPnl);
