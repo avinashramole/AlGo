@@ -1,6 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
-import { dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
+import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
 import { deleteStrategyEnrollments } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
@@ -1688,6 +1688,7 @@ export function toggleAlgo(id, patch = {}) {
   }
   algo.enabled = wantEnabled;
   if (starting) {
+    resetStrategyOrders(algo);
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
@@ -1776,6 +1777,17 @@ export function updateAlgo(id, payload) {
   state.notifications.unshift(`Strategy updated: ${next.name}`);
   persistAlgos();
   return clone(next);
+}
+
+function resetStrategyOrders(algo) {
+  const strategyId = String(algo?.id || "");
+  const strategyName = String(algo?.name || "");
+  if (!strategyId && !strategyName) return;
+  for (let i = pendingLiveAlgoOrders.length - 1; i >= 0; i -= 1) {
+    if (pendingLiveAlgoOrders[i].strategy === strategyName) pendingLiveAlgoOrders.splice(i, 1);
+  }
+  state.orders = withoutStrategyRows(state.orders, { id: strategyId, name: strategyName });
+  clearStrategyOrdersOnMemberDesks({ strategyId, strategyName });
 }
 
 function rowBelongsToStrategy(row, strategyId, strategyName) {

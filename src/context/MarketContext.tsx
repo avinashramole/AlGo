@@ -217,6 +217,19 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     liveRef.current = live;
   }, [live]);
 
+  const clearStrategyOrders = (name: string) => {
+    const strategy = String(name || "").trim();
+    if (!strategy) return;
+    setData((current) => {
+      const orders = (current.orders || []).filter((row) => row.strategy !== strategy);
+      if (orders.length === (current.orders || []).length) return current;
+      const next = { ...current, orders };
+      dataRef.current = next;
+      writeCachedDesk(next);
+      return next;
+    });
+  };
+
   const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
     setData((current) => {
       const next = {
@@ -288,7 +301,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
         indices: keepLastIndexPrices(current.indices || [], feed.indices || current.indices || []),
         positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
-        orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
+        orders: Array.isArray(feed.orders) ? feed.orders : current.orders,
         closedTrades: feed.closedTrades ? patchById(current.closedTrades || [], feed.closedTrades) : current.closedTrades,
         report: current.report,
         chat: current.chat,
@@ -402,6 +415,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
           if (next?.id) patchAlgo(next.id, { ...next, enabled: nextEnabled, status });
+          if (nextEnabled) clearStrategyOrders(previous.name);
         } catch (err) {
           pendingToggles.current.delete(id);
           patchAlgo(id, previous);
@@ -424,6 +438,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           patchAlgo(row.id, { enabled, status });
         }
         const results = await Promise.allSettled(rows.map((row) => toggleAlgo(row.id, enabled)));
+        if (enabled) {
+          results.forEach((result, index) => {
+            if (result.status === "fulfilled" && result.value.algo?.id) clearStrategyOrders(rows[index].name);
+          });
+        }
         const failed: string[] = [];
         results.forEach((result, index) => {
           const row = rows[index];

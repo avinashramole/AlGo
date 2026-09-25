@@ -756,6 +756,27 @@ function rowBelongsToStrategy(row, strategyId, strategyName) {
   return Boolean(strategyName && text.includes(` · ${strategyName}`));
 }
 
+/** Clear one strategy's orders on every user desk. Positions, plans, and tokens stay. */
+export function clearStrategyOrdersOnMemberDesks({ strategyId, strategyName } = {}) {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  if (!id && !name) return 0;
+  let removed = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk || typeof desk !== "object") continue;
+    for (const key of ["orders", "orderHistory"]) {
+      const rows = Array.isArray(desk[key]) ? desk[key] : [];
+      const next = rows.filter((row) => !rowBelongsToStrategy(row, id, name));
+      if (next.length !== rows.length) {
+        desk[key] = next;
+        removed += rows.length - next.length;
+      }
+    }
+  }
+  if (removed) persist();
+  return removed;
+}
+
 /** Remove one strategy's plans, orders, positions, and alerts from every user desk. Broker tokens stay. */
 export function dropStrategyFromMemberDesks({ strategyId, strategyName } = {}) {
   const id = String(strategyId || "").trim();
