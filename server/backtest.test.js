@@ -157,6 +157,33 @@ test("1-year 5m EMA backtest finishes without blocking the event loop", () => {
   assert.equal(typeof result.pnl, "number");
 });
 
+test("close above uses today's session VWAP, not the previous day", () => {
+  const day1 = Date.parse("2026-08-20T03:45:00.000Z");
+  const day2 = Date.parse("2026-08-21T03:45:00.000Z");
+  const candles = [0, 1, 2].map((i) => ({
+    time: day1 + i * BAR,
+    open: 200,
+    high: 202,
+    low: 198,
+    close: 200,
+    volume: 1000,
+  }));
+  candles.push(
+    { time: day2, open: 100, high: 102, low: 98, close: 100, volume: 10 },
+    { time: day2 + BAR, open: 100, high: 102, low: 98, close: 100, volume: 10 },
+    { time: day2 + 2 * BAR, open: 120, high: 132, low: 118, close: 130, volume: 10 },
+  );
+  const orig = Date.now;
+  Date.now = () => day2 + 3 * BAR;
+  try {
+    const signal = evaluateSignals(candles, candles.length - 1, closeAlgo);
+    assert.equal(signal.buy, true);
+    assert.equal(signal.sell, false);
+  } finally {
+    Date.now = orig;
+  }
+});
+
 test("close above ignores the still-forming bar", () => {
   const candles = [bar(0, 140), bar(1, 138), bar(2, 200, { high: 202, low: 198, volume: 10 })];
   const forming = T0 + 2 * BAR + 30_000;

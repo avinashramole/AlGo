@@ -1265,7 +1265,7 @@ test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
   assert.equal(TrailingStopManager.targetPrice(100, 40), 140);
 });
 
-test("first candle uses only the 09:00-09:05 slot and waits until 09:05", () => {
+test("first candle waits until 09:05 and uses the 09:15 candle when 09:00 has no bar", () => {
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5, { sessionOpenMinutes: 9 * 60 }), T0_0900);
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5), null);
   const early = VwapSignalEngine.evaluateFirstCandle({
@@ -1302,8 +1302,51 @@ test("first candle uses only the 09:00-09:05 slot and waits until 09:05", () => 
     firstBarStartIst: "09:00",
     entryEvaluationIst: "09:05",
   });
-  assert.equal(laterOnly.buyCe, false);
-  assert.equal(laterOnly.niftyColor, "");
+  assert.equal(laterOnly.buyCe, true);
+  assert.equal(laterOnly.niftyColor, "green");
+  assert.equal(laterOnly.ceColor, "green");
+});
+
+test("first candle buys ATM CE from the real 09:15 NIFTY candle when 09:00 is missing", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "First candle 09:15" });
+  const book = bookAdapter();
+  const bar915 = {
+    time: T0,
+    open: 24500,
+    high: 24580,
+    low: 24490,
+    close: 24570,
+    volume: 1000,
+  };
+  const ce915 = {
+    time: T0,
+    open: 100,
+    high: 140,
+    low: 98,
+    close: 138,
+    volume: 500,
+  };
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [bar915],
+    ceBars: [ce915],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 138,
+    peLtp: 96,
+    ceSecurityId: "ce-24550",
+    spot: 24570,
+    step: 50,
+    expiry: "2026-09-29",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(result.action, "entry");
+  assert.equal(book.places[0].side, "BUY");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].securityId, "ce-24550");
 });
 
 test("first candle duplicate bar and restart do not place a second order", () => {

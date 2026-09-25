@@ -356,9 +356,11 @@ export const VwapSignalEngine = {
     const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, { sessionOpenMinutes });
     const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, { sessionOpenMinutes });
     const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, { sessionOpenMinutes });
-    const firstFut = firstBarAtSlot(futCompleted, firstBarStartIst);
-    const firstCe = firstFut ? ceCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtSlot(ceCompleted, firstBarStartIst) : null;
-    const firstPe = firstFut ? peCompleted.find((bar) => Number(bar.time) === Number(firstFut.time)) || firstBarAtSlot(peCompleted, firstBarStartIst) : null;
+    const firstFut = firstBarAtSlot(futCompleted, firstBarStartIst) || firstBarAtOrAfter(futCompleted, firstBarStartIst);
+    const sameSlot = (bars) =>
+      firstFut ? (bars || []).find((bar) => Number(bar.time) === Number(firstFut.time)) || null : null;
+    const firstCe = sameSlot(ceCompleted);
+    const firstPe = sameSlot(peCompleted);
     const niftyColor = firstBarColor(firstFut);
     const ceColor = firstBarColor(firstCe);
     const peColor = firstBarColor(firstPe);

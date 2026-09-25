@@ -526,13 +526,18 @@ function enqueueLiveAlgoOrder(payload) {
     }
   } else if (side === "BUY") {
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
-    const openNifty =
+    const openSameStrategy =
       !copyUserId &&
       niftyBuy &&
+      strategy &&
       (state.positions || []).some(
-        (row) => !isPaperRow(row) && orderBrokerId(row) === brokerId && PositionManager.isOpenNiftyOption(row),
+        (row) =>
+          !isPaperRow(row) &&
+          orderBrokerId(row) === brokerId &&
+          PositionManager.isOpenNiftyOption(row) &&
+          realStrategyName(row.strategy) === strategy,
       );
-    if (openNifty) {
+    if (openSameStrategy) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   }
@@ -567,15 +572,16 @@ export function queueLiveAlgoOrder(payload) {
     algoBrokerId: payload?.brokerId || "dhan",
   });
   const targets = brokers.length ? brokers : [orderBrokerId(payload)];
-  let last = { ok: true, queued: true, status: "PENDING" };
+  let primary = { ok: true, queued: false, status: "PENDING" };
   for (const brokerId of targets) {
-    last = enqueueLiveAlgoOrder({ ...payload, brokerId });
+    const result = enqueueLiveAlgoOrder({ ...payload, brokerId });
+    if (!primary.queued) primary = result;
   }
   const algo = (state.algos || []).find((row) => String(row.name || "") === String(payload?.strategy || ""));
   for (const copy of memberCopyPayloads(payload, algo || {})) {
-    last = enqueueLiveAlgoOrder(copy);
+    enqueueLiveAlgoOrder(copy);
   }
-  return last;
+  return primary;
 }
 
 export function queueLivePositionExit(pos) {
@@ -724,6 +730,13 @@ function noteNiftyVwapFeed(feedLive) {
   lastNiftyVwapFeed = Boolean(feedLive);
 }
 
+export function liveOptionSampleTime(now, barMinutes = 5, sessionOpen) {
+  const open = VwapSignalEngine.sessionBarOpenMs(now, barMinutes, {
+    sessionOpenMinutes: sessionOpen,
+  });
+  return open || 0;
+}
+
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const now = Date.now();
   const session = isNiftyFirstCandleAlgo(algo) ? firstCandleWatchSession(algo) : nseMarketSession();
@@ -752,10 +765,6 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       return;
     }
   }
-  if (feedLive && !open && !futuresBars.length) {
-    algo.lastSignal = "WAIT CANDLES";
-    return;
-  }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
@@ -770,8 +779,20 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const ceLtp = optionPremium("NIFTY", ceStrike, "CE", expiry);
   const peLtp = optionPremium("NIFTY", peStrike, "PE", expiry);
-  vs.ceBars = upsertOptionBar(vs.ceBars, barTime, ceLtp);
-  vs.peBars = upsertOptionBar(vs.peBars, barTime, peLtp);
+  const sampleTime =
+    liveOptionSampleTime(
+      now,
+      Number(config.barMinutes) || 5,
+      config.signalMode === "first-candle" ? config.firstBarStartIst : undefined,
+    ) || barTime;
+  vs.ceBars = upsertOptionBar(vs.ceBars, sampleTime, ceLtp);
+  vs.peBars = upsertOptionBar(vs.peBars, sampleTime, peLtp);
+  if (feedLive && !open && !futuresBars.length) {
+    algo.lastSignal = "WAIT CANDLES";
+    return;
+  }
+  const ceSecurityId = optionLegId(ceStrike, "CE");
+  const peSecurityId = optionLegId(peStrike, "PE");
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
@@ -796,6 +817,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     expiry,
     ceLtp,
     peLtp,
+    ceSecurityId,
+    peSecurityId,
     positions,
     adapter,
   });
@@ -924,10 +947,11 @@ function algoOrderFields(algo, side, trade) {
     option: trade.option,
     strike: trade.strike,
     expiry: trade.expiry,
+    securityId: trade.securityId || "",
     product: "MIS",
     type: "MARKET",
     strategy: algo.name,
-    exchangeSegment: exchangeSegmentFor(algo.symbol),
+    exchangeSegment: exchangeSegmentFor(trade.symbol || algo.symbol),
   };
 }
 
@@ -1005,6 +1029,7 @@ export function resolveAlgoTrade(algo) {
     const peLtp = Number(row?.putLtp);
     const liveChain = pack?.meta?.source === "dhan";
     const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+    const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
     const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
@@ -1029,6 +1054,7 @@ export function resolveAlgoTrade(algo) {
       option: option || "CE",
       strike,
       expiry,
+      securityId: securityId ? String(securityId) : "",
       ltp: premium > 0 && weeklyReady ? round2(premium) : 0,
       label: expiry ? `${contract} · ${expiry}` : contract,
       source: pack?.meta?.source || "",
@@ -1063,6 +1089,7 @@ export function resolveAlgoTrade(algo) {
   const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
   const ltp = option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);
+  const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
   const contract = `${symbol} ${strike} ${option}`;
   const liveChain = pack?.meta?.source === "dhan";
   const premium = ltp > 0 ? round2(ltp) : 0;
@@ -1076,6 +1103,7 @@ export function resolveAlgoTrade(algo) {
     option,
     strike,
     expiry,
+    securityId: securityId ? String(securityId) : "",
     ltp: premium,
     label: expiry ? `${contract} · ${expiry}` : contract,
     source: pack?.meta?.source || "",
@@ -1852,6 +1880,38 @@ export async function backtestAlgo(id, options = {}) {
   return { ok: true, algo: clone(algo), backtest: result };
 }
 
+function conditionSources(algo, side) {
+  const group = side === "sell" ? algo?.sellConditions : algo?.buyConditions;
+  const rows = Array.isArray(group?.rows) ? group.rows : [];
+  if (rows.length) return rows.flatMap((row) => [row?.left, row?.right]);
+  if (side === "sell") return [algo?.sellLeft, algo?.sellRight];
+  return [algo?.buyLeft, algo?.buyRight];
+}
+
+export function minLiveBars(algo = {}) {
+  const side = String(algo.side || "BOTH").toUpperCase();
+  const sources = [];
+  if (side !== "SELL") sources.push(...conditionSources(algo, "buy"));
+  if (side !== "BUY") sources.push(...conditionSources(algo, "sell"));
+  if (sources.includes("macd")) return 40;
+  if (sources.includes("ema_slow") || sources.includes("ema_fast")) return Math.max(8, Number(algo.slow) || 21);
+  if (sources.includes("supertrend") || sources.includes("rsi")) return Math.max(8, (Number(algo.period) || 14) + 2);
+  return 3;
+}
+
+export function liveIndicatorSide(algo, candles, now = Date.now()) {
+  const need = minLiveBars(algo);
+  if (!Array.isArray(candles) || candles.length < need) {
+    return { side: "", lastSignal: "WAIT CANDLES", reason: "candles" };
+  }
+  const signal = evaluateSignals(candles, candles.length - 1, algo, undefined, now);
+  const wantBuy = Boolean(signal.buy) && (algo.side === "BUY" || algo.side === "BOTH");
+  const wantSell = Boolean(signal.sell) && (algo.side === "SELL" || algo.side === "BOTH");
+  if (!wantBuy && !wantSell) return { side: "", lastSignal: "HOLD", reason: "flat" };
+  const side = wantBuy ? "BUY" : "SELL";
+  return { side, lastSignal: side, reason: "signal" };
+}
+
 function runPaperAlgos() {
   const feedLive = dhanTapeReady();
   noteNiftyVwapFeed(feedLive);
@@ -1869,8 +1929,12 @@ function runPaperAlgos() {
     if (!feedLive) continue;
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
-    if (pack.candles.length < 32) continue;
-    const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
+    const decision = liveIndicatorSide(algo, pack.candles, now);
+    if (!decision.side) {
+      if (decision.reason === "flat") algo.lastSignal = "HOLD";
+      continue;
+    }
+    const signal = { buy: decision.side === "BUY", sell: decision.side === "SELL" };
     const open = state.positions.find((row) => (row.paper || row.brokerId === "paper") && row.strategy === algo.name);
     if (open) {
       if ((open.type === "BUY" && signal.sell) || (open.type === "SELL" && signal.buy)) {
@@ -1923,25 +1987,19 @@ function runLiveAlgos() {
     }
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
-    if (pack.candles.length < 32) {
-      algo.lastSignal = "WAIT CANDLES";
+    const decision = liveIndicatorSide(algo, pack.candles, now);
+    if (!decision.side) {
+      algo.lastSignal = decision.lastSignal;
       continue;
     }
-    const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
-    const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
-    const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
-    if (!wantBuy && !wantSell) {
-      algo.lastSignal = "HOLD";
-      continue;
-    }
-    const side = wantBuy ? "BUY" : "SELL";
+    const side = decision.side;
     const openLive = (state.positions || []).find(
-      (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
+      (row) => !isPaperRow(row) && realStrategyName(row.strategy) === algo.name && Number(row.qty) > 0,
     );
-    if (algo.lastLiveSide === side && openLive) continue;
+    if (openLive) continue;
     const trade = resolveAlgoTrade(algo);
     if (!trade) continue;
-    if (trade.kind === "option" && !(trade.strike && trade.expiry)) {
+    if (trade.kind === "option" && !(trade.strike && trade.expiry && trade.ltp > 0)) {
       algo.lastSignal = "WAIT";
       continue;
     }
@@ -1949,10 +2007,14 @@ function runLiveAlgos() {
       algo.lastSignal = "WAIT";
       continue;
     }
-    queueLiveAlgoOrder({
+    const queued = queueLiveAlgoOrder({
       ...algoOrderFields(algo, side, trade),
       brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
     });
+    if (!queued?.queued) {
+      algo.lastSignal = queued?.duplicate ? "HOLD 1 LOT" : "WAIT";
+      continue;
+    }
     algo.lastLiveAt = now;
     algo.lastLiveSide = side;
     algo.lastSignal = side;
