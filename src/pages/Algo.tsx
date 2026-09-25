@@ -255,7 +255,7 @@ export function Algo() {
           </div>
           <SignalFeed />
           {rows.length ? (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="flex flex-col gap-4">
               {rows.map((algo) => (
                 <AlgoCard
                   key={algo.id}
@@ -403,16 +403,16 @@ function AlgoCard({
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card flex flex-col p-4">
+    <section className="card flex w-full flex-col p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] text-slate-400">
             <Activity size={16} />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{meta.category}</div>
-            <div className="truncate text-base font-bold">{algo.name}</div>
-            <div className="text-xs text-slate-400">{meta.config}</div>
+            <h2 className="truncate text-lg font-bold">{algo.name}</h2>
+            <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
+            <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
