@@ -675,19 +675,8 @@ function expiryForNiftyVwap(algo, pack) {
 }
 
 function preferWeeklyDeskForReversal() {
-  const running = (state.algos || []).some(
-    (algo) =>
-      (isNiftyVwapReversalAlgo(algo) ||
-        isNiftyVwapHedgeAlgo(algo) ||
-        (isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly")) &&
-      algo.enabled,
-  );
-  if (!running) return;
-  if (String(state.optionMeta?.symbol || "").toUpperCase() !== "NIFTY") return;
-  const weekly = nearestWeeklyExpiry(niftyListedExpiries({ meta: state.optionMeta }), "NIFTY");
-  if (weekly && normalizeExpiry(state.optionMeta.expiry) !== weekly) {
-    state.optionMeta = { ...state.optionMeta, expiry: weekly };
-  }
+  // The option chain page keeps the expiry the user is viewing.
+  // Strategies still read the weekly date from the listed expiries.
 }
 
 function positionsForNiftyVwap(algo, mode) {
@@ -2564,28 +2553,32 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
   return clone(state.optionMeta);
 }
 
-export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) {
+export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source, expiryPinned } = {}) {
   const meta = getUnderlying(symbol || state.optionMeta.symbol);
   const sameSymbol = String(state.optionMeta?.symbol || "").toUpperCase() === meta.id;
   const cached = optionChainCache.get(meta.id);
-  const nextExpiry = expiry || cached?.meta?.expiry || (sameSymbol ? state.optionMeta.expiry : upcomingExpiries(meta.id)[0] || "");
+  const nextExpiry = expiry || (sameSymbol ? state.optionMeta.expiry : "") || upcomingExpiries(meta.id)[0] || "";
   const sameExpiry = normalizeExpiry(nextExpiry) === normalizeExpiry(state.optionMeta.expiry);
+  const cachedSameExpiry =
+    normalizeExpiry(cached?.meta?.expiry) === normalizeExpiry(nextExpiry) && Array.isArray(cached?.rows) && cached.rows.length;
   let nextRows = Array.isArray(rows) && rows.length
     ? rows
-    : sameSymbol
+    : sameSymbol && sameExpiry
       ? state.optionChain
-      : cached?.rows?.length
+      : cachedSameExpiry
         ? cached.rows
         : [];
   if (sameSymbol && sameExpiry) nextRows = keepStrikeWindow(state.optionChain, nextRows);
   const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
+  const pinned =
+    expiryPinned === undefined ? Boolean(sameSymbol && state.optionMeta?.expiryPinned) : Boolean(expiryPinned);
   state.optionChain = nextRows;
   state.optionMeta = withExpiryLabels({
     ...state.optionMeta,
-    ...(cached?.meta || {}),
     symbol: meta.id,
     expiry: nextExpiry,
+    expiryPinned: pinned,
     expiries: expiries?.length ? expiries : cached?.meta?.expiries || (sameSymbol ? state.optionMeta.expiries : upcomingExpiries(meta.id)),
     ...stats,
     source: source || cached?.meta?.source || state.optionMeta.source,

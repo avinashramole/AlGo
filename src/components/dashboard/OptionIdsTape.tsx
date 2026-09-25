@@ -83,6 +83,9 @@ export function OptionIdsTape({ lots = 1 }: { lots?: number }) {
       {note ? (
         <div className={cn("mb-2 break-words text-xs font-semibold", noteFail ? "text-down" : "text-slate-500")}>{note}</div>
       ) : null}
+      {!rows.length ? (
+        <div className="mb-2 text-xs font-semibold text-slate-500">Loading the current expiry…</div>
+      ) : null}
       <div className="space-y-2 md:hidden">
         {rows.map((row) => {
           const callVwap = row.callVwap || row.callLtp;

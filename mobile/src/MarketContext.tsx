@@ -236,7 +236,29 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         else await refresh();
       },
       selectChain: async (symbol: string, expiry?: string) => {
-        const result = await selectOptionChain(symbol, expiry);
+        const wantedSymbol = String(symbol || "NIFTY").toUpperCase();
+        const wantedExpiry = String(expiry || "").slice(0, 10);
+        snapshotGen.current += 1;
+        setData((current) => {
+          const sameSymbol = String(current.optionMeta?.symbol || "").toUpperCase() === wantedSymbol;
+          const currentExpiry = String(current.optionMeta?.expiries?.[0] || "").slice(0, 10);
+          const nextExpiry = wantedExpiry || (sameSymbol ? currentExpiry : current.optionMeta?.expiry);
+          const next = {
+            ...current,
+            optionMeta: {
+              ...current.optionMeta,
+              symbol: wantedSymbol,
+              expiry: nextExpiry || current.optionMeta?.expiry,
+            },
+            optionChain:
+              sameSymbol && (!wantedExpiry || wantedExpiry === String(current.optionMeta?.expiry || "").slice(0, 10))
+                ? current.optionChain
+                : [],
+          };
+          dataRef.current = next;
+          return next;
+        });
+        const result = await selectOptionChain(wantedSymbol, expiry);
         if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
