@@ -77,7 +77,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const connected = (data.brokers || []).filter((item) => item.connected);
   const liveBrokers = (data.brokers || []).filter((item) => item.id !== "paper");
   const kind = (form.kind || "indicator") as StrategyKind;
-  const title = algo ? `Edit ${algo.name}` : "Add strategy";
+  const editing = Boolean(algo);
+  const title = editing ? "Edit strategy" : "Add strategy";
 
   const lotSize = lotForSymbol(form.symbol);
   const lots = form.lots || 1;
@@ -152,6 +153,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </button>
         </div>
 
+        {editing ? null : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <TypeCard
             active={kind === "indicator"}
@@ -234,7 +236,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }
           />
         </div>
+        )}
 
+        {editing ? null : (
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {RUN_MODES.map((mode) => (
             <TypeCard
@@ -251,6 +255,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             />
           ))}
         </div>
+        )}
+
+        <label className="mt-4 block text-xs font-semibold text-slate-500">
+          Strategy name
+          <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
+        </label>
 
         {engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
@@ -322,10 +332,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-500">
-            Strategy name
-            <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
-          </label>
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select

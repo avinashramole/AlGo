@@ -247,6 +247,7 @@ export function AlgoScreen() {
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{draft.id ? "Edit strategy" : "Add strategy"}</Text>
+        {draft.id ? null : (
         <View style={styles.chips}>
           <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator", ...defaultConditions("indicator", draft.indicator, draft.pattern) })} />
           <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action", ...defaultConditions("price-action", draft.indicator, draft.pattern) })} />
@@ -336,6 +337,9 @@ export function AlgoScreen() {
             }
           />
         </View>
+        )}
+        {draft.id ? null : (
+        <>
         <Text style={styles.muted}>Run mode</Text>
         <View style={styles.chips}>
           <Chip label="Paper" on={draft.runMode === "paper"} onPress={() => setDraft({ ...draft, runMode: "paper" })} />
@@ -343,6 +347,8 @@ export function AlgoScreen() {
           <Chip label="Live Dhan" on={draft.runMode === "live"} onPress={() => setDraft({ ...draft, runMode: "live" })} />
         </View>
         {draft.runMode === "paper" ? <Text style={styles.muted}>Paper uses live Dhan quotes. Fills stay virtual — nothing is sent to Dhan.</Text> : null}
+        </>
+        )}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>
