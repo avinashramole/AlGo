@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -96,6 +96,22 @@ test("a closed admin Dhan book keeps the broker loss when nothing is open", () =
   });
   assert.equal(day.totalPnl, -237.25);
   assert.equal(day.pnlByBroker.dhan, -237.25);
+});
+
+test("Upstox user book keeps realised and open MTM on separate legs", () => {
+  const book = upstoxMasterBook({
+    status: "success",
+    data: [
+      { quantity: 0, trading_symbol: "NIFTY 23050 CE", realised: 200, unrealised: 0 },
+      { quantity: 65, trading_symbol: "NIFTY 23100 PE", average_price: 90, last_price: 91.66, realised: 0, unrealised: 108 },
+    ],
+  });
+  assert.equal(book.realizedPnl, 200);
+  assert.equal(book.unrealizedPnl, 108);
+  assert.equal(book.mtm, 308);
+  assert.equal(book.closed.length, 1);
+  assert.equal(book.open.length, 1);
+  assert.equal(book.closed[0].pnl + book.open[0].pnl, 308);
 });
 
 test("Upstox short-term positions use realised and unrealised", () => {

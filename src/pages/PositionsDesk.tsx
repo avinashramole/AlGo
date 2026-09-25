@@ -214,8 +214,8 @@ export function PositionsDesk() {
       const positions = filterRows(ledger, mode, segment);
       const summed = positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);
       const accountMtm =
-        ledger.kind === "master" && useBrokerMtm && mode !== "paper" && segment === "all"
-          ? Number(desk.master.brokerMtm)
+        Number.isFinite(ledger.brokerMtm) && mode !== "paper" && segment === "all"
+          ? Number(ledger.brokerMtm)
           : summed;
       rows.push({
         ledger,

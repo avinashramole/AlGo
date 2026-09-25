@@ -86,15 +86,38 @@ export function dhanMasterBook(raw) {
   if (!pnl) return null;
   const rows = positionRows(raw) || [];
   const closed = [];
+  const open = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const kind = String(row.positionType || row.position_type || "").toUpperCase();
     const net = Number(row.netQty);
     const closedLeg = kind === "CLOSED" || net === 0;
-    if (!closedLeg) continue;
     const realized = firstFinite(row, ["realizedProfit", "realized_profit", "realised"]);
     const unrealized = firstFinite(row, ["unrealizedProfit", "unrealized_profit", "unrealised"]);
     if (realized == null && unrealized == null) continue;
+    if (!closedLeg) {
+      const qty = Math.abs(net);
+      const type = kind === "SHORT" || net < 0 ? "SELL" : "BUY";
+      const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
+      const ltp = Number(row.lastTradedPrice || row.ltp || avg);
+      open.push({
+        id: `dhan-pos-${row.securityId || row.tradingSymbol || open.length}-${row.productType || "MIS"}`,
+        symbol: String(row.tradingSymbol || row.securityId || ""),
+        side: type,
+        type,
+        qty,
+        avg,
+        ltp,
+        pnl: round2((realized || 0) + (unrealized || 0)),
+        realized: round2(realized || 0),
+        product: row.productType || "MIS",
+        brokerId: "dhan",
+        live: true,
+        paper: false,
+        closed: false,
+      });
+      continue;
+    }
     if ((realized || 0) === 0 && (unrealized || 0) === 0) continue;
     const buyQty = Math.abs(Number(row.buyQty || row.dayBuyQty) || 0);
     const sellQty = Math.abs(Number(row.sellQty || row.daySellQty) || 0);
@@ -124,6 +147,56 @@ export function dhanMasterBook(raw) {
     mtm: round2(pnl.realizedPnl + pnl.unrealizedPnl),
     source: "dhan",
     closed,
+    open,
+  };
+}
+
+export function upstoxMasterBook(raw) {
+  const pnl = brokerPnlFromUpstoxRows(raw);
+  if (!pnl) return null;
+  const rows = positionRows(raw) || [];
+  const closed = [];
+  const open = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const realized = firstFinite(row, ["realised", "realized", "realizedProfit"]);
+    const unrealized = firstFinite(row, ["unrealised", "unrealized", "unrealizedProfit"]);
+    if (realized == null && unrealized == null) continue;
+    const qty = Math.abs(Number(row.quantity ?? row.net_quantity ?? 0));
+    const side = Number(row.quantity) < 0 ? "SELL" : "BUY";
+    const avg = Number(row.average_price || row.buy_price || 0);
+    const ltp = Number(row.last_price || row.close_price || avg);
+    const leg = {
+      id: `upstox-${row.instrument_token || row.trading_symbol || row.tradingsymbol || open.length + closed.length}`,
+      symbol: String(row.trading_symbol || row.tradingsymbol || row.instrument_token || ""),
+      side,
+      type: side,
+      qty,
+      avg,
+      ltp,
+      entry: avg,
+      exit: ltp,
+      pnl: round2((realized || 0) + (unrealized || 0)),
+      realized: round2(realized || 0),
+      product: row.product || "MIS",
+      brokerId: "upstox",
+      live: true,
+      paper: false,
+    };
+    if (!qty) {
+      if ((realized || 0) === 0 && (unrealized || 0) === 0) continue;
+      closed.push({ ...leg, closed: true });
+    } else {
+      open.push({ ...leg, closed: false });
+    }
+  }
+  return {
+    realizedPnl: pnl.realizedPnl,
+    unrealizedPnl: pnl.unrealizedPnl,
+    mtm: round2(pnl.realizedPnl + pnl.unrealizedPnl),
+    source: "upstox",
+    closed,
+    open,
   };
 }
 
@@ -211,9 +284,9 @@ async function fetchBrokerPnl(userId) {
   if (!creds) return null;
   if (creds.brokerId === "dhan") {
     const { fetchMemberDhanPositions } = await import("./dhan.js");
-    return brokerPnlFromDhanRows(await fetchMemberDhanPositions(creds.token, creds.clientId));
+    return dhanMasterBook(await fetchMemberDhanPositions(creds.token, creds.clientId));
   }
-  return brokerPnlFromUpstoxRows(await upstoxPositions(creds.token));
+  return upstoxMasterBook(await upstoxPositions(creds.token));
 }
 
 export async function readMemberBrokerPnl(userId) {

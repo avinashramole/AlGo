@@ -364,6 +364,60 @@ function asBrokerClosedLeg(row = {}) {
   };
 }
 
+function asBrokerOpenLeg(row = {}) {
+  const leg = asLedgerPosition({
+    ...row,
+    avg: row.avg || row.entry,
+    ltp: row.ltp || row.exit || row.avg,
+    pnl: row.pnl,
+    realized: row.realized,
+  });
+  return {
+    ...leg,
+    mtm: round2(row.pnl),
+    realized: round2(row.realized),
+    closed: false,
+    paper: false,
+    brokerBook: true,
+  };
+}
+
+function applyBrokerBookToLedger(ledger, brokerBook) {
+  const paperRows = (ledger.positions || []).filter(isPaperLedgerRow);
+  const paperMtm = round2(paperRows.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const brokerRows = [
+    ...(brokerBook.open || []).map(asBrokerOpenLeg),
+    ...(brokerBook.closed || []).map(asBrokerClosedLeg),
+  ];
+  const mtm = round2(paperMtm + Number(brokerBook.mtm));
+  return {
+    ...ledger,
+    positions: [...paperRows, ...brokerRows],
+    mtm,
+    brokerMtm: mtm,
+    realized: round2(brokerBook.realizedPnl),
+    open: paperRows.filter((row) => !row.closed).length + (brokerBook.open || []).length,
+    tradeMode: "real",
+  };
+}
+
+export function applyBrokerBooksToDesk(desk, booksByUserId = {}) {
+  if (!desk) return desk;
+  const clients = (desk.clients || []).map((client) => {
+    const book = booksByUserId?.[client.id];
+    if (!book || !Number.isFinite(Number(book.mtm))) return client;
+    return applyBrokerBookToLedger(client, book);
+  });
+  const clientMtm = round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const masterMtm = Number(desk.masterMtm ?? desk.master?.mtm ?? 0);
+  return {
+    ...desk,
+    clients,
+    clientMtm,
+    totalMtm: round2(masterMtm + clientMtm),
+  };
+}
+
 export function listPositionDesk(users = [], masterPositions = [], masterClosed = [], brokerBook = null) {
   const useBroker = brokerBook && Number.isFinite(Number(brokerBook.mtm));
   const localClosed = useBroker ? (masterClosed || []).filter(isPaperLedgerRow) : masterClosed;

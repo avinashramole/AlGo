@@ -16,7 +16,7 @@ import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
-import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
+import { applyBrokerBooksToDesk, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
   assignStaticIp,
@@ -27,7 +27,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
-import { attachMemberBrokerPnl } from "./memberBrokerPnl.js";
+import { attachMemberBrokerPnl, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
@@ -600,10 +600,14 @@ app.get("/api/mtm", (_req, res) => {
   }
 });
 
-app.get("/api/positions/desk", (_req, res) => {
+app.get("/api/positions/desk", async (_req, res) => {
   try {
     const snap = safeSnapshot() || {};
-    res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || [], getAdminBrokerBook()));
+    const desk = listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || [], getAdminBrokerBook());
+    const loaded = await Promise.all(
+      (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerPnl(client.id)]),
+    );
+    res.json(applyBrokerBooksToDesk(desk, Object.fromEntries(loaded)));
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not load positions" });
   }

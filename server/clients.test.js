@@ -41,7 +41,7 @@ fs.writeFileSync(
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
 const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill } = await import("./memberDesk.js");
-const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
+const { applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
 const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
 const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
@@ -370,6 +370,113 @@ test("master account MTM uses the broker loss when the local book is empty", () 
   assert.equal(desk.master.positions[0].realized, -237.25);
   assert.equal(desk.master.positions[0].mtm, -237.25);
   assert.equal(desk.master.positions[0].closed, true);
+});
+
+test("client MTM uses each user's broker book instead of the local copy loss", () => {
+  const desk = applyBrokerBooksToDesk(
+    {
+      masterMtm: -237.25,
+      master: { mtm: -237.25 },
+      clients: [
+        {
+          id: "u-live",
+          kind: "client",
+          tradeMode: "real",
+          positions: [
+            {
+              id: "bad-copy",
+              symbol: "NIFTY-Oct2026-23100-CE",
+              type: "BUY",
+              qty: 65,
+              avg: 221,
+              ltp: 180,
+              pnl: -2492.75,
+              mtm: -2492.75,
+              realized: -2492.75,
+              closed: true,
+              paper: false,
+              brokerId: "dhan",
+              netQty: 0,
+            },
+          ],
+          mtm: -2492.75,
+          realized: -2492.75,
+          open: 0,
+        },
+        {
+          id: "u-paper",
+          kind: "client",
+          tradeMode: "paper",
+          positions: [
+            {
+              id: "paper-1",
+              symbol: "NIFTY 24600 CE",
+              type: "BUY",
+              qty: 65,
+              avg: 100,
+              ltp: 90,
+              pnl: -10,
+              mtm: -10,
+              realized: 0,
+              closed: false,
+              paper: true,
+              brokerId: "paper",
+              netQty: 65,
+            },
+          ],
+          mtm: -10,
+          realized: 0,
+          open: 1,
+        },
+      ],
+      clientMtm: -2502.75,
+      totalMtm: -2740,
+    },
+    {
+      "u-live": {
+        realizedPnl: 200,
+        unrealizedPnl: 108,
+        mtm: 308,
+        closed: [
+          {
+            id: "dhan-closed-11",
+            symbol: "NIFTY-Sep2026-23050-CE",
+            side: "BUY",
+            qty: 65,
+            entry: 140,
+            exit: 143,
+            pnl: 200,
+            realized: 200,
+            product: "INTRADAY",
+            brokerId: "dhan",
+          },
+        ],
+        open: [
+          {
+            id: "dhan-pos-12",
+            symbol: "NIFTY-Sep2026-23100-PE",
+            type: "BUY",
+            qty: 65,
+            avg: 90,
+            ltp: 91.66,
+            pnl: 108,
+            realized: 0,
+            product: "INTRADAY",
+            brokerId: "dhan",
+          },
+        ],
+      },
+    },
+  );
+  const live = desk.clients.find((row) => row.id === "u-live");
+  const paper = desk.clients.find((row) => row.id === "u-paper");
+  assert.equal(live.brokerMtm, 308);
+  assert.equal(live.mtm, 308);
+  assert.equal(live.positions.some((row) => row.mtm === -2492.75), false);
+  assert.equal(live.positions.reduce((sum, row) => sum + row.mtm, 0), 308);
+  assert.equal(paper.mtm, -10);
+  assert.equal(desk.clientMtm, 298);
+  assert.equal(desk.totalMtm, 60.75);
 });
 
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
