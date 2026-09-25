@@ -1977,7 +1977,7 @@ function runPaperAlgos() {
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
     const decision = liveIndicatorSide(algo, pack.candles, now);
     if (!decision.side) {
-      if (decision.reason === "flat") algo.lastSignal = "HOLD";
+      if (decision.reason === "flat") algo.lastSignal = "";
       continue;
     }
     const signal = { buy: decision.side === "BUY", sell: decision.side === "SELL" };
@@ -1992,7 +1992,7 @@ function runPaperAlgos() {
     const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
     const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
     if (!wantBuy && !wantSell) {
-      algo.lastSignal = "HOLD";
+      algo.lastSignal = "";
       continue;
     }
     const trade = resolveAlgoTrade(algo);
@@ -2058,7 +2058,7 @@ function runLiveAlgos() {
       brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
     });
     if (!queued?.queued) {
-      algo.lastSignal = queued?.duplicate ? "HOLD 1 LOT" : "WAIT";
+      algo.lastSignal = "";
       continue;
     }
     algo.lastLiveAt = now;

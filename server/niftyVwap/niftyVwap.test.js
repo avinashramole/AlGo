@@ -509,7 +509,7 @@ test("duplicate live queue does not mark the strategy as filled", () => {
   assert.equal(result.action, "skip");
   assert.equal(result.reason, "duplicate");
   assert.equal(algo.vwapState.inFlight, false);
-  assert.equal(algo.lastSignal, "HOLD 1 LOT");
+  assert.equal(algo.lastSignal, "");
 });
 
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
@@ -980,7 +980,7 @@ test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", ()
   });
   assert.equal(book.places.length, 0);
   assert.equal(blocked.reason, "already-open");
-  assert.match(algo.lastSignal, /HOLD 1 LOT/);
+  assert.equal(algo.lastSignal, "");
 });
 
 test("in-flight timeout does not punch a second lot while a NIFTY option is still open", () => {

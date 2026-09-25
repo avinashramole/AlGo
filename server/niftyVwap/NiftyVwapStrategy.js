@@ -184,7 +184,7 @@ export const NiftyVwapStrategy = {
       state.inFlight = false;
       state.lastEntryBarTime = 0;
       if (!state.fillPrice) PositionManager.clearOpen(state);
-      algo.lastSignal = "HOLD 1 LOT";
+      algo.lastSignal = "";
       return { action: "skip", reason: "duplicate" };
     }
     const fill = fillFromResult(result, ltp);
@@ -315,7 +315,7 @@ export const NiftyVwapStrategy = {
     }
 
     if (!open && (input.positions || []).some((row) => PositionManager.isOpenNiftyOption(row))) {
-      algo.lastSignal = "HOLD 1 LOT";
+      algo.lastSignal = "";
       return { action: "skip", reason: "already-open" };
     }
 

@@ -35,6 +35,12 @@ function moneyClass(value: number) {
   return "text-[var(--text)]";
 }
 
+function orderActivity(signal: string | undefined, fallback: string) {
+  const text = String(signal || "").trim();
+  if (!text || /^hold\b/i.test(text)) return fallback;
+  return text;
+}
+
 function statusLabel(algo: AlgoStrategy) {
   if (algo.runMode === "backtest" || algo.status === "BACKTEST") return "RESEARCH";
   if (algo.enabled && algo.runMode === "paper") return "PAPER";
@@ -389,14 +395,10 @@ function AlgoCard({
   const drawdown = Number(algo.lastBacktest?.maxDrawdown || 0);
   const bookPnl = Number(algo.lastBacktest?.pnl ?? algo.pnl ?? 0);
   const activity = isNiftyVwapHedgeKind(algo)
-    ? algo.enabled && algo.lastSignal
-      ? algo.lastSignal
-      : algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE"
+    ? orderActivity(algo.enabled ? algo.lastSignal : "", algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE")
     : isNiftyFirstCandleKind(algo)
-      ? algo.lastSignal || "09:00–09:05: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE"
-      : algo.lastSignal && algo.enabled
-        ? algo.lastSignal
-        : "Waiting for the next signal";
+      ? orderActivity(algo.lastSignal, "09:00–09:05: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE")
+      : orderActivity(algo.enabled ? algo.lastSignal : "", "No order");
   const status = statusLabel(algo);
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
