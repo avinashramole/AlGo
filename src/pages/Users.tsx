@@ -13,7 +13,7 @@ import {
   type ClientRow,
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
+import { forgetCachedClient, loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
 import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
 import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 
@@ -96,6 +96,7 @@ export function Users() {
     setError("");
     try {
       await deleteClient(row.id);
+      forgetCachedClient(row.id);
       setClients((current) => current.filter((item) => item.id !== row.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete client");

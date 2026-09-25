@@ -1,5 +1,5 @@
 import { catalog } from "./brokers.js";
-import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser } from "./auth.js";
+import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser, listPublicUsers } from "./auth.js";
 import {
   assignedEgressIps,
   brokerInstallFields,
@@ -12,11 +12,12 @@ import {
   peekClientBook,
   peekClientSettings,
   removeDesk,
+  removeOrphanDesks,
   saveClientSettings,
 } from "./memberDesk.js";
-import { listEnrollments } from "./subscriptions.js";
+import { deleteOrphanEnrollments, deleteUserEnrollments, listEnrollments } from "./subscriptions.js";
 import { inventoryAddresses } from "./ipManagement.js";
-import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
+import { messagingHandleForUser, removeMessagingUser, removeOrphanMessaging, upsertMessagingContact } from "./messaging.js";
 
 function fail(message, status = 400) {
   const error = new Error(message);
@@ -199,10 +200,27 @@ export function saveClient(userId, patch = {}) {
   return asClient(next, peekClientSettings(userId), messagingHandleForUser(userId));
 }
 
+export function knownAccountIds(users = listPublicUsers()) {
+  const ids = new Set((users || []).map((row) => String(row?.id || "").trim()).filter(Boolean));
+  ids.add("admin");
+  return ids;
+}
+
+export function purgeOrphanMemberData(users = listPublicUsers()) {
+  const known = knownAccountIds(users);
+  removeOrphanDesks(known);
+  deleteOrphanEnrollments(known);
+  removeOrphanMessaging(known);
+  return known;
+}
+
 export function deleteClient(userId, { actorId } = {}) {
   const result = deleteRegisteredUser(userId, { actorId });
-  removeDesk(userId);
-  removeMessagingUser(userId);
+  const id = result.id;
+  removeDesk(id);
+  removeMessagingUser(id);
+  deleteUserEnrollments(id);
+  purgeOrphanMemberData();
   return result;
 }
 

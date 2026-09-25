@@ -334,6 +334,23 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   return publicEnroll(row);
 }
 
+export function deleteUserEnrollments(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return 0;
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => row.userId !== id);
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
+export function deleteOrphanEnrollments(knownIds) {
+  const allow = knownIds instanceof Set ? knownIds : new Set(knownIds || []);
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => allow.has(row.userId));
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
 export function deleteEnrollment({ user, enrollmentId } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   if (user.role !== "admin") throw fail("Admin only.", 403);

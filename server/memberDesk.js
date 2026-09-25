@@ -754,6 +754,19 @@ export function removeDesk(userId) {
   return true;
 }
 
+export function removeOrphanDesks(knownIds) {
+  const allow = knownIds instanceof Set ? knownIds : new Set(knownIds || []);
+  allow.add(ADMIN_DESK_ID);
+  let removed = 0;
+  for (const id of Object.keys(store)) {
+    if (allow.has(id)) continue;
+    delete store[id];
+    removed += 1;
+  }
+  if (removed) persist();
+  return removed;
+}
+
 function loadDesk(userId) {
   if (!store[userId]) store[userId] = emptyDesk(userId);
   const desk = store[userId];

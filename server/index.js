@@ -38,6 +38,7 @@ import {
   createAlgo,
   deleteAlgo,
   dropBrokerPositions,
+  dropClientFromStrategies,
   getCandles,
   getOptionMeta,
   getAlgo,
@@ -488,7 +489,9 @@ app.post("/api/clients/:id", (req, res) => {
 
 app.delete("/api/clients/:id", (req, res) => {
   try {
-    res.json(deleteClient(req.params.id, { actorId: req.authUser?.id }));
+    const result = deleteClient(req.params.id, { actorId: req.authUser?.id });
+    dropClientFromStrategies(result.id);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not delete client" });
   }

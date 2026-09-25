@@ -40,8 +40,10 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings, installMemberBroker, getMemberDesk, peekBrokerAccount, peekClientSecrets } = await import("./memberDesk.js");
-const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill } = await import("./memberDesk.js");
+const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
+const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
+const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
@@ -403,9 +405,32 @@ test("saveClient stores the client mobile on the user record", () => {
   assert.equal(listPublicUsers().find((item) => item.id === "u-arpit").mobile, "9876507788");
 });
 
+test("purgeOrphanMemberData removes leftover desks for accounts that are gone", () => {
+  saveClientSettings("u-ghost", { notes: "leftover book" });
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-ghost"), true);
+  purgeOrphanMemberData();
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-ghost"), false);
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-arpit"), true);
+});
+
 test("deleteClient removes a member and refuses the desk admin", () => {
   assert.throws(() => deleteClient("admin", { actorId: "u-arpit" }), /admin/);
+  savePaymentSettings({ mobile: "9876543210", amount: 499, payeeName: "Desk" });
+  const user = listPublicUsers().find((row) => row.id === "u-arpit");
+  enrollStrategy({ user, algo: { id: "a4", name: "NIFTY VWAP ATM" }, channel: "gpay" });
+  recordMemberCopyFill({
+    userId: "u-arpit",
+    payload: { symbol: "NIFTY 24600 CE", side: "BUY", qty: 65, price: 12, strategy: "NIFTY VWAP ATM" },
+    paper: true,
+  });
+  upsertMessagingContact({ id: "u-arpit", userId: "u-arpit", name: "ARPIT", mobile: "9876543210" });
+  assert.equal(listEnrollments({ userId: "u-arpit" }).length, 1);
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-arpit"), true);
+  assert.equal(messagingHandleForUser("u-arpit").mobile, "9876543210");
   const gone = deleteClient("u-arpit", { actorId: "admin" });
   assert.equal(gone.ok, true);
   assert.equal(listClients(listPublicUsers()).some((row) => row.id === "u-arpit"), false);
+  assert.equal(listEnrollments({ admin: true }).some((row) => row.userId === "u-arpit"), false);
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-arpit"), false);
+  assert.equal(messagingHandleForUser("u-arpit").mobile, "");
 });

@@ -96,6 +96,23 @@ export function Algo() {
   const [rangeId, setRangeId] = useState("");
   const [rangeError, setRangeError] = useState("");
   const [mapFor, setMapFor] = useState<AlgoStrategy | null>(null);
+  const [knownClientIds, setKnownClientIds] = useState<Set<string> | null>(() => {
+    const seeded = peekClientList()?.clients || [];
+    return seeded.length ? new Set(seeded.map((row) => row.id)) : null;
+  });
+  useEffect(() => {
+    let cancel = false;
+    void loadClientList()
+      .then((result) => {
+        if (cancel) return;
+        setKnownClientIds(new Set((result.clients || []).map((row) => row.id)));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
   const rangeFor = data.algos.find((item) => item.id === rangeId) || null;
   const canStartAll = data.algos.some((row) => row.runMode !== "backtest" && !row.enabled);
   const canStopAll = data.algos.some((row) => row.enabled);
@@ -238,6 +255,7 @@ export function Algo() {
                   key={algo.id}
                   algo={algo}
                   orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
+                  clientIds={knownClientIds}
                   positions={(data.positions || []).filter((row) => row.strategy === algo.name)}
                   busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
@@ -323,6 +341,7 @@ export function Algo() {
 
 function AlgoCard({
   algo,
+  clientIds,
   orders,
   positions,
   busy,
@@ -338,6 +357,7 @@ function AlgoCard({
   onDelete,
 }: {
   algo: AlgoStrategy;
+  clientIds: Set<string> | null;
   orders: Array<{ id: string }>;
   positions: Array<{ type?: string; pnl?: number; live?: boolean; brokerId?: string }>;
   busy: boolean;
@@ -354,7 +374,8 @@ function AlgoCard({
 }) {
   const meta = kindMeta(algo);
   const liveMtm = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
-  const mapped = (algo.mappedClientIds || []).length;
+  const mappedIds = algo.mappedClientIds || [];
+  const mapped = clientIds ? mappedIds.filter((id) => clientIds.has(id)).length : mappedIds.length;
   const brokerMtm = positions.some((row) => row.live || row.brokerId === "dhan");
   const positionLabel = !positions.length
     ? "FLAT"
@@ -535,6 +556,12 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const live = new Set(clients.map((row) => row.id));
+    setPicked((current) => current.filter((id) => live.has(id)));
+  }, [loaded, clients]);
 
   const toggleId = (id: string) => {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));

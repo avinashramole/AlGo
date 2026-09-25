@@ -23,7 +23,8 @@ import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
-import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
+import { listPublicUsers } from "./auth.js";
+import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
@@ -1422,6 +1423,7 @@ export function livePositionQuoteTargets() {
 }
 
 export function snapshot() {
+  syncAlgoClientMaps();
   markPaperToMarket();
   const brokers = publicBrokers();
   const active = getActiveBroker();
@@ -1467,6 +1469,7 @@ export function snapshot() {
 }
 
 export function deskFeed() {
+  syncAlgoClientMaps();
   markPaperToMarket();
   const { orders, positions, closedTrades } = liveDesk();
   const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
@@ -1478,6 +1481,7 @@ export function deskFeed() {
     pnl: algo.pnl,
     winRate: algo.winRate,
     lastSignal: algo.lastSignal,
+    mappedClientIds: algo.mappedClientIds || [],
     trade: resolveAlgoTrade(algo),
   }));
   const signalAlgos = (state.algos || []).map((algo, index) => ({ ...algo, ...algos[index] }));
@@ -1674,10 +1678,50 @@ export function createAlgo(payload) {
   return clone(algo);
 }
 
+function memberIds() {
+  return new Set(
+    listPublicUsers()
+      .filter((row) => row?.id && row.role !== "admin" && row.id !== "admin")
+      .map((row) => row.id),
+  );
+}
+
+export function syncAlgoClientMaps() {
+  const allow = memberIds();
+  let changed = false;
+  for (const algo of state.algos || []) {
+    const prev = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [];
+    const next = mappedClientIdsForMembers(prev, allow);
+    if (next.length !== prev.length || next.some((id, index) => id !== prev[index])) {
+      algo.mappedClientIds = next;
+      changed = true;
+    }
+  }
+  if (changed) persistAlgos();
+  return changed;
+}
+
+export function dropClientFromStrategies(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return false;
+  let changed = false;
+  for (const algo of state.algos || []) {
+    const prev = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [];
+    const next = prev.filter((item) => String(item || "").trim() !== id);
+    if (next.length !== prev.length) {
+      algo.mappedClientIds = next;
+      changed = true;
+    }
+  }
+  if (changed) persistAlgos();
+  return changed;
+}
+
 export function updateAlgo(id, payload) {
   const index = state.algos.findIndex((item) => item.id === id);
   if (index < 0) return { error: "Strategy not found" };
   const next = normalizeAlgo(payload || {}, state.algos[index]);
+  next.mappedClientIds = mappedClientIdsForMembers(next.mappedClientIds, memberIds());
   next.id = id;
   state.algos[index] = next;
   state.notifications.unshift(`Strategy updated: ${next.name}`);

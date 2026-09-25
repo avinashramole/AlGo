@@ -324,6 +324,11 @@ function mappingIds(value) {
   return [...new Set((Array.isArray(value) ? value : []).map((id) => String(id || "").trim()).filter(Boolean))];
 }
 
+export function mappedClientIdsForMembers(ids, memberIds) {
+  const allow = memberIds instanceof Set ? memberIds : new Set(memberIds || []);
+  return mappingIds(ids).filter((id) => allow.has(id));
+}
+
 function mappingFields(input = {}, existing = {}) {
   const scopeRaw = input.mappingScope != null ? input.mappingScope : existing.mappingScope;
   const mappingScope = ["master", "clients", "both"].includes(String(scopeRaw || "")) ? String(scopeRaw) : "both";
