@@ -403,7 +403,7 @@ function AlgoCard({
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card flex w-full flex-col p-4">
+    <section className="card flex w-full flex-col p-4" data-strategy-card={algo.id}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] text-slate-400">
