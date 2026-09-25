@@ -459,6 +459,7 @@ async function dhanSend(method, path, token, id, body, opts = {}) {
       method,
       headers,
       body: body == null ? undefined : JSON.stringify(body),
+      timeoutMs: Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : 20000,
     });
     try {
       return await readDhanJson(res);
@@ -475,6 +476,10 @@ async function dhanSend(method, path, token, id, body, opts = {}) {
 
 async function dhanGet(path, token, id, opts) {
   return dhanSend("GET", path, token, id, undefined, opts);
+}
+
+export async function fetchMemberDhanPositions(token, clientId) {
+  return dhanGet("/positions", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
 
 async function dhanPost(path, token, id, body, opts) {

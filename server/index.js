@@ -27,6 +27,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
+import { attachMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
@@ -304,26 +305,26 @@ app.get("/api/member/quotes", async (req, res) => {
   }
 });
 
-app.get("/api/member/desk", (req, res) => {
+app.get("/api/member/desk", async (req, res) => {
   try {
     const user = memberAuth(req);
     const snap = safeSnapshot() || {};
     dropEnrollmentsWithoutStrategies(listAlgos());
-    res.json(
-      getMemberDesk({
-        user,
-        enrollments: listEnrollments({ userId: user.id, admin: false }),
-        algos: listAlgos(),
-        quote: quoteSymbol,
-        admins: listPublicUsers(),
-        ownBookOnly: true,
-        liveBook: {
-          positions: snap.positions || [],
-          orders: snap.orders || [],
-          closedTrades: snap.closedTrades || [],
-        },
-      }),
-    );
+    const desk = getMemberDesk({
+      user,
+      enrollments: listEnrollments({ userId: user.id, admin: false }),
+      algos: listAlgos(),
+      quote: quoteSymbol,
+      admins: listPublicUsers(),
+      ownBookOnly: true,
+      liveBook: {
+        positions: snap.positions || [],
+        orders: snap.orders || [],
+        closedTrades: snap.closedTrades || [],
+      },
+    });
+    await attachMemberBrokerPnl(desk, user.id);
+    res.json(desk);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
   }
@@ -452,23 +453,23 @@ app.get("/api/clients", (_req, res) => {
   });
 });
 
-app.get("/api/clients/:id/detail", (req, res) => {
+app.get("/api/clients/:id/detail", async (req, res) => {
   try {
     const snap = safeSnapshot() || {};
-    res.json(
-      getClientDetail({
-        userId: req.params.id,
-        users: listPublicUsers(),
-        algos: listAlgos(),
-        quote: quoteSymbol,
-        admins: listPublicUsers(),
-        liveBook: {
-          positions: snap.positions || [],
-          orders: snap.orders || [],
-          closedTrades: snap.closedTrades || [],
-        },
-      }),
-    );
+    const detail = getClientDetail({
+      userId: req.params.id,
+      users: listPublicUsers(),
+      algos: listAlgos(),
+      quote: quoteSymbol,
+      admins: listPublicUsers(),
+      liveBook: {
+        positions: snap.positions || [],
+        orders: snap.orders || [],
+        closedTrades: snap.closedTrades || [],
+      },
+    });
+    await attachMemberBrokerPnl(detail, req.params.id);
+    res.json(detail);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load client detail" });
   }
