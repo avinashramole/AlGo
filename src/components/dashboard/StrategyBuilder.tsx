@@ -78,7 +78,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const liveBrokers = (data.brokers || []).filter((item) => item.id !== "paper");
   const kind = (form.kind || "indicator") as StrategyKind;
   const editing = Boolean(algo);
-  const title = editing ? "Edit strategy" : "Add strategy";
+  const title = editing ? String(algo?.name || "Edit strategy") : "Add strategy";
 
   const lotSize = lotForSymbol(form.symbol);
   const lots = form.lots || 1;
@@ -142,7 +142,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5">
+      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <div className="text-lg font-bold">{title}</div>
@@ -332,12 +332,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select
               className={fieldClass}
               value={form.symbol || "NIFTY"}
-              disabled={engine}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -352,18 +352,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               ))}
             </select>
           </label>
+          )}
+          {engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Side
-            <select className={fieldClass} value={form.side || "BUY"} disabled={engine} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+            <select className={fieldClass} value={form.side || "BUY"} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
-              {engine ? null : (
-                <>
-                  <option value="SELL">SELL</option>
-                  <option value="BOTH">BOTH</option>
-                </>
-              )}
+              <option value="SELL">SELL</option>
+              <option value="BOTH">BOTH</option>
             </select>
           </label>
+          )}
           <label className="text-xs font-semibold text-slate-500">
             Lots
             <input
