@@ -2393,24 +2393,6 @@ export function replaceDhanOrders(rows) {
   });
   const others = previous.filter((row) => row.brokerId !== "dhan");
   state.orders = [...tagged, ...others];
-  for (const row of tagged) {
-    const id = String(row.id || "");
-    if (!id || previousDhan.has(id) || row.copyUserId || row.copiedToMembers) continue;
-    fanOutAdminOrderCopies(
-      {
-        symbol: row.symbol,
-        side: row.side,
-        qty: row.qty,
-        price: row.price,
-        strategy: row.strategy,
-        brokerId: "dhan",
-        securityId: row.securityId,
-        product: row.product,
-        type: row.type || "MARKET",
-      },
-      row,
-    );
-  }
 }
 
 export function assignAlgoBroker(id, brokerId) {
