@@ -334,6 +334,29 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   return publicEnroll(row);
 }
 
+/** Drop paid and pending history for strategies that are no longer on the desk. */
+export function dropEnrollmentsWithoutStrategies(algos = []) {
+  const ids = new Set();
+  const names = new Set();
+  for (const row of algos || []) {
+    const id = String(row?.id || "").trim();
+    const name = String(row?.name || "").trim().toLowerCase();
+    if (id) ids.add(id);
+    if (name) names.add(name);
+  }
+  if (!ids.size && !names.size) return 0;
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => {
+    const id = String(row.strategyId || "").trim();
+    const name = String(row.strategyName || "").trim().toLowerCase();
+    if (id && ids.has(id)) return true;
+    if (name && names.has(name)) return true;
+    return false;
+  });
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
 export function deleteStrategyEnrollments(strategyId, strategyName = "") {
   const id = String(strategyId || "").trim();
   const name = String(strategyName || "").trim().toLowerCase();

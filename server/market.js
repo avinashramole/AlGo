@@ -1,7 +1,7 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
 import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
-import { deleteStrategyEnrollments } from "./subscriptions.js";
+import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
   UNDERLYINGS,
@@ -1821,6 +1821,7 @@ export function deleteAlgo(id) {
   state.notifications.unshift(`Strategy deleted: ${algo.name}`);
   persistAlgos();
   deleteStrategyEnrollments(strategyId, algo.name);
+  dropEnrollmentsWithoutStrategies(state.algos);
   dropStrategyFromMemberDesks({ strategyId, strategyName: algo.name });
   return { ok: true, id };
 }

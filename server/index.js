@@ -13,7 +13,7 @@ import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
-import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
@@ -80,6 +80,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
 
 attachProcessGuards();
+dropEnrollmentsWithoutStrategies(listAlgos());
 
 const app = express();
 app.set("trust proxy", 1);
@@ -224,6 +225,7 @@ app.get("/api/subscriptions", (req, res) => {
     res.status(401).json({ error: "Sign in first." });
     return;
   }
+  dropEnrollmentsWithoutStrategies(listAlgos());
   res.json({ enrollments: listEnrollments({ userId: user.id, admin: user.role === "admin" }) });
 });
 
@@ -306,6 +308,7 @@ app.get("/api/member/desk", (req, res) => {
   try {
     const user = memberAuth(req);
     const snap = safeSnapshot() || {};
+    dropEnrollmentsWithoutStrategies(listAlgos());
     res.json(
       getMemberDesk({
         user,
