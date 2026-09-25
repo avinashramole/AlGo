@@ -550,18 +550,32 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         pendingChain.current = { symbol: wantedSymbol, expiry: wantedExpiry };
         snapshotGen.current += 1;
         setData((current) => {
-          const sameSymbol = String(current.optionMeta?.symbol || "").toUpperCase() === wantedSymbol;
-          const currentExpiry = String(current.optionMeta?.expiries?.[0] || "").slice(0, 10);
-          const nextExpiry = wantedExpiry || (sameSymbol ? currentExpiry : "");
-          const next = {
+          const meta = current.optionMeta;
+          const sameSymbol = String(meta?.symbol || "").toUpperCase() === wantedSymbol;
+          const keptExpiry = String(meta?.expiry || "");
+          const currentExpiry = String(meta?.expiries?.[0] || "").slice(0, 10);
+          const nextExpiry = wantedExpiry || (sameSymbol ? currentExpiry : "") || keptExpiry;
+          const next: Snapshot = {
             ...current,
             optionMeta: {
-              ...current.optionMeta,
               symbol: wantedSymbol,
-              expiry: nextExpiry || current.optionMeta?.expiry,
-              expiryLabel: nextExpiry && nextExpiry !== String(current.optionMeta?.expiry || "").slice(0, 10) ? nextExpiry : current.optionMeta?.expiryLabel,
+              expiry: nextExpiry,
+              expiries: meta?.expiries || [],
+              spot: Number(meta?.spot) || 0,
+              pcr: Number(meta?.pcr) || 0,
+              maxPain: Number(meta?.maxPain) || 0,
+              atmIv: Number(meta?.atmIv) || 0,
+              source: String(meta?.source || ""),
+              lastAt: meta?.lastAt ?? null,
+              expiryLabel:
+                nextExpiry && nextExpiry !== keptExpiry.slice(0, 10)
+                  ? nextExpiry
+                  : String(meta?.expiryLabel || nextExpiry),
+              expiryLabels: meta?.expiryLabels,
+              contractIds: meta?.contractIds,
+              underlyings: meta?.underlyings,
             },
-            optionChain: sameSymbol && (!wantedExpiry || wantedExpiry === String(current.optionMeta?.expiry || "").slice(0, 10))
+            optionChain: sameSymbol && (!wantedExpiry || wantedExpiry === keptExpiry.slice(0, 10))
               ? current.optionChain
               : [],
           };
