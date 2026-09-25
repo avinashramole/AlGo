@@ -200,6 +200,80 @@ export function upstoxMasterBook(raw) {
   };
 }
 
+export function dhanPnlFromTrades(raw) {
+  const rows = positionRows(raw);
+  if (!rows) return null;
+  const groups = new Map();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const qty = Math.abs(Number(row.tradedQuantity || row.filledQty || row.quantity || 0));
+    const price = Number(row.tradedPrice || row.avgTradedPrice || row.price || 0);
+    if (!qty || !Number.isFinite(price) || price <= 0) continue;
+    const side = String(row.transactionType || row.transaction_type || row.side || "BUY").toUpperCase();
+    const symbol = String(row.tradingSymbol || row.securityId || "");
+    const key = `${row.securityId || symbol}|${row.productType || "MIS"}`;
+    const group = groups.get(key) || { symbol, buyQty: 0, buyValue: 0, sellQty: 0, sellValue: 0, product: row.productType || "MIS" };
+    if (side === "SELL") {
+      group.sellQty += qty;
+      group.sellValue += qty * price;
+    } else {
+      group.buyQty += qty;
+      group.buyValue += qty * price;
+    }
+    groups.set(key, group);
+  }
+  const closed = [];
+  let realized = 0;
+  for (const [key, group] of groups) {
+    const matched = Math.min(group.buyQty, group.sellQty);
+    if (!matched) continue;
+    const buyAvg = group.buyValue / group.buyQty;
+    const sellAvg = group.sellValue / group.sellQty;
+    const pnl = round2((sellAvg - buyAvg) * matched);
+    realized += pnl;
+    closed.push({
+      id: `dhan-trade-${key}`,
+      symbol: group.symbol,
+      side: "BUY",
+      type: "BUY",
+      qty: matched,
+      entry: round2(buyAvg),
+      exit: round2(sellAvg),
+      pnl,
+      realized: pnl,
+      product: group.product,
+      brokerId: "dhan",
+      live: true,
+      paper: false,
+      closed: true,
+    });
+  }
+  if (!closed.length) return { realizedPnl: 0, closed: [] };
+  return { realizedPnl: round2(realized), closed };
+}
+
+export function adminBookFromDhan(positionsRaw, tradesRaw) {
+  const fromPositions = positionsRaw == null ? null : dhanMasterBook(positionsRaw);
+  const fromTrades = tradesRaw == null ? null : dhanPnlFromTrades(tradesRaw);
+  const positionHas = Boolean(
+    fromPositions &&
+      (fromPositions.closed.length || fromPositions.open.length || fromPositions.realizedPnl || fromPositions.unrealizedPnl),
+  );
+  if (positionHas) return fromPositions;
+  if (fromTrades && (fromTrades.realizedPnl || fromTrades.closed.length)) {
+    const unrealized = round2(fromPositions?.unrealizedPnl || 0);
+    return {
+      realizedPnl: fromTrades.realizedPnl,
+      unrealizedPnl: unrealized,
+      mtm: round2(fromTrades.realizedPnl + unrealized),
+      source: "dhan",
+      closed: fromTrades.closed,
+      open: fromPositions?.open || [],
+    };
+  }
+  return fromPositions;
+}
+
 export function withAdminBrokerPnl({ positions = [], closedTrades = [], byBroker = {}, unrealized = 0, realized = 0, broker } = {}) {
   const next = { ...byBroker };
   if (!broker || !Number.isFinite(Number(broker.mtm))) {

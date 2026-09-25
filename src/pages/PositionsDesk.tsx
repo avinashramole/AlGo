@@ -201,11 +201,15 @@ export function PositionsDesk() {
     const deskOpen = (desk.master.positions || []).filter((row) => !isClosedLedger(row));
     const openMaster = liveMaster.length ? liveMaster : deskOpen;
     const masterPositions = [...openMaster, ...closedMaster];
+    const localMtm = masterPositions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);
+    const localRealized = closedMaster.reduce((sum, row) => sum + Number(row.realized || row.mtm || 0), 0);
+    const brokerReady = Number.isFinite(desk.master.brokerMtm);
     const masterLedger: PositionLedger = {
       ...desk.master,
       positions: masterPositions,
-      mtm: masterPositions.reduce((sum, row) => sum + Number(row.mtm || 0), 0),
-      realized: closedMaster.reduce((sum, row) => sum + Number(row.realized || 0), 0),
+      mtm: brokerReady ? Number(desk.master.brokerMtm) : localMtm,
+      realized: brokerReady ? Number(desk.master.realized || 0) : localRealized,
+      unrealized: brokerReady ? Number(desk.master.unrealized || 0) : localMtm - localRealized,
       open: openMaster.length,
       tradeMode: [...openMaster, ...closedMaster].some((row) => !row.paper) ? "real" : desk.master.tradeMode,
     };
@@ -233,8 +237,8 @@ export function PositionsDesk() {
 
   const masterBlock = ledgers.find((row) => row.ledger.kind === "master");
   const clientBlocks = ledgers.filter((row) => row.ledger.kind === "client");
-  const adminMtm = masterBlock?.unrealized || 0;
-  const adminPnl = masterBlock?.realized || 0;
+  const adminMtm = Number.isFinite(desk.master.brokerMtm) ? Number(desk.master.unrealized || 0) : masterBlock?.unrealized || 0;
+  const adminPnl = Number.isFinite(desk.master.brokerMtm) ? Number(desk.master.realized || 0) : masterBlock?.realized || 0;
   const clientMtm = clientBlocks.reduce((sum, row) => sum + row.unrealized, 0);
   const clientPnl = clientBlocks.reduce((sum, row) => sum + row.realized, 0);
   const exitIds = (masterBlock?.positions || []).filter((row) => !isClosedLedger(row)).map((row) => row.id).filter(Boolean);

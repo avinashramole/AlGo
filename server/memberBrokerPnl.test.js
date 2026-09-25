@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, dhanPnlFromTrades, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -96,6 +96,19 @@ test("a closed admin Dhan book keeps the broker loss when nothing is open", () =
   });
   assert.equal(day.totalPnl, -237.25);
   assert.equal(day.pnlByBroker.dhan, -237.25);
+});
+
+test("admin day P&L comes from Dhan trades when positions are flat", () => {
+  const raw = [
+    { tradingSymbol: "NIFTY-Sep2026-23050-CE", securityId: "11", transactionType: "BUY", tradedQuantity: 65, tradedPrice: 140.3, productType: "INTRADAY" },
+    { tradingSymbol: "NIFTY-Sep2026-23050-CE", securityId: "11", transactionType: "SELL", tradedQuantity: 65, tradedPrice: 136.65, productType: "INTRADAY" },
+  ];
+  assert.equal(dhanPnlFromTrades(raw).realizedPnl, -237.25);
+  const book = adminBookFromDhan([], raw);
+  assert.equal(book.realizedPnl, -237.25);
+  assert.equal(book.unrealizedPnl, 0);
+  assert.equal(book.mtm, -237.25);
+  assert.equal(book.closed[0].symbol, "NIFTY-Sep2026-23050-CE");
 });
 
 test("admin report uses the broker MTM and realized P&L", () => {

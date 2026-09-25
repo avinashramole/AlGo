@@ -2291,7 +2291,8 @@ function bookPnl(positions = [], closedTrades = []) {
 }
 
 export function setAdminBrokerBook(book) {
-  state.adminBrokerBook = book && Number.isFinite(Number(book.mtm)) ? book : state.adminBrokerBook;
+  if (!book || !Number.isFinite(Number(book.mtm))) return;
+  state.adminBrokerBook = { ...book, readAt: Date.now() };
 }
 
 export function getAdminBrokerBook() {

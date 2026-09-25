@@ -15,6 +15,7 @@ import {
   quoteSymbol,
   replaceDhanBook,
   replaceDhanOrders,
+  getAdminBrokerBook,
   setAdminBrokerBook,
   restoreSimulatedDesk,
   livePositionQuoteTargets,
@@ -39,7 +40,7 @@ import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, stra
 import { chooseDeskExpiry, dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
-import { dhanMasterBook } from "./memberBrokerPnl.js";
+import { adminBookFromDhan } from "./memberBrokerPnl.js";
 import { looksLikePrevClose } from "./quoteDayChange.js";
 import {
   canAutoGenerate,
@@ -484,6 +485,35 @@ export async function fetchMemberDhanPositions(token, clientId) {
   return dhanGet("/positions", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
 
+let adminBookRefresh = null;
+
+export async function refreshAdminBrokerBook() {
+  const current = getAdminBrokerBook();
+  if (current?.readAt && Date.now() - Number(current.readAt) < 12000) return current;
+  if (adminBookRefresh) return adminBookRefresh;
+  adminBookRefresh = loadAdminBrokerBook().finally(() => {
+    adminBookRefresh = null;
+  });
+  return adminBookRefresh;
+}
+
+async function loadAdminBrokerBook() {
+  const saved = savedDhanAccess();
+  const token = accessToken || saved.token;
+  const id = clientId || saved.id;
+  if (!token || !id) return getAdminBrokerBook();
+  const [positionsRaw, tradesRaw] = await Promise.all([
+    dhanGet("/positions", token, id, { lane: "admin", attempts: 1, timeoutMs: 8000 }).catch(() => null),
+    dhanGet("/trades", token, id, { lane: "admin", attempts: 1, timeoutMs: 8000 }).catch(() => null),
+  ]);
+  if (positionsRaw == null && tradesRaw == null) return getAdminBrokerBook();
+  const book = adminBookFromDhan(positionsRaw, tradesRaw);
+  if (!book) return getAdminBrokerBook();
+  setAdminBrokerBook(book);
+  console.log(`admin broker book realized ${book.realizedPnl} open mtm ${book.unrealizedPnl}`);
+  return getAdminBrokerBook();
+}
+
 async function dhanPost(path, token, id, body, opts) {
   return dhanSend("POST", path, token, id, body, opts);
 }
@@ -818,8 +848,10 @@ async function pullAccount() {
     ]);
     const positionsRaw = positionsPull.rows;
     if (positionsPull.ok) {
-      const book = dhanMasterBook(positionsRaw);
-      if (book) setAdminBrokerBook(book);
+      const book = adminBookFromDhan(positionsRaw, null);
+      if (book && (book.closed.length || book.open.length || book.realizedPnl || book.unrealizedPnl)) {
+        setAdminBrokerBook(book);
+      }
     }
     const positions = mapDhanPositions(positionsRaw);
     const holdings = mapDhanHoldings(holdingsRaw).filter(
