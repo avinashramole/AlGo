@@ -1,4 +1,5 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
+import { dhanTokenStatus } from "./dhanToken.js";
 import { liveAutoTradeBrokers } from "./memberDesk.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
@@ -1294,7 +1295,26 @@ function dhanTapeReady() {
 }
 
 function publicDhanFeed() {
-  return { ...clone(state.dhanFeed), hasQuotes: hasLastLiveBook() };
+  const feed = clone(state.dhanFeed);
+  let saved = null;
+  try {
+    saved = dhanTokenStatus();
+  } catch {
+    saved = null;
+  }
+  return {
+    ...feed,
+    tokenHint: feed.tokenHint || saved?.tokenHint || null,
+    clientId: feed.clientId || saved?.clientId || null,
+    autoRenew: feed.autoRenew || Boolean(saved?.autoRenew),
+    autoMode: feed.autoMode && feed.autoMode !== "off" ? feed.autoMode : saved?.autoMode || feed.autoMode,
+    tokenExpiry: feed.tokenExpiry || saved?.tokenExpiry || null,
+    nextRenewAt: feed.nextRenewAt || saved?.nextRenewAt || null,
+    autoStart: saved?.autoStart !== undefined ? saved.autoStart : feed.autoStart,
+    needsFresh: saved?.needsFresh !== undefined ? saved.needsFresh : feed.needsFresh,
+    renewalBlockedUntil: feed.renewalBlockedUntil || saved?.renewalBlockedUntil || null,
+    hasQuotes: hasLastLiveBook(),
+  };
 }
 
 function isSimRow(row) {

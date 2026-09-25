@@ -147,7 +147,7 @@ export function Brokers() {
               feed?.live ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-slate-100 text-slate-500"
             }`}
           >
-            {feed?.live ? `DHAN LIVE · ${feed.source}` : "WAITING FOR TOKEN"}
+            {feed?.live ? `DHAN LIVE · ${feed.source}` : feed?.tokenHint ? "TOKEN SAVED" : "WAITING FOR TOKEN"}
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
