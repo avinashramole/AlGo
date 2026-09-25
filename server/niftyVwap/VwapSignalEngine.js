@@ -356,23 +356,30 @@ export const VwapSignalEngine = {
     const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, { sessionOpenMinutes });
     const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, { sessionOpenMinutes });
     const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, { sessionOpenMinutes });
-    const firstFut = firstBarAtSlot(futCompleted, firstBarStartIst) || firstBarAtOrAfter(futCompleted, firstBarStartIst);
+    const startMin = hmToMinutes(firstBarStartIst, "09:00");
+    const fromStart = (bars) =>
+      (bars || []).filter((bar) => {
+        const wall = istWallTime(bar.time);
+        return wall.hour * 60 + wall.minute >= startMin;
+      });
+    const futFromStart = fromStart(futCompleted);
+    const candle = futFromStart[futFromStart.length - 1] || null;
     const sameSlot = (bars) =>
-      firstFut ? (bars || []).find((bar) => Number(bar.time) === Number(firstFut.time)) || null : null;
+      candle ? (bars || []).find((bar) => Number(bar.time) === Number(candle.time)) || null : null;
     const firstCe = sameSlot(ceCompleted);
     const firstPe = sameSlot(peCompleted);
-    const niftyColor = firstBarColor(firstFut);
+    const niftyColor = firstBarColor(candle);
     const ceColor = firstBarColor(firstCe);
     const peColor = firstBarColor(firstPe);
     const buyCe = !waitingEval && niftyColor === "green" && ceColor === "green";
     const buyPe = !waitingEval && niftyColor === "red" && peColor === "green";
     return {
-      ready: Boolean(!waitingEval && firstFut && niftyColor),
-      barTime: firstFut ? Number(firstFut.time) : 0,
-      futuresClose: firstFut ? Number(firstFut.close) : 0,
-      futuresOpen: firstFut ? Number(firstFut.open) : 0,
-      futuresHigh: firstFut ? Number(firstFut.high) : 0,
-      futuresLow: firstFut ? Number(firstFut.low) : 0,
+      ready: Boolean(!waitingEval && candle && niftyColor),
+      barTime: candle ? Number(candle.time) : 0,
+      futuresClose: candle ? Number(candle.close) : 0,
+      futuresOpen: candle ? Number(candle.open) : 0,
+      futuresHigh: candle ? Number(candle.high) : 0,
+      futuresLow: candle ? Number(candle.low) : 0,
       futuresVwap: 0,
       bias: buyCe ? "CE" : buyPe ? "PE" : "",
       buyCe,
@@ -382,7 +389,7 @@ export const VwapSignalEngine = {
       peColor,
       firstCandle: true,
       waitingEval,
-      previewFilled: Boolean(firstFut && niftyColor),
+      previewFilled: Boolean(candle && niftyColor),
       ceAboveVwap: false,
       peAboveVwap: false,
       againstCount: 0,

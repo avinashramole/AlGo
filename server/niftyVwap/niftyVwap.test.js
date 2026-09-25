@@ -1186,7 +1186,7 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.maxTradesPerDay, 2);
 });
 
-test("first candle ignores later bars and caps one trade per day", () => {
+test("a later candle can enter when the first candle does not trade", () => {
   const laterGreen = {
     time: T0_0900 + BAR,
     open: 24540,
@@ -1210,8 +1210,68 @@ test("first candle ignores later bars and caps one trade per day", () => {
     now: T0_0900 + 2 * BAR,
     firstBarStartIst: "09:00",
   });
-  assert.equal(signal.niftyColor, "doji");
-  assert.equal(signal.buyCe, false);
+  assert.equal(signal.niftyColor, "green");
+  assert.equal(signal.ceColor, "green");
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.barTime, T0_0900 + BAR);
+  const algo = defaultNiftyFirstCandleAlgo({ name: "First candle next bar" });
+  const book = bookAdapter();
+  const missed = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24500)],
+    ceBars: [firstBar(100, 90)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 90,
+    peLtp: 96,
+    spot: 24500,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.notEqual(missed.action, "entry");
+  assert.equal(book.places.length, 0);
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24500), laterGreen],
+    ceBars: [firstBar(100, 90), laterCe],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 138,
+    peLtp: 90,
+    spot: 24570,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hit.action, "entry");
+  assert.equal(book.places.length, 1);
+  assert.equal(algo.vwapState.sessionTrades, 1);
+});
+
+test("first candle caps one trade per day", () => {
+  const laterGreen = {
+    time: T0_0900 + BAR,
+    open: 24540,
+    high: 24580,
+    low: 24530,
+    close: 24570,
+    volume: 1000,
+  };
+  const laterCe = {
+    time: T0_0900 + BAR,
+    open: 118,
+    high: 140,
+    low: 116,
+    close: 138,
+    volume: 500,
+  };
   const algo = defaultNiftyFirstCandleAlgo({ name: "First candle cap" });
   const book = bookAdapter();
   const first = NiftyVwapStrategy.tick({
