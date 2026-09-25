@@ -1,6 +1,7 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
-import { liveAutoTradeBrokers } from "./memberDesk.js";
+import { dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
+import { deleteStrategyEnrollments } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import {
   UNDERLYINGS,
@@ -1777,13 +1778,38 @@ export function updateAlgo(id, payload) {
   return clone(next);
 }
 
+function rowBelongsToStrategy(row, strategyId, strategyName) {
+  if (!row || typeof row !== "object") return false;
+  if (strategyId && String(row.strategyId || "").trim() === strategyId) return true;
+  const label = String(row.strategy || row.strategyName || "").trim().toLowerCase();
+  return Boolean(strategyName && label === strategyName);
+}
+
+export function withoutStrategyRows(rows, { id, name } = {}) {
+  const strategyId = String(id || "").trim();
+  const strategyName = String(name || "").trim().toLowerCase();
+  return (rows || []).filter((row) => !rowBelongsToStrategy(row, strategyId, strategyName));
+}
+
 export function deleteAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Strategy not found" };
+  const strategyId = String(id);
+  const strategyName = String(algo.name || "").trim().toLowerCase();
+  if (strategyName) cancelPendingForStrategy(algo.name);
+  state.positions = withoutStrategyRows(state.positions, { id: strategyId, name: algo.name });
+  state.orders = withoutStrategyRows(state.orders, { id: strategyId, name: algo.name });
+  state.closedTrades = withoutStrategyRows(state.closedTrades, { id: strategyId, name: algo.name });
+  state.notifications = (state.notifications || []).filter((row) => {
+    const text = typeof row === "string" ? row : String(row?.text || "");
+    return !strategyName || !text.toLowerCase().includes(strategyName);
+  });
   state.algos = state.algos.filter((item) => item.id !== id);
-  removedAlgoIds = [...new Set([...removedAlgoIds, String(id)])];
+  removedAlgoIds = [...new Set([...removedAlgoIds, strategyId])];
   state.notifications.unshift(`Strategy deleted: ${algo.name}`);
   persistAlgos();
+  deleteStrategyEnrollments(strategyId, algo.name);
+  dropStrategyFromMemberDesks({ strategyId, strategyName: algo.name });
   return { ok: true, id };
 }
 

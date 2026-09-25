@@ -334,6 +334,20 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   return publicEnroll(row);
 }
 
+export function deleteStrategyEnrollments(strategyId, strategyName = "") {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  if (!id && !name) return 0;
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => {
+    if (id && String(row.strategyId || "").trim() === id) return false;
+    if (name && String(row.strategyName || "").trim().toLowerCase() === name) return false;
+    return true;
+  });
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
 export function deleteUserEnrollments(userId) {
   const id = String(userId || "").trim();
   if (!id) return 0;

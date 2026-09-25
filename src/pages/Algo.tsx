@@ -133,7 +133,7 @@ export function Algo() {
   };
 
   const remove = async (algo: AlgoStrategy) => {
-    if (!window.confirm(`Delete ${algo.name}?`)) return;
+    if (!window.confirm(`Delete ${algo.name}? This removes its orders, positions, and member plans on the admin desk and on user accounts.`)) return;
     await removeAlgo(algo.id);
   };
 

@@ -235,7 +235,7 @@ export function AlgoScreen() {
   };
 
   const remove = (id: string, name: string) => {
-    Alert.alert("Delete strategy", `Delete ${name}?`, [
+    Alert.alert("Delete strategy", `Delete ${name}? This removes its orders, positions, and member plans on the admin desk and on user accounts.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => void removeAlgo(id) },
     ]);
