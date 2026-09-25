@@ -288,7 +288,7 @@ export function summarizeAlgo(algo) {
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
     const maxTrades = algo.maxTradesPerDay || 1;
     const atm = strikeOffsetLabel(algo.strikeOffset);
-    return `NIFTY first candle · ${tf} · ${expiry} ${atm} · ${firstBar}–${evalAt} IST · end ${endAt} · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY first candle · ${tf} · ${expiry} ${atm} · from ${firstBar}–${evalAt} IST then every candle until a trade · end ${endAt} · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -322,6 +322,11 @@ export function summarizeAlgo(algo) {
 
 function mappingIds(value) {
   return [...new Set((Array.isArray(value) ? value : []).map((id) => String(id || "").trim()).filter(Boolean))];
+}
+
+export function mappedClientIdsForMembers(ids, memberIds) {
+  const allow = memberIds instanceof Set ? memberIds : new Set(memberIds || []);
+  return mappingIds(ids).filter((id) => allow.has(id));
 }
 
 function mappingFields(input = {}, existing = {}) {

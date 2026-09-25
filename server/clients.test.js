@@ -40,8 +40,10 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings, installMemberBroker, getMemberDesk, peekBrokerAccount, peekClientSecrets } = await import("./memberDesk.js");
-const { asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, saveClient } = await import("./clients.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill } = await import("./memberDesk.js");
+const { applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
+const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
+const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
 
 test("listClients starts members on PAPER with copy off and does not include admins", () => {
@@ -335,6 +337,150 @@ test("closed trades stay on the position desk with live P&L and MTM", () => {
   assert.equal(desk.openPositions, 0);
 });
 
+test("master account MTM uses the broker loss when the local book is empty", () => {
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [],
+    [{ id: "local-copy", symbol: "NIFTY-Oct2026-23100-CE", side: "BUY", qty: 65, entry: 200, exit: 100, pnl: -6500, brokerId: "dhan" }],
+    {
+      realizedPnl: -237.25,
+      unrealizedPnl: 0,
+      mtm: -237.25,
+      closed: [
+        {
+          id: "dhan-closed-11",
+          symbol: "NIFTY-Sep2026-23050-CE",
+          side: "BUY",
+          qty: 65,
+          entry: 140.3,
+          exit: 136.65,
+          pnl: -237.25,
+          realized: -237.25,
+          product: "INTRADAY",
+          brokerId: "dhan",
+        },
+      ],
+    },
+  );
+  assert.equal(desk.master.open, 0);
+  assert.equal(desk.master.brokerMtm, -237.25);
+  assert.equal(desk.master.mtm, -237.25);
+  assert.equal(desk.masterMtm, -237.25);
+  assert.equal(desk.master.positions.some((row) => String(row.symbol).includes("23100")), false);
+  assert.equal(desk.master.positions[0].realized, -237.25);
+  assert.equal(desk.master.positions[0].mtm, -237.25);
+  assert.equal(desk.master.positions[0].closed, true);
+});
+
+test("client MTM uses each user's broker book instead of the local copy loss", () => {
+  const desk = applyBrokerBooksToDesk(
+    {
+      masterMtm: -237.25,
+      master: { mtm: -237.25 },
+      clients: [
+        {
+          id: "u-live",
+          kind: "client",
+          tradeMode: "real",
+          positions: [
+            {
+              id: "bad-copy",
+              symbol: "NIFTY-Oct2026-23100-CE",
+              type: "BUY",
+              qty: 65,
+              avg: 221,
+              ltp: 180,
+              pnl: -2492.75,
+              mtm: -2492.75,
+              realized: -2492.75,
+              closed: true,
+              paper: false,
+              brokerId: "dhan",
+              netQty: 0,
+            },
+          ],
+          mtm: -2492.75,
+          realized: -2492.75,
+          open: 0,
+        },
+        {
+          id: "u-paper",
+          kind: "client",
+          tradeMode: "paper",
+          positions: [
+            {
+              id: "paper-1",
+              symbol: "NIFTY 24600 CE",
+              type: "BUY",
+              qty: 65,
+              avg: 100,
+              ltp: 90,
+              pnl: -10,
+              mtm: -10,
+              realized: 0,
+              closed: false,
+              paper: true,
+              brokerId: "paper",
+              netQty: 65,
+            },
+          ],
+          mtm: -10,
+          realized: 0,
+          open: 1,
+        },
+      ],
+      clientMtm: -2502.75,
+      totalMtm: -2740,
+    },
+    {
+      "u-live": {
+        realizedPnl: 200,
+        unrealizedPnl: 108,
+        mtm: 308,
+        closed: [
+          {
+            id: "dhan-closed-11",
+            symbol: "NIFTY-Sep2026-23050-CE",
+            side: "BUY",
+            qty: 65,
+            entry: 140,
+            exit: 143,
+            pnl: 200,
+            realized: 200,
+            product: "INTRADAY",
+            brokerId: "dhan",
+          },
+        ],
+        open: [
+          {
+            id: "dhan-pos-12",
+            symbol: "NIFTY-Sep2026-23100-PE",
+            type: "BUY",
+            qty: 65,
+            avg: 90,
+            ltp: 91.66,
+            pnl: 108,
+            realized: 0,
+            product: "INTRADAY",
+            brokerId: "dhan",
+          },
+        ],
+      },
+    },
+  );
+  const live = desk.clients.find((row) => row.id === "u-live");
+  const paper = desk.clients.find((row) => row.id === "u-paper");
+  assert.equal(live.brokerMtm, 308);
+  assert.equal(live.mtm, 308);
+  assert.equal(live.realized, 200);
+  assert.equal(live.unrealized, 108);
+  assert.equal(live.positions.some((row) => row.mtm === -2492.75), false);
+  assert.equal(live.positions.reduce((sum, row) => sum + row.mtm, 0), 308);
+  assert.equal(paper.mtm, -10);
+  assert.equal(desk.clientMtm, 298);
+  assert.equal(desk.totalMtm, 60.75);
+});
+
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
   const row = asLedgerPosition({
     symbol: "NIFTY 23450 PE",
@@ -403,9 +549,32 @@ test("saveClient stores the client mobile on the user record", () => {
   assert.equal(listPublicUsers().find((item) => item.id === "u-arpit").mobile, "9876507788");
 });
 
+test("purgeOrphanMemberData removes leftover desks for accounts that are gone", () => {
+  saveClientSettings("u-ghost", { notes: "leftover book" });
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-ghost"), true);
+  purgeOrphanMemberData();
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-ghost"), false);
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-arpit"), true);
+});
+
 test("deleteClient removes a member and refuses the desk admin", () => {
   assert.throws(() => deleteClient("admin", { actorId: "u-arpit" }), /admin/);
+  savePaymentSettings({ mobile: "9876543210", amount: 499, payeeName: "Desk" });
+  const user = listPublicUsers().find((row) => row.id === "u-arpit");
+  enrollStrategy({ user, algo: { id: "a4", name: "NIFTY VWAP ATM" }, channel: "gpay" });
+  recordMemberCopyFill({
+    userId: "u-arpit",
+    payload: { symbol: "NIFTY 24600 CE", side: "BUY", qty: 65, price: 12, strategy: "NIFTY VWAP ATM" },
+    paper: true,
+  });
+  upsertMessagingContact({ id: "u-arpit", userId: "u-arpit", name: "ARPIT", mobile: "9876543210" });
+  assert.equal(listEnrollments({ userId: "u-arpit" }).length, 1);
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-arpit"), true);
+  assert.equal(messagingHandleForUser("u-arpit").mobile, "9876543210");
   const gone = deleteClient("u-arpit", { actorId: "admin" });
   assert.equal(gone.ok, true);
   assert.equal(listClients(listPublicUsers()).some((row) => row.id === "u-arpit"), false);
+  assert.equal(listEnrollments({ admin: true }).some((row) => row.userId === "u-arpit"), false);
+  assert.equal(listDeskRecords().some((row) => row.userId === "u-arpit"), false);
+  assert.equal(messagingHandleForUser("u-arpit").mobile, "");
 });

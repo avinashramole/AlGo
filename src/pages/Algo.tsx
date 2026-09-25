@@ -35,6 +35,12 @@ function moneyClass(value: number) {
   return "text-[var(--text)]";
 }
 
+function orderActivity(signal: string | undefined, fallback: string) {
+  const text = String(signal || "").trim();
+  if (!text || /^hold\b/i.test(text)) return fallback;
+  return text;
+}
+
 function statusLabel(algo: AlgoStrategy) {
   if (algo.runMode === "backtest" || algo.status === "BACKTEST") return "RESEARCH";
   if (algo.enabled && algo.runMode === "paper") return "PAPER";
@@ -62,7 +68,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · first ${algo.timeframe || "5m"} ${algo.firstBarStartIst || "09:00"}–${algo.entryEvaluationIst || "09:05"} · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay || 1}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · ${algo.timeframe || "5m"} from ${algo.firstBarStartIst || "09:00"}–${algo.entryEvaluationIst || "09:05"} then every candle until a trade · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay || 1}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -96,6 +102,23 @@ export function Algo() {
   const [rangeId, setRangeId] = useState("");
   const [rangeError, setRangeError] = useState("");
   const [mapFor, setMapFor] = useState<AlgoStrategy | null>(null);
+  const [knownClientIds, setKnownClientIds] = useState<Set<string> | null>(() => {
+    const seeded = peekClientList()?.clients || [];
+    return seeded.length ? new Set(seeded.map((row) => row.id)) : null;
+  });
+  useEffect(() => {
+    let cancel = false;
+    void loadClientList()
+      .then((result) => {
+        if (cancel) return;
+        setKnownClientIds(new Set((result.clients || []).map((row) => row.id)));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
   const rangeFor = data.algos.find((item) => item.id === rangeId) || null;
   const canStartAll = data.algos.some((row) => row.runMode !== "backtest" && !row.enabled);
   const canStopAll = data.algos.some((row) => row.enabled);
@@ -116,7 +139,7 @@ export function Algo() {
   };
 
   const remove = async (algo: AlgoStrategy) => {
-    if (!window.confirm(`Delete ${algo.name}?`)) return;
+    if (!window.confirm(`Delete ${algo.name}? This removes its orders, positions, and member plans on the admin desk and on user accounts.`)) return;
     await removeAlgo(algo.id);
   };
 
@@ -232,12 +255,13 @@ export function Algo() {
           </div>
           <SignalFeed />
           {rows.length ? (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="flex flex-col gap-4">
               {rows.map((algo) => (
                 <AlgoCard
                   key={algo.id}
                   algo={algo}
                   orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
+                  clientIds={knownClientIds}
                   positions={(data.positions || []).filter((row) => row.strategy === algo.name)}
                   busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
@@ -323,6 +347,7 @@ export function Algo() {
 
 function AlgoCard({
   algo,
+  clientIds,
   orders,
   positions,
   busy,
@@ -338,6 +363,7 @@ function AlgoCard({
   onDelete,
 }: {
   algo: AlgoStrategy;
+  clientIds: Set<string> | null;
   orders: Array<{ id: string }>;
   positions: Array<{ type?: string; pnl?: number; live?: boolean; brokerId?: string }>;
   busy: boolean;
@@ -354,7 +380,8 @@ function AlgoCard({
 }) {
   const meta = kindMeta(algo);
   const liveMtm = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
-  const mapped = (algo.mappedClientIds || []).length;
+  const mappedIds = algo.mappedClientIds || [];
+  const mapped = clientIds ? mappedIds.filter((id) => clientIds.has(id)).length : mappedIds.length;
   const brokerMtm = positions.some((row) => row.live || row.brokerId === "dhan");
   const positionLabel = !positions.length
     ? "FLAT"
@@ -368,28 +395,24 @@ function AlgoCard({
   const drawdown = Number(algo.lastBacktest?.maxDrawdown || 0);
   const bookPnl = Number(algo.lastBacktest?.pnl ?? algo.pnl ?? 0);
   const activity = isNiftyVwapHedgeKind(algo)
-    ? algo.enabled && algo.lastSignal
-      ? algo.lastSignal
-      : algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE"
+    ? orderActivity(algo.enabled ? algo.lastSignal : "", algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE")
     : isNiftyFirstCandleKind(algo)
-      ? algo.lastSignal || "09:00–09:05: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE"
-      : algo.lastSignal && algo.enabled
-        ? algo.lastSignal
-        : "Waiting for the next signal";
+      ? orderActivity(algo.lastSignal, "Every completed candle: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE")
+      : orderActivity(algo.enabled ? algo.lastSignal : "", "No order");
   const status = statusLabel(algo);
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card flex flex-col p-4">
+    <section className="card flex w-full flex-col p-4" data-strategy-card={algo.id}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] text-slate-400">
             <Activity size={16} />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{meta.category}</div>
-            <div className="truncate text-base font-bold">{algo.name}</div>
-            <div className="text-xs text-slate-400">{meta.config}</div>
+            <h2 className="truncate text-lg font-bold">{algo.name}</h2>
+            <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
+            <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
@@ -502,7 +525,7 @@ function AlgoCard({
           {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo)
             ? " LIVE arms automatically at 09:20 IST on session days."
             : isNiftyFirstCandleKind(algo)
-              ? " LIVE arms automatically at 09:00 IST on session days. Entry only after the first 5m candle closes."
+              ? " LIVE arms automatically at 09:00 IST on session days. If the first candle does not trade, every later candle is checked until one trade is placed."
               : ""}
         </div>
       ) : null}
@@ -535,6 +558,12 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const live = new Set(clients.map((row) => row.id));
+    setPicked((current) => current.filter((id) => live.has(id)));
+  }, [loaded, clients]);
 
   const toggleId = (id: string) => {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));

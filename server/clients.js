@@ -1,5 +1,5 @@
 import { catalog } from "./brokers.js";
-import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser } from "./auth.js";
+import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser, listPublicUsers } from "./auth.js";
 import {
   assignedEgressIps,
   brokerInstallFields,
@@ -12,11 +12,12 @@ import {
   peekClientBook,
   peekClientSettings,
   removeDesk,
+  removeOrphanDesks,
   saveClientSettings,
 } from "./memberDesk.js";
-import { listEnrollments } from "./subscriptions.js";
+import { deleteOrphanEnrollments, deleteUserEnrollments, listEnrollments } from "./subscriptions.js";
 import { inventoryAddresses } from "./ipManagement.js";
-import { messagingHandleForUser, removeMessagingUser, upsertMessagingContact } from "./messaging.js";
+import { messagingHandleForUser, removeMessagingUser, removeOrphanMessaging, upsertMessagingContact } from "./messaging.js";
 
 function fail(message, status = 400) {
   const error = new Error(message);
@@ -199,10 +200,27 @@ export function saveClient(userId, patch = {}) {
   return asClient(next, peekClientSettings(userId), messagingHandleForUser(userId));
 }
 
+export function knownAccountIds(users = listPublicUsers()) {
+  const ids = new Set((users || []).map((row) => String(row?.id || "").trim()).filter(Boolean));
+  ids.add("admin");
+  return ids;
+}
+
+export function purgeOrphanMemberData(users = listPublicUsers()) {
+  const known = knownAccountIds(users);
+  removeOrphanDesks(known);
+  deleteOrphanEnrollments(known);
+  removeOrphanMessaging(known);
+  return known;
+}
+
 export function deleteClient(userId, { actorId } = {}) {
   const result = deleteRegisteredUser(userId, { actorId });
-  removeDesk(userId);
-  removeMessagingUser(userId);
+  const id = result.id;
+  removeDesk(id);
+  removeMessagingUser(id);
+  deleteUserEnrollments(id);
+  purgeOrphanMemberData();
   return result;
 }
 
@@ -274,10 +292,13 @@ function ledgerBook(openRows = [], closedTrades = []) {
   const open = (openRows || []).map(asLedgerPosition);
   const closed = (closedTrades || []).map(asClosedLedgerPosition);
   const positions = [...open, ...closed];
+  const mtm = round2(positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const realized = round2(closed.reduce((sum, row) => sum + Number(row.realized || 0), 0));
   return {
     positions,
-    mtm: round2(positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
-    realized: round2(closed.reduce((sum, row) => sum + Number(row.realized || 0), 0)),
+    mtm,
+    realized,
+    unrealized: round2(mtm - realized),
     open: open.length,
   };
 }
@@ -329,8 +350,94 @@ export function getClientDetail({ userId, users = [], algos = [], quote, admins 
   };
 }
 
-export function listPositionDesk(users = [], masterPositions = [], masterClosed = []) {
-  const masterBook = ledgerBook(masterPositions, masterClosed);
+function isPaperLedgerRow(row) {
+  return Boolean(row?.paper || row?.brokerId === "paper");
+}
+
+function asBrokerClosedLeg(row = {}) {
+  const realized = round2(row.realized);
+  const leg = asClosedLedgerPosition({ ...row, pnl: Number.isFinite(Number(row.realized)) ? row.realized : row.pnl });
+  return {
+    ...leg,
+    realized,
+    mtm: round2(row.pnl != null ? row.pnl : realized),
+    closed: true,
+    paper: false,
+    brokerBook: true,
+  };
+}
+
+function asBrokerOpenLeg(row = {}) {
+  const leg = asLedgerPosition({
+    ...row,
+    avg: row.avg || row.entry,
+    ltp: row.ltp || row.exit || row.avg,
+    pnl: row.pnl,
+    realized: row.realized,
+  });
+  return {
+    ...leg,
+    mtm: round2(row.pnl),
+    realized: round2(row.realized),
+    closed: false,
+    paper: false,
+    brokerBook: true,
+  };
+}
+
+function applyBrokerBookToLedger(ledger, brokerBook) {
+  const paperRows = (ledger.positions || []).filter(isPaperLedgerRow);
+  const paperMtm = round2(paperRows.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const brokerRows = [
+    ...(brokerBook.open || []).map(asBrokerOpenLeg),
+    ...(brokerBook.closed || []).map(asBrokerClosedLeg),
+  ];
+  const mtm = round2(paperMtm + Number(brokerBook.mtm));
+  return {
+    ...ledger,
+    positions: [...paperRows, ...brokerRows],
+    mtm,
+    brokerMtm: mtm,
+    realized: round2(brokerBook.realizedPnl),
+    unrealized: round2(Number(brokerBook.unrealizedPnl || 0) + paperMtm),
+    open: paperRows.filter((row) => !row.closed).length + (brokerBook.open || []).length,
+    tradeMode: "real",
+  };
+}
+
+export function applyBrokerBooksToDesk(desk, booksByUserId = {}) {
+  if (!desk) return desk;
+  const clients = (desk.clients || []).map((client) => {
+    const book = booksByUserId?.[client.id];
+    if (!book || !Number.isFinite(Number(book.mtm))) return client;
+    return applyBrokerBookToLedger(client, book);
+  });
+  const clientMtm = round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const masterMtm = Number(desk.masterMtm ?? desk.master?.mtm ?? 0);
+  return {
+    ...desk,
+    clients,
+    clientMtm,
+    totalMtm: round2(masterMtm + clientMtm),
+  };
+}
+
+export function listPositionDesk(users = [], masterPositions = [], masterClosed = [], brokerBook = null) {
+  const useBroker = brokerBook && Number.isFinite(Number(brokerBook.mtm));
+  const localClosed = useBroker ? (masterClosed || []).filter(isPaperLedgerRow) : masterClosed;
+  const masterBook = ledgerBook(masterPositions, localClosed);
+  if (useBroker) {
+    const brokerClosed = (brokerBook.closed || []).map(asBrokerClosedLeg);
+    const paperMtm = ledgerBook(
+      (masterPositions || []).filter(isPaperLedgerRow),
+      (masterClosed || []).filter(isPaperLedgerRow),
+    ).mtm;
+    masterBook.positions = [...masterBook.positions, ...brokerClosed];
+    masterBook.mtm = round2(paperMtm + Number(brokerBook.mtm));
+    masterBook.realized = round2(brokerBook.realizedPnl);
+    masterBook.unrealized = round2(Number(brokerBook.unrealizedPnl || 0) + paperMtm);
+    masterBook.brokerMtm = masterBook.mtm;
+  }
   const master = {
     id: "master",
     name: "Master",

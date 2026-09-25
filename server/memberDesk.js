@@ -747,11 +747,80 @@ export function peekAdminBrokerSecrets(brokerId = "dhan") {
   };
 }
 
+function rowBelongsToStrategy(row, strategyId, strategyName) {
+  if (!row || typeof row !== "object") return false;
+  if (strategyId && String(row.strategyId || "").trim() === strategyId) return true;
+  const label = String(row.strategy || row.strategyName || "").trim().toLowerCase();
+  if (strategyName && label === strategyName) return true;
+  const text = String(row.text || "").toLowerCase();
+  return Boolean(strategyName && text.includes(` · ${strategyName}`));
+}
+
+/** Clear one strategy's orders on every user desk. Positions, plans, and tokens stay. */
+export function clearStrategyOrdersOnMemberDesks({ strategyId, strategyName } = {}) {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  if (!id && !name) return 0;
+  let removed = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk || typeof desk !== "object") continue;
+    for (const key of ["orders", "orderHistory"]) {
+      const rows = Array.isArray(desk[key]) ? desk[key] : [];
+      const next = rows.filter((row) => !rowBelongsToStrategy(row, id, name));
+      if (next.length !== rows.length) {
+        desk[key] = next;
+        removed += rows.length - next.length;
+      }
+    }
+  }
+  if (removed) persist();
+  return removed;
+}
+
+/** Remove one strategy's plans, orders, positions, and alerts from every user desk. Broker tokens stay. */
+export function dropStrategyFromMemberDesks({ strategyId, strategyName } = {}) {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  if (!id && !name) return 0;
+  let removed = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk || typeof desk !== "object") continue;
+    for (const key of ["positions", "closedTrades", "orders", "orderHistory", "alerts"]) {
+      const rows = Array.isArray(desk[key]) ? desk[key] : [];
+      const next = rows.filter((row) => !rowBelongsToStrategy(row, id, name));
+      if (next.length !== rows.length) {
+        desk[key] = next;
+        removed += rows.length - next.length;
+      }
+    }
+    const mapped = String(desk.mappedStrategy || "").trim().toLowerCase();
+    if (mapped && (mapped === name || (id && mapped === id.toLowerCase()))) {
+      desk.mappedStrategy = "";
+      removed += 1;
+    }
+  }
+  if (removed) persist();
+  return removed;
+}
+
 export function removeDesk(userId) {
   if (!userId || !store[userId]) return false;
   delete store[userId];
   persist();
   return true;
+}
+
+export function removeOrphanDesks(knownIds) {
+  const allow = knownIds instanceof Set ? knownIds : new Set(knownIds || []);
+  allow.add(ADMIN_DESK_ID);
+  let removed = 0;
+  for (const id of Object.keys(store)) {
+    if (allow.has(id)) continue;
+    delete store[id];
+    removed += 1;
+  }
+  if (removed) persist();
+  return removed;
 }
 
 function loadDesk(userId) {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { upsertDhanEnv } from "./env.js";
-import { persistAdminBrokerSecrets } from "./memberDesk.js";
+import { peekAdminBrokerSecrets, persistAdminBrokerSecrets } from "./memberDesk.js";
 import { ipv4Request } from "./ipv4.js";
 import { normalizeTotpSecret, totpCodes } from "./totp.js";
 
@@ -79,8 +79,17 @@ export function loadDhanSession() {
   return mergeDhanCredentials(session);
 }
 
+/** An empty accessToken in a patch must not wipe a token already on disk. */
+export function sessionPatchKeepsToken(current = {}, patch = {}) {
+  const next = { ...current, ...patch };
+  if (Object.prototype.hasOwnProperty.call(patch, "accessToken") && !String(patch.accessToken || "").trim()) {
+    next.accessToken = String(current.accessToken || "");
+  }
+  return next;
+}
+
 export function saveDhanSession(patch = {}) {
-  const next = { ...loadDhanSession(), ...patch };
+  const next = sessionPatchKeepsToken(loadDhanSession(), patch);
   fs.writeFileSync(SESSION_FILE, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   try {
     fs.chmodSync(SESSION_FILE, 0o600);
@@ -205,11 +214,13 @@ export function lastDailyResetAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST)
 }
 
 export function tokenGeneratedAtMs({ accessToken, expiryTime, generatedAt } = {}) {
+  // The JWT iat is the token's real age. An older generatedAt stamp must not
+  // make a token minted today look like it is from before 8:00 IST.
+  const iat = jwtIssuedAtMs(accessToken);
+  if (iat) return iat;
   const candidates = [];
   const saved = Date.parse(generatedAt || "");
   if (Number.isFinite(saved) && saved > 0) candidates.push(saved);
-  const iat = jwtIssuedAtMs(accessToken);
-  if (iat) candidates.push(iat);
   const exp = Date.parse(resolveTokenExpiry({ accessToken, expiryTime }) || "");
   if (Number.isFinite(exp)) candidates.push(exp - 24 * 60 * 60 * 1000);
   if (candidates.length) return Math.min(...candidates);
@@ -231,24 +242,33 @@ export function msUntilDailyRenewal(from = Date.now(), hour = TOKEN_RENEW_HOUR_I
   return Math.max(5_000, nextDailyRenewalAt(from, hour) - from);
 }
 
+const TOKEN_STILL_GOOD_MS = 20 * 60 * 1000;
+const DAILY_RESET_WINDOW_MS = 3 * 60 * 1000;
+
 export function msUntilTokenKeepAlive(session = {}, from = Date.now()) {
-  if (needsFreshAccessToken(session, from)) return 5_000;
+  const expiry = Date.parse(resolveTokenExpiry(session) || "");
+  const remaining = Number.isFinite(expiry) ? expiry - from : NaN;
+  const tokenStillGood = Number.isFinite(remaining) && remaining > TOKEN_STILL_GOOD_MS;
+  // A restart after 8:00 IST must not mint in 5s while the saved JWT still has life.
+  if (needsFreshAccessToken(session, from) && !tokenStillGood) return 5_000;
   const nextReset = lastDailyResetAt(from) + 24 * 60 * 60 * 1000;
   let wait = Math.max(5_000, nextReset - from);
-  const expiry = Date.parse(resolveTokenExpiry(session) || "");
   if (Number.isFinite(expiry)) {
     wait = Math.min(wait, Math.max(5_000, expiry - from - 5 * 60 * 1000));
   }
   return wait;
 }
 
-const TOKEN_STILL_GOOD_MS = 20 * 60 * 1000;
+function insideDailyResetWindow(now = Date.now()) {
+  const reset = lastDailyResetAt(now);
+  return now >= reset && now - reset <= DAILY_RESET_WINDOW_MS;
+}
 
 /**
  * Decide whether keep-alive should mint a new Dhan token or reuse the current JWT.
- * After today's 8:00 IST reset, mint always wins when PIN+TOTP exist — even if the
- * leftover JWT still has more than 20 minutes of life. Boot/retry used to skip mint
- * in that case and then debounce the 8:00 job.
+ * The 8:00 IST job still mints while this process is already running.
+ * A restart or deploy keeps a JWT that has more than 20 minutes left, including
+ * a restart that happens inside the 8:00 IST window.
  */
 export function keepAlivePlan({
   reason = "schedule",
@@ -265,10 +285,17 @@ export function keepAlivePlan({
   if (generateBackoffUntil && now < generateBackoffUntil) {
     return { action: "wait", because: "generate-429" };
   }
+  const tokenStillGood = Number.isFinite(remainingMs) && remainingMs > TOKEN_STILL_GOOD_MS;
+  const userAsked = reason === "save" || reason === "api" || reason === "auth";
+  // A deploy/restart must not mint, even inside the 8:00 IST window.
+  // The 8:00 job still mints only while this process is already running.
+  if (tokenStillGood && needsFresh && !userAsked && (reason === "boot" || !insideDailyResetWindow(now))) {
+    if (reason === "boot") return { action: "reuse", because: "restart-keeps-token" };
+    return { action: "wait", because: "restart-keeps-token" };
+  }
   if (canAutoGenerate && needsFresh) {
     return { action: "mint", because: "daily-reset" };
   }
-  const tokenStillGood = Number.isFinite(remainingMs) && remainingMs > TOKEN_STILL_GOOD_MS;
   if (tokenStillGood && (reason === "retry" || reason === "boot")) {
     return { action: "reuse", because: "jwt-still-valid" };
   }
@@ -284,27 +311,99 @@ export function keepAlivePlan({
   return { action: "fail", because: "expired-no-creds" };
 }
 
+/**
+ * Newest saved Dhan JWT across the session file, the admin desk, and env.
+ * Env must not hide a token that was pasted later.
+ */
+export function pickSavedDhanAccess({ session = {}, desk = {}, env = {} } = {}) {
+  const rows = [];
+  const push = (token, clientId, at, source) => {
+    const clean = String(token || "").trim();
+    if (!clean) return;
+    rows.push({
+      token: clean,
+      clientId: String(clientId || "").trim(),
+      at: Number.isFinite(at) ? at : 0,
+      source,
+    });
+  };
+  push(
+    session.accessToken,
+    session.clientId,
+    tokenGeneratedAtMs(session) || Date.parse(session.generatedAt || "") || 0,
+    "session",
+  );
+  push(
+    desk.brokerToken,
+    desk.accountId,
+    Date.parse(desk.tokenUpdatedAt || "") || jwtIssuedAtMs(desk.brokerToken) || 0,
+    "desk",
+  );
+  push(env.DHAN_ACCESS_TOKEN, env.DHAN_CLIENT_ID, jwtIssuedAtMs(env.DHAN_ACCESS_TOKEN) || 0, "env");
+  const fallbackId = String(session.clientId || desk.accountId || env.DHAN_CLIENT_ID || "").trim();
+  if (!rows.length) return { token: "", clientId: fallbackId, source: "", at: 0 };
+  rows.sort((a, b) => b.at - a.at);
+  const best = rows[0];
+  return {
+    token: best.token,
+    clientId: best.clientId || rows.find((row) => row.clientId)?.clientId || fallbackId,
+    source: best.source,
+    at: best.at,
+  };
+}
+
+/** Copy the newest saved admin token into the session file without minting or starting LIVE. */
+export function ensureSessionHasPickedToken() {
+  try {
+    const session = loadDhanSession();
+    const picked = pickSavedDhanAccess({
+      session,
+      desk: peekAdminBrokerSecrets("dhan"),
+      env: process.env,
+    });
+    if (!picked.token) return session;
+    if (String(session.accessToken || "").trim() === picked.token) return session;
+    return saveDhanSession({
+      accessToken: picked.token,
+      clientId: picked.clientId || session.clientId,
+      autoStart: session.autoStart !== false,
+    });
+  } catch (error) {
+    console.log(`Could not copy the saved Dhan token into the session file: ${error.message || error}`);
+    return loadDhanSession();
+  }
+}
+
 export function dhanTokenStatus() {
   const session = loadDhanSession();
-  const autoGenerate = Boolean(session.pin && session.totpSecret && session.clientId);
+  const picked = pickSavedDhanAccess({
+    session,
+    desk: peekAdminBrokerSecrets("dhan"),
+    env: process.env,
+  });
+  const token = picked.token || String(session.accessToken || "").trim();
+  const autoGenerate = Boolean(session.pin && session.totpSecret && (session.clientId || picked.clientId));
   const expiryTime = resolveTokenExpiry({
-    accessToken: session.accessToken,
+    accessToken: token,
     expiryTime: session.expiryTime,
   });
-  const staleAfterReset = autoGenerate && needsFreshAccessToken(session);
+  const staleAfterReset = autoGenerate && needsFreshAccessToken({ ...session, accessToken: token });
   const backoff = loadTokenBackoff();
   const blockedUntil = Math.max(backoff.generateBackoffUntil, backoff.credentialsBlockedUntil);
-  const nextMs = staleAfterReset ? Date.now() : nextDailyRenewalAt();
-  const token = String(session.accessToken || "").trim();
+  const tokenStillGood = Date.parse(expiryTime || "") - Date.now() > TOKEN_STILL_GOOD_MS;
+  // A token with more than 20 minutes left is kept across deploy/restart.
+  // "Reset now" is only for a token that is missing or about to expire.
+  const askReset = staleAfterReset && !tokenStillGood;
+  const nextMs = askReset ? Date.now() : nextDailyRenewalAt();
   return {
     autoRenew: autoGenerate || Boolean(session.accessToken && session.source === "web"),
     autoMode: autoGenerate ? "generate" : session.source === "web" ? "renew" : "off",
     tokenExpiry: expiryTime || session.expiryTime || null,
     nextRenewAt: new Date(nextMs).toISOString(),
     autoStart: session.autoStart !== false,
-    needsFresh: staleAfterReset,
+    needsFresh: askReset,
     renewalBlockedUntil: blockedUntil > Date.now() ? new Date(blockedUntil).toISOString() : null,
-    clientId: String(session.clientId || "").trim() || null,
+    clientId: String(picked.clientId || session.clientId || "").trim() || null,
     tokenHint: token ? (token.length <= 8 ? "••••" : `${token.slice(0, 2)}••••${token.slice(-4)}`) : null,
   };
 }
@@ -688,7 +787,7 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
     }),
     generatedAt: tokenChanged ? new Date().toISOString() : session.generatedAt,
     source: session.pin && session.totpSecret ? session.source || "totp" : "web",
-    autoStart: true,
+    autoStart: tokenChanged ? true : session.autoStart !== false,
   });
   persistAdminBrokerSecrets({
     brokerId: "dhan",

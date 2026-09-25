@@ -11,9 +11,21 @@ import {
   weekdayNameIST,
   dhanOrderQuantity,
   keepStrikeWindow,
+  chooseDeskExpiry,
   dropExpired,
   withExpiryLabels,
 } from "./optionChain.js";
+
+test("chooseDeskExpiry defaults to the nearest expiry and keeps a picked date", () => {
+  assert.deepEqual(chooseDeskExpiry(["2027-03-09", "2027-03-02", "2027-03-16"], ""), {
+    expiry: "2027-03-02",
+    pinned: false,
+  });
+  assert.deepEqual(chooseDeskExpiry(["2027-03-02", "2027-03-09"], "2027-03-09"), {
+    expiry: "2027-03-09",
+    pinned: true,
+  });
+});
 
 test("NIFTY monthly is the last Tuesday of the month", () => {
   assert.equal(weekdayNameIST("2026-09-08"), "Tue");

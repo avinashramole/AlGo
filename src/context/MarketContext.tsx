@@ -208,6 +208,27 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const dataRef = useRef(data);
   const liveRef = useRef(live);
   const pendingToggles = useRef(new Map<string, { enabled: boolean; status: Snapshot["algos"][number]["status"] }>());
+  const pendingChain = useRef<{ symbol: string; expiry: string } | null>(null);
+
+  const holdOptionDesk = (current: Snapshot, incoming?: Partial<Snapshot>) => {
+    const pending = pendingChain.current;
+    const meta = incoming?.optionMeta;
+    if (!pending || !meta) {
+      return {
+        optionMeta: meta ? { ...current.optionMeta, ...meta } : current.optionMeta,
+        optionChain: incoming?.optionChain || current.optionChain,
+      };
+    }
+    const symbolOk = String(meta.symbol || "").toUpperCase() === pending.symbol;
+    const expiryOk = !pending.expiry || String(meta.expiry || "").slice(0, 10) === pending.expiry.slice(0, 10);
+    if (!symbolOk || !expiryOk) {
+      return { optionMeta: current.optionMeta, optionChain: current.optionChain };
+    }
+    return {
+      optionMeta: { ...current.optionMeta, ...meta },
+      optionChain: incoming?.optionChain?.length ? incoming.optionChain : current.optionChain,
+    };
+  };
 
   useEffect(() => {
     dataRef.current = data;
@@ -216,6 +237,19 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     liveRef.current = live;
   }, [live]);
+
+  const clearStrategyOrders = (name: string) => {
+    const strategy = String(name || "").trim();
+    if (!strategy) return;
+    setData((current) => {
+      const orders = (current.orders || []).filter((row) => row.strategy !== strategy);
+      if (orders.length === (current.orders || []).length) return current;
+      const next = { ...current, orders };
+      dataRef.current = next;
+      writeCachedDesk(next);
+      return next;
+    });
+  };
 
   const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
     setData((current) => {
@@ -238,15 +272,17 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
       return { ...row, enabled: hold.enabled, status: hold.status };
     });
+    const held = holdOptionDesk(current, incoming);
     const sameDesk =
-      current.optionMeta?.symbol === incoming.optionMeta?.symbol &&
-      current.optionMeta?.expiry === incoming.optionMeta?.expiry;
+      current.optionMeta?.symbol === held.optionMeta?.symbol &&
+      current.optionMeta?.expiry === held.optionMeta?.expiry;
     const optionChain = sameDesk
-      ? keepStrikeWindow(current.optionChain || [], incoming.optionChain || [])
-      : incoming.optionChain || [];
+      ? keepStrikeWindow(current.optionChain || [], held.optionChain || [])
+      : held.optionChain || [];
     const next = {
       ...incoming,
       algos,
+      optionMeta: held.optionMeta,
       optionChain,
       indices: keepLastIndexPrices(current.indices || [], incoming.indices || []),
     };
@@ -274,23 +310,24 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           status,
         };
       });
+      const held = holdOptionDesk(current, feed);
       const sameDesk =
-        current.optionMeta?.symbol === (feed.optionMeta?.symbol || current.optionMeta?.symbol) &&
-        current.optionMeta?.expiry === (feed.optionMeta?.expiry || current.optionMeta?.expiry);
+        current.optionMeta?.symbol === held.optionMeta?.symbol &&
+        current.optionMeta?.expiry === held.optionMeta?.expiry;
       const optionChain = sameDesk
-        ? keepStrikeWindow(current.optionChain || [], feed.optionChain || current.optionChain || [])
-        : feed.optionChain || current.optionChain;
+        ? keepStrikeWindow(current.optionChain || [], held.optionChain || [])
+        : held.optionChain || current.optionChain;
       const next = {
         ...current,
         ...feed,
         algos,
         optionChain,
-        optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
+        optionMeta: held.optionMeta,
         indices: keepLastIndexPrices(current.indices || [], feed.indices || current.indices || []),
         positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
-        orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
+        orders: Array.isArray(feed.orders) ? feed.orders : current.orders,
         closedTrades: feed.closedTrades ? patchById(current.closedTrades || [], feed.closedTrades) : current.closedTrades,
-        report: current.report,
+        report: feed.report || current.report,
         chat: current.chat,
         notifications: current.notifications,
         settings: current.settings,
@@ -402,6 +439,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
           if (next?.id) patchAlgo(next.id, { ...next, enabled: nextEnabled, status });
+          if (nextEnabled) clearStrategyOrders(previous.name);
         } catch (err) {
           pendingToggles.current.delete(id);
           patchAlgo(id, previous);
@@ -424,6 +462,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           patchAlgo(row.id, { enabled, status });
         }
         const results = await Promise.allSettled(rows.map((row) => toggleAlgo(row.id, enabled)));
+        if (enabled) {
+          results.forEach((result, index) => {
+            if (result.status === "fulfilled" && result.value.algo?.id) clearStrategyOrders(rows[index].name);
+          });
+        }
         const failed: string[] = [];
         results.forEach((result, index) => {
           const row = rows[index];
@@ -502,9 +545,53 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         await refresh();
       },
       selectChain: async (symbol: string, expiry?: string) => {
-        const result = await selectOptionChain(symbol, expiry);
-        if (result.snapshot) mergeSnapshot(result.snapshot);
-        else await refresh();
+        const wantedSymbol = String(symbol || "NIFTY").toUpperCase();
+        const wantedExpiry = String(expiry || "").slice(0, 10);
+        pendingChain.current = { symbol: wantedSymbol, expiry: wantedExpiry };
+        snapshotGen.current += 1;
+        setData((current) => {
+          const meta = current.optionMeta;
+          const sameSymbol = String(meta?.symbol || "").toUpperCase() === wantedSymbol;
+          const keptExpiry = String(meta?.expiry || "");
+          const currentExpiry = String(meta?.expiries?.[0] || "").slice(0, 10);
+          const nextExpiry = wantedExpiry || (sameSymbol ? currentExpiry : "") || keptExpiry;
+          const next: Snapshot = {
+            ...current,
+            optionMeta: {
+              symbol: wantedSymbol,
+              expiry: nextExpiry,
+              expiries: meta?.expiries || [],
+              spot: Number(meta?.spot) || 0,
+              pcr: Number(meta?.pcr) || 0,
+              maxPain: Number(meta?.maxPain) || 0,
+              atmIv: Number(meta?.atmIv) || 0,
+              source: String(meta?.source || ""),
+              lastAt: meta?.lastAt ?? null,
+              expiryLabel:
+                nextExpiry && nextExpiry !== keptExpiry.slice(0, 10)
+                  ? nextExpiry
+                  : String(meta?.expiryLabel || nextExpiry),
+              expiryLabels: meta?.expiryLabels,
+              contractIds: meta?.contractIds,
+              underlyings: meta?.underlyings,
+            },
+            optionChain: sameSymbol && (!wantedExpiry || wantedExpiry === keptExpiry.slice(0, 10))
+              ? current.optionChain
+              : [],
+          };
+          dataRef.current = next;
+          return next;
+        });
+        try {
+          const result = await selectOptionChain(wantedSymbol, expiry);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
+          else await refresh();
+        } finally {
+          const pending = pendingChain.current;
+          window.setTimeout(() => {
+            if (pendingChain.current === pending) pendingChain.current = null;
+          }, 2500);
+        }
       },
       saveAlgo: async (payload: Record<string, unknown>) => {
         const id = String(payload.id || "");

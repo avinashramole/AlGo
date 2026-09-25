@@ -77,7 +77,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const connected = (data.brokers || []).filter((item) => item.connected);
   const liveBrokers = (data.brokers || []).filter((item) => item.id !== "paper");
   const kind = (form.kind || "indicator") as StrategyKind;
-  const title = algo ? `Edit ${algo.name}` : "Add strategy";
+  const editing = Boolean(algo);
+  const title = editing ? String(algo?.name || "Edit strategy") : "Add strategy";
 
   const lotSize = lotForSymbol(form.symbol);
   const lots = form.lots || 1;
@@ -98,7 +99,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const firstBar = form.firstBarStartIst || "09:00";
       const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · first ${form.timeframe || "5m"} ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · ${form.timeframe || "5m"} from ${firstBar}–${evalAt} IST then every candle until a trade · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -141,7 +142,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5">
+      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <div className="text-lg font-bold">{title}</div>
@@ -152,6 +153,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </button>
         </div>
 
+        {editing ? null : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <TypeCard
             active={kind === "indicator"}
@@ -234,7 +236,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }
           />
         </div>
+        )}
 
+        {editing ? null : (
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {RUN_MODES.map((mode) => (
             <TypeCard
@@ -251,6 +255,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             />
           ))}
         </div>
+        )}
+
+        <label className="mt-4 block text-xs font-semibold text-slate-500">
+          Strategy name
+          <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
+        </label>
 
         {engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
@@ -259,7 +269,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
               : firstCandle
-              ? "NIFTY options on the completed first candle only. Default: LIVE at 09:00 IST, first 5m 09:15–09:20 (NSE open). Nifty green + CE green → BUY CE. Nifty red + PE green → BUY PE. Doji is no trade. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
+              ? "NIFTY options from the first completed candle, then every later candle until one trade is placed. Default: LIVE at 09:00 IST, first 5m 09:15–09:20 (NSE open). Nifty green + CE green → BUY CE. Nifty red + PE green → BUY PE. Doji is no trade on that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
@@ -322,16 +332,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-500">
-            Strategy name
-            <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
-          </label>
+          {engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select
               className={fieldClass}
               value={form.symbol || "NIFTY"}
-              disabled={engine}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -346,18 +352,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               ))}
             </select>
           </label>
+          )}
+          {engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Side
-            <select className={fieldClass} value={form.side || "BUY"} disabled={engine} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+            <select className={fieldClass} value={form.side || "BUY"} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
-              {engine ? null : (
-                <>
-                  <option value="SELL">SELL</option>
-                  <option value="BOTH">BOTH</option>
-                </>
-              )}
+              <option value="SELL">SELL</option>
+              <option value="BOTH">BOTH</option>
             </select>
           </label>
+          )}
           <label className="text-xs font-semibold text-slate-500">
             Lots
             <input
@@ -512,7 +517,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : firstCandle ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              Uses only the completed 09:00–09:05 candle (editable). Green Nifty + green ATM CE buys weekly ATM CE. Red Nifty + green ATM PE buys weekly ATM PE. No trade if that candle is missing, doji, or the option candle is not green. Duplicate orders and a second trade the same day are blocked.
+              Checks the first completed candle, then every later candle until one trade is placed. Green Nifty + green ATM CE buys weekly ATM CE. Red Nifty + green ATM PE buys weekly ATM PE. A doji or a candle that is not green is skipped, and the next candle is checked. A second trade the same day is blocked.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">

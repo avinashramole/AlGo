@@ -235,7 +235,7 @@ export function AlgoScreen() {
   };
 
   const remove = (id: string, name: string) => {
-    Alert.alert("Delete strategy", `Delete ${name}?`, [
+    Alert.alert("Delete strategy", `Delete ${name}? This removes its orders, positions, and member plans on the admin desk and on user accounts.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => void removeAlgo(id) },
     ]);
@@ -247,6 +247,7 @@ export function AlgoScreen() {
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{draft.id ? "Edit strategy" : "Add strategy"}</Text>
+        {draft.id ? null : (
         <View style={styles.chips}>
           <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator", ...defaultConditions("indicator", draft.indicator, draft.pattern) })} />
           <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action", ...defaultConditions("price-action", draft.indicator, draft.pattern) })} />
@@ -336,6 +337,9 @@ export function AlgoScreen() {
             }
           />
         </View>
+        )}
+        {draft.id ? null : (
+        <>
         <Text style={styles.muted}>Run mode</Text>
         <View style={styles.chips}>
           <Chip label="Paper" on={draft.runMode === "paper"} onPress={() => setDraft({ ...draft, runMode: "paper" })} />
@@ -343,6 +347,8 @@ export function AlgoScreen() {
           <Chip label="Live Dhan" on={draft.runMode === "live"} onPress={() => setDraft({ ...draft, runMode: "live" })} />
         </View>
         {draft.runMode === "paper" ? <Text style={styles.muted}>Paper uses live Dhan quotes. Fills stay virtual — nothing is sent to Dhan.</Text> : null}
+        </>
+        )}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>
@@ -404,7 +410,7 @@ export function AlgoScreen() {
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-first-candle" ? (
           <>
-            <Text style={styles.muted}>Only the completed 09:00–09:05 candle. Green Nifty + green ATM CE → BUY CE. Red Nifty + green ATM PE → BUY PE. Weekly ATM. Saving or restart does not start live.</Text>
+            <Text style={styles.muted}>First candle, then every later candle until one trade. Green Nifty + green ATM CE → BUY CE. Red Nifty + green ATM PE → BUY PE. Weekly ATM. Saving or restart does not start live.</Text>
             <Field label="Start LIVE (IST)" value={draft.dailyLiveIst || "09:00"} onChange={(dailyLiveIst) => setDraft({ ...draft, dailyLiveIst })} />
             <Field label="First candle start (IST)" value={draft.firstBarStartIst || "09:00"} onChange={(firstBarStartIst) => setDraft({ ...draft, firstBarStartIst })} />
             <Field label="Entry evaluation (IST)" value={draft.entryEvaluationIst || "09:05"} onChange={(entryEvaluationIst) => setDraft({ ...draft, entryEvaluationIst })} />

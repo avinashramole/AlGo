@@ -48,10 +48,21 @@ function supertrendAt(candles, period, multiplier) {
   return last.close >= mid ? lower : upper;
 }
 
-function vwapAt(candles) {
+function sessionDayKey(ms) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(ms));
+}
+
+function vwapAt(candles, from = 0) {
   let pv = 0;
   let vol = 0;
-  for (const bar of candles) {
+  const start = Math.max(0, from);
+  for (let i = start; i < candles.length; i += 1) {
+    const bar = candles[i];
     const typical = (bar.high + bar.low + bar.close) / 3;
     pv += typical * (bar.volume || 1);
     vol += bar.volume || 1;
@@ -69,9 +80,9 @@ function macdHist(closes) {
 }
 
 function sessionOpenIndex(candles, i) {
-  const day = new Date(candles[i].time).toDateString();
+  const day = sessionDayKey(candles[i].time);
   let start = i;
-  while (start > 0 && new Date(candles[start - 1].time).toDateString() === day) start -= 1;
+  while (start > 0 && sessionDayKey(candles[start - 1].time) === day) start -= 1;
   return start;
 }
 
@@ -101,7 +112,7 @@ function sourcesAt(candles, i, algo) {
   const look = slice.slice(-lookback);
   return {
     price: candles[i].close,
-    vwap: vwapAt(slice),
+    vwap: vwapAt(slice, openIdx),
     ema_fast: emaSeries(closes, Number(algo.fast) || 9).at(-1),
     ema_slow: emaSeries(closes, Number(algo.slow) || 21).at(-1),
     rsi: rsiAt(closes, Number(algo.period) || 14),
@@ -149,8 +160,10 @@ export function precomputeSources(candles = [], algo = {}) {
   let vol = 0;
   let sessionStart = 0;
   for (let i = 0; i < bars.length; i += 1) {
-    if (i > 0 && new Date(bars[i].time).toDateString() !== new Date(bars[i - 1].time).toDateString()) {
+    if (i > 0 && sessionDayKey(bars[i].time) !== sessionDayKey(bars[i - 1].time)) {
       sessionStart = i;
+      pv = 0;
+      vol = 0;
     }
     const typical = (Number(bars[i].high) + Number(bars[i].low) + Number(bars[i].close)) / 3;
     const barVol = Number(bars[i].volume) || 1;
@@ -262,12 +275,12 @@ function groupFromAlgo(algo, side) {
   return { join, rows };
 }
 
-export function evaluateSignals(candles, i, algo, cache) {
+export function evaluateSignals(candles, i, algo, cache, at = Date.now()) {
   const buyGroup = groupFromAlgo(algo, "buy");
   const sellGroup = groupFromAlgo(algo, "sell");
   const closeOps = [...buyGroup.rows, ...sellGroup.rows].some((row) => isCloseOp(row.op));
   let idx = i;
-  if (closeOps) idx = completedBarIndex(candles, i, algo.timeframe);
+  if (closeOps) idx = completedBarIndex(candles, i, algo.timeframe, at);
   if (idx < 2) return { buy: false, sell: false };
   const now = sourceAt(candles, idx, algo, cache);
   return {

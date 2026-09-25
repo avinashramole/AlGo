@@ -1227,7 +1227,9 @@ export type PositionLedger = {
   positions: LedgerPosition[];
   mtm: number;
   realized: number;
+  unrealized?: number;
   open: number;
+  brokerMtm?: number | null;
 };
 
 export type PositionsDeskSnapshot = {

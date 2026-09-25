@@ -22,6 +22,19 @@ export function applyClientList(result: ClientsList, fromEpoch?: number) {
   return cached;
 }
 
+export function forgetCachedClient(id: string) {
+  epoch += 1;
+  inflight = null;
+  if (!cached || !id) return;
+  const clients = cached.clients.filter((row) => row.id !== id);
+  cached = {
+    ...cached,
+    clients,
+    live: clients.filter((row) => row.status === "LIVE").length,
+    paper: clients.filter((row) => row.status !== "LIVE").length,
+  };
+}
+
 export function upsertCachedClient(client: ClientsList["clients"][number]) {
   epoch += 1;
   inflight = null;

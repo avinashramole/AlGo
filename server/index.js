@@ -7,16 +7,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
-import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
-import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
+import { applyBrokerBooksToDesk, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
   assignStaticIp,
@@ -27,6 +27,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
+import { attachMemberBrokerPnl, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
@@ -38,6 +39,7 @@ import {
   createAlgo,
   deleteAlgo,
   dropBrokerPositions,
+  dropClientFromStrategies,
   getCandles,
   getOptionMeta,
   getAlgo,
@@ -47,6 +49,7 @@ import {
   snapshot,
   deskFeed,
   deskMtm,
+  getAdminBrokerBook,
   squareOff,
   tickMarket,
   toggleAlgo,
@@ -79,6 +82,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
 
 attachProcessGuards();
+dropEnrollmentsWithoutStrategies(listAlgos());
 
 const app = express();
 app.set("trust proxy", 1);
@@ -223,6 +227,7 @@ app.get("/api/subscriptions", (req, res) => {
     res.status(401).json({ error: "Sign in first." });
     return;
   }
+  dropEnrollmentsWithoutStrategies(listAlgos());
   res.json({ enrollments: listEnrollments({ userId: user.id, admin: user.role === "admin" }) });
 });
 
@@ -301,25 +306,26 @@ app.get("/api/member/quotes", async (req, res) => {
   }
 });
 
-app.get("/api/member/desk", (req, res) => {
+app.get("/api/member/desk", async (req, res) => {
   try {
     const user = memberAuth(req);
     const snap = safeSnapshot() || {};
-    res.json(
-      getMemberDesk({
-        user,
-        enrollments: listEnrollments({ userId: user.id, admin: false }),
-        algos: listAlgos(),
-        quote: quoteSymbol,
-        admins: listPublicUsers(),
-        ownBookOnly: true,
-        liveBook: {
-          positions: snap.positions || [],
-          orders: snap.orders || [],
-          closedTrades: snap.closedTrades || [],
-        },
-      }),
-    );
+    dropEnrollmentsWithoutStrategies(listAlgos());
+    const desk = getMemberDesk({
+      user,
+      enrollments: listEnrollments({ userId: user.id, admin: false }),
+      algos: listAlgos(),
+      quote: quoteSymbol,
+      admins: listPublicUsers(),
+      ownBookOnly: true,
+      liveBook: {
+        positions: snap.positions || [],
+        orders: snap.orders || [],
+        closedTrades: snap.closedTrades || [],
+      },
+    });
+    await attachMemberBrokerPnl(desk, user.id);
+    res.json(desk);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
   }
@@ -448,23 +454,23 @@ app.get("/api/clients", (_req, res) => {
   });
 });
 
-app.get("/api/clients/:id/detail", (req, res) => {
+app.get("/api/clients/:id/detail", async (req, res) => {
   try {
     const snap = safeSnapshot() || {};
-    res.json(
-      getClientDetail({
-        userId: req.params.id,
-        users: listPublicUsers(),
-        algos: listAlgos(),
-        quote: quoteSymbol,
-        admins: listPublicUsers(),
-        liveBook: {
-          positions: snap.positions || [],
-          orders: snap.orders || [],
-          closedTrades: snap.closedTrades || [],
-        },
-      }),
-    );
+    const detail = getClientDetail({
+      userId: req.params.id,
+      users: listPublicUsers(),
+      algos: listAlgos(),
+      quote: quoteSymbol,
+      admins: listPublicUsers(),
+      liveBook: {
+        positions: snap.positions || [],
+        orders: snap.orders || [],
+        closedTrades: snap.closedTrades || [],
+      },
+    });
+    await attachMemberBrokerPnl(detail, req.params.id);
+    res.json(detail);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load client detail" });
   }
@@ -488,7 +494,9 @@ app.post("/api/clients/:id", (req, res) => {
 
 app.delete("/api/clients/:id", (req, res) => {
   try {
-    res.json(deleteClient(req.params.id, { actorId: req.authUser?.id }));
+    const result = deleteClient(req.params.id, { actorId: req.authUser?.id });
+    dropClientFromStrategies(result.id);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not delete client" });
   }
@@ -592,10 +600,15 @@ app.get("/api/mtm", (_req, res) => {
   }
 });
 
-app.get("/api/positions/desk", (_req, res) => {
+app.get("/api/positions/desk", async (_req, res) => {
   try {
+    await refreshAdminBrokerBook().catch(() => undefined);
     const snap = safeSnapshot() || {};
-    res.json(listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || []));
+    const desk = listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || [], getAdminBrokerBook());
+    const loaded = await Promise.all(
+      (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerPnl(client.id)]),
+    );
+    res.json(applyBrokerBooksToDesk(desk, Object.fromEntries(loaded)));
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not load positions" });
   }

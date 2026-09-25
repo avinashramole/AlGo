@@ -75,7 +75,7 @@ export const NiftyVwapStrategy = {
     return { action: "exit", reason, result: closed };
   },
 
-  maybeEnter({ algo, config, signal, spot, step, expiry, ceLtp, peLtp, positions, adapter }) {
+  maybeEnter({ algo, config, signal, spot, step, expiry, ceLtp, peLtp, ceSecurityId, peSecurityId, positions, adapter }) {
     const state = runtimeState(algo);
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
@@ -165,6 +165,7 @@ export const NiftyVwapStrategy = {
       option: pick.option,
       strike: pick.strike,
       expiry,
+      securityId: option === "PE" ? peSecurityId || "" : ceSecurityId || "",
       product: "MIS",
       type: "MARKET",
       strategy: algo.name,
@@ -173,6 +174,7 @@ export const NiftyVwapStrategy = {
     const result = adapter.place(payload);
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       state.inFlight = false;
+      state.lastEntryBarTime = 0;
       PositionManager.clearOpen(state);
       TradeLogger.record("rejected", { message: result?.error || "broker-rejected", strategy: algo.name });
       algo.lastSignal = "REJECTED";
@@ -180,8 +182,9 @@ export const NiftyVwapStrategy = {
     }
     if (result?.duplicate || result?.queued === false) {
       state.inFlight = false;
+      state.lastEntryBarTime = 0;
       if (!state.fillPrice) PositionManager.clearOpen(state);
-      algo.lastSignal = "HOLD 1 LOT";
+      algo.lastSignal = "";
       return { action: "skip", reason: "duplicate" };
     }
     const fill = fillFromResult(result, ltp);
@@ -312,7 +315,7 @@ export const NiftyVwapStrategy = {
     }
 
     if (!open && (input.positions || []).some((row) => PositionManager.isOpenNiftyOption(row))) {
-      algo.lastSignal = "HOLD 1 LOT";
+      algo.lastSignal = "";
       return { action: "skip", reason: "already-open" };
     }
 
@@ -345,6 +348,8 @@ export const NiftyVwapStrategy = {
       expiry: input.expiry,
       ceLtp: input.ceLtp,
       peLtp: input.peLtp,
+      ceSecurityId: input.ceSecurityId || "",
+      peSecurityId: input.peSecurityId || "",
       positions: input.positions || [],
       adapter: input.adapter,
     });
