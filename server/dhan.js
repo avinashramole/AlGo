@@ -53,6 +53,7 @@ import {
   loadTokenBackoff,
   markDhanAutoStart,
   needsFreshAccessToken,
+  ensureSessionHasPickedToken,
   persistPastedToken,
   pickSavedDhanAccess,
   configuredDhanClientId,
@@ -2059,8 +2060,15 @@ async function keepDhanTokenFresh(reason = "schedule") {
         return;
       }
       if (plan.action === "reuse") {
-        if (session.accessToken && session.clientId) {
-          await startDhanLive({ accessToken: session.accessToken, clientId: session.clientId, loginId: session.loginId });
+        const saved = savedDhanAccess();
+        const useToken = saved.token || session.accessToken;
+        const useId = saved.id || session.clientId;
+        if (useToken && useId) {
+          await startDhanLive({
+            accessToken: useToken,
+            clientId: useId,
+            loginId: saved.session.loginId || session.loginId,
+          });
           lastKeepAliveAt = Date.now();
           console.log(`Dhan LIVE restarted after ${reason} without minting a new token`);
         }
@@ -2132,6 +2140,7 @@ export async function bootDhanFromEnv() {
   console.log(
     `Dhan daily token reset is set: ${String(TOKEN_RENEW_HOUR_IST).padStart(2, "0")}:00 AM IST · next 8:00 AM IST ${istStamp(nextDailyRenewalAt())}`,
   );
+  ensureSessionHasPickedToken();
   const persisted = loadTokenBackoff();
   keepAliveBackoffUntil = Math.max(keepAliveBackoffUntil, persisted.generateBackoffUntil);
   credentialsBlockedUntil = Math.max(credentialsBlockedUntil, persisted.credentialsBlockedUntil);

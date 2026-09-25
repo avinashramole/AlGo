@@ -294,6 +294,21 @@ test("needsFreshAccessToken is true even if generatedAt was stamped later than J
   );
 });
 
+test("needsFreshAccessToken stays false when generatedAt is old but the JWT was minted after 8:00 IST", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
+  const oldStamp = Date.parse("2026-08-01T02:35:00.000Z");
+  const exp = Math.floor((eightOhFive + 24 * 3600 * 1000) / 1000);
+  const iat = Math.floor(eightOhFive / 1000);
+  assert.equal(
+    needsFreshAccessToken(
+      { accessToken: fakeJwt(exp, iat), generatedAt: new Date(oldStamp).toISOString() },
+      nineAm,
+    ),
+    false,
+  );
+});
+
 test("needsFreshAccessToken is false after today's 8:05 IST mint", () => {
   const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
   const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
@@ -382,6 +397,16 @@ test("keepAlivePlan keeps a long-lived JWT on restart and still mints at 8:00 IS
       now: tenThirty,
     }),
     { action: "wait", because: "restart-keeps-token" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "boot",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+      now: eightOhOne,
+    }),
+    { action: "reuse", because: "restart-keeps-token" },
   );
   assert.deepEqual(
     keepAlivePlan({

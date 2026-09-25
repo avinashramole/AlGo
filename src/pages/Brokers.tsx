@@ -153,7 +153,8 @@ export function Brokers() {
         <p className="mt-2 text-xs text-slate-400">
           Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
           <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
-          no password token API). <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
+          no password token API). A deploy or <b>systemctl restart</b> keeps this access token while it still has time
+          left. <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
           then <b>generateAccessToken</b> with PIN + TOTP if that token is already dead. Save PIN + TOTP once (or set{" "}
           <code>DHAN_CLIENT_ID</code>, <code>DHAN_PIN</code>, <code>DHAN_TOTP_SECRET</code>). A <b>429</b> is a rate
           limit, not an expired token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the{" "}
@@ -234,8 +235,7 @@ export function Brokers() {
         {feed?.error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{feed.error}</div>}
         {feed?.autoMode === "generate" && feed?.needsFresh ? (
           <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            Token is from before <b>8:00 AM IST</b> today. Auto-renew should run now. Click <b>Reset token now</b> if
-            it is still stuck
+            Saved token has under 20 minutes left. Click <b>Reset token now</b> once if it does not renew by itself
             {feed?.renewalBlockedUntil
               ? ` (cooldown until ${new Date(feed.renewalBlockedUntil).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })})`
               : ""}

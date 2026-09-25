@@ -91,8 +91,8 @@ export function BrokersScreen() {
         {feed?.error ? <Text style={{ color: colors.down, marginTop: 6, fontSize: 12 }}>{feed.error}</Text> : null}
         {feed?.autoMode === "generate" && feed?.needsFresh ? (
           <Text style={{ color: colors.amber, marginTop: 6, fontSize: 12 }}>
-            Token is from before 8:00 AM IST today. Auto-renew should run now. Use Reset token now on the web Brokers
-            page if it is still stuck.
+            Saved token has under 20 minutes left. A restart keeps it. Use Reset token now on the web Brokers page
+            only if it does not renew.
           </Text>
         ) : null}
       </Card>
