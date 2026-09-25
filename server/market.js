@@ -3,7 +3,7 @@ import { dhanTokenStatus } from "./dhanToken.js";
 import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
-import { withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { applyBrokerBookToReport, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -1487,7 +1487,7 @@ export function snapshot() {
     marketWatch: watch,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
-    report: buildReport(liveState),
+    report: applyBrokerBookToReport(buildReport(liveState), state.adminBrokerBook),
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
@@ -1544,6 +1544,7 @@ export function deskFeed() {
     sentiment: liveSentiment(dnaScores),
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
+    report: applyBrokerBookToReport(buildReport({ positions, orders, closedTrades, algos: state.algos || [] }), state.adminBrokerBook),
     marketWatch: watch,
     watchlist: watch.map(({ volume: _volume, ...row }) => row),
     marketStatus: nseMarketSession().status,

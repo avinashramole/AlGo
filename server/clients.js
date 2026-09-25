@@ -292,10 +292,13 @@ function ledgerBook(openRows = [], closedTrades = []) {
   const open = (openRows || []).map(asLedgerPosition);
   const closed = (closedTrades || []).map(asClosedLedgerPosition);
   const positions = [...open, ...closed];
+  const mtm = round2(positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const realized = round2(closed.reduce((sum, row) => sum + Number(row.realized || 0), 0));
   return {
     positions,
-    mtm: round2(positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
-    realized: round2(closed.reduce((sum, row) => sum + Number(row.realized || 0), 0)),
+    mtm,
+    realized,
+    unrealized: round2(mtm - realized),
     open: open.length,
   };
 }
@@ -396,6 +399,7 @@ function applyBrokerBookToLedger(ledger, brokerBook) {
     mtm,
     brokerMtm: mtm,
     realized: round2(brokerBook.realizedPnl),
+    unrealized: round2(Number(brokerBook.unrealizedPnl || 0) + paperMtm),
     open: paperRows.filter((row) => !row.closed).length + (brokerBook.open || []).length,
     tradeMode: "real",
   };
@@ -431,6 +435,7 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
     masterBook.positions = [...masterBook.positions, ...brokerClosed];
     masterBook.mtm = round2(paperMtm + Number(brokerBook.mtm));
     masterBook.realized = round2(brokerBook.realizedPnl);
+    masterBook.unrealized = round2(Number(brokerBook.unrealizedPnl || 0) + paperMtm);
     masterBook.brokerMtm = masterBook.mtm;
   }
   const master = {

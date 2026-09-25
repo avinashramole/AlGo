@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -96,6 +96,17 @@ test("a closed admin Dhan book keeps the broker loss when nothing is open", () =
   });
   assert.equal(day.totalPnl, -237.25);
   assert.equal(day.pnlByBroker.dhan, -237.25);
+});
+
+test("admin report uses the broker MTM and realized P&L", () => {
+  const report = applyBrokerBookToReport(
+    { realizedPnl: -2492.75, unrealizedPnl: 0, grossPnl: -2492.75, charges: 40, netPnl: -2532.75 },
+    { realizedPnl: -237.25, unrealizedPnl: 12.5, mtm: -224.75, source: "dhan" },
+  );
+  assert.equal(report.realizedPnl, -237.25);
+  assert.equal(report.unrealizedPnl, 12.5);
+  assert.equal(report.netPnl, -224.75);
+  assert.equal(report.charges, 0);
 });
 
 test("Upstox user book keeps realised and open MTM on separate legs", () => {

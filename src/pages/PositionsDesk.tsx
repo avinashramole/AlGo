@@ -188,7 +188,7 @@ export function PositionsDesk() {
   );
 
   const ledgers = useMemo(() => {
-    const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number }> = [];
+    const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number; realized: number; unrealized: number }> = [];
     const useBrokerMtm = Number.isFinite(desk.master.brokerMtm);
     const closedById = new Map<string, LedgerPosition>();
     const closedSource = useBrokerMtm
@@ -213,14 +213,19 @@ export function PositionsDesk() {
     for (const ledger of books) {
       const positions = filterRows(ledger, mode, segment);
       const summed = positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);
-      const accountMtm =
-        Number.isFinite(ledger.brokerMtm) && mode !== "paper" && segment === "all"
-          ? Number(ledger.brokerMtm)
-          : summed;
+      const useBook = Number.isFinite(ledger.brokerMtm) && mode !== "paper" && segment === "all";
+      const realized = useBook
+        ? Number(ledger.realized || 0)
+        : positions.filter(isClosedLedger).reduce((sum, row) => sum + Number(row.realized || row.mtm || 0), 0);
+      const unrealized = useBook
+        ? Number(ledger.unrealized ?? Number(ledger.brokerMtm) - realized)
+        : positions.filter((row) => !isClosedLedger(row)).reduce((sum, row) => sum + Number(row.mtm || 0), 0);
       rows.push({
         ledger,
         positions,
-        mtm: accountMtm,
+        mtm: useBook ? Number(ledger.brokerMtm) : summed,
+        realized,
+        unrealized,
       });
     }
     return rows;
@@ -228,13 +233,10 @@ export function PositionsDesk() {
 
   const masterBlock = ledgers.find((row) => row.ledger.kind === "master");
   const clientBlocks = ledgers.filter((row) => row.ledger.kind === "client");
-  const masterMtm = masterBlock?.mtm || 0;
-  const clientMtm = clientBlocks.reduce((sum, row) => sum + row.mtm, 0);
-  const totalMtm = masterMtm + clientMtm;
-  const openCount = ledgers.reduce(
-    (sum, row) => sum + row.positions.filter((item) => !isClosedLedger(item)).length,
-    0,
-  );
+  const adminMtm = masterBlock?.unrealized || 0;
+  const adminPnl = masterBlock?.realized || 0;
+  const clientMtm = clientBlocks.reduce((sum, row) => sum + row.unrealized, 0);
+  const clientPnl = clientBlocks.reduce((sum, row) => sum + row.realized, 0);
   const exitIds = (masterBlock?.positions || []).filter((row) => !isClosedLedger(row)).map((row) => row.id).filter(Boolean);
 
   const close = async (id: string, symbol: string) => {
@@ -303,10 +305,10 @@ export function PositionsDesk() {
       <PortfolioSummary />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={<TrendingUp size={18} />} label="Master MTM" value={rupee(masterMtm)} tone={moneyClass(masterMtm)} />
+        <StatCard icon={<TrendingUp size={18} />} label="Admin MTM" value={rupee(adminMtm)} tone={moneyClass(adminMtm)} />
+        <StatCard icon={<Wallet size={18} />} label="Admin P&L" value={rupee(adminPnl)} tone={moneyClass(adminPnl)} />
         <StatCard icon={<UserRound size={18} />} label="Client MTM" value={rupee(clientMtm)} tone={moneyClass(clientMtm)} />
-        <StatCard icon={<Wallet size={18} />} label="Total MTM" value={rupee(totalMtm)} tone={moneyClass(totalMtm)} />
-        <StatCard icon={<Activity size={18} />} label="Open positions" value={String(openCount)} />
+        <StatCard icon={<Activity size={18} />} label="Client P&L" value={rupee(clientPnl)} tone={moneyClass(clientPnl)} />
       </div>
 
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down dark:bg-rose-950/40">{error}</div> : null}
@@ -315,12 +317,14 @@ export function PositionsDesk() {
         <div className="card px-4 py-8 text-center text-sm text-slate-400">Loading client books…</div>
       ) : null}
 
-      {ledgers.map(({ ledger, positions, mtm }) => (
+      {ledgers.map(({ ledger, positions, mtm, realized, unrealized }) => (
         <LedgerCard
           key={ledger.id}
           ledger={ledger}
           positions={positions}
-          mtm={mtm}
+          mtm={unrealized}
+          pnl={realized}
+          net={mtm}
           busy={busy}
           onExit={ledger.kind === "master" ? close : undefined}
         />
@@ -364,12 +368,16 @@ function LedgerCard({
   ledger,
   positions,
   mtm,
+  pnl,
+  net,
   busy,
   onExit,
 }: {
   ledger: PositionLedger;
   positions: LedgerPosition[];
   mtm: number;
+  pnl: number;
+  net: number;
   busy: string;
   onExit?: (id: string, symbol: string) => void;
 }) {
@@ -389,10 +397,12 @@ function LedgerCard({
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Account MTM</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">MTM</div>
           <div className={cn("text-lg font-bold", moneyClass(mtm))}>{rupee(mtm)}</div>
-          <div className="text-[11px] text-slate-400">
-            {openRows.length} open{closedRows.length ? ` · ${closedRows.length} closed` : ""}
+          <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">P&L</div>
+          <div className={cn("text-lg font-bold", moneyClass(pnl))}>{rupee(pnl)}</div>
+          <div className="mt-1 text-[11px] text-slate-400">
+            Net {rupee(net)} · {openRows.length} open{closedRows.length ? ` · ${closedRows.length} closed` : ""}
           </div>
         </div>
       </div>

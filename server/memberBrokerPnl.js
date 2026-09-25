@@ -212,6 +212,23 @@ export function withAdminBrokerPnl({ positions = [], closedTrades = [], byBroker
   return { totalPnl: round2(unrealized + realized - dhanLocal + brokerMtm), pnlByBroker: next };
 }
 
+export function applyBrokerBookToReport(report, book) {
+  if (!report || !book || !Number.isFinite(Number(book.realizedPnl)) || !Number.isFinite(Number(book.unrealizedPnl))) return report;
+  const realized = round2(book.realizedPnl);
+  const unrealized = round2(book.unrealizedPnl);
+  const net = round2(realized + unrealized);
+  return {
+    ...report,
+    realizedPnl: realized,
+    unrealizedPnl: unrealized,
+    grossPnl: net,
+    charges: 0,
+    netPnl: net,
+    brokerPnl: true,
+    brokerPnlSource: book.source || "",
+  };
+}
+
 export function applyBrokerPnl(desk, pnl) {
   if (!desk || !pnl) return desk;
   const realized = round2(pnl.realizedPnl);

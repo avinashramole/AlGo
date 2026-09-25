@@ -472,6 +472,8 @@ test("client MTM uses each user's broker book instead of the local copy loss", (
   const paper = desk.clients.find((row) => row.id === "u-paper");
   assert.equal(live.brokerMtm, 308);
   assert.equal(live.mtm, 308);
+  assert.equal(live.realized, 200);
+  assert.equal(live.unrealized, 108);
   assert.equal(live.positions.some((row) => row.mtm === -2492.75), false);
   assert.equal(live.positions.reduce((sum, row) => sum + row.mtm, 0), 308);
   assert.equal(paper.mtm, -10);

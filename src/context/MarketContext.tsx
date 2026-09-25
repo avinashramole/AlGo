@@ -327,7 +327,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
         orders: Array.isArray(feed.orders) ? feed.orders : current.orders,
         closedTrades: feed.closedTrades ? patchById(current.closedTrades || [], feed.closedTrades) : current.closedTrades,
-        report: current.report,
+        report: feed.report || current.report,
         chat: current.chat,
         notifications: current.notifications,
         settings: current.settings,
