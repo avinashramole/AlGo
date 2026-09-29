@@ -69,10 +69,11 @@ function kindMeta(algo: AlgoStrategy) {
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
+    const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · preview ${algo.timeframe || "5m"} from ${algo.firstBarStartIst || "09:00"} · up to ${algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · preview ${algo.timeframe || "5m"} from ${algo.firstBarStartIst || "09:00"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {

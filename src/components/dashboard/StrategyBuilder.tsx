@@ -105,7 +105,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const firstBar = form.firstBarStartIst || "09:00";
       const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · preview ${form.timeframe || "5m"} from ${firstBar} · up to ${form.maxTradesPerDay > 1 ? form.maxTradesPerDay : 5} trades · first check ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay > 1 ? form.maxTradesPerDay : 5}/day · LIVE ${start} IST`;
+      const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · preview ${form.timeframe || "5m"} from ${firstBar} · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${maxTrades}/day · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -600,7 +601,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField label="Max trades / day" value={form.maxTradesPerDay > 1 ? form.maxTradesPerDay : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+              <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>
