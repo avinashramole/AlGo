@@ -15,6 +15,7 @@ import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, list
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
+import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
@@ -117,33 +118,34 @@ async function flushLiveAlgoOrders() {
   if (!queued.length) return;
   flushingLiveAlgos = true;
   try {
-    for (const payload of queued) {
-      const brokerId = String(payload.brokerId || "dhan");
-      try {
-        if (payload.copyUserId) {
-          const order = await sendMemberCopyOrder(payload);
+    const outcomes = await sendQueuedLiveOrders(queued, {
+      sendAdmin: (payload) => sendLiveBrokerOrder(payload),
+      sendCopy: (payload) => sendMemberCopyOrder(payload),
+    });
+    for (const item of outcomes) {
+      const payload = item.payload || {};
+      const brokerId = item.brokerId || String(payload.brokerId || "dhan");
+      if (payload.copyUserId) {
+        if (item.ok) {
+          const order = item.value;
           noteLiveAlgoOrderResult(payload, { status: order?.status || "PENDING", orderId: order?.id }, order?.reason);
-          continue;
+        } else {
+          noteLiveAlgoOrderResult(payload, item.error?.live || { status: "REJECTED" }, item.error);
+          console.log(`Member copy order failed: ${item.error?.message || item.error}`);
         }
-        const live = await sendLiveBrokerOrder(payload);
+        continue;
+      }
+      if (item.ok) {
+        const live = item.value;
         const order = placeOrder({ ...payload, brokerId, live, copiedToMembers: true });
         noteLiveAlgoOrderResult(payload, live, order?.error);
-        if (order?.error) {
-          console.log(`Strategy live fill book: ${order.error}`);
-        }
-      } catch (error) {
-        if (payload.copyUserId) {
-          noteLiveAlgoOrderResult(payload, error.live || { status: "REJECTED" }, error);
-          console.log(`Member copy order failed: ${error.message || error}`);
-          continue;
-        }
-        const order = bookRejectedLiveOrder({ ...payload, brokerId }, error);
-        noteLiveAlgoOrderResult(payload, error.live || { status: "REJECTED" }, error);
-        if (order?.error) {
-          console.log(`Strategy live fill book: ${order.error}`);
-        }
-        console.log(`Strategy live order failed: ${error.message || error}`);
+        if (order?.error) console.log(`Strategy live fill book: ${order.error}`);
+        continue;
       }
+      const order = bookRejectedLiveOrder({ ...payload, brokerId }, item.error);
+      noteLiveAlgoOrderResult(payload, item.error?.live || { status: "REJECTED" }, item.error);
+      if (order?.error) console.log(`Strategy live fill book: ${order.error}`);
+      console.log(`Strategy live order failed: ${item.error?.message || item.error}`);
     }
   } finally {
     flushingLiveAlgos = false;

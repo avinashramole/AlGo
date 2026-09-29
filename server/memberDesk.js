@@ -6,7 +6,7 @@ import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./
 import { buildReport } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
 import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
-import { buildCopyAlertText, queueMemberCopyNotify } from "./copyNotify.js";
+import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1041,7 +1041,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
   desk.alerts.unshift(alert);
   if (desk.alerts.length > 40) desk.alerts = desk.alerts.slice(0, 40);
-  queueMemberCopyNotify({
+  queueCopyAlertToMemberAndAdmin({
     userId,
     text: alert.text,
     notifications: asNotifications(desk.notifications),

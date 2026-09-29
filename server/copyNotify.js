@@ -1,4 +1,4 @@
-import { getPublicUser } from "./auth.js";
+import { getPublicUser, SOLE_ADMIN_ID } from "./auth.js";
 import { messagingHandleForUser, sendMessaging, upsertMessagingContact } from "./messaging.js";
 
 export function buildCopyAlertText({ side, qty, symbol, strategy, status, error } = {}) {
@@ -52,4 +52,31 @@ export async function notifyMemberCopy({ userId, text, notifications, fetchImpl 
 
 export function queueMemberCopyNotify(args = {}) {
   void notifyMemberCopy(args).catch(() => undefined);
+}
+
+export async function notifyCopyAlertToMemberAndAdmin({
+  userId,
+  text,
+  notifications,
+  fetchImpl = fetch,
+  adminId = SOLE_ADMIN_ID,
+} = {}) {
+  const memberId = String(userId || "").trim();
+  const deskAdminId = String(adminId || SOLE_ADMIN_ID).trim();
+  const member = notifyMemberCopy({ userId: memberId, text, notifications, fetchImpl });
+  const admin =
+    deskAdminId && deskAdminId !== memberId
+      ? notifyMemberCopy({
+          userId: deskAdminId,
+          text,
+          notifications: { instantAlerts: true, whatsapp: true, telegram: true },
+          fetchImpl,
+        })
+      : Promise.resolve({ sent: false, reason: "admin" });
+  const [memberResult, adminResult] = await Promise.all([member, admin]);
+  return { member: memberResult, admin: adminResult };
+}
+
+export function queueCopyAlertToMemberAndAdmin(args = {}) {
+  void notifyCopyAlertToMemberAndAdmin(args).catch(() => undefined);
 }

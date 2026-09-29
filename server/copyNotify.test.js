@@ -9,7 +9,7 @@ process.env.T2S_MESSAGING_FILE = path.join(dir, "messaging.json");
 process.env.T2S_USERS_FILE = path.join(dir, "users.json");
 process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 
-const { buildCopyAlertText, copyNotifyChannels, notifyMemberCopy } = await import("./copyNotify.js");
+const { buildCopyAlertText, copyNotifyChannels, notifyCopyAlertToMemberAndAdmin, notifyMemberCopy } = await import("./copyNotify.js");
 const { resetMessagingStore, saveMessagingConfig, upsertMessagingContact } = await import("./messaging.js");
 
 resetMessagingStore();
@@ -53,4 +53,46 @@ test("notifyMemberCopy sends WhatsApp when the channel is ready", async () => {
   assert.match(calls[0].url, /graph\.facebook\.com/);
   assert.equal(calls[0].body.to, "919876543210");
   assert.match(calls[0].body.text.body, /Copied BUY 65/);
+});
+
+test("a strategy copy alert is sent to the mapped user and the admin together", async () => {
+  saveMessagingConfig({
+    sendVia: "whatsapp",
+    whatsappToken: "EAAB-test-token",
+    phoneNumberId: "123456789012345",
+  });
+  upsertMessagingContact({
+    id: "u-mapped",
+    userId: "u-mapped",
+    name: "Mapped User",
+    mobile: "9876543210",
+  });
+  upsertMessagingContact({
+    id: "admin",
+    userId: "admin",
+    name: "Admin",
+    mobile: "9123456780",
+  });
+  const calls = [];
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const pending = notifyCopyAlertToMemberAndAdmin({
+    userId: "u-mapped",
+    text: "Copied BUY 65 NIFTY FUT · nifty test · PENDING",
+    notifications: { instantAlerts: true, whatsapp: true, telegram: false },
+    fetchImpl: async (_url, opts) => {
+      calls.push(JSON.parse(opts.body).to);
+      await gate;
+      return { ok: true, json: async () => ({ messages: [{ id: "wamid.2" }] }) };
+    },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(calls.slice().sort(), ["919123456780", "919876543210"]);
+  release();
+  const result = await pending;
+  assert.equal(result.member.sent, true);
+  assert.equal(result.admin.sent, true);
 });
