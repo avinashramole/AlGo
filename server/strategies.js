@@ -296,7 +296,7 @@ export function summarizeAlgo(algo) {
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
     const maxTrades = algo.maxTradesPerDay || 1;
     const atm = strikeOffsetLabel(algo.strikeOffset);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · every 5m from ${firstBar} until 1 trade · first check ${firstBar}–${evalAt} IST · end ${endAt} · NIFTY FUT green + CE green → BUY CE · NIFTY FUT red + PE green → BUY PE · doji skips that candle · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m from ${firstBar} until 1 trade · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · doji skips that candle · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

@@ -855,13 +855,17 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const beforeTrades = Number(vs.sessionTrades || 0);
   const beforeBar = Number(vs.lastEntryBarTime || 0);
   const beforeProcessed = Number(vs.processedFirstBarTime || 0);
+  const previewFutures =
+    livePreview && !futuresBars.some((bar) => Number(bar.time) === Number(livePreview.time))
+      ? [...futuresBars, livePreview]
+      : futuresBars;
   NiftyVwapStrategy.tick({
     algo,
     config,
     now,
     feedLive: Boolean(feedLive),
     minutesToClose: session.open ? undefined : 0,
-    futuresBars,
+    futuresBars: previewFutures,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
     spot,

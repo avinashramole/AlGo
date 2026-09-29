@@ -352,59 +352,53 @@ export const VwapSignalEngine = {
     endTimeIst = "15:15",
   } = {}) {
     const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 5);
+    const width = barMinutes * 60 * 1000;
     const sessionOpenMinutes = hmToMinutes(firstBarStartIst, "09:00");
     const endMin = hmToMinutes(endTimeIst, "15:15");
     const evalAt = istHmOnDayMs(now, entryEvaluationIst, "09:05");
     const waitingEval = Number(now) < evalAt;
-    const futCompleted = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, { sessionOpenMinutes });
-    const ceCompleted = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, { sessionOpenMinutes });
-    const peCompleted = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, { sessionOpenMinutes });
+    const agg = { sessionOpenMinutes, includeForming: true };
+    const futAll = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, agg);
+    const ceAll = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, agg);
+    const peAll = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, agg);
     const inWindow = (bar) => {
       const wall = istWallTime(bar?.time);
       const mins = wall.hour * 60 + wall.minute;
       return mins >= sessionOpenMinutes && mins < endMin;
     };
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
-    let chosen = null;
-    let latest = null;
-    for (const fut of futCompleted.filter(inWindow)) {
-      const row = {
-        fut,
-        niftyColor: firstBarColor(fut),
-        ceColor: firstBarColor(sameTime(ceCompleted, fut.time)),
-        peColor: firstBarColor(sameTime(peCompleted, fut.time)),
-      };
-      latest = row;
-      const buyCe = row.niftyColor === "green" && row.ceColor === "green";
-      const buyPe = row.niftyColor === "red" && row.peColor === "green";
-      if (buyCe || buyPe) {
-        chosen = { ...row, buyCe, buyPe };
-        break;
-      }
-    }
-    const shown = chosen || latest;
-    const buyCe = !waitingEval && Boolean(chosen?.buyCe);
-    const buyPe = !waitingEval && Boolean(chosen?.buyPe);
-    const shownFut = shown?.fut || null;
-    const shownWall = shownFut ? istWallTime(shownFut.time) : null;
+    const inSession = futAll.filter(inWindow);
+    const forming =
+      inSession.find((bar) => Number(now) >= Number(bar.time) && Number(now) < Number(bar.time) + width) || null;
+    const completed = inSession.filter((bar) => Number(now) >= Number(bar.time) + width);
+    const fut = forming || completed[completed.length - 1] || null;
+    const previewLive = Boolean(forming);
+    const niftyColor = firstBarColor(fut);
+    const ceColor = firstBarColor(sameTime(ceAll, fut?.time));
+    const peColor = firstBarColor(sameTime(peAll, fut?.time));
+    const tradable = previewLive || !waitingEval;
+    const buyCe = tradable && niftyColor === "green" && ceColor === "green";
+    const buyPe = tradable && niftyColor === "red" && peColor === "green";
+    const shownWall = fut ? istWallTime(fut.time) : null;
     const shownMin = shownWall ? shownWall.hour * 60 + shownWall.minute : -1;
     return {
-      ready: Boolean(!waitingEval && shownFut && shown.niftyColor),
-      barTime: shownFut ? Number(shownFut.time) : 0,
-      futuresClose: shownFut ? Number(shownFut.close) : 0,
-      futuresOpen: shownFut ? Number(shownFut.open) : 0,
-      futuresHigh: shownFut ? Number(shownFut.high) : 0,
-      futuresLow: shownFut ? Number(shownFut.low) : 0,
+      ready: Boolean(fut && niftyColor && tradable),
+      barTime: fut ? Number(fut.time) : 0,
+      futuresClose: fut ? Number(fut.close) : 0,
+      futuresOpen: fut ? Number(fut.open) : 0,
+      futuresHigh: fut ? Number(fut.high) : 0,
+      futuresLow: fut ? Number(fut.low) : 0,
       futuresVwap: 0,
       bias: buyCe ? "CE" : buyPe ? "PE" : "",
       buyCe,
       buyPe,
-      niftyColor: shown?.niftyColor || "",
-      ceColor: shown?.ceColor || "",
-      peColor: shown?.peColor || "",
+      niftyColor,
+      ceColor,
+      peColor,
+      previewLive,
       firstCandle: shownMin === sessionOpenMinutes,
       waitingEval,
-      previewFilled: Boolean(shownFut && shown.niftyColor),
+      previewFilled: Boolean(fut && niftyColor),
       ceAboveVwap: false,
       peAboveVwap: false,
       againstCount: 0,
