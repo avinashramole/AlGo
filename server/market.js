@@ -907,8 +907,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const optionBarTime = livePreview?.time || barTime;
   vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
-  const ceSecurityId = optionLegId(ceStrike, "CE");
-  const peSecurityId = optionLegId(peStrike, "PE");
+  const ceSecurityId = optionLegId(ceStrike, "CE", root);
+  const peSecurityId = optionLegId(peStrike, "PE", root);
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
@@ -949,8 +949,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
 }
 
-function optionLegId(strike, option) {
-  const pack = chainForSymbol("NIFTY");
+function optionLegId(strike, option, root = "NIFTY") {
+  const pack = chainForSymbol(root || "NIFTY");
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
   if (!row) return "";
   const id = option === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
@@ -1132,6 +1132,7 @@ function resolveCrudeFirstCandleTrade(algo) {
   const peLtp = Number(row?.putLtp);
   const liveChain = pack?.meta?.source === "dhan";
   const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+  const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
   const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ATM`;
   let hint = "";
   if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
@@ -1144,6 +1145,7 @@ function resolveCrudeFirstCandleTrade(algo) {
     option: option || "CE",
     strike,
     expiry,
+    securityId: securityId ? String(securityId) : "",
     ltp: premium > 0 ? round2(premium) : 0,
     label: expiry ? `${contract} · ${expiry}` : contract,
     source: pack?.meta?.source || "",

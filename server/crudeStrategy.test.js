@@ -6,6 +6,8 @@ import {
   cacheOptionDesk,
   candleSymbol,
   clearSimulatedDesk,
+  createAlgo,
+  deleteAlgo,
   getCandles,
   getChainSpot,
   isCrudeSymbol,
@@ -15,11 +17,13 @@ import {
   routeManualOrderBrokerId,
   optionRowsForSymbol,
   resolveAlgoTrade,
+  setCrudeFutureChartCandles,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
   snapshot,
   tickMarket,
+  toggleAlgo,
   hasLastLiveBook,
 } from "./market.js";
 import { hydrateAlgos, normalizeAlgo, seedAlgos } from "./strategies.js";
@@ -122,6 +126,112 @@ test("cacheOptionDesk stores Crude Oil chain without changing the visible NIFTY 
   assert.equal(trade.ltp, 42.5);
   assert.equal(trade.source, "dhan");
   assert.equal(trade.ready, true);
+});
+
+test("crude first candle copies the nifty candle rule and uses the CRUDEOIL option scrip", () => {
+  const niftyExpiry = "2026-10-06";
+  const crudeExpiry = "2026-10-19";
+  applyLiveQuotes([{ symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6120, securityId: "426268" }]);
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: niftyExpiry,
+    rows: [{ strike: 6100, atm: false, callLtp: 9, putLtp: 9, callId: "nifty-ce-6100", putId: "nifty-pe-6100" }],
+    source: "dhan",
+  });
+  cacheOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: crudeExpiry,
+    expiries: [crudeExpiry],
+    rows: [{ strike: 6100, atm: true, callLtp: 40, putLtp: 50, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+    spot: 6120,
+    source: "dhan",
+  });
+  const savedAsIndicator = normalizeAlgo({
+    name: "CRUDE OIL 5m first candle",
+    kind: "indicator",
+    symbol: "NIFTY",
+    indicator: "VWAP",
+    buyLeft: "price",
+    buyOp: "close_above",
+    buyRight: "vwap",
+    sellLeft: "price",
+    sellOp: "close_below",
+    sellRight: "vwap",
+    pattern: "ORB",
+  });
+  assert.equal(savedAsIndicator.kind, "crude-first-candle");
+  assert.equal(savedAsIndicator.symbol, "CRUDEOIL");
+  assert.equal(savedAsIndicator.indicator, "CRUDE_FIRST_CANDLE");
+  assert.equal(savedAsIndicator.buyOp, undefined);
+  assert.equal(savedAsIndicator.pattern, undefined);
+  assert.equal(savedAsIndicator.enabled, false);
+  const trade = resolveAlgoTrade(savedAsIndicator);
+  assert.equal(trade.securityId, "crude-ce-6100");
+  assert.equal(trade.strike, 6100);
+  assert.match(String(trade.symbol), /^CRUDEOIL 6100/);
+  const nifty = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle" });
+  const niftyTrade = resolveAlgoTrade(nifty);
+  assert.match(String(niftyTrade.symbol), /^NIFTY /);
+  assert.notEqual(niftyTrade.securityId, "crude-ce-6100");
+
+  const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
+  const open0905 = open0900 + 5 * 60_000;
+  const duringFirst = open0900 + 2 * 60_000;
+  const duringNext = open0905 + 2 * 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "CRUDE first candle scrip",
+    kind: "indicator",
+    symbol: "NIFTY",
+    indicator: "VWAP",
+    buyLeft: "price",
+    buyOp: "close_above",
+    buyRight: "vwap",
+    runMode: "paper",
+  });
+  Date.now = () => duringFirst;
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: duringFirst });
+  try {
+    assert.equal(created.kind, "crude-first-candle");
+    assert.equal(created.enabled, false);
+    setCrudeFutureChartCandles([{ time: open0900, open: 6100, high: 6130, low: 6090, close: 6120, volume: 20 }]);
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.status, "PAPER");
+    assert.equal(started.enabled, true);
+    tickMarket();
+    tickMarket();
+    cacheOptionDesk({
+      symbol: "CRUDEOIL",
+      expiry: crudeExpiry,
+      expiries: [crudeExpiry],
+      rows: [{ strike: 6100, atm: true, callLtp: 48, putLtp: 44, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+      spot: 6120,
+      source: "dhan",
+    });
+    tickMarket();
+    Date.now = () => duringNext;
+    setCrudeFutureChartCandles([
+      { time: open0900, open: 6100, high: 6130, low: 6090, close: 6120, volume: 20 },
+      { time: open0905, open: 6120, high: 6128, low: 6116, close: 6124, volume: 8 },
+    ]);
+    tickMarket();
+    const desk = snapshot();
+    const algo = desk.algos.find((row) => row.id === created.id);
+    const order = desk.orders.find((row) => row.strategy === "CRUDE first candle scrip" && row.side === "BUY");
+    assert.equal(algo.kind, "crude-first-candle");
+    assert.equal(algo.buyOp, undefined);
+    assert.match(String(algo.lastSignal || ""), /PREVIEW CRUDE FUT GREEN/, String(algo.lastSignal || ""));
+    assert.equal(order?.symbol, "CRUDEOIL 6100 CE", String(algo.lastSignal || ""));
+    assert.equal(order.securityId, "crude-ce-6100");
+    assert.notEqual(order.securityId, "nifty-ce-6100");
+    assert.equal(desk.orders.filter((row) => row.strategy === "CRUDE first candle scrip" && row.side === "BUY").length, 1);
+  } finally {
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    setCrudeFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
 });
 
 test("getCandles keeps NIFTY and CRUDEOIL live bars separate", () => {
