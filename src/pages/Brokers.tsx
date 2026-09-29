@@ -178,9 +178,9 @@ export function Brokers() {
         <p className="mt-2 text-xs text-slate-400">
           Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
           <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
-          no password token API). A deploy or <b>systemctl restart</b> keeps this access token on screen and does{" "}
-          <b>not</b> start the data feed. Saving a pasted token also leaves the feed off. <b>Start data feed</b> is
-          separate and does not delete the token. <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
+          no password token API). A deploy or <b>systemctl restart</b> keeps this access token on screen and turns the
+          data feed back on. The feed stays on until you click <b>Stop data feed</b>. Saving a pasted token does not
+          remove it and does not turn strategies LIVE. <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
           then <b>generateAccessToken</b> with PIN + TOTP if that token is already dead. Save PIN + TOTP once (or set{" "}
           <code>DHAN_CLIENT_ID</code>, <code>DHAN_PIN</code>, <code>DHAN_TOTP_SECRET</code>). A <b>429</b> is a rate
           limit, not an expired token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the{" "}
@@ -412,8 +412,8 @@ export function Brokers() {
                 </label>
                 <p className="text-[11px] text-slate-500">
                   {feed?.tokenHint
-                    ? `Saved ${feed.tokenHint}. The token stays after deploy. Paste a new one only to replace it. Saving does not start the data feed.`
-                    : "No access token saved yet. Paste it here and save. That does not start the data feed."}
+                    ? `Saved ${feed.tokenHint}. The token stays after deploy. The data feed stays on until you click Stop data feed.`
+                    : "No access token saved yet. Paste it here and save. Saving starts the data feed and keeps the token on screen."}
                 </p>
                 {error && selected === null ? (
                   <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>

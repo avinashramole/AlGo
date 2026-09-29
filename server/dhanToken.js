@@ -34,6 +34,7 @@ function emptySession() {
     expiryTime: "",
     source: "",
     autoStart: true,
+    feedStopped: false,
   };
 }
 
@@ -381,6 +382,19 @@ export function pickSavedDhanAccess({ session = {}, desk = {}, env = {} } = {}) 
     source: best.source,
     at: best.at,
   };
+}
+
+/** Stop data feed is the only latch that keeps the quote feed off across restart. */
+export function dhanFeedWasStopped(session = {}) {
+  return session?.feedStopped === true;
+}
+
+/**
+ * A saved token resumes the quote feed on boot unless Stop data feed set feedStopped.
+ * autoStart false from an older save does not keep the feed off.
+ */
+export function feedResumesOnBoot(session = {}) {
+  return Boolean(String(session?.accessToken || "").trim()) && !dhanFeedWasStopped(session);
 }
 
 /** Copy the newest saved admin token into the session file and the admin desk without minting or starting LIVE. */
@@ -841,7 +855,6 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
     }),
     generatedAt: tokenChanged ? new Date().toISOString() : session.generatedAt,
     source: session.pin && session.totpSecret ? session.source || "totp" : "web",
-    autoStart: false,
   });
   persistAdminBrokerSecrets({
     brokerId: "dhan",
@@ -851,5 +864,6 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
 }
 
 export function markDhanAutoStart(enabled) {
-  saveDhanSession({ autoStart: Boolean(enabled) });
+  const on = Boolean(enabled);
+  saveDhanSession({ autoStart: on, feedStopped: !on });
 }

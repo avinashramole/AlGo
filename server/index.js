@@ -725,7 +725,7 @@ app.post("/api/brokers/:id/connect", async (req, res) => {
       });
       res.json({
         ok: true,
-        live: false,
+        live: Boolean(result.live),
         saved: true,
         tokenHint: result.tokenHint,
         warning: result.warning || null,

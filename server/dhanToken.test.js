@@ -28,6 +28,9 @@ import {
   resetDhanAccessToken,
   resolveDhanLogin,
   configuredDhanClientId,
+  dhanFeedWasStopped,
+  feedResumesOnBoot,
+  markDhanAutoStart,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -664,6 +667,53 @@ test("an empty patch and a truncated session file keep the saved admin access to
     fs.writeFileSync(process.env.T2S_DHAN_SESSION_FILE, "");
     assert.equal(loadDhanSession().accessToken, "admin-access-token-keep");
     assert.equal(loadDhanSession().clientId, "1100333");
+  } finally {
+    if (prevSession === undefined) delete process.env.T2S_DHAN_SESSION_FILE;
+    else process.env.T2S_DHAN_SESSION_FILE = prevSession;
+    if (prevRoot === undefined) delete process.env.T2S_ENV_ROOT;
+    else process.env.T2S_ENV_ROOT = prevRoot;
+    for (const key of envKeys) {
+      if (prevEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = prevEnv[key];
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a saved token resumes the data feed until Stop data feed latches it off", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-dhan-feed-"));
+  const prevSession = process.env.T2S_DHAN_SESSION_FILE;
+  const prevRoot = process.env.T2S_ENV_ROOT;
+  const envKeys = ["DHAN_ACCESS_TOKEN", "DHAN_CLIENT_ID", "DHAN_LOGIN_ID", "DHAN_PIN", "DHAN_TOTP_SECRET"];
+  const prevEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  process.env.T2S_DHAN_SESSION_FILE = path.join(dir, "session.json");
+  process.env.T2S_ENV_ROOT = dir;
+  for (const key of envKeys) delete process.env[key];
+  try {
+    saveDhanSession({ clientId: "1100333", accessToken: "admin-access-token-keep", autoStart: false });
+    assert.equal(dhanFeedWasStopped(loadDhanSession()), false);
+    assert.equal(feedResumesOnBoot(loadDhanSession()), true);
+    assert.equal(loadDhanSession().accessToken, "admin-access-token-keep");
+
+    markDhanAutoStart(false);
+    const stopped = loadDhanSession();
+    assert.equal(stopped.accessToken, "admin-access-token-keep");
+    assert.equal(stopped.feedStopped, true);
+    assert.equal(stopped.autoStart, false);
+    assert.equal(feedResumesOnBoot(stopped), false);
+
+    saveDhanSession({ expiryTime: "2099-01-01T00:00:00.000Z" });
+    assert.equal(loadDhanSession().feedStopped, true);
+    assert.equal(loadDhanSession().accessToken, "admin-access-token-keep");
+
+    markDhanAutoStart(true);
+    const resumed = loadDhanSession();
+    assert.equal(resumed.accessToken, "admin-access-token-keep");
+    assert.equal(resumed.feedStopped, false);
+    assert.equal(resumed.autoStart, true);
+    assert.equal(feedResumesOnBoot(resumed), true);
+    assert.equal(feedResumesOnBoot({ accessToken: "", autoStart: true }), false);
+    assert.equal(feedResumesOnBoot({ accessToken: "kept", autoStart: false }), true);
   } finally {
     if (prevSession === undefined) delete process.env.T2S_DHAN_SESSION_FILE;
     else process.env.T2S_DHAN_SESSION_FILE = prevSession;
