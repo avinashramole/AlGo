@@ -44,7 +44,7 @@ const fieldClass = "mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg
 
 export function StrategyBuilder({ open, algo, onClose }: Props) {
   const { data, saveAlgo } = useMarket();
-  const [form, setForm] = useState(emptyStrategy("indicator"));
+  const [form, setForm] = useState(emptyStrategy("nifty-first-candle"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -97,7 +97,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }),
       });
     } else {
-      setForm({ ...emptyStrategy("indicator"), brokerId: data.activeBrokerId || "dhan", runMode: "live" });
+      setForm({ ...emptyStrategy("nifty-first-candle"), brokerId: data.activeBrokerId || "dhan", runMode: "live" });
     }
     setError("");
   }, [open, algo, data.activeBrokerId]);
@@ -218,86 +218,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {editing ? null : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <TypeCard
-            active={kind === "nifty-test"}
-            title="nifty test"
-            text="Nifty future. Preview candle green and break high → BUY. Preview candle red and break low → SELL."
-            onClick={() =>
-              set({
-                ...emptyStrategy("nifty-test"),
-                name: form.name || "nifty test",
-                runMode: form.runMode || "live",
-                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
-                lots: form.lots || 1,
-                lotSize,
-                qty: (form.lots || 1) * lotSize,
-                enabled: false,
-              })
-            }
-          />
-          <TypeCard
-            active={kind === "indicator" && !crudeFirst}
-            title="Indicator based"
-            text="RSI, EMA, VWAP with crossover, above, below, <, >"
-            onClick={() => set({ kind: "indicator", tag: "Indicator", ...emptyStrategy("indicator"), name: form.name, runMode: form.runMode, brokerId: form.brokerId, lots: form.lots })}
-          />
-          <TypeCard
-            active={kind === "price-action" && !crudeFirst}
-            title="Price action based"
-            text="ORB, breakout, pin bar, engulfing"
-            onClick={() => set({ kind: "price-action", tag: "Price action", ...emptyStrategy("price-action"), name: form.name, runMode: form.runMode, brokerId: form.brokerId, lots: form.lots })}
-          />
-          <TypeCard
-            active={kind === "nifty-vwap"}
-            title="NIFTY VWAP ATM"
-            text="5m futures VWAP + ATM CE/PE. SL 20% / target 40% / trail +10% then +3%"
-            onClick={() =>
-              set({
-                ...emptyStrategy("nifty-vwap"),
-                name: form.name || "NIFTY VWAP ATM",
-                runMode: form.runMode || "live",
-                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
-                lots: form.lots || 1,
-                lotSize,
-                qty: (form.lots || 1) * lotSize,
-                enabled: false,
-              })
-            }
-          />
-          <TypeCard
-            active={kind === "nifty-vwap-reversal"}
-            title="NIFTY 15m VWAP reversal"
-            text="15m futures: open below VWAP + close above → weekly ATM CE. Open above + close below → weekly ATM PE. Never monthly. SL 15% / target 30%"
-            onClick={() =>
-              set({
-                ...emptyStrategy("nifty-vwap-reversal"),
-                name: form.name || "NIFTY 15m VWAP reversal",
-                runMode: form.runMode || "live",
-                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
-                lots: form.lots || 1,
-                lotSize,
-                qty: (form.lots || 1) * lotSize,
-                enabled: false,
-              })
-            }
-          />
-          <TypeCard
-            active={kind === "nifty-vwap-hedge"}
-            title="NIFTY 15m VWAP hedge"
-            text="15m futures: open below VWAP + close above → 1 lot weekly ATM CE. Open above + close below → 1 lot PE. +40% books primary. −20% buys 2 lots opposite once. +5% account P&L exits all."
-            onClick={() =>
-              set({
-                ...emptyStrategy("nifty-vwap-hedge"),
-                name: form.name || "NIFTY 15m VWAP hedge",
-                runMode: form.runMode || "live",
-                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
-                lots: 1,
-                lotSize,
-                qty: lotSize,
-                enabled: false,
-              })
-            }
-          />
           <TypeCard
             active={crudeFirst}
             title="CRUDE OIL 5m first candle"

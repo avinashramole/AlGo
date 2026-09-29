@@ -1,4 +1,5 @@
 import { useMarket } from "../context/MarketContext";
+import { isRetiredDeskStrategy } from "../lib/strategies";
 
 export function Analytics() {
   const { data } = useMarket();
@@ -9,7 +10,7 @@ export function Analytics() {
         <section className="card p-4">
           <div className="mb-4 text-sm font-bold">Strategy contribution</div>
           <div className="space-y-3">
-            {data.algos.map((algo, i) => {
+            {data.algos.filter((algo) => !isRetiredDeskStrategy(algo)).map((algo, i) => {
               const colors = ["#2f54eb", "#12b76a", "#f79009"];
               const pct = Math.max(8, Math.round((Math.abs(algo.pnl) / 7000) * 100));
               return (

@@ -302,14 +302,14 @@ test("getCandles keeps NIFTY and CRUDEOIL live bars separate", () => {
   }
 });
 
-test("seed catalog hydrates Crude Oil strategies onto an existing NIFTY-only desk", () => {
+test("seed catalog hydrates the crude first-candle strategy onto a NIFTY-only desk", () => {
   const catalog = seedAlgos();
-  const saved = catalog.filter((row) => ["a4", "a5", "a6"].includes(row.id));
+  const saved = catalog.filter((row) => row.id === "a10");
   const next = hydrateAlgos({ algos: saved, removedIds: [] }, catalog);
-  assert.equal(next.algos.some((row) => row.id === "a7"), true);
-  assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
-  assert.equal(next.algos.find((row) => row.id === "a8").timeframe, "15m");
-  assert.equal(next.algos.find((row) => row.id === "a9").indicator, "SUPERTREND");
+  assert.equal(next.algos.some((row) => row.id === "a12"), true);
+  assert.equal(next.algos.find((row) => row.id === "a12").enabled, false);
+  assert.equal(next.algos.find((row) => row.id === "a12").kind, "crude-first-candle");
+  assert.equal(next.algos.some((row) => row.kind === "indicator"), false);
 });
 
 test("switching option desk does not keep the previous underlying strikes", () => {

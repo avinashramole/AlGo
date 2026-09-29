@@ -281,6 +281,14 @@ export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; i
   return algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
 }
 
+export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
+  if (!algo) return false;
+  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo)) return false;
+  if (isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyTestKind(algo)) return true;
+  const kind = String(algo.kind || "");
+  return kind === "indicator" || kind === "price-action" || kind === "";
+}
+
 export function sortDeskAlgos<T extends { kind?: string; strategyType?: string; indicator?: string }>(rows: T[]) {
   return rows
     .map((row, index) => ({ row, index }))

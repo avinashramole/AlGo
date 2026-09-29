@@ -111,7 +111,7 @@ function defaultConditions(kind: Draft["kind"], indicator: string, pattern: stri
 function blankDraft(): Draft {
   return {
     name: "",
-    kind: "indicator",
+    kind: "nifty-first-candle",
     symbol: "NIFTY",
     instrument: "future",
     optionType: "CE",
@@ -175,19 +175,11 @@ export function AlgoScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [rangeDraft, setRangeDraft] = useState<RangeDraft | null>(null);
   const [rangeBusy, setRangeBusy] = useState(false);
-  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test">("all");
+  const [filter, setFilter] = useState<"all" | "nifty-first-candle">("all");
 
   const rows = data.algos
-    .map((algo, index) => ({ algo, index }))
-    .sort((a, b) => {
-      const rank = (kind?: string) => (kind === "nifty-test" ? 0 : 1);
-      return rank(a.algo.kind) - rank(b.algo.kind) || a.index - b.index;
-    })
-    .map((item) => item.algo)
-    .filter((algo) => {
-      if (filter === "all") return true;
-      return (algo.kind || "indicator") === filter;
-    });
+    .filter((algo) => algo.kind === "nifty-first-candle" || algo.kind === "crude-first-candle")
+    .filter((algo) => filter === "all" || algo.kind === filter);
 
   const save = async () => {
     if (!draft) return;
@@ -259,87 +251,6 @@ export function AlgoScreen() {
         <Text style={styles.title}>{draft.id ? "Edit strategy" : "Add strategy"}</Text>
         {draft.id ? null : (
         <View style={styles.chips}>
-          <Chip label="Indicator based" on={draft.kind === "indicator"} onPress={() => setDraft({ ...draft, kind: "indicator", ...defaultConditions("indicator", draft.indicator, draft.pattern) })} />
-          <Chip label="Price action based" on={draft.kind === "price-action"} onPress={() => setDraft({ ...draft, kind: "price-action", ...defaultConditions("price-action", draft.indicator, draft.pattern) })} />
-          <Chip
-            label="NIFTY VWAP ATM"
-            on={draft.kind === "nifty-vwap"}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                kind: "nifty-vwap",
-                symbol: "NIFTY",
-                instrument: "option",
-                optionType: "CE",
-                strikeOffset: "0",
-                side: "BUY",
-                timeframe: "5m",
-                slPct: "20",
-                targetPct: "40",
-                initialSlPct: "20",
-                trailingActivationPct: "10",
-                trailingStepPct: "3",
-                vwapExitCandles: "5",
-              })
-            }
-          />
-          <Chip
-            label="NIFTY 15m reversal"
-            on={draft.kind === "nifty-vwap-reversal"}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                kind: "nifty-vwap-reversal",
-                symbol: "NIFTY",
-                instrument: "option",
-                optionType: "CE",
-                strikeOffset: "0",
-                side: "BUY",
-                timeframe: "15m",
-                slPct: "15",
-                targetPct: "30",
-                initialSlPct: "15",
-              })
-            }
-          />
-          <Chip
-            label="NIFTY 15m hedge"
-            on={draft.kind === "nifty-vwap-hedge"}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                kind: "nifty-vwap-hedge",
-                symbol: "NIFTY",
-                instrument: "option",
-                optionType: "CE",
-                strikeOffset: "0",
-                side: "BUY",
-                timeframe: "15m",
-                slPct: "0",
-                targetPct: "40",
-                initialSlPct: "0",
-              })
-            }
-          />
-          <Chip
-            label="nifty test"
-            on={draft.kind === "nifty-test"}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                kind: "nifty-test",
-                name: draft.name || "nifty test",
-                symbol: "NIFTY",
-                instrument: "future",
-                side: "BOTH",
-                timeframe: "5m",
-                slPct: "0.4",
-                targetPct: "0.8",
-                startTimeIst: "09:15",
-                endTimeIst: "15:15",
-              })
-            }
-          />
           <Chip
             label="NIFTY 5m first candle"
             on={draft.kind === "nifty-first-candle"}
@@ -678,12 +589,6 @@ export function AlgoScreen() {
       )}
       <View style={styles.chips}>
         <Chip label="All" on={filter === "all"} onPress={() => setFilter("all")} />
-        <Chip label="nifty test" on={filter === "nifty-test"} onPress={() => setFilter("nifty-test")} />
-        <Chip label="Indicator" on={filter === "indicator"} onPress={() => setFilter("indicator")} />
-        <Chip label="Price action" on={filter === "price-action"} onPress={() => setFilter("price-action")} />
-        <Chip label="NIFTY VWAP" on={filter === "nifty-vwap"} onPress={() => setFilter("nifty-vwap")} />
-        <Chip label="15m reversal" on={filter === "nifty-vwap-reversal"} onPress={() => setFilter("nifty-vwap-reversal")} />
-        <Chip label="15m hedge" on={filter === "nifty-vwap-hedge"} onPress={() => setFilter("nifty-vwap-hedge")} />
         <Chip label="5m first candle" on={filter === "nifty-first-candle"} onPress={() => setFilter("nifty-first-candle")} />
       </View>
       {rows.map((algo) => (

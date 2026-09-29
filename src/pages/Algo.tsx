@@ -14,15 +14,16 @@ import {
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
   isNiftyTestKind,
-  sortDeskAlgos,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
+  isRetiredDeskStrategy,
+  sortDeskAlgos,
   type AlgoStrategy,
 } from "../lib/strategies";
 
 type DeskTab = "copy" | "tradingview";
-type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test" | "crudeoil";
+type Filter = "all" | "nifty-first-candle" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
 
 function rupee(value: number) {
@@ -138,20 +139,16 @@ export function Algo() {
     };
   }, []);
 
-  const rangeFor = data.algos.find((item) => item.id === rangeId) || null;
-  const canStartAll = data.algos.some((row) => row.runMode !== "backtest" && !row.enabled);
-  const canStopAll = data.algos.some((row) => row.enabled);
+  const deskAlgos = data.algos.filter((row) => !isRetiredDeskStrategy(row));
+  const rangeFor = deskAlgos.find((item) => item.id === rangeId) || null;
+  const canStartAll = deskAlgos.some((row) => row.runMode !== "backtest" && !row.enabled);
+  const canStopAll = deskAlgos.some((row) => row.enabled);
 
-  const rows = sortDeskAlgos(data.algos).filter((algo) => {
+  const rows = sortDeskAlgos(deskAlgos).filter((algo) => {
     if (filter === "all") return true;
     if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL" || isCrudeFirstCandleKind(algo);
     if (isCrudeFirstCandleKind(algo)) return false;
-    if (filter === "nifty-vwap") return isNiftyVwapKind(algo);
-    if (filter === "nifty-vwap-reversal") return isNiftyVwapReversalKind(algo);
-    if (filter === "nifty-vwap-hedge") return isNiftyVwapHedgeKind(algo);
-    if (filter === "nifty-first-candle") return isNiftyFirstCandleKind(algo);
-    if (filter === "nifty-test") return isNiftyTestKind(algo);
-    return (algo.kind || (algo.tag === "Price action" ? "price-action" : "indicator")) === filter;
+    return isNiftyFirstCandleKind(algo);
   }) as AlgoStrategy[];
 
   const openAdd = () => {
@@ -252,12 +249,6 @@ export function Algo() {
             {(
               [
                 ["all", "All"],
-                ["nifty-test", "nifty test"],
-                ["indicator", "Indicator based"],
-                ["price-action", "Price action based"],
-                ["nifty-vwap", "NIFTY VWAP ATM"],
-                ["nifty-vwap-reversal", "15m VWAP reversal"],
-                ["nifty-vwap-hedge", "15m VWAP hedge"],
                 ["nifty-first-candle", "5m first candle"],
                 ["crudeoil", "CRUDE OIL"],
               ] as const
@@ -319,7 +310,7 @@ export function Algo() {
           ) : (
             <section className="card p-8 text-center">
               <div className="text-base font-bold">No strategies in this view</div>
-              <p className="mt-1 text-sm text-slate-400">Add an indicator, price-action, or NIFTY VWAP strategy to start the desk.</p>
+              <p className="mt-1 text-sm text-slate-400">Add a NIFTY 5m or CRUDE OIL strategy to start the desk.</p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
                 Add strategy
               </button>

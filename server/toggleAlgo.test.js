@@ -80,7 +80,7 @@ test("all live strategies can start at the same time", () => {
 test("a started strategy stays LIVE after the saved file is reloaded", () => {
   setDhanFeed({ live: true });
   const stamp = Date.now();
-  const created = createAlgo({ name: `Persist Live ${stamp}`, kind: "indicator", runMode: "live" });
+  const created = createAlgo({ name: `Persist Live ${stamp}`, kind: "nifty-first-candle", runMode: "live" });
   try {
     const started = toggleAlgo(created.id, { enabled: true });
     assert.equal(started.enabled, true);

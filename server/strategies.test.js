@@ -66,72 +66,82 @@ test("mappedClientIdsForMembers keeps only clients that still exist", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 9);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9,a10,a11,a12");
+  assert.equal(next.algos.length, 2);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12");
   assert.equal(next.removedIds.length, 0);
 });
 
 test("hydrate does not resurrect a deleted catalog strategy after deploy", () => {
   const catalog = seedAlgos();
-  const saved = catalog.filter((row) => row.id !== "a6");
-  const next = hydrateAlgos({ algos: saved, removedIds: ["a6"] }, catalog);
-  assert.equal(next.algos.some((row) => row.id === "a6"), false);
-  assert.equal(next.algos.some((row) => row.name === "NIFTY 15m VWAP hedge"), false);
-  assert.deepEqual(next.removedIds, ["a6"]);
-  assert.equal(next.algos.length, 8);
+  const saved = catalog.filter((row) => row.id !== "a12");
+  const next = hydrateAlgos({ algos: saved, removedIds: ["a12"] }, catalog);
+  assert.equal(next.algos.some((row) => row.id === "a12"), false);
+  assert.equal(next.algos.some((row) => row.name === "CRUDE OIL 5m first candle"), false);
+  assert.deepEqual(next.removedIds, ["a12"]);
+  assert.equal(next.algos.length, 1);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
   const catalog = seedAlgos();
-  const next = hydrateAlgos({ algos: catalog.slice(0, 2), removedIds: [] }, catalog);
-  assert.equal(next.algos.some((row) => row.id === "a6"), true);
-  assert.equal(next.algos.find((row) => row.id === "a6").enabled, false);
-  assert.equal(next.algos.some((row) => row.id === "a7"), true);
-  assert.equal(next.algos.find((row) => row.id === "a7").symbol, "CRUDEOIL");
-  assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
+  const next = hydrateAlgos({ algos: catalog.slice(0, 1), removedIds: [] }, catalog);
   assert.equal(next.algos.some((row) => row.id === "a10"), true);
   assert.equal(next.algos.find((row) => row.id === "a10").enabled, false);
+  assert.equal(next.algos.some((row) => row.id === "a12"), true);
+  assert.equal(next.algos.find((row) => row.id === "a12").symbol, "CRUDEOIL");
+  assert.equal(next.algos.find((row) => row.id === "a12").enabled, false);
 });
 
 test("hydrate keeps a user-created strategy and a started LIVE algo after reload", () => {
   const catalog = seedAlgos();
-  const custom = normalizeAlgo({ name: "My RSI", kind: "indicator" }, { id: "a99" });
-  const liveAtm = { ...catalog[0], enabled: true, status: "LIVE" };
-  const next = hydrateAlgos({ algos: [liveAtm, custom], removedIds: ["a5"] }, catalog);
+  const custom = normalizeAlgo({ name: "My crude copy", kind: "crude-first-candle" }, { id: "a99" });
+  const liveFirst = { ...catalog[0], enabled: true, status: "LIVE" };
+  const next = hydrateAlgos({ algos: [liveFirst, custom], removedIds: [] }, catalog);
   assert.equal(next.algos.some((row) => row.id === "a99"), true);
-  assert.equal(next.algos.some((row) => row.id === "a5"), false);
-  const atm = next.algos.find((row) => row.id === "a4");
-  assert.equal(atm.enabled, true);
-  assert.equal(atm.status, "LIVE");
-  assert.equal(next.algos.some((row) => row.id === "a6"), true);
-  assert.equal(next.algos.some((row) => row.id === "a7"), true);
-  assert.equal(next.algos.find((row) => row.id === "a7").enabled, false);
+  const first = next.algos.find((row) => row.id === "a10");
+  assert.equal(first.enabled, true);
+  assert.equal(first.status, "LIVE");
+  assert.equal(next.algos.some((row) => row.id === "a12"), true);
+  assert.equal(next.algos.find((row) => row.id === "a12").enabled, false);
 });
 
 test("hydrate does not start a paused strategy from the catalog", () => {
   const catalog = seedAlgos();
   const paused = { ...catalog[0], enabled: false, status: "PAUSED" };
   const next = hydrateAlgos({ algos: [paused], removedIds: [] }, catalog);
-  const atm = next.algos.find((row) => row.id === "a4");
-  assert.equal(atm.enabled, false);
-  assert.equal(atm.status, "PAUSED");
+  const first = next.algos.find((row) => row.id === "a10");
+  assert.equal(first.enabled, false);
+  assert.equal(first.status, "PAUSED");
+});
+
+test("hydrate drops retired strategies and records them as removed", () => {
+  const catalog = seedAlgos();
+  const retired = [
+    normalizeAlgo({ name: "NIFTY VWAP ATM", kind: "nifty-vwap" }, { id: "a4" }),
+    normalizeAlgo({ name: "NIFTY 15m VWAP reversal", kind: "nifty-vwap-reversal" }, { id: "a5" }),
+    normalizeAlgo({ name: "NIFTY 15m VWAP hedge", kind: "nifty-vwap-hedge" }, { id: "a6" }),
+    normalizeAlgo({ name: "My RSI", kind: "indicator", indicator: "RSI" }, { id: "a20" }),
+    normalizeAlgo({ name: "ORB desk", kind: "price-action", pattern: "ORB" }, { id: "a21" }),
+    normalizeAlgo({ name: "nifty test", kind: "nifty-test" }, { id: "a11" }),
+  ];
+  const next = hydrateAlgos({ algos: [...retired, ...catalog], removedIds: [] }, catalog);
+  for (const id of ["a4", "a5", "a6", "a20", "a21", "a11"]) {
+    assert.equal(next.algos.some((row) => row.id === id), false);
+    assert.equal(next.removedIds.includes(id), true);
+  }
+  assert.equal(next.algos.some((row) => row.id === "a10"), true);
+  assert.equal(next.algos.some((row) => row.id === "a12"), true);
 });
 
 test("seed includes paused CRUDE OIL option strategies", () => {
   const seeded = seedAlgos();
   const crude = seeded.filter((row) => row.symbol === "CRUDEOIL");
-  assert.equal(crude.length, 4);
+  assert.equal(crude.length, 1);
   assert.equal(crude.every((row) => row.enabled === false), true);
   assert.equal(crude.every((row) => row.status === "PAUSED"), true);
   assert.equal(crude.every((row) => row.instrument === "option"), true);
   assert.equal(crude.every((row) => row.lotSize === 100), true);
-  assert.equal(crude.filter((row) => row.kind === "indicator").length, 3);
-  assert.equal(seeded.find((row) => row.id === "a7").name, "CRUDE OIL VWAP ATM");
-  assert.equal(seeded.find((row) => row.id === "a8").name, "CRUDE OIL 15m VWAP reversal");
-  assert.equal(seeded.find((row) => row.id === "a8").timeframe, "15m");
-  assert.equal(seeded.find((row) => row.id === "a9").name, "CRUDE OIL Supertrend ATM");
-  assert.equal(seeded.find((row) => row.id === "a9").indicator, "SUPERTREND");
-  assert.equal(seeded.find((row) => row.id === "a6").symbol, "NIFTY");
+  assert.equal(crude.filter((row) => row.kind === "indicator").length, 0);
+  assert.equal(seeded.some((row) => row.kind === "nifty-vwap" || row.kind === "nifty-test" || row.kind === "indicator"), false);
   const firstCandle = seeded.find((row) => row.id === "a10");
   assert.equal(firstCandle.name, "NIFTY 5m first candle");
   assert.equal(firstCandle.kind, "nifty-first-candle");
@@ -296,25 +306,12 @@ test("hydrate rematerializes first candle saved as a generic indicator", () => {
   assert.equal(row.enabled, false);
 });
 
-test("seed includes paused nifty test future strategy", () => {
+test("seed does not include nifty test", () => {
   const seeded = seedAlgos();
-  const row = seeded.find((item) => item.id === "a11");
-  assert.equal(row.name, "nifty test");
-  assert.equal(row.kind, "nifty-test");
-  assert.equal(row.strategyType, "NIFTY_TEST");
-  assert.equal(row.symbol, "NIFTY");
-  assert.equal(row.instrument, "future");
-  assert.equal(row.side, "BOTH");
-  assert.equal(row.timeframe, "5m");
-  assert.equal(row.startTimeIst, "09:15");
-  assert.equal(row.endTimeIst, "15:15");
-  assert.equal(row.enabled, false);
-  assert.equal(row.status, "PAUSED");
-  assert.match(row.summary, /current candle above open → BUY/);
-  assert.match(row.summary, /current candle below open → SELL/);
+  assert.equal(seeded.some((item) => item.kind === "nifty-test" || item.id === "a11"), false);
 });
 
-test("nifty test time input is kept when the saved row is generic", () => {
+test("a saved nifty test is dropped with the retired strategies", () => {
   const catalog = seedAlgos();
   const next = hydrateAlgos(
     {
@@ -338,15 +335,8 @@ test("nifty test time input is kept when the saved row is generic", () => {
     },
     catalog,
   );
-  const row = next.algos.find((item) => item.id === "a11");
-  assert.equal(row.kind, "nifty-test");
-  assert.equal(row.instrument, "future");
-  assert.equal(row.side, "BOTH");
-  assert.equal(row.timeframe, "15m");
-  assert.equal(row.startTimeIst, "09:20");
-  assert.equal(row.endTimeIst, "15:00");
-  assert.equal(row.slPct, 0.5);
-  assert.equal(row.targetPct, 1);
-  assert.equal(row.enabled, false);
+  assert.equal(next.algos.some((item) => item.id === "a11"), false);
+  assert.equal(next.removedIds.includes("a11"), true);
+  assert.equal(next.algos.some((item) => item.id === "a10"), true);
 });
 

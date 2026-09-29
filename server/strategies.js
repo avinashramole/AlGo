@@ -824,91 +824,27 @@ export function normalizeAlgo(input = {}, existing = {}) {
   return withMapping(next, input, existing);
 }
 
-function seedCrudeAlgo(input, existing) {
-  return normalizeAlgo(
-    {
-      kind: "indicator",
-      symbol: "CRUDEOIL",
-      instrument: "option",
-      optionType: "CE",
-      strikeOffset: 0,
-      lots: 1,
-      runMode: "live",
-      ...input,
-    },
-    { pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live", ...existing },
-  );
+const RETIRED_KINDS = new Set([
+  "indicator",
+  "price-action",
+  "nifty-vwap",
+  "nifty-vwap-reversal",
+  "nifty-vwap-hedge",
+  "nifty-test",
+]);
+
+function isRetiredAlgo(algo) {
+  return RETIRED_KINDS.has(String(algo?.kind || ""));
 }
 
 export function seedAlgos() {
   return [
-    normalizeAlgo(
-      defaultNiftyVwapAlgo({
-        name: "NIFTY VWAP ATM",
-        runMode: "live",
-      }),
-      { id: "a4", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
-    ),
-    normalizeAlgo(
-      defaultNiftyVwapReversalAlgo({
-        name: "NIFTY 15m VWAP reversal",
-        runMode: "live",
-      }),
-      { id: "a5", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
-    ),
-    normalizeAlgo(
-      defaultNiftyVwapHedgeAlgo({
-        name: "NIFTY 15m VWAP hedge",
-        runMode: "live",
-      }),
-      { id: "a6", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
-    ),
-    seedCrudeAlgo(
-      {
-        name: "CRUDE OIL VWAP ATM",
-        indicator: "VWAP",
-        timeframe: "5m",
-        side: "BUY",
-        slPct: 0.4,
-        targetPct: 0.8,
-      },
-      { id: "a7" },
-    ),
-    seedCrudeAlgo(
-      {
-        name: "CRUDE OIL 15m VWAP reversal",
-        indicator: "VWAP",
-        timeframe: "15m",
-        side: "BOTH",
-        slPct: 0.4,
-        targetPct: 0.8,
-      },
-      { id: "a8" },
-    ),
-    seedCrudeAlgo(
-      {
-        name: "CRUDE OIL Supertrend ATM",
-        indicator: "SUPERTREND",
-        timeframe: "5m",
-        side: "BUY",
-        slPct: 0.4,
-        targetPct: 0.8,
-      },
-      { id: "a9" },
-    ),
     normalizeAlgo(
       defaultNiftyFirstCandleAlgo({
         name: "NIFTY 5m first candle",
         runMode: "live",
       }),
       { id: "a10", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
-    ),
-    normalizeAlgo(
-      defaultNiftyTestAlgo({
-        name: "nifty test",
-        runMode: "live",
-      }),
-      { id: "a11", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live", lastSignal: "NO SIGNAL" },
     ),
     normalizeAlgo(
       defaultCrudeFirstCandleAlgo({
@@ -953,23 +889,33 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
   const hasSaved = Array.isArray(stored.algos);
   const algos = [];
   const seen = new Set();
+  const drop = (id) => {
+    if (id) removed.add(id);
+  };
   if (hasSaved) {
     for (const row of stored.algos) {
       const id = String(row?.id || "").trim();
       if (!id || removed.has(id) || seen.has(id)) continue;
       const next = restoreRunStatus(normalizeAlgo(row, { ...row, id }));
       next.id = id;
+      if (isRetiredAlgo(next)) {
+        drop(id);
+        continue;
+      }
       algos.push(next);
       seen.add(id);
     }
   }
   for (const seed of catalog || []) {
     const id = String(seed.id || "").trim();
-    if (!id || removed.has(id) || seen.has(id)) continue;
+    if (!id || removed.has(id) || seen.has(id) || isRetiredAlgo(seed)) {
+      if (id && isRetiredAlgo(seed)) drop(id);
+      continue;
+    }
     algos.push(seed);
     seen.add(id);
   }
-  return { algos, removedIds };
+  return { algos, removedIds: uniqueIds([...removed]) };
 }
 
 export function loadAlgoStore(catalog = seedAlgos()) {

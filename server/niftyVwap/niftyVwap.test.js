@@ -542,25 +542,11 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
   assert.equal(updated.initialSlPct, 18);
 });
 
-test("seed includes paused NIFTY VWAP ATM and 15m reversal algos", () => {
+test("seed does not include NIFTY VWAP ATM or 15m reversal algos", () => {
   const seeded = seedAlgos();
-  assert.ok(seeded.length >= 6);
-  assert.equal(seeded[0].name, "NIFTY VWAP ATM");
-  assert.equal(isNiftyVwapAlgo(seeded[0]), true);
-  assert.equal(seeded[0].enabled, false);
-  assert.equal(seeded[0].runMode, "live");
-  assert.equal(seeded[0].status, "PAUSED");
-  assert.equal(seeded[0].brokerId, "dhan");
-  assert.equal(seeded[1].name, "NIFTY 15m VWAP reversal");
-  assert.equal(isNiftyVwapReversalAlgo(seeded[1]), true);
-  assert.equal(seeded[1].enabled, false);
-  assert.equal(seeded[1].timeframe, "15m");
-  assert.equal(seeded[1].initialSlPct, 15);
-  assert.equal(seeded[1].targetPct, 30);
-  assert.equal(seeded[1].status, "PAUSED");
-  assert.equal(seeded[2].name, "NIFTY 15m VWAP hedge");
-  assert.equal(seeded[2].enabled, false);
-  assert.equal(seeded[2].status, "PAUSED");
+  assert.equal(seeded.some((row) => isNiftyVwapAlgo(row) || isNiftyVwapReversalAlgo(row)), false);
+  assert.equal(seeded.find((row) => row.id === "a10").name, "NIFTY 5m first candle");
+  assert.equal(seeded.find((row) => row.id === "a10").enabled, false);
 });
 
 test("paper/live/backtest share the same config and BUY-only option payload", () => {

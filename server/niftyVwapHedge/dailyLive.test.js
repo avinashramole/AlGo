@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { defaultNiftyFirstCandleAlgo, defaultNiftyVwapReversalAlgo } from "../niftyVwap/config.js";
+import { defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo } from "../niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo } from "./config.js";
 import {
   applyFirstCandleDailyLive,
@@ -40,8 +40,30 @@ const MON_0900 = Date.parse("2026-08-24T03:30:00.000Z");
 const MON_0920 = Date.parse("2026-08-24T03:50:00.000Z");
 
 function desk(patch = {}) {
-  const seeded = seedAlgos();
-  return seeded.map((row) => ({ ...row, ...(patch[row.id] || {}) }));
+  const retired = [
+    normalizeAlgo(defaultNiftyVwapAlgo({ name: "NIFTY VWAP ATM", runMode: "live" }), {
+      id: "a4",
+      enabled: false,
+      status: "PAUSED",
+      brokerId: "dhan",
+      runMode: "live",
+    }),
+    normalizeAlgo(defaultNiftyVwapReversalAlgo({ name: "NIFTY 15m VWAP reversal", runMode: "live" }), {
+      id: "a5",
+      enabled: false,
+      status: "PAUSED",
+      brokerId: "dhan",
+      runMode: "live",
+    }),
+    normalizeAlgo(defaultNiftyVwapHedgeAlgo({ name: "NIFTY 15m VWAP hedge", runMode: "live" }), {
+      id: "a6",
+      enabled: false,
+      status: "PAUSED",
+      brokerId: "dhan",
+      runMode: "live",
+    }),
+  ];
+  return [...retired, ...seedAlgos()].map((row) => ({ ...row, ...(patch[row.id] || {}) }));
 }
 
 test("09:20 IST window is only weekdays at that minute", () => {
@@ -137,7 +159,8 @@ test("hydrate/normalize still seed hedge and reversal paused — 09:20 is a sepa
   assert.equal(createdReversal.enabled, false);
   assert.notEqual(createdHedge.status, "LIVE");
   assert.notEqual(createdReversal.status, "LIVE");
-  const seeded = seedAlgos();
+  const seeded = desk();
+  assert.equal(seedAlgos().some((row) => row.id === "a5" || row.id === "a6"), false);
   assert.equal(seeded.find((row) => row.id === "a5").enabled, false);
   assert.equal(seeded.find((row) => row.id === "a6").enabled, false);
   const boot = applyHedgeDailyLive(seeded, { now: Date.parse("2026-08-21T02:30:00.000Z"), feedLive: true });
