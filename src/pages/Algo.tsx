@@ -74,7 +74,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "crude-first-candle" as const,
       category: "CRUDE OIL FIRST 5M",
-      config: `CRUDE FUT · monthly ATM · preview ${algo.timeframe || "5m"} open/close at the next candle open · up to ${maxTrades} trades · MCX until ${algo.endTimeIst || "23:15"} IST · paused until Start`,
+      config: `CRUDE FUT · monthly ATM · 1 signal = 1 order · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST · paused until Start`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {

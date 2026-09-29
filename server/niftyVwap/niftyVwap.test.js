@@ -1627,3 +1627,92 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
   });
   assert.equal(nseHours.buyCe, false);
 });
+
+test("crude max trades input is kept, and one signal places one order", () => {
+  assert.equal(crudeFirstCandleConfig({ maxTradesPerDay: 1 }).maxTradesPerDay, 1);
+  assert.equal(crudeFirstCandleConfig({ maxTradesPerDay: 3 }).maxTradesPerDay, 3);
+  assert.equal(crudeFirstCandleConfig({}).maxTradesPerDay, 5);
+  assert.equal(niftyFirstCandleConfig({ maxTradesPerDay: 1 }).maxTradesPerDay, 5);
+  const saved = normalizeAlgo(
+    { maxTradesPerDay: 2 },
+    defaultCrudeFirstCandleAlgo({ name: "CRUDE OIL 5m first candle", maxTradesPerDay: 5 }),
+  );
+  assert.equal(saved.maxTradesPerDay, 2);
+  assert.equal(saved.kind, "crude-first-candle");
+
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE one signal", maxTradesPerDay: 5 });
+  const book = bookAdapter();
+  const bar = firstBar(6100, 6120);
+  const input = {
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [bar],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  };
+  assert.equal(NiftyVwapStrategy.tick(input).action, "entry");
+  noteBrokerRejection(algo);
+  book.positions.length = 0;
+  algo.vwapState.lastEntryBarTime = 0;
+  algo.vwapState.inFlight = false;
+  for (let n = 0; n < 4; n += 1) {
+    const again = NiftyVwapStrategy.tick({ ...input, positions: book.positions });
+    assert.equal(again.action, "skip");
+    assert.equal(again.reason, "duplicate-bar");
+  }
+  assert.equal(book.places.length, 1);
+
+  const capped = defaultCrudeFirstCandleAlgo({ name: "CRUDE max 2", maxTradesPerDay: 2 });
+  const capBook = bookAdapter();
+  for (let n = 0; n < 2; n += 1) {
+    const time = T0_0900 + n * BAR;
+    const tick = NiftyVwapStrategy.tick({
+      algo: capped,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 800,
+      futuresBars: [{ time, open: 6100, high: 6130, low: 6090, close: 6120, volume: 10 }],
+      ceBars: [{ time, open: 80, high: 95, low: 78, close: 90, volume: 5 }],
+      peBars: [firstBar(70, 60)],
+      ceLtp: 90,
+      peLtp: 60,
+      spot: 6120,
+      step: 50,
+      expiry: "2026-10-19",
+      positions: capBook.positions,
+      adapter: capBook.adapter,
+    });
+    assert.equal(tick.action, "entry");
+    capBook.adapter.exit(capBook.positions[0]);
+    PositionManager.clearOpen(capped.vwapState);
+    capped.vwapState.lastEntryBarTime = 0;
+  }
+  assert.equal(capBook.places.length, 2);
+  const third = NiftyVwapStrategy.tick({
+    algo: capped,
+    now: T0_0900 + 3 * BAR,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [{ time: T0_0900 + 2 * BAR, open: 6100, high: 6130, low: 6090, close: 6120, volume: 10 }],
+    ceBars: [{ time: T0_0900 + 2 * BAR, open: 80, high: 95, low: 78, close: 90, volume: 5 }],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: capBook.positions,
+    adapter: capBook.adapter,
+  });
+  assert.equal(third.reason, "max-trades");
+  assert.equal(capBook.places.length, 2);
+});

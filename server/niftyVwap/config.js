@@ -302,6 +302,10 @@ export function crudeFirstCandleConfig(algo = {}) {
   const endTimeIst = parseIstHm(algo.endTimeIst, DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.endTimeIst);
   const endParts = endTimeIst.split(":").map(Number);
   const eodFromEnd = Math.max(0, 23 * 60 + 30 - (endParts[0] * 60 + endParts[1]));
+  const requestedMax = Number(algo.maxTradesPerDay);
+  const maxTradesPerDay = Number.isFinite(requestedMax) && requestedMax >= 1
+    ? Math.max(1, Math.min(20, Math.round(requestedMax)))
+    : DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.maxTradesPerDay;
   return {
     ...base,
     symbol: "CRUDEOIL",
@@ -310,6 +314,7 @@ export function crudeFirstCandleConfig(algo = {}) {
     expiryKind: "monthly",
     endTimeIst,
     eodSquareOffMinutes: eodFromEnd,
+    maxTradesPerDay,
   };
 }
 

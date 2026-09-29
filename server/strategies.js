@@ -290,7 +290,7 @@ export function summarizeAlgo(algo) {
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
-    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview 5m open/close at the next candle open · up to ${maxTrades} trades · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trades/day · paused until Start · ${size}`;
+    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview 5m open/close at the next candle open · one signal places one order · max ${maxTrades} trades/day · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

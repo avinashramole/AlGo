@@ -42,6 +42,7 @@ export function runtimeState(algo) {
       exitQueued: false,
       lastEntryAt: 0,
       sessionTrades: 0,
+      sentSignalBarTime: 0,
       processedFirstBarTime: 0,
       ceBars: [],
       peBars: [],
@@ -69,6 +70,7 @@ export function resetSession(state, sessionDate) {
   state.exitQueued = false;
   state.lastEntryAt = 0;
   state.sessionTrades = 0;
+  state.sentSignalBarTime = 0;
   state.processedFirstBarTime = 0;
   state.ceBars = [];
   state.peBars = [];

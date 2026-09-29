@@ -690,7 +690,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
     if (isNiftyVwapHedgeAlgo(algo)) noteHedgeBrokerRejection(algo);
     else noteBrokerRejection(algo);
     algo.lastSignal = next.lastSignal;
-    if (!isNiftyVwapHedgeAlgo(algo)) runtimeState(algo).lastEntryBarTime = 0;
+    if (!isNiftyVwapHedgeAlgo(algo) && !isCrudeFirstCandleAlgo(algo)) runtimeState(algo).lastEntryBarTime = 0;
     return;
   }
   algo.lastSignal = next.lastSignal;
