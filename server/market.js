@@ -2458,14 +2458,28 @@ export function setNiftyFutureChartCandles(candles) {
     niftyFutureChartCandles = [];
     return;
   }
-  niftyFutureChartCandles = candles.map((row) => ({
-    time: Number(row.time),
-    open: Number(row.open),
-    high: Number(row.high),
-    low: Number(row.low),
-    close: Number(row.close),
-    volume: Number(row.volume) || 0,
-  }));
+  const aligned = alignNiftyFutureFiveMinuteOpens(
+    candles.map((row) => ({
+      time: Number(row.time),
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+      volume: Number(row.volume) || 0,
+    })),
+  );
+  const now = Date.now();
+  const step = 5 * 60_000;
+  const currentOpen = futureFiveOpen(now);
+  const forming =
+    currentOpen != null && now < currentOpen + step
+      ? niftyFutureChartCandles.find((bar) => Number(bar.time) === currentOpen)
+      : null;
+  const incomingHasCurrent = aligned.some((bar) => Number(bar.time) === currentOpen);
+  const next = aligned.filter((bar) => !(forming && !incomingHasCurrent && Number(bar.time) === currentOpen));
+  if (forming && !incomingHasCurrent) next.push({ ...forming });
+  next.sort((a, b) => Number(a.time) - Number(b.time));
+  niftyFutureChartCandles = next;
 }
 
 export function peekNiftyFutureBars() {
@@ -2478,6 +2492,35 @@ function futureMinuteOpen(ms) {
     closeLabeled: false,
     sessionOpenMinutes: 9 * 60 + 15,
   });
+}
+
+function futureFiveOpen(ms) {
+  return VwapSignalEngine.sessionBarOpenMs(ms, 5, {
+    closeLabeled: false,
+    sessionOpenMinutes: 9 * 60 + 15,
+  });
+}
+
+function istMinuteOf(ms) {
+  const wall = VwapSignalEngine.istWallTime(ms);
+  return wall.hour * 60 + wall.minute;
+}
+
+function fiveMinuteSeriesIsCloseLabeled(candles) {
+  const sessionOpen = 9 * 60 + 15;
+  const sessionClose = 15 * 60 + 30;
+  const mins = (Array.isArray(candles) ? candles : [])
+    .map((bar) => istMinuteOf(bar.time))
+    .filter((minute) => minute >= sessionOpen && minute <= sessionClose);
+  if (mins.length < 2) return false;
+  if (mins.includes(sessionOpen)) return false;
+  return Math.min(...mins) === sessionOpen + 5 || mins.includes(sessionClose);
+}
+
+function alignNiftyFutureFiveMinuteOpens(candles) {
+  if (!fiveMinuteSeriesIsCloseLabeled(candles)) return candles;
+  const step = 5 * 60_000;
+  return candles.map((bar) => ({ ...bar, time: Number(bar.time) - step }));
 }
 
 function seriesStepMs(series) {
@@ -2497,13 +2540,16 @@ function patchFutureMinute(series, openMs, price, now) {
   const step = seriesStepMs(series);
   const last = series[series.length - 1];
   if (step >= 5 * 60_000 - 1000) {
-    if (!last) return;
-    const start = Number(last.time);
-    if (now >= start && now < start + step) {
+    const bucket = futureFiveOpen(now);
+    if (bucket == null) return;
+    if (last && Number(last.time) === bucket) {
       last.high = Math.max(Number(last.high) || price, price);
       last.low = Math.min(Number(last.low) || price, price);
       last.close = price;
+      return;
     }
+    if (last && bucket < Number(last.time)) return;
+    series.push({ time: bucket, open: price, high: price, low: price, close: price, volume: 0 });
     return;
   }
   if (!last) {

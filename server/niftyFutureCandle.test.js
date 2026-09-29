@@ -126,3 +126,44 @@ test("official Nifty future 5m open stays put when the index and the future tick
   setNiftyFutureChartCandles([]);
   setLiveCandles([{ time: Date.now(), open: 1, high: 1, low: 1, close: 1, volume: 1 }], "NIFTY");
 });
+
+test("a Dhan 15:05 stamp is the 15:00-15:05 candle, and the buy uses the current 15:05 candle", () => {
+  const close0920 = OPEN_0915 + FIVE;
+  const close1505 = Date.parse("2026-09-29T09:35:00.000Z");
+  const open1500 = close1505 - FIVE;
+  const open1505 = close1505;
+  const now = Date.parse("2026-09-29T09:37:00.000Z");
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    setNiftyFutureChartCandles([
+      { time: close0920, open: 22600, high: 22620, low: 22590, close: 22610, volume: 10 },
+      { time: close1505, open: 22665, high: 22680, low: 22660, close: 22672.4, volume: 12 },
+    ]);
+    const stored = peekNiftyFutureBars();
+    assert.equal(stored[1].time, open1500);
+    assert.equal(stored[1].open, 22665);
+    assert.equal(stored[1].close, 22672.4);
+    applyLiveQuotes([
+      { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 22660, securityId: "58072" },
+    ]);
+    applyLiveQuotes([
+      { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 22655, securityId: "58072" },
+    ]);
+    const preview = niftyFuturePreviewBar("5m", now);
+    assert.equal(preview.time, open1505);
+    assert.equal(preview.open, 22660);
+    assert.equal(preview.close, 22655);
+    const text = formatLiveFuturePreview(preview, 5);
+    assert.match(text, /NIFTY FUT RED/);
+    assert.match(text, /15:05–15:10 IST/);
+    assert.doesNotMatch(text, /BUY CE/);
+    const previous = peekNiftyFutureBars().find((bar) => bar.time === open1500);
+    assert.equal(previous.open, 22665);
+    assert.equal(previous.close, 22672.4);
+  } finally {
+    Date.now = realNow;
+    setNiftyFutureChartCandles([]);
+    setLiveCandles([{ time: Date.now(), open: 1, high: 1, low: 1, close: 1, volume: 1 }], "NIFTY");
+  }
+});
