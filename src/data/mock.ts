@@ -297,7 +297,7 @@ export const initialAlgos: Algo[] = [
     targetPct: 0.8,
     startTimeIst: "09:15",
     endTimeIst: "15:15",
-    summary: "nifty test · NIFTY FUT · preview candle green + break high → BUY · preview candle red + break low → SELL · 09:15–15:15 IST",
+    summary: "Nifty Test · NIFTY FUT · live feed while started · current candle above open → BUY · current candle below open → SELL",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

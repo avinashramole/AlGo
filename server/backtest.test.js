@@ -165,9 +165,9 @@ const niftyTest = {
   endTimeIst: "15:15",
 };
 
-test("nifty test buys the future when the preview candle is green and price breaks its high", () => {
+test("nifty test buys when the current candle close is above its open", () => {
   const candles = [
-    bar(0, 110, { open: 100, high: 112, low: 99 }),
+    bar(0, 100, { open: 110, high: 112, low: 99 }),
     bar(1, 114, { open: 110, high: 115, low: 109 }),
   ];
   const signal = evaluateNiftyPreviewBreak(candles, 1, niftyTest);
@@ -176,9 +176,9 @@ test("nifty test buys the future when the preview candle is green and price brea
   assert.equal(evaluateSignals(candles, 1, niftyTest).buy, true);
 });
 
-test("nifty test sells the future when the preview candle is red and price breaks its low", () => {
+test("nifty test sells when the current candle close is below its open", () => {
   const candles = [
-    bar(0, 100, { open: 110, high: 111, low: 98 }),
+    bar(0, 110, { open: 100, high: 112, low: 99 }),
     bar(1, 96, { open: 100, high: 101, low: 95 }),
   ];
   const signal = evaluateSignals(candles, 1, niftyTest);
@@ -186,35 +186,19 @@ test("nifty test sells the future when the preview candle is red and price break
   assert.equal(signal.buy, false);
 });
 
-test("nifty test ignores a green candle that does not break high and a red candle that does not break low", () => {
-  const greenHold = [
+test("nifty test does not use the previous candle and does not trade a doji", () => {
+  const previousGreen = [
     bar(0, 110, { open: 100, high: 112, low: 99 }),
-    bar(1, 111, { open: 110, high: 112, low: 108 }),
+    bar(1, 100, { open: 110, high: 111, low: 99 }),
   ];
-  const redHold = [
-    bar(0, 100, { open: 110, high: 111, low: 98 }),
-    bar(1, 99, { open: 100, high: 102, low: 98 }),
-  ];
-  assert.equal(evaluateSignals(greenHold, 1, niftyTest).buy, false);
-  assert.equal(evaluateSignals(redHold, 1, niftyTest).sell, false);
-});
-
-test("nifty test does not trade a doji preview candle or a break outside the nifty test time", () => {
-  const doji = [
-    bar(0, 100, { open: 100, high: 104, low: 96 }),
-    bar(1, 106, { open: 100, high: 107, low: 94 }),
-  ];
+  const doji = [bar(0, 100, { open: 100, high: 104, low: 96 })];
   const late = Date.parse("2026-08-21T10:00:00.000Z");
-  const afterClose = [
-    { time: late - BAR, open: 100, high: 112, low: 99, close: 110, volume: 1000 },
-    { time: late, open: 110, high: 115, low: 109, close: 114, volume: 1000 },
-  ];
-  const flat = evaluateSignals(doji, 1, niftyTest);
-  assert.equal(flat.buy, false);
-  assert.equal(flat.sell, false);
-  const closed = evaluateSignals(afterClose, 1, niftyTest);
-  assert.equal(closed.buy, false);
-  assert.equal(closed.sell, false);
+  const afterOldWindow = [{ time: late, open: 110, high: 115, low: 109, close: 114, volume: 1000 }];
+  assert.equal(evaluateSignals(previousGreen, 1, niftyTest).buy, false);
+  assert.equal(evaluateSignals(previousGreen, 1, niftyTest).sell, true);
+  assert.equal(evaluateSignals(doji, 0, niftyTest).buy, false);
+  assert.equal(evaluateSignals(doji, 0, niftyTest).sell, false);
+  assert.equal(evaluateSignals(afterOldWindow, 0, niftyTest).buy, true);
 });
 
 test("close above ignores the still-forming bar", () => {

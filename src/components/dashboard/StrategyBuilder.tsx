@@ -98,9 +98,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       return `NIFTY weekly ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · last closed 15m vs VWAP · BUY at next 15m open · SL ${form.initialSlPct || 15}% / TGT ${form.targetPct || 30}% · daily LIVE 09:20 IST`;
     }
     if (isNiftyTestKind(form)) {
-      const start = form.startTimeIst || "09:15";
-      const end = form.endTimeIst || "15:15";
-      return `nifty test · NIFTY FUT · ${form.timeframe || "5m"} · ${start}–${end} IST · green preview + break high → BUY · red preview + break low → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
+      return `Nifty Test · NIFTY FUT · ${form.timeframe || "5m"} · live feed while started · current candle above open → BUY · below open → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -280,7 +278,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {niftyTest ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
-            Locked to the NIFTY future. Each bar uses the previous completed candle. Green candle and a break of its high buys. Red candle and a break of its low sells. The nifty test time is when that rule turns on.
+            Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
           </div>
         ) : engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
@@ -542,7 +540,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : niftyTest ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              Previous completed Nifty future candle only. Green and the next bar breaks that high → BUY the future. Red and the next bar breaks that low → SELL the future. A doji is no trade. Active from the nifty test time until the end time.
+              No first-candle check. While Nifty Test is started, every live Nifty future tick is checked. Current candle close above its open → BUY. Close below its open → SELL. Equal open is no trade.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">

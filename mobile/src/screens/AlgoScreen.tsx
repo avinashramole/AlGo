@@ -458,7 +458,7 @@ export function AlgoScreen() {
           </>
         ) : draft.kind === "nifty-test" ? (
           <>
-            <Text style={styles.muted}>NIFTY future. Previous candle green and break of its high → BUY. Previous candle red and break of its low → SELL.</Text>
+            <Text style={styles.muted}>Nifty Test. While started, the live Nifty future feed is checked the whole session. Price above the current candle open buys. Price below that open sells.</Text>
             <Field label="nifty test" value={draft.startTimeIst || "09:15"} onChange={(startTimeIst) => setDraft({ ...draft, startTimeIst })} />
             <Field label="End time (IST)" value={draft.endTimeIst || "15:15"} onChange={(endTimeIst) => setDraft({ ...draft, endTimeIst })} />
           </>

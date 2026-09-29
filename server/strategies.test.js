@@ -186,8 +186,8 @@ test("seed includes paused nifty test future strategy", () => {
   assert.equal(row.endTimeIst, "15:15");
   assert.equal(row.enabled, false);
   assert.equal(row.status, "PAUSED");
-  assert.match(row.summary, /green \+ break high → BUY/);
-  assert.match(row.summary, /red \+ break low → SELL/);
+  assert.match(row.summary, /current candle above open → BUY/);
+  assert.match(row.summary, /current candle below open → SELL/);
 });
 
 test("nifty test time input is kept when the saved row is generic", () => {

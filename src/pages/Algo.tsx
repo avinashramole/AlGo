@@ -65,7 +65,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test" as const,
       category: "NIFTY TEST",
-      config: `NIFTY FUT · ${algo.timeframe || "5m"} · ${algo.startTimeIst || "09:15"}–${algo.endTimeIst || "15:15"} IST${liveSide ? ` · ${liveSide}` : " · no signal"}`,
+      config: `NIFTY FUT · ${algo.timeframe || "5m"} · live feed while started · above open BUY · below open SELL${liveSide ? ` · ${liveSide}` : " · no signal"}`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {

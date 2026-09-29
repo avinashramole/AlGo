@@ -83,7 +83,7 @@ export const DEFAULT_NIFTY_TEST_CONFIG = {
   symbol: "NIFTY",
   lots: 1,
   lotSize: 65,
-  signalMode: "preview-break",
+  signalMode: "current-open",
   startTimeIst: "09:15",
   endTimeIst: "15:15",
 };
@@ -150,7 +150,7 @@ export function niftyTestConfig(algo = {}) {
     lots,
     lotSize,
     qty: lots * lotSize,
-    signalMode: "preview-break",
+    signalMode: "current-open",
     startTimeIst: parseIstHm(algo.startTimeIst, DEFAULT_NIFTY_TEST_CONFIG.startTimeIst),
     endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_TEST_CONFIG.endTimeIst),
   };

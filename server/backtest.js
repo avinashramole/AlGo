@@ -200,53 +200,22 @@ function barMinutes(tf) {
   return 5;
 }
 
-function istMinutesOf(timeMs) {
-  const ms = Number(timeMs);
-  if (!Number.isFinite(ms)) return null;
-  const shifted = new Date(ms + 5.5 * 60 * 60 * 1000);
-  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
-}
-
-function hmMinutes(value, fallback) {
-  const raw = String(value || "").trim();
-  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
-  const source = match ? raw : String(fallback || "09:15");
-  const parsed = source.match(/^(\d{1,2}):(\d{2})$/);
-  if (!parsed) return 9 * 60 + 15;
-  return Math.min(23, Math.max(0, Number(parsed[1]))) * 60 + Math.min(59, Math.max(0, Number(parsed[2])));
-}
-
 function isNiftyTestAlgo(algo = {}) {
   return algo.kind === "nifty-test" || algo.strategyType === "NIFTY_TEST" || algo.indicator === "NIFTY_TEST";
 }
 
-export function evaluateNiftyPreviewBreak(candles, i, algo = {}) {
-  if (!Array.isArray(candles) || i < 1 || !candles[i] || !candles[i - 1]) {
+export function evaluateNiftyPreviewBreak(candles, i) {
+  if (!Array.isArray(candles) || i < 0 || !candles[i]) {
     return { buy: false, sell: false };
   }
-  const preview = candles[i - 1];
-  const probe = candles[i];
-  const open = Number(preview.open);
-  const close = Number(preview.close);
-  const high = Number(preview.high);
-  const low = Number(preview.low);
-  const probeHigh = Number(probe.high);
-  const probeLow = Number(probe.low);
-  const price = Number(probe.close) || 0;
-  if (![open, close, high, low, probeHigh, probeLow].every((value) => Number.isFinite(value))) {
-    return { buy: false, sell: false, price };
-  }
-  const start = hmMinutes(algo.startTimeIst, "09:15");
-  const end = hmMinutes(algo.endTimeIst, "15:15");
-  const mins = istMinutesOf(probe.time);
-  if (mins == null || mins < start || mins >= end) {
-    return { buy: false, sell: false, price };
-  }
-  const green = close > open;
-  const red = close < open;
+  const bar = candles[i];
+  const open = Number(bar.open);
+  const close = Number(bar.close);
+  const price = Number.isFinite(close) ? close : 0;
+  if (!(open > 0) || !(close > 0)) return { buy: false, sell: false, price };
   return {
-    buy: green && probeHigh > high,
-    sell: red && probeLow < low,
+    buy: close > open,
+    sell: close < open,
     price,
   };
 }

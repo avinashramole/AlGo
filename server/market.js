@@ -2816,19 +2816,15 @@ function niftyFutureBars(timeframe) {
 }
 
 export function niftyTestSide(algo) {
-  const candles = niftyFutureBars(algo?.timeframe);
-  if (candles.length < 3) return "";
-  const tf = String(algo?.timeframe || "5m");
-  const minutes = tf === "1m" ? 1 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
-  const probe = candles[candles.length - 1];
-  const preview = candles[candles.length - 2];
-  if (Number(probe?.time) - Number(preview?.time) < minutes * 60_000) return "";
-  const signal = evaluateSignals(candles, candles.length - 1, algo);
-  const wantBuy = Boolean(signal.buy) && (algo.side === "BUY" || algo.side === "BOTH" || !algo.side);
-  const wantSell = Boolean(signal.sell) && (algo.side === "SELL" || algo.side === "BOTH" || !algo.side);
-  if (wantBuy) return "BUY";
-  if (wantSell) return "SELL";
-  return "";
+  const bar = niftyFuturePreviewBar(algo?.timeframe || "5m", Date.now());
+  if (!bar) return "";
+  const open = Number(bar.open);
+  const close = Number(bar.close);
+  if (!(open > 0) || !(close > 0) || close === open) return "";
+  const side = close > open ? "BUY" : "SELL";
+  if (side === "BUY" && algo?.side === "SELL") return "";
+  if (side === "SELL" && algo?.side === "BUY") return "";
+  return side;
 }
 
 function updateLiveCandle(price) {

@@ -280,11 +280,9 @@ export function summarizeAlgo(algo) {
     return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · daily LIVE 09:20 IST · ${size}`;
   }
   if (isNiftyTestAlgo(algo)) {
-    const start = algo.startTimeIst || "09:15";
-    const end = algo.endTimeIst || "15:15";
     const sl = algo.slPct || 0.4;
     const tgt = algo.targetPct || 0.8;
-    return `nifty test · NIFTY FUT · preview candle green + break high → BUY · preview candle red + break low → SELL · ${start}–${end} IST · ${tf} · SL ${sl}% / TGT ${tgt}% · ${size}`;
+    return `Nifty Test · NIFTY FUT · live feed while started · current candle above open → BUY · current candle below open → SELL · ${tf} · SL ${sl}% / TGT ${tgt}% · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
