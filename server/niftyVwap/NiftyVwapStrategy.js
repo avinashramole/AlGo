@@ -206,7 +206,7 @@ export const NiftyVwapStrategy = {
     const fill = fillFromResult(result, ltp);
     if (result?.queued) {
       TradeLogger.record("queued", { symbol: pick.symbol, strategy: algo.name });
-      algo.lastSignal = `BUY ${pick.option} QUEUED`;
+      algo.lastSignal = `BUY ${pick.option} SENDING`;
       return { action: "queued", pick, result };
     }
     if (!(fill > 0)) {

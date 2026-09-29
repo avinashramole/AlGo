@@ -60,6 +60,7 @@ import {
   drainPendingLiveAlgoOrders,
   fanOutAdminOrderCopies,
   noteLiveAlgoOrderResult,
+  onLiveAlgoOrders,
   bookRejectedLiveOrder,
   queueLivePositionExit,
   routeManualOrderBrokerId,
@@ -103,7 +104,12 @@ async function sendLiveBrokerOrder(payload) {
   const adminPayload = adminLiveOrderPayload(payload);
   const brokerId = String(adminPayload.brokerId || "dhan");
   if (brokerId === "dhan") {
-    if (!isDhanLive()) throw Object.assign(new Error("Dhan is not LIVE. Connect Access Token on Brokers."), { status: 400 });
+    if (!isDhanLive()) {
+      const started = await ensureDhanLiveFromSavedToken();
+      if (!started.live) {
+        throw Object.assign(new Error("Dhan is not LIVE. Connect Access Token on Brokers."), { status: 400 });
+      }
+    }
     return placeDhanOrder(adminPayload);
   }
   return placeLiveBrokerOrder(brokerId, adminPayload);
@@ -138,7 +144,7 @@ async function flushLiveAlgoOrders() {
       if (item.ok) {
         const live = item.value;
         const order = placeOrder({ ...payload, brokerId, live, copiedToMembers: true });
-        noteLiveAlgoOrderResult(payload, live, order?.error);
+        noteLiveAlgoOrderResult(payload, live, null);
         if (order?.error) console.log(`Strategy live fill book: ${order.error}`);
         continue;
       }
@@ -155,6 +161,10 @@ async function flushLiveAlgoOrders() {
     }
   }
 }
+
+onLiveAlgoOrders(() => {
+  void flushLiveAlgoOrders();
+});
 
 function safeSnapshot() {
   try {

@@ -565,20 +565,47 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
   return { queued: true, copies: copies.length };
 }
 
+function contractSecurityId(payload = {}) {
+  const existing = String(payload.securityId || "").trim();
+  if (existing && existing !== "0") return existing;
+  const opt = String(payload.option || "").toUpperCase();
+  const strike = Number(payload.strike);
+  if (!(strike > 0) || (opt !== "CE" && opt !== "PE")) return "";
+  const row = optionRowsForSymbol(payload.symbol || "NIFTY").find((item) => Number(item.strike) === strike);
+  if (!row) return "";
+  const id = opt === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
+  return id ? String(id) : "";
+}
+
+let notifyLiveAlgoOrders = () => {};
+
+export function onLiveAlgoOrders(fn) {
+  notifyLiveAlgoOrders = typeof fn === "function" ? fn : () => {};
+}
+
 export function queueLiveAlgoOrder(payload) {
+  const securityId = contractSecurityId(payload);
+  const stamped = securityId ? { ...payload, securityId } : payload;
   const brokers = liveAutoTradeBrokers({
-    strategyName: payload?.strategy,
-    algoBrokerId: payload?.brokerId || "dhan",
+    strategyName: stamped?.strategy,
+    algoBrokerId: stamped?.brokerId || "dhan",
   });
-  const targets = brokers.length ? brokers : [orderBrokerId(payload)];
+  const targets = brokers.length ? brokers : [orderBrokerId(stamped)];
   let last = { ok: true, queued: true, status: "PENDING" };
   for (const brokerId of targets) {
-    last = enqueueLiveAlgoOrder({ ...payload, brokerId });
+    last = enqueueLiveAlgoOrder({ ...stamped, brokerId });
   }
-  const algo = (state.algos || []).find((row) => String(row.name || "") === String(payload?.strategy || ""));
-  for (const copy of memberCopyPayloads(payload, algo || {})) {
+  const algo = (state.algos || []).find((row) => String(row.name || "") === String(stamped?.strategy || ""));
+  for (const copy of memberCopyPayloads(stamped, algo || {})) {
     last = enqueueLiveAlgoOrder(copy);
   }
+  queueMicrotask(() => {
+    try {
+      notifyLiveAlgoOrders();
+    } catch (error) {
+      console.log(`Live order flush failed: ${error?.message || error}`);
+    }
+  });
   return last;
 }
 
@@ -608,6 +635,21 @@ export function queueLivePositionExit(pos) {
   });
 }
 
+export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {
+  const status = String(live?.status || "").toUpperCase();
+  const failed = Boolean(error) || status === "REJECTED" || status === "CANCELLED";
+  if (failed) {
+    const text = String(error?.message || live?.reason || "Dhan did not accept the order")
+      .replace(/\s+/g, " ")
+      .trim();
+    return { accepted: false, lastSignal: `BROKER · ${text.slice(0, 140) || "Dhan did not accept the order"}` };
+  }
+  const side = payload.side === "SELL" ? "SELL" : "BUY";
+  const opt = payload.option ? ` ${String(payload.option).toUpperCase()}` : "";
+  const id = live?.orderId ? ` ${live.orderId}` : "";
+  return { accepted: true, lastSignal: `${side}${opt} AT BROKER${id}` };
+}
+
 export function noteLiveAlgoOrderResult(payload, live, error) {
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
@@ -622,10 +664,20 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   if (isNiftyVwapHedgeAlgo(algo) && live?.orderId) {
     hedgeState(algo).lastOrderId = String(live.orderId);
   }
-  const status = String(live?.status || "").toUpperCase();
-  if (error || status === "REJECTED" || status === "CANCELLED") {
+  const next = liveAlgoBrokerSignal({ payload, live, error });
+  if (!next.accepted) {
     if (isNiftyVwapHedgeAlgo(algo)) noteHedgeBrokerRejection(algo);
     else noteBrokerRejection(algo);
+    algo.lastSignal = next.lastSignal;
+    if (!isNiftyVwapHedgeAlgo(algo)) runtimeState(algo).lastEntryBarTime = 0;
+    return;
+  }
+  algo.lastSignal = next.lastSignal;
+  if (isNiftyVwapHedgeAlgo(algo)) return;
+  const vs = runtimeState(algo);
+  vs.inFlight = false;
+  if (isNiftyFirstCandleAlgo(algo) && payload.side !== "SELL") {
+    vs.sessionTrades = Math.max(1, Number(vs.sessionTrades || 0));
   }
 }
 
