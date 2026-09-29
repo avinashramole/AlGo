@@ -224,6 +224,27 @@ export function removeMessagingUser(userId) {
   return store.contacts.length !== before;
 }
 
+export function removeOrphanMessaging(knownIds) {
+  const allow = knownIds instanceof Set ? knownIds : new Set(knownIds || []);
+  const before = store.contacts.length;
+  store.contacts = store.contacts.filter((item) => {
+    const owner = String(item.userId || "").trim();
+    if (owner) return allow.has(owner);
+    const id = String(item.id || "").trim();
+    if (!id || allow.has(id)) return true;
+    return !id.startsWith("u");
+  });
+  let threadsChanged = false;
+  for (const id of Object.keys(store.threads || {})) {
+    if (allow.has(id) || !id.startsWith("u")) continue;
+    delete store.threads[id];
+    threadsChanged = true;
+  }
+  const changed = store.contacts.length !== before || threadsChanged;
+  if (changed) persist();
+  return changed;
+}
+
 function findContact(id, users = []) {
   const conversations = listConversations(users);
   const listed = conversations.find((row) => row.id === id);

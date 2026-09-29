@@ -17,6 +17,7 @@ const {
   pickUpstoxOptionHit,
   placeLiveBrokerOrder,
   upstoxErrorMessage,
+  upstoxExpiryDate,
   upstoxInstrumentKeyFromPayload,
 } = await import("./liveBrokers.js");
 
@@ -158,6 +159,53 @@ test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on th
   assert.equal(String(calls[1].url).includes("api.upstox.com/v2/order/place"), false);
   const placed = JSON.parse(calls[1].body);
   assert.equal(placed.instrument_token, "NSE_FO|426269");
+});
+
+test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrument key", async () => {
+  assert.equal(upstoxExpiryDate("2026-10", "NIFTY"), "2026-10-27");
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes("search/instruments")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [] }) };
+    }
+    if (String(url).includes("option/contract")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                trading_symbol: "NIFTY 27 OCT 26 23100 CE",
+                underlying_symbol: "NIFTY",
+                instrument_type: "CE",
+                strike_price: 23100,
+                expiry: "2026-10-27",
+                instrument_key: "NSE_FO|23100ce",
+              },
+            ],
+          }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ data: { order_id: "upx-oct" } }) };
+  };
+  const live = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-oct",
+      brokerSession: { accessToken: "member-upstox-token", clientId: "393216" },
+      symbol: "NIFTY-Oct2026-23100-CE",
+      side: "BUY",
+      qty: 65,
+      securityId: "55123",
+      strategy: "test",
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "upx-oct");
+  assert.ok(calls.some((url) => url.includes("expiry_date=2026-10-27")));
+  assert.ok(calls.some((url) => url.includes("api-hft.upstox.com/v3/order/place")));
 });
 
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {

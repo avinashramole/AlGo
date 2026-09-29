@@ -152,6 +152,16 @@ export function isWeeklyOptionExpiry(ymd, symbol = "NIFTY") {
   return !isLastWeekdayOfMonth(date, und.expiryWeekday);
 }
 
+/**
+ * Card clicks use the nearest live expiry. An expiry button keeps that date.
+ */
+export function chooseDeskExpiry(expiries = [], wanted = "") {
+  const list = dropExpired(Array.isArray(expiries) ? expiries : []);
+  const ask = normalizeExpiry(wanted);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ask)) return { expiry: ask, pinned: true };
+  return { expiry: list[0] || "", pinned: false };
+}
+
 export function nearestWeeklyExpiry(dates, symbol = "NIFTY") {
   const und = getUnderlying(symbol);
   const listed = dropExpired(dates && dates.length ? dates : upcomingExpiries(symbol, 12));

@@ -1,6 +1,9 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
-import { liveAutoTradeBrokers } from "./memberDesk.js";
+import { dhanTokenStatus } from "./dhanToken.js";
+import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
+import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
+import { applyBrokerBookToReport, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -23,7 +26,8 @@ import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
-import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
+import { listPublicUsers } from "./auth.js";
+import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
@@ -409,6 +413,7 @@ const state = {
   sentiment: 50,
   orders: [],
   closedTrades: [],
+  adminBrokerBook: null,
   notifications: [],
   chat: [],
   settings: {
@@ -532,13 +537,18 @@ function enqueueLiveAlgoOrder(payload) {
     }
   } else if (side === "BUY") {
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
-    const openNifty =
+    const openSameStrategy =
       !copyUserId &&
       niftyBuy &&
+      strategy &&
       (state.positions || []).some(
-        (row) => !isPaperRow(row) && orderBrokerId(row) === brokerId && PositionManager.isOpenNiftyOption(row),
+        (row) =>
+          !isPaperRow(row) &&
+          orderBrokerId(row) === brokerId &&
+          PositionManager.isOpenNiftyOption(row) &&
+          realStrategyName(row.strategy) === strategy,
       );
-    if (openNifty) {
+    if (openSameStrategy) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   }
@@ -744,19 +754,8 @@ function expiryForNiftyVwap(algo, pack) {
 }
 
 function preferWeeklyDeskForReversal() {
-  const running = (state.algos || []).some(
-    (algo) =>
-      (isNiftyVwapReversalAlgo(algo) ||
-        isNiftyVwapHedgeAlgo(algo) ||
-        (isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly")) &&
-      algo.enabled,
-  );
-  if (!running) return;
-  if (String(state.optionMeta?.symbol || "").toUpperCase() !== "NIFTY") return;
-  const weekly = nearestWeeklyExpiry(niftyListedExpiries({ meta: state.optionMeta }), "NIFTY");
-  if (weekly && normalizeExpiry(state.optionMeta.expiry) !== weekly) {
-    state.optionMeta = { ...state.optionMeta, expiry: weekly };
-  }
+  // The option chain page keeps the expiry the user is viewing.
+  // Strategies still read the weekly date from the listed expiries.
 }
 
 function positionsForStrategyName(algo, mode) {
@@ -817,6 +816,13 @@ function noteNiftyVwapFeed(feedLive) {
     }
   }
   lastNiftyVwapFeed = Boolean(feedLive);
+}
+
+export function liveOptionSampleTime(now, barMinutes = 5, sessionOpen) {
+  const open = VwapSignalEngine.sessionBarOpenMs(now, barMinutes, {
+    sessionOpenMinutes: sessionOpen,
+  });
+  return open || 0;
 }
 
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
@@ -900,6 +906,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const optionBarTime = livePreview?.time || barTime;
   vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
+  const ceSecurityId = optionLegId(ceStrike, "CE");
+  const peSecurityId = optionLegId(peStrike, "PE");
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
@@ -924,6 +932,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     expiry,
     ceLtp,
     peLtp,
+    ceSecurityId,
+    peSecurityId,
     positions,
     adapter,
   });
@@ -1053,10 +1063,11 @@ function algoOrderFields(algo, side, trade) {
     option: trade.option,
     strike: trade.strike,
     expiry: trade.expiry,
+    securityId: trade.securityId || "",
     product: "MIS",
     type: "MARKET",
     strategy: algo.name,
-    exchangeSegment: exchangeSegmentFor(algo.symbol),
+    exchangeSegment: exchangeSegmentFor(trade.symbol || algo.symbol),
   };
 }
 
@@ -1169,6 +1180,7 @@ export function resolveAlgoTrade(algo) {
     const peLtp = Number(row?.putLtp);
     const liveChain = pack?.meta?.source === "dhan";
     const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+    const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
     const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
@@ -1193,6 +1205,7 @@ export function resolveAlgoTrade(algo) {
       option: option || "CE",
       strike,
       expiry,
+      securityId: securityId ? String(securityId) : "",
       ltp: premium > 0 && weeklyReady ? round2(premium) : 0,
       label: expiry ? `${contract} · ${expiry}` : contract,
       source: pack?.meta?.source || "",
@@ -1227,6 +1240,7 @@ export function resolveAlgoTrade(algo) {
   const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
   const ltp = option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);
+  const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
   const contract = `${symbol} ${strike} ${option}`;
   const liveChain = pack?.meta?.source === "dhan";
   const premium = ltp > 0 ? round2(ltp) : 0;
@@ -1240,6 +1254,7 @@ export function resolveAlgoTrade(algo) {
     option,
     strike,
     expiry,
+    securityId: securityId ? String(securityId) : "",
     ltp: premium,
     label: expiry ? `${contract} · ${expiry}` : contract,
     source: pack?.meta?.source || "",
@@ -1430,7 +1445,26 @@ function dhanTapeReady() {
 }
 
 function publicDhanFeed() {
-  return { ...clone(state.dhanFeed), hasQuotes: hasLastLiveBook() };
+  const feed = clone(state.dhanFeed);
+  let saved = null;
+  try {
+    saved = dhanTokenStatus();
+  } catch {
+    saved = null;
+  }
+  return {
+    ...feed,
+    tokenHint: feed.tokenHint || saved?.tokenHint || null,
+    clientId: feed.clientId || saved?.clientId || null,
+    autoRenew: feed.autoRenew || Boolean(saved?.autoRenew),
+    autoMode: feed.autoMode && feed.autoMode !== "off" ? feed.autoMode : saved?.autoMode || feed.autoMode,
+    tokenExpiry: feed.tokenExpiry || saved?.tokenExpiry || null,
+    nextRenewAt: feed.nextRenewAt || saved?.nextRenewAt || null,
+    autoStart: saved?.autoStart !== undefined ? saved.autoStart : feed.autoStart,
+    needsFresh: saved?.needsFresh !== undefined ? saved.needsFresh : feed.needsFresh,
+    renewalBlockedUntil: feed.renewalBlockedUntil || saved?.renewalBlockedUntil || null,
+    hasQuotes: hasLastLiveBook(),
+  };
 }
 
 function isSimRow(row) {
@@ -1587,6 +1621,7 @@ export function livePositionQuoteTargets() {
 }
 
 export function snapshot() {
+  syncAlgoClientMaps();
   markPaperToMarket();
   const brokers = publicBrokers();
   const active = getActiveBroker();
@@ -1610,7 +1645,7 @@ export function snapshot() {
     marketWatch: watch,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
-    report: buildReport(liveState),
+    report: applyBrokerBookToReport(buildReport(liveState), state.adminBrokerBook),
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
@@ -1632,6 +1667,7 @@ export function snapshot() {
 }
 
 export function deskFeed() {
+  syncAlgoClientMaps();
   markPaperToMarket();
   const { orders, positions, closedTrades } = liveDesk();
   const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
@@ -1643,6 +1679,7 @@ export function deskFeed() {
     pnl: algo.pnl,
     winRate: algo.winRate,
     lastSignal: algo.lastSignal,
+    mappedClientIds: algo.mappedClientIds || [],
     trade: resolveAlgoTrade(algo),
   }));
   const signalAlgos = (state.algos || []).map((algo, index) => ({ ...algo, ...algos[index] }));
@@ -1665,6 +1702,7 @@ export function deskFeed() {
     sentiment: liveSentiment(dnaScores),
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
+    report: applyBrokerBookToReport(buildReport({ positions, orders, closedTrades, algos: state.algos || [] }), state.adminBrokerBook),
     marketWatch: watch,
     watchlist: watch.map(({ volume: _volume, ...row }) => row),
     marketStatus: nseMarketSession().status,
@@ -1801,6 +1839,7 @@ export function toggleAlgo(id, patch = {}) {
   algo.enabled = wantEnabled;
   if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   if (starting) {
+    resetStrategyOrders(algo);
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
@@ -1840,10 +1879,50 @@ export function createAlgo(payload) {
   return clone(algo);
 }
 
+function memberIds() {
+  return new Set(
+    listPublicUsers()
+      .filter((row) => row?.id && row.role !== "admin" && row.id !== "admin")
+      .map((row) => row.id),
+  );
+}
+
+export function syncAlgoClientMaps() {
+  const allow = memberIds();
+  let changed = false;
+  for (const algo of state.algos || []) {
+    const prev = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [];
+    const next = mappedClientIdsForMembers(prev, allow);
+    if (next.length !== prev.length || next.some((id, index) => id !== prev[index])) {
+      algo.mappedClientIds = next;
+      changed = true;
+    }
+  }
+  if (changed) persistAlgos();
+  return changed;
+}
+
+export function dropClientFromStrategies(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return false;
+  let changed = false;
+  for (const algo of state.algos || []) {
+    const prev = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [];
+    const next = prev.filter((item) => String(item || "").trim() !== id);
+    if (next.length !== prev.length) {
+      algo.mappedClientIds = next;
+      changed = true;
+    }
+  }
+  if (changed) persistAlgos();
+  return changed;
+}
+
 export function updateAlgo(id, payload) {
   const index = state.algos.findIndex((item) => item.id === id);
   if (index < 0) return { error: "Strategy not found" };
   const next = normalizeAlgo(payload || {}, state.algos[index]);
+  next.mappedClientIds = mappedClientIdsForMembers(next.mappedClientIds, memberIds());
   next.id = id;
   state.algos[index] = next;
   state.notifications.unshift(`Strategy updated: ${next.name}`);
@@ -1851,13 +1930,50 @@ export function updateAlgo(id, payload) {
   return clone(next);
 }
 
+function resetStrategyOrders(algo) {
+  const strategyId = String(algo?.id || "");
+  const strategyName = String(algo?.name || "");
+  if (!strategyId && !strategyName) return;
+  for (let i = pendingLiveAlgoOrders.length - 1; i >= 0; i -= 1) {
+    if (pendingLiveAlgoOrders[i].strategy === strategyName) pendingLiveAlgoOrders.splice(i, 1);
+  }
+  state.orders = withoutStrategyRows(state.orders, { id: strategyId, name: strategyName });
+  clearStrategyOrdersOnMemberDesks({ strategyId, strategyName });
+}
+
+function rowBelongsToStrategy(row, strategyId, strategyName) {
+  if (!row || typeof row !== "object") return false;
+  if (strategyId && String(row.strategyId || "").trim() === strategyId) return true;
+  const label = String(row.strategy || row.strategyName || "").trim().toLowerCase();
+  return Boolean(strategyName && label === strategyName);
+}
+
+export function withoutStrategyRows(rows, { id, name } = {}) {
+  const strategyId = String(id || "").trim();
+  const strategyName = String(name || "").trim().toLowerCase();
+  return (rows || []).filter((row) => !rowBelongsToStrategy(row, strategyId, strategyName));
+}
+
 export function deleteAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Strategy not found" };
+  const strategyId = String(id);
+  const strategyName = String(algo.name || "").trim().toLowerCase();
+  if (strategyName) cancelPendingForStrategy(algo.name);
+  state.positions = withoutStrategyRows(state.positions, { id: strategyId, name: algo.name });
+  state.orders = withoutStrategyRows(state.orders, { id: strategyId, name: algo.name });
+  state.closedTrades = withoutStrategyRows(state.closedTrades, { id: strategyId, name: algo.name });
+  state.notifications = (state.notifications || []).filter((row) => {
+    const text = typeof row === "string" ? row : String(row?.text || "");
+    return !strategyName || !text.toLowerCase().includes(strategyName);
+  });
   state.algos = state.algos.filter((item) => item.id !== id);
-  removedAlgoIds = [...new Set([...removedAlgoIds, String(id)])];
+  removedAlgoIds = [...new Set([...removedAlgoIds, strategyId])];
   state.notifications.unshift(`Strategy deleted: ${algo.name}`);
   persistAlgos();
+  deleteStrategyEnrollments(strategyId, algo.name);
+  dropEnrollmentsWithoutStrategies(state.algos);
+  dropStrategyFromMemberDesks({ strategyId, strategyName: algo.name });
   return { ok: true, id };
 }
 
@@ -1974,6 +2090,38 @@ export async function backtestAlgo(id, options = {}) {
   return { ok: true, algo: clone(algo), backtest: result };
 }
 
+function conditionSources(algo, side) {
+  const group = side === "sell" ? algo?.sellConditions : algo?.buyConditions;
+  const rows = Array.isArray(group?.rows) ? group.rows : [];
+  if (rows.length) return rows.flatMap((row) => [row?.left, row?.right]);
+  if (side === "sell") return [algo?.sellLeft, algo?.sellRight];
+  return [algo?.buyLeft, algo?.buyRight];
+}
+
+export function minLiveBars(algo = {}) {
+  const side = String(algo.side || "BOTH").toUpperCase();
+  const sources = [];
+  if (side !== "SELL") sources.push(...conditionSources(algo, "buy"));
+  if (side !== "BUY") sources.push(...conditionSources(algo, "sell"));
+  if (sources.includes("macd")) return 40;
+  if (sources.includes("ema_slow") || sources.includes("ema_fast")) return Math.max(8, Number(algo.slow) || 21);
+  if (sources.includes("supertrend") || sources.includes("rsi")) return Math.max(8, (Number(algo.period) || 14) + 2);
+  return 3;
+}
+
+export function liveIndicatorSide(algo, candles, now = Date.now()) {
+  const need = minLiveBars(algo);
+  if (!Array.isArray(candles) || candles.length < need) {
+    return { side: "", lastSignal: "WAIT CANDLES", reason: "candles" };
+  }
+  const signal = evaluateSignals(candles, candles.length - 1, algo, undefined, now);
+  const wantBuy = Boolean(signal.buy) && (algo.side === "BUY" || algo.side === "BOTH");
+  const wantSell = Boolean(signal.sell) && (algo.side === "SELL" || algo.side === "BOTH");
+  if (!wantBuy && !wantSell) return { side: "", lastSignal: "HOLD", reason: "flat" };
+  const side = wantBuy ? "BUY" : "SELL";
+  return { side, lastSignal: side, reason: "signal" };
+}
+
 function runPaperAlgos() {
   const feedLive = dhanTapeReady();
   noteNiftyVwapFeed(feedLive);
@@ -2005,8 +2153,12 @@ function runPaperAlgos() {
     }
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
-    if (pack.candles.length < 32) continue;
-    const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
+    const decision = liveIndicatorSide(algo, pack.candles, now);
+    if (!decision.side) {
+      if (decision.reason === "flat") algo.lastSignal = "";
+      continue;
+    }
+    const signal = { buy: decision.side === "BUY", sell: decision.side === "SELL" };
     const open = state.positions.find((row) => (row.paper || row.brokerId === "paper") && row.strategy === algo.name);
     if (open) {
       if ((open.type === "BUY" && signal.sell) || (open.type === "SELL" && signal.buy)) {
@@ -2018,7 +2170,7 @@ function runPaperAlgos() {
     const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
     const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
     if (!wantBuy && !wantSell) {
-      algo.lastSignal = "HOLD";
+      algo.lastSignal = "";
       continue;
     }
     const trade = resolveAlgoTrade(algo);
@@ -2079,25 +2231,19 @@ function runLiveAlgos() {
     }
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
-    if (pack.candles.length < 32) {
-      algo.lastSignal = "WAIT CANDLES";
+    const decision = liveIndicatorSide(algo, pack.candles, now);
+    if (!decision.side) {
+      algo.lastSignal = decision.lastSignal;
       continue;
     }
-    const signal = evaluateSignals(pack.candles, pack.candles.length - 1, algo);
-    const wantBuy = signal.buy && (algo.side === "BUY" || algo.side === "BOTH");
-    const wantSell = signal.sell && (algo.side === "SELL" || algo.side === "BOTH");
-    if (!wantBuy && !wantSell) {
-      algo.lastSignal = "HOLD";
-      continue;
-    }
-    const side = wantBuy ? "BUY" : "SELL";
+    const side = decision.side;
     const openLive = (state.positions || []).find(
-      (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
+      (row) => !isPaperRow(row) && realStrategyName(row.strategy) === algo.name && Number(row.qty) > 0,
     );
-    if (algo.lastLiveSide === side && openLive) continue;
+    if (openLive) continue;
     const trade = resolveAlgoTrade(algo);
     if (!trade) continue;
-    if (trade.kind === "option" && !(trade.strike && trade.expiry)) {
+    if (trade.kind === "option" && !(trade.strike && trade.expiry && trade.ltp > 0)) {
       algo.lastSignal = "WAIT";
       continue;
     }
@@ -2105,10 +2251,14 @@ function runLiveAlgos() {
       algo.lastSignal = "WAIT";
       continue;
     }
-    queueLiveAlgoOrder({
+    const queued = queueLiveAlgoOrder({
       ...algoOrderFields(algo, side, trade),
       brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
     });
+    if (!queued?.queued) {
+      algo.lastSignal = "";
+      continue;
+    }
     algo.lastLiveAt = now;
     algo.lastLiveSide = side;
     algo.lastSignal = side;
@@ -2323,7 +2473,23 @@ function bookPnl(positions = [], closedTrades = []) {
     const key = row.brokerId || "dhan";
     byBroker[key] = Number(((byBroker[key] || 0) + pnl).toFixed(2));
   }
-  return { totalPnl: Number((unrealized + realized).toFixed(2)), pnlByBroker: byBroker };
+  return withAdminBrokerPnl({
+    positions,
+    closedTrades,
+    byBroker,
+    unrealized,
+    realized,
+    broker: state.adminBrokerBook,
+  });
+}
+
+export function setAdminBrokerBook(book) {
+  if (!book || !Number.isFinite(Number(book.mtm))) return;
+  state.adminBrokerBook = { ...book, readAt: Date.now() };
+}
+
+export function getAdminBrokerBook() {
+  return state.adminBrokerBook || null;
 }
 
 function rememberClosedFromPosition(pos, extra = {}) {
@@ -2439,24 +2605,6 @@ export function replaceDhanOrders(rows) {
   });
   const others = previous.filter((row) => row.brokerId !== "dhan");
   state.orders = [...tagged, ...others];
-  for (const row of tagged) {
-    const id = String(row.id || "");
-    if (!id || previousDhan.has(id) || row.copyUserId || row.copiedToMembers) continue;
-    fanOutAdminOrderCopies(
-      {
-        symbol: row.symbol,
-        side: row.side,
-        qty: row.qty,
-        price: row.price,
-        strategy: row.strategy,
-        brokerId: "dhan",
-        securityId: row.securityId,
-        product: row.product,
-        type: row.type || "MARKET",
-      },
-      row,
-    );
-  }
 }
 
 export function assignAlgoBroker(id, brokerId) {
@@ -2860,28 +3008,32 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
   return clone(state.optionMeta);
 }
 
-export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source }) {
+export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source, expiryPinned } = {}) {
   const meta = getUnderlying(symbol || state.optionMeta.symbol);
   const sameSymbol = String(state.optionMeta?.symbol || "").toUpperCase() === meta.id;
   const cached = optionChainCache.get(meta.id);
-  const nextExpiry = expiry || cached?.meta?.expiry || (sameSymbol ? state.optionMeta.expiry : upcomingExpiries(meta.id)[0] || "");
+  const nextExpiry = expiry || (sameSymbol ? state.optionMeta.expiry : "") || upcomingExpiries(meta.id)[0] || "";
   const sameExpiry = normalizeExpiry(nextExpiry) === normalizeExpiry(state.optionMeta.expiry);
+  const cachedSameExpiry =
+    normalizeExpiry(cached?.meta?.expiry) === normalizeExpiry(nextExpiry) && Array.isArray(cached?.rows) && cached.rows.length;
   let nextRows = Array.isArray(rows) && rows.length
     ? rows
-    : sameSymbol
+    : sameSymbol && sameExpiry
       ? state.optionChain
-      : cached?.rows?.length
+      : cachedSameExpiry
         ? cached.rows
         : [];
   if (sameSymbol && sameExpiry) nextRows = keepStrikeWindow(state.optionChain, nextRows);
   const nextSpot = Number(spot) || Number(cached?.meta?.spot) || getChainSpot(meta.id);
   const stats = chainStats(nextRows, nextSpot);
+  const pinned =
+    expiryPinned === undefined ? Boolean(sameSymbol && state.optionMeta?.expiryPinned) : Boolean(expiryPinned);
   state.optionChain = nextRows;
   state.optionMeta = withExpiryLabels({
     ...state.optionMeta,
-    ...(cached?.meta || {}),
     symbol: meta.id,
     expiry: nextExpiry,
+    expiryPinned: pinned,
     expiries: expiries?.length ? expiries : cached?.meta?.expiries || (sameSymbol ? state.optionMeta.expiries : upcomingExpiries(meta.id)),
     ...stats,
     source: source || cached?.meta?.source || state.optionMeta.source,

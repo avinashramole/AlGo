@@ -42,6 +42,18 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     liveRef.current = live;
   }, [live]);
 
+  const clearStrategyOrders = (name: string) => {
+    const strategy = String(name || "").trim();
+    if (!strategy) return;
+    setData((current) => {
+      const orders = (current.orders || []).filter((row) => row.strategy !== strategy);
+      if (orders.length === (current.orders || []).length) return current;
+      const next = { ...current, orders };
+      dataRef.current = next;
+      return next;
+    });
+  };
+
   const patchAlgo = (id: string, patch: Partial<Snapshot["algos"][number]>) => {
     setData((current) => {
       const next = {
@@ -100,7 +112,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         optionChain,
         optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
         positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
-        orders: feed.orders ? patchById(current.orders || [], feed.orders) : current.orders,
+        orders: Array.isArray(feed.orders) ? feed.orders : current.orders,
         report: current.report,
         brokers: current.brokers,
       };
@@ -186,6 +198,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           const result = await toggleAlgo(id, nextEnabled);
           const next = result.algo;
           if (next?.id) patchAlgo(next.id, { ...next, enabled: nextEnabled, status });
+          if (nextEnabled) clearStrategyOrders(previous.name);
         } catch (err) {
           pendingToggles.current.delete(id);
           patchAlgo(id, previous);
@@ -223,7 +236,29 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         else await refresh();
       },
       selectChain: async (symbol: string, expiry?: string) => {
-        const result = await selectOptionChain(symbol, expiry);
+        const wantedSymbol = String(symbol || "NIFTY").toUpperCase();
+        const wantedExpiry = String(expiry || "").slice(0, 10);
+        snapshotGen.current += 1;
+        setData((current) => {
+          const sameSymbol = String(current.optionMeta?.symbol || "").toUpperCase() === wantedSymbol;
+          const currentExpiry = String(current.optionMeta?.expiries?.[0] || "").slice(0, 10);
+          const nextExpiry = wantedExpiry || (sameSymbol ? currentExpiry : current.optionMeta?.expiry);
+          const next = {
+            ...current,
+            optionMeta: {
+              ...current.optionMeta,
+              symbol: wantedSymbol,
+              expiry: nextExpiry || current.optionMeta?.expiry,
+            },
+            optionChain:
+              sameSymbol && (!wantedExpiry || wantedExpiry === String(current.optionMeta?.expiry || "").slice(0, 10))
+                ? current.optionChain
+                : [],
+          };
+          dataRef.current = next;
+          return next;
+        });
+        const result = await selectOptionChain(wantedSymbol, expiry);
         if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },

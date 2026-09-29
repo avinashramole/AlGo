@@ -7,7 +7,7 @@ import test from "node:test";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
-const { backtestAlgo, createAlgo, deleteAlgo, listAlgos, setDhanFeed, toggleAlgo } = await import("./market.js");
+const { backtestAlgo, createAlgo, deleteAlgo, dropClientFromStrategies, listAlgos, setDhanFeed, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
 const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
@@ -113,6 +113,28 @@ test("indicator Run backtest uses runBacktest instead of throwing not defined", 
     assert.equal(result.ok, true);
     assert.ok(result.backtest.bars >= 32);
     assert.equal(typeof result.backtest.pnl, "number");
+  } finally {
+    deleteAlgo(created.id);
+  }
+});
+
+test("a deleted client is removed from every strategy map", () => {
+  const stamp = Date.now();
+  const created = createAlgo({
+    name: `Map Drop ${stamp}`,
+    kind: "indicator",
+    mappedClientIds: ["u-keep", "u-gone"],
+  });
+  try {
+    assert.deepEqual(listAlgos().find((row) => row.id === created.id).mappedClientIds, ["u-keep", "u-gone"]);
+    assert.equal(dropClientFromStrategies("u-gone"), true);
+    assert.deepEqual(listAlgos().find((row) => row.id === created.id).mappedClientIds, ["u-keep"]);
+    syncAlgoClientMaps();
+    const left = listAlgos().find((row) => row.id === created.id).mappedClientIds || [];
+    assert.equal(left.includes("u-gone"), false);
+    const saved = updateAlgo(created.id, { mappedClientIds: ["u-keep", "u-gone", "u-missing"] });
+    assert.equal((saved.mappedClientIds || []).includes("u-gone"), false);
+    assert.equal((saved.mappedClientIds || []).includes("u-missing"), false);
   } finally {
     deleteAlgo(created.id);
   }

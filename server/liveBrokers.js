@@ -200,6 +200,33 @@ export function isUpstoxInstrumentKey(value) {
   return /^(NSE|BSE|MCX)_[A-Z]+\|/.test(String(value || "").trim());
 }
 
+const UPSTOX_EXPIRY_WEEKDAY = {
+  NIFTY: "Tue",
+  BANKNIFTY: "Tue",
+  FINNIFTY: "Tue",
+  MIDCPNIFTY: "Tue",
+  SENSEX: "Thu",
+};
+
+/** October 2026 NIFTY monthly is the last Tuesday, 2026-10-27. */
+export function upstoxExpiryDate(expiry, root = "NIFTY") {
+  const raw = String(expiry || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const month = raw.match(/^(\d{4})-(\d{2})$/);
+  if (!month) return "";
+  const year = Number(month[1]);
+  const mon = Number(month[2]);
+  const weekday = UPSTOX_EXPIRY_WEEKDAY[String(root || "NIFTY").toUpperCase()] || "Tue";
+  const lastDay = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  for (let day = lastDay; day >= 1; day -= 1) {
+    const ymd = `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const probe = new Date(`${ymd}T12:00:00+05:30`);
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(probe);
+    if (name === weekday) return ymd;
+  }
+  return "";
+}
+
 function parseSymbolExpiry(token) {
   const raw = String(token || "")
     .toUpperCase()
@@ -321,8 +348,14 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
   const parsed = parseDeskOptionSymbol(symbol, { strike, option, expiry });
   if (!parsed || !accessToken) return "";
   const wantedExpiry = String(expiry || parsed.expiry || "").trim();
+  const day = upstoxExpiryDate(wantedExpiry, parsed.root);
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
   const queries = [`${parsed.root} ${parsed.strike} ${parsed.option}`, `${parsed.root}${parsed.strike}${parsed.option}`];
+  if (day) {
+    const [year, month, date] = day.split("-");
+    const mon = MONTHS[Number(month) - 1] || "";
+    queries.push(`${parsed.root} ${date} ${mon} ${year.slice(-2)} ${parsed.strike} ${parsed.option}`);
+  }
   if (wantedExpiry) queries.push(`${parsed.root} ${wantedExpiry} ${parsed.strike} ${parsed.option}`);
   const original = String(symbol || "").trim();
   if (original && !queries.includes(original)) queries.push(original);
@@ -330,7 +363,7 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
   for (const query of queries) {
     try {
       const body = await httpJson(fetchImpl, `https://api.upstox.com/v2/search/instruments?query=${encodeURIComponent(query)}`, { headers });
-      const key = pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: wantedExpiry });
+      const key = pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: day || wantedExpiry });
       if (key) return key;
     } catch (error) {
       if (isAuthError(error)) authError = error;
@@ -338,7 +371,6 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
   }
   if (authError) throw authError;
   const indexKey = UPSTOX_INDEX_KEYS[parsed.root];
-  const day = wantedExpiry.length >= 10 ? wantedExpiry.slice(0, 10) : "";
   if (!indexKey || !day) return "";
   try {
     const body = await httpJson(

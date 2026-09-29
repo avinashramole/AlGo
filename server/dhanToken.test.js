@@ -9,6 +9,8 @@ import {
   jwtExpiryIso,
   lastDailyResetAt,
   keepAlivePlan,
+  pickSavedDhanAccess,
+  sessionPatchKeepsToken,
   effectiveTokenBackoff,
   mergeDhanCredentials,
   msUntilDailyRenewal,
@@ -292,6 +294,21 @@ test("needsFreshAccessToken is true even if generatedAt was stamped later than J
   );
 });
 
+test("needsFreshAccessToken stays false when generatedAt is old but the JWT was minted after 8:00 IST", () => {
+  const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
+  const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
+  const oldStamp = Date.parse("2026-08-01T02:35:00.000Z");
+  const exp = Math.floor((eightOhFive + 24 * 3600 * 1000) / 1000);
+  const iat = Math.floor(eightOhFive / 1000);
+  assert.equal(
+    needsFreshAccessToken(
+      { accessToken: fakeJwt(exp, iat), generatedAt: new Date(oldStamp).toISOString() },
+      nineAm,
+    ),
+    false,
+  );
+});
+
 test("needsFreshAccessToken is false after today's 8:05 IST mint", () => {
   const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
   const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
@@ -321,7 +338,7 @@ test("needsFreshAccessToken is true with no token or under 20 minutes remaining"
   assert.equal(needsFreshAccessToken({ accessToken: fakeJwt(exp) }, now), true);
 });
 
-test("msUntilTokenKeepAlive mints in 5s after 8:00 IST if token is from yesterday, else waits until tomorrow 8:00", () => {
+test("msUntilTokenKeepAlive waits while a pre-8:00 JWT still has life, and mints in 5s only when it is almost expired", () => {
   const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
   const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
   const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
@@ -332,7 +349,9 @@ test("msUntilTokenKeepAlive mints in 5s after 8:00 IST if token is from yesterda
   const staleIat = Math.floor(yesterdayEight / 1000);
   const freshExp = Math.floor((eightOhFive + 24 * 3600 * 1000) / 1000);
   const freshIat = Math.floor(eightOhFive / 1000);
-  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(staleExp, staleIat) }, nineAm), 5_000);
+  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(staleExp, staleIat) }, nineAm), staleExp * 1000 - nineAm - 5 * 60 * 1000);
+  const dyingExp = Math.floor((nineAm + 10 * 60 * 1000) / 1000);
+  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(dyingExp, staleIat) }, nineAm), 5_000);
   assert.equal(
     msUntilTokenKeepAlive(
       { accessToken: fakeJwt(freshExp, freshIat), generatedAt: new Date(eightOhFive).toISOString() },
@@ -345,16 +364,19 @@ test("msUntilTokenKeepAlive mints in 5s after 8:00 IST if token is from yesterda
   assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(yExp, yIat) }, sevenAm), todayEight - sevenAm);
 });
 
-test("keepAlivePlan mints after 8:00 IST even when boot/retry still sees a long-lived JWT", () => {
+test("keepAlivePlan keeps a long-lived JWT on restart and still mints at 8:00 IST", () => {
   const remaining = 12 * 60 * 60 * 1000;
+  const tenThirty = Date.parse("2026-08-21T05:00:00.000Z");
+  const eightOhOne = Date.parse("2026-08-21T02:31:00.000Z");
   assert.deepEqual(
     keepAlivePlan({
       reason: "boot",
       canAutoGenerate: true,
       needsFresh: true,
       remainingMs: remaining,
+      now: tenThirty,
     }),
-    { action: "mint", because: "daily-reset" },
+    { action: "reuse", because: "restart-keeps-token" },
   );
   assert.deepEqual(
     keepAlivePlan({
@@ -362,8 +384,9 @@ test("keepAlivePlan mints after 8:00 IST even when boot/retry still sees a long-
       canAutoGenerate: true,
       needsFresh: true,
       remainingMs: remaining,
+      now: tenThirty,
     }),
-    { action: "mint", because: "daily-reset" },
+    { action: "wait", because: "restart-keeps-token" },
   );
   assert.deepEqual(
     keepAlivePlan({
@@ -371,9 +394,59 @@ test("keepAlivePlan mints after 8:00 IST even when boot/retry still sees a long-
       canAutoGenerate: true,
       needsFresh: true,
       remainingMs: remaining,
+      now: tenThirty,
+    }),
+    { action: "wait", because: "restart-keeps-token" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "boot",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+      now: eightOhOne,
+    }),
+    { action: "reuse", because: "restart-keeps-token" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "schedule",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+      now: eightOhOne,
     }),
     { action: "mint", because: "daily-reset" },
   );
+});
+
+test("pickSavedDhanAccess prefers the newer session token over an older env JWT", () => {
+  const now = Date.parse("2026-08-21T05:00:00.000Z");
+  const older = Math.floor(Date.parse("2026-08-20T03:30:00.000Z") / 1000);
+  const newer = Math.floor(now / 1000);
+  const sessionToken = fakeJwt(newer + 24 * 3600, newer);
+  const envToken = fakeJwt(older + 24 * 3600, older);
+  const picked = pickSavedDhanAccess({
+    session: {
+      clientId: "100",
+      accessToken: sessionToken,
+      generatedAt: new Date(now).toISOString(),
+    },
+    desk: {},
+    env: { DHAN_ACCESS_TOKEN: envToken, DHAN_CLIENT_ID: "100" },
+  });
+  assert.equal(picked.source, "session");
+  assert.equal(picked.token, sessionToken);
+  assert.equal(picked.clientId, "100");
+});
+
+test("sessionPatchKeepsToken does not replace a saved token with a blank", () => {
+  const next = sessionPatchKeepsToken(
+    { accessToken: "saved-token", clientId: "100" },
+    { accessToken: "  ", autoStart: false },
+  );
+  assert.equal(next.accessToken, "saved-token");
+  assert.equal(next.autoStart, false);
 });
 
 test("keepAlivePlan reuses a still-valid JWT on boot only if today's 8:00 mint already ran", () => {

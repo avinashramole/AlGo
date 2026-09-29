@@ -14,6 +14,7 @@ const {
   catalogStrategy,
   claimEnrollmentPaid,
   deleteEnrollment,
+  dropEnrollmentsWithoutStrategies,
   enrollmentActive,
   enrollStrategy,
   feeForTerm,
@@ -166,6 +167,24 @@ test("member claim waits for admin verify before the plan is active", () => {
   assert.equal(paid.active, true);
   assert.equal(paid.verifiedBy, "admin");
   assert.ok(paid.verifiedAt);
+});
+
+test("enrollment history for a deleted strategy is removed and a live strategy stays", () => {
+  const gone = { id: "gone-ema", name: "ema" };
+  const live = { id: "a8", name: "NIFTY 15m VWAP reversal" };
+  const member = { id: "u-shantai", name: "Shantai Infotech", email: "shantai@t2s.app", role: "user" };
+  savePaymentSettings({ mobile: "9876543210", amount: 999, payeeName: "Trade2Smart", upiId: "9876543210@ybl" });
+  const oldPlan = enrollStrategy({ user: member, algo: gone, channel: "gpay", term: "monthly" });
+  markEnrollmentPaid({ user: { id: "admin", role: "admin" }, enrollmentId: oldPlan.enrollment.id });
+  const livePlan = enrollStrategy({ user: member, algo: live, channel: "gpay", term: "monthly" });
+  markEnrollmentPaid({ user: { id: "admin", role: "admin" }, enrollmentId: livePlan.enrollment.id });
+  const removed = dropEnrollmentsWithoutStrategies([live]);
+  assert.ok(removed >= 1);
+  const left = listEnrollments({ userId: member.id });
+  assert.equal(left.some((row) => row.strategyName === "ema"), false);
+  assert.equal(left.some((row) => row.strategyId === "a8"), true);
+  assert.equal(dropEnrollmentsWithoutStrategies([]), 0);
+  assert.equal(listEnrollments({ userId: member.id }).some((row) => row.strategyId === "a8"), true);
 });
 
 test("admin can delete a member subscription and a member cannot", () => {

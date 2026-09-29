@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatConditionGroup, hydrateAlgos, normalizeAlgo, seedAlgos } from "./strategies.js";
+import { formatConditionGroup, hydrateAlgos, mappedClientIdsForMembers, normalizeAlgo, seedAlgos } from "./strategies.js";
 
 test("normalizeAlgo keeps AND/OR condition rows and mirrors the first BUY row", () => {
   const algo = normalizeAlgo({
@@ -57,6 +57,11 @@ test("normalizeAlgo keeps mapped clients and mapping scope", () => {
   assert.deepEqual(saved.mappedClientIds, ["u-arpit", "u-ramesh"]);
   assert.equal(saved.mappingScope, "clients");
   assert.equal(saved.enabled, false);
+});
+
+test("mappedClientIdsForMembers keeps only clients that still exist", () => {
+  assert.deepEqual(mappedClientIdsForMembers(["u-arpit", "u-gone", "u-arpit", ""], ["u-arpit"]), ["u-arpit"]);
+  assert.deepEqual(mappedClientIdsForMembers(["u-a", "u-b"], new Set(["u-b"])), ["u-b"]);
 });
 
 test("hydrate first boot seeds the paused catalog", () => {

@@ -475,6 +475,41 @@ test("admin live desk order copies onto the member token and notifies them", asy
   assert.equal(again.queued, false);
 });
 
+test("reading the admin Dhan order book does not punch user orders", async () => {
+  const user = { id: "u-no-book-copy", name: "No Book Copy", email: "nobookcopy@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100123", accessToken: "book-sync-token" });
+  saveClientSettings(user.id, { copy: true, subscriptionMode: "copy", subscriptionUntil: "" });
+  const { replaceDhanOrders } = await import("./market.js");
+  replaceDhanOrders([
+    {
+      id: "dhan-pending-23100",
+      symbol: "NIFTY-Oct2026-23100-CE",
+      side: "BUY",
+      qty: 65,
+      price: 221.1,
+      status: "PENDING",
+      brokerId: "dhan",
+      live: true,
+    },
+    {
+      id: "dhan-pending-23550",
+      symbol: "NIFTY-Oct2026-23550-CE",
+      side: "SELL",
+      qty: 130,
+      price: 32.55,
+      status: "PENDING",
+      brokerId: "dhan",
+      live: true,
+    },
+  ]);
+  await awaitMemberCopySends();
+  const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  const rows = [...(desk.orders || []), ...(desk.orderHistory || []), ...(desk.alerts || [])];
+  assert.equal(rows.some((row) => String(row.symbol || "").includes("23100")), false);
+  assert.equal(rows.some((row) => String(row.symbol || "").includes("23550")), false);
+});
+
 test("dispatchMemberCopies writes paper fills for mapped clients", () => {
   const user = { id: "u-dispatch", name: "Dispatch", email: "dispatch@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "paper" });

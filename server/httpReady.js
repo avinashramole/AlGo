@@ -72,6 +72,7 @@ export function attachProcessGuards() {
 
 export function sendReadyPage(res, distIndex) {
   if (distIndex) {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(distIndex, (error) => {
       if (!error || res.headersSent) return;
       res.status(200).type("html").send(READY_HTML);

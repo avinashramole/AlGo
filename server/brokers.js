@@ -7,6 +7,7 @@ import {
   liveBrokerMeta,
   liveBrokerPublic,
 } from "./liveBrokers.js";
+import { dhanTokenStatus } from "./dhanToken.js";
 
 export const MAIN_BROKER_ID = "dhan";
 
@@ -64,6 +65,14 @@ function hydrateSavedLiveBrokers() {
 
 hydrateSavedLiveBrokers();
 
+function savedDhanKeyHint() {
+  try {
+    return dhanTokenStatus().tokenHint || "";
+  } catch {
+    return "";
+  }
+}
+
 function publicAccount(meta) {
   const saved = meta.id !== "dhan" && meta.id !== "paper" ? liveBrokerPublic(meta.id) : null;
   const conn = connections[meta.id];
@@ -80,7 +89,7 @@ function publicAccount(meta) {
     funds: connected ? Number(conn?.funds || saved?.funds || 0) : 0,
     marginUsed: connected ? Number(conn?.marginUsed || saved?.marginUsed || 0) : 0,
     status: liveFeed ? "LIVE" : connected ? "CONNECTED" : "DISCONNECTED",
-    keyHint: connected ? conn?.keyHint || saved?.keyHint || "" : "",
+    keyHint: connected ? conn?.keyHint || saved?.keyHint || (meta.id === MAIN_BROKER_ID ? savedDhanKeyHint() : "") : "",
     liveFeed,
     virtual: meta.id === "paper" || Boolean(conn?.virtual),
     fields: liveBrokerMeta(meta.id)?.fields || [],

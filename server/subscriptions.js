@@ -334,6 +334,60 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   return publicEnroll(row);
 }
 
+/** Drop paid and pending history for strategies that are no longer on the desk. */
+export function dropEnrollmentsWithoutStrategies(algos = []) {
+  const ids = new Set();
+  const names = new Set();
+  for (const row of algos || []) {
+    const id = String(row?.id || "").trim();
+    const name = String(row?.name || "").trim().toLowerCase();
+    if (id) ids.add(id);
+    if (name) names.add(name);
+  }
+  if (!ids.size && !names.size) return 0;
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => {
+    const id = String(row.strategyId || "").trim();
+    const name = String(row.strategyName || "").trim().toLowerCase();
+    if (id && ids.has(id)) return true;
+    if (name && names.has(name)) return true;
+    return false;
+  });
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
+export function deleteStrategyEnrollments(strategyId, strategyName = "") {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  if (!id && !name) return 0;
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => {
+    if (id && String(row.strategyId || "").trim() === id) return false;
+    if (name && String(row.strategyName || "").trim().toLowerCase() === name) return false;
+    return true;
+  });
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
+export function deleteUserEnrollments(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return 0;
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => row.userId !== id);
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
+export function deleteOrphanEnrollments(knownIds) {
+  const allow = knownIds instanceof Set ? knownIds : new Set(knownIds || []);
+  const before = enrollments.length;
+  enrollments = enrollments.filter((row) => allow.has(row.userId));
+  if (enrollments.length !== before) persistEnrollments();
+  return before - enrollments.length;
+}
+
 export function deleteEnrollment({ user, enrollmentId } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   if (user.role !== "admin") throw fail("Admin only.", 403);
