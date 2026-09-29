@@ -594,7 +594,10 @@ git fetch origin main
 git checkout main
 git pull origin main
 NODE_OPTIONS=--max-old-space-size=384 npm run build
+mkdir -p /var/www/trade2smart
+cp -af /opt/t2s/dist/. /var/www/trade2smart/
+chmod -R a+rX /var/www/trade2smart
 systemctl restart t2s
 ```
 
-Only run `npm run setup:vps` if `node_modules` is missing. It uses a lot of RAM. Restart does **not** turn LIVE on.
+`npm run build` writes the page into `dist/` and, on the VPS, copies it to `/var/www/trade2smart`. That folder is the site Chrome opens. Restarting `t2s` alone does not replace it. Only run `npm run setup:vps` if `node_modules` is missing. It uses a lot of RAM. Restart does **not** turn LIVE on.

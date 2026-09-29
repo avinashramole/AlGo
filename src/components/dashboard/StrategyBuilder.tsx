@@ -656,7 +656,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             ) : null}
             <p className="text-[11px] font-semibold text-slate-400">
               {crudeFirst
-                ? `Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked. One signal places one order, up to ${Math.max(1, Math.min(20, Math.round(Number(form.maxTradesPerDay) || 5)))} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. VWAP and opening-range conditions are not used.`
+                ? `Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked. One signal places one order, up to ${Math.max(1, Math.min(20, Math.round(Number(form.maxTradesPerDay) || 5)))} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle.`
                 : "When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked."}
             </p>
             <div className="grid gap-3 md:grid-cols-2">

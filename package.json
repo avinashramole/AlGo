@@ -11,7 +11,7 @@
     "setup": "npm install && npm --prefix server install && npm --prefix mobile install",
     "setup:vps": "npm install && npm --prefix server install",
     "start": "concurrently -n api,web -c cyan,green \"npm run dev:api\" \"npm run dev:web\"",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node deploy/publish-web.js",
     "start:vps": "npm --prefix server start",
     "vps": "npm run build && npm run start:vps",
     "preview": "vite preview"
