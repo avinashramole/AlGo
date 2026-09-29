@@ -777,6 +777,54 @@ export function clearStrategyOrdersOnMemberDesks({ strategyId, strategyName } = 
   return removed;
 }
 
+function strategySets(algos = []) {
+  const ids = new Set();
+  const names = new Set();
+  for (const row of algos || []) {
+    const id = String(row?.id || "").trim();
+    const name = String(row?.name || "").trim().toLowerCase();
+    if (id) ids.add(id);
+    if (name) names.add(name);
+  }
+  return { ids, names };
+}
+
+function rowIsMissingStrategy(row, ids, names) {
+  if (!row || typeof row !== "object") return false;
+  const id = String(row.strategyId || "").trim();
+  const name = String(row.strategy || row.strategyName || "").trim().toLowerCase();
+  if (id) return !ids.has(id);
+  if (name) return !names.has(name);
+  const text = String(row.text || "").toLowerCase();
+  const match = text.match(/ · ([^·]+) · /);
+  if (!match) return false;
+  return !names.has(match[1].trim().toLowerCase());
+}
+
+/** Drop orders, positions, alerts, and copy maps for strategies that are no longer on the desk. Tokens stay. */
+export function purgeMemberDesksExcept(algos = []) {
+  const { ids, names } = strategySets(algos);
+  let removed = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk || typeof desk !== "object") continue;
+    for (const key of ["positions", "closedTrades", "orders", "orderHistory", "alerts"]) {
+      const rows = Array.isArray(desk[key]) ? desk[key] : [];
+      const next = rows.filter((row) => !rowIsMissingStrategy(row, ids, names));
+      if (next.length !== rows.length) {
+        desk[key] = next;
+        removed += rows.length - next.length;
+      }
+    }
+    const mapped = String(desk.mappedStrategy || "").trim().toLowerCase();
+    if (mapped && !names.has(mapped)) {
+      desk.mappedStrategy = "";
+      removed += 1;
+    }
+  }
+  if (removed) persist();
+  return removed;
+}
+
 /** Remove one strategy's plans, orders, positions, and alerts from every user desk. Broker tokens stay. */
 export function dropStrategyFromMemberDesks({ strategyId, strategyName } = {}) {
   const id = String(strategyId || "").trim();

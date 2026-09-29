@@ -45,6 +45,7 @@ import {
   getOptionMeta,
   getAlgo,
   listAlgos,
+  purgeStrategiesNotOnDesk,
   quoteSymbol,
   placeOrder,
   snapshot,
@@ -85,7 +86,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
 
 attachProcessGuards();
-dropEnrollmentsWithoutStrategies(listAlgos());
+purgeStrategiesNotOnDesk();
 
 const app = express();
 app.set("trust proxy", 1);

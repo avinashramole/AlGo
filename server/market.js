@@ -1,6 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
-import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers } from "./memberDesk.js";
+import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, withAdminBrokerPnl } from "./memberBrokerPnl.js";
@@ -1496,15 +1496,58 @@ function isPaperRow(row) {
   return Boolean(row?.paper) || row?.brokerId === "paper";
 }
 
+function strategySets(algos = []) {
+  const ids = new Set();
+  const names = new Set();
+  for (const row of algos || []) {
+    const id = String(row?.id || "").trim();
+    const name = String(row?.name || "").trim().toLowerCase();
+    if (id) ids.add(id);
+    if (name) names.add(name);
+  }
+  return { ids, names };
+}
+
+function rowIsMissingStrategy(row, ids, names) {
+  if (!row || typeof row !== "object") return false;
+  const id = String(row.strategyId || "").trim();
+  const name = String(row.strategy || row.strategyName || "").trim().toLowerCase();
+  if (id) return !ids.has(id);
+  if (name) return !names.has(name);
+  const text = String(row.text || "").toLowerCase();
+  const match = text.match(/ · ([^·]+) · /);
+  if (!match) return false;
+  return !names.has(match[1].trim().toLowerCase());
+}
+
 function liveDesk() {
   const live = isDhanFeedLive();
   const keep = (row) => isPaperRow(row) || (!isSimRow(row) && row?.live !== false);
   const algos = state.algos || [];
+  const { ids, names } = strategySets(algos);
   const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });
-  const orders = (state.orders || []).filter(keep).map(withActualName);
-  const positions = (state.positions || []).filter(keep).map(withActualName);
-  const closedTrades = (state.closedTrades || []).filter(keep).map(withActualName);
+  const onDesk = (row) => !rowIsMissingStrategy(row, ids, names);
+  const orders = (state.orders || []).filter(keep).map(withActualName).filter(onDesk);
+  const positions = (state.positions || []).filter(keep).map(withActualName).filter(onDesk);
+  const closedTrades = (state.closedTrades || []).filter(keep).map(withActualName).filter(onDesk);
   return { live, orders, positions, closedTrades };
+}
+
+export function purgeStrategiesNotOnDesk() {
+  const algos = state.algos || [];
+  const { ids, names } = strategySets(algos);
+  const keep = (row) => !rowIsMissingStrategy(row, ids, names);
+  state.orders = (state.orders || []).filter(keep);
+  state.positions = (state.positions || []).filter(keep);
+  state.closedTrades = (state.closedTrades || []).filter(keep);
+  state.notifications = (state.notifications || []).filter((row) => {
+    const text = typeof row === "string" ? row : String(row?.text || "");
+    return keep({ text });
+  });
+  const desks = purgeMemberDesksExcept(algos);
+  const plans = dropEnrollmentsWithoutStrategies(algos);
+  persistAlgos();
+  return { desks, plans, strategies: algos.map((row) => row.id) };
 }
 
 export function clearSimulatedDesk() {
