@@ -592,6 +592,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : firstCandle || crudeFirst ? (
           <div className="mt-4 space-y-3">
+            {crudeFirst ? (
+              <label className="block text-xs font-semibold text-slate-500">
+                Max trades
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  inputMode="numeric"
+                  aria-label="Max trades"
+                  className={fieldClass}
+                  value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+                  onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+                />
+              </label>
+            ) : null}
             <p className="text-[11px] font-semibold text-slate-400">
               {crudeFirst
                 ? "Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked, up to 5 trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle."
@@ -637,17 +652,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField
-                label={crudeFirst ? "Max trades" : "Max trades / day"}
-                value={crudeFirst ? Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5)) : Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5}
-                step={1}
-                onChange={(maxTradesPerDay) => set({ maxTradesPerDay: crudeFirst ? Math.max(1, Math.min(20, Math.round(maxTradesPerDay) || 1)) : Math.max(1, maxTradesPerDay) })}
-              />
-              {crudeFirst ? (
-                <p className="text-[11px] font-semibold text-slate-400 md:col-span-2">
-                  One signal places one order. Max trades is how many of those orders can be accepted today. A rejected order does not send that same candle again.
-                </p>
-              ) : null}
+              {crudeFirst ? null : (
+              <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+              )}
               <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>

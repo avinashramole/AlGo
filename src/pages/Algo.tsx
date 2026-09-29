@@ -70,7 +70,7 @@ function kindMeta(algo: AlgoStrategy) {
     };
   }
   if (isCrudeFirstCandleKind(algo)) {
-    const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
+    const maxTrades = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
     return {
       kind: "crude-first-candle" as const,
       category: "CRUDE OIL FIRST 5M",
@@ -343,6 +343,56 @@ export function Algo() {
   );
 }
 
+function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
+  const { refresh } = useMarket();
+  const saved = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
+  const [value, setValue] = useState(String(saved));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setValue(String(saved));
+  }, [algo.id, saved]);
+
+  const save = async () => {
+    const next = Math.max(1, Math.min(20, Math.round(Number(value) || saved)));
+    setValue(String(next));
+    if (next === saved) return;
+    setSaving(true);
+    try {
+      await updateAlgo(algo.id, { maxTradesPerDay: next });
+      await refresh();
+    } catch (err) {
+      window.alert(catchDeskError(err, "Could not save max trades"));
+      setValue(String(saved));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <label className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+      Max trades
+      <input
+        type="number"
+        min={1}
+        max={20}
+        inputMode="numeric"
+        aria-label="Max trades"
+        className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void save();
+          }
+        }}
+      />
+      <span className="font-medium text-slate-400">{saving ? "Saving..." : "Change this number. One signal places one order."}</span>
+    </label>
+  );
+}
+
 function AlgoCard({
   algo,
   orders,
@@ -424,6 +474,7 @@ function AlgoCard({
               </div>
             ) : null}
             <div className="mt-1 text-[11px] text-slate-500">{contract}</div>
+            {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
             ) : null}
@@ -526,7 +577,7 @@ function AlgoCard({
       </div>
       {isCrudeFirstCandleKind(algo) ? (
         <div className="mt-2 text-[11px] text-slate-500">
-          Saving or mapping clients does not start LIVE and does not place an order. When the current 5m candle opens, the preview crude oil future open and close are checked with the preview ATM CE and PE. The current candle open and close are not used. Up to 5 trades a day. Press Start to run it.
+          Saving or mapping clients does not start LIVE and does not place an order. Max trades is on this card. One signal places one order. Press Start to run it.
         </div>
       ) : null}
       {isNiftyOptionEngineKind(algo) ? (
