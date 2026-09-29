@@ -67,12 +67,34 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 : algo.kind || "indicator"
       ) as StrategyKind;
       const synthesized = groupsFromFlat(algo);
+      const crude = kind === "crude-first-candle";
       setForm({
         ...emptyStrategy(kind),
         ...algo,
         kind,
-        buyConditions: algo.buyConditions?.rows?.length ? algo.buyConditions : synthesized.buyConditions,
-        sellConditions: algo.sellConditions?.rows?.length ? algo.sellConditions : synthesized.sellConditions,
+        ...(crude
+          ? {
+              indicator: "CRUDE_FIRST_CANDLE",
+              strategyType: "CRUDE_FIRST_CANDLE_5M",
+              symbol: "CRUDEOIL",
+              instrument: "option",
+              pattern: undefined,
+              rangeMinutes: undefined,
+              buyConditions: undefined,
+              sellConditions: undefined,
+              buyLeft: undefined,
+              buyOp: undefined,
+              buyRight: undefined,
+              buyValue: undefined,
+              sellLeft: undefined,
+              sellOp: undefined,
+              sellRight: undefined,
+              sellValue: undefined,
+            }
+          : {
+              buyConditions: algo.buyConditions?.rows?.length ? algo.buyConditions : synthesized.buyConditions,
+              sellConditions: algo.sellConditions?.rows?.length ? algo.sellConditions : synthesized.sellConditions,
+            }),
       });
     } else {
       setForm({ ...emptyStrategy("indicator"), brokerId: data.activeBrokerId || "dhan", runMode: "live" });
@@ -105,8 +127,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       return `Nifty Test · NIFTY FUT · ${form.timeframe || "5m"} · live feed while started · current candle above open → BUY · below open → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
     }
     if (isCrudeFirstCandleKind(form)) {
-      const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
-      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · same preview 5m buy as Nifty · up to ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST · saving does not start LIVE`;
+      const requested = Number(form.maxTradesPerDay);
+      const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
+      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · preview 5m open/close · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST · saving does not start LIVE`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -144,7 +167,31 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     setBusy(true);
     setError("");
     try {
-      await saveAlgo({ ...form, id: algo?.id });
+      await saveAlgo(
+        crudeFirst
+          ? {
+              ...form,
+              id: algo?.id,
+              kind: "crude-first-candle",
+              strategyType: "CRUDE_FIRST_CANDLE_5M",
+              indicator: "CRUDE_FIRST_CANDLE",
+              symbol: "CRUDEOIL",
+              instrument: "option",
+              pattern: undefined,
+              rangeMinutes: undefined,
+              buyConditions: undefined,
+              sellConditions: undefined,
+              buyLeft: undefined,
+              buyOp: undefined,
+              buyRight: undefined,
+              buyValue: undefined,
+              sellLeft: undefined,
+              sellOp: undefined,
+              sellRight: undefined,
+              sellValue: undefined,
+            }
+          : { ...form, id: algo?.id },
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save strategy");
@@ -187,13 +234,13 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }
           />
           <TypeCard
-            active={kind === "indicator"}
+            active={kind === "indicator" && !crudeFirst}
             title="Indicator based"
             text="RSI, EMA, VWAP with crossover, above, below, <, >"
             onClick={() => set({ kind: "indicator", tag: "Indicator", ...emptyStrategy("indicator"), name: form.name, runMode: form.runMode, brokerId: form.brokerId, lots: form.lots })}
           />
           <TypeCard
-            active={kind === "price-action"}
+            active={kind === "price-action" && !crudeFirst}
             title="Price action based"
             text="ORB, breakout, pin bar, engulfing"
             onClick={() => set({ kind: "price-action", tag: "Price action", ...emptyStrategy("price-action"), name: form.name, runMode: form.runMode, brokerId: form.brokerId, lots: form.lots })}
@@ -250,7 +297,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }
           />
           <TypeCard
-            active={kind === "crude-first-candle"}
+            active={crudeFirst}
             title="CRUDE OIL 5m first candle"
             text="Same preview-candle buy as Nifty 5m. Crude future green + ATM CE green → BUY CE. Crude future red + ATM PE green → BUY PE. MCX. Paused until Start."
             onClick={() => {
@@ -473,7 +520,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
         </div>
 
-        {engine || niftyTest ? null : kind === "indicator" ? (
+        {engine || niftyTest || crudeFirst ? null : kind === "indicator" ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Indicator
@@ -609,7 +656,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             ) : null}
             <p className="text-[11px] font-semibold text-slate-400">
               {crudeFirst
-                ? "Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked, up to 5 trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle."
+                ? `Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked. One signal places one order, up to ${Math.max(1, Math.min(20, Math.round(Number(form.maxTradesPerDay) || 5)))} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. VWAP and opening-range conditions are not used.`
                 : "When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked."}
             </p>
             <div className="grid gap-3 md:grid-cols-2">

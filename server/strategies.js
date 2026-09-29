@@ -500,19 +500,19 @@ export function normalizeAlgo(input = {}, existing = {}) {
     next.summary = summarizeAlgo(next);
     return withMapping(next, input, existing);
   }
-  const switchingAwayFromCrude =
-    input.kind === "price-action" ||
-    input.kind === "nifty-vwap" ||
-    input.kind === "nifty-vwap-reversal" ||
-    input.kind === "nifty-vwap-hedge" ||
-    input.kind === "nifty-first-candle" ||
-    input.kind === "nifty-test";
   const crudeName = String(merged.name || existing.name || "");
+  const crudeByName = /crude/i.test(crudeName) && /5m first candle/i.test(crudeName);
+  const switchingAwayFromCrude =
+    !crudeByName &&
+    (input.kind === "price-action" ||
+      input.kind === "indicator" ||
+      input.kind === "nifty-vwap" ||
+      input.kind === "nifty-vwap-reversal" ||
+      input.kind === "nifty-vwap-hedge" ||
+      input.kind === "nifty-first-candle" ||
+      input.kind === "nifty-test");
   const keepCrude =
-    (isCrudeFirstCandleAlgo(merged) ||
-      isCrudeFirstCandleAlgo(existing) ||
-      (/crude/i.test(crudeName) && /5m first candle/i.test(crudeName))) &&
-    !switchingAwayFromCrude;
+    (isCrudeFirstCandleAlgo(merged) || isCrudeFirstCandleAlgo(existing) || crudeByName) && !switchingAwayFromCrude;
   if (keepCrude) {
     const cfg = crudeFirstCandleConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -562,6 +562,22 @@ export function normalizeAlgo(input = {}, existing = {}) {
       next.status = "BACKTEST";
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
+    for (const key of [
+      "buyConditions",
+      "sellConditions",
+      "buyLeft",
+      "buyOp",
+      "buyRight",
+      "buyValue",
+      "sellLeft",
+      "sellOp",
+      "sellRight",
+      "sellValue",
+      "pattern",
+      "rangeMinutes",
+    ]) {
+      delete next[key];
+    }
     next.summary = summarizeAlgo(next);
     return withMapping(next, input, existing);
   }

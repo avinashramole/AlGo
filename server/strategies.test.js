@@ -164,10 +164,52 @@ test("crude oil 5m name stays crude and does not become the nifty first candle",
   assert.equal(row.expiryKind, "monthly");
   assert.equal(row.enabled, false);
   assert.notEqual(row.status, "LIVE");
+  assert.equal(row.buyConditions, undefined);
+  assert.equal(row.buyOp, undefined);
+  assert.equal(row.pattern, undefined);
+  assert.match(row.summary, /preview/i);
+  assert.doesNotMatch(row.summary, /close above|price action/i);
   const nifty = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "indicator" });
   assert.equal(nifty.kind, "nifty-first-candle");
   assert.equal(nifty.symbol, "NIFTY");
   assert.equal(nifty.endTimeIst, "15:15");
+});
+
+test("crude oil 5m saved as price action drops indicator conditions and stays paused", () => {
+  const row = normalizeAlgo(
+    {
+      name: "CRUDE OIL 5m first candle",
+      kind: "price-action",
+      pattern: "ORB",
+      rangeMinutes: 15,
+      symbol: "CRUDEOIL",
+      instrument: "option",
+      buyLeft: "price",
+      buyOp: "close_above",
+      buyRight: "vwap",
+      sellLeft: "price",
+      sellOp: "close_below",
+      sellRight: "vwap",
+      buyConditions: { join: "and", rows: [{ left: "price", op: "close_above", right: "vwap", value: 0 }] },
+      enabled: true,
+    },
+    { id: "a12", enabled: false, status: "PAUSED" },
+  );
+  assert.equal(row.kind, "crude-first-candle");
+  assert.equal(row.indicator, "CRUDE_FIRST_CANDLE");
+  assert.equal(row.strategyType, "CRUDE_FIRST_CANDLE_5M");
+  assert.equal(row.symbol, "CRUDEOIL");
+  assert.equal(row.enabled, false);
+  assert.equal(row.status, "PAUSED");
+  assert.equal(row.buyConditions, undefined);
+  assert.equal(row.buyOp, undefined);
+  assert.equal(row.pattern, undefined);
+  assert.match(row.summary, /one signal places one order/i);
+  const nifty = normalizeAlgo(
+    { name: "NIFTY 5m first candle", kind: "price-action", pattern: "ORB" },
+    { id: "a10", kind: "nifty-first-candle", enabled: false, status: "PAUSED" },
+  );
+  assert.equal(nifty.kind, "price-action");
 });
 
 test("hydrate rematerializes first candle saved as a generic indicator", () => {

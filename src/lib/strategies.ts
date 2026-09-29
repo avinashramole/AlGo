@@ -231,12 +231,16 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
   );
 }
 
-export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
-  return (
+export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
+  if (
     algo?.kind === "crude-first-candle" ||
     algo?.strategyType === "CRUDE_FIRST_CANDLE_5M" ||
     algo?.indicator === "CRUDE_FIRST_CANDLE"
-  );
+  ) {
+    return true;
+  }
+  const name = String(algo?.name || "");
+  return /crude/i.test(name) && /5m first candle/i.test(name);
 }
 
 export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
@@ -584,11 +588,6 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       rsiBuy: 30,
       rsiSell: 70,
       multiplier: 3,
-      pattern: "ORB",
-      rangeMinutes: 15,
-      lookback: 20,
-      ...defaultConditions("indicator", "VWAP", "ORB"),
-      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
       runMode: "live",
       dailyLiveIst: "09:00",
       brokerId: "dhan",
