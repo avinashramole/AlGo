@@ -357,7 +357,7 @@ export const VwapSignalEngine = {
     const endMin = hmToMinutes(endTimeIst, "15:15");
     const evalAt = istHmOnDayMs(now, entryEvaluationIst, "09:05");
     const waitingEval = Number(now) < evalAt;
-    const agg = { sessionOpenMinutes, includeForming: true };
+    const agg = { sessionOpenMinutes, includeForming: false };
     const futAll = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, agg);
     const ceAll = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, agg);
     const peAll = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, agg);
@@ -367,27 +367,24 @@ export const VwapSignalEngine = {
       return mins >= sessionOpenMinutes && mins < endMin;
     };
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
-    const inSession = futAll.filter(inWindow);
-    const forming =
-      inSession.find((bar) => Number(now) >= Number(bar.time) && Number(now) < Number(bar.time) + width) || null;
-    const completed = inSession.filter((bar) => Number(now) >= Number(bar.time) + width);
-    const fut = forming || completed[completed.length - 1] || null;
-    const previewLive = Boolean(forming);
-    const niftyColor = firstBarColor(fut);
-    const ceColor = firstBarColor(sameTime(ceAll, fut?.time));
-    const peColor = firstBarColor(sameTime(peAll, fut?.time));
-    const tradable = previewLive || !waitingEval;
-    const buyCe = tradable && niftyColor === "green" && ceColor === "green";
-    const buyPe = tradable && niftyColor === "red" && peColor === "green";
-    const shownWall = fut ? istWallTime(fut.time) : null;
+    const completed = futAll.filter(inWindow);
+    const preview = completed[completed.length - 1] || null;
+    const openedAt = preview ? Number(preview.time) + width : 0;
+    const onCurrentOpen = Boolean(preview && Number(now) >= openedAt && Number(now) < openedAt + width);
+    const niftyColor = firstBarColor(preview);
+    const ceColor = firstBarColor(sameTime(ceAll, preview?.time));
+    const peColor = firstBarColor(sameTime(peAll, preview?.time));
+    const buyCe = onCurrentOpen && !waitingEval && niftyColor === "green" && ceColor === "green";
+    const buyPe = onCurrentOpen && !waitingEval && niftyColor === "red" && peColor === "green";
+    const shownWall = preview ? istWallTime(preview.time) : null;
     const shownMin = shownWall ? shownWall.hour * 60 + shownWall.minute : -1;
     return {
-      ready: Boolean(fut && niftyColor && tradable),
-      barTime: fut ? Number(fut.time) : 0,
-      futuresClose: fut ? Number(fut.close) : 0,
-      futuresOpen: fut ? Number(fut.open) : 0,
-      futuresHigh: fut ? Number(fut.high) : 0,
-      futuresLow: fut ? Number(fut.low) : 0,
+      ready: Boolean(preview && niftyColor && (onCurrentOpen || !waitingEval)),
+      barTime: preview ? Number(preview.time) : 0,
+      futuresClose: preview ? Number(preview.close) : 0,
+      futuresOpen: preview ? Number(preview.open) : 0,
+      futuresHigh: preview ? Number(preview.high) : 0,
+      futuresLow: preview ? Number(preview.low) : 0,
       futuresVwap: 0,
       bias: buyCe ? "CE" : buyPe ? "PE" : "",
       buyCe,
@@ -395,10 +392,12 @@ export const VwapSignalEngine = {
       niftyColor,
       ceColor,
       peColor,
-      previewLive,
+      previewLive: false,
+      previewCandle: Boolean(preview),
+      onCurrentOpen,
       firstCandle: shownMin === sessionOpenMinutes,
       waitingEval,
-      previewFilled: Boolean(fut && niftyColor),
+      previewFilled: Boolean(preview && niftyColor),
       ceAboveVwap: false,
       peAboveVwap: false,
       againstCount: 0,

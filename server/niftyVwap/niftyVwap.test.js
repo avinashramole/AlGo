@@ -1299,12 +1299,12 @@ test("first candle no-trade line prints the Nifty future candle", () => {
   assert.equal(tick.action, "wait");
   assert.equal(tick.reason, "pe-not-green");
   assert.equal(book.places.length, 0);
-  assert.match(algo.lastSignal, /NO TRADE · NIFTY FUT RED PE RED O 22663\.00 C 22647\.50/);
+  assert.match(algo.lastSignal, /NO TRADE · PREVIEW NIFTY FUT RED PE RED O 22663\.00 C 22647\.50/);
   assert.match(algo.lastSignal, /09:00–09:05 IST/);
   assert.doesNotMatch(algo.lastSignal, /22678/);
 });
 
-test("preview 5m buys before the candle closes, and a later closed 5m can still trade", () => {
+test("preview candle is checked when the current candle opens, not from the current close", () => {
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5, { sessionOpenMinutes: 9 * 60 }), T0_0900);
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5), null);
   const early = VwapSignalEngine.evaluateFirstCandle({
@@ -1314,8 +1314,7 @@ test("preview 5m buys before the candle closes, and a later closed 5m can still 
     now: T0_0900 + BAR - 1000,
   });
   assert.equal(early.waitingEval, true);
-  assert.equal(early.previewLive, true);
-  assert.equal(early.buyCe, true);
+  assert.equal(early.buyCe, false);
   assert.equal(early.buyPe, false);
   const laterOnly = VwapSignalEngine.evaluateFirstCandle({
     futuresBars: [
@@ -1345,21 +1344,31 @@ test("preview 5m buys before the candle closes, and a later closed 5m can still 
   });
   assert.equal(laterOnly.buyCe, true);
   assert.equal(laterOnly.niftyColor, "green");
-  assert.equal(laterOnly.previewLive, false);
+  assert.equal(laterOnly.futuresOpen, 24500);
+  assert.equal(laterOnly.futuresClose, 24570);
+  assert.equal(laterOnly.onCurrentOpen, true);
 });
 
-test("preview 5m green Nifty future and green ATM CE buys CE before the close", () => {
-  const now = T0_0900 + 60_000;
+test("preview candle open and close buy CE when the next candle opens", () => {
+  const forming = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(22663, 22680)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    now: T0_0900 + 60_000,
+  });
+  assert.equal(forming.buyCe, false);
+  const now = T0_0900 + BAR;
   const signal = VwapSignalEngine.evaluateFirstCandle({
     futuresBars: [firstBar(22663, 22680)],
     ceBars: [firstBar(100, 118)],
     peBars: [firstBar(110, 96)],
     now,
   });
-  assert.equal(signal.previewLive, true);
   assert.equal(signal.buyCe, true);
   assert.equal(signal.niftyColor, "green");
   assert.equal(signal.ceColor, "green");
+  assert.equal(signal.futuresOpen, 22663);
+  assert.equal(signal.futuresClose, 22680);
   const algo = defaultNiftyFirstCandleAlgo({ name: "Preview CE" });
   const book = bookAdapter();
   const tick = NiftyVwapStrategy.tick({
@@ -1381,10 +1390,10 @@ test("preview 5m green Nifty future and green ATM CE buys CE before the close", 
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "CE");
   assert.equal(book.places[0].side, "BUY");
-  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN/);
+  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN O 22663\.00 C 22680\.00/);
 });
 
-test("preview 5m red Nifty future and green ATM PE buys PE, and an older green candle does not", () => {
+test("preview candle open and close buy PE at the next open, and the current close is ignored", () => {
   const preview = {
     time: T0_0900 + BAR,
     open: 22680,
@@ -1409,28 +1418,28 @@ test("preview 5m red Nifty future and green ATM PE buys PE, and an older green c
     close: 105,
     volume: 500,
   };
-  const now = T0_0900 + BAR + 60_000;
-  const ignored = VwapSignalEngine.evaluateFirstCandle({
-    futuresBars: [firstBar(24500, 24540), { ...preview, close: 22640 }],
-    ceBars: [firstBar(100, 118), cePreview],
-    peBars: [firstBar(96, 110), { ...pePreview, close: 70 }],
-    now,
-  });
-  assert.equal(ignored.previewLive, true);
-  assert.equal(ignored.buyCe, false);
-  assert.equal(ignored.buyPe, false);
-  assert.equal(ignored.niftyColor, "red");
-  const signal = VwapSignalEngine.evaluateFirstCandle({
+  const whileCurrentForms = VwapSignalEngine.evaluateFirstCandle({
     futuresBars: [firstBar(24500, 24500), preview],
     ceBars: [firstBar(118, 100), cePreview],
     peBars: [firstBar(110, 96), pePreview],
+    now: T0_0900 + BAR + 60_000,
+  });
+  assert.equal(whileCurrentForms.buyPe, false);
+  assert.equal(whileCurrentForms.barTime, T0_0900);
+  const now = T0_0900 + 2 * BAR;
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24540), preview],
+    ceBars: [firstBar(100, 118), cePreview],
+    peBars: [firstBar(110, 96), pePreview],
     now,
   });
-  assert.equal(signal.previewLive, true);
   assert.equal(signal.buyPe, true);
   assert.equal(signal.buyCe, false);
   assert.equal(signal.peColor, "green");
+  assert.equal(signal.niftyColor, "red");
   assert.equal(signal.barTime, preview.time);
+  assert.equal(signal.futuresOpen, 22680);
+  assert.equal(signal.futuresClose, 22647.5);
   const algo = defaultNiftyFirstCandleAlgo({ name: "Preview PE" });
   const book = bookAdapter();
   const tick = NiftyVwapStrategy.tick({
@@ -1438,8 +1447,8 @@ test("preview 5m red Nifty future and green ATM PE buys PE, and an older green c
     now,
     feedLive: true,
     minutesToClose: 360,
-    futuresBars: [firstBar(24500, 24500), preview],
-    ceBars: [firstBar(118, 100), cePreview],
+    futuresBars: [firstBar(24500, 24540), preview],
+    ceBars: [firstBar(100, 118), cePreview],
     peBars: [firstBar(110, 96), pePreview],
     ceLtp: 100,
     peLtp: 105,
@@ -1452,7 +1461,7 @@ test("preview 5m red Nifty future and green ATM PE buys PE, and an older green c
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "PE");
   assert.equal(book.places[0].side, "BUY");
-  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE GREEN/);
+  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE GREEN O 22680\.00 C 22647\.50/);
 });
 
 test("first candle duplicate bar and restart do not place a second order", () => {

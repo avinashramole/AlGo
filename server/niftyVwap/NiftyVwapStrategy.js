@@ -109,7 +109,7 @@ export const NiftyVwapStrategy = {
     if (!signal.buyCe && !signal.buyPe) {
       if (config.signalMode === "first-candle") {
         const tape = niftyFutCandleText(signal, config);
-        const preview = signal.previewLive ? "PREVIEW " : "";
+        const preview = signal.previewCandle || signal.previewLive ? "PREVIEW " : "";
         if (signal.waitingEval && !signal.previewLive) {
           algo.lastSignal = "WAIT 09:05 FIRST 5m CLOSE";
           return { action: "wait", reason: "wait-eval" };
@@ -234,7 +234,7 @@ export const NiftyVwapStrategy = {
     });
     algo.lastSignal =
       config.signalMode === "first-candle"
-        ? `BUY ATM ${pick.option} · ${signal.previewLive ? "PREVIEW " : ""}NIFTY FUT ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
+        ? `BUY ATM ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}NIFTY FUT ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
         : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },

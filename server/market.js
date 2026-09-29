@@ -789,7 +789,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const open = PositionManager.openFor(positions, algo.name, vs);
   const showLivePreview = () => {
     if (!isNiftyFirstCandleAlgo(algo) || !feedLive) return;
-    const preview = niftyFuturePreviewBar(config.timeframe || "5m", Date.now());
+    const closed = niftyFutureSignalBars(config.timeframe || "5m", Date.now());
+    const preview = closed[closed.length - 1] || null;
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
     stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now(), {
       ce: preview ? sameTime(vs.ceBars, preview.time) : null,
@@ -855,17 +856,13 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const beforeTrades = Number(vs.sessionTrades || 0);
   const beforeBar = Number(vs.lastEntryBarTime || 0);
   const beforeProcessed = Number(vs.processedFirstBarTime || 0);
-  const previewFutures =
-    livePreview && !futuresBars.some((bar) => Number(bar.time) === Number(livePreview.time))
-      ? [...futuresBars, livePreview]
-      : futuresBars;
   NiftyVwapStrategy.tick({
     algo,
     config,
     now,
     feedLive: Boolean(feedLive),
     minutesToClose: session.open ? undefined : 0,
-    futuresBars: previewFutures,
+    futuresBars,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
     spot,
@@ -2666,8 +2663,10 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}) {
 function stampLiveFuturePreview(algo, timeframe, now, legs = {}) {
   if (!isNiftyFirstCandleAlgo(algo)) return;
   const minutes = futureBarMinutes(timeframe);
-  const label = formatLiveFuturePreview(niftyFuturePreviewBar(timeframe, now), minutes, legs);
-  const base = String(algo.lastSignal || "").replace(/ · LIVE .+$/, "");
+  const closed = niftyFutureSignalBars(timeframe, now);
+  const preview = closed[closed.length - 1] || null;
+  const label = formatLiveFuturePreview(preview, minutes, legs).replace(/^LIVE /, "PREVIEW ");
+  const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
   algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
 }
 

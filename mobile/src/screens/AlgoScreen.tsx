@@ -433,7 +433,7 @@ export function AlgoScreen() {
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-first-candle" ? (
           <>
-            <Text style={styles.muted}>Live preview 5m NIFTY FUT. Green future + green ATM CE → BUY CE. Red future + green ATM PE → BUY PE. Doji skips that candle. Up to 5 trades a day. Weekly ATM. Saving or restart does not start live.</Text>
+            <Text style={styles.muted}>When the current 5m candle opens, the previous Nifty future open and close are checked with the preview ATM CE and PE. Green preview future + green preview CE → BUY CE. Red preview future + green preview PE → BUY PE. The current candle open and close are not used. Doji skips that candle. Up to 5 trades a day. Weekly ATM. Saving or restart does not start live.</Text>
             <Field label="Start LIVE (IST)" value={draft.dailyLiveIst || "09:00"} onChange={(dailyLiveIst) => setDraft({ ...draft, dailyLiveIst })} />
             <Field label="First candle start (IST)" value={draft.firstBarStartIst || "09:00"} onChange={(firstBarStartIst) => setDraft({ ...draft, firstBarStartIst })} />
             <Field label="Entry evaluation (IST)" value={draft.entryEvaluationIst || "09:05"} onChange={(entryEvaluationIst) => setDraft({ ...draft, entryEvaluationIst })} />
