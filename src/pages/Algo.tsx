@@ -72,7 +72,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · first ${algo.timeframe || "5m"} ${algo.firstBarStartIst || "09:00"}–${algo.entryEvaluationIst || "09:05"} · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay || 1}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · every ${algo.timeframe || "5m"} from ${algo.firstBarStartIst || "09:00"} until 1 trade · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay || 1}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -388,7 +388,7 @@ function AlgoCard({
         ? algo.lastSignal
         : "No signal"
     : isNiftyFirstCandleKind(algo)
-      ? algo.lastSignal || "09:00–09:05: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE"
+      ? algo.lastSignal || "Every 5m: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · doji skips that candle"
       : algo.lastSignal && algo.enabled
         ? algo.lastSignal
         : "Waiting for the next signal";
@@ -518,7 +518,7 @@ function AlgoCard({
           {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo)
             ? " LIVE arms automatically at 09:20 IST on session days."
             : isNiftyFirstCandleKind(algo)
-              ? " LIVE arms automatically at 09:00 IST on session days. Entry only after the first 5m candle closes."
+              ? " LIVE arms automatically at 09:00 IST on session days. Each completed 5m candle is checked until one trade is placed."
               : ""}
         </div>
       ) : null}

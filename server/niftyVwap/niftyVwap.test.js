@@ -1186,7 +1186,7 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.maxTradesPerDay, 2);
 });
 
-test("first candle ignores later bars and caps one trade per day", () => {
+test("first candle checks every later 5m candle and caps one trade per day", () => {
   const laterGreen = {
     time: T0_0900 + BAR,
     open: 24540,
@@ -1210,8 +1210,10 @@ test("first candle ignores later bars and caps one trade per day", () => {
     now: T0_0900 + 2 * BAR,
     firstBarStartIst: "09:00",
   });
-  assert.equal(signal.niftyColor, "doji");
-  assert.equal(signal.buyCe, false);
+  assert.equal(signal.niftyColor, "green");
+  assert.equal(signal.ceColor, "green");
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.barTime, laterGreen.time);
   const algo = defaultNiftyFirstCandleAlgo({ name: "First candle cap" });
   const book = bookAdapter();
   const first = NiftyVwapStrategy.tick({
@@ -1265,7 +1267,7 @@ test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
   assert.equal(TrailingStopManager.targetPrice(100, 40), 140);
 });
 
-test("first candle uses only the 09:00-09:05 slot and waits until 09:05", () => {
+test("first candle waits until 09:05, then a later 5m candle can trade", () => {
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5, { sessionOpenMinutes: 9 * 60 }), T0_0900);
   assert.equal(sessionBarOpenMs(Date.parse("2026-08-21T03:32:00.000Z"), 5), null);
   const early = VwapSignalEngine.evaluateFirstCandle({
@@ -1302,8 +1304,8 @@ test("first candle uses only the 09:00-09:05 slot and waits until 09:05", () => 
     firstBarStartIst: "09:00",
     entryEvaluationIst: "09:05",
   });
-  assert.equal(laterOnly.buyCe, false);
-  assert.equal(laterOnly.niftyColor, "");
+  assert.equal(laterOnly.buyCe, true);
+  assert.equal(laterOnly.niftyColor, "green");
 });
 
 test("first candle duplicate bar and restart do not place a second order", () => {

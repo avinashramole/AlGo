@@ -107,7 +107,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const firstBar = form.firstBarStartIst || "09:00";
       const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · first ${form.timeframe || "5m"} ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · every ${form.timeframe || "5m"} from ${firstBar} until 1 trade · first check ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -245,7 +245,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY 5m first candle"
-            text="First 5m Nifty green + ATM CE green → BUY ATM CE. First 5m Nifty red + ATM PE green → BUY ATM PE. SL 20% / target 40%. LIVE at 09:00 IST."
+            text="Every 5m candle until one trade. Nifty green + ATM CE green → BUY ATM CE. Nifty red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -289,7 +289,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
               : firstCandle
-              ? "NIFTY options on the completed first candle only. Default: LIVE at 09:00 IST, first 5m 09:15–09:20 (NSE open). Nifty green + CE green → BUY CE. Nifty red + PE green → BUY PE. Doji is no trade. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
+              ? "NIFTY options from the first completed candle, then every later 5m candle until one trade is placed. Default: LIVE at 09:00 IST. Nifty green + CE green → BUY CE. Nifty red + PE green → BUY PE. Doji is no trade on that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
@@ -564,7 +564,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : firstCandle ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              Uses only the completed 09:00–09:05 candle (editable). Green Nifty + green ATM CE buys weekly ATM CE. Red Nifty + green ATM PE buys weekly ATM PE. No trade if that candle is missing, doji, or the option candle is not green. Duplicate orders and a second trade the same day are blocked.
+              Checks every completed 5m candle from the first one until one trade is placed. Green Nifty + green ATM CE buys weekly ATM CE. Red Nifty + green ATM PE buys weekly ATM PE. A doji, or an option candle that is not green, skips that candle and the next 5m is checked. A second trade the same day is blocked.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">

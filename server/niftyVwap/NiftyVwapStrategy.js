@@ -95,22 +95,22 @@ export const NiftyVwapStrategy = {
           return { action: "wait", reason: "wait-eval" };
         }
         if (signal.niftyColor === "doji") {
-          algo.lastSignal = `NO TRADE · NIFTY DOJI O ${open} C ${close}`;
+          algo.lastSignal = `NO TRADE · NIFTY DOJI O ${open} C ${close} · next 5m`;
           return { action: "wait", reason: "first-doji" };
         }
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
           algo.lastSignal = signal.ceColor
-            ? `NO TRADE · NIFTY GREEN CE ${signal.ceColor.toUpperCase()} O ${open} C ${close}`
-            : "WAIT FIRST CE 5m";
+            ? `NO TRADE · NIFTY GREEN CE ${signal.ceColor.toUpperCase()} O ${open} C ${close} · next 5m`
+            : "WAIT CE 5m";
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
           algo.lastSignal = signal.peColor
-            ? `NO TRADE · NIFTY RED PE ${signal.peColor.toUpperCase()} O ${open} C ${close}`
-            : "WAIT FIRST PE 5m";
+            ? `NO TRADE · NIFTY RED PE ${signal.peColor.toUpperCase()} O ${open} C ${close} · next 5m`
+            : "WAIT PE 5m";
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
-        algo.lastSignal = "WAIT FIRST 5m 09:00-09:05";
+        algo.lastSignal = "WAIT NEXT 5m";
         return { action: "wait", reason: "wait-first-candle" };
       }
       if (config.signalMode === "reversal") {
@@ -252,6 +252,7 @@ export const NiftyVwapStrategy = {
               barMs,
               firstBarStartIst: config.firstBarStartIst || "09:00",
               entryEvaluationIst: config.entryEvaluationIst || "09:05",
+              endTimeIst: config.endTimeIst || "15:15",
             })
           : VwapSignalEngine.evaluate({
               futuresBars: input.futuresBars || [],
