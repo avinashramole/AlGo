@@ -595,7 +595,7 @@ git checkout main
 git pull origin main
 NODE_OPTIONS=--max-old-space-size=384 npm run build
 mkdir -p /var/www/trade2smart
-cp -af /opt/t2s/dist/. /var/www/trade2smart/
+/bin/cp -a /opt/t2s/dist/. /var/www/trade2smart/
 chmod -R a+rX /var/www/trade2smart
 systemctl restart t2s
 ```
