@@ -487,6 +487,49 @@ export async function fetchMemberDhanPositions(token, clientId) {
   return dhanGet("/positions", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
 
+export async function fetchMemberDhanOrders(token, clientId) {
+  return dhanGet("/orders", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
+}
+
+const memberOrderSyncAt = new Map();
+const memberOrderSyncJob = new Map();
+
+export async function syncMemberDhanOrders(userId = "") {
+  const { memberWorkingDhanCopies, applyMemberDhanOrderStatuses } = await import("./memberDesk.js");
+  const { refreshCopyOrdersFromBroker } = await import("./market.js");
+  const wanted = String(userId || "").trim();
+  const targets = memberWorkingDhanCopies().filter((row) => !wanted || row.userId === wanted);
+  for (const target of targets) {
+    if (Date.now() < quoteBackoffUntil) break;
+    try {
+      const raw = await fetchMemberDhanOrders(target.token, target.clientId);
+      const changed = applyMemberDhanOrderStatuses(target.userId, asList(raw));
+      if (changed.length) refreshCopyOrdersFromBroker(target.userId, changed);
+    } catch (error) {
+      if (isDhanRateLimitError(error)) {
+        const wait = Math.min(30_000, error.retryAfterMs || 4000);
+        quoteBackoffUntil = Math.max(quoteBackoffUntil, Date.now() + wait);
+        break;
+      }
+      console.log(`member order status ${target.userId}: ${error?.message || error}`);
+    }
+  }
+}
+
+export function requestMemberOrderSync(userId = "") {
+  const id = String(userId || "*").trim() || "*";
+  const running = memberOrderSyncJob.get(id);
+  if (running) return running;
+  const last = memberOrderSyncAt.get(id) || 0;
+  if (Date.now() - last < 12_000) return Promise.resolve();
+  const job = syncMemberDhanOrders(id === "*" ? "" : id).finally(() => {
+    memberOrderSyncAt.set(id, Date.now());
+    memberOrderSyncJob.delete(id);
+  });
+  memberOrderSyncJob.set(id, job);
+  return job;
+}
+
 let adminBookRefresh = null;
 
 export async function refreshAdminBrokerBook() {
@@ -1412,6 +1455,7 @@ function startLiveLoop() {
   }, 2500);
   accountTimer = setInterval(() => {
     void pullAccount();
+    void requestMemberOrderSync();
   }, 20_000);
   chainTimer = setInterval(() => {
     if (chainBusy || Date.now() < quoteBackoffUntil) return;

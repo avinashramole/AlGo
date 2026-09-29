@@ -16,10 +16,22 @@ export function MemberLiveBook({
   brokerName?: (id?: string) => string;
 }) {
   const closed = tradeBook || [];
-  const working = (orders || []).filter((row) => {
+  const seen = new Set<string>();
+  const working = [...(orders || []), ...(orderHistory || [])].filter((row) => {
+    if (!row?.id || seen.has(row.id)) return false;
     const status = String(row.status || "").toUpperCase();
-    return status === "PENDING" || status === "PARTIAL" || status === "TRANSIT" || status === "OPEN";
-  }).slice(0, 20);
+    const show =
+      status === "PENDING" ||
+      status === "PARTIAL" ||
+      status === "TRANSIT" ||
+      status === "OPEN" ||
+      status === "REJECTED" ||
+      status === "FAILED" ||
+      status === "CANCELLED";
+    if (!show) return false;
+    seen.add(row.id);
+    return true;
+  }).slice(0, 40);
   const history = (orderHistory || []).filter((row) => {
     const status = String(row.status || "").toUpperCase();
     return status === "FILLED" || status === "TRADED" || status === "REJECTED" || status === "FAILED" || status === "CANCELLED";
@@ -49,7 +61,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order book</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Working copies stay here until the broker answers. A rejected copy is listed in order history with the reason. The book and open positions clear at 8:00 AM IST.
+          Status is the broker order book. A rejected order stays here with the broker reason. The book and open positions clear at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -72,12 +84,15 @@ export function MemberLiveBook({
                 </td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
-                <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
+                <td className={cn("px-4 py-3 text-xs font-bold uppercase", String(row.status || "").toUpperCase() === "REJECTED" ? "text-down" : "")}>
+                  {row.status}
+                  {row.reason ? <div className="mt-1 font-medium normal-case text-down">{row.reason}</div> : null}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!working.length ? <p className="px-4 pb-4 text-xs text-slate-400">No working orders. Rejected copies are in order history with the broker reason.</p> : null}
+        {!working.length ? <p className="px-4 pb-4 text-xs text-slate-400">No orders yet.</p> : null}
       </section>
 
       <section className="card overflow-x-auto">

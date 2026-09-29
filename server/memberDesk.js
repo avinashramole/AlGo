@@ -923,10 +923,112 @@ export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
   const raw = String(status || live.status || "PENDING").toUpperCase();
   if (raw === "TRANSIT" || raw === "OPEN") return "PENDING";
   if (raw === "TRADED") return "FILLED";
-  if (raw === "REJECT" || raw === "REJECTION") return "REJECTED";
+  if (raw === "PART_TRADED") return "PARTIAL";
+  if (raw === "REJECTED" || raw === "REJECT" || raw === "REJECTION") return "REJECTED";
   if (raw === "FAIL" || raw === "FAILURE") return "FAILED";
-  if (raw === "CANCELED") return "CANCELLED";
+  if (raw === "CANCELED" || raw === "EXPIRED") return "CANCELLED";
   return raw;
+}
+
+function brokerOrderPrice(row) {
+  const n = Number(row?.averageTradedPrice || row?.avgTradedPrice || row?.tradedPrice || row?.price || 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function brokerOrderReason(row) {
+  return String(row?.omsErrorDescription || row?.rejectedReason || row?.reason || row?.errorMessage || "").trim();
+}
+
+function dropUnfilledMemberPosition(desk, order) {
+  if (!isTerminalMemberOrder(order?.status) || Number(order?.filledQty || 0) > 0) return;
+  const symbol = String(order.symbol || "");
+  const strategy = String(order.strategy || "");
+  const side = order.side === "SELL" ? "SELL" : "BUY";
+  const qty = Number(order.qty || 0);
+  const openedAt = String(order.createdAt || "");
+  let removed = false;
+  desk.positions = (desk.positions || []).filter((row) => {
+    if (removed) return true;
+    const sameContract =
+      row.symbol === symbol &&
+      String(row.strategy || "") === strategy &&
+      (row.type === side || row.side === side) &&
+      Number(row.qty) === qty;
+    const sameTime = !openedAt || !row.openedAt || String(row.openedAt) === openedAt;
+    if (!sameContract || !sameTime) return true;
+    removed = true;
+    return false;
+  });
+}
+
+export function memberWorkingDhanCopies() {
+  const out = [];
+  for (const userId of Object.keys(store)) {
+    if (!userId || userId === "admin") continue;
+    const desk = store[userId] || {};
+    const working = (Array.isArray(desk.orders) ? desk.orders : []).filter(
+      (row) => isWorkingMemberOrder(row?.status) && String(row.brokerId || "").toLowerCase() === "dhan" && !row.paper,
+    );
+    if (!working.length) continue;
+    const slot = brokerAccountForLiveCopy(userId, "dhan");
+    if (slot.leftoverToken) continue;
+    const token = String(slot.brokerToken || (desk.brokerId === "dhan" ? desk.brokerToken : "") || "").trim();
+    const clientId = String(slot.accountId || (desk.brokerId === "dhan" ? desk.accountId : "") || "").trim();
+    if (!token || !clientId) continue;
+    out.push({ userId, token, clientId });
+  }
+  return out;
+}
+
+/** Replace a stored PENDING copy with the status on that member's Dhan order book. */
+export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
+  if (!userId) return [];
+  const desk = loadDesk(userId);
+  const byId = new Map();
+  for (const row of Array.isArray(brokerOrders) ? brokerOrders : []) {
+    const id = String(row?.orderId || row?.dhanOrderId || row?.id || "").trim();
+    if (id) byId.set(id, row);
+  }
+  const updates = [];
+  const working = [];
+  for (const order of desk.orders || []) {
+    const broker = byId.get(String(order.id || ""));
+    if (!broker || !isWorkingMemberOrder(order.status)) {
+      working.push(order);
+      continue;
+    }
+    const status = mapMemberOrderStatus(broker.orderStatus || broker.status, { live: broker });
+    const reason = brokerOrderReason(broker) || String(order.reason || "");
+    const filledQty = Number(broker.filledQty || broker.tradedQuantity || order.filledQty || 0);
+    const nextPrice = brokerOrderPrice(broker);
+    const same =
+      status === String(order.status || "").toUpperCase() &&
+      reason === String(order.reason || "") &&
+      !(status === "FILLED" && filledQty !== Number(order.filledQty || 0));
+    if (same) {
+      working.push(order);
+      continue;
+    }
+    const updated = {
+      ...order,
+      status,
+      reason,
+      filledQty: status === "FILLED" ? Number(order.qty) || filledQty : filledQty,
+      price: nextPrice > 0 ? nextPrice : Number(order.price || 0),
+    };
+    updates.push({ id: String(order.id), status, reason: updated.reason, filledQty: updated.filledQty });
+    if (isWorkingMemberOrder(status)) {
+      working.push(updated);
+      continue;
+    }
+    if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
+    if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
+  }
+  if (!updates.length) return [];
+  desk.orders = working;
+  desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  persist();
+  return updates;
 }
 
 function splitMemberOrderBook(desk) {

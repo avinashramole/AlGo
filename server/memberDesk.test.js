@@ -23,6 +23,8 @@ const {
   peekBrokerAccount,
   peekClientSecrets,
   persistAdminBrokerSecrets,
+  applyMemberDhanOrderStatuses,
+  memberWorkingDhanCopies,
   recordMemberCopyFill,
   saveClientSettings,
   selectMemberBroker,
@@ -483,6 +485,54 @@ test("member own book ignores the regular admin desk book", () => {
   assert.equal(own.positions.some((row) => row.id === "admin-pos"), false);
   assert.equal(own.orders.length, 0);
   assert.equal(own.orderHistory.length, 0);
+});
+
+test("broker order book replaces a pending copy with REJECTED and keeps the limit price", async () => {
+  const member = { id: "u-broker-status", name: "Broker Status", email: "brokerstatus@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  installMemberBroker({ user: member, brokerId: "dhan", clientId: "110022650", accessToken: "status-token" });
+  const pending = recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 22650 CE", side: "BUY", qty: 65, price: 225.7, strategy: algo.name, brokerId: "dhan" },
+    live: { orderId: "ord-22570", status: "TRANSIT", price: 225.7 },
+  });
+  assert.equal(pending.status, "PENDING");
+  assert.equal(pending.price, 225.7);
+  const open = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.ok(open.orders.some((row) => row.id === "ord-22570" && row.status === "PENDING"));
+  assert.ok(open.positions.some((row) => row.symbol === "NIFTY 22650 CE"));
+  assert.ok(memberWorkingDhanCopies().some((row) => row.userId === member.id && row.clientId === "110022650"));
+  const still = applyMemberDhanOrderStatuses(member.id, [{ orderId: "ord-22570", orderStatus: "PENDING", price: 0 }]);
+  assert.deepEqual(still, []);
+  const { bookMemberCopyOnAdminDesk, refreshCopyOrdersFromBroker, snapshot } = await import("./market.js");
+  bookMemberCopyOnAdminDesk(
+    {
+      copyUserId: member.id,
+      symbol: "NIFTY 22650 CE",
+      side: "BUY",
+      qty: 65,
+      price: 225.7,
+      strategy: algo.name,
+      brokerId: "dhan",
+    },
+    { live: { orderId: "ord-22570", status: "PENDING", price: 225.7 } },
+  );
+  const updates = applyMemberDhanOrderStatuses(member.id, [
+    { orderId: "ord-22570", orderStatus: "REJECTED", omsErrorDescription: "Insufficient funds", price: 0 },
+  ]);
+  assert.equal(updates[0].status, "REJECTED");
+  refreshCopyOrdersFromBroker(member.id, updates);
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(desk.orders.some((row) => row.id === "ord-22570"), false);
+  const row = (desk.orderHistory || []).find((item) => item.id === "ord-22570");
+  assert.equal(row.status, "REJECTED");
+  assert.equal(row.price, 225.7);
+  assert.match(row.reason, /Insufficient funds/);
+  assert.equal(desk.positions.some((item) => item.symbol === "NIFTY 22650 CE"), false);
+  const admin = snapshot().orders.find((item) => item.copyUserId === member.id && String(item.id).endsWith("ord-22570"));
+  assert.equal(admin.status, "REJECTED");
+  assert.match(admin.reason, /Insufficient funds/);
+  assert.equal(memberWorkingDhanCopies().some((item) => item.userId === member.id), false);
 });
 
 test("fills and broker refusals stay on the member book; expired tickets stay off", () => {

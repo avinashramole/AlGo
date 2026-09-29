@@ -2678,6 +2678,26 @@ export function replaceDhanOrders(rows) {
   state.orders = [...tagged, ...others];
 }
 
+export function refreshCopyOrdersFromBroker(userId, updates = []) {
+  const id = String(userId || "").trim();
+  if (!id) return 0;
+  let changed = 0;
+  for (const update of Array.isArray(updates) ? updates : []) {
+    const orderId = String(update?.id || "").trim();
+    if (!orderId) continue;
+    const row = (state.orders || []).find(
+      (item) => item.copyUserId === id && (item.id === `copy:${id}:${orderId}` || String(item.id) === orderId),
+    );
+    if (!row) continue;
+    const status = String(update.status || row.status || "").toUpperCase();
+    if (status) row.status = status;
+    if (update.reason) row.reason = String(update.reason);
+    if (Number(update.filledQty) > 0) row.filledQty = Number(update.filledQty);
+    changed += 1;
+  }
+  return changed;
+}
+
 export function assignAlgoBroker(id, brokerId) {
   const wanted = String(brokerId || "").trim();
   if (wanted !== "paper" && !isKnownLiveBroker(wanted)) return { error: "Unknown live broker" };
