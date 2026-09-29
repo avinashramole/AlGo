@@ -130,7 +130,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (crudeFirst) {
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
-      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · preview 5m open/close · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST · saving does not start LIVE`;
+      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -138,7 +138,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
       const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · preview ${form.timeframe || "5m"} open/close when the next candle opens · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${maxTrades}/day · LIVE ${start} IST`;
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -381,18 +381,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
           </div>
-        ) : crudeFirst ? (
-          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
-            Separate from NIFTY 5m first candle. When the current 5m candle opens, the previous crude oil future candle is checked with the preview ATM CE and PE. Preview crude future close above its open and preview ATM CE green → BUY CE. Preview crude future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji skips that candle. Monthly MCX. Saving or restarting t2s does not start LIVE and does not place an order.
-          </div>
-        ) : engine ? (
+        ) : crudeFirst || firstCandle ? null : engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
             {hedge
               ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
               : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
-              : firstCandle
-              ? "When the current 5m candle opens, the previous candle is checked. Preview Nifty future close above its open and preview ATM CE green → BUY CE. Preview Nifty future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji, or a preview option that is not green, skips that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
@@ -662,11 +656,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : firstCandle || crudeFirst ? (
           <div className="mt-4 space-y-3">
-            <p className="text-[11px] font-semibold text-slate-400">
-              {crudeFirst
-                ? `Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked. One signal places one order, up to ${Math.max(1, Math.min(20, Math.round(Number(form.maxTradesPerDay) || 5)))} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle.`
-                : "When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked."}
-            </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">
                 Start LIVE (IST)

@@ -25,23 +25,6 @@ type DeskTab = "copy" | "tradingview";
 type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
 
-function strategyCardExplain(algo: AlgoStrategy) {
-  if (isNiftyFirstCandleKind(algo)) {
-    return [
-      "When the current 5m candle opens, the previous candle is checked. Preview Nifty future close above its open and preview ATM CE green → BUY CE. Preview Nifty future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji, or a preview option that is not green, skips that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE.",
-      "When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked.",
-    ];
-  }
-  if (isCrudeFirstCandleKind(algo)) {
-    const maxTrades = Math.max(1, Math.min(20, Math.round(Number(algo.maxTradesPerDay) || 5)));
-    return [
-      "When the current 5m candle opens, the previous crude oil future candle is checked. Preview crude future close above its open and preview ATM CE green → BUY CE. Preview crude future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji, or a preview option that is not green, skips that candle. Monthly MCX. Saving or restarting t2s does not start LIVE.",
-      `When the current 5m candle opens, the previous candle open and close are checked, up to ${maxTrades} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. One signal places one order.`,
-    ];
-  }
-  return [];
-}
-
 function rupee(value: number) {
   const n = Number(value) || 0;
   const sign = n < 0 ? "-" : "";
@@ -96,7 +79,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "crude-first-candle" as const,
       category: "CRUDE OIL FIRST 5M",
-      config: `CRUDE FUT · monthly ATM · 1 signal = 1 order · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST · paused until Start`,
+      config: `CRUDE FUT · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
@@ -104,7 +87,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · preview ${algo.timeframe || "5m"} open/close at the next candle open · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -489,10 +472,8 @@ function AlgoCard({
       ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
         ? algo.lastSignal
         : "No signal"
-    : isCrudeFirstCandleKind(algo)
-      ? orderActivity(algo.lastSignal, "Preview 5m: CRUDE FUT green + ATM CE green → BUY CE · CRUDE FUT red + ATM PE green → BUY PE · doji skips that candle")
-    : isNiftyFirstCandleKind(algo)
-      ? orderActivity(algo.lastSignal, "Preview 5m: NIFTY FUT green + ATM CE green → BUY CE · NIFTY FUT red + ATM PE green → BUY PE · doji skips that candle")
+    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo)
+      ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
   const status = statusLabel(algo);
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
@@ -509,15 +490,6 @@ function AlgoCard({
             {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
             <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
-            {strategyCardExplain(algo).length ? (
-              <div className="mt-2 space-y-2" data-strategy-explain={algo.kind}>
-                {strategyCardExplain(algo).map((line) => (
-                  <p key={line} className="text-[11px] leading-snug text-slate-500">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            ) : null}
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
