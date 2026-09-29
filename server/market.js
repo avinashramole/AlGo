@@ -788,7 +788,13 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const positions = positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   const showLivePreview = () => {
-    if (isNiftyFirstCandleAlgo(algo) && feedLive) stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now());
+    if (!isNiftyFirstCandleAlgo(algo) || !feedLive) return;
+    const preview = niftyFuturePreviewBar(config.timeframe || "5m", Date.now());
+    const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
+    stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now(), {
+      ce: preview ? sameTime(vs.ceBars, preview.time) : null,
+      pe: preview ? sameTime(vs.peBars, preview.time) : null,
+    });
   };
   if (mode === "live" && !session.open && !open) return;
   if (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) {
@@ -816,7 +822,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       return;
     }
   }
-  if (feedLive && !open && !futuresBars.length) {
+  const livePreview = isNiftyFirstCandleAlgo(algo) && feedLive ? niftyFuturePreviewBar(config.timeframe || "5m", now) : null;
+  if (feedLive && !open && !futuresBars.length && !livePreview) {
     algo.lastSignal = isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
     showLivePreview();
     return;
@@ -835,8 +842,9 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const ceLtp = optionPremium("NIFTY", ceStrike, "CE", expiry);
   const peLtp = optionPremium("NIFTY", peStrike, "PE", expiry);
-  vs.ceBars = upsertOptionBar(vs.ceBars, barTime, ceLtp);
-  vs.peBars = upsertOptionBar(vs.peBars, barTime, peLtp);
+  const optionBarTime = livePreview?.time || barTime;
+  vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
+  vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
@@ -2575,21 +2583,41 @@ export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now()) {
   return last;
 }
 
-export function formatLiveFuturePreview(bar, barMinutes = 5) {
+export function livePreviewCondition(bar, ce, pe) {
+  const nifty = VwapSignalEngine.firstBarColor(bar);
+  const ceColor = VwapSignalEngine.firstBarColor(ce);
+  const peColor = VwapSignalEngine.firstBarColor(pe);
+  if (nifty === "doji") return { nifty, ceColor, peColor, condition: "NO TRADE DOJI" };
+  if (nifty === "green" && ceColor === "green") return { nifty, ceColor, peColor, condition: "BUY CE" };
+  if (nifty === "red" && peColor === "green") return { nifty, ceColor, peColor, condition: "BUY PE" };
+  if (nifty === "green") return { nifty, ceColor, peColor, condition: ceColor ? `NO TRADE CE ${ceColor.toUpperCase()}` : "WAIT CE" };
+  if (nifty === "red") return { nifty, ceColor, peColor, condition: peColor ? `NO TRADE PE ${peColor.toUpperCase()}` : "WAIT PE" };
+  return { nifty: "", ceColor, peColor, condition: "" };
+}
+
+export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}) {
   if (!bar || !(Number(bar.open) > 0) || !(Number(bar.close) > 0)) return "";
   const wall = VwapSignalEngine.istWallTime(bar.time);
   const start = wall.hour * 60 + wall.minute;
   const end = start + Math.max(1, Number(barMinutes) || 5);
   const pad = (value) => String(value).padStart(2, "0");
   const clock = `${pad(wall.hour)}:${pad(wall.minute)}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)} IST`;
-  return `LIVE O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}`;
+  const rule = livePreviewCondition(bar, legs.ce, legs.pe);
+  const parts = [
+    rule.nifty ? `NIFTY FUT ${rule.nifty.toUpperCase()}` : "",
+    rule.ceColor ? `CE ${rule.ceColor.toUpperCase()}` : "",
+    rule.peColor ? `PE ${rule.peColor.toUpperCase()}` : "",
+  ].filter(Boolean);
+  const head = parts.length ? `${parts.join(" ")} ` : "";
+  const condition = rule.condition ? ` · ${rule.condition}` : "";
+  return `LIVE ${head}O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}${condition}`;
 }
 
-function stampLiveFuturePreview(algo, timeframe, now) {
+function stampLiveFuturePreview(algo, timeframe, now, legs = {}) {
   if (!isNiftyFirstCandleAlgo(algo)) return;
   const minutes = futureBarMinutes(timeframe);
-  const label = formatLiveFuturePreview(niftyFuturePreviewBar(timeframe, now), minutes);
-  const base = String(algo.lastSignal || "").replace(/ · LIVE O .+$/, "");
+  const label = formatLiveFuturePreview(niftyFuturePreviewBar(timeframe, now), minutes, legs);
+  const base = String(algo.lastSignal || "").replace(/ · LIVE .+$/, "");
   algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
 }
 

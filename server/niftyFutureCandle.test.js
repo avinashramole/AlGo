@@ -74,7 +74,21 @@ test("live preview candle keeps its own open and close while the 5m bar is still
   const preview = niftyFuturePreviewBar("5m", now);
   assert.equal(preview.open, 22663);
   assert.equal(preview.close, 22647.5);
-  assert.equal(formatLiveFuturePreview(preview, 5), "LIVE O 22663.00 C 22647.50 · 09:20–09:25 IST");
+  assert.equal(
+    formatLiveFuturePreview(preview, 5),
+    "LIVE NIFTY FUT RED O 22663.00 C 22647.50 · 09:20–09:25 IST · WAIT PE",
+  );
+  assert.equal(
+    formatLiveFuturePreview(
+      preview,
+      5,
+      {
+        ce: { open: 120, close: 100 },
+        pe: { open: 80, close: 95 },
+      },
+    ),
+    "LIVE NIFTY FUT RED CE RED PE GREEN O 22663.00 C 22647.50 · 09:20–09:25 IST · BUY PE",
+  );
   const closed = niftyFutureSignalBars("5m", now);
   assert.equal(closed.length, 1);
   assert.equal(closed[0].open, 22678.6);
