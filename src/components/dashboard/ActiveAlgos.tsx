@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatInr } from "../../lib/format";
-import { contractLabel } from "../../lib/strategies";
+import { contractLabel, sortDeskAlgos } from "../../lib/strategies";
 
 export function ActiveAlgos() {
   const { data, toggle } = useMarket();
@@ -18,7 +18,7 @@ export function ActiveAlgos() {
         </div>
       </div>
       <div className="space-y-2">
-        {data.algos.map((algo) => (
+        {sortDeskAlgos(data.algos).map((algo) => (
           <div key={algo.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5">
             <div className="flex-1">
               <div className="flex items-center gap-2">

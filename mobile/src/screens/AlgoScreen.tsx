@@ -177,10 +177,17 @@ export function AlgoScreen() {
   const [rangeBusy, setRangeBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test">("all");
 
-  const rows = data.algos.filter((algo) => {
-    if (filter === "all") return true;
-    return (algo.kind || "indicator") === filter;
-  });
+  const rows = data.algos
+    .map((algo, index) => ({ algo, index }))
+    .sort((a, b) => {
+      const rank = (kind?: string) => (kind === "nifty-test" ? 0 : 1);
+      return rank(a.algo.kind) - rank(b.algo.kind) || a.index - b.index;
+    })
+    .map((item) => item.algo)
+    .filter((algo) => {
+      if (filter === "all") return true;
+      return (algo.kind || "indicator") === filter;
+    });
 
   const save = async () => {
     if (!draft) return;
@@ -666,13 +673,13 @@ export function AlgoScreen() {
       )}
       <View style={styles.chips}>
         <Chip label="All" on={filter === "all"} onPress={() => setFilter("all")} />
+        <Chip label="nifty test" on={filter === "nifty-test"} onPress={() => setFilter("nifty-test")} />
         <Chip label="Indicator" on={filter === "indicator"} onPress={() => setFilter("indicator")} />
         <Chip label="Price action" on={filter === "price-action"} onPress={() => setFilter("price-action")} />
         <Chip label="NIFTY VWAP" on={filter === "nifty-vwap"} onPress={() => setFilter("nifty-vwap")} />
         <Chip label="15m reversal" on={filter === "nifty-vwap-reversal"} onPress={() => setFilter("nifty-vwap-reversal")} />
         <Chip label="15m hedge" on={filter === "nifty-vwap-hedge"} onPress={() => setFilter("nifty-vwap-hedge")} />
         <Chip label="5m first candle" on={filter === "nifty-first-candle"} onPress={() => setFilter("nifty-first-candle")} />
-        <Chip label="nifty test" on={filter === "nifty-test"} onPress={() => setFilter("nifty-test")} />
       </View>
       {rows.map((algo) => (
         <Card key={algo.id}>

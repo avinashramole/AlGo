@@ -163,6 +163,23 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <TypeCard
+            active={kind === "nifty-test"}
+            title="nifty test"
+            text="Nifty future. Preview candle green and break high → BUY. Preview candle red and break low → SELL."
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-test"),
+                name: form.name || "nifty test",
+                runMode: form.runMode || "live",
+                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
+                lots: form.lots || 1,
+                lotSize,
+                qty: (form.lots || 1) * lotSize,
+                enabled: false,
+              })
+            }
+          />
+          <TypeCard
             active={kind === "indicator"}
             title="Indicator based"
             text="RSI, EMA, VWAP with crossover, above, below, <, >"
@@ -221,23 +238,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 lots: 1,
                 lotSize,
                 qty: lotSize,
-                enabled: false,
-              })
-            }
-          />
-          <TypeCard
-            active={kind === "nifty-test"}
-            title="nifty test"
-            text="Nifty future. Preview candle green and break high → BUY. Preview candle red and break low → SELL."
-            onClick={() =>
-              set({
-                ...emptyStrategy("nifty-test"),
-                name: form.name || "nifty test",
-                runMode: form.runMode || "live",
-                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
-                lots: form.lots || 1,
-                lotSize,
-                qty: (form.lots || 1) * lotSize,
                 enabled: false,
               })
             }

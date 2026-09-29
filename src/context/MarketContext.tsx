@@ -260,6 +260,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     setData((current) => {
       const incomingAlgos = feed.algos || [];
       const byId = new Map(incomingAlgos.map((row) => [row.id, row]));
+      const known = new Set((current.algos || []).map((row) => row.id));
       const algos = (current.algos || []).map((row) => {
         const next = byId.get(row.id);
         if (!next) return row;
@@ -274,6 +275,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           status,
         };
       });
+      for (const row of incomingAlgos) {
+        if (!row?.id || known.has(row.id) || !row.name) continue;
+        algos.push(row);
+      }
       const sameDesk =
         current.optionMeta?.symbol === (feed.optionMeta?.symbol || current.optionMeta?.symbol) &&
         current.optionMeta?.expiry === (feed.optionMeta?.expiry || current.optionMeta?.expiry);

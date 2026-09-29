@@ -14,6 +14,7 @@ import {
   isNiftyOptionEngineKind,
   isNiftyFirstCandleKind,
   isNiftyTestKind,
+  sortDeskAlgos,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
@@ -108,7 +109,7 @@ export function Algo() {
   const canStartAll = data.algos.some((row) => row.runMode !== "backtest" && !row.enabled);
   const canStopAll = data.algos.some((row) => row.enabled);
 
-  const rows = data.algos.filter((algo) => {
+  const rows = sortDeskAlgos(data.algos).filter((algo) => {
     if (filter === "all") return true;
     if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL";
     if (filter === "nifty-vwap") return isNiftyVwapKind(algo);
@@ -217,13 +218,13 @@ export function Algo() {
             {(
               [
                 ["all", "All"],
+                ["nifty-test", "nifty test"],
                 ["indicator", "Indicator based"],
                 ["price-action", "Price action based"],
                 ["nifty-vwap", "NIFTY VWAP ATM"],
                 ["nifty-vwap-reversal", "15m VWAP reversal"],
                 ["nifty-vwap-hedge", "15m VWAP hedge"],
                 ["nifty-first-candle", "5m first candle"],
-                ["nifty-test", "nifty test"],
                 ["crudeoil", "CRUDE OIL"],
               ] as const
             ).map(([id, label]) => (

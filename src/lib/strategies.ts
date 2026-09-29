@@ -235,6 +235,17 @@ export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; i
   return algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
 }
 
+export function sortDeskAlgos<T extends { kind?: string; strategyType?: string; indicator?: string }>(rows: T[]) {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const rank = (item: T) => (isNiftyTestKind(item) ? 0 : 1);
+      const byKind = rank(a.row) - rank(b.row);
+      return byKind || a.index - b.index;
+    })
+    .map((item) => item.row);
+}
+
 export function isNiftyOptionEngineKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
   return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyFirstCandleKind(algo);
 }
