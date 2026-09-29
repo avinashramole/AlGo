@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
-import { dhanOrderQuantity, isMcxSymbol } from "./optionChain.js";
+import { isMcxSymbol } from "./optionChain.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
@@ -297,6 +297,50 @@ export function parseDeskOptionSymbol(symbol, extras = {}) {
   return null;
 }
 
+export function parseDeskFutureSymbol(symbol, extras = {}) {
+  const raw = String(symbol || "")
+    .toUpperCase()
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const compact = raw.replace(/\s+/g, "-");
+  const dhan = compact.match(new RegExp(`^(${DESK_OPTION_ROOTS})-(?:(\\d{1,2}[A-Z]{3}\\d{2,4}|[A-Z]{3}\\d{2,4})-)?FUT$`));
+  if (dhan) {
+    const expiry = parseSymbolExpiry(dhan[2]);
+    return expiry ? { root: dhan[1], expiry, future: true } : { root: dhan[1], future: true };
+  }
+  const named = raw.match(new RegExp(`^(${DESK_OPTION_ROOTS})\\s+FUT$`));
+  if (named) return { root: named[1], future: true };
+  return null;
+}
+
+function parseDeskContract(symbol, extras = {}) {
+  const option = parseDeskOptionSymbol(symbol, extras);
+  if (option) return option;
+  const future = parseDeskFutureSymbol(symbol, extras);
+  if (!future) return null;
+  return { ...future, option: "FUT", strike: 0 };
+}
+
+export function upstoxExpiryDay(value) {
+  if (value == null || value === "") return "";
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  if (typeof value === "number" || /^\d{11,}$/.test(raw)) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    const ms = n < 1e11 ? n * 1000 : n;
+    const day = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(ms));
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "";
+  }
+  return "";
+}
+
 function upstoxRootMatches(root, under, name) {
   const u = String(under || "").toUpperCase().replace(/\s+50$/, "").replace(/50$/, "");
   const n = String(name || "").toUpperCase();
@@ -313,46 +357,74 @@ function upstoxRootMatches(root, under, name) {
   return u.includes(root) || n.includes(root);
 }
 
-export function pickUpstoxOptionHit(rows = [], { root, strike, option, expiry } = {}) {
+function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry } = {}) {
   const wantStrike = Number(strike);
   const wantOpt = String(option || "").toUpperCase();
   const wantRoot = String(root || "").toUpperCase();
   const wantExpiry = String(expiry || "").trim();
-  const wantDay = wantExpiry.length >= 10 ? wantExpiry.slice(0, 10) : "";
+  const wantDay = /^\d{4}-\d{2}-\d{2}/.test(wantExpiry) ? wantExpiry.slice(0, 10) : "";
   const wantMonth = wantExpiry.length >= 7 ? wantExpiry.slice(0, 7) : "";
+  const wantFut = wantOpt === "FUT" || wantOpt === "FUTURE";
   const scored = [];
   for (const row of Array.isArray(rows) ? rows : []) {
     const key = String(row.instrument_key || row.instrumentKey || row.instrument_token || "").trim();
     if (!isUpstoxInstrumentKey(key)) continue;
+    if (wantRoot === "CRUDEOIL" && !key.startsWith("MCX_")) continue;
     const type = String(row.instrument_type || row.option_type || row.instrumentType || "").toUpperCase();
     const strikeN = Number(row.strike_price || row.strikePrice || row.strike || 0);
     const under = String(row.underlying_symbol || row.underlying || "").toUpperCase();
     const name = String(row.trading_symbol || row.tradingsymbol || row.name || "").toUpperCase();
-    if (wantStrike && strikeN && strikeN !== wantStrike) continue;
-    if (wantStrike && !strikeN && !name.includes(String(wantStrike))) continue;
-    const isCe = type === "CE" || type === "CALL" || /\bCE\b/.test(name) || /\bCALL\b/.test(name);
-    const isPe = type === "PE" || type === "PUT" || /\bPE\b/.test(name) || /\bPUT\b/.test(name);
-    if (wantOpt === "CE" && !isCe) continue;
-    if (wantOpt === "PE" && !isPe) continue;
+    if (wantFut) {
+      const isFut = type === "FUT" || type === "FUTIDX" || type === "FUTCOM" || /\bFUT\b/.test(name);
+      if (!isFut) continue;
+    } else {
+      if (wantStrike && strikeN && strikeN !== wantStrike) continue;
+      if (wantStrike && !strikeN && !name.includes(String(wantStrike))) continue;
+      const isCe = type === "CE" || type === "CALL" || /\bCE\b/.test(name) || /\bCALL\b/.test(name);
+      const isPe = type === "PE" || type === "PUT" || /\bPE\b/.test(name) || /\bPUT\b/.test(name);
+      if (wantOpt === "CE" && !isCe) continue;
+      if (wantOpt === "PE" && !isPe) continue;
+    }
     if (wantRoot && !upstoxRootMatches(wantRoot, under, name)) continue;
-    const exp = String(row.expiry || row.expiry_date || row.expiryDate || "").slice(0, 10);
+    const exp = upstoxExpiryDay(row.expiry || row.expiry_date || row.expiryDate);
     scored.push({
+      row,
       key,
       exp,
       exact: Boolean(wantDay && exp === wantDay),
       month: Boolean(wantMonth && exp.startsWith(wantMonth)),
     });
   }
-  if (!scored.length) return "";
+  if (!scored.length) return null;
   if (wantDay) {
     const exact = scored.find((row) => row.exact);
-    if (exact) return exact.key;
+    if (exact) return exact.row;
   }
   const monthHits = wantMonth ? scored.filter((row) => row.month) : [];
   const pool = monthHits.length ? monthHits : scored;
   pool.sort((a, b) => String(a.exp).localeCompare(String(b.exp)));
-  const today = new Date().toISOString().slice(0, 10);
-  return (pool.find((row) => !row.exp || row.exp >= today) || pool[0]).key;
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return (pool.find((row) => !row.exp || row.exp >= today) || pool[0]).row;
+}
+
+export function pickUpstoxOptionHit(rows = [], query = {}) {
+  const row = selectUpstoxInstrumentRow(rows, query);
+  return String(row?.instrument_key || row?.instrumentKey || row?.instrument_token || "").trim();
+}
+
+function upstoxHitMeta(row) {
+  if (!row) return null;
+  const key = String(row.instrument_key || row.instrumentKey || row.instrument_token || "").trim();
+  if (!isUpstoxInstrumentKey(key)) return null;
+  const tickRaw = Number(row.tick_size || row.tickSize || 0);
+  const tick = tickRaw >= 1 ? tickRaw / 100 : tickRaw > 0 ? tickRaw : 0;
+  const lotSize = Number(row.lot_size || row.lotSize || 0);
+  return { key, lotSize: lotSize > 0 ? lotSize : 0, tick };
 }
 
 export function upstoxInstrumentKeyFromPayload(payload = {}) {
@@ -368,44 +440,125 @@ function isAuthError(error) {
   return Number(error?.status) === 401 || /unauthorized|\b401\b/i.test(String(error?.message || ""));
 }
 
-async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl }) {
-  const parsed = parseDeskOptionSymbol(symbol, { strike, option, expiry, root: rootFromDeskSymbol(symbol) });
-  if (!parsed || !accessToken) return "";
-  const wantedExpiry = String(expiry || parsed.expiry || "").trim();
-  const day = upstoxExpiryDate(wantedExpiry, parsed.root);
-  const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
-  const queries = [`${parsed.root} ${parsed.strike} ${parsed.option}`, `${parsed.root}${parsed.strike}${parsed.option}`];
-  if (day) {
-    const [year, month, date] = day.split("-");
-    const mon = MONTHS[Number(month) - 1] || "";
-    queries.push(`${parsed.root} ${date} ${mon} ${year.slice(-2)} ${parsed.strike} ${parsed.option}`);
+function contractExpiryWanted(parsed, expiry) {
+  const raw = String(expiry || parsed.expiry || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  if (parsed.root === "CRUDEOIL") return raw.slice(0, 7);
+  return upstoxExpiryDate(raw, parsed.root) || raw.slice(0, 10);
+}
+
+const UPSTOX_MASTER_FILES = [
+  "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz",
+  "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json.gz",
+];
+let upstoxMasterCache = { at: 0, rows: [] };
+const UPSTOX_MASTER_TTL_MS = 6 * 60 * 60 * 1000;
+
+export function resetUpstoxMasterCache() {
+  upstoxMasterCache = { at: 0, rows: [] };
+}
+
+async function responseText(res) {
+  if (typeof res?.arrayBuffer === "function") {
+    const buf = Buffer.from(await res.arrayBuffer());
+    const asText = buf.toString("utf8");
+    if (asText.trim().startsWith("[") || asText.trim().startsWith("{")) return asText;
+    try {
+      const { gunzipSync } = await import("node:zlib");
+      return gunzipSync(buf).toString("utf8");
+    } catch {
+      return asText;
+    }
   }
-  if (wantedExpiry) queries.push(`${parsed.root} ${wantedExpiry} ${parsed.strike} ${parsed.option}`);
+  if (typeof res?.text === "function") return res.text();
+  return "";
+}
+
+function rowsFromMasterText(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return [];
+  try {
+    const json = JSON.parse(trimmed);
+    if (Array.isArray(json)) return json;
+    if (Array.isArray(json.data)) return json.data;
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+async function loadUpstoxMasterRows(fetchImpl) {
+  if (upstoxMasterCache.rows.length && Date.now() - upstoxMasterCache.at < UPSTOX_MASTER_TTL_MS) return upstoxMasterCache.rows;
+  const rows = [];
+  for (const url of UPSTOX_MASTER_FILES) {
+    try {
+      const res = await fetchImpl(url, { headers: { Accept: "application/json, application/gzip, */*" } });
+      if (!res?.ok) continue;
+      rows.push(...rowsFromMasterText(await responseText(res)));
+    } catch {
+      /* next file */
+    }
+  }
+  if (rows.length) upstoxMasterCache = { at: Date.now(), rows };
+  return rows;
+}
+
+async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl }) {
+  const parsed = parseDeskContract(symbol, { strike, option, expiry, root: rootFromDeskSymbol(symbol) });
+  if (!parsed) return null;
+  const wanted = contractExpiryWanted(parsed, expiry);
+  const headers = accessToken ? { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } : null;
+  const queries = [];
+  if (parsed.option === "FUT") {
+    queries.push(`${parsed.root} FUT`);
+    if (wanted.length >= 10) {
+      const [year, month, date] = wanted.split("-");
+      const mon = MONTHS[Number(month) - 1] || "";
+      queries.push(`${parsed.root} FUT ${date} ${mon} ${year.slice(-2)}`);
+    }
+  } else {
+    queries.push(`${parsed.root} ${parsed.strike} ${parsed.option}`, `${parsed.root}${parsed.strike}${parsed.option}`);
+    if (wanted.length >= 10) {
+      const [year, month, date] = wanted.split("-");
+      const mon = MONTHS[Number(month) - 1] || "";
+      queries.push(`${parsed.root} ${date} ${mon} ${year.slice(-2)} ${parsed.strike} ${parsed.option}`);
+    }
+    if (wanted) queries.push(`${parsed.root} ${wanted} ${parsed.strike} ${parsed.option}`);
+  }
   const original = String(symbol || "").trim();
   if (original && !queries.includes(original)) queries.push(original);
   let authError = null;
-  for (const query of queries) {
-    try {
-      const body = await httpJson(fetchImpl, `https://api.upstox.com/v2/search/instruments?query=${encodeURIComponent(query)}`, { headers });
-      const key = pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: day || wantedExpiry });
-      if (key) return key;
-    } catch (error) {
-      if (isAuthError(error)) authError = error;
+  if (headers) {
+    for (const query of queries) {
+      try {
+        const body = await httpJson(fetchImpl, `https://api.upstox.com/v2/search/instruments?query=${encodeURIComponent(query)}`, { headers });
+        const hit = upstoxHitMeta(selectUpstoxInstrumentRow(body.data || body, { ...parsed, expiry: wanted }));
+        if (hit) return hit;
+      } catch (error) {
+        if (isAuthError(error)) authError = error;
+      }
     }
+  }
+  try {
+    const hit = upstoxHitMeta(selectUpstoxInstrumentRow(await loadUpstoxMasterRows(fetchImpl), { ...parsed, expiry: wanted }));
+    if (hit) return hit;
+  } catch {
+    /* contract API is the last index-option path */
   }
   if (authError) throw authError;
   const indexKey = UPSTOX_INDEX_KEYS[parsed.root];
-  if (!indexKey || !day) return "";
+  const day = wanted.length >= 10 ? wanted : "";
+  if (!headers || !indexKey || !day || parsed.option === "FUT") return null;
   try {
     const body = await httpJson(
       fetchImpl,
       `https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(indexKey)}&expiry_date=${encodeURIComponent(day)}`,
       { headers },
     );
-    return pickUpstoxOptionHit(body.data || body, { ...parsed, expiry: day });
+    return upstoxHitMeta(selectUpstoxInstrumentRow(body.data || body, { ...parsed, expiry: day }));
   } catch (error) {
     if (isAuthError(error)) throw error;
-    return "";
+    return null;
   }
 }
 
@@ -615,19 +768,28 @@ function orderQty(payload) {
   return qty;
 }
 
-function upstoxPlaceQuantity(payload, rawQty) {
+function upstoxPlaceQuantity(payload, rawQty, lotSize = 0) {
   const segment = String(payload.exchangeSegment || "").toUpperCase();
-  if (segment !== "MCX_COMM" && !isMcxSymbol(payload.symbol)) return rawQty;
-  const lots = dhanOrderQuantity(payload);
-  if (!lots) throw fail("Order quantity is required.");
-  return lots;
+  const mcx = segment === "MCX_COMM" || isMcxSymbol(payload.symbol);
+  if (!mcx) return rawQty;
+  const lot = Math.max(1, Math.round(Number(lotSize) || Number(payload.lotSize) || 100));
+  const lots = Math.max(0, Math.round(Number(payload.lots) || 0));
+  let units = 0;
+  if (rawQty >= lot) units = Math.round(rawQty / lot) * lot;
+  else if (lots > 0) units = lots * lot;
+  else if (rawQty > 0) units = rawQty * lot;
+  if (!units) throw fail("Order quantity is required.");
+  return units;
 }
 
-function upstoxLimit(payload) {
+function upstoxLimit(payload, tick = 0) {
   const type = String(payload.type || payload.order_type || payload.orderType || "").toUpperCase();
   const price = Number(payload.price);
-  if (type === "LIMIT" && price > 0) return { orderType: "LIMIT", price: Math.round(price * 20) / 20 };
-  return { orderType: "MARKET", price: 0 };
+  if (!(type === "LIMIT" && price > 0)) return { orderType: "MARKET", price: 0 };
+  const mcx = String(payload.exchangeSegment || "").toUpperCase() === "MCX_COMM" || isMcxSymbol(payload.symbol);
+  const step = tick > 0 ? tick : mcx ? 0.1 : 0.05;
+  const factor = Math.round(1 / step);
+  return { orderType: "LIMIT", price: Math.round(price * factor) / factor };
 }
 
 function orderSide(payload) {
@@ -677,8 +839,9 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
 
   if (id === "upstox") {
     let instrument = upstoxInstrumentKeyFromPayload(payload);
+    let resolved = null;
     if (!instrument) {
-      instrument = await resolveUpstoxInstrumentKey({
+      resolved = await resolveUpstoxInstrumentKey({
         symbol,
         expiry,
         strike: payload.strike,
@@ -686,6 +849,7 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
         accessToken: session.accessToken,
         fetchImpl,
       });
+      instrument = resolved?.key || "";
     }
     if (!instrument) throw fail("Upstox live orders need an instrument key or security id.");
     const headers = {
@@ -693,9 +857,9 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
-    const limit = upstoxLimit(payload);
+    const limit = upstoxLimit(payload, resolved?.tick || 0);
     const baseOrder = {
-      quantity: upstoxPlaceQuantity(payload, qty),
+      quantity: upstoxPlaceQuantity(payload, qty, resolved?.lotSize || 0),
       product: product === "NRML" ? "D" : "I",
       validity: "DAY",
       price: limit.price,
