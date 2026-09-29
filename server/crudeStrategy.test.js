@@ -16,6 +16,8 @@ import {
   liveSessionOpenForOrder,
   routeManualOrderBrokerId,
   optionRowsForSymbol,
+  drainPendingLiveAlgoOrders,
+  queueLiveAlgoOrder,
   resolveAlgoTrade,
   setCrudeFutureChartCandles,
   setDhanFeed,
@@ -231,6 +233,53 @@ test("crude first candle copies the nifty candle rule and uses the CRUDEOIL opti
     deleteAlgo(created.id);
     setCrudeFutureChartCandles([]);
     setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
+});
+
+test("crude live order keeps the CRUDEOIL contract while the desk shows NIFTY", () => {
+  const crudeExpiry = "2026-10-19";
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: "2026-10-06",
+    rows: [{ strike: 22650, atm: true, callLtp: 120, putLtp: 110, callId: "nifty-ce-22650", putId: "nifty-pe-22650" }],
+    source: "dhan",
+  });
+  cacheOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: crudeExpiry,
+    expiries: [crudeExpiry],
+    rows: [{ strike: 6100, atm: true, callLtp: 42.5, putLtp: 38.1, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+    spot: 6120,
+    source: "dhan",
+  });
+  drainPendingLiveAlgoOrders();
+  const queuedResult = queueLiveAlgoOrder({
+    strategy: "CRUDE OIL broker send",
+    side: "BUY",
+    symbol: "CRUDEOIL 6100 CE",
+    qty: 100,
+    lots: 1,
+    lotSize: 100,
+    price: 42.5,
+    option: "CE",
+    strike: 6100,
+    expiry: crudeExpiry,
+    kind: "option",
+    exchangeSegment: "MCX_COMM",
+    brokerId: "dhan",
+  });
+  assert.equal(queuedResult.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  const admin = queued.find((row) => row.strategy === "CRUDE OIL broker send" && !row.copyUserId);
+  assert.equal(admin.securityId, "crude-ce-6100");
+  assert.equal(admin.symbol, "CRUDEOIL 6100 CE");
+  assert.equal(admin.exchangeSegment, "MCX_COMM");
+  assert.equal(admin.qty, 100);
+  assert.equal(admin.lotSize, 100);
+  for (const copy of queued.filter((row) => row.copyUserId && row.strategy === "CRUDE OIL broker send")) {
+    assert.equal(copy.securityId, "crude-ce-6100");
+    assert.equal(copy.symbol, "CRUDEOIL 6100 CE");
+    assert.equal(copy.exchangeSegment, "MCX_COMM");
   }
 });
 

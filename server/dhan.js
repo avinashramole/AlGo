@@ -1660,11 +1660,24 @@ function productType(product) {
   return "INTRADAY";
 }
 
+function contractRoot(symbol) {
+  const raw = String(symbol || "").toUpperCase().replace(/\s+/g, "");
+  if (!raw) return "";
+  if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
+  if (raw.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (raw.includes("FINNIFTY")) return "FINNIFTY";
+  if (raw.includes("SENSEX")) return "SENSEX";
+  if (raw.includes("NIFTY")) return "NIFTY";
+  return "";
+}
+
 /** Copy trades share one contract. A desk chain on another expiry must not replace the strategy expiry. */
 export function securityIdForCopyOrder({
   payloadSecurityId,
   payloadExpiry,
+  payloadSymbol,
   chainExpiry,
+  chainSymbol,
   chainSecurityId,
   scripSecurityId,
 } = {}) {
@@ -1672,9 +1685,15 @@ export function securityIdForCopyOrder({
   const chain = normalizeExpiry(chainExpiry);
   const scrip = String(scripSecurityId || "").trim();
   if (wanted && scrip && scrip !== "0") return scrip;
-  const chainOk = !wanted || !chain || wanted === chain;
   const stamped = String(payloadSecurityId || "").trim();
   const fromChain = String(chainSecurityId || "").trim();
+  const orderRoot = contractRoot(payloadSymbol);
+  const deskRoot = contractRoot(chainSymbol);
+  if (orderRoot && deskRoot && orderRoot !== deskRoot) {
+    if (stamped && stamped !== "0") return stamped;
+    return "";
+  }
+  const chainOk = !wanted || !chain || wanted === chain;
   if (chainOk && stamped && stamped !== "0") return stamped;
   if (chainOk && fromChain && fromChain !== "0") return fromChain;
   return "";
@@ -1777,7 +1796,9 @@ export async function placeDhanOrder(payload = {}) {
   const securityId = securityIdForCopyOrder({
     payloadSecurityId: payload.securityId,
     payloadExpiry: payload.expiry,
+    payloadSymbol: payload.symbol,
     chainExpiry: desk.expiry,
+    chainSymbol: desk.symbol,
     chainSecurityId: securityIdFromOpenChain(payload),
     scripSecurityId,
   });
