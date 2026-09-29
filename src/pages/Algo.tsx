@@ -61,10 +61,11 @@ function kindMeta(algo: AlgoStrategy) {
     };
   }
   if (isNiftyTestKind(algo)) {
+    const liveSide = algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL") ? algo.lastSignal : "";
     return {
       kind: "nifty-test" as const,
       category: "NIFTY TEST",
-      config: `NIFTY FUT · ${algo.timeframe || "5m"} · ${algo.startTimeIst || "09:15"}–${algo.endTimeIst || "15:15"} IST · green + break high → BUY · red + break low → SELL`,
+      config: `NIFTY FUT · ${algo.timeframe || "5m"} · ${algo.startTimeIst || "09:15"}–${algo.endTimeIst || "15:15"} IST${liveSide ? ` · ${liveSide}` : " · no signal"}`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {

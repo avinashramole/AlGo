@@ -612,6 +612,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
       next.status = "BACKTEST";
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
+    const keptSignal = String(existing.lastSignal || "").trim().toUpperCase();
+    next.lastSignal = next.enabled && (keptSignal === "BUY" || keptSignal === "SELL") ? keptSignal : "NO SIGNAL";
     next.summary = summarizeAlgo(next);
     return withMapping(next, input, existing);
   }
@@ -804,7 +806,7 @@ export function seedAlgos() {
         name: "nifty test",
         runMode: "live",
       }),
-      { id: "a11", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
+      { id: "a11", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live", lastSignal: "NO SIGNAL" },
     ),
   ];
 }
