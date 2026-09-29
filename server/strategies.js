@@ -292,9 +292,9 @@ export function summarizeAlgo(algo) {
     const evalAt = algo.entryEvaluationIst || "09:05";
     const endAt = algo.endTimeIst || "15:15";
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
-    const maxTrades = algo.maxTradesPerDay || 1;
+    const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
     const atm = strikeOffsetLabel(algo.strikeOffset);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m from ${firstBar} until 1 trade · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · doji skips that candle · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trade/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m from ${firstBar} · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · doji skips that candle · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

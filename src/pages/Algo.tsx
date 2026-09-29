@@ -72,7 +72,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · preview ${algo.timeframe || "5m"} from ${algo.firstBarStartIst || "09:00"} until 1 trade · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay || 1}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · preview ${algo.timeframe || "5m"} from ${algo.firstBarStartIst || "09:00"} · up to ${algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5}/day · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -518,7 +518,7 @@ function AlgoCard({
           {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo)
             ? " LIVE arms automatically at 09:20 IST on session days."
             : isNiftyFirstCandleKind(algo)
-              ? " LIVE arms automatically at 09:00 IST on session days. The live preview 5m NIFTY FUT candle is checked with the preview ATM CE and PE until one trade is placed."
+              ? " LIVE arms automatically at 09:00 IST on session days. The live preview 5m NIFTY FUT candle is checked with the preview ATM CE and PE. Up to 5 trades a day."
               : ""}
         </div>
       ) : null}

@@ -217,7 +217,7 @@ export function AlgoScreen() {
       entryEvaluationIst: draft.kind === "nifty-first-candle" ? draft.entryEvaluationIst || "09:05" : draft.entryEvaluationIst,
       endTimeIst: draft.kind === "nifty-first-candle" || draft.kind === "nifty-test" ? draft.endTimeIst || "15:15" : draft.endTimeIst,
       expiryKind: draft.kind === "nifty-first-candle" ? draft.expiryKind || "weekly" : draft.expiryKind,
-      maxTradesPerDay: draft.kind === "nifty-first-candle" ? Math.max(1, Number(draft.maxTradesPerDay) || 1) : draft.maxTradesPerDay,
+      maxTradesPerDay: draft.kind === "nifty-first-candle" ? Math.max(1, Number(draft.maxTradesPerDay) || 5) : draft.maxTradesPerDay,
       symbol: draft.kind === "nifty-test" || isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
       buyValue: Number(draft.buyRows[0]?.value || draft.buyValue),
       sellValue: Number(draft.sellRows[0]?.value || draft.sellValue),
@@ -360,7 +360,7 @@ export function AlgoScreen() {
                 entryEvaluationIst: "09:05",
                 endTimeIst: "15:15",
                 expiryKind: "weekly",
-                maxTradesPerDay: "1",
+                maxTradesPerDay: "5",
               })
             }
           />
@@ -433,7 +433,7 @@ export function AlgoScreen() {
           <Text style={styles.muted}>15m NIFTY future: open below VWAP and close above → BUY weekly ATM CE. Open above and close below → BUY weekly ATM PE. Never monthly. After candle close. LIVE starts automatically at 09:20 IST on session days. Saving or restart does not start live.</Text>
         ) : draft.kind === "nifty-first-candle" ? (
           <>
-            <Text style={styles.muted}>Live preview 5m NIFTY FUT. Green future + green ATM CE → BUY CE. Red future + green ATM PE → BUY PE. Doji skips that candle. Weekly ATM. Saving or restart does not start live.</Text>
+            <Text style={styles.muted}>Live preview 5m NIFTY FUT. Green future + green ATM CE → BUY CE. Red future + green ATM PE → BUY PE. Doji skips that candle. Up to 5 trades a day. Weekly ATM. Saving or restart does not start live.</Text>
             <Field label="Start LIVE (IST)" value={draft.dailyLiveIst || "09:00"} onChange={(dailyLiveIst) => setDraft({ ...draft, dailyLiveIst })} />
             <Field label="First candle start (IST)" value={draft.firstBarStartIst || "09:00"} onChange={(firstBarStartIst) => setDraft({ ...draft, firstBarStartIst })} />
             <Field label="Entry evaluation (IST)" value={draft.entryEvaluationIst || "09:05"} onChange={(entryEvaluationIst) => setDraft({ ...draft, entryEvaluationIst })} />
@@ -579,7 +579,7 @@ export function AlgoScreen() {
           <>
             <Field label="Stop %" value={draft.initialSlPct || "20"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
             <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
-            <Field label="Max trades / day" value={draft.maxTradesPerDay || "1"} keyboard="numeric" onChange={(maxTradesPerDay) => setDraft({ ...draft, maxTradesPerDay })} />
+            <Field label="Max trades / day" value={draft.maxTradesPerDay && Number(draft.maxTradesPerDay) > 1 ? draft.maxTradesPerDay : "5"} keyboard="numeric" onChange={(maxTradesPerDay) => setDraft({ ...draft, maxTradesPerDay })} />
           </>
         ) : draft.kind === "nifty-vwap" ? (
           <>
@@ -764,7 +764,7 @@ export function AlgoScreen() {
                   entryEvaluationIst: String(algo.entryEvaluationIst || "09:05"),
                   endTimeIst: String(algo.endTimeIst || "15:15"),
                   expiryKind: algo.expiryKind === "monthly" ? "monthly" : "weekly",
-                  maxTradesPerDay: String(algo.maxTradesPerDay || 1),
+                  maxTradesPerDay: String(Number(algo.maxTradesPerDay) > 1 ? algo.maxTradesPerDay : 5),
                   buyLeft: algo.buyLeft || "price",
                   buyOp: algo.buyOp || "close_above",
                   buyRight: algo.buyRight || "vwap",

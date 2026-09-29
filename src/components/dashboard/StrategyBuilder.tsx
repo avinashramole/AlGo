@@ -105,7 +105,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const firstBar = form.firstBarStartIst || "09:00";
       const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · preview ${form.timeframe || "5m"} from ${firstBar} until 1 trade · first check ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay || 1}/day · LIVE ${start} IST`;
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · preview ${form.timeframe || "5m"} from ${firstBar} · up to ${form.maxTradesPerDay > 1 ? form.maxTradesPerDay : 5} trades · first check ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · max ${form.maxTradesPerDay > 1 ? form.maxTradesPerDay : 5}/day · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -243,7 +243,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY 5m first candle"
-            text="Every 5m NIFTY FUT candle until one trade. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
+            text="Every 5m NIFTY FUT candle, up to 5 trades a day. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -562,7 +562,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : firstCandle ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              Checks the live preview 5m candle until one trade is placed. Green Nifty future + green ATM CE buys weekly ATM CE. Red Nifty future + green ATM PE buys weekly ATM PE. A doji, or an option preview that is not green, skips that candle and the next 5m is checked. A second trade the same day is blocked.
+              Checks the live preview 5m candle, up to 5 trades a day. Green Nifty future + green ATM CE buys weekly ATM CE. Red Nifty future + green ATM PE buys weekly ATM PE. A doji, or an option preview that is not green, skips that candle and the next 5m is checked. A sixth trade the same day is blocked.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">
@@ -600,7 +600,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField label="Max trades / day" value={form.maxTradesPerDay || 1} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+              <NumberField label="Max trades / day" value={form.maxTradesPerDay > 1 ? form.maxTradesPerDay : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>

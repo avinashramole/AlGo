@@ -677,7 +677,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   const vs = runtimeState(algo);
   vs.inFlight = false;
   if (isNiftyFirstCandleAlgo(algo) && payload.side !== "SELL") {
-    vs.sessionTrades = Math.max(1, Number(vs.sessionTrades || 0));
+    vs.sessionTrades = Number(vs.sessionTrades || 0) + 1;
   }
 }
 

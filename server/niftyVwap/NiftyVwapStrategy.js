@@ -100,7 +100,7 @@ export const NiftyVwapStrategy = {
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     if (config.signalMode === "first-candle") {
-      const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 1);
+      const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 5);
       if (Number(state.sessionTrades || 0) >= maxTrades) {
         algo.lastSignal = "MAX TRADES";
         return { action: "skip", reason: "max-trades" };

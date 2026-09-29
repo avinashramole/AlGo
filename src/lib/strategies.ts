@@ -561,7 +561,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       trailingStepPct: 3,
       vwapExitCandles: 5,
       maxPositions: 1,
-      maxTradesPerDay: 1,
+      maxTradesPerDay: 5,
       expiryKind: "weekly",
       firstBarStartIst: "09:00",
       entryEvaluationIst: "09:05",

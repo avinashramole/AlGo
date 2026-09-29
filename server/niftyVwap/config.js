@@ -54,7 +54,7 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
   trailingStepPct: 3,
   vwapExitCandles: 5,
   maxPositions: 1,
-  maxTradesPerDay: 1,
+  maxTradesPerDay: 5,
   intradayOnly: true,
   eodSquareOffMinutes: 15,
   barMinutes: 5,
@@ -245,7 +245,11 @@ export function niftyFirstCandleConfig(algo = {}) {
     trailingStepPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingStepPct,
     vwapExitCandles: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.vwapExitCandles,
     maxPositions: 1,
-    maxTradesPerDay: Math.max(1, Math.round(num(algo.maxTradesPerDay, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay))),
+    maxTradesPerDay: (() => {
+      const requested = num(algo.maxTradesPerDay, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay);
+      if (!Number.isFinite(requested) || requested <= 1) return DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay;
+      return Math.max(1, Math.round(requested));
+    })(),
     intradayOnly: algo.intradayOnly !== false,
     eodSquareOffMinutes,
     barMinutes,

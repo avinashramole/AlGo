@@ -1152,8 +1152,10 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(created.endTimeIst, "15:15");
   assert.equal(created.eodSquareOffMinutes, 15);
   assert.equal(created.expiryKind, "weekly");
-  assert.equal(created.maxTradesPerDay, 1);
+  assert.equal(created.maxTradesPerDay, 5);
   assert.equal(created.strikeOffset, 0);
+  const oldCap = normalizeAlgo({ ...created, maxTradesPerDay: 1 }, created);
+  assert.equal(oldCap.maxTradesPerDay, 5);
   const updated = normalizeAlgo(
     {
       name: "Desk first candle",
@@ -1187,7 +1189,7 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.maxTradesPerDay, 2);
 });
 
-test("first candle checks every later 5m candle and caps one trade per day", () => {
+test("first candle checks every later 5m candle and allows five trades a day", () => {
   const laterGreen = {
     time: T0_0900 + BAR,
     open: 24540,
@@ -1216,35 +1218,42 @@ test("first candle checks every later 5m candle and caps one trade per day", () 
   assert.equal(signal.buyCe, true);
   assert.equal(signal.barTime, laterGreen.time);
   const algo = defaultNiftyFirstCandleAlgo({ name: "First candle cap" });
+  assert.equal(niftyFirstCandleConfig(algo).maxTradesPerDay, 5);
   const book = bookAdapter();
-  const first = NiftyVwapStrategy.tick({
+  for (let n = 0; n < 5; n += 1) {
+    const time = T0_0900 + n * BAR;
+    const fut = { time, open: 24500, high: 24580, low: 24490, close: 24540 + n, volume: 1000 };
+    const ce = { time, open: 100, high: 140, low: 98, close: 120 + n, volume: 500 };
+    const tick = NiftyVwapStrategy.tick({
+      algo,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 360 - n,
+      futuresBars: [fut],
+      ceBars: [ce],
+      peBars: [firstBar(110, 96)],
+      ceLtp: 120 + n,
+      peLtp: 96,
+      spot: 24540,
+      step: 50,
+      expiry: "2026-08-27",
+      positions: book.positions,
+      adapter: book.adapter,
+    });
+    assert.equal(tick.action, "entry");
+    book.adapter.exit(book.positions[0]);
+    PositionManager.clearOpen(algo.vwapState);
+    algo.vwapState.lastEntryBarTime = 0;
+  }
+  assert.equal(algo.vwapState.sessionTrades, 5);
+  assert.equal(book.places.length, 5);
+  const sixth = NiftyVwapStrategy.tick({
     algo,
-    now: T0_0900 + BAR,
+    now: T0_0900 + 6 * BAR,
     feedLive: true,
-    minutesToClose: 360,
-    futuresBars: [firstBar(24500, 24540)],
-    ceBars: [firstBar(100, 118)],
-    peBars: [firstBar(110, 96)],
-    ceLtp: 118,
-    peLtp: 96,
-    spot: 24540,
-    step: 50,
-    expiry: "2026-08-27",
-    positions: book.positions,
-    adapter: book.adapter,
-  });
-  assert.equal(first.action, "entry");
-  assert.equal(algo.vwapState.sessionTrades, 1);
-  book.adapter.exit(book.positions[0]);
-  PositionManager.clearOpen(algo.vwapState);
-  algo.vwapState.lastEntryBarTime = 0;
-  const again = NiftyVwapStrategy.tick({
-    algo,
-    now: T0_0900 + 2 * BAR,
-    feedLive: true,
-    minutesToClose: 350,
-    futuresBars: [firstBar(24500, 24540), laterGreen],
-    ceBars: [firstBar(100, 118), laterCe],
+    minutesToClose: 300,
+    futuresBars: [laterGreen],
+    ceBars: [laterCe],
     peBars: [firstBar(110, 96)],
     ceLtp: 138,
     peLtp: 90,
@@ -1254,8 +1263,8 @@ test("first candle checks every later 5m candle and caps one trade per day", () 
     positions: book.positions,
     adapter: book.adapter,
   });
-  assert.equal(again.reason, "max-trades");
-  assert.equal(book.places.length, 1);
+  assert.equal(sixth.reason, "max-trades");
+  assert.equal(book.places.length, 5);
 });
 
 test("first candle ATM offset is applied to the strike", () => {

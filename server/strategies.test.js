@@ -139,7 +139,7 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(firstCandle.entryEvaluationIst, "09:05");
   assert.equal(firstCandle.endTimeIst, "15:15");
   assert.equal(firstCandle.expiryKind, "weekly");
-  assert.equal(firstCandle.maxTradesPerDay, 1);
+  assert.equal(firstCandle.maxTradesPerDay, 5);
   assert.equal(firstCandle.strikeOffset, 0);
 });
 
