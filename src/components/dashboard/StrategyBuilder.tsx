@@ -114,7 +114,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const reversal = isNiftyVwapReversalKind(form);
   const hedge = isNiftyVwapHedgeKind(form);
   const firstCandle = isNiftyFirstCandleKind(form);
-  const crudeFirst = isCrudeFirstCandleKind(form);
+  const crudeFirst = isCrudeFirstCandleKind(form) || isCrudeFirstCandleKind(algo || undefined);
   const niftyTest = isNiftyTestKind(form);
   const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
@@ -127,7 +127,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (isNiftyTestKind(form)) {
       return `Nifty Test · NIFTY FUT · ${form.timeframe || "5m"} · live feed while started · current candle above open → BUY · below open → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
     }
-    if (isCrudeFirstCandleKind(form)) {
+    if (crudeFirst) {
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
       return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · preview 5m open/close · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST · saving does not start LIVE`;
@@ -156,7 +156,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       value: form.sellValue,
     });
     return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
-  }, [form, lotSize, lots]);
+  }, [form, lotSize, lots, crudeFirst]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -395,7 +395,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {!engine && form.instrument === "option" ? (
+        {!engine && !crudeFirst && !niftyTest && form.instrument === "option" ? (
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold text-slate-500">Call or put</div>

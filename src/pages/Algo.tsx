@@ -145,7 +145,8 @@ export function Algo() {
 
   const rows = sortDeskAlgos(data.algos).filter((algo) => {
     if (filter === "all") return true;
-    if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL";
+    if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL" || isCrudeFirstCandleKind(algo);
+    if (isCrudeFirstCandleKind(algo)) return false;
     if (filter === "nifty-vwap") return isNiftyVwapKind(algo);
     if (filter === "nifty-vwap-reversal") return isNiftyVwapReversalKind(algo);
     if (filter === "nifty-vwap-hedge") return isNiftyVwapHedgeKind(algo);

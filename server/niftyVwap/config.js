@@ -137,11 +137,19 @@ export function isNiftyFirstCandleAlgo(algo = {}) {
 }
 
 export function isCrudeFirstCandleAlgo(algo = {}) {
-  return (
+  if (
     algo.kind === CRUDE_FIRST_CANDLE_KIND ||
     algo.strategyType === CRUDE_FIRST_CANDLE_TYPE ||
     algo.indicator === "CRUDE_FIRST_CANDLE"
-  );
+  ) {
+    return true;
+  }
+  const name = String(algo.name || "");
+  const symbol = String(algo.symbol || "").toUpperCase();
+  const mentionsCrude = /crude/i.test(name) || symbol === "CRUDEOIL";
+  if (!mentionsCrude || !/first\s*candle/i.test(name)) return false;
+  if (/(?:^|[^0-9])15\s*m/i.test(name)) return false;
+  return true;
 }
 
 export function isFirstCandleAlgo(algo = {}) {

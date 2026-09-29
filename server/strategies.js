@@ -506,7 +506,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     return withMapping(next, input, existing);
   }
   const crudeName = String(merged.name || existing.name || "");
-  const crudeByName = /crude/i.test(crudeName) && /5m first candle/i.test(crudeName);
+  const crudeByName = isCrudeFirstCandleAlgo({ name: crudeName, symbol: merged.symbol || existing.symbol });
   const switchingAwayFromCrude =
     !crudeByName &&
     (input.kind === "price-action" ||

@@ -217,6 +217,39 @@ test("crude oil 5m saved as price action drops indicator conditions and stays pa
   assert.equal(nifty.kind, "price-action");
 });
 
+test("spaced crude first candle name is not stored as an indicator", () => {
+  const row = normalizeAlgo(
+    {
+      name: "CRUDE OIL 5 m first candle",
+      kind: "indicator",
+      symbol: "CRUDEOIL",
+      indicator: "VWAP",
+      buyLeft: "price",
+      buyOp: "close_above",
+      buyRight: "vwap",
+      sellOp: "close_below",
+      pattern: "ORB",
+      enabled: true,
+    },
+    { id: "a12", enabled: false, status: "PAUSED" },
+  );
+  assert.equal(row.kind, "crude-first-candle");
+  assert.equal(row.indicator, "CRUDE_FIRST_CANDLE");
+  assert.equal(row.symbol, "CRUDEOIL");
+  assert.equal(row.enabled, false);
+  assert.equal(row.status, "PAUSED");
+  assert.equal(row.buyOp, undefined);
+  assert.equal(row.pattern, undefined);
+  assert.match(row.summary, /preview/i);
+  assert.doesNotMatch(row.summary, /Indicator|close above/i);
+  const vwap = normalizeAlgo(
+    { name: "CRUDE OIL VWAP ATM", kind: "indicator", symbol: "CRUDEOIL", indicator: "VWAP" },
+    { id: "a7", enabled: false, status: "PAUSED" },
+  );
+  assert.equal(vwap.kind, "indicator");
+  assert.match(vwap.summary, /^Indicator /);
+});
+
 test("hydrate rematerializes first candle saved as a generic indicator", () => {
   const catalog = seedAlgos();
   const next = hydrateAlgos(

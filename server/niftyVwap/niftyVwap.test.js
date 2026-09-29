@@ -1520,6 +1520,10 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
   assert.equal(isCrudeFirstCandleAlgo(crude), true);
   assert.equal(isNiftyFirstCandleAlgo(crude), false);
   assert.equal(isNiftyOptionEngineAlgo(crude), false);
+  assert.equal(isCrudeFirstCandleAlgo({ name: "CRUDE OIL 5 m first candle", kind: "indicator", symbol: "CRUDEOIL" }), true);
+  assert.equal(isNiftyOptionEngineAlgo({ name: "CRUDE OIL 5 m first candle", kind: "indicator", symbol: "CRUDEOIL" }), false);
+  assert.equal(isNiftyFirstCandleAlgo({ name: "CRUDE OIL 5 m first candle", kind: "indicator" }), false);
+  assert.equal(isCrudeFirstCandleAlgo({ name: "CRUDE OIL VWAP ATM", kind: "indicator", symbol: "CRUDEOIL" }), false);
   assert.equal(crude.enabled, false);
   const cfg = crudeFirstCandleConfig(crude);
   assert.equal(cfg.symbol, "CRUDEOIL");

@@ -31,6 +31,7 @@ import {
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
 import { keepLastIndexPrices, keepStrikeWindow, patchById } from "../lib/deskFeed";
+import { presentDeskAlgo } from "../lib/strategies";
 
 const fallback: Snapshot = {
   indices: indices.map((item) => ({
@@ -130,7 +131,7 @@ function readCachedDesk(): Snapshot | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Snapshot>;
     if (!Array.isArray(parsed.algos)) return null;
-    return { ...fallback, ...parsed, algos: parsed.algos };
+    return { ...fallback, ...parsed, algos: parsed.algos.map((row) => presentDeskAlgo(row)) };
   } catch {
     return null;
   }
@@ -268,9 +269,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     const current = dataRef.current;
     const algos = (incoming.algos || []).map((row) => {
       const hold = pending.get(row.id);
-      if (!hold) return row;
+      const next = presentDeskAlgo(row);
+      if (!hold) return next;
       if (Boolean(row.enabled) === hold.enabled) pending.delete(row.id);
-      return { ...row, enabled: hold.enabled, status: hold.status };
+      return { ...next, enabled: hold.enabled, status: hold.status };
     });
     const held = holdOptionDesk(current, incoming);
     const sameDesk =
@@ -304,16 +306,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         const enabled = hold ? hold.enabled : next.enabled;
         const status = hold ? hold.status : next.status;
         if (hold && Boolean(next.enabled) === hold.enabled) pending.delete(row.id);
-        return {
+        return presentDeskAlgo({
           ...row,
           ...next,
           enabled,
           status,
-        };
+        });
       });
       for (const row of incomingAlgos) {
         if (!row?.id || known.has(row.id) || !row.name) continue;
-        algos.push(row);
+        algos.push(presentDeskAlgo(row));
       }
       const held = holdOptionDesk(current, feed);
       const sameDesk =
@@ -607,12 +609,12 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
         if (result.algo) {
           setData((current) => {
-            const next = result.algo as Snapshot["algos"][number];
+            const next = presentDeskAlgo(result.algo as Snapshot["algos"][number]);
             const algos = current.algos || [];
             const exists = algos.some((row) => row.id === next.id);
             return {
               ...current,
-              algos: exists ? algos.map((row) => (row.id === next.id ? { ...row, ...next } : row)) : [next, ...algos],
+              algos: exists ? algos.map((row) => (row.id === next.id ? presentDeskAlgo({ ...row, ...next }) : row)) : [next, ...algos],
             };
           });
         }

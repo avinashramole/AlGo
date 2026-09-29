@@ -231,7 +231,7 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
   );
 }
 
-export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
+export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
   if (
     algo?.kind === "crude-first-candle" ||
     algo?.strategyType === "CRUDE_FIRST_CANDLE_5M" ||
@@ -240,7 +240,41 @@ export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: st
     return true;
   }
   const name = String(algo?.name || "");
-  return /crude/i.test(name) && /5m first candle/i.test(name);
+  const symbol = String(algo?.symbol || "").toUpperCase();
+  const mentionsCrude = /crude/i.test(name) || symbol === "CRUDEOIL";
+  if (!mentionsCrude || !/first\s*candle/i.test(name)) return false;
+  if (/(?:^|[^0-9])15\s*m/i.test(name)) return false;
+  return true;
+}
+
+const CRUDE_INDICATOR_KEYS = [
+  "buyConditions",
+  "sellConditions",
+  "buyLeft",
+  "buyOp",
+  "buyRight",
+  "buyValue",
+  "sellLeft",
+  "sellOp",
+  "sellRight",
+  "sellValue",
+  "pattern",
+  "rangeMinutes",
+] as const;
+
+export function presentDeskAlgo<T extends { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string; tag?: string; instrument?: string }>(row: T): T {
+  if (!row || !isCrudeFirstCandleKind(row)) return row;
+  const next = {
+    ...row,
+    kind: "crude-first-candle" as const,
+    strategyType: "CRUDE_FIRST_CANDLE_5M",
+    indicator: "CRUDE_FIRST_CANDLE",
+    symbol: "CRUDEOIL",
+    instrument: "option" as const,
+    tag: "crude 5m",
+  };
+  for (const key of CRUDE_INDICATOR_KEYS) delete (next as Record<string, unknown>)[key];
+  return next;
 }
 
 export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
