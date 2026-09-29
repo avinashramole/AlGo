@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -79,6 +79,7 @@ export type AlgoStrategy = {
   firstBarStartIst?: string;
   entryEvaluationIst?: string;
   endTimeIst?: string;
+  startTimeIst?: string;
   expiryKind?: "weekly" | "monthly";
   maxTradesPerDay?: number;
   mappingScope?: "master" | "clients" | "both";
@@ -230,6 +231,10 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
   );
 }
 
+export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
+}
+
 export function isNiftyOptionEngineKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
   return isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyFirstCandleKind(algo);
 }
@@ -244,6 +249,7 @@ export function contractLabel(algo: {
 }) {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
+  if (isNiftyTestKind(algo)) return "NIFTY FUT";
   if (isNiftyFirstCandleKind(algo)) return "NIFTY ATM CE/PE first 5m";
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -480,6 +486,43 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
       runMode: "live",
       dailyLiveIst: "09:20",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "nifty-test") {
+    return {
+      name: "nifty test",
+      kind: "nifty-test",
+      tag: "nifty test",
+      strategyType: "NIFTY_TEST",
+      symbol: "NIFTY",
+      instrument: "future",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BOTH",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "5m",
+      slPct: 0.4,
+      targetPct: 0.8,
+      startTimeIst: "09:15",
+      endTimeIst: "15:15",
+      indicator: "NIFTY_TEST",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "BREAKOUT",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("price-action", "VWAP", "BREAKOUT"),
+      ...groupsFromFlat(defaultConditions("price-action", "VWAP", "BREAKOUT")),
+      runMode: "live",
       brokerId: "dhan",
       enabled: false,
       status: "PAUSED",

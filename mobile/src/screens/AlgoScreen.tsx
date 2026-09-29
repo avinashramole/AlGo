@@ -34,8 +34,9 @@ type CondRow = { left: string; op: string; right: string; value: string };
 type Draft = {
   id?: string;
   name: string;
-  kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
+  kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
   dailyLiveIst?: string;
+  startTimeIst?: string;
   firstBarStartIst?: string;
   entryEvaluationIst?: string;
   endTimeIst?: string;
@@ -174,7 +175,7 @@ export function AlgoScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [rangeDraft, setRangeDraft] = useState<RangeDraft | null>(null);
   const [rangeBusy, setRangeBusy] = useState(false);
-  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle">("all");
+  const [filter, setFilter] = useState<"all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test">("all");
 
   const rows = data.algos.filter((algo) => {
     if (filter === "all") return true;
@@ -200,15 +201,17 @@ export function AlgoScreen() {
       trailingActivationPct: Number(draft.trailingActivationPct || 10),
       trailingStepPct: Number(draft.trailingStepPct || 3),
       vwapExitCandles: Number(draft.vwapExitCandles || 5),
-      instrument: isEngineKind(draft.kind) ? "option" : draft.instrument,
-      timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.kind === "nifty-first-candle" ? (["1m", "5m", "15m"].includes(draft.timeframe) ? draft.timeframe : "5m") : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
+      instrument: draft.kind === "nifty-test" ? "future" : isEngineKind(draft.kind) ? "option" : draft.instrument,
+      side: draft.kind === "nifty-test" ? "BOTH" : draft.side,
+      startTimeIst: draft.kind === "nifty-test" ? draft.startTimeIst || "09:15" : draft.startTimeIst,
+      timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.kind === "nifty-first-candle" || draft.kind === "nifty-test" ? (["1m", "5m", "15m"].includes(draft.timeframe) ? draft.timeframe : "5m") : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
       dailyLiveIst: draft.kind === "nifty-first-candle" ? draft.dailyLiveIst || "09:00" : draft.dailyLiveIst,
       firstBarStartIst: draft.kind === "nifty-first-candle" ? draft.firstBarStartIst || "09:00" : draft.firstBarStartIst,
       entryEvaluationIst: draft.kind === "nifty-first-candle" ? draft.entryEvaluationIst || "09:05" : draft.entryEvaluationIst,
-      endTimeIst: draft.kind === "nifty-first-candle" ? draft.endTimeIst || "15:15" : draft.endTimeIst,
+      endTimeIst: draft.kind === "nifty-first-candle" || draft.kind === "nifty-test" ? draft.endTimeIst || "15:15" : draft.endTimeIst,
       expiryKind: draft.kind === "nifty-first-candle" ? draft.expiryKind || "weekly" : draft.expiryKind,
       maxTradesPerDay: draft.kind === "nifty-first-candle" ? Math.max(1, Number(draft.maxTradesPerDay) || 1) : draft.maxTradesPerDay,
-      symbol: isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
+      symbol: draft.kind === "nifty-test" || isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
       buyValue: Number(draft.buyRows[0]?.value || draft.buyValue),
       sellValue: Number(draft.sellRows[0]?.value || draft.sellValue),
       buyConditions: {
@@ -307,6 +310,25 @@ export function AlgoScreen() {
                 slPct: "0",
                 targetPct: "40",
                 initialSlPct: "0",
+              })
+            }
+          />
+          <Chip
+            label="nifty test"
+            on={draft.kind === "nifty-test"}
+            onPress={() =>
+              setDraft({
+                ...draft,
+                kind: "nifty-test",
+                name: draft.name || "nifty test",
+                symbol: "NIFTY",
+                instrument: "future",
+                side: "BOTH",
+                timeframe: "5m",
+                slPct: "0.4",
+                targetPct: "0.8",
+                startTimeIst: "09:15",
+                endTimeIst: "15:15",
               })
             }
           />
@@ -427,6 +449,12 @@ export function AlgoScreen() {
               ))}
             </View>
           </>
+        ) : draft.kind === "nifty-test" ? (
+          <>
+            <Text style={styles.muted}>NIFTY future. Previous candle green and break of its high → BUY. Previous candle red and break of its low → SELL.</Text>
+            <Field label="nifty test" value={draft.startTimeIst || "09:15"} onChange={(startTimeIst) => setDraft({ ...draft, startTimeIst })} />
+            <Field label="End time (IST)" value={draft.endTimeIst || "15:15"} onChange={(endTimeIst) => setDraft({ ...draft, endTimeIst })} />
+          </>
         ) : draft.kind === "nifty-vwap" ? (
           <Text style={styles.muted}>NIFTY 5m VWAP ATM. First futures close vs VWAP picks CE or PE. Saving does not start live trading.</Text>
         ) : draft.kind === "indicator" ? (
@@ -448,7 +476,7 @@ export function AlgoScreen() {
             </View>
           </>
         )}
-        {isEngineKind(draft.kind) ? null : (
+        {isEngineKind(draft.kind) || draft.kind === "nifty-test" ? null : (
         <>
         <Text style={styles.muted}>BUY when · {draft.buyJoin.toUpperCase()}</Text>
         <View style={styles.chips}>
@@ -644,6 +672,7 @@ export function AlgoScreen() {
         <Chip label="15m reversal" on={filter === "nifty-vwap-reversal"} onPress={() => setFilter("nifty-vwap-reversal")} />
         <Chip label="15m hedge" on={filter === "nifty-vwap-hedge"} onPress={() => setFilter("nifty-vwap-hedge")} />
         <Chip label="5m first candle" on={filter === "nifty-first-candle"} onPress={() => setFilter("nifty-first-candle")} />
+        <Chip label="nifty test" on={filter === "nifty-test"} onPress={() => setFilter("nifty-test")} />
       </View>
       {rows.map((algo) => (
         <Card key={algo.id}>
@@ -692,6 +721,8 @@ export function AlgoScreen() {
                       ? "nifty-vwap-reversal"
                       : algo.kind === "nifty-first-candle"
                         ? "nifty-first-candle"
+                      : algo.kind === "nifty-test"
+                        ? "nifty-test"
                       : algo.kind === "nifty-vwap"
                         ? "nifty-vwap"
                         : algo.kind === "price-action"
@@ -720,6 +751,7 @@ export function AlgoScreen() {
                   trailingActivationPct: String(algo.trailingActivationPct || 10),
                   trailingStepPct: String(algo.trailingStepPct || 3),
                   vwapExitCandles: String(algo.vwapExitCandles || 5),
+                  startTimeIst: String(algo.startTimeIst || "09:15"),
                   dailyLiveIst: String(algo.dailyLiveIst || "09:00"),
                   firstBarStartIst: String(algo.firstBarStartIst || "09:00"),
                   entryEvaluationIst: String(algo.entryEvaluationIst || "09:05"),

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyFirstCandleAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_FIRST_CANDLE_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -254,6 +254,7 @@ export function strikeOffsetLabel(offset) {
 export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
+  if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
   if (isNiftyFirstCandleAlgo(algo)) return "NIFTY ATM CE/PE first 5m";
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -277,6 +278,13 @@ export function summarizeAlgo(algo) {
     const sl = algo.initialSlPct || 15;
     const tgt = algo.targetPct || 30;
     return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · daily LIVE 09:20 IST · ${size}`;
+  }
+  if (isNiftyTestAlgo(algo)) {
+    const start = algo.startTimeIst || "09:15";
+    const end = algo.endTimeIst || "15:15";
+    const sl = algo.slPct || 0.4;
+    const tgt = algo.targetPct || 0.8;
+    return `nifty test · NIFTY FUT · preview candle green + break high → BUY · preview candle red + break low → SELL · ${start}–${end} IST · ${tf} · SL ${sl}% / TGT ${tgt}% · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -343,7 +351,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "price-action" &&
     input.kind !== "nifty-vwap" &&
     input.kind !== "nifty-vwap-reversal" &&
-    input.kind !== "nifty-first-candle";
+    input.kind !== "nifty-first-candle" &&
+    input.kind !== "nifty-test";
   if (keepHedge) {
     const cfg = niftyVwapHedgeConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -389,7 +398,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "price-action" &&
     input.kind !== "nifty-vwap" &&
     input.kind !== "nifty-vwap-hedge" &&
-    input.kind !== "nifty-first-candle";
+    input.kind !== "nifty-first-candle" &&
+    input.kind !== "nifty-test";
   if (keepReversal) {
     const cfg = niftyVwapReversalConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -436,7 +446,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "price-action" &&
     input.kind !== "nifty-vwap-reversal" &&
     input.kind !== "nifty-vwap-hedge" &&
-    input.kind !== "nifty-first-candle";
+    input.kind !== "nifty-first-candle" &&
+    input.kind !== "nifty-test";
   if (keepNiftyVwap) {
     const cfg = niftyVwapConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -484,7 +495,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "price-action" ||
     input.kind === "nifty-vwap" ||
     input.kind === "nifty-vwap-reversal" ||
-    input.kind === "nifty-vwap-hedge";
+    input.kind === "nifty-vwap-hedge" ||
+    input.kind === "nifty-test";
   const keepFirstCandle =
     (isNiftyFirstCandleAlgo(merged) ||
       isNiftyFirstCandleAlgo(existing) ||
@@ -528,6 +540,68 @@ export function normalizeAlgo(input = {}, existing = {}) {
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
       vwapState: existing.vwapState,
+      enabled: creating ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return withMapping(next, input, existing);
+  }
+  const switchingAwayFromNiftyTest =
+    input.kind === "price-action" ||
+    input.kind === "nifty-vwap" ||
+    input.kind === "nifty-vwap-reversal" ||
+    input.kind === "nifty-vwap-hedge" ||
+    input.kind === "nifty-first-candle";
+  const keepNiftyTest =
+    (isNiftyTestAlgo(merged) ||
+      isNiftyTestAlgo(existing) ||
+      /^nifty test$/i.test(String(merged.name || existing.name || ""))) &&
+    !switchingAwayFromNiftyTest;
+  if (keepNiftyTest) {
+    const cfg = niftyTestConfig(merged);
+    const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+      ? input.runMode
+      : ["live", "paper", "backtest"].includes(existing.runMode)
+        ? existing.runMode
+        : "live";
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultNiftyTestAlgo({
+        ...merged,
+        name: String(input.name || existing.name || "").trim() || "nifty test",
+        runMode,
+        lots: cfg.lots,
+        lotSize: cfg.lotSize,
+        slPct: cfg.slPct,
+        targetPct: cfg.targetPct,
+        timeframe: cfg.timeframe,
+        startTimeIst: cfg.startTimeIst,
+        endTimeIst: cfg.endTimeIst,
+      }),
+      id: existing.id || newAlgoId(),
+      kind: NIFTY_TEST_KIND,
+      symbol: "NIFTY",
+      instrument: "future",
+      side: "BOTH",
+      lots: cfg.lots,
+      lotSize: cfg.lotSize,
+      qty: cfg.qty,
+      timeframe: cfg.timeframe,
+      slPct: cfg.slPct,
+      targetPct: cfg.targetPct,
+      startTimeIst: cfg.startTimeIst,
+      endTimeIst: cfg.endTimeIst,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
       enabled: creating ? false : Boolean(existing.enabled),
       status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
     };
@@ -724,6 +798,13 @@ export function seedAlgos() {
         runMode: "live",
       }),
       { id: "a10", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
+    ),
+    normalizeAlgo(
+      defaultNiftyTestAlgo({
+        name: "nifty test",
+        runMode: "live",
+      }),
+      { id: "a11", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
   ];
 }

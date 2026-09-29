@@ -61,8 +61,8 @@ test("normalizeAlgo keeps mapped clients and mapping scope", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 7);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9,a10");
+  assert.equal(next.algos.length, 8);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9,a10,a11");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -73,7 +73,7 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a6"), false);
   assert.equal(next.algos.some((row) => row.name === "NIFTY 15m VWAP hedge"), false);
   assert.deepEqual(next.removedIds, ["a6"]);
-  assert.equal(next.algos.length, 6);
+  assert.equal(next.algos.length, 7);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
@@ -169,6 +169,60 @@ test("hydrate rematerializes first candle saved as a generic indicator", () => {
   assert.equal(row.strategyType, "NIFTY_FIRST_CANDLE_5M");
   assert.equal(row.firstBarStartIst, "09:00");
   assert.equal(row.entryEvaluationIst, "09:05");
+  assert.equal(row.enabled, false);
+});
+
+test("seed includes paused nifty test future strategy", () => {
+  const seeded = seedAlgos();
+  const row = seeded.find((item) => item.id === "a11");
+  assert.equal(row.name, "nifty test");
+  assert.equal(row.kind, "nifty-test");
+  assert.equal(row.strategyType, "NIFTY_TEST");
+  assert.equal(row.symbol, "NIFTY");
+  assert.equal(row.instrument, "future");
+  assert.equal(row.side, "BOTH");
+  assert.equal(row.timeframe, "5m");
+  assert.equal(row.startTimeIst, "09:15");
+  assert.equal(row.endTimeIst, "15:15");
+  assert.equal(row.enabled, false);
+  assert.equal(row.status, "PAUSED");
+  assert.match(row.summary, /green \+ break high → BUY/);
+  assert.match(row.summary, /red \+ break low → SELL/);
+});
+
+test("nifty test time input is kept when the saved row is generic", () => {
+  const catalog = seedAlgos();
+  const next = hydrateAlgos(
+    {
+      algos: [
+        {
+          id: "a11",
+          name: "nifty test",
+          kind: "indicator",
+          symbol: "NIFTY",
+          timeframe: "15m",
+          startTimeIst: "09:20",
+          endTimeIst: "15:00",
+          slPct: 0.5,
+          targetPct: 1,
+          runMode: "live",
+          enabled: false,
+          status: "PAUSED",
+        },
+      ],
+      removedIds: [],
+    },
+    catalog,
+  );
+  const row = next.algos.find((item) => item.id === "a11");
+  assert.equal(row.kind, "nifty-test");
+  assert.equal(row.instrument, "future");
+  assert.equal(row.side, "BOTH");
+  assert.equal(row.timeframe, "15m");
+  assert.equal(row.startTimeIst, "09:20");
+  assert.equal(row.endTimeIst, "15:00");
+  assert.equal(row.slPct, 0.5);
+  assert.equal(row.targetPct, 1);
   assert.equal(row.enabled, false);
 });
 

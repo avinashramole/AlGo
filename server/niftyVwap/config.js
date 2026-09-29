@@ -4,6 +4,8 @@ export const NIFTY_VWAP_REVERSAL_KIND = "nifty-vwap-reversal";
 export const NIFTY_VWAP_REVERSAL_TYPE = "NIFTY_VWAP_REVERSAL_15M";
 export const NIFTY_FIRST_CANDLE_KIND = "nifty-first-candle";
 export const NIFTY_FIRST_CANDLE_TYPE = "NIFTY_FIRST_CANDLE_5M";
+export const NIFTY_TEST_KIND = "nifty-test";
+export const NIFTY_TEST_TYPE = "NIFTY_TEST";
 
 export const DEFAULT_NIFTY_VWAP_CONFIG = {
   timeframe: "5m",
@@ -71,6 +73,20 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
 };
 
 const FIRST_CANDLE_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15 };
+const NIFTY_TEST_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15, "1H": 60 };
+
+export const DEFAULT_NIFTY_TEST_CONFIG = {
+  timeframe: "5m",
+  slPct: 0.4,
+  targetPct: 0.8,
+  barMinutes: 5,
+  symbol: "NIFTY",
+  lots: 1,
+  lotSize: 65,
+  signalMode: "preview-break",
+  startTimeIst: "09:15",
+  endTimeIst: "15:15",
+};
 
 export function parseIstHm(value, fallback = "09:00") {
   const raw = String(value || "").trim();
@@ -109,8 +125,35 @@ export function isNiftyFirstCandleAlgo(algo = {}) {
   );
 }
 
+export function isNiftyTestAlgo(algo = {}) {
+  return algo.kind === NIFTY_TEST_KIND || algo.strategyType === NIFTY_TEST_TYPE || algo.indicator === "NIFTY_TEST";
+}
+
 export function isNiftyOptionEngineAlgo(algo = {}) {
   return isNiftyVwapAlgo(algo) || isNiftyVwapReversalAlgo(algo) || isNiftyFirstCandleAlgo(algo);
+}
+
+export function niftyTestConfig(algo = {}) {
+  const num = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_TEST_CONFIG.lots)));
+  const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_TEST_CONFIG.lotSize)));
+  const timeframe = NIFTY_TEST_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_TEST_CONFIG.timeframe;
+  return {
+    timeframe,
+    slPct: Math.max(0.05, num(algo.slPct, DEFAULT_NIFTY_TEST_CONFIG.slPct)),
+    targetPct: Math.max(0.1, num(algo.targetPct, DEFAULT_NIFTY_TEST_CONFIG.targetPct)),
+    barMinutes: NIFTY_TEST_TIMEFRAMES[timeframe],
+    symbol: "NIFTY",
+    lots,
+    lotSize,
+    qty: lots * lotSize,
+    signalMode: "preview-break",
+    startTimeIst: parseIstHm(algo.startTimeIst, DEFAULT_NIFTY_TEST_CONFIG.startTimeIst),
+    endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_TEST_CONFIG.endTimeIst),
+  };
 }
 
 export function niftyVwapConfig(algo = {}) {
@@ -377,6 +420,56 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     firstBarStartIst: cfg.firstBarStartIst,
     entryEvaluationIst: cfg.entryEvaluationIst,
     endTimeIst: cfg.endTimeIst,
+    enabled: false,
+  };
+}
+
+export function defaultNiftyTestAlgo(patch = {}) {
+  const cfg = niftyTestConfig(patch);
+  return {
+    name: patch.name || "nifty test",
+    kind: NIFTY_TEST_KIND,
+    strategyType: NIFTY_TEST_TYPE,
+    tag: "nifty test",
+    symbol: "NIFTY",
+    instrument: "future",
+    optionType: "CE",
+    strikeOffset: 0,
+    side: "BOTH",
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    timeframe: cfg.timeframe,
+    slPct: cfg.slPct,
+    targetPct: cfg.targetPct,
+    startTimeIst: cfg.startTimeIst,
+    endTimeIst: cfg.endTimeIst,
+    indicator: "NIFTY_TEST",
+    buyLeft: "price",
+    buyOp: "crosses_above",
+    buyRight: "lookback_high",
+    sellLeft: "price",
+    sellOp: "crosses_below",
+    sellRight: "lookback_low",
+    runMode: ["live", "paper", "backtest"].includes(patch.runMode) ? patch.runMode : "live",
+    brokerId: patch.runMode === "paper" || patch.runMode === "backtest" ? "paper" : "dhan",
+    enabled: false,
+    status: patch.runMode === "backtest" ? "BACKTEST" : "PAUSED",
+    ...patch,
+    kind: NIFTY_TEST_KIND,
+    strategyType: NIFTY_TEST_TYPE,
+    symbol: "NIFTY",
+    instrument: "future",
+    side: "BOTH",
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    timeframe: cfg.timeframe,
+    slPct: cfg.slPct,
+    targetPct: cfg.targetPct,
+    startTimeIst: cfg.startTimeIst,
+    endTimeIst: cfg.endTimeIst,
+    indicator: "NIFTY_TEST",
     enabled: false,
   };
 }

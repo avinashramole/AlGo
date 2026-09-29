@@ -103,7 +103,7 @@ export type Snapshot = {
     id: string;
     name: string;
     tag: string;
-    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
+    kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
     symbol?: string;
     instrument?: "future" | "option";
     optionType?: "CE" | "PE";
@@ -141,6 +141,12 @@ export type Snapshot = {
     lookback?: number;
     summary?: string;
     dailyLiveIst?: string;
+    startTimeIst?: string;
+    endTimeIst?: string;
+    firstBarStartIst?: string;
+    entryEvaluationIst?: string;
+    expiryKind?: "weekly" | "monthly";
+    maxTradesPerDay?: number;
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {
       trades?: number;

@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle";
+  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
@@ -55,6 +55,8 @@ export type Algo = {
   sellValue?: number;
   summary?: string;
   dailyLiveIst?: string;
+  startTimeIst?: string;
+  endTimeIst?: string;
   mappingScope?: "master" | "clients" | "both";
   mappedClientIds?: string[];
   runMode?: "live" | "paper" | "backtest";
@@ -271,6 +273,31 @@ export const initialAlgos: Algo[] = [
     targetPct: 40,
     summary: "NIFTY 5m first candle · ATM options · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL 20% / TGT 40% · daily LIVE 09:00 IST",
     dailyLiveIst: "09:00",
+    status: "PAUSED",
+    pnl: 0,
+    winRate: 0,
+    enabled: false,
+    brokerId: "dhan",
+    runMode: "live",
+  },
+  {
+    id: "a11",
+    name: "nifty test",
+    tag: "nifty test",
+    kind: "nifty-test",
+    symbol: "NIFTY",
+    instrument: "future",
+    side: "BOTH",
+    indicator: "NIFTY_TEST",
+    timeframe: "5m",
+    lots: 1,
+    lotSize: 65,
+    qty: 65,
+    slPct: 0.4,
+    targetPct: 0.8,
+    startTimeIst: "09:15",
+    endTimeIst: "15:15",
+    summary: "nifty test · NIFTY FUT · preview candle green + break high → BUY · preview candle red + break low → SELL · 09:15–15:15 IST",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

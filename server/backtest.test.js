@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateSignals, precomputeSources, runBacktest } from "./backtest.js";
+import { evaluateNiftyPreviewBreak, evaluateSignals, precomputeSources, runBacktest } from "./backtest.js";
 
 const BAR = 5 * 60 * 1000;
 const T0 = Date.parse("2026-08-21T03:45:00.000Z");
@@ -155,6 +155,66 @@ test("1-year 5m EMA backtest finishes without blocking the event loop", () => {
   assert.ok(Date.now() - started < 2000, `backtest took ${Date.now() - started}ms`);
   assert.equal(result.bars, 18_000);
   assert.equal(typeof result.pnl, "number");
+});
+
+const niftyTest = {
+  kind: "nifty-test",
+  strategyType: "NIFTY_TEST",
+  timeframe: "5m",
+  startTimeIst: "09:15",
+  endTimeIst: "15:15",
+};
+
+test("nifty test buys the future when the preview candle is green and price breaks its high", () => {
+  const candles = [
+    bar(0, 110, { open: 100, high: 112, low: 99 }),
+    bar(1, 114, { open: 110, high: 115, low: 109 }),
+  ];
+  const signal = evaluateNiftyPreviewBreak(candles, 1, niftyTest);
+  assert.equal(signal.buy, true);
+  assert.equal(signal.sell, false);
+  assert.equal(evaluateSignals(candles, 1, niftyTest).buy, true);
+});
+
+test("nifty test sells the future when the preview candle is red and price breaks its low", () => {
+  const candles = [
+    bar(0, 100, { open: 110, high: 111, low: 98 }),
+    bar(1, 96, { open: 100, high: 101, low: 95 }),
+  ];
+  const signal = evaluateSignals(candles, 1, niftyTest);
+  assert.equal(signal.sell, true);
+  assert.equal(signal.buy, false);
+});
+
+test("nifty test ignores a green candle that does not break high and a red candle that does not break low", () => {
+  const greenHold = [
+    bar(0, 110, { open: 100, high: 112, low: 99 }),
+    bar(1, 111, { open: 110, high: 112, low: 108 }),
+  ];
+  const redHold = [
+    bar(0, 100, { open: 110, high: 111, low: 98 }),
+    bar(1, 99, { open: 100, high: 102, low: 98 }),
+  ];
+  assert.equal(evaluateSignals(greenHold, 1, niftyTest).buy, false);
+  assert.equal(evaluateSignals(redHold, 1, niftyTest).sell, false);
+});
+
+test("nifty test does not trade a doji preview candle or a break outside the nifty test time", () => {
+  const doji = [
+    bar(0, 100, { open: 100, high: 104, low: 96 }),
+    bar(1, 106, { open: 100, high: 107, low: 94 }),
+  ];
+  const late = Date.parse("2026-08-21T10:00:00.000Z");
+  const afterClose = [
+    { time: late - BAR, open: 100, high: 112, low: 99, close: 110, volume: 1000 },
+    { time: late, open: 110, high: 115, low: 109, close: 114, volume: 1000 },
+  ];
+  const flat = evaluateSignals(doji, 1, niftyTest);
+  assert.equal(flat.buy, false);
+  assert.equal(flat.sell, false);
+  const closed = evaluateSignals(afterClose, 1, niftyTest);
+  assert.equal(closed.buy, false);
+  assert.equal(closed.sell, false);
 });
 
 test("close above ignores the still-forming bar", () => {

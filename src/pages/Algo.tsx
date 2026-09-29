@@ -13,6 +13,7 @@ import {
   contractLabel,
   isNiftyOptionEngineKind,
   isNiftyFirstCandleKind,
+  isNiftyTestKind,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
@@ -20,7 +21,7 @@ import {
 } from "../lib/strategies";
 
 type DeskTab = "copy" | "tradingview";
-type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crudeoil";
+type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
 
 function rupee(value: number) {
@@ -56,6 +57,13 @@ function kindMeta(algo: AlgoStrategy) {
       kind: "nifty-vwap-reversal" as const,
       category: "SYSTEMATIC NIFTY 15M",
       config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · daily LIVE 09:20 IST`,
+    };
+  }
+  if (isNiftyTestKind(algo)) {
+    return {
+      kind: "nifty-test" as const,
+      category: "NIFTY TEST",
+      config: `NIFTY FUT · ${algo.timeframe || "5m"} · ${algo.startTimeIst || "09:15"}–${algo.endTimeIst || "15:15"} IST · green + break high → BUY · red + break low → SELL`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
@@ -107,6 +115,7 @@ export function Algo() {
     if (filter === "nifty-vwap-reversal") return isNiftyVwapReversalKind(algo);
     if (filter === "nifty-vwap-hedge") return isNiftyVwapHedgeKind(algo);
     if (filter === "nifty-first-candle") return isNiftyFirstCandleKind(algo);
+    if (filter === "nifty-test") return isNiftyTestKind(algo);
     return (algo.kind || (algo.tag === "Price action" ? "price-action" : "indicator")) === filter;
   }) as AlgoStrategy[];
 
@@ -214,6 +223,7 @@ export function Algo() {
                 ["nifty-vwap-reversal", "15m VWAP reversal"],
                 ["nifty-vwap-hedge", "15m VWAP hedge"],
                 ["nifty-first-candle", "5m first candle"],
+                ["nifty-test", "nifty test"],
                 ["crudeoil", "CRUDE OIL"],
               ] as const
             ).map(([id, label]) => (
@@ -371,6 +381,8 @@ function AlgoCard({
     ? algo.enabled && algo.lastSignal
       ? algo.lastSignal
       : algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE"
+    : isNiftyTestKind(algo)
+      ? algo.lastSignal || "Preview green + break high → BUY NIFTY FUT · preview red + break low → SELL NIFTY FUT"
     : isNiftyFirstCandleKind(algo)
       ? algo.lastSignal || "09:00–09:05: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE"
       : algo.lastSignal && algo.enabled

@@ -200,6 +200,57 @@ function barMinutes(tf) {
   return 5;
 }
 
+function istMinutesOf(timeMs) {
+  const ms = Number(timeMs);
+  if (!Number.isFinite(ms)) return null;
+  const shifted = new Date(ms + 5.5 * 60 * 60 * 1000);
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+}
+
+function hmMinutes(value, fallback) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+  const source = match ? raw : String(fallback || "09:15");
+  const parsed = source.match(/^(\d{1,2}):(\d{2})$/);
+  if (!parsed) return 9 * 60 + 15;
+  return Math.min(23, Math.max(0, Number(parsed[1]))) * 60 + Math.min(59, Math.max(0, Number(parsed[2])));
+}
+
+function isNiftyTestAlgo(algo = {}) {
+  return algo.kind === "nifty-test" || algo.strategyType === "NIFTY_TEST" || algo.indicator === "NIFTY_TEST";
+}
+
+export function evaluateNiftyPreviewBreak(candles, i, algo = {}) {
+  if (!Array.isArray(candles) || i < 1 || !candles[i] || !candles[i - 1]) {
+    return { buy: false, sell: false };
+  }
+  const preview = candles[i - 1];
+  const probe = candles[i];
+  const open = Number(preview.open);
+  const close = Number(preview.close);
+  const high = Number(preview.high);
+  const low = Number(preview.low);
+  const probeHigh = Number(probe.high);
+  const probeLow = Number(probe.low);
+  const price = Number(probe.close) || 0;
+  if (![open, close, high, low, probeHigh, probeLow].every((value) => Number.isFinite(value))) {
+    return { buy: false, sell: false, price };
+  }
+  const start = hmMinutes(algo.startTimeIst, "09:15");
+  const end = hmMinutes(algo.endTimeIst, "15:15");
+  const mins = istMinutesOf(probe.time);
+  if (mins == null || mins < start || mins >= end) {
+    return { buy: false, sell: false, price };
+  }
+  const green = close > open;
+  const red = close < open;
+  return {
+    buy: green && probeHigh > high,
+    sell: red && probeLow < low,
+    price,
+  };
+}
+
 function readValue(src, sources, numberValue) {
   if (src === "value") return Number(numberValue) || 0;
   return Number(sources[src] ?? 0);
@@ -263,6 +314,7 @@ function groupFromAlgo(algo, side) {
 }
 
 export function evaluateSignals(candles, i, algo, cache) {
+  if (isNiftyTestAlgo(algo)) return evaluateNiftyPreviewBreak(candles, i, algo);
   const buyGroup = groupFromAlgo(algo, "buy");
   const sellGroup = groupFromAlgo(algo, "sell");
   const closeOps = [...buyGroup.rows, ...sellGroup.rows].some((row) => isCloseOp(row.op));
