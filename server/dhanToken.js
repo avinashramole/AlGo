@@ -841,7 +841,7 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
     }),
     generatedAt: tokenChanged ? new Date().toISOString() : session.generatedAt,
     source: session.pin && session.totpSecret ? session.source || "totp" : "web",
-    autoStart: tokenChanged ? true : session.autoStart !== false,
+    autoStart: false,
   });
   persistAdminBrokerSecrets({
     brokerId: "dhan",

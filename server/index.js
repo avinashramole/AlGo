@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, selectOptionDesk, startDhanLive, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
@@ -660,7 +660,7 @@ app.post("/api/brokers/dhan/auto", async (req, res) => {
     });
     res.json({
       ok: true,
-      live: true,
+      live: Boolean(result.live),
       rotated: true,
       tokenHint: result.tokenHint,
       autoMode: result.autoMode,
@@ -682,7 +682,7 @@ async function handleDhanTokenReset(req, res) {
     });
     res.json({
       ok: true,
-      live: true,
+      live: Boolean(result.live),
       rotated: true,
       method: result.method || "generate",
       tokenHint: result.tokenHint,
@@ -700,18 +700,35 @@ async function handleDhanTokenReset(req, res) {
 app.post("/api/brokers/dhan/refresh", handleDhanTokenReset);
 app.post("/api/brokers/dhan/reset", handleDhanTokenReset);
 
+app.post("/api/brokers/dhan/feed", async (_req, res) => {
+  try {
+    const result = await startDhanFeedFromSavedToken();
+    res.json({
+      ok: true,
+      live: true,
+      tokenHint: result.tokenHint,
+      account: publicBrokers().brokers.find((item) => item.id === "dhan"),
+      snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start the Dhan data feed" });
+  }
+});
+
 app.post("/api/brokers/:id/connect", async (req, res) => {
   try {
     if (req.params.id === "dhan") {
-      const result = await startDhanLive({
+      const result = await saveDhanAccessToken({
         accessToken: req.body?.accessToken || req.body?.apiKey,
         clientId: req.body?.clientId,
         loginId: req.body?.loginId || req.body?.clientId,
       });
       res.json({
         ok: true,
-        live: true,
+        live: false,
+        saved: true,
         tokenHint: result.tokenHint,
+        warning: result.warning || null,
         account: publicBrokers().brokers.find((item) => item.id === "dhan"),
         snapshot: snapshot(),
       });

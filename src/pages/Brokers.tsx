@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useMarket } from "../context/MarketContext";
 import { formatNumber, fundsCaption } from "../lib/format";
-import type { BrokerAccount } from "../api/client";
+import { startDhanFeed, type BrokerAccount } from "../api/client";
+import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
 import { catchDeskError, isTrade2SmartHost } from "../lib/liveSite";
 
 export function Brokers() {
-  const { data, connect, enableAuto, refreshToken, disconnect, activate } = useMarket();
+  const { data, connect, enableAuto, refreshToken, disconnect, activate, refresh } = useMarket();
   const brokers = data.brokers || [];
   const feed = data.dhanFeed;
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
@@ -15,6 +16,7 @@ export function Brokers() {
   const [sessionToken, setSessionToken] = useState("");
   const [dhanClientId, setDhanClientId] = useState("");
   const [dhanToken, setDhanToken] = useState("");
+  const [dhanTokenFocused, setDhanTokenFocused] = useState(false);
   const [dhanPin, setDhanPin] = useState("");
   const [dhanTotp, setDhanTotp] = useState("");
   const [error, setError] = useState("");
@@ -52,6 +54,7 @@ export function Brokers() {
   const submitDhan = async (id: string, token: string) => {
     await connect("dhan", { clientId: id, accessToken: token, apiKey: token });
     setDhanToken("");
+    setDhanTokenFocused(false);
   };
 
   const submit = async () => {
@@ -114,12 +117,34 @@ export function Brokers() {
   };
 
   const connectDhanCard = async () => {
+    const typed = savedSecretForSubmit(dhanToken);
+    if (!typed) {
+      if (feed?.tokenHint) {
+        setError("");
+        return;
+      }
+      setError("Paste the access token.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await submitDhan(dhanClientId, dhanToken);
+      await submitDhan(dhanClientId || savedDhanClientId, typed);
     } catch (err) {
-      setError(catchDeskError(err, "Could not connect"));
+      setError(catchDeskError(err, "Could not save the access token"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startSavedFeed = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await startDhanFeed();
+      await refresh();
+    } catch (err) {
+      setError(catchDeskError(err, "Could not start the data feed"));
     } finally {
       setBusy(false);
     }
@@ -153,8 +178,9 @@ export function Brokers() {
         <p className="mt-2 text-xs text-slate-400">
           Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
           <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
-          no password token API). A deploy or <b>systemctl restart</b> keeps this access token while it still has time
-          left. <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
+          no password token API). A deploy or <b>systemctl restart</b> keeps this access token on screen and does{" "}
+          <b>not</b> start the data feed. Saving a pasted token also leaves the feed off. <b>Start data feed</b> is
+          separate and does not delete the token. <b>Reset token now</b> calls Dhan <b>GET /v2/RenewToken</b> with the current token,
           then <b>generateAccessToken</b> with PIN + TOTP if that token is already dead. Save PIN + TOTP once (or set{" "}
           <code>DHAN_CLIENT_ID</code>, <code>DHAN_PIN</code>, <code>DHAN_TOTP_SECRET</code>). A <b>429</b> is a rate
           limit, not an expired token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the{" "}
@@ -359,7 +385,7 @@ export function Brokers() {
                 <Mini label="Margin" value={`₹${formatNumber(broker.marginUsed, 0)}`} />
               </div>
             ) : null}
-            {broker.id === "dhan" && !broker.liveFeed ? (
+            {broker.id === "dhan" ? (
               <div className="mt-3 space-y-2">
                 <label className="block text-xs font-semibold">
                   Client ID
@@ -376,51 +402,60 @@ export function Brokers() {
                   <input
                     type="password"
                     className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                    value={dhanToken}
+                    value={dhanTokenFocused ? dhanToken : displaySavedSecret(dhanToken, feed?.tokenHint || "")}
+                    onFocus={() => setDhanTokenFocused(true)}
+                    onBlur={() => setDhanTokenFocused(false)}
                     onChange={(event) => setDhanToken(event.target.value)}
-                    placeholder="24-hour Access Token"
+                    placeholder={feed?.tokenHint || "24-hour Access Token"}
                     autoComplete="off"
                   />
                 </label>
+                <p className="text-[11px] text-slate-500">
+                  {feed?.tokenHint
+                    ? `Saved ${feed.tokenHint}. The token stays after deploy. Paste a new one only to replace it. Saving does not start the data feed.`
+                    : "No access token saved yet. Paste it here and save. That does not start the data feed."}
+                </p>
                 {error && selected === null ? (
                   <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void connectDhanCard()}
-                  className="h-9 w-full rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
-                >
-                  {busy ? "Connecting..." : "Connect with access token"}
-                </button>
-              </div>
-            ) : (
-            <div className="mt-3 flex gap-2">
-              {broker.id === "dhan" ? (
-                <>
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => openForm(broker)}
-                    className="h-9 flex-1 rounded-lg bg-brand-500 text-xs font-semibold text-white"
+                    disabled={busy}
+                    onClick={() => void connectDhanCard()}
+                    className="h-9 flex-1 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
                   >
-                    Update access token
+                    {busy ? "Saving..." : "Save access token"}
                   </button>
-                  {broker.liveFeed && (
+                  {broker.liveFeed ? (
                     <button
                       type="button"
+                      disabled={busy}
                       onClick={() => {
-                        const last = broker.clientId || "";
+                        const last = broker.clientId || savedDhanClientId;
                         void disconnect(broker.id).then(() => {
                           if (last) setDhanClientId(last);
                         });
                       }}
                       className="h-9 flex-1 rounded-lg border border-[var(--border)] text-xs font-semibold"
                     >
-                      Stop live feed
+                      Stop data feed
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy || !feed?.tokenHint}
+                      onClick={() => void startSavedFeed()}
+                      className="h-9 flex-1 rounded-lg border border-[var(--border)] text-xs font-semibold disabled:opacity-60"
+                    >
+                      Start data feed
                     </button>
                   )}
-                </>
-              ) : broker.connected ? (
+                </div>
+              </div>
+            ) : (
+            <div className="mt-3 flex gap-2">
+              {broker.connected ? (
                 <>
                   {!broker.active && (
                     <button

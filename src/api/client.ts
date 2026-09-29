@@ -1373,6 +1373,10 @@ export function refreshDhanToken(
   }>("/brokers/dhan/reset", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export function startDhanFeed() {
+  return request<{ snapshot: Snapshot; tokenHint?: string; live?: boolean }>("/brokers/dhan/feed", { method: "POST" });
+}
+
 export function connectBroker(
   id: string,
   payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string; jwtToken?: string },
