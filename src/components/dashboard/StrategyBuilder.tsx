@@ -360,6 +360,23 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
         </label>
 
+        {crudeFirst ? (
+          <label className="mt-4 block text-xs font-semibold text-slate-500" data-trade-limit="crude">
+            Trade limit
+            <input
+              type="number"
+              min={1}
+              max={20}
+              inputMode="numeric"
+              aria-label="Trade limit"
+              className={fieldClass}
+              value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+              onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+            />
+            <span className="mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
+          </label>
+        ) : null}
+
         {niftyTest ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
@@ -645,21 +662,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : firstCandle || crudeFirst ? (
           <div className="mt-4 space-y-3">
-            {crudeFirst ? (
-              <label className="block text-xs font-semibold text-slate-500">
-                Max trades
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  inputMode="numeric"
-                  aria-label="Max trades"
-                  className={fieldClass}
-                  value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
-                  onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
-                />
-              </label>
-            ) : null}
             <p className="text-[11px] font-semibold text-slate-400">
               {crudeFirst
                 ? `Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked. One signal places one order, up to ${Math.max(1, Math.min(20, Math.round(Number(form.maxTradesPerDay) || 5)))} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle.`
@@ -719,6 +721,22 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : (
         <div className="mt-4 space-y-3">
+          {String(form.symbol || algo?.symbol || "").toUpperCase() === "CRUDEOIL" || /crude/i.test(String(form.name || algo?.name || "")) ? (
+            <label className="block text-xs font-semibold text-slate-500" data-trade-limit="crude">
+              Trade limit
+              <input
+                type="number"
+                min={1}
+                max={20}
+                inputMode="numeric"
+                aria-label="Trade limit"
+                className={fieldClass}
+                value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+                onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+              />
+              <span className="mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
+            </label>
+          ) : null}
           <ConditionGroupEditor
             label="BUY when"
             group={

@@ -250,6 +250,23 @@ test("spaced crude first candle name is not stored as an indicator", () => {
   assert.match(vwap.summary, /^Indicator /);
 });
 
+test("crude oil indicator keeps the trade limit and stays paused", () => {
+  const row = normalizeAlgo(
+    { name: "CRUDE OIL VWAP ATM", kind: "indicator", symbol: "CRUDEOIL", indicator: "VWAP", maxTradesPerDay: 3 },
+    { id: "a7", enabled: false, status: "PAUSED" },
+  );
+  assert.equal(row.kind, "indicator");
+  assert.equal(row.maxTradesPerDay, 3);
+  assert.equal(row.enabled, false);
+  assert.notEqual(row.status, "LIVE");
+  const nifty = normalizeAlgo(
+    { name: "NIFTY 5m first candle", kind: "indicator", maxTradesPerDay: 1 },
+    { id: "a10", enabled: false, status: "PAUSED" },
+  );
+  assert.equal(nifty.kind, "nifty-first-candle");
+  assert.equal(nifty.maxTradesPerDay, 5);
+});
+
 test("hydrate rematerializes first candle saved as a generic indicator", () => {
   const catalog = seedAlgos();
   const next = hydrateAlgos(

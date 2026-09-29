@@ -815,6 +815,10 @@ export function normalizeAlgo(input = {}, existing = {}) {
     enabled: existing.enabled ?? false,
     status: existing.status || "PAUSED",
   };
+  if (String(symbol).toUpperCase() === "CRUDEOIL" && input.maxTradesPerDay != null) {
+    const requested = Number(input.maxTradesPerDay);
+    if (Number.isFinite(requested)) next.maxTradesPerDay = Math.max(1, Math.min(20, Math.round(requested)));
+  }
   delete next.trade;
   next.summary = summarizeAlgo(next);
   return withMapping(next, input, existing);

@@ -394,14 +394,14 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
   };
 
   return (
-    <label className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
-      Max trades
+    <label className="mt-2 flex w-full flex-wrap items-center gap-2 text-sm font-bold text-[var(--text)]" data-trade-limit="crude">
+      Trade limit
       <input
         type="number"
         min={1}
         max={20}
         inputMode="numeric"
-        aria-label="Max trades"
+        aria-label="Trade limit"
         className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
         value={value}
         onChange={(event) => setValue(event.target.value)}
@@ -490,6 +490,7 @@ function AlgoCard({
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-lg font-bold">{algo.name}</h2>
+            {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
             <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
             {algo.runMode === "live" ? (
@@ -498,7 +499,6 @@ function AlgoCard({
               </div>
             ) : null}
             <div className="mt-1 text-[11px] text-slate-500">{contract}</div>
-            {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
             ) : null}
@@ -601,7 +601,7 @@ function AlgoCard({
       </div>
       {isCrudeFirstCandleKind(algo) ? (
         <div className="mt-2 text-[11px] text-slate-500">
-          Saving or mapping clients does not start LIVE and does not place an order. Max trades is on this card. One signal places one order. Press Start to run it.
+          Saving or mapping clients does not start LIVE and does not place an order. Trade limit is under the strategy name. One signal places one order. Press Start to run it.
         </div>
       ) : null}
       {isNiftyOptionEngineKind(algo) ? (
