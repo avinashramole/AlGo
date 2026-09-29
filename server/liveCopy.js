@@ -17,6 +17,18 @@ function subscriptionOpen(until) {
   return day >= new Date().toISOString().slice(0, 10);
 }
 
+function isNiftyFirstCandleName(name) {
+  const text = String(name || "");
+  return /nifty/i.test(text) && /first\s*candle/i.test(text) && !/crude/i.test(text);
+}
+
+function isCrudeFirstCandleName(name) {
+  const text = String(name || "");
+  if (!/crude/i.test(text) || !/first\s*candle/i.test(text)) return false;
+  if (/(?:^|[^0-9])15\s*m/i.test(text)) return false;
+  return true;
+}
+
 function deskCopyMatches({ strategyName, strategyId } = {}) {
   const mapped = new Set();
   const copyMaster = new Set();
@@ -158,6 +170,34 @@ function mergeCopyTargets(...lists) {
   return [...byUser.values()];
 }
 
+/** Crude already copies to its mapped user. NIFTY 5m first candle uses that same user. */
+function niftySharesCrudeCopyTargets(payload = {}, algo = {}) {
+  if (String(algo.mappingScope || "") === "master") return [];
+  if (!isNiftyFirstCandleName(payload.strategy)) return [];
+  const ids = new Set();
+  for (const id of Array.isArray(algo.alsoMappedClientIds) ? algo.alsoMappedClientIds : []) {
+    const clean = String(id || "").trim();
+    if (clean && clean !== "admin") ids.add(clean);
+  }
+  for (const row of listDeskRecords()) {
+    if (!row.userId || row.userId === "admin") continue;
+    if (!subscriptionOpen(row.subscriptionUntil)) continue;
+    if (!isCrudeFirstCandleName(row.mappedStrategy)) continue;
+    ids.add(row.userId);
+  }
+  const targets = [];
+  for (const userId of ids) {
+    const target = copyTargetForUser(userId, {
+      masterQty: payload.qty,
+      lotSize: payload.lotSize || payload.qty,
+      strategyId: algo.id,
+      strategyName: payload.strategy,
+    });
+    if (target) targets.push(target);
+  }
+  return targets;
+}
+
 export function memberCopyPayloads(payload = {}, algo = {}) {
   const targets = mergeCopyTargets(
     listLiveCopyTargets({
@@ -172,6 +212,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
       masterQty: payload.qty,
       lotSize: payload.lotSize || payload.qty,
     }),
+    niftySharesCrudeCopyTargets(payload, algo),
   );
   return targets.map((target) => ({
     ...payload,

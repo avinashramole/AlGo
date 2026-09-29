@@ -615,6 +615,22 @@ function sameBookOrder(payload = {}) {
   return { ...payload, type: "LIMIT", price };
 }
 
+function liveCopyAlgo(stamped = {}) {
+  const name = String(stamped?.strategy || "");
+  const exact = (state.algos || []).find((row) => String(row.name || "") === name) || {};
+  const niftyFirst = isNiftyFirstCandleAlgo(exact) || (/nifty/i.test(name) && /first\s*candle/i.test(name) && !/crude/i.test(name));
+  if (!niftyFirst || String(exact.mappingScope || "") === "master") return exact;
+  const also = new Set();
+  for (const row of state.algos || []) {
+    if (!isCrudeFirstCandleAlgo(row)) continue;
+    for (const id of row.mappedClientIds || []) {
+      const clean = String(id || "").trim();
+      if (clean) also.add(clean);
+    }
+  }
+  return also.size ? { ...exact, alsoMappedClientIds: [...also] } : exact;
+}
+
 export function queueLiveAlgoOrder(payload) {
   const priced = sameBookOrder(payload);
   const securityId = contractSecurityId(priced);
@@ -628,7 +644,7 @@ export function queueLiveAlgoOrder(payload) {
   for (const brokerId of targets) {
     last = enqueueLiveAlgoOrder({ ...stamped, brokerId });
   }
-  const algo = (state.algos || []).find((row) => String(row.name || "") === String(stamped?.strategy || ""));
+  const algo = liveCopyAlgo(stamped);
   for (const copy of memberCopyPayloads(stamped, algo || {})) {
     last = enqueueLiveAlgoOrder(copy);
   }

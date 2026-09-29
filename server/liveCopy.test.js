@@ -767,3 +767,93 @@ test("mapped crude copy keeps the crude contract and the member token", async ()
   assert.equal(copy.type, "LIMIT");
   assert.equal(copy.price, 42.5);
 });
+
+test("nifty first candle uses the same mapped user as crude and keeps the NIFTY contract", async () => {
+  const user = { id: "u-nifty-same-copy", name: "Nifty Same", email: "niftysame@t2s.app", role: "user" };
+  const other = { id: "u-vwap-only", name: "Vwap Only", email: "vwaponly@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "upstox" });
+  installMemberBroker({ user, brokerId: "upstox", clientId: "393216", accessToken: "nifty-upstox-token" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "CRUDE OIL 5m first candle",
+    tradeMode: "real",
+    brokerId: "upstox",
+  });
+  selectMemberBroker({ user: other, brokerId: "dhan" });
+  installMemberBroker({ user: other, brokerId: "dhan", clientId: "1100999", accessToken: "vwap-token" });
+  saveClientSettings(other.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "NIFTY VWAP ATM",
+    tradeMode: "real",
+    brokerId: "dhan",
+  });
+  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder } = await import("./market.js");
+  drainPendingLiveAlgoOrders();
+  const queuedResult = queueLiveAlgoOrder({
+    strategy: "NIFTY 5m first candle",
+    side: "BUY",
+    symbol: "NIFTY 22650 CE",
+    qty: 65,
+    price: 118.2,
+    option: "CE",
+    strike: 22650,
+    expiry: "2026-10-06",
+    kind: "option",
+    securityId: "51338",
+    product: "MIS",
+    type: "MARKET",
+    brokerId: "dhan",
+  });
+  assert.equal(queuedResult.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  const admin = queued.find((row) => row.strategy === "NIFTY 5m first candle" && !row.copyUserId);
+  const copy = queued.find((row) => row.copyUserId === user.id && row.strategy === "NIFTY 5m first candle");
+  assert.ok(admin);
+  assert.equal(admin.symbol, "NIFTY 22650 CE");
+  assert.equal(admin.qty, 65);
+  assert.equal(admin.securityId, "51338");
+  assert.equal(admin.brokerId, "dhan");
+  assert.ok(copy);
+  assert.equal(copy.symbol, "NIFTY 22650 CE");
+  assert.equal(copy.qty, 65);
+  assert.equal(copy.strike, 22650);
+  assert.equal(copy.option, "CE");
+  assert.equal(copy.expiry, "2026-10-06");
+  assert.equal(copy.securityId, "51338");
+  assert.equal(copy.product, "MIS");
+  assert.equal(copy.exchangeSegment, undefined);
+  assert.equal(copy.type, "LIMIT");
+  assert.equal(copy.price, 118.2);
+  assert.equal(copy.brokerId, "upstox");
+  assert.equal(copy.account.accessToken, "nifty-upstox-token");
+  assert.equal(copy.account.clientId, "393216");
+  assert.equal(queued.some((row) => row.copyUserId === other.id), false);
+
+  const cardMapped = memberCopyPayloads(
+    {
+      strategy: "NIFTY 5m first candle",
+      side: "BUY",
+      symbol: "NIFTY 22900 CE",
+      qty: 65,
+      option: "CE",
+      strike: 22900,
+      expiry: "2026-10-06",
+      product: "MIS",
+      brokerId: "dhan",
+    },
+    { id: "a10", name: "NIFTY 5m first candle", mappingScope: "both", mappedClientIds: [], alsoMappedClientIds: [other.id] },
+  );
+  const fromCard = cardMapped.find((row) => row.copyUserId === other.id);
+  assert.ok(fromCard);
+  assert.equal(fromCard.symbol, "NIFTY 22900 CE");
+  assert.equal(fromCard.qty, 65);
+  assert.equal(fromCard.product, "MIS");
+
+  const master = memberCopyPayloads(
+    { strategy: "NIFTY 5m first candle", side: "BUY", symbol: "NIFTY 22650 CE", qty: 65, brokerId: "dhan" },
+    { id: "a10", name: "NIFTY 5m first candle", mappingScope: "master", mappedClientIds: [user.id], alsoMappedClientIds: [user.id] },
+  );
+  assert.equal(master.some((row) => row.copyUserId === user.id), false);
+});
