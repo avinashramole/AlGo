@@ -71,6 +71,11 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
     });
   }
   for (const algo of algos || []) {
+    const niftyTest = algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
+    if (niftyTest) {
+      const exact = String(algo.lastSignal || "").trim().toUpperCase();
+      if (!algo.enabled || (exact !== "BUY" && exact !== "SELL")) continue;
+    }
     const action = signalAction(algo.lastSignal);
     if (!action) continue;
     const symbol = optionFromSignal(algo.lastSignal, algo);

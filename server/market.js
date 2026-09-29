@@ -29,6 +29,7 @@ import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
   isNiftyFirstCandleAlgo,
   isNiftyOptionEngineAlgo,
+  isNiftyTestAlgo,
   isNiftyVwapReversalAlgo,
   LiveTradingAdapter,
   NiftyVwapStrategy,
@@ -440,6 +441,7 @@ const state = {
 const optionChainCache = new Map();
 const liveCandleCache = new Map();
 const pendingLiveAlgoOrders = [];
+const niftyFutureCandles = [];
 
 function rememberOptionChain(symbol, rows, meta) {
   const id = String(symbol || "").toUpperCase();
@@ -1634,11 +1636,12 @@ export function toggleAlgo(id, patch = {}) {
     }
   }
   algo.enabled = wantEnabled;
+  if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   if (starting) {
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
-    algo.lastSignal = "WAIT";
+    algo.lastSignal = isNiftyTestAlgo(algo) ? "NO SIGNAL" : "WAIT";
     if (isNiftyOptionEngineAlgo(algo)) {
       const vs = runtimeState(algo);
       vs.inFlight = false;
@@ -1823,6 +1826,20 @@ function runPaperAlgos() {
       continue;
     }
     if (!feedLive) continue;
+    if (isNiftyTestAlgo(algo)) {
+      const side = niftyTestSide(algo);
+      algo.lastSignal = side || "NO SIGNAL";
+      if (!side) continue;
+      if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
+      const trade = resolveAlgoTrade(algo);
+      if (!trade?.ready || !(trade.ltp > 0)) continue;
+      placeOrder({
+        ...algoOrderFields(algo, side, trade),
+        brokerId: "paper",
+      });
+      algo.lastPaperAt = now;
+      continue;
+    }
     if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
     const pack = candlesForBacktest(algo.timeframe, false, algo.symbol);
     if (pack.candles.length < 32) continue;
@@ -1870,11 +1887,31 @@ function runLiveAlgos() {
       continue;
     }
     if (!feedLive) {
-      algo.lastSignal = "FEED DOWN";
+      algo.lastSignal = isNiftyTestAlgo(algo) ? "NO SIGNAL" : "FEED DOWN";
       continue;
     }
     if (!sessionOpenForAlgo(algo)) {
-      algo.lastSignal = "WAIT SESSION";
+      algo.lastSignal = isNiftyTestAlgo(algo) ? "NO SIGNAL" : "WAIT SESSION";
+      continue;
+    }
+    if (isNiftyTestAlgo(algo)) {
+      const side = niftyTestSide(algo);
+      algo.lastSignal = side || "NO SIGNAL";
+      if (!side) continue;
+      if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000 && algo.lastLiveSide === side) continue;
+      const openLive = (state.positions || []).find(
+        (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
+      );
+      if (algo.lastLiveSide === side && openLive) continue;
+      const trade = resolveAlgoTrade(algo);
+      if (!trade?.ready || trade.kind !== "future" || !(trade.ltp > 0)) continue;
+      queueLiveAlgoOrder({
+        ...algoOrderFields(algo, side, trade),
+        brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
+      });
+      algo.lastLiveAt = now;
+      algo.lastLiveSide = side;
+      algo.lastSignal = side;
       continue;
     }
     if (algo.lastLiveAt && now - algo.lastLiveAt < 60_000) continue;
@@ -2497,6 +2534,48 @@ function seedLiveCandles(price) {
   liveCandleCache.set("NIFTY", candles);
 }
 
+function noteNiftyFuturePrice(price) {
+  const ltp = Number(price);
+  if (!(ltp > 0)) return;
+  const now = Date.now();
+  const last = niftyFutureCandles[niftyFutureCandles.length - 1];
+  if (!last || now - last.time >= 60_000) {
+    const open = last ? last.close : ltp;
+    niftyFutureCandles.push({
+      time: now,
+      open,
+      high: Math.max(open, ltp),
+      low: Math.min(open, ltp),
+      close: ltp,
+      volume: 0,
+    });
+    if (niftyFutureCandles.length > 400) niftyFutureCandles.shift();
+    return;
+  }
+  last.close = ltp;
+  last.high = Math.max(last.high, ltp);
+  last.low = Math.min(last.low, ltp);
+}
+
+function niftyFutureBars(timeframe) {
+  if (niftyFutureCandles.length < 2) return [];
+  const tf = String(timeframe || "5m");
+  const minutes = tf === "1m" ? 1 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  if (minutes <= 1) return niftyFutureCandles.slice();
+  return VwapSignalEngine.aggregateSessionBars(niftyFutureCandles, minutes);
+}
+
+export function niftyTestSide(algo) {
+  const candles = niftyFutureBars(algo?.timeframe);
+  if (candles.length < 2) return "";
+  const signal = evaluateSignals(candles, candles.length - 1, algo);
+  const wantBuy = Boolean(signal.buy) && (algo.side === "BUY" || algo.side === "BOTH" || !algo.side);
+  const wantSell = Boolean(signal.sell) && (algo.side === "SELL" || algo.side === "BOTH" || !algo.side);
+  if (wantBuy) return "BUY";
+  if (wantSell) return "SELL";
+  return "";
+}
+
 function updateLiveCandle(price) {
   if (!state.liveCandles.length) seedLiveCandles(price);
   const last = state.liveCandles[state.liveCandles.length - 1];
@@ -2555,6 +2634,7 @@ export function applyLiveQuotes(quotes) {
         index.prevClose = day.prevClose;
         index.spark = pushSpark(index.spark, ltp);
       }
+      if (index.symbol === "NIFTY 50") noteNiftyFuturePrice(ltp);
       continue;
     }
     if (index && Number(quote.prevClose) > 0 && !(Number.isFinite(ltp) && ltp > 0)) {

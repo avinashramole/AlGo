@@ -36,6 +36,37 @@ test("buildLiveSignals uses desk orders and skips rejected rows", () => {
   assert.equal(rows[0].strategy, "NIFTY 15m VWAP hedge");
 });
 
+test("nifty test does not show BUY in the signal feed unless that side just fired", () => {
+  const quiet = buildLiveSignals({
+    algos: [
+      { id: "a11", name: "nifty test", kind: "nifty-test", enabled: true, lastSignal: "NO SIGNAL", symbol: "NIFTY" },
+      {
+        id: "a11b",
+        name: "nifty test",
+        kind: "nifty-test",
+        enabled: false,
+        lastSignal: "BUY",
+        symbol: "NIFTY",
+      },
+      {
+        id: "a11c",
+        name: "nifty test",
+        kind: "nifty-test",
+        enabled: true,
+        lastSignal: "Preview green + break high → BUY NIFTY FUT",
+        symbol: "NIFTY",
+      },
+    ],
+  });
+  assert.equal(quiet.length, 0);
+  const live = buildLiveSignals({
+    algos: [{ id: "a11", name: "nifty test", kind: "nifty-test", enabled: true, lastSignal: "BUY", symbol: "NIFTY" }],
+  });
+  assert.equal(live.length, 1);
+  assert.equal(live[0].action, "BUY");
+  assert.equal(live[0].strategy, "nifty test");
+});
+
 test("featured signal is empty until a live BUY or SELL exists", () => {
   assert.equal(buildFeaturedSignal([]).symbol, "");
   assert.equal(emptyFeaturedSignal().confidence, 0);

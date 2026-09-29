@@ -383,7 +383,9 @@ function AlgoCard({
       ? algo.lastSignal
       : algo.trade?.hint || "15m: O<VWAP C>VWAP → BUY CE · O>VWAP C<VWAP → BUY PE"
     : isNiftyTestKind(algo)
-      ? algo.lastSignal || "Preview green + break high → BUY NIFTY FUT · preview red + break low → SELL NIFTY FUT"
+      ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
+        ? algo.lastSignal
+        : "No signal"
     : isNiftyFirstCandleKind(algo)
       ? algo.lastSignal || "09:00–09:05: Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE"
       : algo.lastSignal && algo.enabled
