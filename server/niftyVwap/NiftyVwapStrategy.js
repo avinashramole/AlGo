@@ -4,7 +4,27 @@ import { PositionManager, runtimeState, resetSession } from "./PositionManager.j
 import { RiskManager } from "./RiskManager.js";
 import { TradeLogger } from "./TradeLogger.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
-import { VwapSignalEngine, sessionKeyIST } from "./VwapSignalEngine.js";
+import { VwapSignalEngine, istWallTime, sessionKeyIST } from "./VwapSignalEngine.js";
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function candleWindowIst(barTime, barMinutes) {
+  const time = Number(barTime);
+  if (!(time > 0)) return "";
+  const wall = istWallTime(time);
+  const start = wall.hour * 60 + wall.minute;
+  const end = start + Math.max(1, Number(barMinutes) || 5);
+  return `${pad2(wall.hour)}:${pad2(wall.minute)}–${pad2(Math.floor(end / 60) % 24)}:${pad2(end % 60)} IST`;
+}
+
+function niftyFutCandleText(signal, config) {
+  const open = Number(signal.futuresOpen || 0).toFixed(2);
+  const close = Number(signal.futuresClose || 0).toFixed(2);
+  const clock = candleWindowIst(signal.barTime, config.barMinutes || 5);
+  return { open, close, clock: clock ? ` · ${clock}` : "" };
+}
 
 function istMinutesToClose(now = Date.now()) {
   const parts = Object.fromEntries(
@@ -88,25 +108,24 @@ export const NiftyVwapStrategy = {
     }
     if (!signal.buyCe && !signal.buyPe) {
       if (config.signalMode === "first-candle") {
-        const open = Number(signal.futuresOpen || 0).toFixed(2);
-        const close = Number(signal.futuresClose || 0).toFixed(2);
+        const tape = niftyFutCandleText(signal, config);
         if (signal.waitingEval) {
           algo.lastSignal = "WAIT 09:05 FIRST 5m CLOSE";
           return { action: "wait", reason: "wait-eval" };
         }
         if (signal.niftyColor === "doji") {
-          algo.lastSignal = `NO TRADE · NIFTY DOJI O ${open} C ${close} · next 5m`;
+          algo.lastSignal = `NO TRADE · NIFTY FUT DOJI O ${tape.open} C ${tape.close}${tape.clock} · next 5m`;
           return { action: "wait", reason: "first-doji" };
         }
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
           algo.lastSignal = signal.ceColor
-            ? `NO TRADE · NIFTY GREEN CE ${signal.ceColor.toUpperCase()} O ${open} C ${close} · next 5m`
+            ? `NO TRADE · NIFTY FUT GREEN CE ${signal.ceColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
             : "WAIT CE 5m";
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
           algo.lastSignal = signal.peColor
-            ? `NO TRADE · NIFTY RED PE ${signal.peColor.toUpperCase()} O ${open} C ${close} · next 5m`
+            ? `NO TRADE · NIFTY FUT RED PE ${signal.peColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
             : "WAIT PE 5m";
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
@@ -214,7 +233,7 @@ export const NiftyVwapStrategy = {
     });
     algo.lastSignal =
       config.signalMode === "first-candle"
-        ? `BUY ATM ${pick.option} · NIFTY ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}`
+        ? `BUY ATM ${pick.option} · NIFTY FUT ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
         : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },

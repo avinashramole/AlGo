@@ -442,6 +442,9 @@ const optionChainCache = new Map();
 const liveCandleCache = new Map();
 const pendingLiveAlgoOrders = [];
 const niftyFutureCandles = [];
+let niftyFutureChartCandles = [];
+const niftyFutureMinuteBars = [];
+let niftyLiveCandleInstrument = "";
 
 function rememberOptionChain(symbol, rows, meta) {
   const id = String(symbol || "").toUpperCase();
@@ -736,7 +739,11 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   if (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) {
     preferWeeklyDeskForReversal();
   }
-  const futuresBars = feedLive ? getCandles(config.timeframe || "5m") : [];
+  const futuresBars = feedLive
+    ? isNiftyFirstCandleAlgo(algo)
+      ? niftyFutureSignalBars(config.timeframe || "5m", now)
+      : getCandles(config.timeframe || "5m")
+    : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
   const und = getUnderlying("NIFTY");
@@ -754,7 +761,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     }
   }
   if (feedLive && !open && !futuresBars.length) {
-    algo.lastSignal = "WAIT CANDLES";
+    algo.lastSignal = isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
     return;
   }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
@@ -2376,11 +2383,122 @@ export function replaceDhanBook(rows) {
   if (typeof onLiveBookChange === "function") onLiveBookChange();
 }
 
-export function setLiveCandles(candles, symbol = "NIFTY") {
+export function setNiftyFutureChartCandles(candles) {
+  if (!Array.isArray(candles) || !candles.length) {
+    niftyFutureChartCandles = [];
+    return;
+  }
+  niftyFutureChartCandles = candles.map((row) => ({
+    time: Number(row.time),
+    open: Number(row.open),
+    high: Number(row.high),
+    low: Number(row.low),
+    close: Number(row.close),
+    volume: Number(row.volume) || 0,
+  }));
+}
+
+export function peekNiftyFutureBars() {
+  const source = niftyFutureChartCandles.length ? niftyFutureChartCandles : niftyFutureMinuteBars;
+  return source.map((row) => ({ ...row }));
+}
+
+function futureMinuteOpen(ms) {
+  return VwapSignalEngine.sessionBarOpenMs(ms, 1, {
+    closeLabeled: false,
+    sessionOpenMinutes: 9 * 60 + 15,
+  });
+}
+
+function seriesStepMs(series) {
+  const deltas = [];
+  const rows = Array.isArray(series) ? series : [];
+  for (let i = 1; i < Math.min(rows.length, 24); i += 1) {
+    const delta = Number(rows[i]?.time) - Number(rows[i - 1]?.time);
+    if (delta > 0) deltas.push(delta);
+  }
+  if (!deltas.length) return 60_000;
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)];
+}
+
+function patchFutureMinute(series, openMs, price, now) {
+  if (!Array.isArray(series) || openMs == null) return;
+  const step = seriesStepMs(series);
+  const last = series[series.length - 1];
+  if (step >= 5 * 60_000 - 1000) {
+    if (!last) return;
+    const start = Number(last.time);
+    if (now >= start && now < start + step) {
+      last.high = Math.max(Number(last.high) || price, price);
+      last.low = Math.min(Number(last.low) || price, price);
+      last.close = price;
+    }
+    return;
+  }
+  if (!last) {
+    series.push({ time: openMs, open: price, high: price, low: price, close: price, volume: 0 });
+    return;
+  }
+  const lastBucket = futureMinuteOpen(last.time);
+  if (lastBucket === openMs || Number(last.time) === openMs) {
+    last.high = Math.max(Number(last.high) || price, price);
+    last.low = Math.min(Number(last.low) || price, price);
+    last.close = price;
+    return;
+  }
+  if (lastBucket != null && openMs < lastBucket) return;
+  if (openMs > Number(last.time)) {
+    series.push({ time: openMs, open: price, high: price, low: price, close: price, volume: 0 });
+    if (series === niftyFutureMinuteBars && series.length > 400) series.shift();
+  }
+}
+
+function touchNiftyFutureMinute(ltp, now = Date.now()) {
+  const price = Number(ltp);
+  if (!(price > 0)) return;
+  const openMs = futureMinuteOpen(now);
+  if (openMs == null) return;
+  if (niftyFutureChartCandles.length) patchFutureMinute(niftyFutureChartCandles, openMs, price, now);
+  else patchFutureMinute(niftyFutureMinuteBars, openMs, price, now);
+  if (niftyLiveCandleInstrument === "FUTIDX") patchFutureMinute(state.liveCandles, openMs, price, now);
+}
+
+function barsMatchMinutes(candles, minutes) {
+  if (!Array.isArray(candles) || candles.length < 2) return false;
+  const target = Math.max(1, Number(minutes) || 5) * 60_000;
+  const step = seriesStepMs(candles);
+  return step >= target * 0.8 && step <= target * 1.2;
+}
+
+export function niftyFutureSignalBars(timeframe = "5m", now = Date.now()) {
+  const chartIsFuture = niftyLiveCandleInstrument === "FUTIDX" && state.liveCandles.length;
+  const source = niftyFutureChartCandles.length
+    ? niftyFutureChartCandles
+    : chartIsFuture
+      ? state.liveCandles
+      : niftyFutureMinuteBars;
+  if (!source.length) return [];
+  const tf = String(timeframe || "5m");
+  const minutes = tf === "1m" ? 1 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  const barMs = minutes * 60_000;
+  if (barsMatchMinutes(source, minutes)) {
+    return source
+      .filter((bar) => Number(bar.close) > 0 && now >= Number(bar.time) + barMs)
+      .map((bar) => ({ ...bar }));
+  }
+  return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
+    closeLabeled: false,
+    sessionOpenMinutes: 9 * 60 + 15,
+  });
+}
+
+export function setLiveCandles(candles, symbol = "NIFTY", instrument = "") {
   if (!Array.isArray(candles) || !candles.length) return;
   const key = candleSymbol(symbol);
   liveCandleCache.set(key, candles);
   if (key !== "NIFTY") return;
+  niftyLiveCandleInstrument = instrument ? String(instrument) : "";
   state.liveCandles = candles;
   const last = candles[candles.length - 1];
   state.ohlc = {
@@ -2582,6 +2700,7 @@ export function niftyTestSide(algo) {
 }
 
 function updateLiveCandle(price) {
+  if (niftyLiveCandleInstrument === "FUTIDX") return;
   if (!state.liveCandles.length) seedLiveCandles(price);
   const last = state.liveCandles[state.liveCandles.length - 1];
   const now = Date.now();
@@ -2639,7 +2758,10 @@ export function applyLiveQuotes(quotes) {
         index.prevClose = day.prevClose;
         index.spark = pushSpark(index.spark, ltp);
       }
-      if (index.symbol === "NIFTY 50") noteNiftyFuturePrice(ltp);
+      if (index.symbol === "NIFTY 50") {
+        noteNiftyFuturePrice(ltp);
+        touchNiftyFutureMinute(ltp);
+      }
       continue;
     }
     if (index && Number(quote.prevClose) > 0 && !(Number.isFinite(ltp) && ltp > 0)) {

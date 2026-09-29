@@ -245,7 +245,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY 5m first candle"
-            text="Every 5m candle until one trade. Nifty green + ATM CE green → BUY ATM CE. Nifty red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
+            text="Every 5m NIFTY FUT candle until one trade. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -289,7 +289,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               : reversal
               ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
               : firstCandle
-              ? "NIFTY options from the first completed candle, then every later 5m candle until one trade is placed. Default: LIVE at 09:00 IST. Nifty green + CE green → BUY CE. Nifty red + PE green → BUY PE. Doji is no trade on that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
+              ? "NIFTY options from the first completed NIFTY FUT candle, then every later 5m candle until one trade is placed. Default: LIVE at 09:00 IST. NIFTY FUT green + CE green → BUY CE. NIFTY FUT red + PE green → BUY PE. Doji is no trade on that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE."
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (

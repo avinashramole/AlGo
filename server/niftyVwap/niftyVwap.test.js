@@ -1117,6 +1117,7 @@ test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail
     adapter: book.adapter,
   });
   assert.equal(result.action, "entry");
+  assert.match(algo.lastSignal, /NIFTY FUT GREEN/);
   assert.equal(book.places[0].option, "CE");
   assert.equal(book.places[0].side, "BUY");
   assert.equal(algo.vwapState.stopPrice, TrailingStopManager.initialStop(118, 20));
@@ -1265,6 +1266,33 @@ test("first candle ATM offset is applied to the strike", () => {
 test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
   assert.equal(TrailingStopManager.initialStop(100, 20), 80);
   assert.equal(TrailingStopManager.targetPrice(100, 40), 140);
+});
+
+test("first candle no-trade line prints the Nifty future candle", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Fut OHLC" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22663, 22647.5)],
+    ceBars: [firstBar(100, 90)],
+    peBars: [firstBar(120, 100)],
+    ceLtp: 90,
+    peLtp: 100,
+    spot: 22647.5,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "wait");
+  assert.equal(tick.reason, "pe-not-green");
+  assert.equal(book.places.length, 0);
+  assert.match(algo.lastSignal, /NO TRADE · NIFTY FUT RED PE RED O 22663\.00 C 22647\.50/);
+  assert.match(algo.lastSignal, /09:00–09:05 IST/);
+  assert.doesNotMatch(algo.lastSignal, /22678/);
 });
 
 test("first candle waits until 09:05, then a later 5m candle can trade", () => {

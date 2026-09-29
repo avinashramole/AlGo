@@ -96,7 +96,8 @@ export function looksLikeOneMinuteBars(candles = [], barMinutes = 5) {
 export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.now(), opts = {}) {
   const step = Math.max(1, Number(barMinutes) || 5);
   const barMs = step * 60 * 1000;
-  const closeLabeled = looksLikeOneMinuteBars(candles, step);
+  const closeLabeled =
+    opts.closeLabeled == null ? looksLikeOneMinuteBars(candles, step) : Boolean(opts.closeLabeled);
   const sessionOpenMinutes = opts.sessionOpenMinutes;
   const buckets = new Map();
   for (const row of Array.isArray(candles) ? candles : []) {
