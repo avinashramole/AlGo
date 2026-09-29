@@ -399,12 +399,12 @@ test("Upstox switches a crude copy to NSE NSCOM when MCX orders are disabled and
     assert.equal(second.tradingSymbol, "CRUDEOIL 8700 CE 08 OCT 26");
     assert.equal(nifty.tradingSymbol, "");
     assert.deepEqual(
-      placed.map((row) => [row.instrument_token, row.quantity, row.order_type]),
+      placed.map((row) => [row.instrument_token, row.quantity, row.order_type, row.product]),
       [
-        ["MCX_FO|580473", 100, "LIMIT"],
-        ["NSE_COM|133060", 1, "LIMIT"],
-        ["NSE_COM|133060", 1, "LIMIT"],
-        ["NSE_FO|51338", 65, "MARKET"],
+        ["MCX_FO|580473", 100, "LIMIT", "D"],
+        ["NSE_COM|133060", 1, "LIMIT", "D"],
+        ["NSE_COM|133060", 1, "LIMIT", "D"],
+        ["NSE_FO|51338", 65, "MARKET", "I"],
       ],
     );
     assert.equal(placed[1].price, 454.5);
@@ -412,6 +412,60 @@ test("Upstox switches a crude copy to NSE NSCOM when MCX orders are disabled and
     resetUpstoxMasterCache();
     resetUpstoxMcxApiDisable();
   }
+});
+
+test("Upstox retries UDAPI100500 as delivery and keeps a normal NIFTY order intraday", async () => {
+  const placed = [];
+  const fetchImpl = async (url, options) => {
+    if (!String(url).includes("order/place")) return { ok: true, status: 200, text: async () => JSON.stringify({ data: [] }) };
+    const body = JSON.parse(options.body);
+    placed.push(body);
+    if (body.product === "I" && body.instrument_token === "NSE_FO|blocked") {
+      return {
+        ok: false,
+        status: 400,
+        text: async () =>
+          JSON.stringify({
+            errors: [{ errorCode: "UDAPI100500", message: "Intraday (I) orders are not allowed on this scrip." }],
+          }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ data: { order_id: "upx-d" } }) };
+  };
+  const blocked = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox",
+      brokerSession: { accessToken: "upstox-member-token", clientId: "393216" },
+      symbol: "NIFTY 22650 CE",
+      side: "BUY",
+      qty: 65,
+      instrumentKey: "NSE_FO|blocked",
+    },
+    fetchImpl,
+  );
+  const normal = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox",
+      brokerSession: { accessToken: "upstox-member-token", clientId: "393216" },
+      symbol: "NIFTY 22650 CE",
+      side: "BUY",
+      qty: 65,
+      instrumentKey: "NSE_FO|51338",
+    },
+    fetchImpl,
+  );
+  assert.equal(blocked.orderId, "upx-d");
+  assert.equal(normal.orderId, "upx-d");
+  assert.deepEqual(
+    placed.map((row) => [row.instrument_token, row.product, row.quantity]),
+    [
+      ["NSE_FO|blocked", "I", 65],
+      ["NSE_FO|blocked", "D", 65],
+      ["NSE_FO|51338", "I", 65],
+    ],
+  );
 });
 
 test("placeLiveBrokerOrder searches Upstox for NIFTY 22850 CE instead of using a Dhan security id", async () => {

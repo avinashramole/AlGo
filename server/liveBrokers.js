@@ -488,6 +488,10 @@ function upstoxMcxApiDisabledError(error) {
   return /UDAPI1161|MCX API orders are temporarily disabled|NSCOM/i.test(String(error?.message || ""));
 }
 
+function upstoxIntradayBlocked(error) {
+  return /UDAPI100500|Intraday \(I\) orders are not allowed/i.test(String(error?.message || ""));
+}
+
 async function responseText(res) {
   if (typeof res?.arrayBuffer === "function") {
     const buf = Buffer.from(await res.arrayBuffer());
@@ -900,9 +904,10 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
     };
     const upstoxOrder = (hit, token) => {
       const limit = upstoxLimit(payload, hit?.tick || 0);
+      const commodity = crude || String(token).startsWith("NSE_COM") || String(token).startsWith("MCX_");
       return {
         quantity: upstoxPlaceQuantity(payload, qty, hit || { key: token }),
-        product: product === "NRML" ? "D" : "I",
+        product: product === "NRML" || commodity ? "D" : "I",
         validity: "DAY",
         price: limit.price,
         instrument_token: token,
@@ -922,9 +927,11 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
     };
     let current = upstoxOrder(resolved, instrument);
     let nseUsed = useNseCommodity || String(instrument).startsWith("NSE_COM");
+    let deliveryRetried = current.product === "D";
     let lastError = null;
-    for (let round = 0; round < 2; round += 1) {
+    for (let round = 0; round < 3; round += 1) {
       let switchToNse = false;
+      let switchToDelivery = false;
       for (const attempt of upstoxAttempts(current)) {
         try {
           const body = await httpJson(fetchImpl, attempt.url, {
@@ -933,18 +940,26 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
             body: JSON.stringify(attempt.body),
           });
           const tradingSymbol = nseUsed ? resolved?.tradingSymbol || "" : "";
+          const note = [current.product === "D" && crude ? "Delivery" : "", tradingSymbol ? `NSE NSCOM · ${tradingSymbol}` : ""]
+            .filter(Boolean)
+            .join(" · ");
           return {
             orderId: String(body.data?.order_id || body.data?.order_ids?.[0] || body.order_id || ""),
             status: "PENDING",
             brokerId: "upstox",
             tradingSymbol,
-            reason: tradingSymbol ? `NSE NSCOM · ${tradingSymbol}` : "",
+            reason: note,
           };
         } catch (error) {
           lastError = error;
           if (!nseUsed && crude && upstoxMcxApiDisabledError(error)) {
             noteUpstoxMcxApiDisabled();
             switchToNse = true;
+            break;
+          }
+          if (!deliveryRetried && current.product === "I" && upstoxIntradayBlocked(error)) {
+            deliveryRetried = true;
+            switchToDelivery = true;
             break;
           }
           const message = String(error?.message || "");
@@ -955,6 +970,10 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
             /UDAPI10000|UDAPI100015|not supported|does not exist/i.test(message);
           if (!retry) throw decorateUpstoxPlaceError(error);
         }
+      }
+      if (switchToDelivery) {
+        current = { ...current, product: "D" };
+        continue;
       }
       if (!switchToNse) throw decorateUpstoxPlaceError(lastError || fail("Upstox live order place failed."));
       const nse = await resolveUpstoxInstrumentKey({
