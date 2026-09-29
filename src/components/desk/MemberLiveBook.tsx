@@ -134,7 +134,7 @@ export function MemberLiveBook({
 
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Trade book</div>
-        <p className="px-4 pt-1 text-xs text-slate-400">Closed trades with entry, exit, and P&L.</p>
+        <p className="px-4 pt-1 text-xs text-slate-400">Today's closed trades with entry, exit, and P&L.</p>
         <table className="mt-2 w-full min-w-[760px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
             <tr>
@@ -167,7 +167,7 @@ export function MemberLiveBook({
             ))}
           </tbody>
         </table>
-        {!closed.length ? <p className="px-4 pb-4 text-xs text-slate-400">No closed trades yet.</p> : null}
+        {!closed.length ? <p className="px-4 pb-4 text-xs text-slate-400">No closed trades today.</p> : null}
       </section>
     </>
   );

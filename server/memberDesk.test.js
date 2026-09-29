@@ -493,7 +493,7 @@ test("broker order book replaces a pending copy with REJECTED and keeps the limi
   installMemberBroker({ user: member, brokerId: "dhan", clientId: "110022650", accessToken: "status-token" });
   const pending = recordMemberCopyFill({
     userId: member.id,
-    payload: { symbol: "NIFTY 22650 CE", side: "BUY", qty: 65, price: 225.7, strategy: algo.name, brokerId: "dhan" },
+    payload: { symbol: "NIFTY 22650 CE", side: "BUY", qty: 65, price: 225.7, strategy: "NIFTY 5m first candle", brokerId: "dhan" },
     live: { orderId: "ord-22570", status: "TRANSIT", price: 225.7 },
   });
   assert.equal(pending.status, "PENDING");
@@ -512,7 +512,7 @@ test("broker order book replaces a pending copy with REJECTED and keeps the limi
       side: "BUY",
       qty: 65,
       price: 225.7,
-      strategy: algo.name,
+      strategy: "NIFTY 5m first candle",
       brokerId: "dhan",
     },
     { live: { orderId: "ord-22570", status: "PENDING", price: 225.7 } },

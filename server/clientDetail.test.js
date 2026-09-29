@@ -101,6 +101,17 @@ test("getClientDetail returns profile, subscription, transaction, and P&L", () =
           exit: 90,
           pnl: 1300,
           strategy: "NIFTY VWAP ATM",
+          closedAt: new Date().toISOString(),
+        },
+        {
+          id: "t-old",
+          symbol: "NIFTY 24400 PE",
+          side: "BUY",
+          qty: 65,
+          entry: 40,
+          exit: 30,
+          pnl: -650,
+          strategy: "NIFTY VWAP ATM",
           closedAt: "2026-09-12T10:00:00.000Z",
         },
       ],
@@ -115,10 +126,11 @@ test("getClientDetail returns profile, subscription, transaction, and P&L", () =
   assert.ok(detail.transactions.some((row) => row.kind === "wallet" && row.amount === 2500 && row.status === "paid"));
   assert.equal(detail.wallet.balance, 2500);
   assert.equal(detail.plans[0].strategyName, "NIFTY VWAP ATM");
-  assert.equal(detail.report.realizedPnl, 1300);
+  assert.equal(detail.report.realizedPnl, 650);
   assert.equal(detail.report.unrealizedPnl, 780);
   assert.equal(detail.positions.length, 1);
   assert.ok(detail.report.tradeBook.some((row) => row.id === "t1"));
+  assert.equal(detail.report.tradeBook.some((row) => row.id === "t-old"), false);
 });
 
 test("getClientDetail rejects admins and unknown ids", () => {

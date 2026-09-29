@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
-import { buildReport } from "./desk.js";
+import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
 import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
@@ -1409,6 +1409,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     positions: book.positions,
     orders: [...(book.orders || []), ...(book.orderHistory || [])],
   });
+  report.tradeBook = closedTradesToday(report.tradeBook);
   const unrealized = Number(report.unrealizedPnl || 0);
   const balance = round2(desk.wallet.balance || 0);
   const autoTrade = brokerId !== "paper" && desk.tradeMode === "real";

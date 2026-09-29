@@ -97,7 +97,7 @@ function MemberHome() {
       </Card>
       <Card>
         <Text style={styles.heading}>Trade book</Text>
-        <Text style={styles.muted}>Closed trades with entry, exit, and P&L.</Text>
+        <Text style={styles.muted}>Today's closed trades with entry, exit, and P&L.</Text>
         {(desk?.report.tradeBook || []).map((row) => (
           <View key={row.id} style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -112,7 +112,7 @@ function MemberHome() {
             <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "700" }}>{formatInr(row.pnl)}</Text>
           </View>
         ))}
-        {!(desk?.report.tradeBook || []).length ? <Text style={styles.muted}>No closed trades yet.</Text> : null}
+        {!(desk?.report.tradeBook || []).length ? <Text style={styles.muted}>No closed trades today.</Text> : null}
       </Card>
       <Card>
         <Text style={styles.price}>{user?.email || "Gmail account"}</Text>

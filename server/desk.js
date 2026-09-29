@@ -270,12 +270,17 @@ export function enrichPositions(rows) {
   }));
 }
 
-function dayKey(iso) {
+export function istDayKey(iso) {
   try {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
   } catch {
     return String(iso).slice(0, 10);
   }
+}
+
+export function closedTradesToday(rows = [], now = new Date()) {
+  const today = istDayKey(now.toISOString());
+  return (rows || []).filter((row) => row && istDayKey(row.closedAt) === today);
 }
 
 function pushGroup(map, key, patch) {
@@ -320,20 +325,20 @@ export function buildReport(state) {
   const dailyMap = {};
   for (let i = 6; i >= 0; i -= 1) {
     const date = new Date(Date.UTC(2026, 7, 18) - i * 86400000);
-    const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(date);
+    const key = istDayKey(date.toISOString());
     dailyMap[key] = { date: key, pnl: 0, trades: 0 };
   }
   for (const row of closed) {
-    const key = dayKey(row.closedAt);
+    const key = istDayKey(row.closedAt);
     if (!dailyMap[key]) dailyMap[key] = { date: key, pnl: 0, trades: 0 };
     dailyMap[key].pnl = round2(dailyMap[key].pnl + Number(row.pnl || 0));
     dailyMap[key].trades += 1;
   }
-  const todayKey = dayKey(new Date().toISOString());
+  const todayKey = istDayKey(new Date().toISOString());
   if (dailyMap[todayKey]) dailyMap[todayKey].unrealized = unrealized;
 
   return {
-    date: dayKey(new Date().toISOString()),
+    date: istDayKey(new Date().toISOString()),
     realizedPnl: realized,
     unrealizedPnl: unrealized,
     grossPnl: round2(realized + unrealized),

@@ -246,7 +246,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                       ))}
                     </tbody>
                   </table>
-                  {!report?.tradeBook?.length ? <p className="px-3 py-4 text-xs text-slate-400">No closed trades yet.</p> : null}
+                  {!report?.tradeBook?.length ? <p className="px-3 py-4 text-xs text-slate-400">No closed trades today.</p> : null}
                 </div>
               </section>
 
