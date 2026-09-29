@@ -1181,7 +1181,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   const order = {
     id: live?.orderId ? String(live.orderId) : `mo${crypto.randomBytes(6).toString("hex")}`,
     userId,
-    symbol: payload.symbol || "",
+    symbol: live?.tradingSymbol || payload.symbol || "",
     side,
     qty,
     filledQty: mapped === "FILLED" ? qty : Number(live?.filledQty || 0),
@@ -1191,7 +1191,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     brokerId,
     paper: Boolean(paper),
     live: Boolean(live?.orderId) && !paper,
-    reason: error ? String(error.message || error) : "",
+    reason: error ? String(error.message || error) : String(live?.reason || ""),
     securityId: payload.securityId ? String(payload.securityId) : "",
     createdAt: now,
   };

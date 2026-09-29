@@ -357,7 +357,7 @@ function upstoxRootMatches(root, under, name) {
   return u.includes(root) || n.includes(root);
 }
 
-function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry } = {}) {
+function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry, segment } = {}) {
   const wantStrike = Number(strike);
   const wantOpt = String(option || "").toUpperCase();
   const wantRoot = String(root || "").toUpperCase();
@@ -369,7 +369,10 @@ function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry } =
   for (const row of Array.isArray(rows) ? rows : []) {
     const key = String(row.instrument_key || row.instrumentKey || row.instrument_token || "").trim();
     if (!isUpstoxInstrumentKey(key)) continue;
-    if (wantRoot === "CRUDEOIL" && !key.startsWith("MCX_")) continue;
+    if (wantRoot === "CRUDEOIL") {
+      const nseCommodity = String(segment || "").toUpperCase() === "NSE";
+      if (nseCommodity ? !key.startsWith("NSE_") : !key.startsWith("MCX_")) continue;
+    }
     const type = String(row.instrument_type || row.option_type || row.instrumentType || "").toUpperCase();
     const strikeN = Number(row.strike_price || row.strikePrice || row.strike || 0);
     const under = String(row.underlying_symbol || row.underlying || "").toUpperCase();
@@ -424,7 +427,15 @@ function upstoxHitMeta(row) {
   const tickRaw = Number(row.tick_size || row.tickSize || 0);
   const tick = tickRaw >= 1 ? tickRaw / 100 : tickRaw > 0 ? tickRaw : 0;
   const lotSize = Number(row.lot_size || row.lotSize || 0);
-  return { key, lotSize: lotSize > 0 ? lotSize : 0, tick };
+  const qtyMultiplier = Number(row.qty_multiplier || row.qtyMultiplier || 0);
+  const tradingSymbol = String(row.trading_symbol || row.tradingsymbol || row.name || "").trim();
+  return {
+    key,
+    lotSize: lotSize > 0 ? lotSize : 0,
+    tick,
+    qtyMultiplier: qtyMultiplier > 0 ? qtyMultiplier : 0,
+    tradingSymbol,
+  };
 }
 
 export function upstoxInstrumentKeyFromPayload(payload = {}) {
@@ -456,6 +467,25 @@ const UPSTOX_MASTER_TTL_MS = 6 * 60 * 60 * 1000;
 
 export function resetUpstoxMasterCache() {
   upstoxMasterCache = { at: 0, rows: [] };
+}
+
+let upstoxMcxApiDisabledUntil = 0;
+const UPSTOX_MCX_DISABLE_MS = 6 * 60 * 60 * 1000;
+
+export function resetUpstoxMcxApiDisable() {
+  upstoxMcxApiDisabledUntil = 0;
+}
+
+function upstoxMcxApiDisabledNow() {
+  return Date.now() < upstoxMcxApiDisabledUntil;
+}
+
+function noteUpstoxMcxApiDisabled() {
+  upstoxMcxApiDisabledUntil = Date.now() + UPSTOX_MCX_DISABLE_MS;
+}
+
+function upstoxMcxApiDisabledError(error) {
+  return /UDAPI1161|MCX API orders are temporarily disabled|NSCOM/i.test(String(error?.message || ""));
 }
 
 async function responseText(res) {
@@ -503,10 +533,11 @@ async function loadUpstoxMasterRows(fetchImpl) {
   return rows;
 }
 
-async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl }) {
+async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl, segment }) {
   const parsed = parseDeskContract(symbol, { strike, option, expiry, root: rootFromDeskSymbol(symbol) });
   if (!parsed) return null;
   const wanted = contractExpiryWanted(parsed, expiry);
+  const pickFrom = (rows, expiryValue) => upstoxHitMeta(selectUpstoxInstrumentRow(rows, { ...parsed, expiry: expiryValue, segment }));
   const headers = accessToken ? { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } : null;
   const queries = [];
   if (parsed.option === "FUT") {
@@ -532,7 +563,7 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
     for (const query of queries) {
       try {
         const body = await httpJson(fetchImpl, `https://api.upstox.com/v2/search/instruments?query=${encodeURIComponent(query)}`, { headers });
-        const hit = upstoxHitMeta(selectUpstoxInstrumentRow(body.data || body, { ...parsed, expiry: wanted }));
+        const hit = pickFrom(body.data || body, wanted);
         if (hit) return hit;
       } catch (error) {
         if (isAuthError(error)) authError = error;
@@ -540,7 +571,7 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
     }
   }
   try {
-    const hit = upstoxHitMeta(selectUpstoxInstrumentRow(await loadUpstoxMasterRows(fetchImpl), { ...parsed, expiry: wanted }));
+    const hit = pickFrom(await loadUpstoxMasterRows(fetchImpl), wanted);
     if (hit) return hit;
   } catch {
     /* contract API is the last index-option path */
@@ -555,7 +586,7 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
       `https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(indexKey)}&expiry_date=${encodeURIComponent(day)}`,
       { headers },
     );
-    return upstoxHitMeta(selectUpstoxInstrumentRow(body.data || body, { ...parsed, expiry: day }));
+    return pickFrom(body.data || body, day);
   } catch (error) {
     if (isAuthError(error)) throw error;
     return null;
@@ -768,18 +799,24 @@ function orderQty(payload) {
   return qty;
 }
 
-function upstoxPlaceQuantity(payload, rawQty, lotSize = 0) {
+function upstoxPlaceQuantity(payload, rawQty, instrument = {}) {
+  const meta = typeof instrument === "number" ? { lotSize: instrument } : instrument || {};
+  const lotSize = Number(meta.lotSize || 0);
+  const qtyMultiplier = Number(meta.qtyMultiplier || 0);
   const segment = String(payload.exchangeSegment || "").toUpperCase();
-  const mcx = segment === "MCX_COMM" || isMcxSymbol(payload.symbol);
-  if (!mcx) return rawQty;
-  const lot = Math.max(1, Math.round(Number(lotSize) || Number(payload.lotSize) || 100));
-  const lots = Math.max(0, Math.round(Number(payload.lots) || 0));
-  let units = 0;
-  if (rawQty >= lot) units = Math.round(rawQty / lot) * lot;
-  else if (lots > 0) units = lots * lot;
-  else if (rawQty > 0) units = rawQty * lot;
-  if (!units) throw fail("Order quantity is required.");
-  return units;
+  const commodity = segment === "MCX_COMM" || isMcxSymbol(payload.symbol);
+  if (!commodity) return rawQty;
+  const strategyLot = Math.max(1, Math.round(Number(payload.lotSize) || 100));
+  const lots =
+    Math.max(0, Math.round(Number(payload.lots) || 0)) ||
+    (rawQty >= strategyLot ? Math.max(1, Math.round(rawQty / strategyLot)) : Math.max(1, rawQty));
+  const nseCommodity = String(meta.key || "").startsWith("NSE_") && lotSize <= 1;
+  if (nseCommodity || (lotSize <= 1 && qtyMultiplier >= 100)) return Math.max(1, lots);
+  const lot = Math.max(1, Math.round(lotSize || strategyLot));
+  if (rawQty >= lot) return Math.round(rawQty / lot) * lot;
+  if (lots > 0) return lots * lot;
+  if (!rawQty) throw fail("Order quantity is required.");
+  return rawQty;
 }
 
 function upstoxLimit(payload, tick = 0) {
@@ -838,7 +875,10 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
   }
 
   if (id === "upstox") {
+    const crude = isMcxSymbol(symbol);
+    const useNseCommodity = crude && upstoxMcxApiDisabledNow();
     let instrument = upstoxInstrumentKeyFromPayload(payload);
+    if (useNseCommodity && String(instrument).startsWith("MCX_")) instrument = "";
     let resolved = null;
     if (!instrument) {
       resolved = await resolveUpstoxInstrumentKey({
@@ -848,6 +888,7 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
         option: payload.option,
         accessToken: session.accessToken,
         fetchImpl,
+        segment: useNseCommodity ? "NSE" : "",
       });
       instrument = resolved?.key || "";
     }
@@ -857,47 +898,78 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
-    const limit = upstoxLimit(payload, resolved?.tick || 0);
-    const baseOrder = {
-      quantity: upstoxPlaceQuantity(payload, qty, resolved?.lotSize || 0),
-      product: product === "NRML" ? "D" : "I",
-      validity: "DAY",
-      price: limit.price,
-      instrument_token: instrument,
-      order_type: limit.orderType,
-      transaction_type: side,
-      disclosed_quantity: 0,
-      trigger_price: 0,
-      is_amo: false,
+    const upstoxOrder = (hit, token) => {
+      const limit = upstoxLimit(payload, hit?.tick || 0);
+      return {
+        quantity: upstoxPlaceQuantity(payload, qty, hit || { key: token }),
+        product: product === "NRML" ? "D" : "I",
+        validity: "DAY",
+        price: limit.price,
+        instrument_token: token,
+        order_type: limit.orderType,
+        transaction_type: side,
+        disclosed_quantity: 0,
+        trigger_price: 0,
+        is_amo: false,
+      };
     };
-    const protection = limit.orderType === "MARKET" ? { market_protection: -1 } : {};
-    const attempts = [
-      { url: "https://api-hft.upstox.com/v3/order/place", body: { ...baseOrder, slice: false, ...protection } },
-      { url: "https://api-hft.upstox.com/v2/order/place", body: { ...baseOrder, ...protection } },
-    ];
+    const upstoxAttempts = (order) => {
+      const protection = order.order_type === "MARKET" ? { market_protection: -1 } : {};
+      return [
+        { url: "https://api-hft.upstox.com/v3/order/place", body: { ...order, slice: false, ...protection } },
+        { url: "https://api-hft.upstox.com/v2/order/place", body: { ...order, ...protection } },
+      ];
+    };
+    let current = upstoxOrder(resolved, instrument);
+    let nseUsed = useNseCommodity || String(instrument).startsWith("NSE_COM");
     let lastError = null;
-    for (const attempt of attempts) {
-      try {
-        const body = await httpJson(fetchImpl, attempt.url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(attempt.body),
-        });
-        return {
-          orderId: String(body.data?.order_id || body.data?.order_ids?.[0] || body.order_id || ""),
-          status: "PENDING",
-          brokerId: "upstox",
-        };
-      } catch (error) {
-        lastError = error;
-        const message = String(error?.message || "");
-        const retry =
-          error.status === 401 ||
-          error.status === 404 ||
-          error.status === 410 ||
-          /UDAPI10000|UDAPI100015|not supported|does not exist/i.test(message);
-        if (!retry) throw decorateUpstoxPlaceError(error);
+    for (let round = 0; round < 2; round += 1) {
+      let switchToNse = false;
+      for (const attempt of upstoxAttempts(current)) {
+        try {
+          const body = await httpJson(fetchImpl, attempt.url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(attempt.body),
+          });
+          const tradingSymbol = nseUsed ? resolved?.tradingSymbol || "" : "";
+          return {
+            orderId: String(body.data?.order_id || body.data?.order_ids?.[0] || body.order_id || ""),
+            status: "PENDING",
+            brokerId: "upstox",
+            tradingSymbol,
+            reason: tradingSymbol ? `NSE NSCOM · ${tradingSymbol}` : "",
+          };
+        } catch (error) {
+          lastError = error;
+          if (!nseUsed && crude && upstoxMcxApiDisabledError(error)) {
+            noteUpstoxMcxApiDisabled();
+            switchToNse = true;
+            break;
+          }
+          const message = String(error?.message || "");
+          const retry =
+            error.status === 401 ||
+            error.status === 404 ||
+            error.status === 410 ||
+            /UDAPI10000|UDAPI100015|not supported|does not exist/i.test(message);
+          if (!retry) throw decorateUpstoxPlaceError(error);
+        }
       }
+      if (!switchToNse) throw decorateUpstoxPlaceError(lastError || fail("Upstox live order place failed."));
+      const nse = await resolveUpstoxInstrumentKey({
+        symbol,
+        expiry,
+        strike: payload.strike,
+        option: payload.option,
+        accessToken: session.accessToken,
+        fetchImpl,
+        segment: "NSE",
+      });
+      if (!nse?.key) throw decorateUpstoxPlaceError(lastError || fail("Upstox live order place failed."));
+      nseUsed = true;
+      resolved = nse;
+      current = upstoxOrder(nse, nse.key);
     }
     throw decorateUpstoxPlaceError(lastError || fail("Upstox live order place failed."));
   }
