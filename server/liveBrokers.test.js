@@ -59,6 +59,118 @@ test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
   );
 });
 
+test("Upstox crude copy uses the CRUDEOIL contract, not NIFTY or CRUDEOILM", () => {
+  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 8700 CE"), { root: "CRUDEOIL", strike: 8700, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 8700 CALL"), { root: "CRUDEOIL", strike: 8700, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 26 8700 CALL"), {
+    root: "CRUDEOIL",
+    strike: 8700,
+    option: "CE",
+    expiry: "2026-10-15",
+  });
+  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL-15Oct2026-8700-CE"), {
+    root: "CRUDEOIL",
+    strike: 8700,
+    option: "CE",
+    expiry: "2026-10-15",
+  });
+  assert.equal(parseDeskOptionSymbol("CRUDEOIL", { strike: 8700, option: "CE", expiry: "2026-10-15" }).root, "CRUDEOIL");
+  assert.equal(
+    pickUpstoxOptionHit(
+      [
+        {
+          trading_symbol: "CRUDEOILM 15 OCT 26 8700 CE",
+          underlying_symbol: "CRUDEOILM",
+          instrument_type: "CE",
+          strike_price: 8700,
+          expiry: "2026-10-15",
+          instrument_key: "MCX_FO|mini",
+        },
+        {
+          trading_symbol: "CRUDEOIL 15 OCT 26 8700 CALL",
+          underlying_symbol: "CRUDEOIL",
+          instrument_type: "CE",
+          strike_price: 8700,
+          expiry: "2026-10-15",
+          instrument_key: "MCX_FO|8700ce",
+        },
+      ],
+      { root: "CRUDEOIL", strike: 8700, option: "CE", expiry: "2026-10-15" },
+    ),
+    "MCX_FO|8700ce",
+  );
+});
+
+test("placeLiveBrokerOrder sends the crude Upstox copy as a 1-lot limit", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), body: options.body });
+    if (String(url).includes("search/instruments")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                trading_symbol: "CRUDEOILM 15 OCT 26 8700 CE",
+                underlying_symbol: "CRUDEOILM",
+                instrument_type: "CE",
+                strike_price: 8700,
+                expiry: "2026-10-15",
+                instrument_key: "MCX_FO|mini",
+              },
+              {
+                trading_symbol: "CRUDEOIL 15 OCT 26 8700 CE",
+                underlying_symbol: "CRUDEOIL",
+                instrument_type: "CE",
+                strike_price: 8700,
+                expiry: "2026-10-15",
+                instrument_key: "MCX_FO|8700ce",
+              },
+            ],
+          }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { order_id: "upx-crude-1" } }),
+    };
+  };
+  const live = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-crude",
+      brokerSession: { accessToken: "upstox-member-token", clientId: "UPX1" },
+      symbol: "CRUDEOIL 8700 CE",
+      side: "BUY",
+      qty: 100,
+      lots: 1,
+      lotSize: 100,
+      type: "LIMIT",
+      price: 468.6,
+      strike: 8700,
+      option: "CE",
+      expiry: "2026-10-15",
+      exchangeSegment: "MCX_COMM",
+      securityId: "55123",
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "upx-crude-1");
+  assert.match(calls[0].url, /search\/instruments/);
+  assert.match(calls[0].url, /CRUDEOIL%208700%20CE/);
+  assert.equal(calls[0].url.includes("NIFTY"), false);
+  assert.match(calls[1].url, /api-hft\.upstox\.com\/v3\/order\/place/);
+  const placed = JSON.parse(calls[1].body);
+  assert.equal(placed.instrument_token, "MCX_FO|8700ce");
+  assert.equal(placed.quantity, 1);
+  assert.equal(placed.order_type, "LIMIT");
+  assert.equal(placed.price, 468.6);
+  assert.equal(placed.transaction_type, "BUY");
+});
+
 test("placeLiveBrokerOrder searches Upstox for NIFTY 22850 CE instead of using a Dhan security id", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {

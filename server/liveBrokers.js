@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
+import { dhanOrderQuantity, isMcxSymbol } from "./optionChain.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
@@ -241,6 +242,28 @@ function parseSymbolExpiry(token) {
   return `${year}-${month}`;
 }
 
+const DESK_OPTION_ROOTS = "CRUDEOIL|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|NIFTY";
+const DESK_OPTION_SIDES = "CE|PE|CALL|PUT";
+
+function optionSide(token) {
+  const raw = String(token || "").toUpperCase();
+  if (raw === "CE" || raw === "CALL") return "CE";
+  if (raw === "PE" || raw === "PUT") return "PE";
+  return "";
+}
+
+function rootFromDeskSymbol(symbol) {
+  const compact = String(symbol || "").toUpperCase().replace(/[^A-Z]/g, "");
+  const known = ["CRUDEOILM", "CRUDEOIL", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "NIFTY"];
+  return known.find((root) => compact.startsWith(root)) || "";
+}
+
+function deskOption(root, strike, option, expiry = "") {
+  const side = optionSide(option);
+  if (!root || !side || !strike) return null;
+  return expiry ? { root, strike: Number(strike), option: side, expiry } : { root, strike: Number(strike), option: side };
+}
+
 export function parseDeskOptionSymbol(symbol, extras = {}) {
   const raw = String(symbol || "")
     .toUpperCase()
@@ -249,32 +272,27 @@ export function parseDeskOptionSymbol(symbol, extras = {}) {
     .trim();
   const compact = raw.replace(/\s+/g, "-");
   const dhan = compact.match(
-    /^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)-(?:(\d{1,2}[A-Z]{3}\d{2,4}|[A-Z]{3}\d{2,4})-)?(\d{3,6})-(CE|PE)$/,
+    new RegExp(`^(${DESK_OPTION_ROOTS})-(?:(\\d{1,2}[A-Z]{3}\\d{2,4}|[A-Z]{3}\\d{2,4})-)?(\\d{3,6})-(${DESK_OPTION_SIDES})$`),
   );
   if (dhan) {
     const expiry = parseSymbolExpiry(dhan[2]);
-    return expiry
-      ? { root: dhan[1], strike: Number(dhan[3]), option: dhan[4], expiry }
-      : { root: dhan[1], strike: Number(dhan[3]), option: dhan[4] };
+    return deskOption(dhan[1], dhan[3], dhan[4], expiry);
   }
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)\s+(\d{3,6})\s*(CE|PE)$/);
-  if (named) return { root: named[1], strike: Number(named[2]), option: named[3] };
+  const named = raw.match(new RegExp(`^(${DESK_OPTION_ROOTS})\\s+(\\d{3,6})\\s*(${DESK_OPTION_SIDES})$`));
+  if (named) return deskOption(named[1], named[2], named[3]);
   const spaced = raw.match(
-    /^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|MIDCPNIFTY)\s+(\d{1,2})\s+([A-Z]{3})(?:\s+(\d{2,4}))?\s+(\d{3,6})\s*(CE|PE)$/,
+    new RegExp(`^(${DESK_OPTION_ROOTS})\\s+(\\d{1,2})\\s+([A-Z]{3})(?:\\s+(\\d{2,4}))?\\s+(\\d{3,6})\\s*(${DESK_OPTION_SIDES})$`),
   );
   if (spaced) {
     const expiry = parseSymbolExpiry(`${spaced[2]}${spaced[3]}${spaced[4] || ""}`);
-    return expiry
-      ? { root: spaced[1], strike: Number(spaced[5]), option: spaced[6], expiry }
-      : { root: spaced[1], strike: Number(spaced[5]), option: spaced[6] };
+    return deskOption(spaced[1], spaced[5], spaced[6], expiry);
   }
   const strike = Number(extras.strike || 0);
-  const option = String(extras.option || "").toUpperCase();
-  if (strike && (option === "CE" || option === "PE")) {
+  const option = optionSide(extras.option);
+  if (strike && option) {
     const expiry = parseSymbolExpiry(extras.expiry) || String(extras.expiry || "").slice(0, 10);
-    return expiry
-      ? { root: String(extras.root || "NIFTY").toUpperCase(), strike, option, expiry }
-      : { root: String(extras.root || "NIFTY").toUpperCase(), strike, option };
+    const root = String(extras.root || "").trim().toUpperCase() || rootFromDeskSymbol(raw) || "NIFTY";
+    return deskOption(root, strike, option, expiry);
   }
   return null;
 }
@@ -285,6 +303,12 @@ function upstoxRootMatches(root, under, name) {
   if (root === "NIFTY") {
     if (u === "NIFTY" || u === "NIFTY50") return true;
     return /^NIFTY(\s|$)/.test(n) && !/BANKNIFTY|FINNIFTY|MIDCP/.test(n);
+  }
+  if (root === "CRUDEOIL") {
+    const compactU = u.replace(/\s+/g, "");
+    const compactN = n.replace(/\s+/g, "");
+    if (compactU.includes("CRUDEOILM") || compactN.includes("CRUDEOILM")) return false;
+    return compactU === "CRUDEOIL" || compactN.includes("CRUDEOIL");
   }
   return u.includes(root) || n.includes(root);
 }
@@ -306,8 +330,8 @@ export function pickUpstoxOptionHit(rows = [], { root, strike, option, expiry } 
     const name = String(row.trading_symbol || row.tradingsymbol || row.name || "").toUpperCase();
     if (wantStrike && strikeN && strikeN !== wantStrike) continue;
     if (wantStrike && !strikeN && !name.includes(String(wantStrike))) continue;
-    const isCe = type === "CE" || type === "CALL" || /\bCE\b/.test(name);
-    const isPe = type === "PE" || type === "PUT" || /\bPE\b/.test(name);
+    const isCe = type === "CE" || type === "CALL" || /\bCE\b/.test(name) || /\bCALL\b/.test(name);
+    const isPe = type === "PE" || type === "PUT" || /\bPE\b/.test(name) || /\bPUT\b/.test(name);
     if (wantOpt === "CE" && !isCe) continue;
     if (wantOpt === "PE" && !isPe) continue;
     if (wantRoot && !upstoxRootMatches(wantRoot, under, name)) continue;
@@ -345,7 +369,7 @@ function isAuthError(error) {
 }
 
 async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, accessToken, fetchImpl }) {
-  const parsed = parseDeskOptionSymbol(symbol, { strike, option, expiry });
+  const parsed = parseDeskOptionSymbol(symbol, { strike, option, expiry, root: rootFromDeskSymbol(symbol) });
   if (!parsed || !accessToken) return "";
   const wantedExpiry = String(expiry || parsed.expiry || "").trim();
   const day = upstoxExpiryDate(wantedExpiry, parsed.root);
@@ -591,6 +615,21 @@ function orderQty(payload) {
   return qty;
 }
 
+function upstoxPlaceQuantity(payload, rawQty) {
+  const segment = String(payload.exchangeSegment || "").toUpperCase();
+  if (segment !== "MCX_COMM" && !isMcxSymbol(payload.symbol)) return rawQty;
+  const lots = dhanOrderQuantity(payload);
+  if (!lots) throw fail("Order quantity is required.");
+  return lots;
+}
+
+function upstoxLimit(payload) {
+  const type = String(payload.type || payload.order_type || payload.orderType || "").toUpperCase();
+  const price = Number(payload.price);
+  if (type === "LIMIT" && price > 0) return { orderType: "LIMIT", price: Math.round(price * 20) / 20 };
+  return { orderType: "MARKET", price: 0 };
+}
+
 function orderSide(payload) {
   return String(payload.side || payload.transaction_type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
 }
@@ -654,21 +693,23 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
+    const limit = upstoxLimit(payload);
     const baseOrder = {
-      quantity: qty,
+      quantity: upstoxPlaceQuantity(payload, qty),
       product: product === "NRML" ? "D" : "I",
       validity: "DAY",
-      price: 0,
+      price: limit.price,
       instrument_token: instrument,
-      order_type: "MARKET",
+      order_type: limit.orderType,
       transaction_type: side,
       disclosed_quantity: 0,
       trigger_price: 0,
       is_amo: false,
     };
+    const protection = limit.orderType === "MARKET" ? { market_protection: -1 } : {};
     const attempts = [
-      { url: "https://api-hft.upstox.com/v3/order/place", body: { ...baseOrder, slice: false, market_protection: -1 } },
-      { url: "https://api-hft.upstox.com/v2/order/place", body: { ...baseOrder, market_protection: -1 } },
+      { url: "https://api-hft.upstox.com/v3/order/place", body: { ...baseOrder, slice: false, ...protection } },
+      { url: "https://api-hft.upstox.com/v2/order/place", body: { ...baseOrder, ...protection } },
     ];
     let lastError = null;
     for (const attempt of attempts) {
