@@ -787,6 +787,9 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const vs = runtimeState(algo);
   const positions = positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
+  const showLivePreview = () => {
+    if (isNiftyFirstCandleAlgo(algo) && feedLive) stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now());
+  };
   if (mode === "live" && !session.open && !open) return;
   if (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) {
     preferWeeklyDeskForReversal();
@@ -809,11 +812,13 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   ) {
     if (!positions.some((row) => PositionManager.isOpenNiftyOption(row))) {
       algo.lastSignal = "WAIT WEEKLY EXPIRY";
+      showLivePreview();
       return;
     }
   }
   if (feedLive && !open && !futuresBars.length) {
     algo.lastSignal = isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
+    showLivePreview();
     return;
   }
   const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
@@ -859,6 +864,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     positions,
     adapter,
   });
+  showLivePreview();
   if (
     isNiftyFirstCandleAlgo(algo) &&
     (Number(vs.sessionTrades || 0) !== beforeTrades ||
@@ -2523,26 +2529,68 @@ function barsMatchMinutes(candles, minutes) {
   return step >= target * 0.8 && step <= target * 1.2;
 }
 
-export function niftyFutureSignalBars(timeframe = "5m", now = Date.now()) {
-  const chartIsFuture = niftyLiveCandleInstrument === "FUTIDX" && state.liveCandles.length;
-  const source = niftyFutureChartCandles.length
-    ? niftyFutureChartCandles
-    : chartIsFuture
-      ? state.liveCandles
-      : niftyFutureMinuteBars;
-  if (!source.length) return [];
+function futureBarMinutes(timeframe) {
   const tf = String(timeframe || "5m");
-  const minutes = tf === "1m" ? 1 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  if (tf === "1m") return 1;
+  if (tf === "15m") return 15;
+  if (tf === "1H" || tf === "1h") return 60;
+  return 5;
+}
+
+function futureCandleSource() {
+  if (niftyFutureChartCandles.length) return niftyFutureChartCandles;
+  if (niftyLiveCandleInstrument === "FUTIDX" && state.liveCandles.length) return state.liveCandles;
+  return niftyFutureMinuteBars;
+}
+
+function aggregateFutureBars(source, minutes, now, includeForming) {
   const barMs = minutes * 60_000;
   if (barsMatchMinutes(source, minutes)) {
     return source
-      .filter((bar) => Number(bar.close) > 0 && now >= Number(bar.time) + barMs)
+      .filter((bar) => Number(bar.close) > 0 && (includeForming || now >= Number(bar.time) + barMs))
       .map((bar) => ({ ...bar }));
   }
   return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
     closeLabeled: false,
     sessionOpenMinutes: 9 * 60 + 15,
+    includeForming,
   });
+}
+
+export function niftyFutureSignalBars(timeframe = "5m", now = Date.now()) {
+  const source = futureCandleSource();
+  if (!source.length) return [];
+  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false);
+}
+
+export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now()) {
+  const source = futureCandleSource();
+  if (!source.length) return null;
+  const minutes = futureBarMinutes(timeframe);
+  const barMs = minutes * 60_000;
+  const rows = aggregateFutureBars(source, minutes, now, true);
+  const last = rows[rows.length - 1];
+  if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
+  if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
+  return last;
+}
+
+export function formatLiveFuturePreview(bar, barMinutes = 5) {
+  if (!bar || !(Number(bar.open) > 0) || !(Number(bar.close) > 0)) return "";
+  const wall = VwapSignalEngine.istWallTime(bar.time);
+  const start = wall.hour * 60 + wall.minute;
+  const end = start + Math.max(1, Number(barMinutes) || 5);
+  const pad = (value) => String(value).padStart(2, "0");
+  const clock = `${pad(wall.hour)}:${pad(wall.minute)}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)} IST`;
+  return `LIVE O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}`;
+}
+
+function stampLiveFuturePreview(algo, timeframe, now) {
+  if (!isNiftyFirstCandleAlgo(algo)) return;
+  const minutes = futureBarMinutes(timeframe);
+  const label = formatLiveFuturePreview(niftyFuturePreviewBar(timeframe, now), minutes);
+  const base = String(algo.lastSignal || "").replace(/ · LIVE O .+$/, "");
+  algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
 }
 
 export function setLiveCandles(candles, symbol = "NIFTY", instrument = "") {

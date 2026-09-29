@@ -130,7 +130,7 @@ export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.no
   }
   return [...buckets.values()]
     .sort((a, b) => a.time - b.time)
-    .filter((bar) => now >= bar.time + barMs)
+    .filter((bar) => opts.includeForming || now >= bar.time + barMs)
     .map(({ samples: _samples, ...bar }) => bar);
 }
 

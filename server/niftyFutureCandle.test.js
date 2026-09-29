@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyLiveQuotes,
+  formatLiveFuturePreview,
+  niftyFuturePreviewBar,
   niftyFutureSignalBars,
   peekNiftyFutureBars,
   setLiveCandles,
@@ -60,6 +62,24 @@ test("first candle uses the Nifty future 5m candle, not the index tape", () => {
   assert.equal(afterIndex[0].close, 22647.5);
   setNiftyFutureChartCandles([]);
   setLiveCandles([{ time: Date.now(), open: 1, high: 1, low: 1, close: 1, volume: 1 }], "NIFTY");
+});
+
+test("live preview candle keeps its own open and close while the 5m bar is still forming", () => {
+  const start = OPEN_0915;
+  const now = start + FIVE + 60_000;
+  setNiftyFutureChartCandles([
+    { time: start, open: 22678.6, high: 22690, low: 22660, close: 22668.5, volume: 20 },
+    { time: start + FIVE, open: 22663, high: 22670, low: 22647.5, close: 22647.5, volume: 12 },
+  ]);
+  const preview = niftyFuturePreviewBar("5m", now);
+  assert.equal(preview.open, 22663);
+  assert.equal(preview.close, 22647.5);
+  assert.equal(formatLiveFuturePreview(preview, 5), "LIVE O 22663.00 C 22647.50 · 09:20–09:25 IST");
+  const closed = niftyFutureSignalBars("5m", now);
+  assert.equal(closed.length, 1);
+  assert.equal(closed[0].open, 22678.6);
+  assert.equal(closed[0].close, 22668.5);
+  setNiftyFutureChartCandles([]);
 });
 
 test("official Nifty future 5m open stays put when the index and the future tick", () => {
