@@ -24,6 +24,7 @@ import {
   setDhanFeed,
   setLiveCandles,
   setNiftyFutureChartCandles,
+  setCrudeFutureChartCandles,
   setOptionDesk,
   snapshot,
   restoreLastIndexQuotes,
@@ -917,6 +918,7 @@ async function pullChartCandles(symbol = "NIFTY") {
           if (!crude && inst.instrument === "FUTIDX") {
             void pullNiftyFutureFiveMinute(inst);
           }
+          if (crude) void pullCrudeFutureFiveMinute(inst);
           try {
             recordLiveIndexHistory(crude ? "CRUDEOIL" : "NIFTY", candles);
           } catch {
@@ -951,6 +953,27 @@ async function pullNiftyFutureFiveMinute(inst) {
     if (candles.length) setNiftyFutureChartCandles(candles);
   } catch {
     /* 1m future candles remain the fallback */
+  }
+}
+
+async function pullCrudeFutureFiveMinute(inst) {
+  if (!accessToken || !inst?.securityId) return;
+  try {
+    const from = kolkataStamp(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), "09:00:00");
+    const to = kolkataStamp(new Date());
+    const payload = await dhanPost("/charts/intraday", accessToken, clientId, {
+      securityId: String(inst.securityId),
+      exchangeSegment: inst.exchangeSegment || "MCX_COMM",
+      instrument: "FUTCOM",
+      interval: "5",
+      oi: false,
+      fromDate: from,
+      toDate: to,
+    });
+    const candles = mapChartCandles(payload);
+    if (candles.length) setCrudeFutureChartCandles(candles);
+  } catch {
+    /* 1m crude candles remain the fallback */
   }
 }
 

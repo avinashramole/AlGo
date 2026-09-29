@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyLiveQuotes,
+  crudeFuturePreviewBar,
+  crudeFutureSignalBars,
   formatLiveFuturePreview,
   niftyFuturePreviewBar,
   niftyFutureSignalBars,
   peekNiftyFutureBars,
+  setCrudeFutureChartCandles,
   setLiveCandles,
   setNiftyFutureChartCandles,
 } from "./market.js";
@@ -165,5 +168,54 @@ test("a Dhan 15:05 stamp is the 15:00-15:05 candle, and the buy uses the current
     Date.now = realNow;
     setNiftyFutureChartCandles([]);
     setLiveCandles([{ time: Date.now(), open: 1, high: 1, low: 1, close: 1, volume: 1 }], "NIFTY");
+  }
+});
+
+test("crude future 5m close stamp keeps that candle open and close", () => {
+  const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
+  const close0905 = open0900 + FIVE;
+  const close0910 = close0905 + FIVE;
+  const open0910 = close0910;
+  const now = open0910 + 2 * 60_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    setCrudeFutureChartCandles([
+      { time: close0905, open: 6100, high: 6130, low: 6090, close: 6120, volume: 30 },
+      { time: close0910, open: 6120, high: 6134, low: 6110, close: 6115, volume: 18 },
+    ]);
+    const closed = crudeFutureSignalBars("5m", now);
+    const checked = closed[closed.length - 1];
+    assert.equal(checked.time, close0905);
+    assert.equal(checked.open, 6120);
+    assert.equal(checked.close, 6115);
+    assert.equal(closed[0].open, 6100);
+    assert.equal(closed[0].close, 6120);
+    applyLiveQuotes([
+      { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6111, securityId: "426268" },
+    ]);
+    applyLiveQuotes([
+      { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6104, securityId: "426268" },
+    ]);
+    const afterTick = crudeFutureSignalBars("5m", now);
+    assert.equal(afterTick[afterTick.length - 1].open, 6120);
+    assert.equal(afterTick[afterTick.length - 1].close, 6115);
+    const forming = crudeFuturePreviewBar("5m", now);
+    assert.equal(forming.time, open0910);
+    assert.equal(forming.open, 6111);
+    assert.equal(forming.close, 6104);
+    const text = formatLiveFuturePreview(afterTick[afterTick.length - 1], 5, {}, "CRUDE FUT").replace(/^LIVE /, "PREVIEW ");
+    assert.match(text, /CRUDE FUT RED/);
+    assert.match(text, /O 6120\.00 C 6115\.00/);
+    assert.match(text, /09:05–09:10 IST/);
+    setCrudeFutureChartCandles([
+      { time: close0905, open: 6100, high: 6130, low: 6090, close: 6120, volume: 30 },
+      { time: close0910, open: 6120, high: 6134, low: 6110, close: 6115, volume: 18 },
+    ]);
+    assert.equal(crudeFutureSignalBars("5m", now).at(-1).close, 6115);
+    assert.equal(crudeFuturePreviewBar("5m", now).open, 6111);
+  } finally {
+    Date.now = realNow;
+    setCrudeFutureChartCandles([]);
   }
 });

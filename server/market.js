@@ -450,6 +450,7 @@ const liveCandleCache = new Map();
 const pendingLiveAlgoOrders = [];
 const niftyFutureCandles = [];
 let niftyFutureChartCandles = [];
+let crudeFutureChartCandles = [];
 const niftyFutureMinuteBars = [];
 let niftyLiveCandleInstrument = "";
 
@@ -2740,9 +2741,7 @@ function istMinuteOf(ms) {
   return wall.hour * 60 + wall.minute;
 }
 
-function fiveMinuteSeriesIsCloseLabeled(candles) {
-  const sessionOpen = 9 * 60 + 15;
-  const sessionClose = 15 * 60 + 30;
+function fiveMinuteSeriesIsCloseLabeled(candles, sessionOpen = 9 * 60 + 15, sessionClose = 15 * 60 + 30) {
   const mins = (Array.isArray(candles) ? candles : [])
     .map((bar) => istMinuteOf(bar.time))
     .filter((minute) => minute >= sessionOpen && minute <= sessionClose);
@@ -2751,10 +2750,14 @@ function fiveMinuteSeriesIsCloseLabeled(candles) {
   return Math.min(...mins) === sessionOpen + 5 || mins.includes(sessionClose);
 }
 
-function alignNiftyFutureFiveMinuteOpens(candles) {
-  if (!fiveMinuteSeriesIsCloseLabeled(candles)) return candles;
+function alignFiveMinuteOpens(candles, sessionOpen, sessionClose) {
+  if (!fiveMinuteSeriesIsCloseLabeled(candles, sessionOpen, sessionClose)) return candles;
   const step = 5 * 60_000;
   return candles.map((bar) => ({ ...bar, time: Number(bar.time) - step }));
+}
+
+function alignNiftyFutureFiveMinuteOpens(candles) {
+  return alignFiveMinuteOpens(candles, 9 * 60 + 15, 15 * 60 + 30);
 }
 
 function seriesStepMs(series) {
@@ -2852,7 +2855,65 @@ function aggregateFutureBars(source, minutes, now, includeForming) {
 const MCX_SESSION_OPEN = 9 * 60;
 const MCX_SESSION_CLOSE = 23 * 60 + 30;
 
+function crudeFiveOpen(ms) {
+  return VwapSignalEngine.sessionBarOpenMs(ms, 5, {
+    closeLabeled: false,
+    sessionOpenMinutes: MCX_SESSION_OPEN,
+    sessionCloseMinutes: MCX_SESSION_CLOSE,
+  });
+}
+
+function alignCrudeFutureFiveMinuteOpens(candles) {
+  return alignFiveMinuteOpens(candles, MCX_SESSION_OPEN, MCX_SESSION_CLOSE);
+}
+
+export function setCrudeFutureChartCandles(candles) {
+  if (!Array.isArray(candles) || !candles.length) {
+    crudeFutureChartCandles = [];
+    return;
+  }
+  const aligned = alignCrudeFutureFiveMinuteOpens(
+    candles.map((row) => ({
+      time: Number(row.time),
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+      volume: Number(row.volume) || 0,
+    })),
+  );
+  const now = Date.now();
+  const step = 5 * 60_000;
+  const currentOpen = crudeFiveOpen(now);
+  const forming =
+    currentOpen != null && now < currentOpen + step
+      ? crudeFutureChartCandles.find((bar) => Number(bar.time) === currentOpen)
+      : null;
+  const incomingHasCurrent = aligned.some((bar) => Number(bar.time) === currentOpen);
+  const next = aligned.filter((bar) => !(forming && !incomingHasCurrent && Number(bar.time) === currentOpen));
+  if (forming && !incomingHasCurrent) next.push({ ...forming });
+  next.sort((a, b) => Number(a.time) - Number(b.time));
+  crudeFutureChartCandles = next;
+}
+
+function touchCrudeFutureMinute(ltp, now = Date.now()) {
+  const price = Number(ltp);
+  if (!(price > 0) || !crudeFutureChartCandles.length) return;
+  const bucket = crudeFiveOpen(now);
+  if (bucket == null) return;
+  const last = crudeFutureChartCandles[crudeFutureChartCandles.length - 1];
+  if (last && Number(last.time) === bucket) {
+    last.high = Math.max(Number(last.high) || price, price);
+    last.low = Math.min(Number(last.low) || price, price);
+    last.close = price;
+    return;
+  }
+  if (last && bucket < Number(last.time)) return;
+  crudeFutureChartCandles.push({ time: bucket, open: price, high: price, low: price, close: price, volume: 0 });
+}
+
 function crudeCandleSource() {
+  if (crudeFutureChartCandles.length) return crudeFutureChartCandles;
   return liveCandleCache.get("CRUDEOIL") || [];
 }
 
@@ -3211,6 +3272,7 @@ export function applyLiveQuotes(quotes) {
         index.changePct = day.changePct;
         index.prevClose = day.prevClose;
         index.spark = pushSpark(index.spark, ltp);
+        touchCrudeFutureMinute(ltp);
       }
       if (index.symbol === "NIFTY 50") {
         noteNiftyFuturePrice(ltp);
