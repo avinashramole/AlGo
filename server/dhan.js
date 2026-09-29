@@ -2386,8 +2386,13 @@ export async function bootDhanFromEnv() {
     blockedUntil: credentialsBlockedUntil,
     generateBackoffUntil: keepAliveBackoffUntil,
   });
+  let action = plan.action;
+  if (action === "mint" && token) {
+    console.log("Dhan saved access token kept. Deploy/restart does not replace the admin token.");
+    action = "reuse";
+  }
 
-  if (plan.action === "reuse" || plan.action === "wait") {
+  if (action === "reuse" || action === "wait") {
     if (!token || !id) {
       scheduleTokenKeepAlive();
       return false;
@@ -2413,7 +2418,7 @@ export async function bootDhanFromEnv() {
     }
   }
 
-  if (plan.action === "mint" && canAutoGenerate()) {
+  if (action === "mint" && canAutoGenerate()) {
     try {
       await rotateDhanAccessToken({ ...creds, reason: "boot" });
       console.log("Dhan access token generated automatically (PIN + TOTP)");

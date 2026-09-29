@@ -1,13 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeFileAtomic } from "./atomicWrite.js";
 import { upsertDhanEnv } from "./env.js";
 import { peekAdminBrokerSecrets, persistAdminBrokerSecrets } from "./memberDesk.js";
 import { ipv4Request } from "./ipv4.js";
 import { normalizeTotpSecret, totpCodes } from "./totp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SESSION_FILE = path.join(__dirname, ".dhan-session.json");
+
+function sessionPath() {
+  return process.env.T2S_DHAN_SESSION_FILE || path.join(__dirname, ".dhan-session.json");
+}
+
+function readJsonObject(file) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return null;
+  }
+}
 const AUTH = "https://auth.dhan.co";
 const API = "https://api.dhan.co/v2";
 
@@ -70,11 +83,17 @@ export function resolveDhanLogin(input = {}, env = process.env, session) {
 
 export function loadDhanSession() {
   const session = emptySession();
-  try {
-    const raw = JSON.parse(fs.readFileSync(SESSION_FILE, "utf8"));
-    Object.assign(session, raw && typeof raw === "object" ? raw : {});
-  } catch {
-    /* first run */
+  const file = sessionPath();
+  const raw = readJsonObject(file);
+  if (raw) Object.assign(session, raw);
+  if (!String(session.accessToken || "").trim()) {
+    const bak = readJsonObject(`${file}.bak`);
+    if (bak && String(bak.accessToken || "").trim()) {
+      session.accessToken = String(bak.accessToken).trim();
+      if (!session.clientId && bak.clientId) session.clientId = String(bak.clientId);
+      if (!session.expiryTime && bak.expiryTime) session.expiryTime = String(bak.expiryTime);
+      if (!session.generatedAt && bak.generatedAt) session.generatedAt = String(bak.generatedAt);
+    }
   }
   return mergeDhanCredentials(session);
 }
@@ -89,13 +108,18 @@ export function sessionPatchKeepsToken(current = {}, patch = {}) {
 }
 
 export function saveDhanSession(patch = {}) {
-  const next = sessionPatchKeepsToken(loadDhanSession(), patch);
-  fs.writeFileSync(SESSION_FILE, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(SESSION_FILE, 0o600);
-  } catch {
-    /* windows */
+  const file = sessionPath();
+  const raw = readJsonObject(file);
+  const current = raw ? { ...emptySession(), ...raw } : emptySession();
+  const next = sessionPatchKeepsToken(mergeDhanCredentials(current), patch);
+  if (!String(next.accessToken || "").trim() && String(current.accessToken || "").trim()) {
+    next.accessToken = String(current.accessToken);
   }
+  const prevToken = String(current.accessToken || "").trim();
+  if (prevToken) {
+    writeFileAtomic(`${file}.bak`, `${JSON.stringify({ ...current, accessToken: prevToken }, null, 2)}\n`);
+  }
+  writeFileAtomic(file, `${JSON.stringify(next, null, 2)}\n`);
   if (patch.clientId || patch.loginId || patch.pin || patch.totpSecret || patch.accessToken) {
     upsertDhanEnv({
       clientId: next.clientId,
@@ -248,12 +272,16 @@ const DAILY_RESET_WINDOW_MS = 3 * 60 * 1000;
 export function msUntilTokenKeepAlive(session = {}, from = Date.now()) {
   const expiry = Date.parse(resolveTokenExpiry(session) || "");
   const remaining = Number.isFinite(expiry) ? expiry - from : NaN;
+  const token = String(session.accessToken || "").trim();
   const tokenStillGood = Number.isFinite(remaining) && remaining > TOKEN_STILL_GOOD_MS;
-  // A restart after 8:00 IST must not mint in 5s while the saved JWT still has life.
-  if (needsFreshAccessToken(session, from) && !tokenStillGood) return 5_000;
+  // No saved token: mint soon when PIN + TOTP exist. A saved token is not replaced 5s after deploy.
+  if (!token && needsFreshAccessToken(session, from)) return 5_000;
   const nextReset = lastDailyResetAt(from) + 24 * 60 * 60 * 1000;
   let wait = Math.max(5_000, nextReset - from);
-  if (Number.isFinite(expiry)) {
+  if (token && Number.isFinite(expiry) && !tokenStillGood) {
+    const untilRefresh = expiry - from - 5 * 60 * 1000;
+    if (untilRefresh > 5_000) wait = Math.min(wait, untilRefresh);
+  } else if (Number.isFinite(expiry)) {
     wait = Math.min(wait, Math.max(5_000, expiry - from - 5 * 60 * 1000));
   }
   return wait;
@@ -287,11 +315,14 @@ export function keepAlivePlan({
   }
   const tokenStillGood = Number.isFinite(remainingMs) && remainingMs > TOKEN_STILL_GOOD_MS;
   const userAsked = reason === "save" || reason === "api" || reason === "auth";
-  // A deploy/restart must not mint, even inside the 8:00 IST window.
+  // A deploy/restart must not mint, even inside the 8:00 IST window and even when the JWT is short.
   // The 8:00 job still mints only while this process is already running.
   if (tokenStillGood && needsFresh && !userAsked && (reason === "boot" || !insideDailyResetWindow(now))) {
     if (reason === "boot") return { action: "reuse", because: "restart-keeps-token" };
     return { action: "wait", because: "restart-keeps-token" };
+  }
+  if (reason === "boot" && needsFresh) {
+    return { action: "reuse", because: "restart-keeps-token" };
   }
   if (canAutoGenerate && needsFresh) {
     return { action: "mint", because: "daily-reset" };
@@ -352,22 +383,33 @@ export function pickSavedDhanAccess({ session = {}, desk = {}, env = {} } = {}) 
   };
 }
 
-/** Copy the newest saved admin token into the session file without minting or starting LIVE. */
+/** Copy the newest saved admin token into the session file and the admin desk without minting or starting LIVE. */
 export function ensureSessionHasPickedToken() {
   try {
     const session = loadDhanSession();
+    const desk = peekAdminBrokerSecrets("dhan");
     const picked = pickSavedDhanAccess({
       session,
-      desk: peekAdminBrokerSecrets("dhan"),
+      desk,
       env: process.env,
     });
     if (!picked.token) return session;
-    if (String(session.accessToken || "").trim() === picked.token) return session;
-    return saveDhanSession({
-      accessToken: picked.token,
-      clientId: picked.clientId || session.clientId,
-      autoStart: session.autoStart !== false,
-    });
+    let next = session;
+    if (String(session.accessToken || "").trim() !== picked.token) {
+      next = saveDhanSession({
+        accessToken: picked.token,
+        clientId: picked.clientId || session.clientId,
+        autoStart: session.autoStart !== false,
+      });
+    }
+    if (String(desk.brokerToken || "").trim() !== picked.token) {
+      persistAdminBrokerSecrets({
+        brokerId: "dhan",
+        accountId: picked.clientId || desk.accountId || next.clientId,
+        accessToken: picked.token,
+      });
+    }
+    return next;
   } catch (error) {
     console.log(`Could not copy the saved Dhan token into the session file: ${error.message || error}`);
     return loadDhanSession();
@@ -774,6 +816,18 @@ export function persistPastedToken({ clientId, loginId, accessToken, expiryTime,
   const token = String(accessToken || "").trim();
   const tokenChanged = token !== String(session.accessToken || "").trim();
   const savedClientId = String(clientId || session.clientId || "").trim();
+  const sameClient = savedClientId === String(session.clientId || "").trim();
+  if (token && !tokenChanged && sameClient) {
+    const desk = peekAdminBrokerSecrets("dhan");
+    if (String(desk.brokerToken || "").trim() !== token) {
+      persistAdminBrokerSecrets({
+        brokerId: "dhan",
+        accountId: savedClientId,
+        accessToken: token,
+      });
+    }
+    return session;
+  }
   const entered = String(loginId || session.loginId || "").trim();
   saveDhanSession({
     clientId: savedClientId,

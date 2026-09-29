@@ -23,6 +23,7 @@ const {
   peekBrokerAccount,
   peekClientSecrets,
   persistAdminBrokerSecrets,
+  purgeMemberDesksExcept,
   applyMemberDhanOrderStatuses,
   memberWorkingDhanCopies,
   recordMemberCopyFill,
@@ -618,4 +619,27 @@ test("admin Dhan client ID and access token persist on the admin desk, not the l
   });
   assert.equal(peekAdminBrokerSecrets("dhan").brokerToken, "admin-dhan-token-replaced");
   assert.equal(peekAdminBrokerSecrets("dhan").accountId, "1100333");
+});
+
+test("deploy purge and a blank token patch keep the admin access token", () => {
+  persistAdminBrokerSecrets({
+    brokerId: "dhan",
+    accountId: "1100333",
+    accessToken: "admin-token-survive-deploy",
+  });
+  purgeMemberDesksExcept([]);
+  sweepMemberDailyBooks(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  assert.equal(peekAdminBrokerSecrets("dhan").brokerToken, "admin-token-survive-deploy");
+  const raw = JSON.parse(fs.readFileSync(process.env.T2S_MEMBER_DESK_FILE, "utf8"));
+  assert.equal(raw.admin.brokerAccounts.dhan.brokerToken, "admin-token-survive-deploy");
+  const member = { id: "u-keep-token", name: "Keep", email: "keep-token@t2s.app", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "dhan",
+    clientId: "1100771",
+    accessToken: "member-token-keep-deploy",
+  });
+  saveClientSettings(member.id, { brokerToken: "", notes: "deploy touch" });
+  assert.equal(peekClientSecrets(member.id).brokerToken, "member-token-keep-deploy");
+  assert.equal(peekBrokerAccount(member.id, "dhan").brokerToken, "member-token-keep-deploy");
 });

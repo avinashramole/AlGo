@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeFileAtomic } from "./atomicWrite.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.join(__dirname, "..");
@@ -91,7 +92,7 @@ function serializeEnvMap(map) {
   return `${lines.join("\n")}\n`;
 }
 
-export function upsertDhanEnv(patch = {}, { root = REPO_ROOT, env = process.env } = {}) {
+export function upsertDhanEnv(patch = {}, { root = process.env.T2S_ENV_ROOT || REPO_ROOT, env = process.env } = {}) {
   const updates = {};
   const clientId = String(patch.DHAN_CLIENT_ID || patch.clientId || "").trim();
   const loginId = String(patch.DHAN_LOGIN_ID || patch.loginId || "").trim();
@@ -110,12 +111,9 @@ export function upsertDhanEnv(patch = {}, { root = REPO_ROOT, env = process.env 
   for (const file of targets) {
     const current = readEnvFile(file)?.map || {};
     const next = { ...current, ...updates };
-    fs.writeFileSync(file, serializeEnvMap(next), { mode: 0o600 });
-    try {
-      fs.chmodSync(file, 0o600);
-    } catch {
-      /* windows */
-    }
+    const savedToken = String(current.DHAN_ACCESS_TOKEN || "").trim();
+    if (savedToken && !String(next.DHAN_ACCESS_TOKEN || "").trim()) next.DHAN_ACCESS_TOKEN = savedToken;
+    writeFileAtomic(file, serializeEnvMap(next));
   }
   for (const key of DHAN_KEYS) {
     if (updates[key]) env[key] = updates[key];

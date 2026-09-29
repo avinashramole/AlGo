@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   asDhanPin,
@@ -9,7 +12,9 @@ import {
   jwtExpiryIso,
   lastDailyResetAt,
   keepAlivePlan,
+  loadDhanSession,
   pickSavedDhanAccess,
+  saveDhanSession,
   sessionPatchKeepsToken,
   effectiveTokenBackoff,
   mergeDhanCredentials,
@@ -338,7 +343,7 @@ test("needsFreshAccessToken is true with no token or under 20 minutes remaining"
   assert.equal(needsFreshAccessToken({ accessToken: fakeJwt(exp) }, now), true);
 });
 
-test("msUntilTokenKeepAlive waits while a pre-8:00 JWT still has life, and mints in 5s only when it is almost expired", () => {
+test("msUntilTokenKeepAlive waits while a saved JWT still has life and does not mint 5s after deploy", () => {
   const nineAm = Date.parse("2026-08-21T03:30:00.000Z");
   const eightOhFive = Date.parse("2026-08-21T02:35:00.000Z");
   const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
@@ -351,7 +356,8 @@ test("msUntilTokenKeepAlive waits while a pre-8:00 JWT still has life, and mints
   const freshIat = Math.floor(eightOhFive / 1000);
   assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(staleExp, staleIat) }, nineAm), staleExp * 1000 - nineAm - 5 * 60 * 1000);
   const dyingExp = Math.floor((nineAm + 10 * 60 * 1000) / 1000);
-  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(dyingExp, staleIat) }, nineAm), 5_000);
+  assert.equal(msUntilTokenKeepAlive({ accessToken: fakeJwt(dyingExp, staleIat) }, nineAm), 5 * 60 * 1000);
+  assert.equal(msUntilTokenKeepAlive({}, nineAm), 5_000);
   assert.equal(
     msUntilTokenKeepAlive(
       { accessToken: fakeJwt(freshExp, freshIat), generatedAt: new Date(eightOhFive).toISOString() },
@@ -417,6 +423,26 @@ test("keepAlivePlan keeps a long-lived JWT on restart and still mints at 8:00 IS
       now: eightOhOne,
     }),
     { action: "mint", because: "daily-reset" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "boot",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: 5 * 60 * 1000,
+      now: tenThirty,
+    }),
+    { action: "reuse", because: "restart-keeps-token" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "boot",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: Number.NaN,
+      now: tenThirty,
+    }),
+    { action: "reuse", because: "restart-keeps-token" },
   );
 });
 
@@ -620,4 +646,33 @@ test("resetDhanAccessToken rejects a website password when no PIN is saved", asy
       ),
     /does not use the website login password/,
   );
+});
+
+test("an empty patch and a truncated session file keep the saved admin access token", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-dhan-session-"));
+  const prevSession = process.env.T2S_DHAN_SESSION_FILE;
+  const prevRoot = process.env.T2S_ENV_ROOT;
+  const envKeys = ["DHAN_ACCESS_TOKEN", "DHAN_CLIENT_ID", "DHAN_LOGIN_ID", "DHAN_PIN", "DHAN_TOTP_SECRET"];
+  const prevEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  process.env.T2S_DHAN_SESSION_FILE = path.join(dir, "session.json");
+  process.env.T2S_ENV_ROOT = dir;
+  for (const key of envKeys) delete process.env[key];
+  try {
+    saveDhanSession({ clientId: "1100333", accessToken: "admin-access-token-keep", pin: "2468" });
+    saveDhanSession({ accessToken: "", autoStart: false });
+    assert.equal(loadDhanSession().accessToken, "admin-access-token-keep");
+    fs.writeFileSync(process.env.T2S_DHAN_SESSION_FILE, "");
+    assert.equal(loadDhanSession().accessToken, "admin-access-token-keep");
+    assert.equal(loadDhanSession().clientId, "1100333");
+  } finally {
+    if (prevSession === undefined) delete process.env.T2S_DHAN_SESSION_FILE;
+    else process.env.T2S_DHAN_SESSION_FILE = prevSession;
+    if (prevRoot === undefined) delete process.env.T2S_ENV_ROOT;
+    else process.env.T2S_ENV_ROOT = prevRoot;
+    for (const key of envKeys) {
+      if (prevEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = prevEnv[key];
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

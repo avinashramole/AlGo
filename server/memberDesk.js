@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeFileAtomic } from "./atomicWrite.js";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
@@ -27,6 +28,7 @@ function round2(value) {
 
 function readStore() {
   try {
+    if (!fs.existsSync(DESK_FILE)) return {};
     const row = JSON.parse(fs.readFileSync(DESK_FILE, "utf8"));
     return row && typeof row === "object" && !Array.isArray(row) ? row : {};
   } catch {
@@ -34,9 +36,55 @@ function readStore() {
   }
 }
 
-function writeStore(store) {
-  fs.mkdirSync(path.dirname(DESK_FILE), { recursive: true });
-  fs.writeFileSync(DESK_FILE, `${JSON.stringify(store, null, 2)}\n`);
+function keepSavedBrokerSecrets(nextStore, disk) {
+  for (const [userId, saved] of Object.entries(disk || {})) {
+    if (!saved || typeof saved !== "object") continue;
+    const mem = nextStore[userId];
+    if (!mem || typeof mem !== "object") continue;
+    const savedAccounts = saved.brokerAccounts && typeof saved.brokerAccounts === "object" ? saved.brokerAccounts : {};
+    mem.brokerAccounts = mem.brokerAccounts && typeof mem.brokerAccounts === "object" ? mem.brokerAccounts : {};
+    for (const [brokerId, slot] of Object.entries(savedAccounts)) {
+      if (!slot || typeof slot !== "object") continue;
+      const cur = mem.brokerAccounts[brokerId] && typeof mem.brokerAccounts[brokerId] === "object" ? mem.brokerAccounts[brokerId] : {};
+      const next = { ...cur };
+      let kept = false;
+      if (!String(next.brokerToken || "").trim() && String(slot.brokerToken || "").trim()) {
+        next.brokerToken = slot.brokerToken;
+        if (!next.tokenUpdatedAt) next.tokenUpdatedAt = slot.tokenUpdatedAt || "";
+        kept = true;
+      }
+      if (!String(next.brokerApiKey || "").trim() && String(slot.brokerApiKey || "").trim()) {
+        next.brokerApiKey = slot.brokerApiKey;
+        kept = true;
+      }
+      if (!String(next.brokerSessionToken || "").trim() && String(slot.brokerSessionToken || "").trim()) {
+        next.brokerSessionToken = slot.brokerSessionToken;
+        kept = true;
+      }
+      if (kept) mem.brokerAccounts[brokerId] = next;
+    }
+  }
+  return nextStore;
+}
+
+function writeStore(nextStore) {
+  let disk = {};
+  let readable = true;
+  try {
+    if (fs.existsSync(DESK_FILE)) {
+      const row = JSON.parse(fs.readFileSync(DESK_FILE, "utf8"));
+      if (!row || typeof row !== "object" || Array.isArray(row)) readable = false;
+      else disk = row;
+    }
+  } catch {
+    readable = false;
+  }
+  if (!readable) {
+    console.log("member-desk.json is unreadable; refusing to replace saved broker tokens.");
+    return;
+  }
+  keepSavedBrokerSecrets(nextStore, disk);
+  writeFileAtomic(DESK_FILE, `${JSON.stringify(nextStore, null, 2)}\n`);
 }
 
 let store = readStore();
@@ -176,7 +224,16 @@ function syncSelectedBrokerAccount(desk) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   desk.brokerAccounts = brokerAccountsMap(desk);
   if (!brokerId || brokerId === "paper") return desk.brokerAccounts;
-  desk.brokerAccounts[brokerId] = snapshotSelectedBrokerAccount(desk);
+  const prev = desk.brokerAccounts[brokerId] || emptyBrokerAccount();
+  const snap = snapshotSelectedBrokerAccount(desk);
+  desk.brokerAccounts[brokerId] = {
+    accountId: snap.accountId || prev.accountId,
+    brokerToken: snap.brokerToken || prev.brokerToken,
+    brokerApiKey: snap.brokerApiKey || prev.brokerApiKey,
+    brokerSessionToken: snap.brokerSessionToken || prev.brokerSessionToken,
+    tokenUpdatedAt: snap.brokerToken ? snap.tokenUpdatedAt || prev.tokenUpdatedAt : prev.tokenUpdatedAt || snap.tokenUpdatedAt,
+  };
+  if (!snap.brokerToken && prev.brokerToken) desk.brokerToken = prev.brokerToken;
   return desk.brokerAccounts;
 }
 
@@ -737,13 +794,15 @@ export function persistAdminBrokerSecrets({ brokerId = "dhan", accountId, access
 }
 
 export function peekAdminBrokerSecrets(brokerId = "dhan") {
-  const slot = peekBrokerAccount(ADMIN_DESK_ID, brokerId);
+  const wanted = String(brokerId || "dhan").trim().toLowerCase() || "dhan";
+  const slot = peekBrokerAccount(ADMIN_DESK_ID, wanted);
   const desk = store[ADMIN_DESK_ID] || {};
-  const selected = String(desk.brokerId || "").trim().toLowerCase() === String(brokerId || "dhan").trim().toLowerCase();
+  const selected = String(desk.brokerId || "").trim().toLowerCase();
+  const useTop = selected === wanted || (wanted === "dhan" && (!selected || selected === "paper" || selected === "dhan"));
   return {
-    accountId: String(slot.accountId || (selected ? desk.accountId : "") || "").trim(),
-    brokerToken: String(slot.brokerToken || (selected ? desk.brokerToken : "") || "").trim(),
-    tokenUpdatedAt: String(slot.tokenUpdatedAt || (selected ? desk.brokerTokenUpdatedAt : "") || "").trim(),
+    accountId: String(slot.accountId || (useTop ? desk.accountId : "") || "").trim(),
+    brokerToken: String(slot.brokerToken || (useTop ? desk.brokerToken : "") || "").trim(),
+    tokenUpdatedAt: String(slot.tokenUpdatedAt || (useTop ? desk.brokerTokenUpdatedAt : "") || "").trim(),
   };
 }
 
