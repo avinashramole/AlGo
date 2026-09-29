@@ -11,7 +11,6 @@ import { brokerName, defaultBrokers } from "../lib/brokers";
 import { cn, formatInr, formatNumber } from "../lib/format";
 import {
   contractLabel,
-  isNiftyOptionEngineKind,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
   isNiftyTestKind,
@@ -25,6 +24,23 @@ import {
 type DeskTab = "copy" | "tradingview";
 type Filter = "all" | "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
+
+function strategyCardExplain(algo: AlgoStrategy) {
+  if (isNiftyFirstCandleKind(algo)) {
+    return [
+      "When the current 5m candle opens, the previous candle is checked. Preview Nifty future close above its open and preview ATM CE green → BUY CE. Preview Nifty future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji, or a preview option that is not green, skips that candle. Weekly ATM by default. Saving or restarting t2s does not start LIVE.",
+      "When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked.",
+    ];
+  }
+  if (isCrudeFirstCandleKind(algo)) {
+    const maxTrades = Math.max(1, Math.min(20, Math.round(Number(algo.maxTradesPerDay) || 5)));
+    return [
+      "When the current 5m candle opens, the previous crude oil future candle is checked. Preview crude future close above its open and preview ATM CE green → BUY CE. Preview crude future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji, or a preview option that is not green, skips that candle. Monthly MCX. Saving or restarting t2s does not start LIVE.",
+      `When the current 5m candle opens, the previous candle open and close are checked, up to ${maxTrades} trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. One signal places one order.`,
+    ];
+  }
+  return [];
+}
 
 function rupee(value: number) {
   const n = Number(value) || 0;
@@ -493,6 +509,15 @@ function AlgoCard({
             {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
             <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
+            {strategyCardExplain(algo).length ? (
+              <div className="mt-2 space-y-2" data-strategy-explain={algo.kind}>
+                {strategyCardExplain(algo).map((line) => (
+                  <p key={line} className="text-[11px] leading-snug text-slate-500">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
@@ -599,19 +624,9 @@ function AlgoCard({
           )}
         </div>
       </div>
-      {isCrudeFirstCandleKind(algo) ? (
+      {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo) ? (
         <div className="mt-2 text-[11px] text-slate-500">
-          Saving or mapping clients does not start LIVE and does not place an order. Trade limit is under the strategy name. One signal places one order. Press Start to run it.
-        </div>
-      ) : null}
-      {isNiftyOptionEngineKind(algo) ? (
-        <div className="mt-2 text-[11px] text-slate-500">
-          Saving or mapping clients does not start LIVE.
-          {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo)
-            ? " LIVE arms automatically at 09:20 IST on session days."
-            : isNiftyFirstCandleKind(algo)
-              ? " LIVE arms automatically at 09:00 IST on session days. When the current 5m candle opens, the preview Nifty future open and close are checked with the preview ATM CE and PE. The current candle open and close are not used. Up to 5 trades a day."
-              : ""}
+          Saving or mapping clients does not start LIVE. LIVE arms automatically at 09:20 IST on session days.
         </div>
       ) : null}
     </section>
