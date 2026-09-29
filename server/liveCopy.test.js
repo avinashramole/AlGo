@@ -804,6 +804,9 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
     securityId: "51338",
     product: "MIS",
     type: "MARKET",
+    lots: 1,
+    lotSize: 65,
+    exchangeSegment: "NSE_FNO",
     brokerId: "dhan",
   });
   assert.equal(queuedResult.queued, true);
@@ -823,7 +826,9 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
   assert.equal(copy.expiry, "2026-10-06");
   assert.equal(copy.securityId, "51338");
   assert.equal(copy.product, "MIS");
-  assert.equal(copy.exchangeSegment, undefined);
+  assert.equal(copy.exchangeSegment, "NSE_FNO");
+  assert.equal(copy.lots, 1);
+  assert.equal(copy.lotSize, 65);
   assert.equal(copy.type, "LIMIT");
   assert.equal(copy.price, 118.2);
   assert.equal(copy.brokerId, "upstox");

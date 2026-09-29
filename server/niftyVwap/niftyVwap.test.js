@@ -1584,8 +1584,12 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
   assert.match(niftyAlgo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN/);
   assert.match(niftyBook.places[0].symbol, /^NIFTY \d+ CE$/);
   assert.equal(niftyBook.places[0].qty, 65);
-  assert.equal(niftyBook.places[0].exchangeSegment, undefined);
-  assert.equal(niftyBook.places[0].lots, undefined);
+  assert.equal(niftyBook.places[0].lots, 1);
+  assert.equal(niftyBook.places[0].lotSize, 65);
+  assert.equal(niftyBook.places[0].exchangeSegment, "NSE_FNO");
+  assert.equal(niftyBook.places[0].product, "MIS");
+  assert.equal(niftyBook.places[0].side, book.places[0].side);
+  assert.equal(niftyBook.places[0].type, book.places[0].type);
 
   const forming = defaultCrudeFirstCandleAlgo({ name: "CRUDE forming" });
   const formingBook = bookAdapter();

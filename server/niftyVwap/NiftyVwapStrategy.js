@@ -1,3 +1,4 @@
+import { exchangeSegmentFor } from "../optionChain.js";
 import { optionEngineConfig } from "./config.js";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { PositionManager, runtimeState, resetSession } from "./PositionManager.js";
@@ -187,11 +188,12 @@ export const NiftyVwapStrategy = {
     if (crudeSignal) state.sentSignalBarTime = signal.barTime;
     state.lastEntryAt = Date.now();
     PositionManager.lockContract(state, pick);
-    const crude = String(config.symbol || "").toUpperCase() === "CRUDEOIL";
     const payload = {
       symbol: pick.symbol,
       side: "BUY",
       qty: config.qty,
+      lots: config.lots,
+      lotSize: config.lotSize,
       price: ltp,
       kind: "option",
       option: pick.option,
@@ -202,7 +204,7 @@ export const NiftyVwapStrategy = {
       type: "MARKET",
       strategy: algo.name,
       barTime: signal.barTime,
-      ...(crude ? { lots: config.lots, lotSize: config.lotSize, exchangeSegment: "MCX_COMM" } : {}),
+      exchangeSegment: exchangeSegmentFor(pick.symbol),
     };
     const result = adapter.place(payload);
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
