@@ -583,9 +583,24 @@ export function onLiveAlgoOrders(fn) {
   notifyLiveAlgoOrders = typeof fn === "function" ? fn : () => {};
 }
 
+function optionTickPrice(value) {
+  const n = Number(value);
+  if (!(Number.isFinite(n) && n > 0)) return 0;
+  return Math.round(n * 20) / 20;
+}
+
+/** One limit for the admin book and every mapped user. A MARKET buy lets each Dhan account invent its own protection price. */
+function sameBookOrder(payload = {}) {
+  if (payload?.side === "SELL") return payload;
+  const price = optionTickPrice(payload.price);
+  if (!(price > 0)) return payload;
+  return { ...payload, type: "LIMIT", price };
+}
+
 export function queueLiveAlgoOrder(payload) {
-  const securityId = contractSecurityId(payload);
-  const stamped = securityId ? { ...payload, securityId } : payload;
+  const priced = sameBookOrder(payload);
+  const securityId = contractSecurityId(priced);
+  const stamped = securityId ? { ...priced, securityId } : priced;
   const brokers = liveAutoTradeBrokers({
     strategyName: stamped?.strategy,
     algoBrokerId: stamped?.brokerId || "dhan",

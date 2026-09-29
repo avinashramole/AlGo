@@ -588,12 +588,20 @@ test("member live BUY still queues when the master desk already has a Nifty opti
     symbol: "NIFTY 24700 CE",
     qty: 65,
     lotSize: 65,
+    price: 248.27,
+    type: "MARKET",
     brokerId: "dhan",
   });
   const queued = drainPendingLiveAlgoOrders();
   const copy = queued.find((row) => row.copyUserId === user.id);
   assert.ok(copy);
   assert.equal(copy.account.accessToken, "member-buy-token");
+  assert.equal(copy.type, "LIMIT");
+  assert.equal(copy.price, 248.25);
+  for (const row of queued) {
+    assert.equal(row.type, "LIMIT");
+    assert.equal(row.price, 248.25);
+  }
   replaceDhanBook([]);
 });
 
