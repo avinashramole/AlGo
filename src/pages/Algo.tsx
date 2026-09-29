@@ -12,6 +12,7 @@ import { cn, formatInr, formatNumber } from "../lib/format";
 import {
   contractLabel,
   isNiftyOptionEngineKind,
+  isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
   isNiftyTestKind,
   sortDeskAlgos,
@@ -66,6 +67,14 @@ function kindMeta(algo: AlgoStrategy) {
       kind: "nifty-test" as const,
       category: "NIFTY TEST",
       config: `NIFTY FUT · ${algo.timeframe || "5m"} · live feed while started · above open BUY · below open SELL${liveSide ? ` · ${liveSide}` : " · no signal"}`,
+    };
+  }
+  if (isCrudeFirstCandleKind(algo)) {
+    const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
+    return {
+      kind: "crude-first-candle" as const,
+      category: "CRUDE OIL FIRST 5M",
+      config: `CRUDE FUT · monthly ATM · preview ${algo.timeframe || "5m"} open/close at the next candle open · up to ${maxTrades} trades · MCX until ${algo.endTimeIst || "23:15"} IST · paused until Start`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
@@ -388,6 +397,8 @@ function AlgoCard({
       ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
         ? algo.lastSignal
         : "No signal"
+    : isCrudeFirstCandleKind(algo)
+      ? algo.lastSignal || "Preview 5m: CRUDE FUT green + ATM CE green → BUY CE · CRUDE FUT red + ATM PE green → BUY PE · doji skips that candle"
     : isNiftyFirstCandleKind(algo)
       ? algo.lastSignal || "Preview 5m: NIFTY FUT green + ATM CE green → BUY CE · NIFTY FUT red + ATM PE green → BUY PE · doji skips that candle"
       : algo.lastSignal && algo.enabled
@@ -513,6 +524,11 @@ function AlgoCard({
           )}
         </div>
       </div>
+      {isCrudeFirstCandleKind(algo) ? (
+        <div className="mt-2 text-[11px] text-slate-500">
+          Saving or mapping clients does not start LIVE and does not place an order. When the current 5m candle opens, the preview crude oil future open and close are checked with the preview ATM CE and PE. The current candle open and close are not used. Up to 5 trades a day. Press Start to run it.
+        </div>
+      ) : null}
       {isNiftyOptionEngineKind(algo) ? (
         <div className="mt-2 text-[11px] text-slate-500">
           Saving or mapping clients does not start LIVE.

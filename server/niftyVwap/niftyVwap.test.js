@@ -4,7 +4,7 @@ import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
 import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
-import { defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyFirstCandleAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
+import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyOptionEngineAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
 import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap, nextCandleEntryWindow } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 import { runtimeState, PositionManager } from "./PositionManager.js";
@@ -1509,4 +1509,121 @@ test("normalizeAlgo rematerializes first candle even if kind was saved as indica
   assert.equal(isNiftyFirstCandleAlgo(restored), true);
   assert.equal(restored.kind, "nifty-first-candle");
   assert.equal(restored.enabled, false);
+});
+
+test("crude oil preview candle uses the same buy and leaves the nifty strategy unchanged", () => {
+  const nifty = defaultNiftyFirstCandleAlgo({ name: "NIFTY 5m first candle" });
+  const crude = defaultCrudeFirstCandleAlgo({ name: "CRUDE OIL 5m first candle", enabled: true });
+  assert.equal(isNiftyFirstCandleAlgo(nifty), true);
+  assert.equal(isCrudeFirstCandleAlgo(nifty), false);
+  assert.equal(isNiftyOptionEngineAlgo(nifty), true);
+  assert.equal(isCrudeFirstCandleAlgo(crude), true);
+  assert.equal(isNiftyFirstCandleAlgo(crude), false);
+  assert.equal(isNiftyOptionEngineAlgo(crude), false);
+  assert.equal(crude.enabled, false);
+  const cfg = crudeFirstCandleConfig(crude);
+  assert.equal(cfg.symbol, "CRUDEOIL");
+  assert.equal(cfg.lotSize, 100);
+  assert.equal(cfg.qty, 100);
+  assert.equal(cfg.expiryKind, "monthly");
+  assert.equal(cfg.endTimeIst, "23:15");
+  assert.equal(cfg.signalMode, "first-candle");
+  assert.equal(niftyFirstCandleConfig(nifty).symbol, "NIFTY");
+  assert.equal(niftyFirstCandleConfig(nifty).endTimeIst, "15:15");
+  assert.equal(niftyFirstCandleConfig(nifty).lotSize, 65);
+
+  const now = T0_0900 + BAR;
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo: crude,
+    now,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.match(crude.lastSignal, /PREVIEW CRUDE FUT GREEN \+ CE GREEN/);
+  assert.equal(book.places[0].symbol, "CRUDEOIL 6100 CE");
+  assert.equal(book.places[0].qty, 100);
+  assert.equal(book.places[0].lots, 1);
+  assert.equal(book.places[0].lotSize, 100);
+  assert.equal(book.places[0].exchangeSegment, "MCX_COMM");
+
+  const niftyBook = bookAdapter();
+  const niftyAlgo = defaultNiftyFirstCandleAlgo({ name: "NIFTY 5m first candle" });
+  const niftyTick = NiftyVwapStrategy.tick({
+    algo: niftyAlgo,
+    now,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22663, 22680)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 22680,
+    step: 50,
+    expiry: "2026-10-06",
+    positions: niftyBook.positions,
+    adapter: niftyBook.adapter,
+  });
+  assert.equal(niftyTick.action, "entry");
+  assert.match(niftyAlgo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN/);
+  assert.match(niftyBook.places[0].symbol, /^NIFTY \d+ CE$/);
+  assert.equal(niftyBook.places[0].qty, 65);
+  assert.equal(niftyBook.places[0].exchangeSegment, undefined);
+  assert.equal(niftyBook.places[0].lots, undefined);
+
+  const forming = defaultCrudeFirstCandleAlgo({ name: "CRUDE forming" });
+  const formingBook = bookAdapter();
+  const skipped = NiftyVwapStrategy.tick({
+    algo: forming,
+    now: T0_0900 + 60_000,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: formingBook.positions,
+    adapter: formingBook.adapter,
+  });
+  assert.notEqual(skipped.action, "entry");
+  assert.equal(formingBook.places.length, 0);
+
+  const evening = T0_0900 + 12 * 60 * 60 * 1000;
+  const eveningBar = { time: evening, open: 6100, high: 6130, low: 6090, close: 6120, volume: 20 };
+  const eveningCe = { time: evening, open: 40, high: 48, low: 39, close: 46, volume: 8 };
+  const eveningPe = { time: evening, open: 40, high: 42, low: 30, close: 32, volume: 8 };
+  const mcx = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [eveningBar],
+    ceBars: [eveningCe],
+    peBars: [eveningPe],
+    now: evening + BAR,
+    endTimeIst: "23:15",
+    firstBarStartIst: "09:00",
+    entryEvaluationIst: "09:05",
+  });
+  assert.equal(mcx.buyCe, true);
+  const nseHours = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [eveningBar],
+    ceBars: [eveningCe],
+    peBars: [eveningPe],
+    now: evening + BAR,
+    endTimeIst: "15:15",
+  });
+  assert.equal(nseHours.buyCe, false);
 });

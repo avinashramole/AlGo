@@ -79,14 +79,17 @@ function isFirstCandleAlgo(algo = {}) {
   return (
     algo.kind === "nifty-first-candle" ||
     algo.strategyType === "NIFTY_FIRST_CANDLE_5M" ||
-    algo.indicator === "NIFTY_FIRST_CANDLE"
+    algo.indicator === "NIFTY_FIRST_CANDLE" ||
+    algo.kind === "crude-first-candle" ||
+    algo.strategyType === "CRUDE_FIRST_CANDLE_5M" ||
+    algo.indicator === "CRUDE_FIRST_CANDLE"
   );
 }
 
 export function looksLikeNiftyOption(row = {}) {
   if (row.option === "CE" || row.option === "PE") {
     const symbol = String(row.symbol || "");
-    return !/BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX/i.test(symbol);
+    return !/BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|CRUDEOIL/i.test(symbol);
   }
   const text = `${row.symbol || ""} ${row.tradingSymbol || ""}`;
   return /NIFTY/i.test(text) && /(CE|PE)/i.test(text) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(text);

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, CRUDE_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -255,6 +255,7 @@ export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
+  if (isCrudeFirstCandleAlgo(algo)) return "CRUDE OIL ATM CE/PE first 5m";
   if (isNiftyFirstCandleAlgo(algo)) return "NIFTY ATM CE/PE first 5m";
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -283,6 +284,13 @@ export function summarizeAlgo(algo) {
     const sl = algo.slPct || 0.4;
     const tgt = algo.targetPct || 0.8;
     return `Nifty Test · NIFTY FUT · live feed while started · current candle above open → BUY · current candle below open → SELL · ${tf} · SL ${sl}% / TGT ${tgt}% · ${size}`;
+  }
+  if (isCrudeFirstCandleAlgo(algo)) {
+    const sl = algo.initialSlPct || 20;
+    const tgt = algo.targetPct || 40;
+    const endAt = algo.endTimeIst || "23:15";
+    const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
+    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview 5m open/close at the next candle open · up to ${maxTrades} trades · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trades/day · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -350,6 +358,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "nifty-vwap" &&
     input.kind !== "nifty-vwap-reversal" &&
     input.kind !== "nifty-first-candle" &&
+    input.kind !== "crude-first-candle" &&
     input.kind !== "nifty-test";
   if (keepHedge) {
     const cfg = niftyVwapHedgeConfig(merged);
@@ -397,6 +406,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "nifty-vwap" &&
     input.kind !== "nifty-vwap-hedge" &&
     input.kind !== "nifty-first-candle" &&
+    input.kind !== "crude-first-candle" &&
     input.kind !== "nifty-test";
   if (keepReversal) {
     const cfg = niftyVwapReversalConfig(merged);
@@ -445,6 +455,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "nifty-vwap-reversal" &&
     input.kind !== "nifty-vwap-hedge" &&
     input.kind !== "nifty-first-candle" &&
+    input.kind !== "crude-first-candle" &&
     input.kind !== "nifty-test";
   if (keepNiftyVwap) {
     const cfg = niftyVwapConfig(merged);
@@ -489,16 +500,83 @@ export function normalizeAlgo(input = {}, existing = {}) {
     next.summary = summarizeAlgo(next);
     return withMapping(next, input, existing);
   }
+  const switchingAwayFromCrude =
+    input.kind === "price-action" ||
+    input.kind === "nifty-vwap" ||
+    input.kind === "nifty-vwap-reversal" ||
+    input.kind === "nifty-vwap-hedge" ||
+    input.kind === "nifty-first-candle" ||
+    input.kind === "nifty-test";
+  const crudeName = String(merged.name || existing.name || "");
+  const keepCrude =
+    (isCrudeFirstCandleAlgo(merged) ||
+      isCrudeFirstCandleAlgo(existing) ||
+      (/crude/i.test(crudeName) && /5m first candle/i.test(crudeName))) &&
+    !switchingAwayFromCrude;
+  if (keepCrude) {
+    const cfg = crudeFirstCandleConfig(merged);
+    const runMode = ["live", "paper", "backtest"].includes(input.runMode)
+      ? input.runMode
+      : ["live", "paper", "backtest"].includes(existing.runMode)
+        ? existing.runMode
+        : "live";
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultCrudeFirstCandleAlgo({
+        ...merged,
+        name: String(input.name || existing.name || "").trim() || "CRUDE OIL 5m first candle",
+        runMode,
+        lots: cfg.lots,
+        lotSize: cfg.lotSize,
+      }),
+      id: existing.id || newAlgoId(),
+      kind: CRUDE_FIRST_CANDLE_KIND,
+      symbol: "CRUDEOIL",
+      lots: cfg.lots,
+      lotSize: cfg.lotSize,
+      qty: cfg.qty,
+      slPct: cfg.initialSlPct,
+      initialSlPct: cfg.initialSlPct,
+      targetPct: cfg.targetPct,
+      eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+      timeframe: cfg.timeframe,
+      expiryKind: "monthly",
+      strikeOffset: cfg.strikeOffset,
+      maxTradesPerDay: cfg.maxTradesPerDay,
+      dailyLiveIst: cfg.dailyLiveIst,
+      firstBarStartIst: cfg.firstBarStartIst,
+      entryEvaluationIst: cfg.entryEvaluationIst,
+      endTimeIst: cfg.endTimeIst,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
+      vwapState: existing.vwapState,
+      enabled: creating ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return withMapping(next, input, existing);
+  }
   const switchingAwayFromFirstCandle =
     input.kind === "price-action" ||
     input.kind === "nifty-vwap" ||
     input.kind === "nifty-vwap-reversal" ||
     input.kind === "nifty-vwap-hedge" ||
+    input.kind === "crude-first-candle" ||
     input.kind === "nifty-test";
+  const firstCandleName = String(merged.name || existing.name || "");
   const keepFirstCandle =
     (isNiftyFirstCandleAlgo(merged) ||
       isNiftyFirstCandleAlgo(existing) ||
-      /5m first candle/i.test(String(merged.name || existing.name || ""))) &&
+      (/5m first candle/i.test(firstCandleName) && !/crude/i.test(firstCandleName))) &&
     !switchingAwayFromFirstCandle;
   if (keepFirstCandle) {
     const cfg = niftyFirstCandleConfig(merged);
@@ -556,7 +634,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "nifty-vwap" ||
     input.kind === "nifty-vwap-reversal" ||
     input.kind === "nifty-vwap-hedge" ||
-    input.kind === "nifty-first-candle";
+    input.kind === "nifty-first-candle" ||
+    input.kind === "crude-first-candle";
   const keepNiftyTest =
     (isNiftyTestAlgo(merged) ||
       isNiftyTestAlgo(existing) ||
@@ -805,6 +884,13 @@ export function seedAlgos() {
         runMode: "live",
       }),
       { id: "a11", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live", lastSignal: "NO SIGNAL" },
+    ),
+    normalizeAlgo(
+      defaultCrudeFirstCandleAlgo({
+        name: "CRUDE OIL 5m first candle",
+        runMode: "live",
+      }),
+      { id: "a12", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
   ];
 }

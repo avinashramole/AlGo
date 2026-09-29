@@ -4,6 +4,8 @@ export const NIFTY_VWAP_REVERSAL_KIND = "nifty-vwap-reversal";
 export const NIFTY_VWAP_REVERSAL_TYPE = "NIFTY_VWAP_REVERSAL_15M";
 export const NIFTY_FIRST_CANDLE_KIND = "nifty-first-candle";
 export const NIFTY_FIRST_CANDLE_TYPE = "NIFTY_FIRST_CANDLE_5M";
+export const CRUDE_FIRST_CANDLE_KIND = "crude-first-candle";
+export const CRUDE_FIRST_CANDLE_TYPE = "CRUDE_FIRST_CANDLE_5M";
 export const NIFTY_TEST_KIND = "nifty-test";
 export const NIFTY_TEST_TYPE = "NIFTY_TEST";
 
@@ -72,6 +74,15 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
   endTimeIst: "15:15",
 };
 
+export const DEFAULT_CRUDE_FIRST_CANDLE_CONFIG = {
+  ...DEFAULT_NIFTY_FIRST_CANDLE_CONFIG,
+  symbol: "CRUDEOIL",
+  lotSize: 100,
+  expiryKind: "monthly",
+  endTimeIst: "23:15",
+  eodSquareOffMinutes: 15,
+};
+
 const FIRST_CANDLE_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15 };
 const NIFTY_TEST_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15, "1H": 60 };
 
@@ -123,6 +134,18 @@ export function isNiftyFirstCandleAlgo(algo = {}) {
     algo.strategyType === NIFTY_FIRST_CANDLE_TYPE ||
     algo.indicator === "NIFTY_FIRST_CANDLE"
   );
+}
+
+export function isCrudeFirstCandleAlgo(algo = {}) {
+  return (
+    algo.kind === CRUDE_FIRST_CANDLE_KIND ||
+    algo.strategyType === CRUDE_FIRST_CANDLE_TYPE ||
+    algo.indicator === "CRUDE_FIRST_CANDLE"
+  );
+}
+
+export function isFirstCandleAlgo(algo = {}) {
+  return isNiftyFirstCandleAlgo(algo) || isCrudeFirstCandleAlgo(algo);
 }
 
 export function isNiftyTestAlgo(algo = {}) {
@@ -269,7 +292,29 @@ export function niftyFirstCandleConfig(algo = {}) {
   };
 }
 
+export function crudeFirstCandleConfig(algo = {}) {
+  const base = niftyFirstCandleConfig({
+    ...algo,
+    lotSize: algo.lotSize || DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.lotSize,
+    endTimeIst: algo.endTimeIst || DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.endTimeIst,
+    expiryKind: "monthly",
+  });
+  const endTimeIst = parseIstHm(algo.endTimeIst, DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.endTimeIst);
+  const endParts = endTimeIst.split(":").map(Number);
+  const eodFromEnd = Math.max(0, 23 * 60 + 30 - (endParts[0] * 60 + endParts[1]));
+  return {
+    ...base,
+    symbol: "CRUDEOIL",
+    lotSize: Math.max(1, Math.round(Number(algo.lotSize) || DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.lotSize)),
+    qty: Math.max(1, Math.round(Number(base.lots) || 1)) * Math.max(1, Math.round(Number(algo.lotSize) || DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.lotSize)),
+    expiryKind: "monthly",
+    endTimeIst,
+    eodSquareOffMinutes: eodFromEnd,
+  };
+}
+
 export function optionEngineConfig(algo = {}) {
+  if (isCrudeFirstCandleAlgo(algo)) return crudeFirstCandleConfig(algo);
   if (isNiftyVwapReversalAlgo(algo)) return niftyVwapReversalConfig(algo);
   if (isNiftyFirstCandleAlgo(algo)) return niftyFirstCandleConfig(algo);
   return niftyVwapConfig(algo);
@@ -424,6 +469,68 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     firstBarStartIst: cfg.firstBarStartIst,
     entryEvaluationIst: cfg.entryEvaluationIst,
     endTimeIst: cfg.endTimeIst,
+    enabled: false,
+  };
+}
+
+export function defaultCrudeFirstCandleAlgo(patch = {}) {
+  const cfg = crudeFirstCandleConfig(patch);
+  return {
+    name: patch.name || "CRUDE OIL 5m first candle",
+    kind: CRUDE_FIRST_CANDLE_KIND,
+    strategyType: CRUDE_FIRST_CANDLE_TYPE,
+    tag: "crude 5m",
+    symbol: "CRUDEOIL",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    side: "BUY",
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    timeframe: cfg.timeframe,
+    slPct: cfg.initialSlPct,
+    targetPct: cfg.targetPct,
+    initialSlPct: cfg.initialSlPct,
+    trailingActivationPct: cfg.trailingActivationPct,
+    trailingStepPct: cfg.trailingStepPct,
+    vwapExitCandles: cfg.vwapExitCandles,
+    maxPositions: 1,
+    maxTradesPerDay: cfg.maxTradesPerDay,
+    intradayOnly: true,
+    eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+    expiryKind: "monthly",
+    strikeOffset: cfg.strikeOffset,
+    firstBarStartIst: cfg.firstBarStartIst,
+    entryEvaluationIst: cfg.entryEvaluationIst,
+    endTimeIst: cfg.endTimeIst,
+    indicator: "CRUDE_FIRST_CANDLE",
+    buyLeft: "price",
+    buyOp: "close_above",
+    buyRight: "vwap",
+    sellLeft: "price",
+    sellOp: "close_below",
+    sellRight: "vwap",
+    runMode: ["live", "paper", "backtest"].includes(patch.runMode) ? patch.runMode : "live",
+    brokerId: patch.runMode === "paper" || patch.runMode === "backtest" ? "paper" : "dhan",
+    dailyLiveIst: cfg.dailyLiveIst,
+    enabled: false,
+    status: patch.runMode === "backtest" ? "BACKTEST" : "PAUSED",
+    ...patch,
+    kind: CRUDE_FIRST_CANDLE_KIND,
+    strategyType: CRUDE_FIRST_CANDLE_TYPE,
+    symbol: "CRUDEOIL",
+    instrument: "option",
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    timeframe: cfg.timeframe,
+    expiryKind: "monthly",
+    strikeOffset: cfg.strikeOffset,
+    maxTradesPerDay: cfg.maxTradesPerDay,
+    eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+    endTimeIst: cfg.endTimeIst,
+    indicator: "CRUDE_FIRST_CANDLE",
     enabled: false,
   };
 }

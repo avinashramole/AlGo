@@ -26,7 +26,7 @@ export type Algo = {
   id: string;
   name: string;
   tag: string;
-  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
+  kind?: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test";
   symbol?: string;
   side?: "BUY" | "SELL" | "BOTH";
   qty?: number;
@@ -57,6 +57,8 @@ export type Algo = {
   dailyLiveIst?: string;
   startTimeIst?: string;
   endTimeIst?: string;
+  expiryKind?: "weekly" | "monthly";
+  maxTradesPerDay?: number;
   mappingScope?: "master" | "clients" | "both";
   mappedClientIds?: string[];
   runMode?: "live" | "paper" | "backtest";
@@ -298,6 +300,34 @@ export const initialAlgos: Algo[] = [
     startTimeIst: "09:15",
     endTimeIst: "15:15",
     summary: "Nifty Test · NIFTY FUT · live feed while started · current candle above open → BUY · current candle below open → SELL",
+    status: "PAUSED",
+    pnl: 0,
+    winRate: 0,
+    enabled: false,
+    brokerId: "dhan",
+    runMode: "live",
+  },
+  {
+    id: "a12",
+    name: "CRUDE OIL 5m first candle",
+    tag: "crude 5m",
+    kind: "crude-first-candle",
+    symbol: "CRUDEOIL",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    indicator: "CRUDE_FIRST_CANDLE",
+    timeframe: "5m",
+    side: "BUY",
+    lots: 1,
+    lotSize: 100,
+    qty: 100,
+    slPct: 20,
+    targetPct: 40,
+    expiryKind: "monthly",
+    endTimeIst: "23:15",
+    maxTradesPerDay: 5,
+    summary: "CRUDE OIL 5m first candle · preview crude future green + ATM CE green → BUY CE · crude future red + ATM PE green → BUY PE · paused until Start",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -231,6 +231,14 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
   );
 }
 
+export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
+  return (
+    algo?.kind === "crude-first-candle" ||
+    algo?.strategyType === "CRUDE_FIRST_CANDLE_5M" ||
+    algo?.indicator === "CRUDE_FIRST_CANDLE"
+  );
+}
+
 export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
   return algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
 }
@@ -261,6 +269,7 @@ export function contractLabel(algo: {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
+  if (isCrudeFirstCandleKind(algo)) return "CRUDE OIL ATM CE/PE first 5m";
   if (isNiftyFirstCandleKind(algo)) return "NIFTY ATM CE/PE first 5m";
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
@@ -534,6 +543,54 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       ...defaultConditions("price-action", "VWAP", "BREAKOUT"),
       ...groupsFromFlat(defaultConditions("price-action", "VWAP", "BREAKOUT")),
       runMode: "live",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "crude-first-candle") {
+    return {
+      name: "CRUDE OIL 5m first candle",
+      kind: "crude-first-candle",
+      tag: "crude 5m",
+      strategyType: "CRUDE_FIRST_CANDLE_5M",
+      symbol: "CRUDEOIL",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 100,
+      qty: 100,
+      timeframe: "5m",
+      slPct: 20,
+      initialSlPct: 20,
+      targetPct: 40,
+      trailingActivationPct: 10,
+      trailingStepPct: 3,
+      vwapExitCandles: 5,
+      maxPositions: 1,
+      maxTradesPerDay: 5,
+      expiryKind: "monthly",
+      firstBarStartIst: "09:00",
+      entryEvaluationIst: "09:05",
+      endTimeIst: "23:15",
+      intradayOnly: true,
+      eodSquareOffMinutes: 15,
+      indicator: "CRUDE_FIRST_CANDLE",
+      period: 14,
+      fast: 9,
+      slow: 21,
+      rsiBuy: 30,
+      rsiSell: 70,
+      multiplier: 3,
+      pattern: "ORB",
+      rangeMinutes: 15,
+      lookback: 20,
+      ...defaultConditions("indicator", "VWAP", "ORB"),
+      ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
+      runMode: "live",
+      dailyLiveIst: "09:00",
       brokerId: "dhan",
       enabled: false,
       status: "PAUSED",

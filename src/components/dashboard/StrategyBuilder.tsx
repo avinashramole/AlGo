@@ -22,6 +22,7 @@ import {
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
   isNiftyVwapHedgeKind,
+  isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
   isNiftyTestKind,
   isNiftyOptionEngineKind,
@@ -55,6 +56,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ? "nifty-vwap-hedge"
           : isNiftyVwapReversalKind(algo)
             ? "nifty-vwap-reversal"
+            : isCrudeFirstCandleKind(algo)
+              ? "crude-first-candle"
             : isNiftyFirstCandleKind(algo)
               ? "nifty-first-candle"
               : isNiftyTestKind(algo)
@@ -88,6 +91,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const reversal = isNiftyVwapReversalKind(form);
   const hedge = isNiftyVwapHedgeKind(form);
   const firstCandle = isNiftyFirstCandleKind(form);
+  const crudeFirst = isCrudeFirstCandleKind(form);
   const niftyTest = isNiftyTestKind(form);
   const engine = isNiftyOptionEngineKind(form);
   const preview = useMemo(() => {
@@ -99,6 +103,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     }
     if (isNiftyTestKind(form)) {
       return `Nifty Test · NIFTY FUT · ${form.timeframe || "5m"} · live feed while started · current candle above open → BUY · below open → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
+    }
+    if (isCrudeFirstCandleKind(form)) {
+      const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
+      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · same preview 5m buy as Nifty · up to ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST · saving does not start LIVE`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -242,6 +250,24 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }
           />
           <TypeCard
+            active={kind === "crude-first-candle"}
+            title="CRUDE OIL 5m first candle"
+            text="Same preview-candle buy as Nifty 5m. Crude future green + ATM CE green → BUY CE. Crude future red + ATM PE green → BUY PE. MCX. Paused until Start."
+            onClick={() => {
+              const next = emptyStrategy("crude-first-candle");
+              set({
+                ...next,
+                name: form.name || "CRUDE OIL 5m first candle",
+                runMode: form.runMode || "live",
+                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
+                lots: form.lots || 1,
+                lotSize: next.lotSize,
+                qty: (form.lots || 1) * Number(next.lotSize || 100),
+                enabled: false,
+              });
+            }}
+          />
+          <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY 5m first candle"
             text="Every 5m NIFTY FUT candle, up to 5 trades a day. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
@@ -280,6 +306,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         {niftyTest ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
+          </div>
+        ) : crudeFirst ? (
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
+            Separate from NIFTY 5m first candle. When the current 5m candle opens, the previous crude oil future candle is checked with the preview ATM CE and PE. Preview crude future close above its open and preview ATM CE green → BUY CE. Preview crude future close below its open and preview ATM PE green → BUY PE. The current candle open and close are not used. A doji skips that candle. Monthly MCX. Saving or restarting t2s does not start LIVE and does not place an order.
           </div>
         ) : engine ? (
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
@@ -359,8 +389,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             Underlying
             <select
               className={fieldClass}
-              value={niftyTest ? "NIFTY" : form.symbol || "NIFTY"}
-              disabled={engine || niftyTest}
+              value={crudeFirst ? "CRUDEOIL" : niftyTest ? "NIFTY" : form.symbol || "NIFTY"}
+              disabled={engine || niftyTest || crudeFirst}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -377,7 +407,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Side
-            <select className={fieldClass} value={niftyTest ? "BOTH" : form.side || "BUY"} disabled={engine || niftyTest} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+            <select className={fieldClass} value={niftyTest ? "BOTH" : form.side || "BUY"} disabled={engine || niftyTest || crudeFirst} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
               {engine ? null : (
                 <>
@@ -411,7 +441,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
             <select className={fieldClass} value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine && !firstCandle} onChange={(event) => set({ timeframe: event.target.value })}>
-              {(reversal || hedge ? ["15m"] : vwap ? ["5m"] : firstCandle || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
+              {(reversal || hedge ? ["15m"] : vwap ? ["5m"] : firstCandle || crudeFirst || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>
@@ -560,10 +590,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
             </div>
           </div>
-        ) : firstCandle ? (
+        ) : firstCandle || crudeFirst ? (
           <div className="mt-4 space-y-3">
             <p className="text-[11px] font-semibold text-slate-400">
-              When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked.
+              {crudeFirst
+                ? "Same buy as Nifty 5m, on crude oil. When the current 5m candle opens, the previous crude future open and close are checked, up to 5 trades a day. Preview crude future green + preview ATM CE green buys CE. Preview crude future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle."
+                : "When the current 5m candle opens, the previous candle open and close are checked, up to 5 trades a day. Preview Nifty future green + preview ATM CE green buys CE. Preview Nifty future red + preview ATM PE green buys PE. The current candle open and close are not used. A doji skips that candle. A sixth trade the same day is blocked."}
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-500">
@@ -580,14 +612,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 End time (IST)
-                <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
+                <input className={fieldClass} value={form.endTimeIst || (crudeFirst ? "23:15" : "15:15")} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder={crudeFirst ? "23:15" : "15:15"} />
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 Expiry
+                {crudeFirst ? (
+                  <input className={fieldClass} value="Monthly MCX" readOnly />
+                ) : (
                 <select className={fieldClass} value={form.expiryKind || "weekly"} onChange={(event) => set({ expiryKind: event.target.value as "weekly" | "monthly" })}>
                   <option value="weekly">Nearest weekly</option>
                   <option value="monthly">Monthly</option>
                 </select>
+                )}
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 Strike
@@ -602,7 +638,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
               <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
-              <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>
         ) : hedge ? (
@@ -652,7 +688,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         )}
 
-        {engine ? null : (
+        {engine || crudeFirst ? null : (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
           <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
@@ -663,6 +699,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <p className="mt-3 text-[11px] font-semibold text-amber-600">
             {hedge || reversal
               ? "NIFTY 15m VWAP hedge and NIFTY 15m VWAP reversal go LIVE automatically at 09:20 IST on session days. Saving this form or restarting t2s does not start LIVE."
+              : crudeFirst
+              ? "CRUDE OIL 5m first candle stays off until you press Start strategy. Saving this form or restarting t2s does not start LIVE and does not place an order."
               : firstCandle
               ? "NIFTY 5m first candle goes LIVE automatically at 09:00 IST on session days. Saving this form or restarting t2s does not start LIVE."
               : niftyTest

@@ -61,8 +61,8 @@ test("normalizeAlgo keeps mapped clients and mapping scope", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 8);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9,a10,a11");
+  assert.equal(next.algos.length, 9);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a4,a5,a6,a7,a8,a9,a10,a11,a12");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -73,7 +73,7 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a6"), false);
   assert.equal(next.algos.some((row) => row.name === "NIFTY 15m VWAP hedge"), false);
   assert.deepEqual(next.removedIds, ["a6"]);
-  assert.equal(next.algos.length, 7);
+  assert.equal(next.algos.length, 8);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
@@ -115,12 +115,12 @@ test("hydrate does not start a paused strategy from the catalog", () => {
 test("seed includes paused CRUDE OIL option strategies", () => {
   const seeded = seedAlgos();
   const crude = seeded.filter((row) => row.symbol === "CRUDEOIL");
-  assert.equal(crude.length, 3);
+  assert.equal(crude.length, 4);
   assert.equal(crude.every((row) => row.enabled === false), true);
   assert.equal(crude.every((row) => row.status === "PAUSED"), true);
   assert.equal(crude.every((row) => row.instrument === "option"), true);
   assert.equal(crude.every((row) => row.lotSize === 100), true);
-  assert.equal(crude.every((row) => row.kind === "indicator"), true);
+  assert.equal(crude.filter((row) => row.kind === "indicator").length, 3);
   assert.equal(seeded.find((row) => row.id === "a7").name, "CRUDE OIL VWAP ATM");
   assert.equal(seeded.find((row) => row.id === "a8").name, "CRUDE OIL 15m VWAP reversal");
   assert.equal(seeded.find((row) => row.id === "a8").timeframe, "15m");
@@ -141,6 +141,33 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(firstCandle.expiryKind, "weekly");
   assert.equal(firstCandle.maxTradesPerDay, 5);
   assert.equal(firstCandle.strikeOffset, 0);
+  const crudeFirst = seeded.find((row) => row.id === "a12");
+  assert.equal(crudeFirst.name, "CRUDE OIL 5m first candle");
+  assert.equal(crudeFirst.kind, "crude-first-candle");
+  assert.equal(crudeFirst.symbol, "CRUDEOIL");
+  assert.equal(crudeFirst.enabled, false);
+  assert.equal(crudeFirst.status, "PAUSED");
+  assert.equal(crudeFirst.lotSize, 100);
+  assert.equal(crudeFirst.qty, 100);
+  assert.equal(crudeFirst.expiryKind, "monthly");
+  assert.equal(crudeFirst.endTimeIst, "23:15");
+  assert.equal(crudeFirst.maxTradesPerDay, 5);
+  assert.notEqual(crudeFirst.kind, firstCandle.kind);
+});
+
+test("crude oil 5m name stays crude and does not become the nifty first candle", () => {
+  const row = normalizeAlgo({ name: "CRUDE OIL 5m first candle", kind: "indicator" });
+  assert.equal(row.kind, "crude-first-candle");
+  assert.equal(row.symbol, "CRUDEOIL");
+  assert.equal(row.lotSize, 100);
+  assert.equal(row.endTimeIst, "23:15");
+  assert.equal(row.expiryKind, "monthly");
+  assert.equal(row.enabled, false);
+  assert.notEqual(row.status, "LIVE");
+  const nifty = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "indicator" });
+  assert.equal(nifty.kind, "nifty-first-candle");
+  assert.equal(nifty.symbol, "NIFTY");
+  assert.equal(nifty.endTimeIst, "15:15");
 });
 
 test("hydrate rematerializes first candle saved as a generic indicator", () => {

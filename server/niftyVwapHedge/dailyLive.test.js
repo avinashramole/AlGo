@@ -211,6 +211,8 @@ test("daily LIVE 09:00 arms NIFTY 5m first candle and leaves VWAP/hedge paused",
   assert.equal(result.algos.find((row) => row.id === "a4").enabled, false);
   assert.equal(result.algos.find((row) => row.id === "a5").enabled, false);
   assert.equal(result.algos.find((row) => row.id === "a6").enabled, false);
+  assert.equal(result.algos.find((row) => row.id === "a12").enabled, false);
+  assert.equal(result.algos.find((row) => row.id === "a12").status, "PAUSED");
 });
 
 test("first candle daily LIVE does not arm on boot, after hours, weekends, or without Dhan LIVE", () => {

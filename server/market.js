@@ -27,6 +27,8 @@ import { loadAlgoStore, normalizeAlgo, saveAlgoStore } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
+  isCrudeFirstCandleAlgo,
+  isFirstCandleAlgo,
   isNiftyFirstCandleAlgo,
   isNiftyOptionEngineAlgo,
   isNiftyTestAlgo,
@@ -673,7 +675,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
   const algo = (state.algos || []).find(
-    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isNiftyVwapHedgeAlgo(item)),
+    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyVwapHedgeAlgo(item)),
   );
   if (!algo) return;
   rememberOrderStrategy(
@@ -695,7 +697,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   if (isNiftyVwapHedgeAlgo(algo)) return;
   const vs = runtimeState(algo);
   vs.inFlight = false;
-  if (isNiftyFirstCandleAlgo(algo) && payload.side !== "SELL") {
+  if (isFirstCandleAlgo(algo) && payload.side !== "SELL") {
     vs.sessionTrades = Number(vs.sessionTrades || 0) + 1;
   }
 }
@@ -757,6 +759,24 @@ function preferWeeklyDeskForReversal() {
   }
 }
 
+function positionsForStrategyName(algo, mode) {
+  const vs = runtimeState(algo);
+  const mine = (row) => {
+    if (row.strategy && row.strategy !== algo.name) return false;
+    if (row.strategy === algo.name) return true;
+    if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
+    return false;
+  };
+  const rows = state.positions || [];
+  if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
+  return rows.filter((row) => !isPaperRow(row) && mine(row));
+}
+
+function minutesUntilIst(closeMinutes, date = new Date()) {
+  const parts = sessionParts(date);
+  return closeMinutes - (Number(parts.hour) * 60 + Number(parts.minute));
+}
+
 function positionsForNiftyVwap(algo, mode) {
   const vs = runtimeState(algo);
   const mine = (row) => {
@@ -793,7 +813,7 @@ let lastNiftyVwapFeed = true;
 function noteNiftyVwapFeed(feedLive) {
   if (feedLive && lastNiftyVwapFeed === false) {
     for (const algo of state.algos || []) {
-      if (isNiftyOptionEngineAlgo(algo) && algo.enabled) noteFeedReconnect(algo);
+      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) && algo.enabled) noteFeedReconnect(algo);
     }
   }
   lastNiftyVwapFeed = Boolean(feedLive);
@@ -801,36 +821,48 @@ function noteNiftyVwapFeed(feedLive) {
 
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const now = Date.now();
-  const session = isNiftyFirstCandleAlgo(algo) ? firstCandleWatchSession(algo) : nseMarketSession();
+  const crude = isCrudeFirstCandleAlgo(algo);
+  const root = crude ? "CRUDEOIL" : "NIFTY";
+  const session = crude ? mcxMarketSession() : isNiftyFirstCandleAlgo(algo) ? firstCandleWatchSession(algo) : nseMarketSession();
   const config = optionEngineConfig(algo);
   const vs = runtimeState(algo);
-  const positions = positionsForNiftyVwap(algo, mode);
+  const positions = crude ? positionsForStrategyName(algo, mode) : positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
+  const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
   const showLivePreview = () => {
-    if (!isNiftyFirstCandleAlgo(algo) || !feedLive) return;
-    const closed = niftyFutureSignalBars(config.timeframe || "5m", Date.now());
+    if (!isFirstCandleAlgo(algo) || !feedLive) return;
+    const closed = signalBars(config.timeframe || "5m", Date.now());
     const preview = closed[closed.length - 1] || null;
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
-    stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now(), {
-      ce: preview ? sameTime(vs.ceBars, preview.time) : null,
-      pe: preview ? sameTime(vs.peBars, preview.time) : null,
-    });
+    stampLiveFuturePreview(
+      algo,
+      config.timeframe || "5m",
+      Date.now(),
+      {
+        ce: preview ? sameTime(vs.ceBars, preview.time) : null,
+        pe: preview ? sameTime(vs.peBars, preview.time) : null,
+      },
+      signalBars,
+    );
   };
   if (mode === "live" && !session.open && !open) return;
-  if (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) {
+  if (!crude && (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly"))) {
     preferWeeklyDeskForReversal();
   }
   const futuresBars = feedLive
-    ? isNiftyFirstCandleAlgo(algo)
-      ? niftyFutureSignalBars(config.timeframe || "5m", now)
-      : getCandles(config.timeframe || "5m")
+    ? crude
+      ? crudeFutureSignalBars(config.timeframe || "5m", now)
+      : isNiftyFirstCandleAlgo(algo)
+        ? niftyFutureSignalBars(config.timeframe || "5m", now)
+        : getCandles(config.timeframe || "5m")
     : [];
   const lastBar = futuresBars[futuresBars.length - 1];
   const barTime = lastBar ? Number(lastBar.time) : 0;
-  const und = getUnderlying("NIFTY");
-  const pack = chainForSymbol("NIFTY");
-  const expiry = expiryForNiftyVwap(algo, pack);
+  const und = getUnderlying(root);
+  const pack = chainForSymbol(root);
+  const expiry = crude ? pack?.meta?.expiry || upcomingExpiries("CRUDEOIL")[0] || "" : expiryForNiftyVwap(algo, pack);
   if (
+    !crude &&
     (isNiftyVwapReversalAlgo(algo) || (isNiftyFirstCandleAlgo(algo) && config.expiryKind !== "monthly")) &&
     expiry &&
     !isWeeklyOptionExpiry(expiry, "NIFTY") &&
@@ -842,13 +874,16 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       return;
     }
   }
-  const livePreview = isNiftyFirstCandleAlgo(algo) && feedLive ? niftyFuturePreviewBar(config.timeframe || "5m", now) : null;
+  const livePreview =
+    isFirstCandleAlgo(algo) && feedLive
+      ? (crude ? crudeFuturePreviewBar : niftyFuturePreviewBar)(config.timeframe || "5m", now)
+      : null;
   if (feedLive && !open && !futuresBars.length && !livePreview) {
-    algo.lastSignal = isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
+    algo.lastSignal = crude ? "WAIT CRUDE FUT" : isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
     showLivePreview();
     return;
   }
-  const spot = Number(getChainSpot("NIFTY")) || Number(lastBar?.close) || 0;
+  const spot = Number(getChainSpot(root)) || Number(lastBar?.close) || 0;
   const atm = atmStrike(spot, und.step);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
   const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : atm;
@@ -860,8 +895,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     vs.peBars = [];
     vs.peStrike = peStrike;
   }
-  const ceLtp = optionPremium("NIFTY", ceStrike, "CE", expiry);
-  const peLtp = optionPremium("NIFTY", peStrike, "PE", expiry);
+  const ceLtp = optionPremium(root, ceStrike, "CE", expiry);
+  const peLtp = optionPremium(root, peStrike, "PE", expiry);
   const optionBarTime = livePreview?.time || barTime;
   vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
@@ -880,7 +915,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     config,
     now,
     feedLive: Boolean(feedLive),
-    minutesToClose: session.open ? undefined : 0,
+    minutesToClose: session.open ? (crude ? minutesUntilIst(23 * 60 + 30, new Date(now)) : undefined) : 0,
     futuresBars,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
@@ -894,7 +929,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   });
   showLivePreview();
   if (
-    isNiftyFirstCandleAlgo(algo) &&
+    isFirstCandleAlgo(algo) &&
     (Number(vs.sessionTrades || 0) !== beforeTrades ||
       Number(vs.lastEntryBarTime || 0) !== beforeBar ||
       Number(vs.processedFirstBarTime || 0) !== beforeProcessed)
@@ -1071,8 +1106,43 @@ function resolveHedgeAlgoTrade(algo) {
   };
 }
 
+function resolveCrudeFirstCandleTrade(algo) {
+  const symbol = "CRUDEOIL";
+  const und = getUnderlying(symbol);
+  const pack = chainForSymbol(symbol);
+  const vs = algo.vwapState || {};
+  const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
+  const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
+  const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
+  const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+  const ceLtp = Number(row?.callLtp);
+  const peLtp = Number(row?.putLtp);
+  const liveChain = pack?.meta?.source === "dhan";
+  const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+  const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ATM`;
+  let hint = "";
+  if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
+  else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
+  else if (!(ceLtp > 0) && !(peLtp > 0)) hint = "Waiting for live ATM option LTP";
+  else hint = `CE ${ceLtp > 0 ? ceLtp : "—"} · PE ${peLtp > 0 ? peLtp : "—"}`;
+  return {
+    kind: "option",
+    symbol: contract,
+    option: option || "CE",
+    strike,
+    expiry,
+    ltp: premium > 0 ? round2(premium) : 0,
+    label: expiry ? `${contract} · ${expiry}` : contract,
+    source: pack?.meta?.source || "",
+    ready: liveChain && (ceLtp > 0 || peLtp > 0),
+    hint,
+  };
+}
+
 export function resolveAlgoTrade(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return resolveHedgeAlgoTrade(algo);
+  if (isCrudeFirstCandleAlgo(algo)) return resolveCrudeFirstCandleTrade(algo);
   if (isNiftyOptionEngineAlgo(algo)) {
     const symbol = "NIFTY";
     const und = getUnderlying(symbol);
@@ -1914,7 +1984,7 @@ function runPaperAlgos() {
       tickNiftyVwapHedgeAlgo(algo, "paper", feedLive);
       continue;
     }
-    if (isNiftyOptionEngineAlgo(algo)) {
+    if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "paper", feedLive);
       continue;
     }
@@ -1975,7 +2045,7 @@ function runLiveAlgos() {
       tickNiftyVwapHedgeAlgo(algo, "live", feedLive);
       continue;
     }
-    if (isNiftyOptionEngineAlgo(algo)) {
+    if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "live", feedLive);
       continue;
     }
@@ -2631,6 +2701,45 @@ function aggregateFutureBars(source, minutes, now, includeForming) {
   });
 }
 
+const MCX_SESSION_OPEN = 9 * 60;
+const MCX_SESSION_CLOSE = 23 * 60 + 30;
+
+function crudeCandleSource() {
+  return liveCandleCache.get("CRUDEOIL") || [];
+}
+
+function aggregateCrudeBars(source, minutes, now, includeForming) {
+  const barMs = minutes * 60_000;
+  if (barsMatchMinutes(source, minutes)) {
+    return source
+      .filter((bar) => Number(bar.close) > 0 && (includeForming || now >= Number(bar.time) + barMs))
+      .map((bar) => ({ ...bar }));
+  }
+  return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
+    sessionOpenMinutes: MCX_SESSION_OPEN,
+    sessionCloseMinutes: MCX_SESSION_CLOSE,
+    includeForming,
+  });
+}
+
+export function crudeFutureSignalBars(timeframe = "5m", now = Date.now()) {
+  const source = crudeCandleSource();
+  if (!source.length) return [];
+  return aggregateCrudeBars(source, futureBarMinutes(timeframe), now, false);
+}
+
+export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now()) {
+  const source = crudeCandleSource();
+  if (!source.length) return null;
+  const minutes = futureBarMinutes(timeframe);
+  const barMs = minutes * 60_000;
+  const rows = aggregateCrudeBars(source, minutes, now, true);
+  const last = rows[rows.length - 1];
+  if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
+  if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
+  return last;
+}
+
 export function niftyFutureSignalBars(timeframe = "5m", now = Date.now()) {
   const source = futureCandleSource();
   if (!source.length) return [];
@@ -2661,7 +2770,7 @@ export function livePreviewCondition(bar, ce, pe) {
   return { nifty: "", ceColor, peColor, condition: "" };
 }
 
-export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}) {
+export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "NIFTY FUT") {
   if (!bar || !(Number(bar.open) > 0) || !(Number(bar.close) > 0)) return "";
   const wall = VwapSignalEngine.istWallTime(bar.time);
   const start = wall.hour * 60 + wall.minute;
@@ -2670,7 +2779,7 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}) {
   const clock = `${pad(wall.hour)}:${pad(wall.minute)}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)} IST`;
   const rule = livePreviewCondition(bar, legs.ce, legs.pe);
   const parts = [
-    rule.nifty ? `NIFTY FUT ${rule.nifty.toUpperCase()}` : "",
+    rule.nifty ? `${root} ${rule.nifty.toUpperCase()}` : "",
     rule.ceColor ? `CE ${rule.ceColor.toUpperCase()}` : "",
     rule.peColor ? `PE ${rule.peColor.toUpperCase()}` : "",
   ].filter(Boolean);
@@ -2679,12 +2788,13 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}) {
   return `LIVE ${head}O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}${condition}`;
 }
 
-function stampLiveFuturePreview(algo, timeframe, now, legs = {}) {
-  if (!isNiftyFirstCandleAlgo(algo)) return;
+function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = niftyFutureSignalBars) {
+  if (!isFirstCandleAlgo(algo)) return;
+  const root = isCrudeFirstCandleAlgo(algo) ? "CRUDE FUT" : "NIFTY FUT";
   const minutes = futureBarMinutes(timeframe);
-  const closed = niftyFutureSignalBars(timeframe, now);
+  const closed = signalBars(timeframe, now);
   const preview = closed[closed.length - 1] || null;
-  const label = formatLiveFuturePreview(preview, minutes, legs).replace(/^LIVE /, "PREVIEW ");
+  const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
   const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
   algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
 }

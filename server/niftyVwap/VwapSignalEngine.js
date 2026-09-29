@@ -53,16 +53,20 @@ export function sessionOpenMinutesFromIst(value, fallbackMinutes = NSE_OPEN_MINU
 export function sessionBarOpenMs(ms, barMinutes = 5, opts = {}) {
   const step = Math.max(1, Number(barMinutes) || 5);
   const sessionOpen = sessionOpenMinutesFromIst(opts.sessionOpenMinutes, NSE_OPEN_MINUTES);
+  const sessionClose = sessionOpenMinutesFromIst(
+    opts.sessionCloseMinutes == null || opts.sessionCloseMinutes === "" ? NSE_CLOSE_MINUTES : opts.sessionCloseMinutes,
+    NSE_CLOSE_MINUTES,
+  );
   const wall = istWallTime(ms);
   let minutes = wall.hour * 60 + wall.minute;
   const onSlotClose =
     Boolean(opts.closeLabeled) &&
     wall.second === 0 &&
     minutes > sessionOpen &&
-    ((minutes === NSE_CLOSE_MINUTES && minutes - sessionOpen >= step) ||
-      ((minutes - sessionOpen) % step === 0 && minutes < NSE_CLOSE_MINUTES));
+    ((minutes === sessionClose && minutes - sessionOpen >= step) ||
+      ((minutes - sessionOpen) % step === 0 && minutes < sessionClose));
   if (onSlotClose) minutes -= 1;
-  if (minutes < sessionOpen || minutes >= NSE_CLOSE_MINUTES) return null;
+  if (minutes < sessionOpen || minutes >= sessionClose) return null;
   const elapsed = minutes - sessionOpen;
   const openMin = sessionOpen + Math.floor(elapsed / step) * step;
   return istWallToUtcMs({
@@ -99,9 +103,10 @@ export function aggregateSessionBars(candles = [], barMinutes = 5, now = Date.no
   const closeLabeled =
     opts.closeLabeled == null ? looksLikeOneMinuteBars(candles, step) : Boolean(opts.closeLabeled);
   const sessionOpenMinutes = opts.sessionOpenMinutes;
+  const sessionCloseMinutes = opts.sessionCloseMinutes;
   const buckets = new Map();
   for (const row of Array.isArray(candles) ? candles : []) {
-    const openMs = sessionBarOpenMs(row.time, step, { closeLabeled, sessionOpenMinutes });
+    const openMs = sessionBarOpenMs(row.time, step, { closeLabeled, sessionOpenMinutes, sessionCloseMinutes });
     if (openMs == null) continue;
     const open = Number(row.open);
     const high = Number(row.high);
@@ -355,9 +360,11 @@ export const VwapSignalEngine = {
     const width = barMinutes * 60 * 1000;
     const sessionOpenMinutes = hmToMinutes(firstBarStartIst, "09:00");
     const endMin = hmToMinutes(endTimeIst, "15:15");
+    const nseClose = 15 * 60 + 30;
+    const sessionCloseMinutes = endMin > nseClose ? 23 * 60 + 30 : nseClose;
     const evalAt = istHmOnDayMs(now, entryEvaluationIst, "09:05");
     const waitingEval = Number(now) < evalAt;
-    const agg = { sessionOpenMinutes, includeForming: false };
+    const agg = { sessionOpenMinutes, sessionCloseMinutes, includeForming: false };
     const futAll = aggregateSessionBars(sessionBars(futuresBars, now), barMinutes, now, agg);
     const ceAll = aggregateSessionBars(sessionBars(ceBars, now), barMinutes, now, agg);
     const peAll = aggregateSessionBars(sessionBars(peBars, now), barMinutes, now, agg);

@@ -19,6 +19,10 @@ function candleWindowIst(barTime, barMinutes) {
   return `${pad2(wall.hour)}:${pad2(wall.minute)}–${pad2(Math.floor(end / 60) % 24)}:${pad2(end % 60)} IST`;
 }
 
+function futTapeLabel(config) {
+  return String(config?.symbol || "").toUpperCase() === "CRUDEOIL" ? "CRUDE FUT" : "NIFTY FUT";
+}
+
 function niftyFutCandleText(signal, config) {
   const open = Number(signal.futuresOpen || 0).toFixed(2);
   const close = Number(signal.futuresClose || 0).toFixed(2);
@@ -114,19 +118,20 @@ export const NiftyVwapStrategy = {
           algo.lastSignal = "WAIT 09:05 FIRST 5m CLOSE";
           return { action: "wait", reason: "wait-eval" };
         }
+        const fut = futTapeLabel(config);
         if (signal.niftyColor === "doji") {
-          algo.lastSignal = `NO TRADE · ${preview}NIFTY FUT DOJI O ${tape.open} C ${tape.close}${tape.clock} · next 5m`;
+          algo.lastSignal = `NO TRADE · ${preview}${fut} DOJI O ${tape.open} C ${tape.close}${tape.clock} · next 5m`;
           return { action: "wait", reason: "first-doji" };
         }
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
           algo.lastSignal = signal.ceColor
-            ? `NO TRADE · ${preview}NIFTY FUT GREEN CE ${signal.ceColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
+            ? `NO TRADE · ${preview}${fut} GREEN CE ${signal.ceColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
             : "WAIT CE 5m";
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
           algo.lastSignal = signal.peColor
-            ? `NO TRADE · ${preview}NIFTY FUT RED PE ${signal.peColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
+            ? `NO TRADE · ${preview}${fut} RED PE ${signal.peColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
             : "WAIT PE 5m";
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
@@ -176,6 +181,7 @@ export const NiftyVwapStrategy = {
     state.lastEntryBarTime = signal.barTime;
     state.lastEntryAt = Date.now();
     PositionManager.lockContract(state, pick);
+    const crude = String(config.symbol || "").toUpperCase() === "CRUDEOIL";
     const payload = {
       symbol: pick.symbol,
       side: "BUY",
@@ -189,6 +195,7 @@ export const NiftyVwapStrategy = {
       type: "MARKET",
       strategy: algo.name,
       barTime: signal.barTime,
+      ...(crude ? { lots: config.lots, lotSize: config.lotSize, exchangeSegment: "MCX_COMM" } : {}),
     };
     const result = adapter.place(payload);
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
@@ -234,7 +241,7 @@ export const NiftyVwapStrategy = {
     });
     algo.lastSignal =
       config.signalMode === "first-candle"
-        ? `BUY ATM ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}NIFTY FUT ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
+        ? `BUY ATM ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
         : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },
