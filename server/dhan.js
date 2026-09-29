@@ -1573,6 +1573,26 @@ function productType(product) {
   return "INTRADAY";
 }
 
+/** Copy trades share one contract. A desk chain on another expiry must not replace the strategy expiry. */
+export function securityIdForCopyOrder({
+  payloadSecurityId,
+  payloadExpiry,
+  chainExpiry,
+  chainSecurityId,
+  scripSecurityId,
+} = {}) {
+  const wanted = normalizeExpiry(payloadExpiry);
+  const chain = normalizeExpiry(chainExpiry);
+  const scrip = String(scripSecurityId || "").trim();
+  if (wanted && scrip && scrip !== "0") return scrip;
+  const chainOk = !wanted || !chain || wanted === chain;
+  const stamped = String(payloadSecurityId || "").trim();
+  const fromChain = String(chainSecurityId || "").trim();
+  if (chainOk && stamped && stamped !== "0") return stamped;
+  if (chainOk && fromChain && fromChain !== "0") return fromChain;
+  return "";
+}
+
 function securityIdFromOpenChain(payload = {}) {
   const parsed = parseOptionContract(payload.symbol);
   const strike = Number(payload.strike || parsed?.strike || 0);
@@ -1646,30 +1666,34 @@ export async function placeDhanOrder(payload = {}) {
   const id = creds.clientId;
   const sendOpts = dhanSendOptions(creds.lane);
   const desk = getOptionMeta();
-  let securityId = String(payload.securityId || "").trim();
-  if (!securityId || securityId === "0") securityId = securityIdFromOpenChain(payload);
-  if (!securityId || securityId === "0") {
-    securityId = await resolveTradableSecurityId({
+  const wantedExpiry = normalizeExpiry(payload.expiry);
+  let scripSecurityId = "";
+  if (wantedExpiry) {
+    scripSecurityId = await resolveTradableSecurityId({
       symbol: payload.symbol,
-      expiry: payload.expiry || desk.expiry,
+      expiry: wantedExpiry,
       strike: payload.strike,
       option: payload.option,
       kind: payload.kind,
     });
+    if ((!scripSecurityId || scripSecurityId === "0") && !scripMasterLoaded()) {
+      await reloadScripMaster();
+      scripSecurityId = await resolveTradableSecurityId({
+        symbol: payload.symbol,
+        expiry: wantedExpiry,
+        strike: payload.strike,
+        option: payload.option,
+        kind: payload.kind,
+      });
+    }
   }
-  if ((!securityId || securityId === "0") && !scripMasterLoaded()) {
-    await reloadScripMaster();
-    securityId = await resolveTradableSecurityId({
-      symbol: payload.symbol,
-      expiry: payload.expiry || desk.expiry,
-      strike: payload.strike,
-      option: payload.option,
-      kind: payload.kind,
-    });
-  }
-  if (!securityId || securityId === "0") {
-    securityId = String(payload.securityId || "").trim();
-  }
+  const securityId = securityIdForCopyOrder({
+    payloadSecurityId: payload.securityId,
+    payloadExpiry: payload.expiry,
+    chainExpiry: desk.expiry,
+    chainSecurityId: securityIdFromOpenChain(payload),
+    scripSecurityId,
+  });
   if (!securityId || securityId === "0") {
     const label = payload.symbol || `${desk.symbol} ${payload.strike || ""} ${payload.option || ""}`.trim();
     const error = new Error(

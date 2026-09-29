@@ -571,7 +571,11 @@ function contractSecurityId(payload = {}) {
   const opt = String(payload.option || "").toUpperCase();
   const strike = Number(payload.strike);
   if (!(strike > 0) || (opt !== "CE" && opt !== "PE")) return "";
-  const row = optionRowsForSymbol(payload.symbol || "NIFTY").find((item) => Number(item.strike) === strike);
+  const pack = chainForSymbol(payload.symbol || "NIFTY");
+  const wanted = normalizeExpiry(payload.expiry);
+  const chainExpiry = normalizeExpiry(pack?.meta?.expiry);
+  if (wanted && chainExpiry && wanted !== chainExpiry) return "";
+  const row = (pack?.rows || optionRowsForSymbol(payload.symbol || "NIFTY")).find((item) => Number(item.strike) === strike);
   if (!row) return "";
   const id = opt === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
   return id ? String(id) : "";
