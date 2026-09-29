@@ -84,6 +84,8 @@ export type DeskOrder = {
   brokerName?: string;
   reason?: string;
   createdAt?: string;
+  copyUserId?: string;
+  copyUserName?: string;
 };
 
 export type DeskReport = {

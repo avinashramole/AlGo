@@ -16,8 +16,12 @@ import {
   liveSessionOpenForOrder,
   routeManualOrderBrokerId,
   optionRowsForSymbol,
+  bookMemberCopyOnAdminDesk,
   drainPendingLiveAlgoOrders,
+  getAlgo,
+  noteLiveAlgoOrderResult,
   queueLiveAlgoOrder,
+  replaceDhanOrders,
   resolveAlgoTrade,
   setCrudeFutureChartCandles,
   setDhanFeed,
@@ -433,4 +437,60 @@ test("tickMarket still evaluates live algos from last Dhan quotes when the socke
     assert.equal(typeof after?.lastSignal, "string");
     assert.notEqual(String(after.lastSignal || "").trim(), "");
   }
+});
+
+test("a mapped user refusal does not change the crude strategy signal", () => {
+  const created = createAlgo({
+    name: "CRUDE copy refuse",
+    kind: "crude-first-candle",
+    symbol: "CRUDEOIL",
+    runMode: "live",
+  });
+  try {
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE", copyUserId: "u-copy" },
+      { status: "REJECTED" },
+      new Error("This member has no Dhan Client ID + Access Token"),
+    );
+    assert.equal(getAlgo(created.id)?.lastSignal || "", "");
+  } finally {
+    deleteAlgo(created.id);
+  }
+});
+
+test("a user copy stays on the admin order book after the Dhan refresh", () => {
+  const booked = bookMemberCopyOnAdminDesk(
+    {
+      copyUserId: "u-show",
+      symbol: "CRUDEOIL 6100 CE",
+      side: "BUY",
+      qty: 100,
+      price: 42.5,
+      type: "LIMIT",
+      strategy: "CRUDE OIL 5m first candle",
+      brokerId: "dhan",
+      securityId: "crude-ce-6100",
+      exchangeSegment: "MCX_COMM",
+    },
+    { error: new Error("This member has no Dhan Client ID + Access Token. Install them on My plan.") },
+  );
+  assert.equal(booked.status, "REJECTED");
+  assert.equal(booked.copyUserId, "u-show");
+  assert.equal(booked.securityId, "crude-ce-6100");
+  assert.match(booked.reason, /Access Token/);
+  replaceDhanOrders([
+    {
+      id: "admin-crude-1",
+      symbol: "CRUDEOIL 6100 CE",
+      side: "BUY",
+      qty: 100,
+      status: "PENDING",
+      brokerId: "dhan",
+      live: true,
+      price: 42.5,
+    },
+  ]);
+  const orders = snapshot().orders;
+  assert.ok(orders.some((row) => row.id === "admin-crude-1"));
+  assert.ok(orders.some((row) => row.copyUserId === "u-show" && row.status === "REJECTED" && row.symbol === "CRUDEOIL 6100 CE"));
 });

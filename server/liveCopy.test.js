@@ -73,12 +73,15 @@ test("paid real members with a token are live copy targets", () => {
   assert.equal(mine.qty, 65);
 });
 
-test("real members without a token are skipped", () => {
+test("real members without a token stay on the copy list as blocked", () => {
   const user = { id: "u-notoken", name: "No Token", email: "notoken@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   payMember(user);
   const targets = listLiveCopyTargets({ strategyName: algo.name, strategyId: algo.id, masterQty: 65 });
-  assert.equal(targets.some((row) => row.userId === user.id), false);
+  const mine = targets.find((row) => row.userId === user.id);
+  assert.ok(mine);
+  assert.equal(mine.brokerToken, "");
+  assert.match(mine.copyBlocked, /Access Token/);
 });
 
 test("paper members get a book fill only", () => {
@@ -467,8 +470,10 @@ test("admin live desk order copies onto the member token and notifies them", asy
   await awaitMemberCopySends();
   const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
   assert.ok((desk.alerts || []).some((row) => row.symbol === "NIFTY 25200 CE" && row.side === "BUY"));
+  const rows = [...(desk.orders || []), ...(desk.orderHistory || [])].filter((row) => row.symbol === "NIFTY 25200 CE");
+  assert.ok(rows.length >= 1, "the member book keeps the copy");
   assert.equal(
-    [...(desk.orders || []), ...(desk.orderHistory || [])].some((row) => row.status === "REJECTED" || row.status === "FAILED"),
+    rows.some((row) => (row.status === "REJECTED" || row.status === "FAILED") && !String(row.reason || "").trim()),
     false,
   );
   const again = fanOutAdminOrderCopies({ copiedToMembers: true, symbol: "NIFTY 25200 CE" }, booked);
@@ -663,4 +668,102 @@ test("sendMemberCopyOrder paper path writes the member book", async () => {
     quote: () => 0,
   });
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24700 PE"));
+});
+
+test("a mapped member with no token is rejected on their book and is not sent", async () => {
+  const user = { id: "u-blocked-send", name: "Blocked Send", email: "blockedsend@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "CRUDE OIL 5m first candle",
+    tradeMode: "real",
+    brokerId: "dhan",
+  });
+  const copies = memberCopyPayloads(
+    {
+      strategy: "CRUDE OIL 5m first candle",
+      side: "BUY",
+      symbol: "CRUDEOIL 6100 CE",
+      qty: 100,
+      lotSize: 100,
+      price: 42.5,
+      securityId: "crude-ce-6100",
+      exchangeSegment: "MCX_COMM",
+      brokerId: "dhan",
+    },
+    { id: "a12", name: "CRUDE OIL 5m first candle", mappingScope: "both", mappedClientIds: [user.id] },
+  );
+  const mine = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(mine);
+  assert.match(mine.copyBlocked, /Access Token/);
+  assert.equal(mine.securityId, "crude-ce-6100");
+  assert.equal(mine.account, undefined);
+  let called = false;
+  await assert.rejects(
+    () =>
+      sendMemberCopyOrder(mine, async () => {
+        called = true;
+        return {};
+      }),
+    /Access Token/,
+  );
+  assert.equal(called, false);
+  const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  const row = [...(desk.orders || []), ...(desk.orderHistory || [])].find((item) => item.symbol === "CRUDEOIL 6100 CE");
+  assert.ok(row);
+  assert.equal(row.status, "REJECTED");
+  assert.match(row.reason, /Access Token/);
+});
+
+test("mapped crude copy keeps the crude contract and the member token", async () => {
+  const user = { id: "u-crude-copy", name: "Crude Copy", email: "crudecopy@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11006100", accessToken: "crude-member-token" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "CRUDE OIL 5m first candle",
+    tradeMode: "real",
+    brokerId: "dhan",
+  });
+  const { cacheOptionDesk, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, setOptionDesk } = await import("./market.js");
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: "2026-10-06",
+    rows: [{ strike: 22650, callId: "nifty-ce-22650", putId: "nifty-pe-22650" }],
+  });
+  cacheOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: "2026-10-19",
+    rows: [{ strike: 6100, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+    spot: 6120,
+  });
+  drainPendingLiveAlgoOrders();
+  queueLiveAlgoOrder({
+    strategy: "CRUDE OIL 5m first candle",
+    side: "BUY",
+    symbol: "CRUDEOIL 6100 CE",
+    qty: 100,
+    lots: 1,
+    lotSize: 100,
+    price: 42.5,
+    option: "CE",
+    strike: 6100,
+    expiry: "2026-10-19",
+    kind: "option",
+    exchangeSegment: "MCX_COMM",
+    brokerId: "dhan",
+  });
+  const queued = drainPendingLiveAlgoOrders();
+  const copy = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(copy);
+  assert.equal(copy.securityId, "crude-ce-6100");
+  assert.equal(copy.symbol, "CRUDEOIL 6100 CE");
+  assert.equal(copy.exchangeSegment, "MCX_COMM");
+  assert.equal(copy.account.accessToken, "crude-member-token");
+  assert.equal(copy.account.clientId, "11006100");
+  assert.equal(copy.copyBlocked, "");
+  assert.equal(copy.type, "LIMIT");
+  assert.equal(copy.price, 42.5);
 });

@@ -908,6 +908,15 @@ export function isHistoryMemberOrder(status) {
   return isExecutedMemberOrder(status);
 }
 
+export function isTerminalMemberOrder(status) {
+  const raw = String(status || "").toUpperCase();
+  return raw === "REJECTED" || raw === "FAILED" || raw === "CANCELLED";
+}
+
+function isStoredHistoryMemberOrder(status) {
+  return isExecutedMemberOrder(status) || isTerminalMemberOrder(status);
+}
+
 export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
   if (error) return "REJECTED";
   if (paper || !live) return "FILLED";
@@ -926,11 +935,11 @@ function splitMemberOrderBook(desk) {
   const working = [];
   const history = [];
   for (const row of desk.orderHistory) {
-    if (isExecutedMemberOrder(row?.status)) history.push(row);
+    if (isStoredHistoryMemberOrder(row?.status)) history.push(row);
   }
   for (const row of desk.orders) {
     if (isWorkingMemberOrder(row?.status)) working.push(row);
-    else if (isExecutedMemberOrder(row?.status)) history.unshift(row);
+    else if (isStoredHistoryMemberOrder(row?.status)) history.unshift(row);
   }
   desk.orders = working;
   desk.orderHistory = history.slice(0, 400);
@@ -1004,8 +1013,8 @@ function placeMemberOrder(desk, order) {
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
   desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
   if (isWorkingMemberOrder(order.status)) desk.orders.unshift(order);
-  else if (isExecutedMemberOrder(order.status)) desk.orderHistory.unshift(order);
-  desk.orderHistory = desk.orderHistory.filter((row) => isExecutedMemberOrder(row?.status)).slice(0, 400);
+  else if (isStoredHistoryMemberOrder(order.status)) desk.orderHistory.unshift(order);
+  desk.orderHistory = desk.orderHistory.filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
 }
 
 function sameStrategy(left, right) {
@@ -1081,6 +1090,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     paper: Boolean(paper),
     live: Boolean(live?.orderId) && !paper,
     reason: error ? String(error.message || error) : "",
+    securityId: payload.securityId ? String(payload.securityId) : "",
     createdAt: now,
   };
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
@@ -1236,7 +1246,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],
     orders: Array.isArray(desk.orders) ? desk.orders : [],
-    orderHistory: (Array.isArray(desk.orderHistory) ? desk.orderHistory : []).filter((row) => isExecutedMemberOrder(row?.status)),
+    orderHistory: (Array.isArray(desk.orderHistory) ? desk.orderHistory : []).filter((row) => isStoredHistoryMemberOrder(row?.status)),
     closedTrades: Array.isArray(desk.closedTrades) ? desk.closedTrades : [],
   };
   const hasOwn = own.positions.length || own.orders.length || own.orderHistory.length || own.closedTrades.length;

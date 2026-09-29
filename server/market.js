@@ -684,6 +684,7 @@ export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
+  if (payload?.copyUserId) return;
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
   const algo = (state.algos || []).find(
@@ -2295,6 +2296,72 @@ function liveRejectReason(live, fallback) {
   return clean || fallback;
 }
 
+function copyDeskStatus(live, error) {
+  if (error) {
+    const raw = String(error?.live?.status || "REJECTED").toUpperCase();
+    if (raw === "FAILED" || raw === "CANCELLED" || raw === "REJECTED") return raw;
+    return "REJECTED";
+  }
+  return mapLiveStatus(live?.status || "PENDING");
+}
+
+function copyUserLabel(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return "";
+  try {
+    const person = listPublicUsers().find((row) => row.id === id);
+    const name = String(person?.name || "").trim();
+    if (name) return name;
+  } catch {
+    /* the order still shows the user id */
+  }
+  return id;
+}
+
+/** Show the mapped user's ticket on the admin order book without opening an admin position. */
+export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
+  if (!payload?.copyUserId) return null;
+  const name = copyUserLabel(payload.copyUserId);
+  const status = copyDeskStatus(live, error);
+  const rawId = String(live?.orderId || live?.id || "");
+  const id = `copy:${payload.copyUserId}:${rawId || `rej${Date.now()}`}`;
+  const paper = Boolean(payload.paper || payload.brokerId === "paper");
+  const reason = error
+    ? String(error?.message || error || "Copy was not sent")
+    : `Sent to ${name}'s broker`;
+  const order = {
+    id,
+    symbol: payload.symbol || "",
+    side: payload.side === "SELL" ? "SELL" : "BUY",
+    qty: Number(payload.qty) || 0,
+    filledQty: status === "FILLED" ? Number(payload.qty) || 0 : Number(live?.filledQty || 0),
+    product: payload.product || "MIS",
+    type: String(payload.type || "MARKET").toUpperCase(),
+    status,
+    price: Number(live?.price || payload.price || 0),
+    strategy: payload.strategy || "",
+    correlationId: String(payload.correlationId || live?.correlationId || ""),
+    brokerId: payload.brokerId || "dhan",
+    brokerName: paper ? "Paper" : payload.brokerId === "dhan" || !payload.brokerId ? "Dhan" : "",
+    live: !paper,
+    sim: false,
+    paper,
+    copyUserId: String(payload.copyUserId),
+    copyUserName: name,
+    securityId: String(payload.securityId || live?.securityId || ""),
+    reason,
+    createdAt: new Date().toISOString(),
+  };
+  const existing = (state.orders || []).find((row) => String(row.id) === id && row.copyUserId === order.copyUserId);
+  if (existing) {
+    const createdAt = existing.createdAt;
+    Object.assign(existing, order, { createdAt });
+    return existing;
+  }
+  state.orders.unshift(order);
+  return order;
+}
+
 export function bookRejectedLiveOrder(payload, error) {
   if (!isDhanBrokerReject(error)) return null;
   const live = error?.live && typeof error.live === "object" ? error.live : {};
@@ -2607,7 +2674,7 @@ export function replaceDhanOrders(rows) {
       }),
     };
   });
-  const others = previous.filter((row) => row.brokerId !== "dhan");
+  const others = previous.filter((row) => row.brokerId !== "dhan" || row.copyUserId);
   state.orders = [...tagged, ...others];
 }
 

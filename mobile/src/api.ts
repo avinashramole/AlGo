@@ -221,6 +221,8 @@ export type Snapshot = {
     brokerName?: string;
     reason?: string;
     createdAt?: string;
+    copyUserId?: string;
+    copyUserName?: string;
   }>;
   report?: {
     date: string;

@@ -32,12 +32,13 @@ export function OrdersScreen() {
             <Pill text={row.status} up={row.status === "FILLED"} />
           </View>
           <Text style={styles.strategy}>{row.side === "SELL" ? "SELL" : "BUY"}</Text>
+          {row.copyUserId ? <Text style={styles.muted}>Copy · {row.copyUserName || row.copyUserId}</Text> : null}
           <Text style={styles.muted}>
             {row.side} · {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
           </Text>
           <Text style={styles.muted}>{row.brokerName || row.brokerId || "dhan"}</Text>
           {row.reason ? <Text style={{ color: colors.down, marginTop: 6, fontWeight: "700" }}>{row.reason}</Text> : null}
-          {row.status === "PENDING" || row.status === "PARTIAL" ? (
+          {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
             <Pressable
               style={styles.btn}
               onPress={() =>

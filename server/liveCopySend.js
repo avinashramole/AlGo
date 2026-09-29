@@ -10,6 +10,12 @@ export async function sendMemberCopyOrder(payload = {}, fetchImpl = fetch) {
   if (payload.paper || payload.brokerId === "paper") {
     return recordMemberCopyFill({ userId, payload, paper: true });
   }
+  if (payload.copyBlocked) {
+    const error = new Error(String(payload.copyBlocked));
+    error.status = 400;
+    recordMemberCopyFill({ userId, payload, error });
+    throw error;
+  }
   const brokerName = liveBrokerMeta(payload.brokerId)?.name || payload.brokerId;
   const creds = payload.brokerSession || payload.account || {};
   try {

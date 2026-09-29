@@ -65,6 +65,7 @@ import {
   noteLiveAlgoOrderResult,
   onLiveAlgoOrders,
   bookRejectedLiveOrder,
+  bookMemberCopyOnAdminDesk,
   queueLivePositionExit,
   routeManualOrderBrokerId,
 } from "./market.js";
@@ -138,8 +139,18 @@ async function flushLiveAlgoOrders() {
       if (payload.copyUserId) {
         if (item.ok) {
           const order = item.value;
+          bookMemberCopyOnAdminDesk(payload, {
+            live: {
+              orderId: order?.id || order?.orderId,
+              status: order?.status || "PENDING",
+              price: order?.price,
+              filledQty: order?.filledQty,
+              securityId: order?.securityId || payload.securityId,
+            },
+          });
           noteLiveAlgoOrderResult(payload, { status: order?.status || "PENDING", orderId: order?.id }, order?.reason);
         } else {
+          bookMemberCopyOnAdminDesk(payload, { live: item.error?.live, error: item.error });
           noteLiveAlgoOrderResult(payload, item.error?.live || { status: "REJECTED" }, item.error);
           console.log(`Member copy order failed: ${item.error?.message || item.error}`);
         }

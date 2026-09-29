@@ -48,12 +48,33 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   const token = leftoverSlot ? "" : String(slot.brokerToken || (!slot.leftoverToken && desk.brokerToken) || "").trim();
   const accountId = leftoverSlot ? "" : String(slot.accountId || desk.accountId || "").trim();
   const paper = brokerId === "paper";
-  if (!paper && !token && !leftoverSlot && !canMintUpstox) return null;
-  return {
+  const qty = sizeCopyQty(masterQty, { sizingKind: desk.sizingKind, sizingValue: desk.sizingValue, lotSize });
+  const base = {
     userId,
     enrollmentId: enrollment?.id || "",
     strategyId: enrollment?.strategyId || strategyId || "",
     strategyName: enrollment?.strategyName || strategyName || "",
+    qty,
+  };
+  if (!paper && !token && !leftoverSlot && !canMintUpstox) {
+    const copyBlocked =
+      brokerId === "dhan"
+        ? "This member has no Dhan Client ID + Access Token. Install them on My plan."
+        : `This member has no ${brokerId} access token. Install it on My plan.`;
+    return {
+      ...base,
+      brokerId,
+      accountId: "",
+      leftoverSlot: false,
+      brokerToken: "",
+      brokerApiKey: "",
+      brokerSessionToken: "",
+      paper: false,
+      copyBlocked,
+    };
+  }
+  return {
+    ...base,
     brokerId: paper ? "paper" : brokerId,
     accountId,
     leftoverSlot,
@@ -61,7 +82,7 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     brokerApiKey: leftoverSlot || paper ? "" : slot.brokerApiKey || desk.brokerApiKey,
     brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
     paper,
-    qty: sizeCopyQty(masterQty, { sizingKind: desk.sizingKind, sizingValue: desk.sizingValue, lotSize }),
+    copyBlocked: "",
   };
 }
 
@@ -158,8 +179,9 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
     brokerId: target.brokerId,
     copyUserId: target.userId,
     paper: target.paper,
+    copyBlocked: target.copyBlocked || "",
     leftoverSlot: Boolean(target.leftoverSlot),
-    account: target.paper
+    account: target.paper || target.copyBlocked
       ? undefined
       : {
           clientId: target.accountId,
@@ -168,7 +190,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           sessionToken: target.brokerSessionToken,
           leftoverSlot: Boolean(target.leftoverSlot),
         },
-    brokerSession: target.paper
+    brokerSession: target.paper || target.copyBlocked
       ? undefined
       : {
           clientId: target.accountId,

@@ -85,6 +85,9 @@ export function Orders() {
                       <div className="min-w-0">
                         <div className="text-sm font-semibold">{row.symbol}</div>
                         {strategy ? <div className="text-[11px] text-slate-400">{strategy}</div> : null}
+                        {row.copyUserId ? (
+                          <div className="text-[11px] font-semibold text-brand-500">Copy · {row.copyUserName || row.copyUserId}</div>
+                        ) : null}
                       </div>
                       <StatusBadge status={row.status} />
                     </div>
@@ -102,7 +105,7 @@ export function Orders() {
                         {row.reason}
                       </div>
                     ) : null}
-                    {row.status === "PENDING" || row.status === "PARTIAL" ? (
+                    {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
                       <button
                         type="button"
                         disabled={busy === row.id}
@@ -147,6 +150,9 @@ export function Orders() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-bold">{deskStrategyName(row.strategy, data.algos) || "—"}</div>
+                          {row.copyUserId ? (
+                            <div className="text-[10px] font-semibold text-brand-500">Copy · {row.copyUserName || row.copyUserId}</div>
+                          ) : null}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {row.filledQty || 0}/{row.qty}
@@ -163,7 +169,7 @@ export function Orders() {
                         </td>
                         <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>
                         <td className="px-4 py-3 text-right">
-                          {row.status === "PENDING" || row.status === "PARTIAL" ? (
+                          {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
                             <button
                               type="button"
                               disabled={busy === row.id}

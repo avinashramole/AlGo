@@ -228,8 +228,13 @@ test("queueLiveAlgoOrder places the desk broker order without member tokens", as
     brokerId: "dhan",
   });
   const queued = drainPendingLiveAlgoOrders();
-  assert.deepEqual(queued.map((row) => row.brokerId), ["dhan"]);
-  assert.equal(queued.every((row) => !row.copyUserId), true);
+  const admin = queued.filter((row) => !row.copyUserId);
+  assert.deepEqual(admin.map((row) => row.brokerId), ["dhan"]);
+  const copy = queued.find((row) => row.copyUserId === user.id);
+  assert.ok(copy);
+  assert.equal(copy.brokerId, "zerodha");
+  assert.match(copy.copyBlocked, /access token/);
+  assert.equal(copy.account, undefined);
 });
 
 test("installMemberBroker stores API key and access token hints without secrets", () => {
@@ -480,7 +485,7 @@ test("member own book ignores the regular admin desk book", () => {
   assert.equal(own.orderHistory.length, 0);
 });
 
-test("only executed fills go to order history; reject failed and expired stay off the book", () => {
+test("fills and broker refusals stay on the member book; expired tickets stay off", () => {
   const member = { id: "u-book-split", name: "Book Split", email: "booksplit@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "dhan" });
   const pending = recordMemberCopyFill({
@@ -512,7 +517,9 @@ test("only executed fills go to order history; reject failed and expired stay of
   assert.deepEqual(desk.orders.map((row) => row.symbol), ["NIFTY 24100 CE"]);
   assert.equal(desk.orders[0].status, "PENDING");
   assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24200 CE" && row.status === "FILLED"), true);
-  assert.equal(desk.orderHistory.some((row) => row.status === "REJECTED" || row.status === "FAILED" || row.status === "EXPIRED"), false);
+  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24300 CE" && row.status === "REJECTED" && /Insufficient margin/.test(row.reason)), true);
+  assert.equal(desk.orderHistory.some((row) => row.symbol === "NIFTY 24400 CE" && row.status === "FAILED"), true);
+  assert.equal(desk.orderHistory.some((row) => row.status === "EXPIRED"), false);
   assert.equal(desk.orders.some((row) => row.status === "FILLED" || row.status === "REJECTED" || row.status === "FAILED"), false);
 });
 

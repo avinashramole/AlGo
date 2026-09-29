@@ -22,7 +22,7 @@ export function MemberLiveBook({
   }).slice(0, 20);
   const history = (orderHistory || []).filter((row) => {
     const status = String(row.status || "").toUpperCase();
-    return status === "FILLED" || status === "TRADED";
+    return status === "FILLED" || status === "TRADED" || status === "REJECTED" || status === "FAILED" || status === "CANCELLED";
   }).slice(0, 40);
   const nameOf = brokerName || ((id?: string) => id || "Paper");
 
@@ -49,7 +49,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order book</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Working copies only. Executed fills move to order history. Rejected, failed, and expired tickets are not stored. The book and open positions clear at 8:00 AM IST.
+          Working copies stay here until the broker answers. A rejected copy is listed in order history with the reason. The book and open positions clear at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -77,13 +77,13 @@ export function MemberLiveBook({
             ))}
           </tbody>
         </table>
-        {!working.length ? <p className="px-4 pb-4 text-xs text-slate-400">No working orders today.</p> : null}
+        {!working.length ? <p className="px-4 pb-4 text-xs text-slate-400">No working orders. Rejected copies are in order history with the broker reason.</p> : null}
       </section>
 
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order history</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Executed fills from this account only. Rejected, failed, and expired tickets are not shown. This is not the admin order book.
+          Fills and broker answers from this account. A rejected copy shows the reason. This is not the admin order book.
         </p>
         <table className="mt-2 w-full min-w-[720px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -106,12 +106,15 @@ export function MemberLiveBook({
                 </td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
-                <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
+                <td className="px-4 py-3 text-xs font-bold uppercase">
+                  {row.status}
+                  {row.reason ? <div className="mt-1 font-medium normal-case text-down">{row.reason}</div> : null}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!history.length ? <p className="px-4 pb-4 text-xs text-slate-400">No executed copies yet.</p> : null}
+        {!history.length ? <p className="px-4 pb-4 text-xs text-slate-400">No copies yet.</p> : null}
       </section>
 
       <section className="card overflow-x-auto">
