@@ -14,9 +14,9 @@ if (!existsSync(dest)) {
   process.exit(0);
 }
 
-const copy = spawnSync("cp", ["-af", `${src}/.`, `${dest}/`], { stdio: "inherit" });
+const copy = spawnSync("/bin/cp", ["-a", `${src}/.`, `${dest}/`], { stdio: "inherit" });
 if (copy.status !== 0) {
-  console.log(`Could not copy the website to ${dest}. Run: cp -af dist/. ${dest}/`);
+  console.log(`Could not copy the website to ${dest}. Run: /bin/cp -a dist/. ${dest}/`);
   process.exit(0);
 }
 spawnSync("chmod", ["-R", "a+rX", dest], { stdio: "inherit" });
