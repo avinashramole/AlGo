@@ -534,6 +534,9 @@ test("broker order book replaces a pending copy with REJECTED and keeps the limi
   assert.equal(admin.status, "REJECTED");
   assert.match(admin.reason, /Insufficient funds/);
   assert.equal(memberWorkingDhanCopies().some((item) => item.userId === member.id), false);
+  const alert = (desk.alerts || []).find((row) => row.symbol === "NIFTY 22650 CE");
+  assert.equal(alert.status, "REJECTED");
+  assert.match(alert.text, /Copied BUY 65 NIFTY 22650 CE · NIFTY 5m first candle · REJECTED · Insufficient funds/);
 });
 
 test("fills and broker refusals stay on the member book; expired tickets stay off", () => {

@@ -1087,13 +1087,74 @@ export function memberWorkingDhanCopies() {
   return out;
 }
 
+function sameCopyIdentity(alert, order) {
+  return (
+    String(alert?.symbol || "") === String(order?.symbol || "") &&
+    String(alert?.side || "BUY").toUpperCase() === String(order?.side || "BUY").toUpperCase() &&
+    Number(alert?.qty || 0) === Number(order?.qty || 0) &&
+    String(alert?.strategy || "") === String(order?.strategy || "")
+  );
+}
+
+function pickOrderForAlert(book, alert, used) {
+  const id = String(alert?.orderId || "");
+  if (id) {
+    const byId = book.find((row) => !used.has(row) && String(row.id) === id);
+    if (byId) return byId;
+  }
+  const candidates = book.filter((row) => !used.has(row) && sameCopyIdentity(alert, row));
+  const exact = candidates.find(
+    (row) => alert.createdAt && row.createdAt && String(row.createdAt) === String(alert.createdAt),
+  );
+  if (exact) return exact;
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function applyCopyAlertFromOrder(alert, order) {
+  const status = String(order?.status || "").toUpperCase();
+  if (!status) return false;
+  const reason = String(order?.reason || "").trim();
+  const text = buildCopyAlertText({
+    side: order.side,
+    qty: order.qty,
+    symbol: order.symbol,
+    strategy: order.strategy,
+    status,
+    reason,
+  });
+  const changed = alert.status !== status || alert.text !== text || String(alert.orderId || "") !== String(order.id || "");
+  alert.orderId = String(order.id || alert.orderId || "");
+  alert.status = status;
+  alert.text = text;
+  if (isTerminalMemberOrder(status)) alert.kind = "copy_rejected";
+  return changed;
+}
+
+/** Rewrite a PENDING copy alert once the member order is filled, rejected, or cancelled. */
+export function reconcileCopyAlerts(desk) {
+  if (!desk) return false;
+  desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
+  const book = [...(desk.orders || []), ...(desk.orderHistory || [])];
+  const used = new Set();
+  let changed = false;
+  for (const alert of desk.alerts) {
+    const current = String(alert?.status || "PENDING").toUpperCase();
+    if (!isWorkingMemberOrder(current)) continue;
+    const order = pickOrderForAlert(book, alert, used);
+    if (!order) continue;
+    used.add(order);
+    if (applyCopyAlertFromOrder(alert, order)) changed = true;
+  }
+  return changed;
+}
+
 /** Replace a stored PENDING copy with the status on that member's Dhan order book. */
 export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
   if (!userId) return [];
   const desk = loadDesk(userId);
   const byId = new Map();
   for (const row of Array.isArray(brokerOrders) ? brokerOrders : []) {
-    const id = String(row?.orderId || row?.dhanOrderId || row?.id || "").trim();
+    const id = String(row?.orderId || row?.dhanOrderId || row?.order_id || row?.id || "").trim();
     if (id) byId.set(id, row);
   }
   const updates = [];
@@ -1131,9 +1192,12 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
     if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
     if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
   }
-  if (!updates.length) return [];
-  desk.orders = working;
-  desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  if (updates.length) {
+    desk.orders = working;
+    desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  }
+  const alertsChanged = reconcileCopyAlerts(desk);
+  if (!updates.length && !alertsChanged) return [];
   persist();
   return updates;
 }
@@ -1309,6 +1373,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   placeMemberOrder(desk, order);
   const alert = {
     id: `na${crypto.randomBytes(6).toString("hex")}`,
+    orderId: String(order.id || ""),
     kind: error ? "copy_rejected" : "copy_order",
     text: buildCopyAlertText({
       side,
@@ -1317,6 +1382,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
       strategy: order.strategy,
       status: mapped,
       error,
+      reason: error ? "" : order.reason,
     }),
     symbol: order.symbol,
     side,
@@ -1451,6 +1517,7 @@ function planRows(book, enrollments = []) {
 export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook, ownBookOnly = false } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
+  if (reconcileCopyAlerts(desk)) persist();
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],

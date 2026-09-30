@@ -1,12 +1,14 @@
 import { getPublicUser, SOLE_ADMIN_ID } from "./auth.js";
 import { messagingHandleForUser, sendMessaging, upsertMessagingContact } from "./messaging.js";
 
-export function buildCopyAlertText({ side, qty, symbol, strategy, status, error } = {}) {
+export function buildCopyAlertText({ side, qty, symbol, strategy, status, error, reason } = {}) {
   const action = `${String(side || "BUY").toUpperCase()} ${Math.max(1, Math.round(Number(qty) || 1))} ${String(symbol || "contract").trim()}`;
   const strat = String(strategy || "").trim();
   const note = strat ? ` · ${strat}` : "";
   if (error) return `Copy failed: ${action}${note} · ${String(error.message || error)}`;
-  return `Copied ${action}${note} · ${String(status || "PENDING").toUpperCase()}`;
+  const label = `Copied ${action}${note} · ${String(status || "PENDING").toUpperCase()}`;
+  const why = String(reason || "").trim();
+  return why ? `${label} · ${why}` : label;
 }
 
 export function copyNotifyChannels(notifications = {}) {
