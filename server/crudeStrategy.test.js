@@ -467,6 +467,104 @@ test("tickMarket still evaluates live algos from last Dhan quotes when the socke
   }
 });
 
+test("rejected admin and user orders do not use the max, only an executed fill does", () => {
+  const created = createAlgo({
+    name: "NIFTY executed max",
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "PENDING", orderId: "pend-1" },
+      null,
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "REJECTED", orderId: "rej-admin" },
+      new Error("Admin broker rejected"),
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE", copyUserId: "u-copy" },
+      { status: "REJECTED", orderId: "rej-user" },
+      new Error("User broker rejected"),
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE", copyUserId: "u-copy" },
+      { status: "TRADED", orderId: "user-fill", filledQty: 65 },
+      null,
+    );
+    assert.equal(Number(getAlgo(created.id)?.vwapState?.sessionTrades || 0), 0);
+
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "TRADED", orderId: "fill-1", filledQty: 65 },
+      null,
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "FILLED", orderId: "fill-1", filledQty: 65 },
+      null,
+    );
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 1);
+
+    replaceDhanOrders([
+      {
+        id: "pend-book",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "PENDING",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 0,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 1);
+    replaceDhanOrders([
+      {
+        id: "pend-book",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "REJECTED",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 0,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 1);
+    replaceDhanOrders([
+      {
+        id: "late-fill",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "FILLED",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 65,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 2);
+    replaceDhanOrders([
+      {
+        id: "late-fill",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "FILLED",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 65,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 2);
+  } finally {
+    deleteAlgo(created.id);
+  }
+});
+
 test("a mapped user refusal does not change the crude strategy signal", () => {
   const created = createAlgo({
     name: "CRUDE copy refuse",

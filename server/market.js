@@ -687,7 +687,7 @@ export function queueLivePositionExit(pos) {
 
 export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {
   const status = String(live?.status || "").toUpperCase();
-  const failed = Boolean(error) || status === "REJECTED" || status === "CANCELLED";
+  const failed = Boolean(error) || ["REJECTED", "CANCELLED", "FAILED", "EXPIRED"].includes(status);
   if (failed) {
     const text = String(error?.message || live?.reason || "Dhan did not accept the order")
       .replace(/\s+/g, " ")
@@ -698,6 +698,60 @@ export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {
   const opt = payload.option ? ` ${String(payload.option).toUpperCase()}` : "";
   const id = live?.orderId ? ` ${live.orderId}` : "";
   return { accepted: true, lastSignal: `${side}${opt} AT BROKER${id}` };
+}
+
+function orderStatusText(row) {
+  return String(row?.status || "").toUpperCase();
+}
+
+function orderWasRejected(row) {
+  return ["REJECTED", "CANCELLED", "FAILED", "EXPIRED"].includes(orderStatusText(row));
+}
+
+function orderWasExecuted(row, error) {
+  if (error || !row || row.copyUserId) return false;
+  if (orderWasRejected(row)) return false;
+  const status = orderStatusText(row);
+  if (status === "FILLED" || status === "TRADED" || status === "PARTIAL" || status === "PART_TRADED") return true;
+  return Number(row.filledQty || 0) > 0;
+}
+
+function firstCandleAlgoNamed(name) {
+  const clean = realStrategyName(name) || String(name || "");
+  if (!clean) return null;
+  return (
+    (state.algos || []).find((item) => item.name === clean && isFirstCandleAlgo(item)) || null
+  );
+}
+
+function rememberExecutedEntry(algo, orderId) {
+  if (!isFirstCandleAlgo(algo)) return;
+  const vs = runtimeState(algo);
+  if (!Array.isArray(vs.executedOrderIds)) vs.executedOrderIds = [];
+  const id = String(orderId || "").trim();
+  if (id && vs.executedOrderIds.includes(id)) return;
+  if (id) vs.executedOrderIds.push(id);
+  vs.sessionTrades = Number(vs.sessionTrades || 0) + 1;
+}
+
+function dropCountedEntry(algo, orderId) {
+  if (!isFirstCandleAlgo(algo)) return;
+  const vs = runtimeState(algo);
+  const id = String(orderId || "").trim();
+  if (!id || !Array.isArray(vs.executedOrderIds) || !vs.executedOrderIds.includes(id)) return;
+  vs.executedOrderIds = vs.executedOrderIds.filter((item) => item !== id);
+  vs.sessionTrades = Math.max(0, Number(vs.sessionTrades || 0) - 1);
+}
+
+function syncExecutedTradeCount(previousRow, nextRow) {
+  if (!nextRow || nextRow.copyUserId) return;
+  if (String(nextRow.side || "BUY").toUpperCase() === "SELL") return;
+  const algo = firstCandleAlgoNamed(nextRow.strategy);
+  if (!algo) return;
+  const wasExecuted = orderWasExecuted(previousRow);
+  const nowExecuted = orderWasExecuted(nextRow);
+  if (!wasExecuted && nowExecuted) rememberExecutedEntry(algo, nextRow.id);
+  if (wasExecuted && orderWasRejected(nextRow) && !(Number(nextRow.filledQty) > 0)) dropCountedEntry(algo, nextRow.id);
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
@@ -721,14 +775,15 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
     else noteBrokerRejection(algo);
     algo.lastSignal = next.lastSignal;
     if (!isNiftyVwapHedgeAlgo(algo) && !isCrudeFirstCandleAlgo(algo)) runtimeState(algo).lastEntryBarTime = 0;
+    if (isFirstCandleAlgo(algo) && payload.side !== "SELL") dropCountedEntry(algo, live?.orderId);
     return;
   }
   algo.lastSignal = next.lastSignal;
   if (isNiftyVwapHedgeAlgo(algo)) return;
   const vs = runtimeState(algo);
   vs.inFlight = false;
-  if (isFirstCandleAlgo(algo) && payload.side !== "SELL") {
-    vs.sessionTrades = Number(vs.sessionTrades || 0) + 1;
+  if (isFirstCandleAlgo(algo) && payload.side !== "SELL" && orderWasExecuted(live)) {
+    rememberExecutedEntry(algo, live?.orderId);
   }
 }
 
@@ -2726,7 +2781,7 @@ export function replaceDhanOrders(rows) {
   );
   const tagged = incoming.map((row) => {
     const existing = previousDhan.get(String(row.id));
-    return {
+    const next = {
       ...row,
       price: mergeDhanOrderPrice(row, existing),
       filledQty: Number(row.filledQty || existing?.filledQty || 0),
@@ -2736,6 +2791,8 @@ export function replaceDhanOrders(rows) {
         positions: state.positions || [],
       }),
     };
+    syncExecutedTradeCount(existing, next);
+    return next;
   });
   const others = previous.filter((row) => row.brokerId !== "dhan" || row.copyUserId);
   state.orders = [...tagged, ...others];
