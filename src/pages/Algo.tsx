@@ -408,6 +408,12 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
+function brokerFilledOrder(row: { status?: string; filledQty?: number }) {
+  const status = String(row.status || "").toUpperCase();
+  if (Number(row.filledQty || 0) > 0) return true;
+  return status === "FILLED" || status === "TRADED";
+}
+
 function AlgoCard({
   algo,
   clientIds,
@@ -427,7 +433,7 @@ function AlgoCard({
 }: {
   algo: AlgoStrategy;
   clientIds: Set<string> | null;
-  orders: Array<{ id: string }>;
+  orders: Array<{ id: string; status?: string; filledQty?: number }>;
   positions: Array<{ type?: string; pnl?: number; live?: boolean; brokerId?: string }>;
   busy: boolean;
   rangeOpen: boolean;
@@ -453,6 +459,7 @@ function AlgoCard({
       : positions.every((row) => row.type !== "SELL")
         ? "LONG"
         : "MIXED";
+  const filledOrders = orders.filter(brokerFilledOrder);
   const trades = Number(algo.lastBacktest?.trades || 0);
   const winRate = Number(algo.lastBacktest?.winRate ?? algo.winRate ?? 0);
   const drawdown = Number(algo.lastBacktest?.maxDrawdown || 0);
@@ -508,7 +515,7 @@ function AlgoCard({
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />
-        <Metric label="Total orders" value={String(orders.length)} hint={orders.length ? "Desk orders" : "No orders"} />
+        <Metric label="Total orders" value={String(filledOrders.length)} hint={filledOrders.length ? "Filled at the broker" : "No filled orders"} />
         <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
         <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />
       </div>
