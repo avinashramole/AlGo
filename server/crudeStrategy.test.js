@@ -82,6 +82,34 @@ test("option-chain BUY goes to Dhan when LIVE even if Paper is selected", () => 
   );
 });
 
+test("nifty first candle ATM+2 and ATM-2 resolve to 22800 and 22600, not the ATM strike", () => {
+  const expiry = "2026-10-06";
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry,
+    expiries: [expiry],
+    spot: 22720,
+    source: "dhan",
+    rows: [
+      { strike: 22600, atm: false, callLtp: 180, putLtp: 40, callId: "ce-22600", putId: "pe-22600" },
+      { strike: 22700, atm: true, callLtp: 110, putLtp: 95, callId: "ce-22700", putId: "pe-22700" },
+      { strike: 22800, atm: false, callLtp: 48, putLtp: 170, callId: "ce-22800", putId: "pe-22800" },
+    ],
+  });
+  const plus = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle", strikeOffset: 2 });
+  const plusTrade = resolveAlgoTrade(plus);
+  assert.equal(plusTrade.strike, 22800);
+  assert.equal(plusTrade.securityId, "ce-22800");
+  assert.match(String(plusTrade.symbol), /22800/);
+  assert.doesNotMatch(String(plusTrade.symbol), /22700/);
+
+  const minus = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle", strikeOffset: -2 });
+  const minusTrade = resolveAlgoTrade(minus);
+  assert.equal(minusTrade.strike, 22600);
+  assert.equal(minusTrade.securityId, "ce-22600");
+  assert.match(String(minusTrade.symbol), /22600/);
+});
+
 test("resolveAlgoTrade uses the CRUDEOIL option chain and keeps it after switching to NIFTY", () => {
   applySyntheticOptionChain("CRUDEOIL");
   const algo = normalizeAlgo({

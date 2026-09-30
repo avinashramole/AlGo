@@ -27,7 +27,7 @@ import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp 
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { listPublicUsers } from "./auth.js";
-import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore } from "./strategies.js";
+import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
@@ -41,6 +41,7 @@ import {
   NiftyVwapStrategy,
   noteBrokerRejection,
   noteFeedReconnect,
+  OptionStrikeSelector,
   optionEngineConfig,
   parseIstHm,
   PaperTradingAdapter,
@@ -909,9 +910,9 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     return;
   }
   const spot = Number(getChainSpot(root)) || Number(lastBar?.close) || 0;
-  const atm = atmStrike(spot, und.step);
-  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
-  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : atm;
+  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;
@@ -1142,7 +1143,8 @@ function resolveCrudeFirstCandleTrade(algo) {
   const pack = chainForSymbol(symbol);
   const vs = algo.vwapState || {};
   const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
-  const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
+  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, algo.strikeOffset);
+  const strike = Number(vs.lockedStrike) || selected;
   const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
   const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
@@ -1151,7 +1153,7 @@ function resolveCrudeFirstCandleTrade(algo) {
   const liveChain = pack?.meta?.source === "dhan";
   const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
   const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
-  const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ATM`;
+  const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ${strikeOffsetLabel(algo.strikeOffset)}`;
   let hint = "";
   if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
   else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
@@ -1182,7 +1184,9 @@ export function resolveAlgoTrade(algo) {
     const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
     const vs = algo.vwapState || {};
     const hs = algo.hedgeState || {};
-    const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
+    const offset = isNiftyFirstCandleAlgo(algo) ? algo.strikeOffset : 0;
+    const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, offset);
+    const strike = Number(vs.lockedStrike) || selected;
     const option =
       vs.lockedOption === "PE" || hs.primarySide === "PE"
         ? "PE"
@@ -1202,7 +1206,7 @@ export function resolveAlgoTrade(algo) {
     const liveChain = pack?.meta?.source === "dhan";
     const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
     const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
-    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
+    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ${strikeOffsetLabel(offset)}`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
     else if (

@@ -1256,6 +1256,63 @@ test("first candle checks every later 5m candle and allows five trades a day", (
 test("first candle ATM offset is applied to the strike", () => {
   const pick = OptionStrikeSelector.select({ spot: 24540, step: 50, option: "CE", strikeOffset: 1 });
   assert.equal(pick.strike, 24600);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 0), 22700);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 2), 22800);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, -2), 22600);
+});
+
+test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
+  const plus = defaultNiftyFirstCandleAlgo({ name: "First candle plus two", strikeOffset: 2 });
+  const plusBook = bookAdapter();
+  const plusTick = NiftyVwapStrategy.tick({
+    algo: plus,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22680, 22720)],
+    ceBars: [firstBar(80, 96)],
+    peBars: [firstBar(110, 90)],
+    ceLtp: 96,
+    peLtp: 90,
+    ceSecurityId: "ce-22800",
+    peSecurityId: "pe-22800",
+    spot: 22720,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: plusBook.positions,
+    adapter: plusBook.adapter,
+  });
+  assert.equal(plusTick.action, "entry");
+  assert.equal(plusBook.places[0].strike, 22800);
+  assert.equal(plusBook.places[0].symbol, "NIFTY 22800 CE");
+  assert.equal(plusBook.places[0].securityId, "ce-22800");
+  assert.match(plus.lastSignal, /BUY 22800 CE/);
+
+  const minus = defaultNiftyFirstCandleAlgo({ name: "First candle minus two", strikeOffset: -2 });
+  const minusBook = bookAdapter();
+  const minusTick = NiftyVwapStrategy.tick({
+    algo: minus,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22720, 22680)],
+    ceBars: [firstBar(90, 70)],
+    peBars: [firstBar(80, 110)],
+    ceLtp: 70,
+    peLtp: 110,
+    ceSecurityId: "ce-22600",
+    peSecurityId: "pe-22600",
+    spot: 22720,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: minusBook.positions,
+    adapter: minusBook.adapter,
+  });
+  assert.equal(minusTick.action, "entry");
+  assert.equal(minusBook.places[0].strike, 22600);
+  assert.equal(minusBook.places[0].option, "PE");
+  assert.equal(minusBook.places[0].symbol, "NIFTY 22600 PE");
+  assert.equal(minusBook.places[0].securityId, "pe-22600");
 });
 
 test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {

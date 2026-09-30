@@ -252,7 +252,7 @@ export const NiftyVwapStrategy = {
     });
     algo.lastSignal =
       config.signalMode === "first-candle"
-        ? `BUY ATM ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
+        ? `BUY ${pick.strike} ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
         : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },

@@ -613,6 +613,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                     </option>
                   ))}
                 </select>
+                <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
               </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
@@ -868,27 +869,40 @@ function ConditionRowFields({
   );
 }
 
+function strikeStep(symbol?: string) {
+  const id = String(symbol || "NIFTY").toUpperCase();
+  if (id.includes("BANK") || id.includes("SENSEX")) return 100;
+  return 50;
+}
+
 function liveOptionHint(
   form: Partial<AlgoStrategy>,
   data: {
-    optionMeta?: { symbol?: string; expiry?: string; expiryLabel?: string };
+    optionMeta?: { symbol?: string; expiry?: string; expiryLabel?: string; spot?: number };
     optionChain?: Array<{ strike: number; atm?: boolean; callLtp?: number; putLtp?: number }>;
   },
 ) {
   const symbol = form.symbol || "NIFTY";
   const option = form.optionType === "PE" ? "PE" : "CE";
-  const offset = Math.round(Number(form.strikeOffset) || 0);
-  if (data.optionMeta?.symbol !== symbol) {
-    return `Open Options on ${symbol} to see live ${option} LTP`;
+  const offset = Math.max(-2, Math.min(2, Math.round(Number(form.strikeOffset) || 0)));
+  const step = strikeStep(symbol);
+  const sameDesk = data.optionMeta?.symbol === symbol;
+  const rows = sameDesk ? data.optionChain || [] : [];
+  const atm = rows.find((row) => row.atm);
+  const spot = sameDesk ? Number(data.optionMeta?.spot) : 0;
+  const atmPrice = atm ? Number(atm.strike) : spot > 0 ? Math.round(spot / step) * step : 0;
+  const want = atmPrice > 0 ? atmPrice + offset * step : 0;
+  if (!sameDesk) {
+    return `Open Options on ${symbol} to see live ${strikeOffsetLabel(offset)} ${option} LTP`;
   }
-  const rows = data.optionChain || [];
-  const atmIndex = rows.findIndex((row) => row.atm);
-  if (atmIndex < 0) return "Waiting for ATM on the option tape";
-  const row = rows[atmIndex + offset];
-  if (!row) return `No ${strikeOffsetLabel(offset)} strike on this tape`;
+  if (!(atmPrice > 0)) return "Waiting for ATM on the option tape";
+  const row = rows.find((item) => Number(item.strike) === want);
+  if (!row) return `${symbol} ${want} ${option} · no ${strikeOffsetLabel(offset)} strike on this tape`;
   const ltp = option === "PE" ? Number(row.putLtp) : Number(row.callLtp);
-  const expiry = data.optionMeta.expiryLabel || data.optionMeta.expiry || "";
-  return ltp > 0 ? `${symbol} ${row.strike} ${option} · LTP ${ltp} · ${expiry}` : `${symbol} ${row.strike} ${option} · waiting for LTP`;
+  const expiry = data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "";
+  return ltp > 0
+    ? `${symbol} ${row.strike} ${option} · ${strikeOffsetLabel(offset)} · LTP ${ltp}${expiry ? ` · ${expiry}` : ""}`
+    : `${symbol} ${row.strike} ${option} · ${strikeOffsetLabel(offset)} · waiting for LTP`;
 }
 
 function TypeCard({ active, title, text, onClick }: { active: boolean; title: string; text: string; onClick: () => void }) {
