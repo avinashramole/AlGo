@@ -409,7 +409,7 @@ test("duplicate-order prevention while in-flight", () => {
     ceLtp: 140,
     positions: [],
     adapter: { place: () => ({ queued: true }), exit: () => ({}) },
-  }).reason, "in-flight");
+  }).reason, "buy-active");
 });
 
 test("market-data disconnect pauses entries; reconnect clears the flag", () => {
@@ -507,9 +507,10 @@ test("duplicate live queue does not mark the strategy as filled", () => {
     adapter: { place: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }), exit: () => ({}) },
   });
   assert.equal(result.action, "skip");
-  assert.equal(result.reason, "duplicate");
-  assert.equal(algo.vwapState.inFlight, false);
-  assert.equal(algo.lastSignal, "");
+  assert.equal(result.reason, "buy-active");
+  assert.equal(algo.vwapState.buyPhase, "entry");
+  assert.equal(Number(algo.vwapState.fillPrice || 0), 0);
+  assert.equal(algo.lastSignal, "WAIT ORDER");
 });
 
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
@@ -1539,6 +1540,135 @@ test("first candle duplicate bar and restart do not place a second order", () =>
   });
   assert.ok(afterRestart.action === "hold" || afterRestart.reason === "duplicate-bar" || afterRestart.reason === "already-open");
   assert.equal(book.places.length, 1);
+});
+
+test("only one buy is sent until that order is squared off", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "One buy at a time" });
+  const places = [];
+  const adapter = {
+    place(payload) {
+      places.push(payload);
+      return { queued: true, status: "PENDING" };
+    },
+    exit() {
+      return { queued: true };
+    },
+  };
+  const tickAt = (n, extra = {}) => {
+    const time = T0_0900 + n * BAR;
+    return NiftyVwapStrategy.tick({
+      algo,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 360,
+      futuresBars: [{ time, open: 24500, high: 24580, low: 24490, close: 24540 + n, volume: 1000 }],
+      ceBars: [{ time, open: 100, high: 140, low: 98, close: 120 + n, volume: 500 }],
+      peBars: [firstBar(110, 96)],
+      ceLtp: 120 + n,
+      peLtp: 96,
+      spot: 24540,
+      step: 50,
+      expiry: "2026-08-27",
+      positions: extra.positions || [],
+      orders: extra.orders || [],
+      adapter,
+    });
+  };
+  const first = tickAt(0);
+  assert.equal(first.action, "queued");
+  assert.equal(places.length, 1);
+  assert.equal(algo.vwapState.buyPhase, "entry");
+  algo.vwapState.inFlight = false;
+  algo.vwapState.lastEntryAt = T0_0900;
+  const second = tickAt(1, {
+    orders: [{ id: "b1", strategy: algo.name, side: "BUY", status: "PENDING" }],
+  });
+  assert.equal(second.reason, "buy-active");
+  assert.equal(places.length, 1);
+  assert.equal(algo.lastSignal, "WAIT ORDER");
+  const held = tickAt(2, {
+    positions: [
+      {
+        symbol: "NIFTY 24550 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 120,
+        ltp: 122,
+        strategy: algo.name,
+        option: "CE",
+        strike: 24550,
+      },
+    ],
+    orders: [{ id: "b1", strategy: algo.name, side: "BUY", status: "FILLED", filledQty: 65 }],
+  });
+  assert.equal(places.length, 1);
+  assert.ok(held.action === "hold" || held.reason === "already-open");
+  assert.equal(algo.vwapState.buyPhase, "open");
+  const stillOpen = tickAt(3, {
+    positions: [
+      {
+        symbol: "NIFTY 24550 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 120,
+        ltp: 122,
+        strategy: algo.name,
+        option: "CE",
+        strike: 24550,
+      },
+    ],
+  });
+  assert.equal(places.length, 1);
+  assert.ok(stillOpen.action === "hold" || stillOpen.reason === "already-open");
+  PositionManager.clearOpen(algo.vwapState);
+  const afterSquareOff = tickAt(4, {
+    orders: [
+      { id: "s1", strategy: algo.name, side: "SELL", status: "FILLED", filledQty: 65 },
+      { id: "b1", strategy: algo.name, side: "BUY", status: "FILLED", filledQty: 65 },
+    ],
+  });
+  assert.equal(afterSquareOff.action, "queued");
+  assert.equal(places.length, 2);
+});
+
+test("a rejected buy is resolved and the next buy can be sent", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Rejected buy can retry" });
+  const places = [];
+  const adapter = {
+    place(payload) {
+      places.push(payload);
+      return { queued: true, status: "PENDING" };
+    },
+    exit() {
+      return { ok: true };
+    },
+  };
+  const tickAt = (n, orders = []) => {
+    const time = T0_0900 + n * BAR;
+    return NiftyVwapStrategy.tick({
+      algo,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 360,
+      futuresBars: [{ time, open: 24500, high: 24580, low: 24490, close: 24540 + n, volume: 1000 }],
+      ceBars: [{ time, open: 100, high: 140, low: 98, close: 120 + n, volume: 500 }],
+      peBars: [firstBar(110, 96)],
+      ceLtp: 120,
+      peLtp: 96,
+      spot: 24540,
+      step: 50,
+      expiry: "2026-08-27",
+      positions: [],
+      orders,
+      adapter,
+    });
+  };
+  assert.equal(tickAt(0).action, "queued");
+  algo.vwapState.inFlight = false;
+  const released = tickAt(1, [{ id: "rej-1", strategy: algo.name, side: "BUY", status: "REJECTED", filledQty: 0 }]);
+  assert.equal(released.action, "queued");
+  assert.equal(places.length, 2);
+  assert.equal(algo.vwapState.buyPhase, "entry");
 });
 
 test("normalizeAlgo rematerializes first candle even if kind was saved as indicator", () => {

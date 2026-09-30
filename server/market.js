@@ -504,6 +504,47 @@ function orderBrokerId(row) {
   return String(row?.brokerId || "dhan").trim().toLowerCase() || "dhan";
 }
 
+function orderIsWorking(row) {
+  const status = orderStatusText(row);
+  if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
+  const qty = Number(row?.qty) || 0;
+  const filled = Number(row?.filledQty) || 0;
+  if (qty > 0 && filled >= qty) return false;
+  return true;
+}
+
+function strategyBuyUnresolved(strategyName) {
+  const name = realStrategyName(strategyName) || String(strategyName || "");
+  if (!name) return false;
+  const algo = (state.algos || []).find((item) => item.name === name);
+  const phase = String(algo?.vwapState?.buyPhase || "");
+  if (phase === "entry" || phase === "open") return true;
+  if (
+    pendingLiveAlgoOrders.some(
+      (row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === name && liveOrderSide(row) === "BUY",
+    )
+  ) {
+    return true;
+  }
+  if (
+    (state.orders || []).some(
+      (row) =>
+        !row.copyUserId &&
+        (realStrategyName(row.strategy) || row.strategy) === name &&
+        liveOrderSide(row) === "BUY" &&
+        orderIsWorking(row),
+    )
+  ) {
+    return true;
+  }
+  return (state.positions || []).some(
+    (row) =>
+      (realStrategyName(row.strategy) || row.strategy) === name &&
+      Number(row.qty) > 0 &&
+      String(row.type || "BUY").toUpperCase() !== "CLOSED",
+  );
+}
+
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
@@ -538,6 +579,9 @@ function enqueueLiveAlgoOrder(payload) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
+    if (!copyUserId && strategy && strategyBuyUnresolved(strategy)) {
+      return { ok: true, queued: false, status: "PENDING", duplicate: true };
+    }
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
     const openSameStrategy =
       !copyUserId &&
@@ -782,6 +826,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   if (isNiftyVwapHedgeAlgo(algo)) return;
   const vs = runtimeState(algo);
   vs.inFlight = false;
+  if (String(payload.side || "BUY").toUpperCase() !== "SELL" && vs.buyPhase !== "open") vs.buyPhase = "entry";
   if (isFirstCandleAlgo(algo) && payload.side !== "SELL" && orderWasExecuted(live)) {
     rememberExecutedEntry(algo, live?.orderId);
   }
@@ -1010,6 +1055,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     ceSecurityId,
     peSecurityId,
     positions,
+    orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,
   });
   showLivePreview();
@@ -2302,6 +2348,10 @@ function runPaperAlgos() {
       continue;
     }
     const side = wantBuy ? "BUY" : "SELL";
+    if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
+      algo.lastSignal = "WAIT ORDER";
+      continue;
+    }
     placeOrder({
       ...algoOrderFields(algo, side, trade),
       brokerId: "paper",
@@ -2341,6 +2391,10 @@ function runLiveAlgos() {
         (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
       );
       if (algo.lastLiveSide === side && openLive) continue;
+      if (side === "BUY" && (openLive || strategyBuyUnresolved(algo.name))) {
+        algo.lastSignal = "WAIT ORDER";
+        continue;
+      }
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || trade.kind !== "future" || !(trade.ltp > 0)) continue;
       queueLiveAlgoOrder({
@@ -2364,6 +2418,10 @@ function runLiveAlgos() {
       (row) => !isPaperRow(row) && realStrategyName(row.strategy) === algo.name && Number(row.qty) > 0,
     );
     if (openLive) continue;
+    if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
+      algo.lastSignal = "WAIT ORDER";
+      continue;
+    }
     const trade = resolveAlgoTrade(algo);
     if (!trade) continue;
     if (trade.kind === "option" && !(trade.strike && trade.expiry && trade.ltp > 0)) {

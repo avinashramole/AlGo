@@ -43,6 +43,7 @@ export function runtimeState(algo) {
       lastEntryAt: 0,
       sessionTrades: 0,
       executedOrderIds: [],
+      buyPhase: "",
       sentSignalBarTime: 0,
       processedFirstBarTime: 0,
       ceBars: [],
@@ -72,6 +73,7 @@ export function resetSession(state, sessionDate) {
   state.lastEntryAt = 0;
   state.sessionTrades = 0;
   state.executedOrderIds = [];
+  if (state.buyPhase !== "entry" && state.buyPhase !== "open") state.buyPhase = "";
   state.sentSignalBarTime = 0;
   state.processedFirstBarTime = 0;
   state.ceBars = [];
@@ -115,6 +117,7 @@ export const PositionManager = {
   },
   markFill(state, fillPrice, stopPrice, targetPrice) {
     state.inFlight = false;
+    state.buyPhase = "open";
     state.fillPrice = Number(fillPrice);
     state.stopPrice = Number(stopPrice);
     state.targetPrice = Number(targetPrice);
@@ -122,6 +125,7 @@ export const PositionManager = {
   },
   clearOpen(state) {
     state.inFlight = false;
+    state.buyPhase = "";
     state.lockedStrike = 0;
     state.lockedOption = "";
     state.lockedSymbol = "";
