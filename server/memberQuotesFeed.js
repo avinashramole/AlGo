@@ -91,7 +91,12 @@ function emptyQuotes(brokerId, reason) {
   };
 }
 
+function kotakTotpSecret(deskKotak) {
+  return String(process.env.T2S_KOTAK_TOTP_SECRET || deskKotak?.totpSecret || "").trim();
+}
+
 function kotakFeedCreds(secrets, deskKotak) {
+  const totpSecret = kotakTotpSecret(deskKotak);
   const ownReady = Boolean(secrets.credentialsInstalled && secrets.brokerToken && secrets.accountId && secrets.brokerApiKey);
   if (ownReady) {
     return {
@@ -100,6 +105,7 @@ function kotakFeedCreds(secrets, deskKotak) {
       clientId: String(secrets.accountId).trim(),
       apiKey: String(secrets.brokerApiKey).trim(),
       sessionToken: String(secrets.brokerSessionToken || "").trim(),
+      totpSecret,
     };
   }
   const envKey = String(process.env.T2S_KOTAK_CONSUMER_KEY || "").trim();
@@ -111,6 +117,7 @@ function kotakFeedCreds(secrets, deskKotak) {
       clientId: String(process.env.T2S_KOTAK_CLIENT_ID || "").trim(),
       apiKey: envKey || envToken,
       sessionToken: "",
+      totpSecret,
     };
   }
   const session = deskKotak === null ? null : deskKotak || liveBrokerSession("kotak");
@@ -123,6 +130,7 @@ function kotakFeedCreds(secrets, deskKotak) {
     clientId: String(session?.clientId || "").trim(),
     apiKey: apiKey || accessToken,
     sessionToken: String(session?.sessionToken || "").trim(),
+    totpSecret,
   };
 }
 

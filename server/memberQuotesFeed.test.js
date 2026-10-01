@@ -192,7 +192,12 @@ test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", 
   const seen = [];
   const mine = await memberQuotesForUser(member, {
     now: Date.now() + 60_000,
-    deskKotak: { clientId: "YIX14", apiKey: "kotak-consumer-key", accessToken: "kotak-consumer-key" },
+    deskKotak: {
+      clientId: "YIX14",
+      apiKey: "kotak-consumer-key",
+      accessToken: "kotak-consumer-key",
+      totpSecret: "JBSWY3DPEHPK3PXP",
+    },
     fetchQuotes: async (creds) => {
       seen.push(creds);
       return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22421.95, close: 22620.45 }];
@@ -203,6 +208,7 @@ test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", 
   assert.equal(seen[0].apiKey, "kotak-consumer-key");
   assert.equal(seen[0].accessToken, "kotak-consumer-key");
   assert.equal(seen[0].clientId, "YIX14");
+  assert.equal(seen[0].totpSecret, "JBSWY3DPEHPK3PXP");
   assert.equal(mine.brokerId, "kotak");
   assert.equal(mine.brokerName, "KOTAK");
   assert.equal(mine.live, true);
@@ -212,6 +218,7 @@ test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", 
   const body = JSON.stringify(mine);
   assert.equal(body.includes("kotak-consumer-key"), false);
   assert.equal(body.includes("YIX14"), false);
+  assert.equal(body.includes("JBSWY3DPEHPK3PXP"), false);
 });
 
 test("paper members stay on an empty board even if admin quotes exist", async () => {
