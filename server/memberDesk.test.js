@@ -833,6 +833,49 @@ test("the member profile does not show the desk Kotak Neo login", async () => {
   assert.equal(kotakField.label, "Consumer key");
 });
 
+test("a member Kotak trade login still supplies the balance when the consumer key matches the desk", () => {
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YT2VM";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "same-consumer-key";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "same-consumer-key";
+  try {
+    const member = { id: "u-yt2vm-balance", name: "Avinash", email: "avinash.ramole86@gmail.com", role: "user" };
+    installMemberBroker({
+      user: member,
+      brokerId: "kotak",
+      clientId: "YT2VM",
+      apiKey: "same-consumer-key",
+      accessToken: "same-consumer-key",
+      mobile: "9000000000",
+      mpin: "111111",
+      totpSecret: "GEZDGNBVGY3TQOJQ",
+    });
+    const slot = brokerAccountForLiveCopy(member.id, "kotak");
+    assert.equal(slot.leftoverToken, false);
+    assert.equal(slot.accountId, "YT2VM");
+    assert.equal(slot.brokerMobile, "+919000000000");
+    assert.equal(slot.brokerMpin, "111111");
+    assert.equal(slot.brokerTotpSecret, "GEZDGNBVGY3TQOJQ");
+    const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+    assert.equal(shown.install.accountId, "YT2VM");
+    assert.equal(shown.install.hasTradeLogin, true);
+    assert.equal(shown.wallet.balance, 0);
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("a Kotak user's trade login stays on that user and is not returned on the profile view", async () => {
   const member = { id: "u-yt2vm-login", name: "Avinash", email: "avinash.ramole86@gmail.com", role: "user" };
   const saved = installMemberBroker({
