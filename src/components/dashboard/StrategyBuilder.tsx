@@ -24,6 +24,7 @@ import {
   isNiftyVwapHedgeKind,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
+  niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
@@ -68,10 +69,19 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       ) as StrategyKind;
       const synthesized = groupsFromFlat(algo);
       const crude = kind === "crude-first-candle";
+      const trail = kind === "nifty-first-candle" ? niftyFirstCandleTrail(algo) : null;
       setForm({
         ...emptyStrategy(kind),
         ...algo,
         kind,
+        ...(trail
+          ? {
+              trailingActivationPct: trail.activation,
+              trailingEveryPct: trail.every,
+              trailingShiftPct: trail.shift,
+              trailingStepPct: trail.shift,
+            }
+          : {}),
         ...(crude
           ? {
               indicator: "CRUDE_FIRST_CANDLE",
@@ -138,7 +148,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const evalAt = form.entryEvaluationIst || "09:05";
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
       const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · LIVE ${start} IST`;
+      const trail = niftyFirstCandleTrail(form);
+      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -618,7 +629,39 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
               {crudeFirst ? null : (
+              <>
+              <p className="text-[11px] font-semibold text-slate-400 md:col-span-2" data-trailing-sl="nifty-first-candle">
+                Trailing SL: at this profit the stop moves to the buy price. Each further gain of the next percent lifts the stop by the shift percent. A pullback does not lower the stop.
+              </p>
+              <NumberField
+                label="Trailing SL to buy price at %"
+                value={niftyFirstCandleTrail(form).activation}
+                step={1}
+                onChange={(trailingActivationPct) => {
+                  const trail = niftyFirstCandleTrail(form);
+                  set({ trailingActivationPct, trailingEveryPct: trail.every, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                }}
+              />
+              <NumberField
+                label="Trailing SL every %"
+                value={niftyFirstCandleTrail(form).every}
+                step={1}
+                onChange={(trailingEveryPct) => {
+                  const trail = niftyFirstCandleTrail(form);
+                  set({ trailingActivationPct: trail.activation, trailingEveryPct, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                }}
+              />
+              <NumberField
+                label="Trailing SL shift %"
+                value={niftyFirstCandleTrail(form).shift}
+                step={1}
+                onChange={(trailingShiftPct) => {
+                  const trail = niftyFirstCandleTrail(form);
+                  set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
+                }}
+              />
               <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+              </>
               )}
               <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>

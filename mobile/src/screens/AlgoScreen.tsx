@@ -57,6 +57,8 @@ type Draft = {
   maxTradesPerDay?: string;
   initialSlPct?: string;
   trailingActivationPct?: string;
+  trailingEveryPct?: string;
+  trailingShiftPct?: string;
   trailingStepPct?: string;
   vwapExitCandles?: string;
   symbol: string;
@@ -137,8 +139,10 @@ function blankDraft(): Draft {
     slPct: "0.4",
     targetPct: "0.8",
     initialSlPct: "20",
-    trailingActivationPct: "10",
-    trailingStepPct: "3",
+    trailingActivationPct: "20",
+    trailingEveryPct: "10",
+    trailingShiftPct: "5",
+    trailingStepPct: "5",
     vwapExitCandles: "5",
     buyLeft: "price",
     buyOp: "close_above",
@@ -210,8 +214,17 @@ export function AlgoScreen() {
       slPct: Number(isEngineKind(draft.kind) ? draft.initialSlPct || draft.slPct : draft.slPct),
       targetPct: Number(draft.targetPct),
       initialSlPct: Number(draft.initialSlPct || (draft.kind === "nifty-vwap-reversal" ? 15 : 20)),
-      trailingActivationPct: Number(draft.trailingActivationPct || 10),
-      trailingStepPct: Number(draft.trailingStepPct || 3),
+      ...(draft.kind === "nifty-first-candle"
+        ? {
+            trailingActivationPct: Number(draft.trailingActivationPct || 20),
+            trailingEveryPct: Number(draft.trailingEveryPct || 10),
+            trailingShiftPct: Number(draft.trailingShiftPct || 5),
+            trailingStepPct: Number(draft.trailingShiftPct || 5),
+          }
+        : {
+            trailingActivationPct: Number(draft.trailingActivationPct || 10),
+            trailingStepPct: Number(draft.trailingStepPct || 3),
+          }),
       vwapExitCandles: Number(draft.vwapExitCandles || 5),
       instrument: draft.kind === "nifty-test" ? "future" : isEngineKind(draft.kind) ? "option" : draft.instrument,
       side: draft.kind === "nifty-test" ? "BOTH" : draft.side,
@@ -280,6 +293,10 @@ export function AlgoScreen() {
                 slPct: "20",
                 targetPct: "40",
                 initialSlPct: "20",
+                trailingActivationPct: "20",
+                trailingEveryPct: "10",
+                trailingShiftPct: "5",
+                trailingStepPct: "5",
                 dailyLiveIst: "09:00",
                 firstBarStartIst: "09:00",
                 entryEvaluationIst: "09:05",
@@ -496,6 +513,10 @@ export function AlgoScreen() {
           <>
             <Field label="Stop %" value={draft.initialSlPct || "20"} keyboard="numeric" onChange={(initialSlPct) => setDraft({ ...draft, initialSlPct, slPct: initialSlPct })} />
             <Field label="Target %" value={draft.targetPct} keyboard="numeric" onChange={(targetPct) => setDraft({ ...draft, targetPct })} />
+            <Text style={styles.muted}>Trailing SL: at this profit the stop moves to the buy price. Each further gain lifts the stop by the shift percent. A pullback does not lower the stop.</Text>
+            <Field label="Trailing SL to buy price at %" value={draft.trailingActivationPct || "20"} keyboard="numeric" onChange={(trailingActivationPct) => setDraft({ ...draft, trailingActivationPct, trailingEveryPct: draft.trailingEveryPct || "10", trailingShiftPct: draft.trailingShiftPct || "5" })} />
+            <Field label="Trailing SL every %" value={draft.trailingEveryPct || "10"} keyboard="numeric" onChange={(trailingEveryPct) => setDraft({ ...draft, trailingActivationPct: draft.trailingActivationPct || "20", trailingEveryPct, trailingShiftPct: draft.trailingShiftPct || "5" })} />
+            <Field label="Trailing SL shift %" value={draft.trailingShiftPct || "5"} keyboard="numeric" onChange={(trailingShiftPct) => setDraft({ ...draft, trailingActivationPct: draft.trailingActivationPct || "20", trailingEveryPct: draft.trailingEveryPct || "10", trailingShiftPct, trailingStepPct: trailingShiftPct })} />
             <Field label="Max trades / day" value={draft.maxTradesPerDay && Number(draft.maxTradesPerDay) > 1 ? draft.maxTradesPerDay : "5"} keyboard="numeric" onChange={(maxTradesPerDay) => setDraft({ ...draft, maxTradesPerDay })} />
           </>
         ) : draft.kind === "nifty-vwap" ? (
@@ -598,6 +619,11 @@ export function AlgoScreen() {
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.name}>{algo.name}</Text>
               <Text style={styles.muted}>{algo.summary || algo.tag}</Text>
+              {algo.kind === "nifty-first-candle" ? (
+                <Text style={styles.muted}>
+                  Trailing SL +{Number(algo.trailingEveryPct) > 0 && Number(algo.trailingShiftPct) > 0 ? algo.trailingActivationPct || 20 : 20}% to buy, then +{Number(algo.trailingShiftPct) > 0 ? algo.trailingShiftPct : 5}% every +{Number(algo.trailingEveryPct) > 0 ? algo.trailingEveryPct : 10}%
+                </Text>
+              ) : null}
             </View>
             <Pill text={algo.status} up={algo.status === "LIVE"} />
           </View>
@@ -666,8 +692,22 @@ export function AlgoScreen() {
                   ),
                   targetPct: String(algo.targetPct || (algo.kind === "nifty-vwap-hedge" ? 40 : algo.kind === "nifty-vwap-reversal" ? 30 : algo.kind === "nifty-vwap" || algo.kind === "nifty-first-candle" ? 40 : 0.8)),
                   initialSlPct: String(algo.kind === "nifty-vwap-hedge" ? 0 : algo.initialSlPct || (algo.kind === "nifty-vwap-reversal" ? 15 : 20)),
-                  trailingActivationPct: String(algo.trailingActivationPct || 10),
-                  trailingStepPct: String(algo.trailingStepPct || 3),
+                  trailingActivationPct: String(
+                    algo.kind === "nifty-first-candle"
+                      ? Number(algo.trailingEveryPct) > 0 && Number(algo.trailingShiftPct) > 0
+                        ? algo.trailingActivationPct || 20
+                        : 20
+                      : algo.trailingActivationPct || 10,
+                  ),
+                  trailingEveryPct: String(algo.kind === "nifty-first-candle" ? (Number(algo.trailingEveryPct) > 0 ? algo.trailingEveryPct : 10) : algo.trailingEveryPct || ""),
+                  trailingShiftPct: String(algo.kind === "nifty-first-candle" ? (Number(algo.trailingShiftPct) > 0 ? algo.trailingShiftPct : 5) : algo.trailingShiftPct || ""),
+                  trailingStepPct: String(
+                    algo.kind === "nifty-first-candle"
+                      ? Number(algo.trailingShiftPct) > 0
+                        ? algo.trailingShiftPct
+                        : 5
+                      : algo.trailingStepPct || 3,
+                  ),
                   vwapExitCandles: String(algo.vwapExitCandles || 5),
                   startTimeIst: String(algo.startTimeIst || "09:15"),
                   dailyLiveIst: String(algo.dailyLiveIst || "09:00"),

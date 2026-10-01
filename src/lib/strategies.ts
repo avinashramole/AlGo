@@ -44,6 +44,8 @@ export type AlgoStrategy = {
   targetPct?: number;
   initialSlPct?: number;
   trailingActivationPct?: number;
+  trailingEveryPct?: number;
+  trailingShiftPct?: number;
   trailingStepPct?: number;
   vwapExitCandles?: number;
   maxPositions?: number;
@@ -235,6 +237,24 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
     algo?.strategyType === "NIFTY_FIRST_CANDLE_5M" ||
     algo?.indicator === "NIFTY_FIRST_CANDLE"
   );
+}
+
+export function niftyFirstCandleTrail(algo?: {
+  trailingActivationPct?: number;
+  trailingEveryPct?: number;
+  trailingShiftPct?: number;
+}) {
+  const every = Number(algo?.trailingEveryPct);
+  const shift = Number(algo?.trailingShiftPct);
+  const activation = Number(algo?.trailingActivationPct);
+  if (every > 0 && shift > 0) {
+    return {
+      activation: activation > 0 ? activation : 20,
+      every,
+      shift,
+    };
+  }
+  return { activation: 20, every: 10, shift: 5 };
 }
 
 export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
@@ -661,8 +681,10 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       slPct: 20,
       initialSlPct: 20,
       targetPct: 40,
-      trailingActivationPct: 10,
-      trailingStepPct: 3,
+      trailingActivationPct: 20,
+      trailingEveryPct: 10,
+      trailingShiftPct: 5,
+      trailingStepPct: 5,
       vwapExitCandles: 5,
       maxPositions: 1,
       maxTradesPerDay: 5,

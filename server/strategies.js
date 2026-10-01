@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, CRUDE_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, CRUDE_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -302,7 +302,8 @@ export function summarizeAlgo(algo) {
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
     const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
     const atm = strikeOffsetLabel(algo.strikeOffset);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
+    const trail = niftyFirstCandleTrail(algo);
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -633,6 +634,10 @@ export function normalizeAlgo(input = {}, existing = {}) {
       firstBarStartIst: cfg.firstBarStartIst,
       entryEvaluationIst: cfg.entryEvaluationIst,
       endTimeIst: cfg.endTimeIst,
+      trailingActivationPct: cfg.trailingActivationPct,
+      trailingEveryPct: cfg.trailingEveryPct,
+      trailingShiftPct: cfg.trailingShiftPct,
+      trailingStepPct: cfg.trailingShiftPct,
       lastBacktest: existing.lastBacktest || null,
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,

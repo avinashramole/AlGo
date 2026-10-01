@@ -13,6 +13,7 @@ import {
   contractLabel,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
+  niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
@@ -85,10 +86,11 @@ function kindMeta(algo: AlgoStrategy) {
   }
   if (isNiftyFirstCandleKind(algo)) {
     const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
+    const trail = niftyFirstCandleTrail(algo);
     return {
       kind: "nifty-first-candle" as const,
       category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {

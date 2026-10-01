@@ -246,11 +246,34 @@ export function niftyVwapReversalConfig(algo = {}) {
   };
 }
 
+export function niftyFirstCandleTrail(algo = {}) {
+  const num = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  const every = num(algo.trailingEveryPct);
+  const shift = num(algo.trailingShiftPct);
+  const activation = num(algo.trailingActivationPct);
+  if (every > 0 && shift > 0) {
+    return {
+      trailingActivationPct: activation > 0 ? activation : DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingActivationPct,
+      trailingEveryPct: every,
+      trailingShiftPct: shift,
+    };
+  }
+  return {
+    trailingActivationPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingActivationPct,
+    trailingEveryPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingEveryPct,
+    trailingShiftPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingShiftPct,
+  };
+}
+
 export function niftyFirstCandleConfig(algo = {}) {
   const num = (value, fallback) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   };
+  const trail = niftyFirstCandleTrail(algo);
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.lots)));
   const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.lotSize)));
   const timeframe = FIRST_CANDLE_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.timeframe;
@@ -274,10 +297,10 @@ export function niftyFirstCandleConfig(algo = {}) {
     timeframe,
     initialSlPct: Math.max(1, num(algo.initialSlPct ?? algo.slPct, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.initialSlPct)),
     targetPct: Math.max(1, num(algo.targetPct ?? algo.targetProfitPct, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.targetPct)),
-    trailingActivationPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingActivationPct,
-    trailingStepPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingShiftPct,
-    trailingEveryPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingEveryPct,
-    trailingShiftPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingShiftPct,
+    trailingActivationPct: trail.trailingActivationPct,
+    trailingStepPct: trail.trailingShiftPct,
+    trailingEveryPct: trail.trailingEveryPct,
+    trailingShiftPct: trail.trailingShiftPct,
     lockToEntry: true,
     vwapExitCandles: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.vwapExitCandles,
     maxPositions: 1,
@@ -448,6 +471,8 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     targetPct: cfg.targetPct,
     initialSlPct: cfg.initialSlPct,
     trailingActivationPct: cfg.trailingActivationPct,
+    trailingEveryPct: cfg.trailingEveryPct,
+    trailingShiftPct: cfg.trailingShiftPct,
     trailingStepPct: cfg.trailingStepPct,
     vwapExitCandles: cfg.vwapExitCandles,
     maxPositions: 1,
@@ -489,6 +514,10 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     firstBarStartIst: cfg.firstBarStartIst,
     entryEvaluationIst: cfg.entryEvaluationIst,
     endTimeIst: cfg.endTimeIst,
+    trailingActivationPct: cfg.trailingActivationPct,
+    trailingEveryPct: cfg.trailingEveryPct,
+    trailingShiftPct: cfg.trailingShiftPct,
+    trailingStepPct: cfg.trailingShiftPct,
     enabled: false,
   };
 }

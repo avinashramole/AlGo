@@ -1151,6 +1151,55 @@ test("first candle strategy buys ATM CE and trails the stop to the buy price at 
   assert.equal(book.places.length, 1);
 });
 
+test("first candle trail uses a saved shift and keeps the old 10/3 row on 20/10/5", () => {
+  const saved = niftyFirstCandleConfig({
+    trailingActivationPct: 25,
+    trailingEveryPct: 8,
+    trailingShiftPct: 4,
+  });
+  assert.equal(saved.useTrail, true);
+  assert.equal(saved.lockToEntry, true);
+  assert.equal(saved.trailingActivationPct, 25);
+  assert.equal(saved.trailingEveryPct, 8);
+  assert.equal(saved.trailingShiftPct, 4);
+  assert.equal(saved.trailingStepPct, 4);
+  assert.equal(TrailingStopManager.nextStop({
+    entry: 100,
+    mark: 133,
+    prevStop: 80,
+    initialSlPct: saved.initialSlPct,
+    activationPct: saved.trailingActivationPct,
+    lockToEntry: saved.lockToEntry,
+    trailEveryPct: saved.trailingEveryPct,
+    trailShiftPct: saved.trailingShiftPct,
+  }), 104);
+  const legacy = niftyFirstCandleConfig({ trailingActivationPct: 10, trailingStepPct: 3 });
+  assert.equal(legacy.trailingActivationPct, 20);
+  assert.equal(legacy.trailingEveryPct, 10);
+  assert.equal(legacy.trailingShiftPct, 5);
+  assert.equal(crudeFirstCandleConfig({ trailingActivationPct: 25, trailingEveryPct: 8, trailingShiftPct: 4 }).useTrail, false);
+  const normalized = normalizeAlgo({
+    name: "Desk first candle",
+    kind: "nifty-first-candle",
+    trailingActivationPct: 25,
+    trailingEveryPct: 8,
+    trailingShiftPct: 4,
+  });
+  assert.equal(normalized.trailingActivationPct, 25);
+  assert.equal(normalized.trailingEveryPct, 8);
+  assert.equal(normalized.trailingShiftPct, 4);
+  assert.match(normalized.summary, /trailing SL \+25% to buy, then \+4% every \+8%/);
+  const leftover = normalizeAlgo({
+    name: "Desk first candle",
+    kind: "nifty-first-candle",
+    trailingActivationPct: 10,
+    trailingStepPct: 3,
+  });
+  assert.equal(leftover.trailingActivationPct, 20);
+  assert.equal(leftover.trailingEveryPct, 10);
+  assert.equal(leftover.trailingShiftPct, 5);
+});
+
 test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   const created = normalizeAlgo(defaultNiftyFirstCandleAlgo({ name: "Desk first candle", runMode: "live" }));
   assert.equal(isNiftyFirstCandleAlgo(created), true);
