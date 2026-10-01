@@ -40,14 +40,7 @@ export function UserHome() {
     <div className="space-y-4">
       <section className="card p-6">
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
-        <h1 className="mt-1 text-2xl font-extrabold">Welcome, {user?.name || "trader"}</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Signed in with {user?.email || "your account"}. Index cards show price and future only — no VWAP. Copied orders,
-          open positions, MTM, and your closed trade book are on this page.
-        </p>
-        <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500 dark:bg-slate-800">
-          {user?.role || "user"}
-        </div>
+        <h1 className="mt-1 text-2xl font-extrabold">{user?.email || ""}</h1>
       </section>
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
