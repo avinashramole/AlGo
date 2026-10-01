@@ -76,6 +76,9 @@ export const NiftyVwapStrategy = {
             initialSlPct: config.initialSlPct,
             activationPct: config.trailingActivationPct,
             stepPct: config.trailingStepPct,
+            lockToEntry: config.lockToEntry === true,
+            trailEveryPct: config.trailingEveryPct,
+            trailShiftPct: config.trailingShiftPct,
           });
     if (config.useTrail !== false && nextStop > Number(state.stopPrice || 0)) {
       state.stopPrice = nextStop;

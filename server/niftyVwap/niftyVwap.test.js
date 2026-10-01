@@ -128,6 +128,25 @@ test("initial SL is 20% and target is 40% of fill", () => {
   assert.equal(TrailingStopManager.targetPrice(200, 40), 280);
 });
 
+test("Nifty trail moves the stop to the buy price at +20% and then +5% every +10%", () => {
+  const args = {
+    entry: 100,
+    initialSlPct: 20,
+    activationPct: 20,
+    lockToEntry: true,
+    trailEveryPct: 10,
+    trailShiftPct: 5,
+    prevStop: 80,
+  };
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 119 }), 80);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 120 }), 100);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 129 }), 100);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 130 }), 105);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 140 }), 110);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 150 }), 115);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 125, prevStop: 105 }), 105);
+});
+
 test("trailing activates at +10% and steps +3% as in the spec", () => {
   const args = { entry: 200, initialSlPct: 20, activationPct: 10, stepPct: 3, prevStop: 160 };
   assert.equal(TrailingStopManager.nextStop({ ...args, mark: 210 }), 160);
@@ -1078,11 +1097,15 @@ test("first candle doji or option not green is no trade", () => {
   assert.equal(redPe.peColor, "red");
 });
 
-test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail", () => {
+test("first candle strategy buys ATM CE and trails the stop to the buy price at +20%", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "First candle CE" });
   const cfg = niftyFirstCandleConfig(algo);
   assert.equal(cfg.signalMode, "first-candle");
-  assert.equal(cfg.useTrail, false);
+  assert.equal(cfg.useTrail, true);
+  assert.equal(cfg.lockToEntry, true);
+  assert.equal(cfg.trailingActivationPct, 20);
+  assert.equal(cfg.trailingEveryPct, 10);
+  assert.equal(cfg.trailingShiftPct, 5);
   assert.equal(cfg.useVwapExit, false);
   assert.equal(cfg.initialSlPct, 20);
   assert.equal(cfg.targetPct, 40);
