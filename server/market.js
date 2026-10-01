@@ -2722,7 +2722,7 @@ export function placeOrder(payload) {
       ) || stampedStrategy || realStrategyName(payload.strategy),
     correlationId,
     brokerId,
-    brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
+    brokerName: live ? (brokerId === "dhan" ? "Dhan" : account.name) : demoDhan ? "Dhan (demo)" : account.name,
     live: Boolean(live),
     sim: !live && !isPaper,
     paper: isPaper,
@@ -2763,7 +2763,7 @@ export function placeOrder(payload) {
   const strategyNote = order.strategy ? ` · ${order.strategy}` : "";
   state.notifications.unshift(
     live
-      ? `Dhan ${order.status}: ${order.side} ${order.symbol}${strategyNote}`
+      ? `${brokerId === "dhan" ? "Dhan" : account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`
       : demoDhan
         ? `Desk demo ${order.status}: ${order.side} ${order.symbol}${strategyNote} (not sent to Dhan)`
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
