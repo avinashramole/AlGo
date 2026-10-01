@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakMasterBook, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -168,6 +168,23 @@ test("Kotak limits and positions are this user's account balance, MTM, and P&L",
   });
   assert.equal(session.sessionToken, "neo-sid-88");
   assert.equal(session.token, "trade-token-1452");
+  const saved = kotakLimitHeaderSets({
+    token: "trade-token-1452",
+    apiKey: "member-consumer",
+    sessionToken: "neo-sid-88",
+    clientId: "YT2Vm",
+  });
+  assert.equal(saved[0].headers.Auth, "trade-token-1452");
+  assert.equal(saved[0].headers.Sid, "neo-sid-88");
+  assert.equal(saved.some((row) => row.headers.Auth === "neo-sid-88" && row.headers.Sid === "trade-token-1452"), true);
+  const appToken = kotakLimitHeaderSets({
+    token: "trade-token-1452",
+    apiKey: "member-consumer",
+    clientId: "YT2Vm",
+  });
+  assert.equal(appToken.some((row) => row.headers.Authorization === "trade-token-1452"), true);
+  assert.equal(appToken.some((row) => row.headers.Authorization === "member-consumer"), true);
+  assert.equal(appToken.some((row) => row.headers.Sid === "YT2Vm"), false);
   assert.equal(kotakAvailableBalance({ stat: "Ok", Category: "net", Net: "88420.50", MarginUsed: "1200" }), 88420.5);
   assert.equal(kotakAvailableBalance({ data: { NotionalCash: "10000", MarginUsed: "250" } }), 9750);
   assert.equal(

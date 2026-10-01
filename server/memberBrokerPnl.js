@@ -351,12 +351,13 @@ async function memberBrokerCredentials(userId) {
   const token = String(slot.brokerToken || desk.brokerToken || "").trim();
   const clientId = String(slot.accountId || desk.accountId || "").trim();
   if (brokerId === "kotak") {
-    return kotakTradeSession({
-      token,
-      apiKey: slot.brokerApiKey || desk.brokerApiKey,
-      sessionToken: slot.brokerSessionToken || desk.brokerSessionToken,
-      clientId,
-    });
+    const apiKey = String(slot.brokerApiKey || desk.brokerApiKey || "").trim();
+    const sessionToken = String(slot.brokerSessionToken || desk.brokerSessionToken || "").trim();
+    const session = kotakTradeSession({ token, apiKey, sessionToken, clientId });
+    if (session) return session;
+    if ((!token || token === apiKey) && !apiKey) return null;
+    if (!token && !apiKey) return null;
+    return { brokerId: "kotak", token, clientId, apiKey, sessionToken };
   }
   if (!token) return null;
   if (brokerId === "dhan" && !clientId) return null;
@@ -398,10 +399,49 @@ const KOTAK_TRADE_HOSTS = [
   "https://e43.kotaksecurities.com",
 ];
 
-async function kotakTradePost(creds, path, jData) {
+function distinctKotakValue(value, ...blocked) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return blocked.some((item) => text === String(item || "").trim()) ? "" : text;
+}
+
+export function kotakLimitHeaderSets(creds = {}) {
+  const token = String(creds.token || creds.accessToken || "").trim();
+  const sid = String(creds.sessionToken || "").trim();
+  const key = String(creds.apiKey || "").trim();
+  const clientId = String(creds.clientId || "").trim();
+  const tradeAuth = distinctKotakValue(token, key);
+  const tradeSid = distinctKotakValue(sid, clientId, key, token);
+  const sets = [];
+  const add = (headers) => {
+    const auth = String(headers.Auth || "");
+    const session = String(headers.Sid || "");
+    const authorization = String(headers.Authorization || "");
+    const id = `${auth}|${session}|${authorization}`;
+    if (sets.some((row) => row.id === id)) return;
+    sets.push({
+      id,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "neo-fin-key": "neotradeapi",
+        ...headers,
+      },
+    });
+  };
+  if (tradeAuth && tradeSid) {
+    add({ Auth: tradeAuth, Sid: tradeSid });
+    add({ Auth: tradeSid, Sid: tradeAuth });
+  }
+  if (tradeAuth) add({ Authorization: tradeAuth });
+  if (distinctKotakValue(key, token)) add({ Authorization: key });
+  return sets;
+}
+
+async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_TRADE_HOSTS) {
   const { ipv4Request } = await import("./ipv4.js");
   const body = new URLSearchParams({ jData: JSON.stringify(jData || {}) }).toString();
-  const headers = {
+  const requestHeaders = headers || {
     Auth: creds.token,
     Sid: creds.sessionToken,
     "neo-fin-key": "neotradeapi",
@@ -409,9 +449,9 @@ async function kotakTradePost(creds, path, jData) {
     "Content-Type": "application/x-www-form-urlencoded",
   };
   let last = null;
-  for (const host of KOTAK_TRADE_HOSTS) {
+  for (const host of hosts) {
     try {
-      const res = await ipv4Request(`${host}${path}`, { method: "POST", headers, body, timeoutMs: 8000 });
+      const res = await ipv4Request(`${host}${path}`, { method: "POST", headers: requestHeaders, body, timeoutMs: 8000 });
       const text = await res.text();
       let json = null;
       try {
@@ -421,6 +461,7 @@ async function kotakTradePost(creds, path, jData) {
       }
       if (!res.ok) {
         last = new Error(json?.errMsg || json?.message || `Kotak ${res.status}`);
+        if (res.status === 401 || res.status === 403) throw last;
         continue;
       }
       const stat = String(json?.stat || "").toLowerCase();
@@ -647,8 +688,22 @@ async function fetchBrokerBalance(userId) {
     return available == null ? null : { balance: available, source: "dhan" };
   }
   if (creds.brokerId === "kotak") {
-    const available = kotakAvailableBalance(await kotakTradePost(creds, "/quick/user/limits", { seg: "ALL", exch: "ALL", prod: "ALL" }));
-    return available == null ? null : { balance: available, source: "kotak" };
+    const sets = kotakLimitHeaderSets(creds);
+    if (!sets.length) return null;
+    let last = null;
+    for (const set of sets) {
+      try {
+        const hosts = set.headers.Auth ? KOTAK_TRADE_HOSTS : ["https://mis.kotaksecurities.com"];
+        const available = kotakAvailableBalance(
+          await kotakTradePost(creds, "/quick/user/limits", { seg: "ALL", exch: "ALL", prod: "ALL" }, set.headers, hosts),
+        );
+        if (available != null) return { balance: available, source: "kotak" };
+      } catch (error) {
+        last = error;
+      }
+    }
+    if (last) throw last;
+    return null;
   }
   const available = upstoxAvailableBalance(await upstoxFunds(creds.token));
   return available == null ? null : { balance: available, source: "upstox" };
