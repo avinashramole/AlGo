@@ -2,12 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
-import { isMcxSymbol } from "./optionChain.js";
+import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const NFO_WEEK_MONTH = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "O", "N", "D"];
 
 export const LIVE_BROKER_CATALOG = [
   {
@@ -167,21 +168,35 @@ export function listLiveBrokerPublic() {
   return LIVE_BROKER_CATALOG.filter((row) => row.id !== "dhan").map((row) => liveBrokerPublic(row.id));
 }
 
-export function nfoTradingSymbol(symbol, expiry) {
-  const raw = String(symbol || "").toUpperCase().replace(/,/g, " ").replace(/\s+/g, " ").trim();
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\s+(\d{3,6})\s*(CE|PE)$/);
-  if (!named) {
-    const compact = raw.replace(/\s+/g, "");
-    return compact || raw;
+function nfoDateToken(ymd, root) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
+  const yy = ymd.slice(2, 4);
+  const monthIndex = Number(ymd.slice(5, 7)) - 1;
+  if (getUnderlying(root).weekly && isWeeklyOptionExpiry(ymd, root)) {
+    const code = NFO_WEEK_MONTH[monthIndex];
+    return code ? `${yy}${code}${ymd.slice(8, 10)}` : "";
   }
-  const root = named[1];
-  const strike = named[2];
-  const opt = named[3];
-  const ymd = String(expiry || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!ymd) return `${root}${strike}${opt}`;
-  const yy = ymd[1].slice(-2);
-  const mon = MONTHS[Number(ymd[2]) - 1] || "JAN";
-  return `${root}${yy}${mon}${strike}${opt}`;
+  return `${yy}${MONTHS[monthIndex] || "JAN"}`;
+}
+
+function resolveNfoExpiry(root, expiry, parsedExpiry) {
+  const raw = String(expiry || parsedExpiry || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const month = raw.match(/^(\d{4})-(\d{2})/);
+  if (month) return upstoxExpiryDate(`${month[1]}-${month[2]}`, root);
+  return "";
+}
+
+export function nfoTradingSymbol(symbol, expiry) {
+  const parsed = parseDeskOptionSymbol(symbol, { expiry });
+  if (!parsed) {
+    const compact = String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return compact || String(symbol || "").trim();
+  }
+  const ymd = resolveNfoExpiry(parsed.root, expiry, parsed.expiry);
+  const token = nfoDateToken(ymd, parsed.root);
+  if (!token) return `${parsed.root}${parsed.strike}${parsed.option}`;
+  return `${parsed.root}${token}${parsed.strike}${parsed.option}`;
 }
 
 export function fyersSymbol(symbol, expiry) {
@@ -209,12 +224,18 @@ const UPSTOX_EXPIRY_WEEKDAY = {
   SENSEX: "Thu",
 };
 
-/** October 2026 NIFTY monthly is the last Tuesday, 2026-10-27. */
+/** A month with no day uses the nearest weekly expiry, not the monthly last Tuesday. */
 export function upstoxExpiryDate(expiry, root = "NIFTY") {
   const raw = String(expiry || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const month = raw.match(/^(\d{4})-(\d{2})$/);
   if (!month) return "";
+  const und = getUnderlying(root);
+  const prefix = `${month[1]}-${month[2]}`;
+  if (und.weekly) {
+    const inMonth = upcomingExpiries(root, 16).filter((date) => date.startsWith(prefix) && isWeeklyOptionExpiry(date, root));
+    if (inMonth.length) return inMonth[0];
+  }
   const year = Number(month[1]);
   const mon = Number(month[2]);
   const weekday = UPSTOX_EXPIRY_WEEKDAY[String(root || "NIFTY").toUpperCase()] || "Tue";
@@ -232,14 +253,36 @@ function parseSymbolExpiry(token) {
   const raw = String(token || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-  const hit = raw.match(/^(?:(\d{1,2}))?([A-Z]{3})(\d{2}|\d{4})$/);
-  if (!hit) return "";
+  const hit = raw.match(/^(?:(\d{1,2}))?([A-Z]{3})(\d{2}|\d{4})?$/);
+  if (!hit || !hit[2]) return "";
   const mon = MONTHS.indexOf(hit[2]);
   if (mon < 0) return "";
-  const year = hit[3].length === 2 ? `20${hit[3]}` : hit[3];
   const month = String(mon + 1).padStart(2, "0");
-  if (hit[1]) return `${year}-${month}-${String(Number(hit[1])).padStart(2, "0")}`;
-  return `${year}-${month}`;
+  if (!hit[1] && hit[3]) {
+    const year = hit[3].length === 2 ? `20${hit[3]}` : hit[3];
+    return `${year}-${month}`;
+  }
+  if (!hit[1]) return "";
+  const day = String(Number(hit[1])).padStart(2, "0");
+  const year = hit[3]
+    ? hit[3].length === 2
+      ? `20${hit[3]}`
+      : hit[3]
+    : String(inferExpiryYear(mon, Number(hit[1])));
+  return `${year}-${month}-${day}`;
+}
+
+function inferExpiryYear(monthIndex, day) {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  let year = Number(today.slice(0, 4));
+  const ymd = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (ymd < today) year += 1;
+  return year;
 }
 
 const DESK_OPTION_ROOTS = "CRUDEOIL|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|NIFTY";
@@ -402,6 +445,7 @@ function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry, se
   if (wantDay) {
     const exact = scored.find((row) => row.exact);
     if (exact) return exact.row;
+    if (getUnderlying(wantRoot).weekly) return null;
   }
   const monthHits = wantMonth ? scored.filter((row) => row.month) : [];
   const pool = monthHits.length ? monthHits : scored;

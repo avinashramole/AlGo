@@ -65,7 +65,12 @@ test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
 
 test("Upstox crude copy uses the CRUDEOIL contract, not NIFTY or CRUDEOILM", () => {
   assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 8700 CE"), { root: "CRUDEOIL", strike: 8700, option: "CE" });
-  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 8700 CALL"), { root: "CRUDEOIL", strike: 8700, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 8700 CALL"), {
+    root: "CRUDEOIL",
+    strike: 8700,
+    option: "CE",
+    expiry: "2026-10-15",
+  });
   assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 26 8700 CALL"), {
     root: "CRUDEOIL",
     strike: 8700,
@@ -293,7 +298,7 @@ test("Upstox master file resolves crude, NIFTY options, and the NIFTY future whe
       ["MCX_FO|580473", 100, "LIMIT"],
       ["MCX_FO|580627", 100, "LIMIT"],
       ["NSE_FO|73899", 65, "MARKET"],
-      ["NSE_FO|51338", 65, "MARKET"],
+      ["NSE_FO|40704", 65, "MARKET"],
       ["NSE_FO|68407", 65, "MARKET"],
     ],
   );
@@ -327,11 +332,11 @@ test("Upstox switches a crude copy to NSE NSCOM when MCX orders are disabled and
       tick_size: 10,
     },
     {
-      trading_symbol: "NIFTY 22650 CE 27 OCT 26",
+      trading_symbol: "NIFTY 22650 CE 06 OCT 26",
       underlying_symbol: "NIFTY",
       instrument_type: "CE",
       strike_price: 22650,
-      expiry: "2026-10-27",
+      expiry: "2026-10-06",
       instrument_key: "NSE_FO|51338",
       lot_size: 65,
     },
@@ -570,8 +575,10 @@ test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on th
   assert.equal(placed.instrument_token, "NSE_FO|426269");
 });
 
-test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrument key", async () => {
-  assert.equal(upstoxExpiryDate("2026-10", "NIFTY"), "2026-10-27");
+test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrument key", async () => {
+  const day = upstoxExpiryDate("2026-10", "NIFTY");
+  assert.equal(day, "2026-10-06");
+  assert.notEqual(day, "2026-10-27");
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(String(url));
@@ -586,11 +593,11 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrum
           JSON.stringify({
             data: [
               {
-                trading_symbol: "NIFTY 27 OCT 26 23100 CE",
+                trading_symbol: "NIFTY 06 OCT 26 23100 CE",
                 underlying_symbol: "NIFTY",
                 instrument_type: "CE",
                 strike_price: 23100,
-                expiry: "2026-10-27",
+                expiry: "2026-10-06",
                 instrument_key: "NSE_FO|23100ce",
               },
             ],
@@ -613,13 +620,17 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrum
     fetchImpl,
   );
   assert.equal(live.orderId, "upx-oct");
-  assert.ok(calls.some((url) => url.includes("expiry_date=2026-10-27")));
+  assert.ok(calls.some((url) => url.includes(`expiry_date=${day}`)));
   assert.ok(calls.some((url) => url.includes("api-hft.upstox.com/v3/order/place")));
 });
 
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {
-  assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY26SEP24500CE");
-  assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY26SEP24500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY2691524500CE");
+  assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY2691524500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-06"), "NIFTY26O0622500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 06 OCT 22500 PUT"), "NIFTY26O0622500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-27"), "NIFTY26OCT22500PE");
+  assert.equal(nfoTradingSymbol("NIFTY-Oct2026-22500-PE"), "NIFTY26O0622500PE");
 });
 
 test("connectLiveBroker stores Zerodha after a profile probe and does not invent positions", async () => {
@@ -661,7 +672,7 @@ test("placeLiveBrokerOrder sends a Kite MARKET order", async () => {
   );
   assert.equal(live.orderId, "z-100");
   assert.equal(live.brokerId, "zerodha");
-  assert.match(String(calls[0].body), /NIFTY26SEP24500CE/);
+  assert.match(String(calls[0].body), /NIFTY2691524500CE/);
   assert.match(String(calls[0].body), /transaction_type=BUY/);
 });
 
