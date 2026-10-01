@@ -341,6 +341,25 @@ export function kotakTradeSession(creds = {}) {
   return { brokerId: "kotak", token: auth, clientId, apiKey: key, sessionToken: sid };
 }
 
+export function kotakNeedsTradeLogin(creds = {}) {
+  if (!creds || creds.brokerId !== "kotak") return false;
+  if (kotakTradeSession(creds)) return false;
+  const mobile = String(creds.mobile || "").trim();
+  const mpin = String(creds.mpin || "").trim();
+  const totpSecret = String(creds.totpSecret || "").trim();
+  const clientId = String(creds.clientId || "").trim();
+  const token = String(creds.token || creds.accessToken || "").trim();
+  const apiKey = String(creds.apiKey || "").trim();
+  return Boolean(mobile && mpin && totpSecret && clientId && (token || apiKey));
+}
+
+export function applyKotakTradeSession(creds, trade) {
+  const token = String(trade?.tradeToken || "").trim();
+  const sid = String(trade?.tradeSid || "").trim();
+  if (!token || !sid) return creds;
+  return { ...creds, token, sessionToken: sid };
+}
+
 async function memberBrokerCredentials(userId) {
   const { brokerAccountForLiveCopy, peekClientSecrets } = await import("./memberDesk.js");
   const desk = peekClientSecrets(userId);
@@ -483,23 +502,18 @@ async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_
 }
 
 async function withKotakTradeLogin(creds) {
-  if (!creds || creds.brokerId !== "kotak") return creds;
-  const sid = String(creds.sessionToken || "").trim();
-  const clientId = String(creds.clientId || "").trim();
-  const distinctSid = sid && sid !== clientId && sid !== creds.apiKey && sid !== creds.token;
-  if (distinctSid || !creds.mobile || !creds.mpin || !creds.totpSecret) return creds;
+  if (!kotakNeedsTradeLogin(creds)) return creds;
   try {
     const { openKotakTradeSession } = await import("./liveBrokers.js");
     const trade = await openKotakTradeSession({
       clientId: creds.clientId,
       apiKey: creds.apiKey,
-      accessToken: creds.token,
+      accessToken: creds.token || creds.apiKey,
       mobile: creds.mobile,
       mpin: creds.mpin,
       totpSecret: creds.totpSecret,
     });
-    if (!trade?.tradeToken || !trade?.tradeSid) return creds;
-    return { ...creds, token: trade.tradeToken, sessionToken: trade.tradeSid };
+    return applyKotakTradeSession(creds, trade);
   } catch {
     return creds;
   }
