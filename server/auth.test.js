@@ -34,6 +34,7 @@ const {
   sessionUser,
   upsertGoogleUser,
   updateProfile,
+  adminCreateMember,
   adminUpdateUser,
   verifyOtp,
 } = await import("./auth.js");
@@ -232,6 +233,31 @@ test("listPublicUsers includes registered Gmail members for admin", () => {
   assert.equal(member?.authProvider, "google");
   assert.ok(users.some((row) => row.id === "admin" && row.role === "admin"));
   assert.equal(users.some((row) => row.id === "avinash" || row.id === "segin"), false);
+});
+
+test("a former admin Gmail stays a member and can use the member dashboard", () => {
+  const email = "avinash.ramole86@gmail.com";
+  const created = upsertGoogleUser({ email, name: "Avinash", googleId: "gid-avinash-member" });
+  assert.equal(created.user.role, "user");
+  assert.equal(created.user.email, email);
+  const listed = listPublicUsers().find((row) => row.email === email);
+  assert.equal(listed?.id, created.user.id);
+  assert.equal(listed?.role, "user");
+  const saved = updateProfile(created.token, {
+    name: "Avinash Member",
+    email,
+    mobile: "9843210091",
+  });
+  assert.equal(saved.user.name, "Avinash Member");
+  assert.equal(saved.user.mobile, "9843210091");
+  const onDisk = JSON.parse(fs.readFileSync(usersFile, "utf8"));
+  assert.equal(onDisk.some((row) => row.email === email && row.role === "user"), true);
+  const client = adminCreateMember({
+    name: "Desk Client",
+    email: `desk.client.${Date.now()}@gmail.com`,
+    mobile: "9843210092",
+  });
+  assert.equal(listPublicUsers().some((row) => row.id === client.id && row.email === client.email), true);
 });
 
 test("sign-in session is saved so a restart does not ask to sign in again", () => {

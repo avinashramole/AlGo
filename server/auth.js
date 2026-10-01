@@ -322,10 +322,10 @@ function loadUsers() {
       password: row.password ? String(row.password) : undefined,
       thumbHash: row.thumbHash ? String(row.thumbHash) : undefined,
     };
-    if (RETIRED_ADMIN_IDS.has(id) && normalizeEmail(next.email) !== SOLE_ADMIN_EMAIL) continue;
-    if (RETIRED_ADMIN_EMAILS.has(normalizeEmail(next.email)) && normalizeEmail(next.email) !== SOLE_ADMIN_EMAIL) {
-      continue;
-    }
+    const email = normalizeEmail(next.email);
+    const retiredMember = RETIRED_ADMIN_EMAILS.has(email) && email !== SOLE_ADMIN_EMAIL;
+    if (retiredMember) next.role = "user";
+    if (RETIRED_ADMIN_IDS.has(id) && email !== SOLE_ADMIN_EMAIL && !retiredMember) continue;
     const seed = byId.get(id);
     byId.set(id, seed ? { ...seed, ...next, password: next.password || seed.password } : next);
   }

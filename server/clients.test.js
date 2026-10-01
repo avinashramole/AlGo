@@ -549,6 +549,23 @@ test("saveClient stores the client mobile on the user record", () => {
   assert.equal(listPublicUsers().find((item) => item.id === "u-arpit").mobile, "9876507788");
 });
 
+test("a former admin Gmail added as a client stays on the client list", () => {
+  const created = createClient({
+    name: "Avinash Member",
+    email: "avinash.ramole86@gmail.com",
+    mobile: "9843210093",
+    brokerId: "dhan",
+    tradeMode: "paper",
+  });
+  assert.equal(created.email, "avinash.ramole86@gmail.com");
+  assert.equal(created.role, undefined);
+  const listed = listClients(listPublicUsers()).find((row) => row.email === "avinash.ramole86@gmail.com");
+  assert.equal(listed?.id, created.id);
+  assert.equal(listed?.name, "Avinash Member");
+  assert.equal(listed?.mobile, "9843210093");
+  assert.equal(listPublicUsers().find((row) => row.id === created.id)?.role, "user");
+});
+
 test("purgeOrphanMemberData removes leftover desks for accounts that are gone", () => {
   saveClientSettings("u-ghost", { notes: "leftover book" });
   assert.equal(listDeskRecords().some((row) => row.userId === "u-ghost"), true);
