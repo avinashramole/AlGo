@@ -876,6 +876,31 @@ test("a member Kotak trade login still supplies the balance when the consumer ke
   }
 });
 
+test("an empty Neo sid is removed when clear is requested and a blank save keeps it", () => {
+  const member = { id: "u-clear-sid", name: "Clear Sid", email: "clear.sid@gmail.com", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "YT2VM",
+    apiKey: "member-consumer",
+    accessToken: "member-access-1452",
+    sessionToken: "neo-sid-88",
+    mobile: "9000000000",
+    mpin: "111111",
+    totpSecret: "GEZDGNBVGY3TQOJQ",
+  });
+  saveClientSettings(member.id, { brokerSessionToken: "" });
+  assert.equal(peekBrokerAccount(member.id, "kotak").brokerSessionToken, "neo-sid-88");
+  saveClientSettings(member.id, { clearSessionToken: true });
+  const slot = peekBrokerAccount(member.id, "kotak");
+  assert.equal(slot.brokerSessionToken, "");
+  assert.equal(slot.brokerToken, "member-access-1452");
+  assert.equal(slot.brokerMobile, "+919000000000");
+  const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(shown.install.sessionHint, "");
+  assert.equal(shown.install.hasTradeLogin, true);
+});
+
 test("a Kotak user's trade login stays on that user and is not returned on the profile view", async () => {
   const member = { id: "u-yt2vm-login", name: "Avinash", email: "avinash.ramole86@gmail.com", role: "user" };
   const saved = installMemberBroker({
