@@ -824,15 +824,17 @@ function AddClientModal({
               </div>
             </div>
             <div className="rounded-xl border border-[var(--border)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{broker?.name || "Broker"} API and access token</div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {brokerId === "kotak" ? "Kotak Neo consumer key and access token" : `${broker?.name || "Broker"} API and access token`}
+              </div>
               {needsBrokerApiKey(brokerId) ? (
-                <Field label="API key">
+                <Field label={brokerId === "kotak" ? "Consumer key" : "API key"}>
                   <input
                     className={inputClass}
                     type="password"
                     value={brokerApiKey}
                     onChange={(event) => setBrokerApiKey(event.target.value)}
-                    placeholder="Broker API key / app id"
+                    placeholder={brokerId === "kotak" ? "This client's Neo consumer key" : "Broker API key / app id"}
                     autoComplete="off"
                   />
                 </Field>
@@ -847,7 +849,9 @@ function AddClientModal({
                   autoComplete="off"
                 />
                 <span className="font-normal text-[11px] text-slate-500">
-                  Saved on admin Users and on the client My plan page. Required for Real mode. This does not start Dhan LIVE.
+                  {brokerId === "kotak"
+                    ? "Use this client's own Kotak Neo client ID, consumer key, and access token. The admin Kotak login is not saved on a user."
+                    : "Saved on admin Users and on the client My plan page. Required for Real mode. This does not start Dhan LIVE."}
                 </span>
               </Field>
             </div>
@@ -1052,7 +1056,7 @@ function EditModal({
         {brokerId !== "paper" ? (
           <>
             {needsBrokerApiKey(brokerId) ? (
-              <Field label="API key">
+              <Field label={brokerId === "kotak" ? "Consumer key" : "API key"}>
                 <input
                   className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
                   type="password"
@@ -1060,7 +1064,7 @@ function EditModal({
                   onFocus={() => setApiKeyFocused(true)}
                   onBlur={() => setApiKeyFocused(false)}
                   onChange={(event) => setBrokerApiKey(event.target.value)}
-                  placeholder={selectedAccount.apiKeyHint || "Paste API key to replace"}
+                  placeholder={selectedAccount.apiKeyHint || (brokerId === "kotak" ? "Paste this client's Neo consumer key" : "Paste API key to replace")}
                   autoComplete="off"
                 />
               </Field>

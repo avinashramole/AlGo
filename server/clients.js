@@ -14,6 +14,7 @@ import {
   removeDesk,
   removeOrphanDesks,
   saveClientSettings,
+  assertOwnKotakForSave,
 } from "./memberDesk.js";
 import { deleteOrphanEnrollments, deleteUserEnrollments, listEnrollments } from "./subscriptions.js";
 import { inventoryAddresses } from "./ipManagement.js";
@@ -132,6 +133,15 @@ export function createClient(patch = {}) {
   if (tradeMode === "real" && !String(patch.brokerToken || "").trim()) {
     throw fail("Paste the broker access token before enabling real orders.");
   }
+  assertOwnKotakForSave(
+    { brokerId: "", accountId: "", brokerToken: "", brokerApiKey: "", brokerAccounts: {} },
+    {
+      brokerId,
+      accountId: patch.accountId,
+      brokerToken: patch.brokerToken,
+      brokerApiKey: patch.brokerApiKey,
+    },
+  );
   const user = adminCreateMember({
     name: patch.name,
     mobile: patch.mobile,

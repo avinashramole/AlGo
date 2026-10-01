@@ -40,7 +40,7 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill } = await import("./memberDesk.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill, brokerAccountForLiveCopy } = await import("./memberDesk.js");
 const { adminAccountBalance, applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
 const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
 const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
@@ -268,6 +268,87 @@ test("createClient refuses REAL when no broker is linked", () => {
     () => createClient({ name: "No Broker", mobile: "9000000001", brokerId: "paper", tradeMode: "real" }),
     /broker/,
   );
+});
+
+test("createClient stores a user's own Kotak Neo", () => {
+  const row = createClient({
+    name: "Kotak User",
+    mobile: "9001112233",
+    email: "kotak.user.new@gmail.com",
+    brokerId: "kotak",
+    accountId: "USERK1",
+    brokerApiKey: "user-consumer-key",
+    brokerToken: "user-access-token",
+    tradeMode: "paper",
+  });
+  assert.equal(row.brokerId, "kotak");
+  assert.equal(row.accountId, "USERK1");
+  assert.equal(row.credentialsInstalled, true);
+  assert.equal(peekClientSecrets(row.id).brokerToken, "user-access-token");
+  assert.equal(peekClientSecrets(row.id).brokerApiKey, "user-consumer-key");
+  const copy = brokerAccountForLiveCopy(row.id, "kotak");
+  assert.equal(copy.leftoverToken, false);
+  assert.equal(copy.brokerToken, "user-access-token");
+  const later = createClient({
+    name: "Kotak Later",
+    mobile: "9001112255",
+    brokerId: "kotak",
+    tradeMode: "paper",
+  });
+  assert.equal(later.brokerId, "kotak");
+  assert.equal(later.accountId, "");
+  assert.equal(later.credentialsInstalled, false);
+});
+
+test("createClient refuses the admin Kotak Neo and does not create the user", () => {
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-key-9f44";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-key-9f44";
+  const before = listPublicUsers().map((row) => row.id);
+  try {
+    assert.throws(
+      () =>
+        createClient({
+          name: "Bad Kotak",
+          mobile: "9001112244",
+          email: "bad.kotak.admin@gmail.com",
+          brokerId: "kotak",
+          accountId: "YIX14",
+          brokerApiKey: "admin-key-9f44",
+          brokerToken: "admin-key-9f44",
+        }),
+      /admin Kotak Neo/,
+    );
+    assert.throws(
+      () =>
+        createClient({
+          name: "Kotak No Key",
+          mobile: "9001112266",
+          email: "kotak.nokey@gmail.com",
+          brokerId: "kotak",
+          accountId: "USERK2",
+          brokerToken: "user-access-token-2",
+        }),
+      /consumer key/,
+    );
+    const ids = new Set(listPublicUsers().map((row) => row.id));
+    assert.deepEqual([...ids].filter((id) => !before.includes(id)), []);
+    assert.equal(listPublicUsers().some((row) => row.mobile === "9001112244" || row.mobile === "9001112266"), false);
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 });
 
 test("position desk lists master first and a live ledger per member", () => {

@@ -657,21 +657,60 @@ test("deploy purge and a blank token patch keep the admin access token", () => {
   assert.equal(peekBrokerAccount(member.id, "dhan").brokerToken, "member-token-keep-deploy");
 });
 
-test("Kotak pasted on the user stays hidden until that user adds Kotak Neo", () => {
-  const member = { id: "u-kotak-admin", name: "Admin Kotak", email: "admin.kotak@gmail.com", role: "user" };
-  saveClientSettings(member.id, {
+test("admin save of a user's own Kotak Neo shows on the profile", () => {
+  const member = { id: "u-kotak-own", name: "Own Kotak", email: "own.kotak@gmail.com", role: "user" };
+  const saved = saveClientSettings(member.id, {
     brokerId: "kotak",
-    accountId: "YIX14",
-    brokerApiKey: "cd-consumer-key-3e77",
-    brokerToken: "kotak-pasted-token",
+    accountId: "USERK1",
+    brokerApiKey: "user-consumer-key",
+    brokerToken: "user-access-token",
   });
+  assert.equal(saved.accountId, "USERK1");
+  assert.equal(saved.credentialsInstalled, true);
   const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
-  assert.equal(shown.install.accountId, "");
-  assert.equal(shown.install.apiKeyHint, "");
-  assert.equal(shown.install.tokenHint, "");
-  assert.equal(shown.install.installed, false);
-  assert.equal(shown.brokers.find((row) => row.id === "kotak").installed, false);
-  assert.equal(brokerAccountForLiveCopy(member.id, "kotak").brokerToken, "");
+  assert.equal(shown.install.accountId, "USERK1");
+  assert.equal(shown.install.installed, true);
+  assert.equal(shown.brokers.find((row) => row.id === "kotak").installed, true);
+  const copy = brokerAccountForLiveCopy(member.id, "kotak");
+  assert.equal(copy.brokerToken, "user-access-token");
+  assert.equal(copy.leftoverToken, false);
+});
+
+test("admin save refuses the admin Kotak Neo login", () => {
+  const member = { id: "u-kotak-admin", name: "Admin Kotak", email: "admin.kotak@gmail.com", role: "user" };
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-key-9f44";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-key-9f44";
+  try {
+    assert.throws(
+      () =>
+        saveClientSettings(member.id, {
+          brokerId: "kotak",
+          accountId: "YIX14",
+          brokerApiKey: "admin-key-9f44",
+          brokerToken: "admin-key-9f44",
+        }),
+      /admin Kotak Neo/,
+    );
+    const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+    assert.equal(shown.install.accountId, "");
+    assert.equal(shown.install.installed, false);
+    assert.equal(brokerAccountForLiveCopy(member.id, "kotak").brokerToken, "");
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 });
 
 test("the member profile does not show the desk Kotak Neo login", async () => {
@@ -710,6 +749,16 @@ test("the member profile does not show the desk Kotak Neo login", async () => {
         accessToken: "kotak-desk-access-token",
       }),
     /Waiting for this user to add their own Kotak Neo/,
+  );
+  assert.throws(
+    () =>
+      saveClientSettings(member.id, {
+        brokerId: "kotak",
+        accountId: "YIX14",
+        brokerApiKey: "cd-consumer-key-3e77",
+        brokerToken: "kotak-desk-access-token",
+      }),
+    /desk Kotak Neo/,
   );
   const own = installMemberBroker({
     user: member,

@@ -700,6 +700,7 @@ export function peekClientBook(userId) {
 export function saveClientSettings(userId, patch = {}) {
   if (!userId) throw fail("Client required.");
   const desk = loadDesk(userId);
+  assertOwnKotakForSave(desk, patch);
   if (patch.group != null || patch.groups != null) {
     const groups = asGroups(patch.groups != null ? patch.groups : patch.group);
     desk.groups = groups;
@@ -768,8 +769,64 @@ export function saveClientSettings(userId, patch = {}) {
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   if (tokenWritten) enableLiveCopyFromToken(desk, patch);
   syncSelectedBrokerAccount(desk);
+  markOwnKotakAdded(desk, patch);
   persist();
   return normalizeClientSettings(desk);
+}
+
+function normalizeBrokerSecret(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
+function prospectiveKotakLogin(desk = {}, patch = {}) {
+  const nextBroker = patch.brokerId != null
+    ? String(patch.brokerId || "").trim().toLowerCase()
+    : String(desk.brokerId || "").trim().toLowerCase();
+  if (nextBroker !== "kotak") return null;
+  const offeredId = patch.accountId != null ? String(patch.accountId || "").trim() : "";
+  const offeredToken = patch.brokerToken != null ? normalizeBrokerSecret(patch.brokerToken) : "";
+  const offeredKey = patch.brokerApiKey != null ? String(patch.brokerApiKey || "").trim() : "";
+  if (!offeredId && !offeredToken && !offeredKey) return null;
+  const currentBroker = String(desk.brokerId || "").trim().toLowerCase();
+  const switching = patch.brokerId != null && String(patch.brokerId || "").trim().toLowerCase() !== currentBroker;
+  const prev = brokerAccountsMap(desk).kotak || emptyBrokerAccount();
+  const baseId = switching ? String(prev.accountId || "").trim() : String(desk.accountId || prev.accountId || "").trim();
+  const baseToken = switching ? String(prev.brokerToken || "").trim() : String(desk.brokerToken || prev.brokerToken || "").trim();
+  const baseKey = switching ? String(prev.brokerApiKey || "").trim() : String(desk.brokerApiKey || prev.brokerApiKey || "").trim();
+  return {
+    accountId: patch.accountId != null ? offeredId : baseId,
+    token: offeredToken || baseToken,
+    apiKey: offeredKey || baseKey,
+  };
+}
+
+export function assertOwnKotakForSave(desk = {}, patch = {}) {
+  const login = prospectiveKotakLogin(desk, patch);
+  if (!login) return;
+  if (sessionUsesAdminKotak({ clientId: login.accountId, accessToken: login.token, apiKey: login.apiKey })) {
+    throw fail("That login is the admin Kotak Neo. Add this user's own Kotak Neo client ID, consumer key, and access token.");
+  }
+  if (slotMatchesDeskBroker({ accountId: login.accountId, brokerToken: login.token, brokerApiKey: login.apiKey }, "kotak")) {
+    throw fail("That login is the desk Kotak Neo. Waiting for this user to add their own Kotak Neo.");
+  }
+  if (login.token && !login.apiKey) throw fail("Paste the Kotak Neo consumer key.");
+}
+
+function markOwnKotakAdded(desk, patch = {}) {
+  if (String(desk.brokerId || "").trim().toLowerCase() !== "kotak") return;
+  const login = prospectiveKotakLogin(desk, patch);
+  if (!login?.accountId || !login.token || !login.apiKey) return;
+  if (sessionUsesAdminKotak({ clientId: login.accountId, accessToken: login.token, apiKey: login.apiKey })) return;
+  if (slotMatchesDeskBroker({ accountId: login.accountId, brokerToken: login.token, brokerApiKey: login.apiKey }, "kotak")) return;
+  const slot = desk.brokerAccounts?.kotak;
+  if (!slot?.accountId || !slot.brokerToken || !slot.brokerApiKey) return;
+  if (credentialsCopiedFromAnotherBroker(desk.brokerAccounts, "kotak", slot)) return;
+  slot.memberAdded = true;
 }
 
 export function assignedEgressIps(brokerId, exceptUserId = "") {
