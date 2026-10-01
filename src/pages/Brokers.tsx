@@ -155,8 +155,8 @@ export function Brokers() {
       <div>
         <h1 className="text-xl font-bold">Brokers</h1>
         <p className="text-sm text-slate-400">
-          Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect the broker first,
-          then pick it on the algo card. Connecting a broker does not start LIVE algos.
+          Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect more than one.
+          Set default is the broker used for admin orders and the admin balance. The Dhan data feed can stay on without becoming that default. Connecting a broker does not start LIVE algos.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -369,7 +369,7 @@ export function Brokers() {
                     : "bg-slate-100 text-slate-500"
                 }`}
               >
-                {broker.active ? "ACTIVE" : broker.status}
+                {broker.active ? "DEFAULT" : broker.status}
               </span>
             </div>
             {broker.id === "dhan" ? (
@@ -419,6 +419,15 @@ export function Brokers() {
                   <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>
                 ) : null}
                 <div className="flex gap-2">
+                  {!broker.active ? (
+                    <button
+                      type="button"
+                      onClick={() => void activate(broker.id)}
+                      className="h-9 flex-1 rounded-lg bg-brand-500 text-xs font-semibold text-white"
+                    >
+                      Set default
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy}
@@ -463,7 +472,7 @@ export function Brokers() {
                       onClick={() => void activate(broker.id)}
                       className="h-9 flex-1 rounded-lg bg-brand-500 text-xs font-semibold text-white"
                     >
-                      Set active
+                      Set default
                     </button>
                   )}
                   {broker.id !== "paper" && (

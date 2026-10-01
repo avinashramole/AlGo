@@ -1136,6 +1136,17 @@ function loadDesk(userId) {
   return desk;
 }
 
+function brokerChoiceNote(row, { selected, saved, virtual }) {
+  if (virtual) return "Virtual paper book. Signals stay on the T2S desk.";
+  const detail = saved.installed
+    ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}.${selected ? "" : " Select it to make it the default."}`
+    : saved.oauthReady
+      ? `API key and secret saved for ${row.name}. Generate today's trading token.`
+      : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.";
+  if (!selected) return detail;
+  return `Default broker. Quotes, orders, balance, MTM, and P&L use this login${saved.accountId ? ` · ${saved.accountId}` : ""}. ${detail}`;
+}
+
 export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
   const accounts = publicBrokerAccounts(desk);
   return catalog.map((row) => {
@@ -1158,13 +1169,7 @@ export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
       oauthReady: Boolean(saved.oauthReady),
       accountId: saved.accountId || "",
       mode: virtual ? "paper" : live ? "live" : "desk-managed",
-      note: virtual
-        ? "Virtual paper book. Signals stay on the T2S desk."
-        : saved.installed
-          ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}. Select it to update the ID or token.`
-          : saved.oauthReady
-            ? `API key and secret saved for ${row.name}. Generate today's trading token.`
-            : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.",
+      note: brokerChoiceNote(row, { selected, saved, virtual }),
     };
   });
 }

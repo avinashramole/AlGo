@@ -1,4 +1,4 @@
-import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
+import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, orderBrokerForDesk, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
 import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
@@ -684,17 +684,19 @@ export function queueLiveAlgoOrder(payload) {
   const priced = sameBookOrder(payload);
   const securityId = contractSecurityId(priced);
   const stamped = securityId ? { ...priced, securityId } : priced;
+  const deskBroker = payload.copyUserId ? stamped.brokerId : orderBrokerForDesk(stamped.brokerId);
+  const deskStamped = { ...stamped, brokerId: deskBroker };
   const brokers = liveAutoTradeBrokers({
-    strategyName: stamped?.strategy,
-    algoBrokerId: stamped?.brokerId || "dhan",
+    strategyName: deskStamped?.strategy,
+    algoBrokerId: deskStamped?.brokerId || "dhan",
   });
-  const targets = brokers.length ? brokers : [orderBrokerId(stamped)];
+  const targets = brokers.length ? brokers : [orderBrokerId(deskStamped)];
   let last = { ok: true, queued: true, status: "PENDING" };
   for (const brokerId of targets) {
-    last = enqueueLiveAlgoOrder({ ...stamped, brokerId });
+    last = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
-  const algo = liveCopyAlgo(stamped);
-  for (const copy of memberCopyPayloads(stamped, algo || {})) {
+  const algo = liveCopyAlgo(deskStamped);
+  for (const copy of memberCopyPayloads(deskStamped, algo || {})) {
     last = enqueueLiveAlgoOrder(copy);
   }
   queueMicrotask(() => {

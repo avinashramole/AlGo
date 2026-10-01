@@ -15,7 +15,7 @@ export function BrokerSwitch() {
         onChange={(event) => {
           void activate(event.target.value).catch(() => undefined);
         }}
-        title="Active order broker"
+        title="Default order broker"
       >
         {connected.map((item) => (
           <option key={item.id} value={item.id}>

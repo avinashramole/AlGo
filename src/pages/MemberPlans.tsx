@@ -359,8 +359,8 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Broker selection</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose the broker used for your live copies. Each live broker keeps its own client ID and access token — selecting
-          DHAN does not overwrite UPSTOX. Paper stays on this plan book only. Saving a token does not start desk LIVE.
+          Save more than one broker. The selected broker is the default: quotes, orders, balance, MTM, and P&L use that login.
+          Selecting DHAN does not overwrite UPSTOX. Paper stays on this plan book only. Saving a token does not start desk LIVE.
         </p>
         <p className="mt-2 text-xs font-semibold text-slate-500">
           {desk.copyReady
@@ -383,7 +383,7 @@ export function MemberPlans() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-extrabold">{row.name}</span>
-                {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Selected</span> : null}
+                {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Default</span> : null}
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
                 {row.virtual
