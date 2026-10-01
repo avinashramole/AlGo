@@ -1,4 +1,3 @@
-import { liveBrokerSession } from "./liveBrokers.js";
 import { brokerNeedsApiKey, fetchMemberBrokerQuotes, supportedMemberQuoteBroker } from "./memberBrokerQuotes.js";
 import { memberIndexQuote } from "./market.js";
 import { peekClientSecrets } from "./memberDesk.js";
@@ -91,46 +90,15 @@ function emptyQuotes(brokerId, reason) {
   };
 }
 
-function kotakTotpSecret(deskKotak) {
-  return String(process.env.T2S_KOTAK_TOTP_SECRET || deskKotak?.totpSecret || "").trim();
-}
-
-function kotakFeedCreds(secrets, deskKotak) {
-  const totpSecret = kotakTotpSecret(deskKotak);
+function kotakFeedCreds(secrets) {
   const ownReady = Boolean(secrets.credentialsInstalled && secrets.brokerToken && secrets.accountId && secrets.brokerApiKey);
-  if (ownReady) {
-    return {
-      brokerId: "kotak",
-      accessToken: String(secrets.brokerToken).trim(),
-      clientId: String(secrets.accountId).trim(),
-      apiKey: String(secrets.brokerApiKey).trim(),
-      sessionToken: String(secrets.brokerSessionToken || "").trim(),
-      totpSecret,
-    };
-  }
-  const envKey = String(process.env.T2S_KOTAK_CONSUMER_KEY || "").trim();
-  const envToken = String(process.env.T2S_KOTAK_ACCESS_TOKEN || envKey).trim();
-  if (envKey || envToken) {
-    return {
-      brokerId: "kotak",
-      accessToken: envToken || envKey,
-      clientId: String(process.env.T2S_KOTAK_CLIENT_ID || "").trim(),
-      apiKey: envKey || envToken,
-      sessionToken: "",
-      totpSecret,
-    };
-  }
-  const session = deskKotak === null ? null : deskKotak || liveBrokerSession("kotak");
-  const apiKey = String(session?.apiKey || "").trim();
-  const accessToken = String(session?.accessToken || apiKey).trim();
-  if (!apiKey && !accessToken) return null;
+  if (!ownReady) return null;
   return {
     brokerId: "kotak",
-    accessToken,
-    clientId: String(session?.clientId || "").trim(),
-    apiKey: apiKey || accessToken,
-    sessionToken: String(session?.sessionToken || "").trim(),
-    totpSecret,
+    accessToken: String(secrets.brokerToken).trim(),
+    clientId: String(secrets.accountId).trim(),
+    apiKey: String(secrets.brokerApiKey).trim(),
+    sessionToken: String(secrets.brokerSessionToken || "").trim(),
   };
 }
 
@@ -146,11 +114,11 @@ function kotakQuoteBoard(now, { live = false, indices = [], reason = "" } = {}) 
   };
 }
 
-async function kotakLiveBoard(user, secrets, { fetchQuotes, deskKotak, now }) {
-  const creds = kotakFeedCreds(secrets, deskKotak);
+async function kotakLiveBoard(user, secrets, { fetchQuotes, now }) {
+  const creds = kotakFeedCreds(secrets);
   if (!creds) {
     return kotakQuoteBoard(now, {
-      reason: "Index quotes use this user's Kotak Neo key. Add it on the server, then the Kotak feed fills in.",
+      reason: "Index quotes use this user's own Kotak Neo key. Add Kotak Neo on Profile. The admin feed stays on the admin side.",
     });
   }
   const hit = cache.get(user.id);
@@ -187,7 +155,7 @@ async function kotakLiveBoard(user, secrets, { fetchQuotes, deskKotak, now }) {
   }
 }
 
-export async function memberQuotesForUser(user, { fetchQuotes, deskKotak, now = Date.now() } = {}) {
+export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() } = {}) {
   if (!user?.id) return emptyQuotes("paper", "Sign in first.");
   const secrets = peekClientSecrets(user.id);
   const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
@@ -195,7 +163,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskKotak, now = 
   const accountId = String(secrets.accountId || "").trim();
   const apiKey = String(secrets.brokerApiKey || "").trim();
   if (brokerId === "kotak") {
-    return kotakLiveBoard(user, secrets, { fetchQuotes, deskKotak, now });
+    return kotakLiveBoard(user, secrets, { fetchQuotes, now });
   }
   if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
     return emptyQuotes(

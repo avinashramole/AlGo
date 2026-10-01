@@ -151,6 +151,32 @@ test("member cards show daily change vs yesterday close for every index", () => 
   assert.equal(again.find((row) => row.symbol === "NIFTY 50").change, 140);
 });
 
+function withAdminKotakEnv(run) {
+  const saved = {
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+    client: process.env.T2S_KOTAK_CLIENT_ID,
+    totp: process.env.T2S_KOTAK_TOTP_SECRET,
+  };
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-consumer-key";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-access-token";
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+  return Promise.resolve()
+    .then(run)
+    .finally(() => {
+      for (const [name, value] of [
+        ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+        ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+        ["T2S_KOTAK_CLIENT_ID", saved.client],
+        ["T2S_KOTAK_TOTP_SECRET", saved.totp],
+      ]) {
+        if (value == null) delete process.env[name];
+        else process.env[name] = value;
+      }
+    });
+}
+
 test("Shivam Fintech on Kotak does not receive the admin Dhan tape", async () => {
   const member = { id: "u-shivam-kotak", name: "Shivam Fintech", email: "shivam.fintech@gmail.com", role: "user" };
   saveClientSettings(member.id, {
@@ -160,92 +186,110 @@ test("Shivam Fintech on Kotak does not receive the admin Dhan tape", async () =>
     brokerToken: "kotak-desk-token",
     tradeMode: "real",
   });
-  let fetches = 0;
-  const mine = await memberQuotesForUser(member, {
-    now: Date.now() + 30_000,
-    deskKotak: null,
-    fetchQuotes: async () => {
-      fetches += 1;
-      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 }];
-    },
-    deskQuotes: () => ({
-      indices: [
-        { symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [25100, 25111.25], future: 25140, lot: 65 },
-        { symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52100, change: -10, changePct: -0.02, spark: [], future: 52120, lot: 30 },
-      ],
-    }),
+  await withAdminKotakEnv(async () => {
+    let fetches = 0;
+    const mine = await memberQuotesForUser(member, {
+      now: Date.now() + 30_000,
+      fetchQuotes: async () => {
+        fetches += 1;
+        return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 }];
+      },
+      deskQuotes: () => ({
+        indices: [
+          { symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [25100, 25111.25], future: 25140, lot: 65 },
+          { symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52100, change: -10, changePct: -0.02, spark: [], future: 52120, lot: 30 },
+        ],
+      }),
+    });
+    assert.equal(fetches, 0);
+    assert.equal(mine.brokerId, "kotak");
+    assert.equal(mine.brokerName, "KOTAK");
+    assert.equal(mine.source, "kotak");
+    assert.equal(mine.live, false);
+    assert.deepEqual(mine.indices, []);
+    assert.match(mine.reason, /own Kotak Neo/);
+    const body = JSON.stringify(mine);
+    assert.equal(body.includes("25111.25"), false);
+    assert.equal(body.includes("YIX14"), false);
+    assert.equal(body.includes("kotak-desk-token"), false);
+    assert.equal(body.includes("admin-consumer-key"), false);
+    assert.equal(body.includes("admin-access-token"), false);
   });
-  assert.equal(fetches, 0);
-  assert.equal(mine.brokerId, "kotak");
-  assert.equal(mine.brokerName, "KOTAK");
-  assert.equal(mine.source, "kotak");
-  assert.equal(mine.live, false);
-  assert.deepEqual(mine.indices, []);
-  assert.match(mine.reason, /Kotak Neo/);
-  assert.equal(String(JSON.stringify(mine)).includes("25111.25"), false);
-  assert.equal(String(JSON.stringify(mine)).includes("YIX14"), false);
-  assert.equal(String(JSON.stringify(mine)).includes("kotak-desk-token"), false);
 });
 
-test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", async () => {
+test("admin Kotak login stays off Shivam Fintech's feed", async () => {
   const member = { id: "u-shivam-live", name: "Shivam Fintech", email: "shivam.live@gmail.com", role: "user" };
   saveClientSettings(member.id, { brokerId: "kotak", tradeMode: "paper" });
-  const seen = [];
-  const mine = await memberQuotesForUser(member, {
-    now: Date.now() + 60_000,
-    deskKotak: {
-      clientId: "YIX14",
-      apiKey: "kotak-consumer-key",
-      accessToken: "kotak-consumer-key",
-      totpSecret: "JBSWY3DPEHPK3PXP",
-    },
-    fetchQuotes: async (creds) => {
-      seen.push(creds);
-      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22421.95, close: 22620.45 }];
-    },
-    deskQuotes: () => ({
-      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
-    }),
+  await withAdminKotakEnv(async () => {
+    let fetches = 0;
+    const mine = await memberQuotesForUser(member, {
+      now: Date.now() + 60_000,
+      deskKotak: {
+        clientId: "YIX14",
+        apiKey: "kotak-consumer-key",
+        accessToken: "kotak-consumer-key",
+        totpSecret: "JBSWY3DPEHPK3PXP",
+      },
+      fetchQuotes: async () => {
+        fetches += 1;
+        return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22421.95, close: 22620.45 }];
+      },
+      deskQuotes: () => ({
+        indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
+      }),
+    });
+    assert.equal(fetches, 0);
+    assert.equal(mine.brokerId, "kotak");
+    assert.equal(mine.brokerName, "KOTAK");
+    assert.equal(mine.live, false);
+    assert.equal(mine.source, "kotak");
+    assert.deepEqual(mine.indices, []);
+    assert.match(mine.reason, /admin feed stays on the admin side/);
+    const body = JSON.stringify(mine);
+    assert.equal(body.includes("22421.95"), false);
+    assert.equal(body.includes("25111.25"), false);
+    assert.equal(body.includes("kotak-consumer-key"), false);
+    assert.equal(body.includes("YIX14"), false);
+    assert.equal(body.includes("JBSWY3DPEHPK3PXP"), false);
+    assert.equal(body.includes("admin-access-token"), false);
   });
-  assert.equal(seen.length, 1);
-  assert.equal(seen[0].apiKey, "kotak-consumer-key");
-  assert.equal(seen[0].accessToken, "kotak-consumer-key");
-  assert.equal(seen[0].clientId, "YIX14");
-  assert.equal(seen[0].totpSecret, "JBSWY3DPEHPK3PXP");
-  assert.equal(mine.brokerId, "kotak");
-  assert.equal(mine.brokerName, "KOTAK");
-  assert.equal(mine.live, true);
-  assert.equal(mine.source, "kotak");
-  assert.equal(mine.reason, "");
-  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 22421.95);
-  const body = JSON.stringify(mine);
-  assert.equal(body.includes("kotak-consumer-key"), false);
-  assert.equal(body.includes("YIX14"), false);
-  assert.equal(body.includes("JBSWY3DPEHPK3PXP"), false);
-  assert.equal(body.includes("25111.25"), false);
 });
 
 test("an empty Kotak quote does not fill in the admin Dhan tape", async () => {
   const member = { id: "u-shivam-empty", name: "Shivam Fintech", email: "shivam.empty@gmail.com", role: "user" };
-  saveClientSettings(member.id, { brokerId: "kotak", tradeMode: "paper" });
-  const mine = await memberQuotesForUser(member, {
-    now: Date.now() + 90_000,
-    deskKotak: {
-      clientId: "YIX14",
-      apiKey: "kotak-consumer-key",
-      accessToken: "kotak-consumer-key",
-    },
-    fetchQuotes: async () => [],
-    deskQuotes: () => ({
-      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
-    }),
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "SHIVAM-EMPTY",
+    apiKey: "shivam-empty-key",
+    accessToken: "shivam-empty-token",
   });
-  assert.equal(mine.source, "kotak");
-  assert.equal(mine.brokerId, "kotak");
-  assert.equal(mine.live, false);
-  assert.deepEqual(mine.indices, []);
-  assert.match(mine.reason, /Kotak Neo/);
-  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
+  await withAdminKotakEnv(async () => {
+    const seen = [];
+    const mine = await memberQuotesForUser(member, {
+      now: Date.now() + 90_000,
+      fetchQuotes: async (creds) => {
+        seen.push(creds);
+        return [];
+      },
+      deskQuotes: () => ({
+        indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
+      }),
+    });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].clientId, "SHIVAM-EMPTY");
+    assert.equal(seen[0].apiKey, "shivam-empty-key");
+    assert.equal(mine.source, "kotak");
+    assert.equal(mine.brokerId, "kotak");
+    assert.equal(mine.live, false);
+    assert.deepEqual(mine.indices, []);
+    assert.match(mine.reason, /Kotak Neo did not return/);
+    const body = JSON.stringify(mine);
+    assert.equal(body.includes("25111.25"), false);
+    assert.equal(body.includes("YIX14"), false);
+    assert.equal(body.includes("admin-access-token"), false);
+  });
 });
 
 test("Shivam Fintech quotes use his own Kotak token, not the admin Dhan tape", async () => {
@@ -258,32 +302,39 @@ test("Shivam Fintech quotes use his own Kotak token, not the admin Dhan tape", a
     apiKey: "shivam-consumer-key",
     accessToken: "shivam-access-token",
   });
-  const seen = [];
-  const mine = await memberQuotesForUser(member, {
-    now: Date.now() + 120_000,
-    deskKotak: {
-      clientId: "YIX14",
-      apiKey: "desk-consumer-key",
-      accessToken: "desk-access-token",
-    },
-    fetchQuotes: async (creds) => {
-      seen.push(creds);
-      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22480.1, close: 22620.45 }];
-    },
-    deskQuotes: () => ({
-      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
-    }),
+  await withAdminKotakEnv(async () => {
+    const seen = [];
+    const mine = await memberQuotesForUser(member, {
+      now: Date.now() + 120_000,
+      deskKotak: {
+        clientId: "YIX14",
+        apiKey: "desk-consumer-key",
+        accessToken: "desk-access-token",
+      },
+      fetchQuotes: async (creds) => {
+        seen.push(creds);
+        return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22480.1, close: 22620.45 }];
+      },
+      deskQuotes: () => ({
+        indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
+      }),
+    });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].clientId, "SHIVAM1");
+    assert.equal(seen[0].apiKey, "shivam-consumer-key");
+    assert.equal(seen[0].accessToken, "shivam-access-token");
+    assert.equal(seen[0].totpSecret, undefined);
+    assert.equal(mine.source, "kotak");
+    assert.equal(mine.live, true);
+    assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 22480.1);
+    const body = JSON.stringify(mine);
+    assert.equal(body.includes("25111.25"), false);
+    assert.equal(body.includes("shivam-access-token"), false);
+    assert.equal(body.includes("desk-consumer-key"), false);
+    assert.equal(body.includes("YIX14"), false);
+    assert.equal(body.includes("admin-access-token"), false);
+    assert.equal(body.includes("JBSWY3DPEHPK3PXP"), false);
   });
-  assert.equal(seen.length, 1);
-  assert.equal(seen[0].clientId, "SHIVAM1");
-  assert.equal(seen[0].apiKey, "shivam-consumer-key");
-  assert.equal(seen[0].accessToken, "shivam-access-token");
-  assert.equal(mine.source, "kotak");
-  assert.equal(mine.live, true);
-  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 22480.1);
-  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
-  assert.equal(JSON.stringify(mine).includes("shivam-access-token"), false);
-  assert.equal(JSON.stringify(mine).includes("desk-consumer-key"), false);
 });
 
 test("paper members stay on an empty board even if admin quotes exist", async () => {
