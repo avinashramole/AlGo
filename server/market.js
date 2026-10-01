@@ -1535,6 +1535,10 @@ export function setDhanFeed(patch) {
   state.dhanFeed = { ...state.dhanFeed, ...patch };
 }
 
+export function adminQuoteFeed() {
+  return { live: Boolean(state.dhanFeed.live), source: String(state.dhanFeed.source || "") };
+}
+
 const LAST_QUOTES_FILE = process.env.T2S_QUOTE_CACHE || path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "last-quotes.json");
 
 function underNodeTest() {

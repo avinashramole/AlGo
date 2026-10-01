@@ -115,10 +115,18 @@ export function hasDhanQuotes(data?: {
 
 export { brokerChipName, headerBrokerLabel } from "./headerBroker";
 
+export function kotakAdminTape(data?: {
+  dhanFeed?: { source?: string; live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };
+}) {
+  const feed = data?.dhanFeed;
+  return feed?.source === "kotak" && Boolean(feed.live || feed.hasQuotes || feed.lastTickAt);
+}
+
 export function dhanFeedLabel(
-  data?: { dhanFeed?: { live?: boolean; hasQuotes?: boolean }; optionMeta?: { source?: string } },
+  data?: { dhanFeed?: { live?: boolean; hasQuotes?: boolean; source?: string }; optionMeta?: { source?: string } },
   sessionOpen?: boolean,
 ) {
+  if (kotakAdminTape(data)) return data?.dhanFeed?.live && (sessionOpen == null || sessionOpen) ? "KOTAK LIVE" : "KOTAK";
   if (!hasDhanQuotes(data)) return "WAIT";
   if (data?.dhanFeed?.live && (sessionOpen == null || sessionOpen)) {
     return data?.optionMeta?.source === "dhan" ? "DHAN LIVE" : "DHAN LIVE · waiting for chain";

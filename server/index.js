@@ -31,6 +31,7 @@ import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markT
 import { attachMemberBrokerBalance, attachMemberBrokerPnl, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
+import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -1304,6 +1305,7 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
+  startKotakAdminQuoteFeed();
   startUpstoxDailyTokenScheduler();
   startMemberDailyBookScheduler();
   if (skipLiveAlgos()) {
