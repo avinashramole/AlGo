@@ -489,6 +489,7 @@ export type AuthUser = {
   authProvider?: string;
   createdAt?: string;
   lastLoginAt?: string;
+  loginIp?: string;
   registered?: boolean;
   hasPassword?: boolean;
   thumbEnabled?: boolean;
@@ -1032,6 +1033,7 @@ export type MemberDesk = {
   payments: PaymentPublic;
   copyReady?: boolean;
   alerts?: MemberCopyAlert[];
+  staticIp?: string;
 };
 
 export type MemberIndexQuote = {
@@ -1061,6 +1063,13 @@ export function getMemberQuotes() {
 
 export function getMemberDesk() {
   return request<MemberDesk>("/member/desk");
+}
+
+export function saveMemberIp(staticIp: string) {
+  return request<{ ok: boolean; staticIp: string }>("/member/ip", {
+    method: "POST",
+    body: JSON.stringify({ staticIp }),
+  });
 }
 
 export function selectMemberBroker(brokerId: string) {

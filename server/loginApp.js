@@ -13,6 +13,8 @@ import {
   requestOtp,
   resetPassword,
   safeFrontendOrigin,
+  clientAddress,
+  recordLoginIp,
   sessionUser,
   updateProfile,
   verifyOtp,
@@ -58,6 +60,11 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
         redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
       });
       try {
+        recordLoginIp(result.token, clientAddress(req));
+      } catch {
+        /* login still succeeds if the address cannot be stored */
+      }
+      try {
         queueLoginNotice(result.user);
       } catch (mailError) {
         console.error("[auth] Google login mail failed:", mailError?.message || mailError);
@@ -72,6 +79,8 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
   app.post("/api/login", (req, res) => {
     try {
       const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
+      const noted = recordLoginIp(result.token, clientAddress(req));
+      if (noted) result.user = noted;
       queueLoginNotice(result.user);
       res.json(result);
     } catch (error) {
@@ -105,7 +114,11 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
         otp: req.body?.otp,
         purpose: req.body?.purpose,
       });
-      if (result.token) queueLoginNotice(result.user);
+      if (result.token) {
+        const noted = recordLoginIp(result.token, clientAddress(req));
+        if (noted) result.user = noted;
+        queueLoginNotice(result.user);
+      }
       res.json(result);
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
@@ -152,7 +165,9 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
   });
 
   app.get("/api/me", (req, res) => {
-    const user = sessionUser(readToken(req), { reload: true });
+    const token = readToken(req);
+    recordLoginIp(token, clientAddress(req));
+    const user = sessionUser(token, { reload: true });
     if (!user) {
       res.status(401).json({ error: "Sign in first." });
       return;

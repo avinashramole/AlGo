@@ -197,6 +197,7 @@ function publicUser(user) {
     authProvider: user.authProvider || (user.googleId ? "google" : user.password ? "password" : ""),
     createdAt: user.createdAt || "",
     lastLoginAt: user.lastLoginAt || "",
+    loginIp: user.loginIp || "",
     registered: isRegisteredUser(user),
     hasPassword: Boolean(user.password),
     thumbEnabled: Boolean(user.thumbHash),
@@ -238,6 +239,7 @@ function loadUsers() {
       authProvider: row.authProvider ? String(row.authProvider) : undefined,
       createdAt: row.createdAt ? String(row.createdAt) : undefined,
       lastLoginAt: row.lastLoginAt ? String(row.lastLoginAt) : undefined,
+      loginIp: row.loginIp ? String(row.loginIp) : undefined,
       password: row.password ? String(row.password) : undefined,
       thumbHash: row.thumbHash ? String(row.thumbHash) : undefined,
     };
@@ -282,6 +284,7 @@ function saveUsers(users) {
     ...(row.authProvider ? { authProvider: row.authProvider } : {}),
     ...(row.createdAt ? { createdAt: row.createdAt } : {}),
     ...(row.lastLoginAt ? { lastLoginAt: row.lastLoginAt } : {}),
+    ...(row.loginIp ? { loginIp: row.loginIp } : {}),
     ...(row.password ? { password: row.password } : {}),
     ...(row.thumbHash ? { thumbHash: row.thumbHash } : {}),
   }));
@@ -308,6 +311,37 @@ export function findUser(identifier) {
   if (isGmail(email) || email.includes("@")) return store.byEmail.get(email) || null;
   if (isMobile(mobile)) return store.byMobile.get(mobile) || null;
   return store.byEmail.get(email) || null;
+}
+
+export function clientAddress(req) {
+  const forwarded = String(req?.headers?.["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  const real = String(req?.headers?.["x-real-ip"] || "").trim();
+  const socket = String(req?.socket?.remoteAddress || req?.ip || "").trim();
+  return (forwarded || real || socket).replace(/^::ffff:/, "");
+}
+
+function looksLikeIp(value) {
+  const raw = String(value || "").trim();
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(raw)) {
+    return raw.split(".").every((part) => {
+      const n = Number(part);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  }
+  return raw.includes(":") && /^[0-9a-fA-F:]+$/.test(raw) && raw.length <= 45;
+}
+
+export function recordLoginIp(sessionToken, ip) {
+  const clean = String(ip || "").trim().replace(/^::ffff:/, "");
+  if (!looksLikeIp(clean)) return null;
+  store = loadUsers();
+  const user = userFromToken(sessionToken);
+  if (!user) return null;
+  user.loginIp = clean;
+  persist();
+  return publicUser(user);
 }
 
 function issueSession(user) {

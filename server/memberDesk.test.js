@@ -28,6 +28,7 @@ const {
   memberWorkingDhanCopies,
   recordMemberCopyFill,
   saveClientSettings,
+  saveMemberStaticIp,
   selectMemberBroker,
   startWalletTopup,
   sweepMemberDailyBooks,
@@ -43,6 +44,15 @@ savePaymentSettings({
 
 const user = { id: "u-member", name: "Desk Member", email: "member.desk@gmail.com", role: "user" };
 const algo = { id: "a4", name: "NIFTY VWAP ATM" };
+
+test("a member can save a static IP on their own desk", () => {
+  const saved = saveMemberStaticIp({ user, staticIp: "203.0.113.44" });
+  assert.equal(saved.staticIp, "203.0.113.44");
+  assert.equal(getMemberDesk({ user, enrollments: [], quote: () => 0 }).staticIp, "203.0.113.44");
+  assert.throws(() => saveMemberStaticIp({ user, staticIp: "999.1.1.1" }), /IPv4 or IPv6/);
+  const cleared = saveMemberStaticIp({ user, staticIp: "" });
+  assert.equal(cleared.staticIp, "");
+});
 
 test("selectMemberBroker stores the chosen broker without secrets", () => {
   const row = selectMemberBroker({ user, brokerId: "dhan" });

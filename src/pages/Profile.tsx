@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { useAuth } from "../context/AuthContext";
 import { formatMobile } from "../lib/format";
 
@@ -52,8 +53,10 @@ export function Profile() {
           <Row label="Email" value={user?.email || "Not added"} />
           <Row label="Role" value={user?.role === "admin" ? "Admin" : "Member"} />
           <Row label="Mobile no" value={formatMobile(user?.mobile)} />
+          <Row label="Login IP" value={user?.loginIp || "Not captured yet"} />
         </dl>
       </section>
+      <MemberAccountSetup showProfile={false} />
       <section className="card p-5">
         <div className="mb-3 text-sm font-bold">Edit profile</div>
         <form onSubmit={onSave}>

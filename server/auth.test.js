@@ -27,6 +27,8 @@ const {
   requestOtp,
   resolveUserRole,
   safeFrontendOrigin,
+  clientAddress,
+  recordLoginIp,
   sessionUser,
   upsertGoogleUser,
   updateProfile,
@@ -423,6 +425,22 @@ test("name-only profile update keeps the saved admin mobile after disk reload", 
   assert.equal(fromUsers.mobile, "9876508882");
   const afterReload = updateProfile(session.token, { name: "Trade 2 Smart" });
   assert.equal(afterReload.user.mobile, "9876508882");
+});
+
+test("a Gmail login stores the client IP on the profile", () => {
+  const session = upsertGoogleUser({
+    email: `ip.member.${Date.now()}@gmail.com`,
+    name: "IP Member",
+    googleId: "gid-ip-member",
+  });
+  const noted = recordLoginIp(session.token, "150.129.129.108");
+  assert.equal(noted.loginIp, "150.129.129.108");
+  assert.equal(sessionUser(session.token, { reload: true }).loginIp, "150.129.129.108");
+  assert.equal(recordLoginIp(session.token, "not-an-ip"), null);
+  assert.equal(
+    clientAddress({ headers: { "x-forwarded-for": "203.0.113.10, 10.0.0.1" }, socket: { remoteAddress: "127.0.0.1" } }),
+    "203.0.113.10",
+  );
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {

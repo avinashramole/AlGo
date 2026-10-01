@@ -3,6 +3,7 @@ import { Bell, Shield, UserRound, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getMemberDesk, getMemberQuotes, type MemberCopyAlert, type MemberDesk, type MemberIndexQuote } from "../api/client";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
+import { MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { useAuth } from "../context/AuthContext";
 import { cn, formatInr, formatIst } from "../lib/format";
@@ -42,6 +43,8 @@ export function UserHome() {
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
         <h1 className="mt-1 text-2xl font-extrabold">{user?.email || ""}</h1>
       </section>
+
+      <MemberAccountSetup />
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
 

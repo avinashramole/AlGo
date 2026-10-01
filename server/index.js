@@ -27,7 +27,7 @@ import {
   unassignStaticIp,
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
-import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
+import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, saveMemberStaticIp, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
 import { attachMemberBrokerPnl, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
@@ -406,6 +406,14 @@ app.post("/api/member/broker/upstox/token", async (req, res) => {
     res.json(await startMemberUpstoxToken(memberAuth(req)));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not request Upstox trading token" });
+  }
+});
+
+app.post("/api/member/ip", (req, res) => {
+  try {
+    res.json(saveMemberStaticIp({ user: memberAuth(req), staticIp: req.body?.staticIp }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save IP" });
   }
 });
 

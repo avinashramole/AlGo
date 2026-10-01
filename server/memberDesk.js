@@ -1593,7 +1593,14 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     payments: publicPayments(admins),
     copyReady: Boolean(autoTrade && String(desk.brokerToken || "").trim()),
     alerts: publicAlerts(desk.alerts),
+    staticIp: String(desk.staticIp || "").trim(),
   };
+}
+
+export function saveMemberStaticIp({ user, staticIp } = {}) {
+  if (!user?.id) throw fail("Sign in first.", 401);
+  const saved = saveClientSettings(user.id, { staticIp: staticIp ?? "" });
+  return { ok: true, staticIp: saved.staticIp || "" };
 }
 
 export function selectMemberBroker({ user, brokerId } = {}) {
