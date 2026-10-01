@@ -132,3 +132,58 @@ test("today's filled, rejected, and failed orders stay on the book when a Dhan p
   assert.match(updated?.reason || "", /Rejected by broker/);
   assert.equal(snapshot().orders.some((row) => row.id === "pe-22500-fail" && row.status === "FAILED"), true);
 });
+
+test("a resent SELL keeps the strategy of the BUY on that contract", () => {
+  const stamp = new Date().toISOString();
+  replaceDhanOrders([
+    {
+      id: "sell-22400",
+      symbol: "NIFTY-Oct2026-22400-PE",
+      side: "SELL",
+      qty: 65,
+      price: 154.95,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      createdAt: stamp,
+    },
+  ]);
+  assert.equal(snapshot().orders.find((row) => row.id === "sell-22400")?.strategy || "", "");
+
+  replaceDhanOrders([
+    {
+      id: "buy-22400",
+      symbol: "NIFTY-Oct2026-22400-PE",
+      side: "BUY",
+      qty: 65,
+      price: 109.8,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      strategy: "NIFTY 5m first candle",
+      createdAt: stamp,
+    },
+  ]);
+  const kept = snapshot().orders.find((row) => row.id === "sell-22400");
+  assert.equal(kept?.status, "FILLED");
+  assert.equal(kept?.strategy, "NIFTY 5m first candle");
+
+  replaceDhanOrders([
+    {
+      id: "sell-22400-again",
+      symbol: "NIFTY 22400 PE",
+      side: "SELL",
+      qty: 65,
+      price: 150,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      correlationId: "t2s1770000099",
+      createdAt: stamp,
+    },
+  ]);
+  assert.equal(snapshot().orders.find((row) => row.id === "sell-22400-again")?.strategy, "NIFTY 5m first candle");
+});

@@ -1,3 +1,5 @@
+import { parseOptionContract } from "./frontFutures.js";
+
 const CORR_MAX = 25;
 const GENERIC_NAME = /^(manual|auto)$/i;
 const memory = new Map();
@@ -112,10 +114,40 @@ function uniqueStrategy(rows = []) {
   return names.length === 1 ? names[0] : "";
 }
 
+function contractKey(row = {}) {
+  const raw = String(row.symbol || row.tradingSymbol || "")
+    .replace(/\bPUT\b/gi, "PE")
+    .replace(/\bCALL\b/gi, "CE");
+  const parsed = parseOptionContract(raw);
+  if (parsed?.root && parsed.strike && parsed.option) return `${parsed.root}|${parsed.strike}|${parsed.option}`;
+  const option = String(row.option || "").toUpperCase() === "PUT" ? "PE" : String(row.option || "").toUpperCase() === "CALL" ? "CE" : String(row.option || "").toUpperCase();
+  const strike = Number(row.strike);
+  const root = raw.toUpperCase().match(/\b(BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NIFTY)\b/);
+  if ((option === "CE" || option === "PE") && strike > 0 && root) return `${root[1]}|${strike}|${option}`;
+  return "";
+}
+
 function sameContract(left = {}, right = {}) {
   if (left.securityId && right.securityId && String(left.securityId) === String(right.securityId)) return true;
   if (left.symbol && right.symbol && left.symbol === right.symbol) return true;
-  return false;
+  const leftKey = contractKey(left);
+  const rightKey = contractKey(right);
+  return Boolean(leftKey && rightKey && leftKey === rightKey);
+}
+
+function exitStrategyFromBook(row, pools) {
+  const matches = [];
+  for (const pool of pools) {
+    for (const item of pool || []) {
+      if (!item || item.copyUserId) continue;
+      if (row.id && String(item.id) === String(row.id)) continue;
+      if (!keepStrategy(item) || !sameContract(item, row)) continue;
+      matches.push(item);
+    }
+  }
+  const opens = matches.filter((item) => String(item.side || item.type || "BUY").toUpperCase() !== "SELL");
+  if (opens.length) return uniqueStrategy(opens);
+  return uniqueStrategy(matches);
 }
 
 function inferFromLastOrderId(row = {}, algos = []) {
@@ -173,6 +205,9 @@ export function resolveOrderStrategy(row = {}, { previous = [], algos = [], posi
   }
   if (!name && !forPosition) {
     name = inferFromLastOrderId(row, algos) || inferPendingInFlight(row, algos);
+  }
+  if (!name && String(row.side || "").toUpperCase() === "SELL") {
+    name = exitStrategyFromBook(row, [orders, previous, positions]);
   }
   if (name) {
     name = canonicalStrategyName(name, algos) || name;

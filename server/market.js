@@ -712,8 +712,10 @@ export function queueLivePositionExit(pos) {
   const strategy =
     resolveOrderStrategy(pos, {
       previous: state.orders || [],
+      orders: state.orders || [],
       algos: state.algos || [],
       positions: state.positions || [],
+      forPosition: true,
     }) || realStrategyName(pos.strategy);
   return queueLiveAlgoOrder({
     symbol: pos.symbol,
@@ -1088,7 +1090,12 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
-          queueLiveOrder: (payload) => queueLiveAlgoOrder({ ...payload, brokerId: algo.brokerId || "dhan" }),
+          queueLiveOrder: (payload) =>
+            queueLiveAlgoOrder({
+              ...payload,
+              strategy: realStrategyName(payload.strategy) || algo.name,
+              brokerId: algo.brokerId || "dhan",
+            }),
           squareOff,
         })
       : PaperTradingAdapter({ placeOrder, squareOff });
@@ -2866,8 +2873,10 @@ export function squareOff(id) {
     strategy:
       resolveOrderStrategy(pos, {
         previous: state.orders || [],
+        orders: state.orders || [],
         algos: state.algos || [],
         positions: state.positions || [],
+        forPosition: true,
       }) || realStrategyName(pos.strategy),
     brokerId: account.id,
     brokerName: account.name,
@@ -2918,6 +2927,7 @@ export function replaceDhanOrders(rows) {
       reason: String(row.reason || existing?.reason || ""),
       strategy: resolveOrderStrategy(row, {
         previous,
+        orders: previous,
         algos: state.algos || [],
         positions: state.positions || [],
       }),
@@ -2925,6 +2935,16 @@ export function replaceDhanOrders(rows) {
     syncExecutedTradeCount(existing, next);
     return next;
   });
+  for (const row of tagged) {
+    if (realStrategyName(row.strategy)) continue;
+    const strategy = resolveOrderStrategy(row, {
+      previous,
+      orders: tagged,
+      algos: state.algos || [],
+      positions: state.positions || [],
+    });
+    if (strategy) row.strategy = strategy;
+  }
   const today = VwapSignalEngine.sessionKeyIST(Date.now());
   const kept = [];
   for (const row of previous) {
@@ -2935,7 +2955,18 @@ export function replaceDhanOrders(rows) {
     if (incomingIds.has(String(row.id))) continue;
     if (!keepOmittedDhanOrder(row, today)) continue;
     const status = orderFeedStatus(row.status);
-    kept.push(status === row.status ? row : { ...row, status });
+    const normalized = status === row.status ? row : { ...row, status };
+    if (realStrategyName(normalized.strategy)) {
+      kept.push(normalized);
+      continue;
+    }
+    const strategy = resolveOrderStrategy(normalized, {
+      previous,
+      orders: [...tagged, ...kept],
+      algos: state.algos || [],
+      positions: state.positions || [],
+    });
+    kept.push(strategy ? { ...normalized, strategy } : normalized);
   }
   state.orders = [...tagged, ...kept];
 }
