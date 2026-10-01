@@ -8,6 +8,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-copy-"));
 process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
+process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
@@ -861,4 +862,53 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
     { id: "a10", name: "NIFTY 5m first candle", mappingScope: "master", mappedClientIds: [user.id], alsoMappedClientIds: [user.id] },
   );
   assert.equal(master.some((row) => row.copyUserId === user.id), false);
+});
+
+test("admin BUY PE copies a mapped client who is not Copy ON", async () => {
+  const user = { id: "u-pe-mapped", name: "PE Mapped", email: "pemapped@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11007701", accessToken: "pe-mapped-token" });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "",
+    tradeMode: "real",
+    brokerId: "dhan",
+    subscriptionUntil: "2026-12-31",
+  });
+  const { createAlgo, deleteAlgo, fanOutAdminOrderCopies } = await import("./market.js");
+  const created = createAlgo({
+    name: "NIFTY 5m first candle PE map",
+    kind: "nifty-first-candle",
+    indicator: "NIFTY_FIRST_CANDLE",
+    runMode: "live",
+    symbol: "NIFTY",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
+  });
+  try {
+    const result = fanOutAdminOrderCopies(
+      {
+        symbol: "NIFTY 22600 PE",
+        side: "BUY",
+        qty: 65,
+        price: 42,
+        option: "PE",
+        strike: 22600,
+        strategy: created.name,
+        brokerId: "dhan",
+      },
+      { symbol: "NIFTY 22600 PE", side: "BUY", qty: 65, price: 42, strategy: created.name },
+    );
+    assert.ok(result.copies >= 1);
+    await awaitMemberCopySends();
+    const desk = getMemberDesk({ user, enrollments: [], algos: [created], quote: () => 0, ownBookOnly: true });
+    const row = [...(desk.orders || []), ...(desk.orderHistory || [])].find((item) => item.symbol === "NIFTY 22600 PE");
+    assert.ok(row);
+    assert.equal(row.side, "BUY");
+    assert.equal(row.strategy, created.name);
+    assert.equal(row.qty, 65);
+  } finally {
+    deleteAlgo(created.id);
+  }
 });

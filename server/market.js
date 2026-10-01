@@ -566,7 +566,8 @@ function enqueueLiveAlgoOrder(payload) {
     if (orderBrokerId(row) !== brokerId) return false;
     if (!strategy || row.strategy !== strategy) return false;
     if (liveOrderSide(row) !== side) return false;
-    return String(row.role || "") === role;
+    if (String(row.role || "") !== role) return false;
+    return sameLiveContract(payload, row);
   });
   if (sameStrategyRole) {
     return { ok: true, queued: false, status: "PENDING", duplicate: true };
@@ -613,13 +614,15 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
     symbol: order.symbol || payload.symbol,
     price: order.price || payload.price,
   };
-  const copies = memberCopyPayloads(next, { mappingScope: "both", mappedClientIds: [] });
+  const algo = liveCopyAlgo(next);
+  const copies = memberCopyPayloads(next, algo);
   if (!copies.length) {
+    const mapped = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0;
     console.log(
-      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — Copy ON + saved token copies even if the user is logged off`,
+      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — ${mapped ? `${mapped} mapped client(s) on ${algo.name || next.strategy}, scope ${algo.mappingScope || "both"}` : "Copy ON + saved token copies even if the user is logged off"}`,
     );
   }
-  dispatchMemberCopies(next, { mappingScope: "both", mappedClientIds: [] });
+  dispatchMemberCopies(next, algo);
   if (order && typeof order === "object") order.copiedToMembers = true;
   return { queued: true, copies: copies.length };
 }
