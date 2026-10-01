@@ -87,6 +87,12 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                 <Info label="Joined" value={formatIstDate(client.createdAt)} />
                 <Info label="Last login" value={formatIst(client.lastLoginAt)} />
                 <Info label="Wallet" value={formatInr(detail.wallet.balance)} />
+                <Info
+                  label="Account balance"
+                  value={Number.isFinite(Number(detail.wallet.brokerBalance)) ? formatInr(Number(detail.wallet.brokerBalance)) : "—"}
+                />
+                <Info label="MTM" value={formatInr(detail.wallet.mtm)} />
+                <Info label="P&L" value={formatInr(detail.report?.realizedPnl || 0)} />
                 <Info label="Live copy" value={detail.copyReady ? "Ready · own token" : "Waiting · pay + token"} />
               </section>
 

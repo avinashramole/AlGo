@@ -659,6 +659,8 @@ export type ClientRow = {
   >;
   notes?: string;
   margin: number;
+  brokerBalance?: number;
+  balanceSource?: string;
   createdAt?: string;
   lastLoginAt?: string;
 };

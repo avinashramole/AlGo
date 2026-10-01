@@ -331,15 +331,33 @@ export function applyBrokerPnl(desk, pnl) {
   return desk;
 }
 
+export function kotakTradeSession(creds = {}) {
+  const sid = String(creds.sessionToken || "").trim();
+  const auth = String(creds.token || creds.accessToken || "").trim();
+  const key = String(creds.apiKey || "").trim();
+  const clientId = String(creds.clientId || "").trim();
+  if (!sid || !auth || !key) return null;
+  if (sid === clientId || sid === key || sid === auth || auth === key) return null;
+  return { brokerId: "kotak", token: auth, clientId, apiKey: key, sessionToken: sid };
+}
+
 async function memberBrokerCredentials(userId) {
   const { brokerAccountForLiveCopy, peekClientSecrets } = await import("./memberDesk.js");
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "").trim().toLowerCase();
-  if (brokerId !== "dhan" && brokerId !== "upstox") return null;
+  if (brokerId !== "dhan" && brokerId !== "upstox" && brokerId !== "kotak") return null;
   const slot = brokerAccountForLiveCopy(userId, brokerId);
   if (slot.leftoverToken) return null;
   const token = String(slot.brokerToken || desk.brokerToken || "").trim();
   const clientId = String(slot.accountId || desk.accountId || "").trim();
+  if (brokerId === "kotak") {
+    return kotakTradeSession({
+      token,
+      apiKey: slot.brokerApiKey || desk.brokerApiKey,
+      sessionToken: slot.brokerSessionToken || desk.brokerSessionToken,
+      clientId,
+    });
+  }
   if (!token) return null;
   if (brokerId === "dhan" && !clientId) return null;
   return { brokerId, token, clientId };
@@ -372,12 +390,63 @@ async function upstoxPositions(token) {
   return json;
 }
 
+const KOTAK_TRADE_HOSTS = [
+  "https://mis.kotaksecurities.com",
+  "https://e21.kotaksecurities.com",
+  "https://e22.kotaksecurities.com",
+  "https://e41.kotaksecurities.com",
+  "https://e43.kotaksecurities.com",
+];
+
+async function kotakTradePost(creds, path, jData) {
+  const { ipv4Request } = await import("./ipv4.js");
+  const body = new URLSearchParams({ jData: JSON.stringify(jData || {}) }).toString();
+  const headers = {
+    Auth: creds.token,
+    Sid: creds.sessionToken,
+    "neo-fin-key": "neotradeapi",
+    Accept: "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  let last = null;
+  for (const host of KOTAK_TRADE_HOSTS) {
+    try {
+      const res = await ipv4Request(`${host}${path}`, { method: "POST", headers, body, timeoutMs: 8000 });
+      const text = await res.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = null;
+      }
+      if (!res.ok) {
+        last = new Error(json?.errMsg || json?.message || `Kotak ${res.status}`);
+        if (res.status === 400) throw last;
+        continue;
+      }
+      const stat = String(json?.stat || "").toLowerCase();
+      if (stat === "not_ok" || stat === "not ok" || stat === "error") {
+        last = new Error(json?.errMsg || json?.emsg || "Kotak refused this request.");
+        continue;
+      }
+      return json;
+    } catch (error) {
+      last = error;
+      if (Number(error?.status) === 400) throw error;
+    }
+  }
+  throw last || new Error("Kotak trade request failed.");
+}
+
 async function fetchBrokerPnl(userId) {
   const creds = await memberBrokerCredentials(userId);
   if (!creds) return null;
   if (creds.brokerId === "dhan") {
     const { fetchMemberDhanPositions } = await import("./dhan.js");
     return dhanMasterBook(await fetchMemberDhanPositions(creds.token, creds.clientId));
+  }
+  if (creds.brokerId === "kotak") {
+    return kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", {}));
   }
   return upstoxMasterBook(await upstoxPositions(creds.token));
 }
@@ -411,6 +480,90 @@ export async function readMemberBrokerPnl(userId) {
 export function dhanAvailableBalance(funds) {
   const n = firstFinite(funds, ["availabelBalance", "availableBalance", "availablBalance", "sodLimit"]);
   return n == null ? null : round2(n);
+}
+
+export function kotakAvailableBalance(body) {
+  const root = body?.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body;
+  const rows = Array.isArray(root) ? root : root && typeof root === "object" ? [root] : [];
+  let fallback = null;
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const category = String(row.Category || row.category || "net").toLowerCase();
+    const net = firstFinite(row, ["Net", "net"]);
+    if (net != null && category === "net") return round2(net);
+    const cash = firstFinite(row, ["NotionalCash", "notionalCash", "Cash", "cash"]);
+    if (cash == null || fallback != null) continue;
+    const used = firstFinite(row, ["MarginUsed", "marginUsed"]) || 0;
+    fallback = round2(Math.max(0, cash - used));
+  }
+  return fallback;
+}
+
+function kotakPositionRows(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data)) return raw.data;
+  return null;
+}
+
+function kotakSignedQty(row) {
+  const net = finite(row.netQty ?? row.qty);
+  if (net != null && net !== 0) return net;
+  const buy = Math.abs(Number(row.flBuyQty || row.buyQty || 0));
+  const sell = Math.abs(Number(row.flSellQty || row.sellQty || 0));
+  if (!buy && !sell) return 0;
+  return buy - sell;
+}
+
+export function kotakMasterBook(raw) {
+  const rows = kotakPositionRows(raw);
+  if (!rows) return null;
+  const closed = [];
+  const open = [];
+  let realized = 0;
+  let unrealized = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    if (String(row.stat || "Ok").toLowerCase() === "not_ok") continue;
+    const qty = kotakSignedQty(row);
+    const realizedLeg = firstFinite(row, ["rlMtom", "realizedMtom", "realisedMtom", "realizedGain", "realizedProfit"]) || 0;
+    const quotedUnreal = firstFinite(row, ["urMtom", "unrealizedMtom", "unRealizedMtom", "unrealizedGain", "unrealizedProfit"]);
+    const totalMtm = firstFinite(row, ["mTom", "mtom", "Mtom"]);
+    const unrealizedLeg = quotedUnreal != null ? quotedUnreal : qty && totalMtm != null ? totalMtm - realizedLeg : 0;
+    if (!qty && !realizedLeg && !unrealizedLeg) continue;
+    realized += realizedLeg;
+    unrealized += unrealizedLeg;
+    const symbol = String(row.trdSym || row.sym || row.tradingSymbol || "");
+    const side = qty < 0 ? "SELL" : "BUY";
+    const avg = Number(row.avgPrc || row.avgPrice || 0);
+    const ltp = Number(row.ltp || row.LTP || avg);
+    const leg = {
+      id: `kotak-${row.tok || symbol || open.length + closed.length}-${row.prod || "MIS"}`,
+      symbol,
+      side,
+      type: side,
+      qty: Math.abs(qty),
+      avg,
+      ltp,
+      entry: avg,
+      exit: ltp,
+      pnl: round2(realizedLeg + unrealizedLeg),
+      realized: round2(realizedLeg),
+      product: row.prod || "MIS",
+      brokerId: "kotak",
+      live: true,
+      paper: false,
+    };
+    if (!qty) closed.push({ ...leg, closed: true });
+    else open.push({ ...leg, closed: false });
+  }
+  return {
+    realizedPnl: round2(realized),
+    unrealizedPnl: round2(unrealized),
+    mtm: round2(realized + unrealized),
+    source: "kotak",
+    closed,
+    open,
+  };
 }
 
 export function upstoxAvailableBalance(body) {
@@ -450,6 +603,10 @@ async function fetchBrokerBalance(userId) {
     const { fetchMemberDhanFunds } = await import("./dhan.js");
     const available = dhanAvailableBalance(await fetchMemberDhanFunds(creds.token, creds.clientId));
     return available == null ? null : { balance: available, source: "dhan" };
+  }
+  if (creds.brokerId === "kotak") {
+    const available = kotakAvailableBalance(await kotakTradePost(creds, "/quick/user/limits", { seg: "ALL", exch: "ALL", prod: "ALL" }));
+    return available == null ? null : { balance: available, source: "kotak" };
   }
   const available = upstoxAvailableBalance(await upstoxFunds(creds.token));
   return available == null ? null : { balance: available, source: "upstox" };

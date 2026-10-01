@@ -46,11 +46,16 @@ export function UserHome() {
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
       <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Your balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
-        <Stat label="Open MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
-        <Stat label="Realized P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
+        <Stat label="Balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
+        <Stat label="MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
+        <Stat label="P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
         <Stat label="Net P&L" value={formatInr(report?.netPnl || 0)} signed={report?.netPnl} />
       </div>
+      {desk?.brokerId === "kotak" && !Number.isFinite(Number(desk.wallet.brokerBalance)) ? (
+        <p className="text-xs text-slate-500">
+          Balance, MTM, and P&L use this Kotak account after the Neo sid and today's trade session token are saved on Profile.
+        </p>
+      ) : null}
 
       <MemberLiveBook
         positions={desk?.positions || []}

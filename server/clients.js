@@ -433,6 +433,14 @@ export function applyBrokerBooksToDesk(desk, booksByUserId = {}) {
   };
 }
 
+export function applyListedBalances(clients = [], balancesById = {}) {
+  return (clients || []).map((client) => {
+    const hit = balancesById?.[client.id];
+    if (!hit || !Number.isFinite(Number(hit.balance))) return client;
+    return { ...client, brokerBalance: round2(hit.balance), balanceSource: String(hit.source || "") };
+  });
+}
+
 export function adminAccountBalance(brokers = [], activeBrokerId = "") {
   const active = (brokers || []).find((row) => row.id === activeBrokerId) || null;
   return {

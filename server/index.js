@@ -17,7 +17,7 @@ import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmen
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
-import { adminAccountBalance, applyBrokerBooksToDesk, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
+import { adminAccountBalance, applyBrokerBooksToDesk, applyListedBalances, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
   assignStaticIp,
@@ -482,13 +482,22 @@ app.post("/api/users/:id", (req, res) => {
   }
 });
 
-app.get("/api/clients", (_req, res) => {
-  const book = publicBrokers();
-  res.json({
-    ...clientStatus(listPublicUsers()),
-    ...adminAccountBalance(book.brokers, book.activeBrokerId),
-    strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
-  });
+app.get("/api/clients", async (_req, res) => {
+  try {
+    const book = publicBrokers();
+    const status = clientStatus(listPublicUsers());
+    const balances = await Promise.all(
+      (status.clients || []).map(async (client) => [client.id, await readMemberBrokerBalance(client.id)]),
+    );
+    res.json({
+      ...status,
+      clients: applyListedBalances(status.clients, Object.fromEntries(balances)),
+      ...adminAccountBalance(book.brokers, book.activeBrokerId),
+      strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || "Could not load clients" });
+  }
 });
 
 app.get("/api/clients/:id/detail", async (req, res) => {
@@ -507,6 +516,7 @@ app.get("/api/clients/:id/detail", async (req, res) => {
       },
     });
     await attachMemberBrokerPnl(detail, req.params.id);
+    await attachMemberBrokerBalance(detail, req.params.id);
     res.json(detail);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load client detail" });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakMasterBook, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -155,6 +155,39 @@ test("Upstox short-term positions use realised and unrealised", () => {
   assert.equal(desk.report.unrealizedPnl, 18.25);
   assert.equal(desk.report.netPnl, 326.25);
   assert.equal(desk.wallet.mtm, 18.25);
+});
+
+test("Kotak limits and positions are this user's account balance, MTM, and P&L", () => {
+  assert.equal(kotakTradeSession({ token: "member-consumer", apiKey: "member-consumer", sessionToken: "YT2Vm", clientId: "YT2Vm" }), null);
+  assert.equal(kotakTradeSession({ token: "trade-token-1452", apiKey: "member-consumer", clientId: "YT2Vm" }), null);
+  const session = kotakTradeSession({
+    token: "trade-token-1452",
+    apiKey: "member-consumer",
+    sessionToken: "neo-sid-88",
+    clientId: "YT2Vm",
+  });
+  assert.equal(session.sessionToken, "neo-sid-88");
+  assert.equal(session.token, "trade-token-1452");
+  assert.equal(kotakAvailableBalance({ stat: "Ok", Category: "net", Net: "88420.50", MarginUsed: "1200" }), 88420.5);
+  assert.equal(kotakAvailableBalance({ data: { NotionalCash: "10000", MarginUsed: "250" } }), 9750);
+  const book = kotakMasterBook([
+    { trdSym: "NIFTY26O0622900CE", flBuyQty: "65", flSellQty: "0", avgPrc: "15.40", ltp: "16.00", rlMtom: "0", urMtom: "39", prod: "MIS" },
+    { trdSym: "NIFTY26O0622800PE", flBuyQty: "65", flSellQty: "65", rlMtom: "120.5", urMtom: "0", prod: "MIS" },
+  ]);
+  assert.equal(book.source, "kotak");
+  assert.equal(book.realizedPnl, 120.5);
+  assert.equal(book.unrealizedPnl, 39);
+  assert.equal(book.open.length, 1);
+  assert.equal(book.closed.length, 1);
+  assert.equal(book.open[0].symbol, "NIFTY26O0622900CE");
+  const desk = localDesk();
+  applyBrokerPnl(desk, book);
+  applyBrokerBalance(desk, { balance: 88420.5, source: "kotak" });
+  assert.equal(desk.wallet.balance, 10000);
+  assert.equal(desk.wallet.brokerBalance, 88420.5);
+  assert.equal(desk.wallet.mtm, 39);
+  assert.equal(desk.report.realizedPnl, 120.5);
+  assert.equal(desk.report.netPnl, 159.5);
 });
 
 test("broker available balance is the user balance and leaves the wallet topup alone", () => {

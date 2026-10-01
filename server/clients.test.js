@@ -41,7 +41,7 @@ fs.writeFileSync(
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
 const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill, brokerAccountForLiveCopy } = await import("./memberDesk.js");
-const { adminAccountBalance, applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
+const { adminAccountBalance, applyBrokerBooksToDesk, applyListedBalances, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
 const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
 const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
@@ -435,6 +435,17 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(crypto.segment, "crypto");
   assert.equal(crypto.sellQty, 1);
   assert.equal(crypto.netQty, -1);
+});
+
+test("a listed Kotak balance stays on that user and does not replace the wallet margin", () => {
+  const rows = applyListedBalances(
+    [{ id: "u-avinash", name: "Avinash", margin: 0 }],
+    { "u-avinash": { balance: 88420.5, source: "kotak" } },
+  );
+  assert.equal(rows[0].margin, 0);
+  assert.equal(rows[0].brokerBalance, 88420.5);
+  assert.equal(rows[0].balanceSource, "kotak");
+  assert.equal(applyListedBalances([{ id: "u-avinash", margin: 0 }], {})[0].brokerBalance, undefined);
 });
 
 test("admin balance stays separate from each user balance", () => {
