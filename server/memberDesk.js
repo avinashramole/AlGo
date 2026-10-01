@@ -6,6 +6,7 @@ import { writeFileAtomic } from "./atomicWrite.js";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
+import { sessionUsesAdminKotak } from "./brokerIsolation.js";
 import { LIVE_BROKER_CATALOG, liveBrokerSession } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
@@ -304,6 +305,9 @@ function ownBrokerAccount(desk = {}, brokerId = desk.brokerId) {
     };
   }
   if (id === "kotak" && !slot.memberAdded) return emptyBrokerAccount();
+  if (id === "kotak" && sessionUsesAdminKotak({ clientId: slot.accountId, accessToken: slot.brokerToken, apiKey: slot.brokerApiKey })) {
+    return emptyBrokerAccount();
+  }
   if (credentialsCopiedFromAnotherBroker(map, id, slot) || slotMatchesDeskBroker(slot, id)) return emptyBrokerAccount();
   return slot;
 }
@@ -384,13 +388,19 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   const map = brokerAccountsMap(desk);
   const slot = map[id] || emptyBrokerAccount();
   const waitingForMember = id === "kotak" && !slot.memberAdded;
-  const leftoverToken = waitingForMember || slotTokenCopiedFromAnotherBroker(map, id) || slotMatchesDeskBroker(slot, id);
+  const adminKotak = id === "kotak" && sessionUsesAdminKotak({
+    clientId: slot.accountId || desk.accountId,
+    accessToken: slot.brokerToken || desk.brokerToken,
+    apiKey: slot.brokerApiKey || desk.brokerApiKey,
+  });
+  const leftoverToken = waitingForMember || adminKotak || slotTokenCopiedFromAnotherBroker(map, id) || slotMatchesDeskBroker(slot, id);
   if (leftoverToken) {
     return {
       ...emptyBrokerAccount(),
       leftoverToken: true,
-      brokerApiKey: waitingForMember ? "" : slot.brokerApiKey,
-      brokerSessionToken: waitingForMember ? "" : slot.brokerSessionToken,
+      adminKotak,
+      brokerApiKey: waitingForMember || adminKotak ? "" : slot.brokerApiKey,
+      brokerSessionToken: waitingForMember || adminKotak ? "" : slot.brokerSessionToken,
     };
   }
   return { ...slot, leftoverToken: false };
@@ -1679,6 +1689,9 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (slotMatchesDeskBroker({ accountId: nextClientId, brokerToken: offeredToken, brokerApiKey: offeredKey }, wanted)) {
     const name = catalog.find((row) => row.id === wanted)?.name || "broker";
     throw fail(`That login is the desk ${name}. Waiting for this user to add their own ${name}.`);
+  }
+  if (wanted === "kotak" && sessionUsesAdminKotak({ clientId: nextClientId, accessToken: offeredToken, apiKey: offeredKey })) {
+    throw fail("That login is the admin Kotak Neo. This user needs their own Kotak Neo client ID and access token.");
   }
   desk.accountId = nextClientId;
   const token = String(accessToken || "").trim();

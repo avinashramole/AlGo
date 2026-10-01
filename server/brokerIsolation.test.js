@@ -230,3 +230,45 @@ test("sendMemberCopyOrder refuses leftover credentials instead of calling Upstox
     /another broker's token/,
   );
 });
+
+test("a member Kotak order refuses the admin login instead of calling Kotak", () => {
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-key-9f44";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-key-9f44";
+  try {
+    assert.throws(
+      () =>
+        liveOrderSession(
+          {
+            copyUserId: "u-shivam",
+            brokerId: "kotak",
+            brokerSession: { clientId: "YIX14", accessToken: "admin-key-9f44", apiKey: "admin-key-9f44" },
+          },
+          { accessToken: "admin-key-9f44", clientId: "YIX14", apiKey: "admin-key-9f44" },
+          { brokerName: "Kotak Neo" },
+        ),
+      /This user is not the admin/,
+    );
+    const wrapped = annotateMemberLiveAuthError(
+      Object.assign(new Error("invalid session token"), { status: 401 }),
+      { clientId: "YIX14", accessToken: "admin-key-9f44" },
+      { brokerName: "Kotak Neo" },
+    );
+    assert.match(wrapped.message, /invalid session token/);
+    assert.match(wrapped.message, /This user is not the admin/);
+    assert.equal(wrapped.message.includes("not the admin login"), false);
+    assert.equal(wrapped.message.includes("admin-key-9f44"), false);
+  } finally {
+    if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;
+    else process.env.T2S_KOTAK_CLIENT_ID = saved.id;
+    if (saved.key == null) delete process.env.T2S_KOTAK_CONSUMER_KEY;
+    else process.env.T2S_KOTAK_CONSUMER_KEY = saved.key;
+    if (saved.token == null) delete process.env.T2S_KOTAK_ACCESS_TOKEN;
+    else process.env.T2S_KOTAK_ACCESS_TOKEN = saved.token;
+  }
+});

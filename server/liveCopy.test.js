@@ -912,3 +912,54 @@ test("admin BUY PE copies a mapped client who is not Copy ON", async () => {
     deleteAlgo(created.id);
   }
 });
+
+test("Shivam Fintech's copy does not send the admin Kotak login", () => {
+  const member = { id: "u-shivam-user", name: "Shivam Fintech", email: "kavitadaundkar14@gmail.com", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "YIX14",
+    apiKey: "admin-key-9f44",
+    accessToken: "admin-key-9f44",
+  });
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-key-9f44";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-key-9f44";
+  try {
+    const copies = memberCopyPayloads(
+      { strategy: "NIFTY 5m first candle", symbol: "NIFTY 22900 CE", side: "BUY", qty: 65, price: 15.4, brokerId: "dhan" },
+      { id: "a-shivam", name: "NIFTY 5m first candle", mappingScope: "both", mappedClientIds: [member.id] },
+    );
+    const mine = copies.find((row) => row.copyUserId === member.id);
+    assert.ok(mine);
+    assert.match(mine.copyBlocked, /This user is not the admin/);
+    assert.equal(mine.account, undefined);
+    assert.equal(mine.brokerSession, undefined);
+    assert.equal(JSON.stringify(mine).includes("admin-key-9f44"), false);
+    assert.equal(JSON.stringify(mine).includes("YIX14"), false);
+    assert.throws(
+      () =>
+        installMemberBroker({
+          user: member,
+          brokerId: "kotak",
+          clientId: "YIX14",
+          apiKey: "admin-key-9f44",
+          accessToken: "admin-key-9f44",
+        }),
+      /admin Kotak Neo/,
+    );
+  } finally {
+    if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;
+    else process.env.T2S_KOTAK_CLIENT_ID = saved.id;
+    if (saved.key == null) delete process.env.T2S_KOTAK_CONSUMER_KEY;
+    else process.env.T2S_KOTAK_CONSUMER_KEY = saved.key;
+    if (saved.token == null) delete process.env.T2S_KOTAK_ACCESS_TOKEN;
+    else process.env.T2S_KOTAK_ACCESS_TOKEN = saved.token;
+  }
+});

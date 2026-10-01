@@ -68,6 +68,19 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     strategyName: enrollment?.strategyName || strategyName || "",
     qty,
   };
+  if (slot.adminKotak) {
+    return {
+      ...base,
+      brokerId,
+      accountId: "",
+      leftoverSlot: true,
+      brokerToken: "",
+      brokerApiKey: "",
+      brokerSessionToken: "",
+      paper: false,
+      copyBlocked: "This user is not the admin. The admin Kotak Neo login is not used for this order. Add this user's own Kotak Neo on Profile.",
+    };
+  }
   if (!paper && !token && !leftoverSlot && !canMintUpstox) {
     const copyBlocked =
       brokerId === "dhan"

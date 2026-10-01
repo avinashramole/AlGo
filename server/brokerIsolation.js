@@ -53,10 +53,31 @@ export function credentialHint(value) {
   return raw.length >= 4 ? `••••${raw.slice(-4)}` : "set";
 }
 
+export function sessionUsesAdminKotak(session = {}) {
+  const clientId = String(process.env.T2S_KOTAK_CLIENT_ID || "").trim();
+  const apiKey = String(process.env.T2S_KOTAK_CONSUMER_KEY || "").trim();
+  const accessToken = String(process.env.T2S_KOTAK_ACCESS_TOKEN || apiKey).trim();
+  const id = String(session.clientId || session.accountId || "").trim();
+  const token = String(session.accessToken || session.brokerToken || "").trim();
+  const key = String(session.apiKey || session.brokerApiKey || "").trim();
+  if (!clientId && !apiKey && !accessToken) return false;
+  if (token && ((accessToken && token === accessToken) || (apiKey && token === apiKey))) return true;
+  if (key && ((apiKey && key === apiKey) || (accessToken && key === accessToken))) return true;
+  if (id && clientId && id === clientId) return true;
+  return false;
+}
+
+const ADMIN_KOTAK_MEMBER_BLOCK = "This user is not the admin. The admin Kotak Neo login is not used for this order. Add this user's own Kotak Neo on Profile.";
+
 export function annotateMemberLiveAuthError(error, session = {}, { brokerName = "broker" } = {}) {
   const status = Number(error?.status || 0);
   const message = String(error?.message || error || "broker error");
   if (/used this member's/.test(message)) return error instanceof Error ? error : new Error(message);
+  if (sessionUsesAdminKotak(session)) {
+    const next = new Error(`${message}. ${ADMIN_KOTAK_MEMBER_BLOCK}`);
+    next.status = status || 401;
+    return next;
+  }
   if (status !== 401 && !/unauthorized|invalid.?token|expired.?token|extended_token|UDAPI1000|\b401\b/i.test(message)) {
     return error instanceof Error ? error : new Error(message);
   }
@@ -81,6 +102,9 @@ export function liveOrderSession(payload = {}, adminSession = null, { brokerName
       clientId: String(override?.clientId || account?.clientId || "").trim(),
       sessionToken: String(override?.sessionToken || account?.sessionToken || "").trim(),
     };
+    if (String(payload.brokerId || "").toLowerCase() === "kotak" && sessionUsesAdminKotak(session)) {
+      throw fail(ADMIN_KOTAK_MEMBER_BLOCK);
+    }
     if (leftover) {
       throw fail(
         `This member's ${brokerName} slot still has another broker's token. Paste this member's ${brokerName} client ID and daily access token on My plan.`,
