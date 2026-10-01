@@ -10,6 +10,7 @@ import { useAuth } from "../../context/AuthContext";
 import { isAdminUser } from "../../lib/roles";
 import {
   credsAfterInstall,
+  describeBrokerInstall,
   describeBrokerSave,
   hintsFromInstall,
   installValueForSubmit,
@@ -201,6 +202,9 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
         </div>
         {desk && desk.brokerId !== "paper" ? (
           <form className="mt-3" onSubmit={saveBroker}>
+            {desk.install?.installed ? null : (
+              <p className="mb-2 text-xs text-slate-500">{describeBrokerInstall(desk.install, desk.brokerId)}</p>
+            )}
             <BrokerInstallFields
               fields={desk.install?.fields || []}
               values={creds}

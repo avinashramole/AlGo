@@ -77,7 +77,7 @@ export const LIVE_BROKER_CATALOG = [
     segments: ["EQ", "FNO"],
     fields: [
       { id: "clientId", label: "Client ID", placeholder: "Kotak client id" },
-      { id: "apiKey", label: "Consumer key", placeholder: "Neo consumer key" },
+      { id: "apiKey", label: "Consumer key", secret: true, placeholder: "Neo consumer key" },
       { id: "accessToken", label: "Access token", secret: true, placeholder: "Neo access token" },
       { id: "sessionToken", label: "Sid / session", secret: true, placeholder: "Neo sid (if required)" },
     ],

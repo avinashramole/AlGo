@@ -6,7 +6,7 @@ import { writeFileAtomic } from "./atomicWrite.js";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
-import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
+import { LIVE_BROKER_CATALOG, liveBrokerSession } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
@@ -206,6 +206,7 @@ function brokerAccountsMap(desk = {}) {
       brokerApiKey: String(row?.brokerApiKey || "").trim(),
       brokerSessionToken: String(row?.brokerSessionToken || "").trim(),
       tokenUpdatedAt: String(row?.tokenUpdatedAt || "").trim(),
+      memberAdded: Boolean(row?.memberAdded),
     };
   }
   return next;
@@ -233,6 +234,7 @@ function syncSelectedBrokerAccount(desk) {
     brokerApiKey: snap.brokerApiKey || prev.brokerApiKey,
     brokerSessionToken: snap.brokerSessionToken || prev.brokerSessionToken,
     tokenUpdatedAt: snap.brokerToken ? snap.tokenUpdatedAt || prev.tokenUpdatedAt : prev.tokenUpdatedAt || snap.tokenUpdatedAt,
+    memberAdded: Boolean(prev.memberAdded),
   };
   if (!snap.brokerToken && prev.brokerToken) desk.brokerToken = prev.brokerToken;
   return desk.brokerAccounts;
@@ -249,15 +251,32 @@ function migrateLegacyBrokerAccount(desk) {
   }
 }
 
-function slotCopiedFromAnotherBroker(map, brokerId) {
-  const slot = map[brokerId];
-  if (!slot || (!slot.accountId && !slot.brokerToken)) return false;
+function slotMatchesDeskBroker(slot, brokerId) {
+  const session = liveBrokerSession(brokerId);
+  if (!session || !slot) return false;
+  const accountId = String(slot.accountId || "").trim();
+  const token = String(slot.brokerToken || "").trim();
+  const apiKey = String(slot.brokerApiKey || "").trim();
+  const sessionId = String(session.clientId || "").trim();
+  const sessionToken = String(session.accessToken || "").trim();
+  const sessionKey = String(session.apiKey || "").trim();
+  if (token && sessionToken && token === sessionToken) return true;
+  return Boolean(accountId && sessionId && accountId === sessionId && apiKey && sessionKey && apiKey === sessionKey);
+}
+
+function credentialsCopiedFromAnotherBroker(map, brokerId, slot) {
+  if (!slot || (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey)) return false;
   return Object.entries(map).some(([id, other]) => {
     if (id === brokerId) return false;
-    const sameId = slot.accountId && slot.accountId === other.accountId;
-    const sameToken = slot.brokerToken && slot.brokerToken === other.brokerToken;
-    return Boolean(sameId || sameToken);
+    const sameId = slot.accountId && other.accountId && slot.accountId === other.accountId;
+    const sameToken = slot.brokerToken && other.brokerToken && slot.brokerToken === other.brokerToken;
+    const sameKey = slot.brokerApiKey && other.brokerApiKey && slot.brokerApiKey === other.brokerApiKey;
+    return Boolean(sameId || sameToken || sameKey);
   });
+}
+
+function slotCopiedFromAnotherBroker(map, brokerId) {
+  return credentialsCopiedFromAnotherBroker(map, brokerId, map[brokerId]);
 }
 
 function slotTokenCopiedFromAnotherBroker(map, brokerId) {
@@ -269,18 +288,28 @@ function slotTokenCopiedFromAnotherBroker(map, brokerId) {
   });
 }
 
-function selectedBrokerAccount(desk = {}) {
+function ownBrokerAccount(desk = {}, brokerId = desk.brokerId) {
+  const id = knownBroker(brokerId) ? brokerId : "paper";
+  if (!id || id === "paper") return emptyBrokerAccount();
   const map = brokerAccountsMap(desk);
-  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
-  if (!brokerId || brokerId === "paper") return emptyBrokerAccount();
-  const slot = map[brokerId] || emptyBrokerAccount();
-  if (slotCopiedFromAnotherBroker(map, brokerId)) {
-    return { ...slot, accountId: "" };
+  let slot = map[id] || emptyBrokerAccount();
+  if (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey && id === (knownBroker(desk.brokerId) ? desk.brokerId : "")) {
+    const snap = snapshotSelectedBrokerAccount(desk);
+    slot = {
+      accountId: snap.accountId,
+      brokerToken: snap.brokerToken,
+      brokerApiKey: snap.brokerApiKey,
+      brokerSessionToken: snap.brokerSessionToken,
+      tokenUpdatedAt: snap.tokenUpdatedAt,
+    };
   }
-  if (slot.accountId || slot.brokerToken) return slot;
-  const snap = snapshotSelectedBrokerAccount(desk);
-  if (snap.accountId || snap.brokerToken) return snap;
+  if (id === "kotak" && !slot.memberAdded) return emptyBrokerAccount();
+  if (credentialsCopiedFromAnotherBroker(map, id, slot) || slotMatchesDeskBroker(slot, id)) return emptyBrokerAccount();
   return slot;
+}
+
+function selectedBrokerAccount(desk = {}) {
+  return ownBrokerAccount(desk);
 }
 
 function hydrateBrokerAccount(desk, brokerId) {
@@ -324,16 +353,16 @@ export function publicBrokerAccounts(desk = {}) {
   }
   const out = {};
   for (const [id, slot] of Object.entries(map)) {
-    if (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey) continue;
-    const copied = slotCopiedFromAnotherBroker(map, id);
+    const own = ownBrokerAccount(desk, id);
+    if (!own.accountId && !own.brokerToken && !own.brokerApiKey) continue;
     out[id] = {
-      accountId: copied ? "" : slot.accountId,
-      tokenHint: maskSecret(slot.brokerToken),
-      apiKeyHint: maskSecret(slot.brokerApiKey),
-      sessionHint: maskSecret(slot.brokerSessionToken),
-      installed: Boolean(slot.brokerToken),
-      oauthReady: Boolean(slot.brokerApiKey && slot.brokerSessionToken),
-      tokenUpdatedAt: slot.tokenUpdatedAt,
+      accountId: own.accountId,
+      tokenHint: maskSecret(own.brokerToken),
+      apiKeyHint: maskSecret(own.brokerApiKey),
+      sessionHint: maskSecret(own.brokerSessionToken),
+      installed: Boolean(own.brokerToken),
+      oauthReady: Boolean(own.brokerApiKey && own.brokerSessionToken),
+      tokenUpdatedAt: own.brokerToken ? own.tokenUpdatedAt : "",
     };
   }
   return out;
@@ -353,14 +382,15 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   const id = String(brokerId || desk.brokerId || "").trim().toLowerCase();
   if (!id || id === "paper") return { ...emptyBrokerAccount(), leftoverToken: false };
   const map = brokerAccountsMap(desk);
-  const leftoverToken = slotTokenCopiedFromAnotherBroker(map, id);
   const slot = map[id] || emptyBrokerAccount();
+  const waitingForMember = id === "kotak" && !slot.memberAdded;
+  const leftoverToken = waitingForMember || slotTokenCopiedFromAnotherBroker(map, id) || slotMatchesDeskBroker(slot, id);
   if (leftoverToken) {
     return {
       ...emptyBrokerAccount(),
       leftoverToken: true,
-      brokerApiKey: slot.brokerApiKey,
-      brokerSessionToken: slot.brokerSessionToken,
+      brokerApiKey: waitingForMember ? "" : slot.brokerApiKey,
+      brokerSessionToken: waitingForMember ? "" : slot.brokerSessionToken,
     };
   }
   return { ...slot, leftoverToken: false };
@@ -568,6 +598,7 @@ export function normalizeClientSettings(desk = {}) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const subscriptionMode = SUBSCRIPTION_MODES.includes(desk.subscriptionMode) ? desk.subscriptionMode : "copy";
   const groups = asGroups(desk.groups || desk.group);
+  const own = selectedBrokerAccount(desk);
   return {
     group: groups[0] || "ALL",
     groups,
@@ -576,17 +607,17 @@ export function normalizeClientSettings(desk = {}) {
     tradeMode,
     copy: Boolean(desk.copy),
     staticIp: String(desk.staticIp || "").trim(),
-    accountId: selectedBrokerAccount(desk).accountId,
+    accountId: own.accountId,
     brokerId,
     subscriptionMode,
     subscriptionUntil: String(desk.subscriptionUntil || "").trim(),
     mappedStrategy: String(desk.mappedStrategy || "").trim(),
     segments: asSegments(desk.segments),
     notifications: asNotifications(desk.notifications),
-    tokenHint: maskSecret(desk.brokerToken),
-    apiKeyHint: maskSecret(desk.brokerApiKey),
-    credentialsInstalled: Boolean(String(desk.brokerToken || "").trim()),
-    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
+    tokenHint: maskSecret(own.brokerToken),
+    apiKeyHint: maskSecret(own.brokerApiKey),
+    credentialsInstalled: Boolean(String(own.brokerToken || "").trim()),
+    tokenUpdatedAt: own.brokerToken ? String(own.tokenUpdatedAt || "").trim() : "",
     brokerAccounts: publicBrokerAccounts(desk),
     notes: String(desk.notes || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
@@ -614,17 +645,18 @@ export function brokerInstallFields(brokerId) {
 
 export function publicBrokerInstall(desk = {}) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  const own = ownBrokerAccount(desk);
   return {
     brokerId,
-    accountId: selectedBrokerAccount(desk).accountId,
-    tokenHint: maskSecret(desk.brokerToken),
-    apiKeyHint: maskSecret(desk.brokerApiKey),
-    sessionHint: maskSecret(desk.brokerSessionToken),
-    hasApiKey: Boolean(String(desk.brokerApiKey || "").trim()),
-    hasApiSecret: Boolean(String(desk.brokerSessionToken || "").trim()),
-    oauthReady: Boolean(String(desk.brokerApiKey || "").trim() && String(desk.brokerSessionToken || "").trim()),
-    installed: Boolean(String(desk.brokerToken || "").trim()),
-    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
+    accountId: own.accountId,
+    tokenHint: maskSecret(own.brokerToken),
+    apiKeyHint: maskSecret(own.brokerApiKey),
+    sessionHint: maskSecret(own.brokerSessionToken),
+    hasApiKey: Boolean(String(own.brokerApiKey || "").trim()),
+    hasApiSecret: Boolean(String(own.brokerSessionToken || "").trim()),
+    oauthReady: Boolean(String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim()),
+    installed: Boolean(String(own.brokerToken || "").trim()),
+    tokenUpdatedAt: own.brokerToken ? String(own.tokenUpdatedAt || "").trim() : "",
     fields: brokerInstallFields(brokerId),
     help:
       brokerId === "paper"
@@ -1635,29 +1667,45 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (wanted !== desk.brokerId) switchDeskBroker(desk, wanted);
   else syncSelectedBrokerAccount(desk);
   const slot = peekBrokerAccount(user.id, wanted);
-  const nextClientId = clientId != null ? String(clientId || "").trim() : String(slot.accountId || desk.accountId || "").trim();
+  const deskLogin = slotMatchesDeskBroker(slot, wanted) || slotMatchesDeskBroker(snapshotSelectedBrokerAccount(desk), wanted);
+  const priorId = deskLogin ? "" : String(slot.accountId || "").trim();
+  const priorToken = deskLogin ? "" : String(slot.brokerToken || "").trim();
+  const priorKey = deskLogin ? "" : String(slot.brokerApiKey || "").trim();
+  const priorSecret = deskLogin ? "" : String(slot.brokerSessionToken || "").trim();
+  const nextClientId = clientId != null ? String(clientId || "").trim() : priorId || (deskLogin ? "" : String(desk.accountId || "").trim());
   if (!nextClientId) throw fail("Paste the client ID.");
+  const offeredToken = String(accessToken || "").trim() || priorToken;
+  const offeredKey = String(apiKey || "").trim() || priorKey;
+  if (slotMatchesDeskBroker({ accountId: nextClientId, brokerToken: offeredToken, brokerApiKey: offeredKey }, wanted)) {
+    const name = catalog.find((row) => row.id === wanted)?.name || "broker";
+    throw fail(`That login is the desk ${name}. Waiting for this user to add their own ${name}.`);
+  }
   desk.accountId = nextClientId;
   const token = String(accessToken || "").trim();
-  const nextApiKey = String(apiKey || "").trim() || slot.brokerApiKey || desk.brokerApiKey;
-  const nextSecret = String(sessionToken || "").trim() || slot.brokerSessionToken || desk.brokerSessionToken;
+  const nextApiKey = offeredKey;
+  const nextSecret = String(sessionToken || "").trim() || priorSecret;
   const canMintUpstox = wanted === "upstox" && nextApiKey.length >= 8 && nextSecret.length >= 8;
-  if (!token && !slot.brokerToken && !desk.brokerToken && !canMintUpstox) {
+  if (!token && !priorToken && !canMintUpstox) {
     throw fail(wanted === "upstox" ? "Paste the trading access token, or API key + API secret to generate it." : "Paste the access token.");
   }
   if (token) {
     if (token.length < 6) throw fail("Access token is too short.");
     writeBrokerToken(desk, token);
+  } else if (deskLogin) {
+    desk.brokerToken = "";
+    desk.brokerTokenUpdatedAt = "";
   }
   desk.tradeMode = "real";
   const needsApi = fields.some((row) => row.id === "apiKey") && wanted !== "upstox";
   const key = String(apiKey || "").trim();
-  if (needsApi && !key && !slot.brokerApiKey && !desk.brokerApiKey) throw fail("Paste the API key.");
+  if (needsApi && !key && !priorKey) throw fail("Paste the API key.");
   if (key) desk.brokerApiKey = key;
+  else if (deskLogin) desk.brokerApiKey = "";
   if (sessionToken != null && String(sessionToken).trim()) {
     desk.brokerSessionToken = String(sessionToken).trim();
   }
   syncSelectedBrokerAccount(desk);
+  if (desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].memberAdded = true;
   persist();
   return { ok: true, install: publicBrokerInstall(desk), brokerId: desk.brokerId };
 }

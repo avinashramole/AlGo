@@ -129,6 +129,7 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
       id === "upstox" ? "Save API key and API secret, then generate today's token." : "No access token installed yet."
     }`;
   }
+  if (id === "kotak") return "Waiting for you to add Kotak Neo.";
   return id === "upstox"
     ? "No API key, API secret, or trading token stored yet."
     : "No access token installed yet.";

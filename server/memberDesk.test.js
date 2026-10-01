@@ -656,3 +656,73 @@ test("deploy purge and a blank token patch keep the admin access token", () => {
   assert.equal(peekClientSecrets(member.id).brokerToken, "member-token-keep-deploy");
   assert.equal(peekBrokerAccount(member.id, "dhan").brokerToken, "member-token-keep-deploy");
 });
+
+test("Kotak pasted on the user stays hidden until that user adds Kotak Neo", () => {
+  const member = { id: "u-kotak-admin", name: "Admin Kotak", email: "admin.kotak@gmail.com", role: "user" };
+  saveClientSettings(member.id, {
+    brokerId: "kotak",
+    accountId: "YIX14",
+    brokerApiKey: "cd-consumer-key-3e77",
+    brokerToken: "kotak-pasted-token",
+  });
+  const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(shown.install.accountId, "");
+  assert.equal(shown.install.apiKeyHint, "");
+  assert.equal(shown.install.tokenHint, "");
+  assert.equal(shown.install.installed, false);
+  assert.equal(shown.brokers.find((row) => row.id === "kotak").installed, false);
+  assert.equal(brokerAccountForLiveCopy(member.id, "kotak").brokerToken, "");
+});
+
+test("the member profile does not show the desk Kotak Neo login", async () => {
+  const member = { id: "u-kotak-wait", name: "Wait Kotak", email: "wait.kotak@gmail.com", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "YIX14",
+    apiKey: "cd-consumer-key-3e77",
+    accessToken: "kotak-desk-access-token",
+  });
+  const { connectLiveBroker } = await import("./liveBrokers.js");
+  await connectLiveBroker(
+    "kotak",
+    { clientId: "YIX14", apiKey: "cd-consumer-key-3e77", accessToken: "kotak-desk-access-token" },
+    async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ clientId: "YIX14", name: "Desk Kotak" }) }),
+  );
+  const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(shown.install.accountId, "");
+  assert.equal(shown.install.apiKeyHint, "");
+  assert.equal(shown.install.tokenHint, "");
+  assert.equal(shown.install.installed, false);
+  const kotak = shown.brokers.find((row) => row.id === "kotak");
+  assert.equal(kotak.installed, false);
+  assert.equal(kotak.accountId, "");
+  assert.match(kotak.note, /own client ID/);
+  assert.equal(brokerAccountForLiveCopy(member.id, "kotak").brokerToken, "");
+  assert.equal(brokerAccountForLiveCopy(member.id, "kotak").leftoverToken, true);
+  assert.throws(
+    () =>
+      installMemberBroker({
+        user: member,
+        brokerId: "kotak",
+        clientId: "YIX14",
+        apiKey: "cd-consumer-key-3e77",
+        accessToken: "kotak-desk-access-token",
+      }),
+    /Waiting for this user to add their own Kotak Neo/,
+  );
+  const own = installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "USER88",
+    apiKey: "member-consumer-key",
+    accessToken: "member-kotak-token",
+  });
+  assert.equal(own.install.accountId, "USER88");
+  assert.equal(own.install.installed, true);
+  assert.equal(own.install.apiKeyHint.includes("member-consumer-key"), false);
+  assert.match(own.install.apiKeyHint, /me••••/);
+  const kotakField = own.install.fields.find((row) => row.id === "apiKey");
+  assert.equal(kotakField.secret, true);
+  assert.equal(kotakField.label, "Consumer key");
+});
