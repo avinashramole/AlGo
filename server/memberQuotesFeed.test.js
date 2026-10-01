@@ -151,6 +151,40 @@ test("member cards show daily change vs yesterday close for every index", () => 
   assert.equal(again.find((row) => row.symbol === "NIFTY 50").change, 140);
 });
 
+test("a new Kotak Neo user sees the desk live feed instead of a waiting board", async () => {
+  const member = { id: "u-shivam-kotak", name: "Shivam Fintech", email: "shivam.fintech@gmail.com", role: "user" };
+  saveClientSettings(member.id, {
+    brokerId: "kotak",
+    accountId: "YIX14",
+    brokerApiKey: "cd-consumer-key-3e77",
+    brokerToken: "kotak-desk-token",
+    tradeMode: "real",
+  });
+  let fetches = 0;
+  const mine = await memberQuotesForUser(member, {
+    now: Date.now() + 30_000,
+    fetchQuotes: async () => {
+      fetches += 1;
+      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 }];
+    },
+    deskQuotes: () => ({
+      indices: [
+        { symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [25100, 25111.25], future: 25140, lot: 65 },
+        { symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52100, change: -10, changePct: -0.02, spark: [], future: 52120, lot: 30 },
+      ],
+    }),
+  });
+  assert.equal(fetches, 0);
+  assert.equal(mine.brokerId, "kotak");
+  assert.equal(mine.brokerName, "KOTAK");
+  assert.equal(mine.live, true);
+  assert.equal(mine.reason, "");
+  assert.equal(mine.source, "desk");
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
+  assert.equal(String(JSON.stringify(mine)).includes("YIX14"), false);
+  assert.equal(String(JSON.stringify(mine)).includes("kotak-desk-token"), false);
+});
+
 test("paper members stay on an empty board even if admin quotes exist", async () => {
   const paper = { id: "u-paper-quotes", name: "Paper Quotes", email: "paperq@t2s.app", role: "user" };
   selectMemberBroker({ user: paper, brokerId: "paper" });

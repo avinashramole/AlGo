@@ -90,13 +90,32 @@ function emptyQuotes(brokerId, reason) {
   };
 }
 
-export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() } = {}) {
+async function deskLiveBoard(brokerId, now, deskQuotes) {
+  const load = typeof deskQuotes === "function" ? deskQuotes : () => import("./market.js").then((mod) => mod.memberQuotes());
+  const desk = (await load()) || {};
+  const indices = Array.isArray(desk.indices) ? desk.indices : [];
+  const live = indices.some((row) => Number(row?.price) > 0);
+  return {
+    indices,
+    source: "desk",
+    brokerId,
+    brokerName: brokerNameOf(brokerId),
+    live,
+    lastTickAt: live ? now : null,
+    reason: "",
+  };
+}
+
+export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now = Date.now() } = {}) {
   if (!user?.id) return emptyQuotes("paper", "Sign in first.");
   const secrets = peekClientSecrets(user.id);
   const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
   const token = String(secrets.brokerToken || "").trim();
   const accountId = String(secrets.accountId || "").trim();
   const apiKey = String(secrets.brokerApiKey || "").trim();
+  if (brokerId === "kotak" && !(secrets.credentialsInstalled && token && accountId && apiKey)) {
+    return deskLiveBoard(brokerId, now, deskQuotes);
+  }
   if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
     return emptyQuotes(
       brokerId,
@@ -104,6 +123,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
     );
   }
   if (!supportedMemberQuoteBroker(brokerId)) {
+    if (brokerId === "kotak") return deskLiveBoard(brokerId, now, deskQuotes);
     return emptyQuotes(
       brokerId,
       `Your selected broker is ${brokerId}. Index cards are wired for Dhan, Upstox, Zerodha, Fyers, and Angel — install that broker token on My plan.`,
@@ -124,6 +144,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
     } catch {
       quotes = [];
     }
+    if (brokerId === "kotak" && !quotes.length) return deskLiveBoard(brokerId, now, deskQuotes);
     const payload = {
       indices: cardsFromMemberQuotes(user.id, quotes),
       source: "member",
