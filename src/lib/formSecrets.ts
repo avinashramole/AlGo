@@ -10,6 +10,10 @@ export type InstallHints = {
   tokenHint?: string;
   apiKeyHint?: string;
   sessionHint?: string;
+  tradeMobileHint?: string;
+  hasTradeLogin?: boolean;
+  hasMpin?: boolean;
+  hasTotp?: boolean;
   hasApiKey?: boolean;
   hasApiSecret?: boolean;
   oauthReady?: boolean;
@@ -29,12 +33,15 @@ export function hintsFromInstall(install?: InstallHints | null): Record<string, 
     ...(tokenHint ? { accessToken: tokenHint } : {}),
     ...(apiKeyHint ? { apiKey: apiKeyHint } : {}),
     ...(sessionHint ? { sessionToken: sessionHint } : {}),
+    ...(String(install.tradeMobileHint || "").trim() ? { mobile: String(install.tradeMobileHint).trim() } : {}),
+    ...(install.hasMpin ? { mpin: "saved" } : {}),
+    ...(install.hasTotp ? { totpSecret: "saved" } : {}),
   };
 }
 
 function keepTypedSecrets(current: Record<string, string> = {}) {
   const next: Record<string, string> = {};
-  for (const id of ["apiKey", "sessionToken", "accessToken"]) {
+  for (const id of ["apiKey", "sessionToken", "accessToken", "mobile", "mpin", "totpSecret"]) {
     const value = String(current[id] || "").trim();
     if (value && value !== SECRET_FIELD_MASK) next[id] = current[id];
   }
@@ -113,7 +120,8 @@ function installBits(install?: InstallHints | null, brokerId = "") {
   if (id === "kotak") {
     if (flags.hasApiKey) bits.push(`consumer key ${String(install?.apiKeyHint || "").trim() || "saved"}`);
     if (flags.hasApiSecret) bits.push(`Neo sid ${String(install?.sessionHint || "").trim() || "saved"}`);
-    if (flags.hasTradingToken) bits.push(`trade session ${String(install?.tokenHint || "").trim() || "saved"}`);
+    if (flags.hasTradingToken) bits.push(`Neo access token ${String(install?.tokenHint || "").trim() || "saved"}`);
+    if (install?.hasTradeLogin) bits.push("trade login saved");
     return { flags, bits };
   }
   if (flags.hasApiKey) bits.push(`API key ${String(install?.apiKeyHint || "").trim() || "saved"}`);
@@ -127,10 +135,10 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
   const { flags, bits } = installBits(install, id);
   if (id === "kotak") {
     const line = bits.join(" · ");
+    if (install?.hasTradeLogin && flags.hasApiKey && flags.hasTradingToken) return line;
     if (!flags.hasApiSecret || !flags.hasTradingToken) {
-      const need = !flags.hasApiSecret
-        ? "Paste the Neo sid and the session token from today's trade login. The consumer key is only for quotes."
-        : "Paste the session token from today's trade login.";
+      const need =
+        "Paste this user's trade-login mobile, MPIN, and TOTP, or the Neo sid and the session token from today's trade login. The consumer key is only for quotes.";
       return line ? `${line}. ${need}` : `Waiting for you to add Kotak Neo. ${need}`;
     }
     return line;

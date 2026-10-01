@@ -290,8 +290,8 @@ export function Users() {
                     <div>{clientBalanceText(row)}</div>
                     {row.balanceSource ? (
                       <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{row.balanceSource}</div>
-                    ) : row.brokerId === "kotak" && !row.brokerAccounts?.kotak?.sessionHint ? (
-                      <div className="text-[10px] font-semibold text-amber-700">Needs Neo sid</div>
+                    ) : row.brokerId === "kotak" && !row.brokerAccounts?.kotak?.sessionHint && !row.brokerAccounts?.kotak?.hasTradeLogin ? (
+                      <div className="text-[10px] font-semibold text-amber-700">Needs trade login</div>
                     ) : row.brokerId === "kotak" ? (
                       <div className="text-[10px] font-semibold text-amber-700">Kotak balance unavailable</div>
                     ) : null}
@@ -604,6 +604,9 @@ function AddClientModal({
   const [brokerToken, setBrokerToken] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerSessionToken, setBrokerSessionToken] = useState("");
+  const [tradeMobile, setTradeMobile] = useState("");
+  const [tradeMpin, setTradeMpin] = useState("");
+  const [tradeTotp, setTradeTotp] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -650,6 +653,9 @@ function AddClientModal({
         brokerToken,
         brokerApiKey,
         brokerSessionToken,
+        brokerMobile: tradeMobile,
+        brokerMpin: tradeMpin,
+        brokerTotpSecret: tradeTotp,
         notes,
         staticIp,
       });
@@ -853,9 +859,15 @@ function AddClientModal({
               brokerApiKey={brokerApiKey}
               brokerToken={brokerToken}
               brokerSessionToken={brokerSessionToken}
+              tradeMobile={tradeMobile}
+              tradeMpin={tradeMpin}
+              tradeTotp={tradeTotp}
               onApiKey={setBrokerApiKey}
               onToken={setBrokerToken}
               onSession={setBrokerSessionToken}
+              onTradeMobile={setTradeMobile}
+              onTradeMpin={setTradeMpin}
+              onTradeTotp={setTradeTotp}
             />
             <Field label="Internal notes">
               <textarea
@@ -923,20 +935,27 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
       placeholder: brokerId === "kotak" ? "This client's Neo consumer key" : "This client's API key",
     });
   }
+  extra.push({
+    id: "accessToken",
+    label: brokerId === "kotak" ? "Neo access token" : "Access token",
+    secret: true,
+    placeholder: brokerId === "kotak" ? "Access token from the Neo app" : "Paste this client's access token",
+  });
+  if (brokerId === "kotak") {
+    extra.push(
+      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile registered on this Kotak Neo" },
+      { id: "mpin", label: "MPIN", secret: true, placeholder: "Kotak Neo MPIN" },
+      { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
+    );
+  }
   if (brokerId === "upstox" || brokerId === "kotak") {
     extra.push({
       id: "sessionToken",
       label: brokerId === "upstox" ? "API secret" : "Neo sid",
       secret: true,
-      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Sid from today's trade login",
+      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Sid from today's trade login, if already copied",
     });
   }
-  extra.push({
-    id: "accessToken",
-    label: brokerId === "kotak" ? "Trade session token" : "Access token",
-    secret: true,
-    placeholder: brokerId === "kotak" ? "Session token from today's trade login" : "Paste this client's access token",
-  });
   return extra;
 }
 
@@ -947,10 +966,16 @@ function BrokerLoginFields({
   brokerApiKey,
   brokerToken,
   brokerSessionToken,
+  tradeMobile,
+  tradeMpin,
+  tradeTotp,
   hints,
   onApiKey,
   onToken,
   onSession,
+  onTradeMobile,
+  onTradeMpin,
+  onTradeTotp,
 }: {
   brokerId: string;
   brokerName: string;
@@ -958,19 +983,42 @@ function BrokerLoginFields({
   brokerApiKey: string;
   brokerToken: string;
   brokerSessionToken: string;
-  hints?: { apiKeyHint?: string; tokenHint?: string; sessionHint?: string };
+  tradeMobile: string;
+  tradeMpin: string;
+  tradeTotp: string;
+  hints?: { apiKeyHint?: string; tokenHint?: string; sessionHint?: string; mobileHint?: string };
   onApiKey: (value: string) => void;
   onToken: (value: string) => void;
   onSession: (value: string) => void;
+  onTradeMobile: (value: string) => void;
+  onTradeMpin: (value: string) => void;
+  onTradeTotp: (value: string) => void;
 }) {
   const rows = brokerLoginFields(brokerId, fields);
   if (!rows.length) return null;
-  const valueFor = (id: string) => (id === "apiKey" ? brokerApiKey : id === "sessionToken" ? brokerSessionToken : brokerToken);
-  const hintFor = (id: string) => (id === "apiKey" ? hints?.apiKeyHint : id === "sessionToken" ? hints?.sessionHint : hints?.tokenHint);
+  const valueFor = (id: string) => {
+    if (id === "apiKey") return brokerApiKey;
+    if (id === "sessionToken") return brokerSessionToken;
+    if (id === "accessToken") return brokerToken;
+    if (id === "mobile") return tradeMobile;
+    if (id === "mpin") return tradeMpin;
+    if (id === "totpSecret") return tradeTotp;
+    return "";
+  };
+  const hintFor = (id: string) => {
+    if (id === "apiKey") return hints?.apiKeyHint;
+    if (id === "sessionToken") return hints?.sessionHint;
+    if (id === "accessToken") return hints?.tokenHint;
+    if (id === "mobile") return hints?.mobileHint;
+    return "";
+  };
   const changeFor = (id: string, value: string) => {
     if (id === "apiKey") onApiKey(value);
     else if (id === "sessionToken") onSession(value);
-    else onToken(value);
+    else if (id === "mobile") onTradeMobile(value);
+    else if (id === "mpin") onTradeMpin(value);
+    else if (id === "totpSecret") onTradeTotp(value);
+    else if (id === "accessToken") onToken(value);
   };
   return (
     <div className="rounded-xl border border-[var(--border)] p-3">
@@ -1021,16 +1069,20 @@ function EditModal({
         tokenHint: source.tokenHint || "",
         apiKeyHint: source.apiKeyHint || "",
         sessionHint: "",
+        tradeMobileHint: "",
         tokenUpdatedAt: source.tokenUpdatedAt || "",
       };
     }
-    return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tokenUpdatedAt: "" };
+    return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tradeMobileHint: "", tokenUpdatedAt: "" };
   };
   const [brokerId, setBrokerId] = useState(row.brokerId);
   const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
   const [brokerSessionToken, setBrokerSessionToken] = useState("");
+  const [tradeMobile, setTradeMobile] = useState("");
+  const [tradeMpin, setTradeMpin] = useState("");
+  const [tradeTotp, setTradeTotp] = useState("");
   const selectedAccount = accountFor(brokerId);
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
@@ -1043,6 +1095,9 @@ function EditModal({
     setBrokerToken("");
     setBrokerApiKey("");
     setBrokerSessionToken("");
+    setTradeMobile("");
+    setTradeMpin("");
+    setTradeTotp("");
   }, [row.id, row.brokerId, row.accountId, row.tokenHint]);
 
   const onSubmit = async (event: FormEvent) => {
@@ -1053,6 +1108,9 @@ function EditModal({
       const nextApiKey = savedSecretForSubmit(brokerApiKey);
       const nextToken = savedSecretForSubmit(brokerToken);
       const nextSession = savedSecretForSubmit(brokerSessionToken);
+      const nextTradeMobile = savedSecretForSubmit(tradeMobile);
+      const nextTradeMpin = savedSecretForSubmit(tradeMpin);
+      const nextTradeTotp = savedSecretForSubmit(tradeTotp);
       const result = await saveClient(row.id, {
         name,
         mobile,
@@ -1064,10 +1122,16 @@ function EditModal({
         ...(nextApiKey ? { brokerApiKey: nextApiKey } : {}),
         ...(nextToken ? { brokerToken: nextToken } : {}),
         ...(nextSession ? { brokerSessionToken: nextSession } : {}),
+        ...(nextTradeMobile ? { brokerMobile: nextTradeMobile } : {}),
+        ...(nextTradeMpin ? { brokerMpin: nextTradeMpin } : {}),
+        ...(nextTradeTotp ? { brokerTotpSecret: nextTradeTotp } : {}),
       });
       setBrokerToken("");
       setBrokerApiKey("");
       setBrokerSessionToken("");
+      setTradeMobile("");
+      setTradeMpin("");
+      setTradeTotp("");
       setAccountId(String(result.client.accountId || "").trim());
       onSaved(result.client);
     } catch (err) {
@@ -1108,6 +1172,9 @@ function EditModal({
               setBrokerToken("");
               setBrokerApiKey("");
               setBrokerSessionToken("");
+              setTradeMobile("");
+              setTradeMpin("");
+              setTradeTotp("");
             }}
           >
             {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
@@ -1143,14 +1210,21 @@ function EditModal({
           brokerApiKey={brokerApiKey}
           brokerToken={brokerToken}
           brokerSessionToken={brokerSessionToken}
+          tradeMobile={tradeMobile}
+          tradeMpin={tradeMpin}
+          tradeTotp={tradeTotp}
           hints={{
             apiKeyHint: selectedAccount.apiKeyHint,
             tokenHint: selectedAccount.tokenHint,
             sessionHint: selectedAccount.sessionHint,
+            mobileHint: selectedAccount.tradeMobileHint,
           }}
           onApiKey={setBrokerApiKey}
           onToken={setBrokerToken}
           onSession={setBrokerSessionToken}
+          onTradeMobile={setTradeMobile}
+          onTradeMpin={setTradeMpin}
+          onTradeTotp={setTradeTotp}
         />
         {brokerId !== "paper" ? (
           <span className="font-normal text-[11px] text-slate-500">

@@ -85,7 +85,7 @@ export function annotateMemberLiveAuthError(error, session = {}, { brokerName = 
   const who = clientId ? `client ID ${clientId}` : "no client ID";
   if (/kotak/i.test(brokerName)) {
     const next = new Error(
-      `${message}. Kotak Neo used this member's ${who} and access token ${credentialHint(session.accessToken)}. That is not a trade session. Paste this user's Neo sid and the session token from today's trade login on Profile. The consumer key is only for quotes.`,
+      `${message}. Kotak Neo used this member's ${who} and access token ${credentialHint(session.accessToken)}. That is not a trade session. On Profile, paste this user's trade-login mobile, MPIN, and TOTP, or paste the Neo sid and the session token from today's trade login. The consumer key is only for quotes.`,
     );
     next.status = status || 401;
     return next;
@@ -108,6 +108,9 @@ export function liveOrderSession(payload = {}, adminSession = null, { brokerName
       apiKey: String(override?.apiKey || account?.apiKey || "").trim(),
       clientId: String(override?.clientId || account?.clientId || "").trim(),
       sessionToken: String(override?.sessionToken || account?.sessionToken || "").trim(),
+      mobile: String(override?.mobile || account?.mobile || "").trim(),
+      mpin: String(override?.mpin || account?.mpin || "").trim(),
+      totpSecret: String(override?.totpSecret || account?.totpSecret || "").trim(),
     };
     if (String(payload.brokerId || "").toLowerCase() === "kotak" && sessionUsesAdminKotak(session)) {
       throw fail(ADMIN_KOTAK_MEMBER_BLOCK);

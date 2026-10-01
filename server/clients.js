@@ -88,6 +88,9 @@ function settingsPatch(patch = {}) {
     brokerToken: patch.brokerToken,
     brokerApiKey: patch.brokerApiKey,
     brokerSessionToken: patch.brokerSessionToken,
+    brokerMobile: patch.brokerMobile,
+    brokerMpin: patch.brokerMpin,
+    brokerTotpSecret: patch.brokerTotpSecret,
     notes: patch.notes,
     staticIp: patch.staticIp,
   };

@@ -7,7 +7,7 @@ import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./
 import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
 import { sessionUsesAdminKotak } from "./brokerIsolation.js";
-import { LIVE_BROKER_CATALOG, liveBrokerSession } from "./liveBrokers.js";
+import { LIVE_BROKER_CATALOG, kotakMobileNumber, liveBrokerSession } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
@@ -61,6 +61,18 @@ function keepSavedBrokerSecrets(nextStore, disk) {
       }
       if (!String(next.brokerSessionToken || "").trim() && String(slot.brokerSessionToken || "").trim()) {
         next.brokerSessionToken = slot.brokerSessionToken;
+        kept = true;
+      }
+      if (!String(next.brokerMobile || "").trim() && String(slot.brokerMobile || "").trim()) {
+        next.brokerMobile = slot.brokerMobile;
+        kept = true;
+      }
+      if (!String(next.brokerMpin || "").trim() && String(slot.brokerMpin || "").trim()) {
+        next.brokerMpin = slot.brokerMpin;
+        kept = true;
+      }
+      if (!String(next.brokerTotpSecret || "").trim() && String(slot.brokerTotpSecret || "").trim()) {
+        next.brokerTotpSecret = slot.brokerTotpSecret;
         kept = true;
       }
       if (kept) mem.brokerAccounts[brokerId] = next;
@@ -192,7 +204,24 @@ function writeBrokerToken(desk, token) {
 }
 
 function emptyBrokerAccount() {
-  return { accountId: "", brokerToken: "", brokerApiKey: "", brokerSessionToken: "", tokenUpdatedAt: "" };
+  return {
+    accountId: "",
+    brokerToken: "",
+    brokerApiKey: "",
+    brokerSessionToken: "",
+    brokerMobile: "",
+    brokerMpin: "",
+    brokerTotpSecret: "",
+    tokenUpdatedAt: "",
+  };
+}
+
+function tradeLoginFields(row = {}) {
+  return {
+    brokerMobile: String(row.brokerMobile || "").trim(),
+    brokerMpin: String(row.brokerMpin || "").trim(),
+    brokerTotpSecret: String(row.brokerTotpSecret || "").trim(),
+  };
 }
 
 function brokerAccountsMap(desk = {}) {
@@ -206,6 +235,7 @@ function brokerAccountsMap(desk = {}) {
       brokerToken: String(row?.brokerToken || "").trim(),
       brokerApiKey: String(row?.brokerApiKey || "").trim(),
       brokerSessionToken: String(row?.brokerSessionToken || "").trim(),
+      ...tradeLoginFields(row),
       tokenUpdatedAt: String(row?.tokenUpdatedAt || "").trim(),
       memberAdded: Boolean(row?.memberAdded),
     };
@@ -219,6 +249,7 @@ function snapshotSelectedBrokerAccount(desk) {
     brokerToken: String(desk.brokerToken || "").trim(),
     brokerApiKey: String(desk.brokerApiKey || "").trim(),
     brokerSessionToken: String(desk.brokerSessionToken || "").trim(),
+    ...tradeLoginFields(desk),
     tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
   };
 }
@@ -234,10 +265,16 @@ function syncSelectedBrokerAccount(desk) {
     brokerToken: snap.brokerToken || prev.brokerToken,
     brokerApiKey: snap.brokerApiKey || prev.brokerApiKey,
     brokerSessionToken: snap.brokerSessionToken || prev.brokerSessionToken,
+    brokerMobile: snap.brokerMobile || prev.brokerMobile,
+    brokerMpin: snap.brokerMpin || prev.brokerMpin,
+    brokerTotpSecret: snap.brokerTotpSecret || prev.brokerTotpSecret,
     tokenUpdatedAt: snap.brokerToken ? snap.tokenUpdatedAt || prev.tokenUpdatedAt : prev.tokenUpdatedAt || snap.tokenUpdatedAt,
     memberAdded: Boolean(prev.memberAdded),
   };
   if (!snap.brokerToken && prev.brokerToken) desk.brokerToken = prev.brokerToken;
+  if (!snap.brokerMobile && prev.brokerMobile) desk.brokerMobile = prev.brokerMobile;
+  if (!snap.brokerMpin && prev.brokerMpin) desk.brokerMpin = prev.brokerMpin;
+  if (!snap.brokerTotpSecret && prev.brokerTotpSecret) desk.brokerTotpSecret = prev.brokerTotpSecret;
   return desk.brokerAccounts;
 }
 
@@ -311,6 +348,7 @@ function ownBrokerAccount(desk = {}, brokerId = desk.brokerId) {
       brokerToken: snap.brokerToken,
       brokerApiKey: snap.brokerApiKey,
       brokerSessionToken: snap.brokerSessionToken,
+      ...tradeLoginFields(snap),
       tokenUpdatedAt: snap.tokenUpdatedAt,
     };
   }
@@ -334,6 +372,9 @@ function hydrateBrokerAccount(desk, brokerId) {
     desk.brokerToken = "";
     desk.brokerApiKey = "";
     desk.brokerSessionToken = "";
+    desk.brokerMobile = "";
+    desk.brokerMpin = "";
+    desk.brokerTotpSecret = "";
     desk.brokerTokenUpdatedAt = "";
     return;
   }
@@ -343,6 +384,9 @@ function hydrateBrokerAccount(desk, brokerId) {
   desk.brokerToken = slot.brokerToken;
   desk.brokerApiKey = slot.brokerApiKey;
   desk.brokerSessionToken = slot.brokerSessionToken;
+  desk.brokerMobile = slot.brokerMobile || "";
+  desk.brokerMpin = slot.brokerMpin || "";
+  desk.brokerTotpSecret = slot.brokerTotpSecret || "";
   desk.brokerTokenUpdatedAt = slot.tokenUpdatedAt;
 }
 
@@ -374,6 +418,10 @@ export function publicBrokerAccounts(desk = {}) {
       tokenHint: maskSecret(own.brokerToken),
       apiKeyHint: maskSecret(own.brokerApiKey),
       sessionHint: maskSecret(own.brokerSessionToken),
+      hasTradeLogin: Boolean(own.brokerMobile && own.brokerMpin && own.brokerTotpSecret),
+      hasMpin: Boolean(own.brokerMpin),
+      hasTotp: Boolean(own.brokerTotpSecret),
+      tradeMobileHint: maskSecret(own.brokerMobile),
       installed: Boolean(own.brokerToken),
       oauthReady: Boolean(own.brokerApiKey && own.brokerSessionToken),
       tokenUpdatedAt: own.brokerToken ? own.tokenUpdatedAt : "",
@@ -672,6 +720,10 @@ export function publicBrokerInstall(desk = {}) {
     tokenHint: maskSecret(own.brokerToken),
     apiKeyHint: maskSecret(own.brokerApiKey),
     sessionHint: maskSecret(own.brokerSessionToken),
+    hasTradeLogin: Boolean(own.brokerMobile && own.brokerMpin && own.brokerTotpSecret),
+    hasMpin: Boolean(own.brokerMpin),
+    hasTotp: Boolean(own.brokerTotpSecret),
+    tradeMobileHint: maskSecret(own.brokerMobile),
     hasApiKey: Boolean(String(own.brokerApiKey || "").trim()),
     hasApiSecret: Boolean(String(own.brokerSessionToken || "").trim()),
     oauthReady: Boolean(String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim()),
@@ -684,7 +736,7 @@ export function publicBrokerInstall(desk = {}) {
         : brokerId === "upstox"
           ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token and retry every 15 minutes until 4:00 PM if it is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
           : brokerId === "kotak"
-            ? "Quotes use the Neo consumer key. Orders need this user's Neo sid and the session token from today's trade login. The client ID is not the sid. This does not start desk LIVE."
+            ? "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid. This does not start desk LIVE."
             : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };
 }
@@ -777,6 +829,15 @@ export function saveClientSettings(userId, patch = {}) {
   }
   if (patch.brokerSessionToken != null && String(patch.brokerSessionToken).trim()) {
     desk.brokerSessionToken = String(patch.brokerSessionToken).trim();
+  }
+  if (patch.brokerMobile != null && String(patch.brokerMobile).trim()) {
+    desk.brokerMobile = kotakMobileNumber(patch.brokerMobile);
+  }
+  if (patch.brokerMpin != null && String(patch.brokerMpin).trim()) {
+    desk.brokerMpin = String(patch.brokerMpin).trim();
+  }
+  if (patch.brokerTotpSecret != null && String(patch.brokerTotpSecret).trim()) {
+    desk.brokerTotpSecret = String(patch.brokerTotpSecret).trim();
   }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   if (tokenWritten) enableLiveCopyFromToken(desk, patch);
@@ -1778,7 +1839,7 @@ export function selectMemberBroker({ user, brokerId } = {}) {
   };
 }
 
-export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken } = {}) {
+export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken, mobile, mpin, totpSecret } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   const wanted = String(brokerId || desk.brokerId || "paper").trim().toLowerCase();
@@ -1830,6 +1891,9 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (sessionToken != null && String(sessionToken).trim()) {
     desk.brokerSessionToken = String(sessionToken).trim();
   }
+  if (String(mobile || "").trim()) desk.brokerMobile = kotakMobileNumber(mobile);
+  if (String(mpin || "").trim()) desk.brokerMpin = String(mpin).trim();
+  if (String(totpSecret || "").trim()) desk.brokerTotpSecret = String(totpSecret).trim();
   syncSelectedBrokerAccount(desk);
   if (desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].memberAdded = true;
   persist();

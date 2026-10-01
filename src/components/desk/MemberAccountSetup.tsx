@@ -107,6 +107,9 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
         apiKey: installValueForSubmit({ id: "apiKey", secret: true }, creds, hints),
         accessToken: installValueForSubmit({ id: "accessToken", secret: true }, creds, hints),
         sessionToken: installValueForSubmit({ id: "sessionToken", secret: true }, creds, hints),
+        mobile: installValueForSubmit({ id: "mobile", secret: true }, creds, hints),
+        mpin: installValueForSubmit({ id: "mpin", secret: true }, creds, hints),
+        totpSecret: installValueForSubmit({ id: "totpSecret", secret: true }, creds, hints),
       });
       const next = await getMemberDesk();
       setDesk(next);

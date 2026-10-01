@@ -53,7 +53,7 @@ export function UserHome() {
       </div>
       {desk?.brokerId === "kotak" && !Number.isFinite(Number(desk.wallet.brokerBalance)) ? (
         <p className="text-xs text-slate-500">
-          Balance, MTM, and P&L use this Kotak account after the Neo sid and today's trade session token are saved on Profile.
+          Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
         </p>
       ) : null}
 

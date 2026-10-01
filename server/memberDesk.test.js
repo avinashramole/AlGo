@@ -832,3 +832,44 @@ test("the member profile does not show the desk Kotak Neo login", async () => {
   assert.equal(kotakField.secret, true);
   assert.equal(kotakField.label, "Consumer key");
 });
+
+test("a Kotak user's trade login stays on that user and is not returned on the profile view", async () => {
+  const member = { id: "u-yt2vm-login", name: "Avinash", email: "avinash.ramole86@gmail.com", role: "user" };
+  const saved = installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "YT2Vm",
+    apiKey: "member-consumer",
+    accessToken: "member-access-1452",
+    mobile: "9876501234",
+    mpin: "654321",
+    totpSecret: "GEZDGNBVGY3TQOJQ",
+  });
+  const view = JSON.stringify(saved.install);
+  assert.equal(view.includes("654321"), false);
+  assert.equal(view.includes("GEZDGNBVGY3TQOJQ"), false);
+  assert.equal(view.includes("9876501234"), false);
+  assert.equal(saved.install.hasTradeLogin, true);
+  assert.equal(saved.install.fields.some((row) => row.id === "mpin" && row.secret), true);
+  const slot = brokerAccountForLiveCopy(member.id, "kotak");
+  assert.equal(slot.leftoverToken, false);
+  assert.equal(slot.accountId, "YT2Vm");
+  assert.equal(slot.brokerMobile, "+919876501234");
+  assert.equal(slot.brokerMpin, "654321");
+  assert.equal(slot.brokerTotpSecret, "GEZDGNBVGY3TQOJQ");
+  saveClientSettings(member.id, { copy: true, tradeMode: "real", brokerId: "kotak" });
+  const { memberCopyPayloads } = await import("./liveCopy.js");
+  const copies = memberCopyPayloads(
+    { strategy: "CRUDE", symbol: "CRUDEOIL 8800 PE", side: "BUY", qty: 100, lotSize: 100, brokerId: "dhan" },
+    { id: "crude", mappingScope: "master" },
+  );
+  const row = copies.find((item) => item.copyUserId === member.id);
+  assert.ok(row);
+  assert.equal(row.brokerId, "kotak");
+  assert.equal(row.brokerSession.clientId, "YT2Vm");
+  assert.equal(row.brokerSession.accessToken, "member-access-1452");
+  assert.equal(row.brokerSession.mobile, "+919876501234");
+  assert.equal(row.brokerSession.mpin, "654321");
+  assert.equal(row.brokerSession.totpSecret, "GEZDGNBVGY3TQOJQ");
+  assert.equal(JSON.stringify(row.account).includes("YIX14"), false);
+});

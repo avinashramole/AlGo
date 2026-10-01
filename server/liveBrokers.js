@@ -79,10 +79,13 @@ export const LIVE_BROKER_CATALOG = [
     fields: [
       { id: "clientId", label: "Client ID", placeholder: "Kotak client id" },
       { id: "apiKey", label: "Consumer key", secret: true, placeholder: "Neo consumer key" },
-      { id: "accessToken", label: "Trade session token", secret: true, placeholder: "Session token from today's trade login" },
-      { id: "sessionToken", label: "Neo sid", secret: true, placeholder: "Sid from today's trade login" },
+      { id: "accessToken", label: "Neo access token", secret: true, placeholder: "Access token from the Neo app" },
+      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile registered on this Kotak Neo" },
+      { id: "mpin", label: "MPIN", secret: true, placeholder: "Kotak Neo MPIN" },
+      { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
+      { id: "sessionToken", label: "Neo sid", secret: true, placeholder: "Sid from today's trade login, if already copied" },
     ],
-    help: "Quotes use the Neo consumer key. Orders need this user's Neo sid and the session token from today's trade login. The client ID is not the sid.",
+    help: "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid.",
   },
   {
     id: "angelone",
@@ -1045,14 +1048,32 @@ function stampKotakPlaceError(error) {
   error.live = { ...(error.live || {}), status: "REJECTED", reason, brokerId: "kotak" };
 }
 
-async function openKotakTradeSession(creds, fetchImpl) {
-  const key = `${creds.clientId}|${creds.apiKey}`;
+export function kotakLoginAuthorization(creds = {}) {
+  const token = String(creds.accessToken || "").trim();
+  const key = String(creds.apiKey || "").trim();
+  if (token && token !== key) return token;
+  return key || token;
+}
+
+export function canKotakTradeLogin(creds = {}) {
+  return Boolean(
+    String(creds.mobile || "").trim() &&
+      String(creds.mpin || "").trim() &&
+      String(creds.totpSecret || "").trim() &&
+      String(creds.clientId || "").trim() &&
+      kotakLoginAuthorization(creds),
+  );
+}
+
+export async function openKotakTradeSession(creds, fetchImpl = fetch) {
+  const authHeader = kotakLoginAuthorization(creds);
+  const key = `${creds.clientId}|${authHeader}`;
   const cached = kotakTradeCache.get(key);
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
   const login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
     method: "POST",
     headers: {
-      Authorization: creds.apiKey,
+      Authorization: authHeader,
       "neo-fin-key": "neotradeapi",
       "Content-Type": "application/json",
       Accept: "application/json",
@@ -1066,7 +1087,7 @@ async function openKotakTradeSession(creds, fetchImpl) {
   const validated = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate", {
     method: "POST",
     headers: {
-      Authorization: creds.apiKey,
+      Authorization: authHeader,
       "neo-fin-key": "neotradeapi",
       sid: viewSid,
       Auth: viewToken,
@@ -1108,17 +1129,18 @@ function kotakPlaceUrls(trade) {
 async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product }) {
   const creds = kotakDeskCreds(session, lane);
   const savedToken = creds.tradeToken || (lane !== "member" && creds.sessionToken && creds.sessionToken !== creds.apiKey && creds.sessionToken !== creds.accessToken ? creds.sessionToken : "");
+  const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
+  const pastedTrade = Boolean(memberPair?.sid && memberPair?.auth);
   let trade = null;
   if (creds.baseUrl && savedToken) {
     trade = { baseUrl: creds.baseUrl, tradeToken: savedToken, tradeSid: creds.tradeSid || creds.sessionToken, serverId: creds.serverId };
-  } else if (creds.mobile && creds.mpin && creds.totpSecret && creds.apiKey && creds.clientId) {
+  } else if (!pastedTrade && canKotakTradeLogin(creds)) {
     trade = await openKotakTradeSession(creds, fetchImpl);
   }
-  const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
   if (lane === "member" && !trade && (!memberPair.sid || !memberPair.auth)) {
     const who = creds.clientId ? `client ID ${creds.clientId}` : "this user";
     throw fail(
-      `Kotak Neo has no trade session for ${who}. The quote consumer key cannot place this order. Paste this user's Neo sid and the session token from today's trade login on Profile.`,
+      `Kotak Neo has no trade session for ${who}. The quote consumer key cannot place this order. On Profile, paste this user's trade-login mobile, MPIN, and TOTP, or paste the Neo sid and the session token from today's trade login.`,
     );
   }
   const auth = trade?.tradeToken || memberPair?.auth || creds.accessToken || creds.apiKey;

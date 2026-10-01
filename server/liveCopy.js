@@ -134,6 +134,9 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     brokerToken: paper ? "" : token,
     brokerApiKey: apiKey,
     brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
+    brokerMobile: leftoverSlot || paper ? "" : slot.brokerMobile || desk.brokerMobile || "",
+    brokerMpin: leftoverSlot || paper ? "" : slot.brokerMpin || desk.brokerMpin || "",
+    brokerTotpSecret: leftoverSlot || paper ? "" : slot.brokerTotpSecret || desk.brokerTotpSecret || "",
     paper,
     copyBlocked: "",
   };
@@ -271,6 +274,9 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           accessToken: target.brokerToken,
           apiKey: target.brokerApiKey,
           sessionToken: target.brokerSessionToken,
+          mobile: target.brokerMobile || "",
+          mpin: target.brokerMpin || "",
+          totpSecret: target.brokerTotpSecret || "",
           leftoverSlot: Boolean(target.leftoverSlot),
         },
     brokerSession: target.paper || target.copyBlocked
@@ -280,6 +286,9 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           accessToken: target.brokerToken,
           apiKey: target.brokerApiKey,
           sessionToken: target.brokerSessionToken,
+          mobile: target.brokerMobile || "",
+          mpin: target.brokerMpin || "",
+          totpSecret: target.brokerTotpSecret || "",
           leftoverSlot: Boolean(target.leftoverSlot),
         },
   }));

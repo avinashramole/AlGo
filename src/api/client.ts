@@ -653,6 +653,8 @@ export type ClientRow = {
       tokenHint?: string;
       apiKeyHint?: string;
       sessionHint?: string;
+      hasTradeLogin?: boolean;
+      tradeMobileHint?: string;
       installed?: boolean;
       tokenUpdatedAt?: string;
     }
@@ -705,6 +707,9 @@ export function createClient(payload: {
   brokerToken?: string;
   brokerApiKey?: string;
   brokerSessionToken?: string;
+  brokerMobile?: string;
+  brokerMpin?: string;
+  brokerTotpSecret?: string;
   notes?: string;
   staticIp?: string;
 }) {
@@ -723,6 +728,9 @@ export function saveClient(
     brokerToken?: string;
     brokerApiKey?: string;
     brokerSessionToken?: string;
+    brokerMobile?: string;
+    brokerMpin?: string;
+    brokerTotpSecret?: string;
   },
 ) {
   return request<{ client: ClientRow }>(`/clients/${encodeURIComponent(id)}`, {
@@ -1005,6 +1013,10 @@ export type MemberBrokerInstall = {
   tokenHint?: string;
   apiKeyHint?: string;
   sessionHint?: string;
+  hasTradeLogin?: boolean;
+  hasMpin?: boolean;
+  hasTotp?: boolean;
+  tradeMobileHint?: string;
   hasApiKey?: boolean;
   hasApiSecret?: boolean;
   oauthReady?: boolean;
@@ -1101,6 +1113,9 @@ export function installMemberBroker(payload: {
   apiKey?: string;
   accessToken?: string;
   sessionToken?: string;
+  mobile?: string;
+  mpin?: string;
+  totpSecret?: string;
 }) {
   return request<{ ok: boolean; brokerId: string; install: MemberBrokerInstall }>("/member/broker/credentials", {
     method: "POST",

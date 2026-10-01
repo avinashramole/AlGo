@@ -353,11 +353,16 @@ async function memberBrokerCredentials(userId) {
   if (brokerId === "kotak") {
     const apiKey = String(slot.brokerApiKey || desk.brokerApiKey || "").trim();
     const sessionToken = String(slot.brokerSessionToken || desk.brokerSessionToken || "").trim();
+    const login = {
+      mobile: String(slot.brokerMobile || desk.brokerMobile || "").trim(),
+      mpin: String(slot.brokerMpin || desk.brokerMpin || "").trim(),
+      totpSecret: String(slot.brokerTotpSecret || desk.brokerTotpSecret || "").trim(),
+    };
     const session = kotakTradeSession({ token, apiKey, sessionToken, clientId });
-    if (session) return session;
-    if ((!token || token === apiKey) && !apiKey) return null;
-    if (!token && !apiKey) return null;
-    return { brokerId: "kotak", token, clientId, apiKey, sessionToken };
+    if (session) return { ...session, ...login };
+    if ((!token || token === apiKey) && !apiKey && !login.mobile) return null;
+    if (!token && !apiKey && !login.mobile) return null;
+    return { brokerId: "kotak", token, clientId, apiKey, sessionToken, ...login };
   }
   if (!token) return null;
   if (brokerId === "dhan" && !clientId) return null;
@@ -477,8 +482,31 @@ async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_
   throw last || new Error("Kotak trade request failed.");
 }
 
+async function withKotakTradeLogin(creds) {
+  if (!creds || creds.brokerId !== "kotak") return creds;
+  const sid = String(creds.sessionToken || "").trim();
+  const clientId = String(creds.clientId || "").trim();
+  const distinctSid = sid && sid !== clientId && sid !== creds.apiKey && sid !== creds.token;
+  if (distinctSid || !creds.mobile || !creds.mpin || !creds.totpSecret) return creds;
+  try {
+    const { openKotakTradeSession } = await import("./liveBrokers.js");
+    const trade = await openKotakTradeSession({
+      clientId: creds.clientId,
+      apiKey: creds.apiKey,
+      accessToken: creds.token,
+      mobile: creds.mobile,
+      mpin: creds.mpin,
+      totpSecret: creds.totpSecret,
+    });
+    if (!trade?.tradeToken || !trade?.tradeSid) return creds;
+    return { ...creds, token: trade.tradeToken, sessionToken: trade.tradeSid };
+  } catch {
+    return creds;
+  }
+}
+
 async function fetchBrokerPnl(userId) {
-  const creds = await memberBrokerCredentials(userId);
+  const creds = await withKotakTradeLogin(await memberBrokerCredentials(userId));
   if (!creds) return null;
   if (creds.brokerId === "dhan") {
     const { fetchMemberDhanPositions } = await import("./dhan.js");
@@ -680,7 +708,7 @@ async function upstoxFunds(token) {
 }
 
 async function fetchBrokerBalance(userId) {
-  const creds = await memberBrokerCredentials(userId);
+  const creds = await withKotakTradeLogin(await memberBrokerCredentials(userId));
   if (!creds) return null;
   if (creds.brokerId === "dhan") {
     const { fetchMemberDhanFunds } = await import("./dhan.js");

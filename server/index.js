@@ -429,6 +429,9 @@ app.post("/api/member/broker/credentials", (req, res) => {
         apiKey: req.body?.apiKey ?? req.body?.brokerApiKey,
         accessToken: req.body?.accessToken ?? req.body?.brokerToken,
         sessionToken: req.body?.sessionToken ?? req.body?.brokerSessionToken,
+        mobile: req.body?.mobile ?? req.body?.brokerMobile,
+        mpin: req.body?.mpin ?? req.body?.brokerMpin,
+        totpSecret: req.body?.totpSecret ?? req.body?.brokerTotpSecret,
       }),
     );
   } catch (error) {
