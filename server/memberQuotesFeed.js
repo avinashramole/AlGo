@@ -165,7 +165,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
   if (brokerId === "kotak") {
     return kotakLiveBoard(user, secrets, { fetchQuotes, now });
   }
-  if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
+  if (brokerId === "paper" || !token || !accountId) {
     return emptyQuotes(
       brokerId,
       "Install your broker client ID and access token on My plan. Index quotes use your token, not the desk token.",

@@ -805,16 +805,55 @@ function prospectiveKotakLogin(desk = {}, patch = {}) {
   };
 }
 
+function prospectiveBrokerLogin(desk = {}, patch = {}) {
+  const nextBroker = patch.brokerId != null
+    ? String(patch.brokerId || "").trim().toLowerCase()
+    : String(desk.brokerId || "").trim().toLowerCase();
+  if (!nextBroker || nextBroker === "paper") return null;
+  const offeredId = patch.accountId != null ? String(patch.accountId || "").trim() : "";
+  const offeredToken = patch.brokerToken != null ? normalizeBrokerSecret(patch.brokerToken) : "";
+  const offeredKey = patch.brokerApiKey != null ? String(patch.brokerApiKey || "").trim() : "";
+  const offeredSecret = patch.brokerSessionToken != null ? String(patch.brokerSessionToken || "").trim() : "";
+  if (!offeredId && !offeredToken && !offeredKey && !offeredSecret) return null;
+  const currentBroker = String(desk.brokerId || "").trim().toLowerCase();
+  const switching = patch.brokerId != null && String(patch.brokerId || "").trim().toLowerCase() !== currentBroker;
+  const prev = brokerAccountsMap(desk)[nextBroker] || emptyBrokerAccount();
+  const baseId = switching ? String(prev.accountId || "").trim() : String(desk.accountId || prev.accountId || "").trim();
+  const baseToken = switching ? String(prev.brokerToken || "").trim() : String(desk.brokerToken || prev.brokerToken || "").trim();
+  const baseKey = switching ? String(prev.brokerApiKey || "").trim() : String(desk.brokerApiKey || prev.brokerApiKey || "").trim();
+  const baseSecret = switching ? String(prev.brokerSessionToken || "").trim() : String(desk.brokerSessionToken || prev.brokerSessionToken || "").trim();
+  return {
+    brokerId: nextBroker,
+    accountId: patch.accountId != null ? offeredId : baseId,
+    token: offeredToken || baseToken,
+    apiKey: offeredKey || baseKey,
+    sessionToken: offeredSecret || baseSecret,
+  };
+}
+
+const BROKER_KEY_REQUIRED = {
+  zerodha: "Paste the Zerodha API key.",
+  fyers: "Paste the Fyers app ID.",
+  kotak: "Paste the Kotak Neo consumer key.",
+  angelone: "Paste the Angel SmartAPI key.",
+};
+
 export function assertOwnKotakForSave(desk = {}, patch = {}) {
-  const login = prospectiveKotakLogin(desk, patch);
+  const login = prospectiveBrokerLogin(desk, patch);
   if (!login) return;
-  if (sessionUsesAdminKotak({ clientId: login.accountId, accessToken: login.token, apiKey: login.apiKey })) {
-    throw fail("That login is the admin Kotak Neo. Add this user's own Kotak Neo client ID, consumer key, and access token.");
+  if (login.brokerId === "kotak") {
+    if (sessionUsesAdminKotak({ clientId: login.accountId, accessToken: login.token, apiKey: login.apiKey })) {
+      throw fail("That login is the admin Kotak Neo. Add this user's own Kotak Neo client ID, consumer key, and access token.");
+    }
+    if (slotMatchesDeskBroker({ accountId: login.accountId, brokerToken: login.token, brokerApiKey: login.apiKey }, "kotak")) {
+      throw fail("That login is the desk Kotak Neo. Waiting for this user to add their own Kotak Neo.");
+    }
   }
-  if (slotMatchesDeskBroker({ accountId: login.accountId, brokerToken: login.token, brokerApiKey: login.apiKey }, "kotak")) {
-    throw fail("That login is the desk Kotak Neo. Waiting for this user to add their own Kotak Neo.");
+  const keyMessage = BROKER_KEY_REQUIRED[login.brokerId];
+  if (login.token && keyMessage && !login.apiKey) throw fail(keyMessage);
+  if (login.brokerId === "upstox" && login.apiKey && !login.sessionToken && !login.token) {
+    throw fail("Paste the Upstox API secret with the API key, or paste today's trading access token.");
   }
-  if (login.token && !login.apiKey) throw fail("Paste the Kotak Neo consumer key.");
 }
 
 function markOwnKotakAdded(desk, patch = {}) {

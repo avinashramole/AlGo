@@ -337,6 +337,35 @@ test("Shivam Fintech quotes use his own Kotak token, not the admin Dhan tape", a
   });
 });
 
+test("a paper-mode user quotes their own Dhan token", async () => {
+  const member = { id: "u-paper-dhan-own", name: "Paper Dhan", email: "paper.dhan.own@gmail.com", role: "user" };
+  saveClientSettings(member.id, {
+    brokerId: "dhan",
+    accountId: "DHAN-PAPER",
+    brokerToken: "dhan-paper-token",
+    tradeMode: "paper",
+  });
+  const seen = [];
+  const mine = await memberQuotesForUser(member, {
+    now: Date.now() + 150_000,
+    fetchQuotes: async (creds) => {
+      seen.push(creds);
+      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22400 }];
+    },
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 1, changePct: 0.01, spark: [], future: 25140, lot: 65 }],
+    }),
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].accessToken, "dhan-paper-token");
+  assert.equal(seen[0].clientId, "DHAN-PAPER");
+  assert.equal(mine.brokerId, "dhan");
+  assert.equal(mine.live, true);
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 22400);
+  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
+  assert.equal(JSON.stringify(mine).includes("dhan-paper-token"), false);
+});
+
 test("paper members stay on an empty board even if admin quotes exist", async () => {
   const paper = { id: "u-paper-quotes", name: "Paper Quotes", email: "paperq@t2s.app", role: "user" };
   selectMemberBroker({ user: paper, brokerId: "paper" });

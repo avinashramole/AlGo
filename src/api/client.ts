@@ -652,6 +652,7 @@ export type ClientRow = {
       accountId?: string;
       tokenHint?: string;
       apiKeyHint?: string;
+      sessionHint?: string;
       installed?: boolean;
       tokenUpdatedAt?: string;
     }

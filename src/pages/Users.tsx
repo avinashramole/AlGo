@@ -9,12 +9,13 @@ import {
   saveClient,
   saveUserContact,
   type AuthUser,
+  type BrokerInstallField,
   type ClientBroker,
   type ClientRow,
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { forgetCachedClient, loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
-import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
+import { savedSecretForSubmit } from "../lib/formSecrets";
 import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
@@ -348,6 +349,7 @@ export function Users() {
         <EditModal
           row={edit}
           groups={groups}
+          brokers={brokers}
           onClose={() => setEdit(null)}
           onSaved={(client) => {
             upsertCachedClient(client);
@@ -585,6 +587,7 @@ function AddClientModal({
   const [segments, setSegments] = useState<string[]>(["All segments"]);
   const [brokerToken, setBrokerToken] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerSessionToken, setBrokerSessionToken] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -630,6 +633,7 @@ function AddClientModal({
         telegramId,
         brokerToken,
         brokerApiKey,
+        brokerSessionToken,
         notes,
         staticIp,
       });
@@ -704,6 +708,9 @@ function AddClientModal({
                     const row = catalog.find((item) => item.id === next);
                     setSegments(row?.segments?.includes("All segments") ? ["All segments"] : row?.segments?.slice(0, 1) || ["All segments"]);
                     setStaticIp("");
+                    setBrokerToken("");
+                    setBrokerApiKey("");
+                    setBrokerSessionToken("");
                   }}
                 >
                   {catalog.map((row) => (
@@ -823,38 +830,17 @@ function AddClientModal({
                 ))}
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--border)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {brokerId === "kotak" ? "Kotak Neo consumer key and access token" : `${broker?.name || "Broker"} API and access token`}
-              </div>
-              {needsBrokerApiKey(brokerId) ? (
-                <Field label={brokerId === "kotak" ? "Consumer key" : "API key"}>
-                  <input
-                    className={inputClass}
-                    type="password"
-                    value={brokerApiKey}
-                    onChange={(event) => setBrokerApiKey(event.target.value)}
-                    placeholder={brokerId === "kotak" ? "This client's Neo consumer key" : "Broker API key / app id"}
-                    autoComplete="off"
-                  />
-                </Field>
-              ) : null}
-              <Field label="Access Token *">
-                <input
-                  className={inputClass}
-                  type="password"
-                  value={brokerToken}
-                  onChange={(event) => setBrokerToken(event.target.value)}
-                  placeholder="Paste access token"
-                  autoComplete="off"
-                />
-                <span className="font-normal text-[11px] text-slate-500">
-                  {brokerId === "kotak"
-                    ? "Use this client's own Kotak Neo client ID, consumer key, and access token. The admin Kotak login is not saved on a user."
-                    : "Saved on admin Users and on the client My plan page. Required for Real mode. This does not start Dhan LIVE."}
-                </span>
-              </Field>
-            </div>
+            <BrokerLoginFields
+              brokerId={brokerId}
+              brokerName={broker?.name || "Broker"}
+              fields={broker?.fields}
+              brokerApiKey={brokerApiKey}
+              brokerToken={brokerToken}
+              brokerSessionToken={brokerSessionToken}
+              onApiKey={setBrokerApiKey}
+              onToken={setBrokerToken}
+              onSession={setBrokerSessionToken}
+            />
             <Field label="Internal notes">
               <textarea
                 className="min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-sm"
@@ -905,7 +891,86 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 }
 
 function needsBrokerApiKey(brokerId: string) {
-  return ["zerodha", "fyers", "kotak", "angelone"].includes(brokerId);
+  return ["zerodha", "fyers", "kotak", "angelone", "upstox"].includes(brokerId);
+}
+
+function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
+  const listed = (fields || []).filter((field) => field.id !== "clientId");
+  if (listed.length) return listed;
+  if (brokerId === "paper") return [];
+  const extra: BrokerInstallField[] = [];
+  if (needsBrokerApiKey(brokerId)) {
+    extra.push({
+      id: "apiKey",
+      label: brokerId === "kotak" ? "Consumer key" : brokerId === "upstox" ? "API key" : brokerId === "fyers" ? "App ID" : "API key",
+      secret: true,
+      placeholder: brokerId === "kotak" ? "This client's Neo consumer key" : "This client's API key",
+    });
+  }
+  if (brokerId === "upstox" || brokerId === "kotak") {
+    extra.push({
+      id: "sessionToken",
+      label: brokerId === "upstox" ? "API secret" : "Sid / session",
+      secret: true,
+      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Neo sid, if Kotak gave one",
+    });
+  }
+  extra.push({ id: "accessToken", label: "Access token", secret: true, placeholder: "Paste this client's access token" });
+  return extra;
+}
+
+function BrokerLoginFields({
+  brokerId,
+  brokerName,
+  fields,
+  brokerApiKey,
+  brokerToken,
+  brokerSessionToken,
+  hints,
+  onApiKey,
+  onToken,
+  onSession,
+}: {
+  brokerId: string;
+  brokerName: string;
+  fields?: BrokerInstallField[];
+  brokerApiKey: string;
+  brokerToken: string;
+  brokerSessionToken: string;
+  hints?: { apiKeyHint?: string; tokenHint?: string; sessionHint?: string };
+  onApiKey: (value: string) => void;
+  onToken: (value: string) => void;
+  onSession: (value: string) => void;
+}) {
+  const rows = brokerLoginFields(brokerId, fields);
+  if (!rows.length) return null;
+  const valueFor = (id: string) => (id === "apiKey" ? brokerApiKey : id === "sessionToken" ? brokerSessionToken : brokerToken);
+  const hintFor = (id: string) => (id === "apiKey" ? hints?.apiKeyHint : id === "sessionToken" ? hints?.sessionHint : hints?.tokenHint);
+  const changeFor = (id: string, value: string) => {
+    if (id === "apiKey") onApiKey(value);
+    else if (id === "sessionToken") onSession(value);
+    else onToken(value);
+  };
+  return (
+    <div className="rounded-xl border border-[var(--border)] p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
+      {rows.map((field) => (
+        <Field key={field.id} label={field.label}>
+          <input
+            className={inputClass}
+            type={field.secret ? "password" : "text"}
+            value={valueFor(field.id)}
+            onChange={(event) => changeFor(field.id, event.target.value)}
+            placeholder={hintFor(field.id) || field.placeholder || field.label}
+            autoComplete="off"
+          />
+        </Field>
+      ))}
+      <span className="font-normal text-[11px] text-slate-500">
+        Algo copies and this user's home use this login. The admin broker login is not saved on the user. This does not turn LIVE on.
+      </span>
+    </div>
+  );
 }
 
 const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
@@ -913,11 +978,13 @@ const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var
 function EditModal({
   row,
   groups,
+  brokers,
   onClose,
   onSaved,
 }: {
   row: ClientRow;
   groups: string[];
+  brokers: ClientBroker[];
   onClose: () => void;
   onSaved: (client: ClientRow) => void;
 }) {
@@ -932,17 +999,17 @@ function EditModal({
         accountId: source.accountId || "",
         tokenHint: source.tokenHint || "",
         apiKeyHint: source.apiKeyHint || "",
+        sessionHint: "",
         tokenUpdatedAt: source.tokenUpdatedAt || "",
       };
     }
-    return { accountId: "", tokenHint: "", apiKeyHint: "", tokenUpdatedAt: "" };
+    return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tokenUpdatedAt: "" };
   };
   const [brokerId, setBrokerId] = useState(row.brokerId);
   const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
-  const [tokenFocused, setTokenFocused] = useState(false);
-  const [apiKeyFocused, setApiKeyFocused] = useState(false);
+  const [brokerSessionToken, setBrokerSessionToken] = useState("");
   const selectedAccount = accountFor(brokerId);
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
@@ -954,8 +1021,7 @@ function EditModal({
     setAccountId(accountFor(row.brokerId, row).accountId || "");
     setBrokerToken("");
     setBrokerApiKey("");
-    setTokenFocused(false);
-    setApiKeyFocused(false);
+    setBrokerSessionToken("");
   }, [row.id, row.brokerId, row.accountId, row.tokenHint]);
 
   const onSubmit = async (event: FormEvent) => {
@@ -965,6 +1031,7 @@ function EditModal({
     try {
       const nextApiKey = savedSecretForSubmit(brokerApiKey);
       const nextToken = savedSecretForSubmit(brokerToken);
+      const nextSession = savedSecretForSubmit(brokerSessionToken);
       const result = await saveClient(row.id, {
         name,
         mobile,
@@ -975,12 +1042,12 @@ function EditModal({
         group,
         ...(nextApiKey ? { brokerApiKey: nextApiKey } : {}),
         ...(nextToken ? { brokerToken: nextToken } : {}),
+        ...(nextSession ? { brokerSessionToken: nextSession } : {}),
       });
       setBrokerToken("");
       setBrokerApiKey("");
+      setBrokerSessionToken("");
       setAccountId(String(result.client.accountId || "").trim());
-      setTokenFocused(false);
-      setApiKeyFocused(false);
       onSaved(result.client);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -1019,19 +1086,14 @@ function EditModal({
               setAccountId(slot.accountId || "");
               setBrokerToken("");
               setBrokerApiKey("");
-              setTokenFocused(false);
-              setApiKeyFocused(false);
+              setBrokerSessionToken("");
             }}
           >
-            <option value="paper">PAPER</option>
-            <option value="dhan">DHAN</option>
-            <option value="upstox">UPSTOX</option>
-            <option value="zerodha">ZERODHA</option>
-            <option value="kotak">KOTAK</option>
-            <option value="angelone">ANGELONE</option>
-            <option value="aliceblue">ALICEBLUE</option>
-            <option value="sharekhan">SHAREKHAN</option>
-            <option value="fyers">FYERS</option>
+            {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.name}
+              </option>
+            ))}
           </select>
           <span className="font-normal text-[11px] text-slate-500">
             This user can keep a client ID and token on each broker. Selecting DHAN edits only the DHAN slot.
@@ -1053,41 +1115,29 @@ function EditModal({
             placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
           />
         </Field>
+        <BrokerLoginFields
+          brokerId={brokerId}
+          brokerName={(brokers.find((choice) => choice.id === brokerId)?.name || brokerId).toUpperCase()}
+          fields={brokers.find((choice) => choice.id === brokerId)?.fields}
+          brokerApiKey={brokerApiKey}
+          brokerToken={brokerToken}
+          brokerSessionToken={brokerSessionToken}
+          hints={{
+            apiKeyHint: selectedAccount.apiKeyHint,
+            tokenHint: selectedAccount.tokenHint,
+            sessionHint: selectedAccount.sessionHint,
+          }}
+          onApiKey={setBrokerApiKey}
+          onToken={setBrokerToken}
+          onSession={setBrokerSessionToken}
+        />
         {brokerId !== "paper" ? (
-          <>
-            {needsBrokerApiKey(brokerId) ? (
-              <Field label={brokerId === "kotak" ? "Consumer key" : "API key"}>
-                <input
-                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                  type="password"
-                  value={apiKeyFocused ? brokerApiKey : displaySavedSecret(brokerApiKey, selectedAccount.apiKeyHint)}
-                  onFocus={() => setApiKeyFocused(true)}
-                  onBlur={() => setApiKeyFocused(false)}
-                  onChange={(event) => setBrokerApiKey(event.target.value)}
-                  placeholder={selectedAccount.apiKeyHint || (brokerId === "kotak" ? "Paste this client's Neo consumer key" : "Paste API key to replace")}
-                  autoComplete="off"
-                />
-              </Field>
-            ) : null}
-            <Field label="Access token">
-                <input
-                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                  type="password"
-                  value={tokenFocused ? brokerToken : displaySavedSecret(brokerToken, selectedAccount.tokenHint)}
-                  onFocus={() => setTokenFocused(true)}
-                  onBlur={() => setTokenFocused(false)}
-                  onChange={(event) => setBrokerToken(event.target.value)}
-                  placeholder={selectedAccount.tokenHint || "Paste access token to replace"}
-                  autoComplete="off"
-                />
-              <span className="font-normal text-[11px] text-slate-500">
-                {selectedAccount.tokenHint
-                  ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
-                  : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
-                Saving a token turns REAL and Copy on so this client can receive live orders. This does not start Dhan LIVE.
-              </span>
-            </Field>
-          </>
+          <span className="font-normal text-[11px] text-slate-500">
+            {selectedAccount.tokenHint
+              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
+              : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
+            Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
+          </span>
         ) : null}
         <Field label="Static IP">
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />

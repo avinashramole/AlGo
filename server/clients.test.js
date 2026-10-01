@@ -300,6 +300,61 @@ test("createClient stores a user's own Kotak Neo", () => {
   assert.equal(later.credentialsInstalled, false);
 });
 
+test("createClient stores each live broker login on that user for algo copy", () => {
+  const cases = [
+    { name: "Dhan Copy User", mobile: "9002221001", brokerId: "dhan", accountId: "DHAN1", brokerToken: "dhan-user-token" },
+    { name: "Kite Copy User", mobile: "9002221002", brokerId: "zerodha", accountId: "ZR1", brokerApiKey: "kite-key", brokerToken: "kite-token" },
+    { name: "Fyers Copy User", mobile: "9002221003", brokerId: "fyers", accountId: "FY1", brokerApiKey: "fyers-app", brokerToken: "fyers-token" },
+    { name: "Angel Copy User", mobile: "9002221004", brokerId: "angelone", accountId: "AN1", brokerApiKey: "angel-key", brokerToken: "angel-token" },
+    {
+      name: "Upstox Copy User",
+      mobile: "9002221005",
+      brokerId: "upstox",
+      accountId: "UP1",
+      brokerApiKey: "upstox-key",
+      brokerSessionToken: "upstox-secret",
+      brokerToken: "upstox-token",
+    },
+  ];
+  for (const row of cases) {
+    const created = createClient({ ...row, tradeMode: "paper", copy: true });
+    assert.equal(created.brokerId, row.brokerId);
+    assert.equal(created.accountId, row.accountId);
+    assert.equal(created.credentialsInstalled, true);
+    const secrets = peekClientSecrets(created.id);
+    assert.equal(secrets.brokerToken, row.brokerToken);
+    if (row.brokerApiKey) assert.equal(secrets.brokerApiKey, row.brokerApiKey);
+    if (row.brokerSessionToken) assert.equal(secrets.brokerSessionToken, row.brokerSessionToken);
+    const shown = getMemberDesk({ user: { id: created.id, name: row.name, role: "user" }, enrollments: [], quote: () => 0 });
+    assert.equal(shown.install.accountId, row.accountId);
+    assert.equal(shown.install.installed, true);
+    const copies = memberCopyPayloads(
+      { strategy: "NIFTY VWAP ATM", side: "BUY", symbol: "NIFTY 24600 CE", qty: 65, lotSize: 65, brokerId: row.brokerId },
+      { id: "a4", name: "NIFTY VWAP ATM", mappingScope: "both" },
+    );
+    const copy = copies.find((item) => item.copyUserId === created.id);
+    assert.ok(copy);
+    assert.equal(copy.brokerId, row.brokerId);
+    assert.equal(copy.copyBlocked, "");
+    assert.equal(copy.account.clientId, row.accountId);
+    assert.equal(copy.account.accessToken, row.brokerToken);
+    if (row.brokerApiKey) assert.equal(copy.account.apiKey, row.brokerApiKey);
+    if (row.brokerSessionToken) assert.equal(copy.account.sessionToken, row.brokerSessionToken);
+  }
+  assert.throws(
+    () =>
+      createClient({
+        name: "Kite No Key",
+        mobile: "9002221006",
+        brokerId: "zerodha",
+        accountId: "ZR2",
+        brokerToken: "kite-token-only",
+      }),
+    /Zerodha API key/,
+  );
+  assert.equal(listPublicUsers().some((user) => user.mobile === "9002221006"), false);
+});
+
 test("createClient refuses the admin Kotak Neo and does not create the user", () => {
   const saved = {
     id: process.env.T2S_KOTAK_CLIENT_ID,

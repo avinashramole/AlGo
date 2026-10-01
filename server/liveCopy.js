@@ -48,6 +48,19 @@ function deskCopyMatches({ strategyName, strategyId } = {}) {
   return { mapped, copyMaster };
 }
 
+function brokerKeyRequired(brokerId) {
+  return ["zerodha", "fyers", "kotak", "angelone"].includes(String(brokerId || "").toLowerCase());
+}
+
+function brokerKeyLabel(brokerId) {
+  const id = String(brokerId || "").toLowerCase();
+  if (id === "kotak") return "Kotak Neo consumer key";
+  if (id === "fyers") return "Fyers app ID";
+  if (id === "angelone") return "Angel SmartAPI key";
+  if (id === "zerodha") return "Zerodha API key";
+  return "API key";
+}
+
 function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyName, enrollment } = {}) {
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "paper").trim().toLowerCase();
@@ -81,6 +94,20 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
       copyBlocked: "This user is not the admin. The admin Kotak Neo login is not used for this order. Add this user's own Kotak Neo on Profile.",
     };
   }
+  const apiKey = leftoverSlot || paper ? "" : String(slot.brokerApiKey || desk.brokerApiKey || "").trim();
+  if (!paper && token && brokerKeyRequired(brokerId) && !apiKey) {
+    return {
+      ...base,
+      brokerId,
+      accountId: "",
+      leftoverSlot: false,
+      brokerToken: "",
+      brokerApiKey: "",
+      brokerSessionToken: "",
+      paper: false,
+      copyBlocked: `Paste this user's ${brokerKeyLabel(brokerId)} with the access token.`,
+    };
+  }
   if (!paper && !token && !leftoverSlot && !canMintUpstox) {
     const copyBlocked =
       brokerId === "dhan"
@@ -104,7 +131,7 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     accountId,
     leftoverSlot,
     brokerToken: paper ? "" : token,
-    brokerApiKey: leftoverSlot || paper ? "" : slot.brokerApiKey || desk.brokerApiKey,
+    brokerApiKey: apiKey,
     brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
     paper,
     copyBlocked: "",

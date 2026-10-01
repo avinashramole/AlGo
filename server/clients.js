@@ -140,6 +140,7 @@ export function createClient(patch = {}) {
       accountId: patch.accountId,
       brokerToken: patch.brokerToken,
       brokerApiKey: patch.brokerApiKey,
+      brokerSessionToken: patch.brokerSessionToken,
     },
   );
   const user = adminCreateMember({
