@@ -1113,6 +1113,87 @@ test("a member crude order opens that user's Kotak trade login and does not use 
   }
 });
 
+test("a member Kotak refusal stays on that user's own key and does not send the admin broker", async () => {
+  const saved = {
+    mobile: process.env.T2S_KOTAK_MOBILE,
+    mpin: process.env.T2S_KOTAK_MPIN,
+    totp: process.env.T2S_KOTAK_TOTP_SECRET,
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_MOBILE = "9000000099";
+  process.env.T2S_KOTAK_MPIN = "111111";
+  process.env.T2S_KOTAK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-consumer-key";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-access-token";
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), auth: options.headers?.Authorization, body: options.body });
+    if (String(url).includes("tradeApiLogin")) {
+      return {
+        ok: false,
+        status: 424,
+        text: async () => JSON.stringify({ error: [{ code: "424", message: "Consumer key user-own-key-1452 does not exist" }] }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "should-not-place" }) };
+  };
+  try {
+    await assert.rejects(
+      () =>
+        placeLiveBrokerOrder(
+          "kotak",
+          {
+            copyUserId: "u-avinash",
+            brokerSession: {
+              accessToken: "user-own-key-1452",
+              apiKey: "user-own-key-1452",
+              clientId: "YT2Vm",
+              mobile: "9922980000",
+              mpin: "654321",
+              totpSecret: "GEZDGNBVGY3TQOJQ",
+            },
+            symbol: "CRUDEOIL 8800 PE",
+            side: "BUY",
+            qty: 100,
+            type: "MARKET",
+          },
+          fetchImpl,
+        ),
+      (error) => {
+        assert.match(error.message, /YT2Vm/);
+        assert.match(error.message, /admin broker was not used/);
+        assert.equal(error.message.includes("user-own-key-1452"), false);
+        assert.equal(error.message.includes("admin-consumer-key"), false);
+        assert.equal(error.message.includes("YIX14"), false);
+        assert.equal(error.live?.status, "REJECTED");
+        return true;
+      },
+    );
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /tradeApiLogin/);
+    assert.equal(calls[0].auth, "user-own-key-1452");
+    assert.equal(String(calls[0].body).includes("+919922980000"), true);
+    assert.equal(String(calls[0].body).includes("YT2Vm"), true);
+    assert.equal(String(calls[0].body).includes("9000000099"), false);
+    assert.equal(String(calls[0].body).includes("YIX14"), false);
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_MOBILE", saved.mobile],
+      ["T2S_KOTAK_MPIN", saved.mpin],
+      ["T2S_KOTAK_TOTP_SECRET", saved.totp],
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("Kotak order network failure names the host instead of a bare fetch failed", async () => {
   const fetchImpl = async (url) => {
     throw Object.assign(new TypeError("fetch failed"), {

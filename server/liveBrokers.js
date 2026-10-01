@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
+import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
 import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
 import { totpCode } from "./totp.js";
 
@@ -1177,13 +1177,35 @@ async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, si
   throw last || fail("Kotak Neo order was not sent.");
 }
 
+function memberKotakOwnKeyError(error, session = {}) {
+  const raw = String(error?.message || "");
+  const key = String(session.apiKey || "").trim();
+  const token = String(session.accessToken || "").trim();
+  if (!/consumer key/i.test(raw) || !/does not exist|not linked/i.test(raw)) {
+    let message = raw;
+    if (key) message = message.split(key).join(credentialHint(key));
+    if (token && token !== key) message = message.split(token).join(credentialHint(token));
+    if (message === raw) return error instanceof Error ? error : new Error(message);
+    const next = new Error(message);
+    next.status = error?.status || 400;
+    return next;
+  }
+  const who = String(session.clientId || "").trim() ? `client ID ${String(session.clientId).trim()}` : "this user";
+  const next = new Error(
+    `Kotak Neo refused this user's own consumer key ${credentialHint(key || token)} for ${who}. The admin broker was not used. This key loads quotes. Orders need the trade consumer key from this user's own Kotak Neo API app.`,
+  );
+  next.status = error?.status || 424;
+  return next;
+}
+
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
   const brokerName = liveBrokerMeta(id)?.name || id;
   const { lane, session } = liveOrderSession(payload, liveBrokerSession(id), { brokerName });
   try {
     return await placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, lane);
   } catch (error) {
-    const wrapped = lane === "member" ? annotateMemberLiveAuthError(error, session, { brokerName }) : error;
+    const owned = lane === "member" && String(id) === "kotak" ? memberKotakOwnKeyError(error, session) : error;
+    const wrapped = lane === "member" ? annotateMemberLiveAuthError(owned, session, { brokerName }) : owned;
     if (String(id) === "kotak") stampKotakPlaceError(wrapped);
     throw wrapped;
   }
