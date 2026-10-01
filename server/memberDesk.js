@@ -317,10 +317,20 @@ function slotCopiedFromAnotherBroker(map, brokerId) {
   return credentialsCopiedFromAnotherBroker(map, brokerId, map[brokerId]);
 }
 
+function kotakHasOwnTradeLogin(slot = {}) {
+  return Boolean(
+    String(slot.accountId || "").trim() &&
+      String(slot.brokerMobile || "").trim() &&
+      String(slot.brokerMpin || "").trim() &&
+      String(slot.brokerTotpSecret || "").trim(),
+  );
+}
+
 function kotakSlotIsOwn(slot = {}) {
   const accountId = String(slot.accountId || "").trim();
   const token = String(slot.brokerToken || "").trim();
   const apiKey = String(slot.brokerApiKey || "").trim();
+  if (kotakHasOwnTradeLogin(slot)) return true;
   if (!accountId || !token || !apiKey) return false;
   if (sessionUsesAdminKotak({ clientId: accountId, accessToken: token, apiKey })) return false;
   if (slotMatchesDeskBroker({ accountId, brokerToken: token, brokerApiKey: apiKey }, "kotak")) return false;
@@ -352,7 +362,11 @@ function ownBrokerAccount(desk = {}, brokerId = desk.brokerId) {
       tokenUpdatedAt: snap.tokenUpdatedAt,
     };
   }
-  if (id === "kotak" && sessionUsesAdminKotak({ clientId: slot.accountId, accessToken: slot.brokerToken, apiKey: slot.brokerApiKey })) {
+  if (
+    id === "kotak" &&
+    !kotakHasOwnTradeLogin(slot) &&
+    sessionUsesAdminKotak({ clientId: slot.accountId, accessToken: slot.brokerToken, apiKey: slot.brokerApiKey })
+  ) {
     return emptyBrokerAccount();
   }
   if (credentialsCopiedFromAnotherBroker(map, id, slot) || slotMatchesDeskBroker(slot, id)) return emptyBrokerAccount();
@@ -445,8 +459,9 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   if (!id || id === "paper") return { ...emptyBrokerAccount(), leftoverToken: false };
   const map = brokerAccountsMap(desk);
   const slot = map[id] || emptyBrokerAccount();
-  const waitingForMember = id === "kotak" && !slot.memberAdded && !kotakSlotIsOwn(slot);
-  const adminKotak = id === "kotak" && sessionUsesAdminKotak({
+  const ownTrade = id === "kotak" && kotakHasOwnTradeLogin(slot);
+  const waitingForMember = id === "kotak" && !ownTrade && !slot.memberAdded && !kotakSlotIsOwn(slot);
+  const adminKotak = id === "kotak" && !ownTrade && sessionUsesAdminKotak({
     clientId: slot.accountId || desk.accountId,
     accessToken: slot.brokerToken || desk.brokerToken,
     apiKey: slot.brokerApiKey || desk.brokerApiKey,
@@ -1860,11 +1875,16 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (!nextClientId) throw fail("Paste the client ID.");
   const offeredToken = String(accessToken || "").trim() || priorToken;
   const offeredKey = String(apiKey || "").trim() || priorKey;
-  if (slotMatchesDeskBroker({ accountId: nextClientId, brokerToken: offeredToken, brokerApiKey: offeredKey }, wanted)) {
+  const ownKotakTrade =
+    wanted === "kotak" &&
+    (String(mobile || "").trim() || String(slot.brokerMobile || "").trim()) &&
+    (String(mpin || "").trim() || String(slot.brokerMpin || "").trim()) &&
+    (String(totpSecret || "").trim() || String(slot.brokerTotpSecret || "").trim());
+  if (!ownKotakTrade && slotMatchesDeskBroker({ accountId: nextClientId, brokerToken: offeredToken, brokerApiKey: offeredKey }, wanted)) {
     const name = catalog.find((row) => row.id === wanted)?.name || "broker";
     throw fail(`That login is the desk ${name}. Waiting for this user to add their own ${name}.`);
   }
-  if (wanted === "kotak" && sessionUsesAdminKotak({ clientId: nextClientId, accessToken: offeredToken, apiKey: offeredKey })) {
+  if (wanted === "kotak" && !ownKotakTrade && sessionUsesAdminKotak({ clientId: nextClientId, accessToken: offeredToken, apiKey: offeredKey })) {
     throw fail("That login is the admin Kotak Neo. This user needs their own Kotak Neo client ID and access token.");
   }
   desk.accountId = nextClientId;
