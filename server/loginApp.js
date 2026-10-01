@@ -4,6 +4,7 @@ import {
   decodeOAuthState,
   enableThumb,
   googleAuthorizeUrl,
+  googleLoginSearch,
   googleOAuthConfigured,
   googleRedirectUri,
   loginWithGoogleCode,
@@ -83,7 +84,7 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
         console.error("[auth] Google login mail failed:", mailError?.message || mailError);
       }
       keepSession(res, req, result.token);
-      res.redirect(`${next}/login?google_token=${encodeURIComponent(result.token)}`);
+      res.redirect(`${next}/login?${googleLoginSearch(result)}`);
     } catch (error) {
       console.error("[auth] Google callback failed:", error?.message || error);
       res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
@@ -190,7 +191,11 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
 
   app.get("/api/me", (req, res) => {
     const token = readToken(req);
-    recordLoginIp(token, clientAddress(req));
+    try {
+      recordLoginIp(token, clientAddress(req));
+    } catch {
+      /* the profile still loads when the address cannot be stored */
+    }
     const user = sessionUser(token, { reload: true });
     if (!user) {
       res.status(401).json({ error: "Sign in first." });

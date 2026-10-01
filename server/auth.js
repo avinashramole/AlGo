@@ -859,14 +859,22 @@ export function loginWithThumb(thumbToken) {
 }
 
 export function sessionUser(token, { reload = false } = {}) {
+  const memory = store;
   if (reload) {
     const next = loadUsers();
     if (usersReadable && next !== store) store = next;
   }
-  const user = userFromToken(token);
+  let user = userFromToken(token);
+  if (!user && memory && memory !== store) {
+    const disk = store;
+    store = memory;
+    user = userFromToken(token);
+    if (!user) store = disk;
+  }
   if (user) return publicUser(user);
   if (!reload) {
-    store = loadUsers();
+    const next = loadUsers();
+    if (usersReadable && next !== store) store = next;
     const again = userFromToken(token);
     return again ? publicUser(again) : null;
   }
@@ -1074,6 +1082,18 @@ export function safeFrontendOrigin(next, env = process.env) {
   }
 }
 
+export function googleLoginSearch({ token, user } = {}) {
+  const query = new URLSearchParams();
+  query.set("google_token", String(token || ""));
+  const name = String(user?.name || "").trim();
+  const email = String(user?.email || "").trim();
+  const mobile = String(user?.mobile || "").trim();
+  if (name) query.set("google_name", name);
+  if (email) query.set("google_email", email);
+  if (mobile) query.set("google_mobile", mobile);
+  return query.toString();
+}
+
 export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
   const clientId = String(env.GOOGLE_CLIENT_ID || "").trim();
   if (!clientId || !String(env.GOOGLE_CLIENT_SECRET || "").trim()) {
@@ -1117,7 +1137,7 @@ export function upsertGoogleUser({ email, name, googleId, env = process.env } = 
     user.authProvider = user.authProvider || "google";
     user.createdAt = user.createdAt || new Date().toISOString();
     const nextName = String(name || "").trim();
-    if (nextName && (!user.name || user.name === "Trader")) user.name = nextName;
+    if (nextName && (!user.name || user.name === "Trader" || user.name === "Google user")) user.name = nextName;
   }
   user.email = normalized;
   if (!user.role) user.role = resolveUserRole(user, env);

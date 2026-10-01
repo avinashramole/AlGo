@@ -16,6 +16,7 @@ const {
   decodeOAuthState,
   encodeOAuthState,
   googleAuthorizeUrl,
+  googleLoginSearch,
   googleOAuthConfigured,
   googleRedirectUri,
   completeSignup,
@@ -142,6 +143,20 @@ test("upsertGoogleUser adds a member and keeps admin emails as admin", () => {
   });
   assert.equal(admin.user.role, "admin");
   assert.equal(admin.user.id, "admin");
+});
+
+test("google login hands the Gmail name and email to the profile", () => {
+  const email = `handoff.${Date.now()}@gmail.com`;
+  const first = upsertGoogleUser({ email, name: "Google user", googleId: "gid-handoff" });
+  const params = new URLSearchParams(googleLoginSearch(first));
+  assert.equal(params.get("google_email"), email);
+  assert.equal(params.get("google_name"), "Google user");
+  assert.equal(params.get("google_token"), first.token);
+  const again = upsertGoogleUser({ email, name: "Asha Google", googleId: "gid-handoff", });
+  assert.equal(again.user.name, "Asha Google");
+  assert.equal(again.user.email, email);
+  assert.equal(sessionUser(again.token, { reload: true }).email, email);
+  assert.equal(sessionUser(again.token, { reload: true }).name, "Asha Google");
 });
 
 test("upsertGoogleUser rejects non-Gmail accounts", () => {
