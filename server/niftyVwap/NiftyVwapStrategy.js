@@ -31,6 +31,16 @@ function niftyFutCandleText(signal, config) {
   return { open, close, clock: clock ? ` · ${clock}` : "" };
 }
 
+function trackedOptionStrike(state, spot, step, strikeOffset, option) {
+  if (state?.lockedOption === option && Number(state.lockedStrike) > 0) return Number(state.lockedStrike);
+  return OptionStrikeSelector.strikeForOffset(spot, step, strikeOffset);
+}
+
+function optionColorText(option, color, strike) {
+  const price = Number(strike) > 0 ? ` ${Number(strike)}` : "";
+  return `${option}${price} ${String(color || "").toUpperCase()}`;
+}
+
 function istMinutesToClose(now = Date.now()) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -125,20 +135,27 @@ export const NiftyVwapStrategy = {
           return { action: "wait", reason: "wait-eval" };
         }
         const fut = futTapeLabel(config);
+        const ceTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "CE");
+        const peTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "PE");
+        const strikeNote = ceTrack && ceTrack === peTrack ? ` · STRIKE ${ceTrack}` : "";
         if (signal.niftyColor === "doji") {
-          algo.lastSignal = `NO TRADE · ${preview}${fut} DOJI O ${tape.open} C ${tape.close}${tape.clock} · next 5m`;
+          algo.lastSignal = `NO TRADE · ${preview}${fut} DOJI O ${tape.open} C ${tape.close}${tape.clock}${strikeNote} · next 5m`;
           return { action: "wait", reason: "first-doji" };
         }
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
           algo.lastSignal = signal.ceColor
-            ? `NO TRADE · ${preview}${fut} GREEN CE ${signal.ceColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : "WAIT CE 5m";
+            ? `NO TRADE · ${preview}${fut} GREEN ${optionColorText("CE", signal.ceColor, ceTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
+            : ceTrack
+              ? `WAIT CE ${ceTrack} 5m`
+              : "WAIT CE 5m";
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
           algo.lastSignal = signal.peColor
-            ? `NO TRADE · ${preview}${fut} RED PE ${signal.peColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : "WAIT PE 5m";
+            ? `NO TRADE · ${preview}${fut} RED ${optionColorText("PE", signal.peColor, peTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
+            : peTrack
+              ? `WAIT PE ${peTrack} 5m`
+              : "WAIT PE 5m";
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
         algo.lastSignal = "WAIT NEXT 5m";
@@ -252,7 +269,7 @@ export const NiftyVwapStrategy = {
     });
     algo.lastSignal =
       config.signalMode === "first-candle"
-        ? `BUY ${pick.strike} ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
+        ? `BUY ${pick.strike} ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${optionColorText(pick.option, "GREEN", pick.strike)} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
         : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },

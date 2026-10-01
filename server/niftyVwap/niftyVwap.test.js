@@ -1348,7 +1348,7 @@ test("first candle no-trade line prints the Nifty future candle", () => {
   assert.equal(tick.action, "wait");
   assert.equal(tick.reason, "pe-not-green");
   assert.equal(book.places.length, 0);
-  assert.match(algo.lastSignal, /NO TRADE · PREVIEW NIFTY FUT RED PE RED O 22663\.00 C 22647\.50/);
+  assert.match(algo.lastSignal, /NO TRADE · PREVIEW NIFTY FUT RED PE 22650 RED O 22663\.00 C 22647\.50/);
   assert.match(algo.lastSignal, /09:00–09:05 IST/);
   assert.doesNotMatch(algo.lastSignal, /22678/);
 });
@@ -1439,7 +1439,7 @@ test("preview candle open and close buy CE when the next candle opens", () => {
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "CE");
   assert.equal(book.places[0].side, "BUY");
-  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN O 22663\.00 C 22680\.00/);
+  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE 22700 GREEN O 22663\.00 C 22680\.00/);
 });
 
 test("preview candle open and close buy PE at the next open, and the current close is ignored", () => {
@@ -1510,7 +1510,7 @@ test("preview candle open and close buy PE at the next open, and the current clo
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "PE");
   assert.equal(book.places[0].side, "BUY");
-  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE GREEN O 22680\.00 C 22647\.50/);
+  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE 22650 GREEN O 22680\.00 C 22647\.50/);
 });
 
 test("first candle duplicate bar and restart do not place a second order", () => {
@@ -1836,7 +1836,7 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
     adapter: book.adapter,
   });
   assert.equal(tick.action, "entry");
-  assert.match(crude.lastSignal, /PREVIEW CRUDE FUT GREEN \+ CE GREEN/);
+  assert.match(crude.lastSignal, /PREVIEW CRUDE FUT GREEN \+ CE 6100 GREEN/);
   assert.equal(book.places[0].symbol, "CRUDEOIL 6100 CE");
   assert.equal(book.places[0].qty, 100);
   assert.equal(book.places[0].lots, 1);
@@ -1862,7 +1862,7 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
     adapter: niftyBook.adapter,
   });
   assert.equal(niftyTick.action, "entry");
-  assert.match(niftyAlgo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN/);
+  assert.match(niftyAlgo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE 22700 GREEN/);
   assert.match(niftyBook.places[0].symbol, /^NIFTY \d+ CE$/);
   assert.equal(niftyBook.places[0].qty, 65);
   assert.equal(niftyBook.places[0].lots, 1);

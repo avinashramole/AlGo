@@ -1010,6 +1010,11 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     const closed = signalBars(config.timeframe || "5m", Date.now());
     const preview = closed[closed.length - 1] || null;
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
+    const und = getUnderlying(root);
+    const spotNow = Number(getChainSpot(root)) || 0;
+    const selected = OptionStrikeSelector.strikeForOffset(spotNow, und.step, config.strikeOffset);
+    const ceStrike = vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0 ? Number(vs.lockedStrike) : selected || Number(vs.ceStrike) || 0;
+    const peStrike = vs.lockedOption === "PE" && Number(vs.lockedStrike) > 0 ? Number(vs.lockedStrike) : selected || Number(vs.peStrike) || 0;
     stampLiveFuturePreview(
       algo,
       config.timeframe || "5m",
@@ -1017,6 +1022,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       {
         ce: preview ? sameTime(vs.ceBars, preview.time) : null,
         pe: preview ? sameTime(vs.peBars, preview.time) : null,
+        ceStrike,
+        peStrike,
       },
       signalBars,
     );
@@ -3324,6 +3331,23 @@ export function livePreviewCondition(bar, ce, pe) {
   return { nifty: "", ceColor, peColor, condition: "" };
 }
 
+function strikeToken(value) {
+  const n = Number(value);
+  return n > 0 ? String(n) : "";
+}
+
+function withTrackedStrike(label, ceStrike, peStrike) {
+  const ce = strikeToken(ceStrike);
+  const pe = strikeToken(peStrike);
+  let text = String(label || "");
+  if (ce) text = text.replace(/\bCE\b(?! \d)/, `CE ${ce}`);
+  if (pe) text = text.replace(/\bPE\b(?! \d)/, `PE ${pe}`);
+  if (/\b(?:CE|PE) \d/.test(text)) return text;
+  if (ce && pe && ce === pe) return text ? `${text} · STRIKE ${ce}` : `STRIKE ${ce}`;
+  const extra = [ce ? `CE ${ce}` : "", pe ? `PE ${pe}` : ""].filter(Boolean).join(" ");
+  return extra ? (text ? `${text} · ${extra}` : extra) : text;
+}
+
 export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "NIFTY FUT") {
   if (!bar || !(Number(bar.open) > 0) || !(Number(bar.close) > 0)) return "";
   const wall = VwapSignalEngine.istWallTime(bar.time);
@@ -3332,13 +3356,15 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "
   const pad = (value) => String(value).padStart(2, "0");
   const clock = `${pad(wall.hour)}:${pad(wall.minute)}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)} IST`;
   const rule = livePreviewCondition(bar, legs.ce, legs.pe);
+  const ceStrike = legs.ceStrike;
+  const peStrike = legs.peStrike;
   const parts = [
     rule.nifty ? `${root} ${rule.nifty.toUpperCase()}` : "",
-    rule.ceColor ? `CE ${rule.ceColor.toUpperCase()}` : "",
-    rule.peColor ? `PE ${rule.peColor.toUpperCase()}` : "",
+    rule.ceColor ? withTrackedStrike(`CE ${rule.ceColor.toUpperCase()}`, ceStrike, 0) : "",
+    rule.peColor ? withTrackedStrike(`PE ${rule.peColor.toUpperCase()}`, 0, peStrike) : "",
   ].filter(Boolean);
   const head = parts.length ? `${parts.join(" ")} ` : "";
-  const condition = rule.condition ? ` · ${rule.condition}` : "";
+  const condition = rule.condition ? ` · ${withTrackedStrike(rule.condition, ceStrike, peStrike)}` : "";
   return `LIVE ${head}O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}${condition}`;
 }
 
