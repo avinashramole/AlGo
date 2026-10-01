@@ -287,11 +287,13 @@ export function Users() {
                     <StatusPill live={row.status === "LIVE"} />
                   </td>
                   <td className="px-4 py-3 align-middle font-semibold">
-                    <div>₹{formatNumber(clientShownBalance(row), 2)}</div>
+                    <div>{clientBalanceText(row)}</div>
                     {row.balanceSource ? (
                       <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{row.balanceSource}</div>
                     ) : row.brokerId === "kotak" && !row.brokerAccounts?.kotak?.sessionHint ? (
                       <div className="text-[10px] font-semibold text-amber-700">Needs Neo sid</div>
+                    ) : row.brokerId === "kotak" ? (
+                      <div className="text-[10px] font-semibold text-amber-700">Kotak balance unavailable</div>
                     ) : null}
                   </td>
                   <td className="px-4 py-3 align-middle">
@@ -465,10 +467,11 @@ function Stat({ label, value, hint }: { label: string; value: number | string; h
   );
 }
 
-function clientShownBalance(row: ClientRow) {
+function clientBalanceText(row: ClientRow) {
   const broker = Number(row.brokerBalance);
-  if (Number.isFinite(broker)) return broker;
-  return Number(row.margin) || 0;
+  if (Number.isFinite(broker)) return `₹${formatNumber(broker, 2)}`;
+  if (row.brokerId === "kotak") return "—";
+  return `₹${formatNumber(Number(row.margin) || 0, 2)}`;
 }
 
 function BrokerCell({ row }: { row: ClientRow }) {

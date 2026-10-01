@@ -170,6 +170,23 @@ test("Kotak limits and positions are this user's account balance, MTM, and P&L",
   assert.equal(session.token, "trade-token-1452");
   assert.equal(kotakAvailableBalance({ stat: "Ok", Category: "net", Net: "88420.50", MarginUsed: "1200" }), 88420.5);
   assert.equal(kotakAvailableBalance({ data: { NotionalCash: "10000", MarginUsed: "250" } }), 9750);
+  assert.equal(
+    kotakAvailableBalance({
+      stat: "Ok",
+      Category: "CLIENT_SPECIAL",
+      Net: "10157.08",
+      NotionalCash: "0",
+      MarginUsed: "40.4",
+    }),
+    10157.08,
+  );
+  assert.equal(
+    kotakAvailableBalance({
+      stat: "Ok",
+      data: [{ Category: "CLIENT_MTF", Net: "88,420.50", NotionalCash: "0", MarginUsed: "1200" }],
+    }),
+    88420.5,
+  );
   const book = kotakMasterBook([
     { trdSym: "NIFTY26O0622900CE", flBuyQty: "65", flSellQty: "0", avgPrc: "15.40", ltp: "16.00", rlMtom: "0", urMtom: "39", prod: "MIS" },
     { trdSym: "NIFTY26O0622800PE", flBuyQty: "65", flSellQty: "65", rlMtom: "120.5", urMtom: "0", prod: "MIS" },

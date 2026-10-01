@@ -713,6 +713,63 @@ test("admin save refuses the admin Kotak Neo login", () => {
   }
 });
 
+test("a Kotak user's own login is used for balance when it was saved before the added flag", async () => {
+  const file = path.join(dir, "legacy-kotak-desk.json");
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  delete process.env.T2S_KOTAK_CLIENT_ID;
+  delete process.env.T2S_KOTAK_CONSUMER_KEY;
+  delete process.env.T2S_KOTAK_ACCESS_TOKEN;
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      "u-avinash-kotak": {
+        brokerId: "kotak",
+        accountId: "YT2Vm",
+        brokerToken: "trade-token-1452",
+        brokerApiKey: "member-consumer",
+        brokerSessionToken: "neo-sid-88",
+        brokerAccounts: {
+          kotak: {
+            accountId: "YT2Vm",
+            brokerToken: "trade-token-1452",
+            brokerApiKey: "member-consumer",
+            brokerSessionToken: "neo-sid-88",
+            memberAdded: false,
+          },
+        },
+      },
+    }),
+  );
+  const previous = process.env.T2S_MEMBER_DESK_FILE;
+  process.env.T2S_MEMBER_DESK_FILE = file;
+  try {
+    const fresh = await import(`./memberDesk.js?legacy-kotak=${Date.now()}`);
+    const slot = fresh.brokerAccountForLiveCopy("u-avinash-kotak", "kotak");
+    assert.equal(slot.leftoverToken, false);
+    assert.equal(slot.accountId, "YT2Vm");
+    assert.equal(slot.brokerToken, "trade-token-1452");
+    assert.equal(slot.brokerSessionToken, "neo-sid-88");
+    const shown = fresh.peekClientSettings("u-avinash-kotak");
+    assert.equal(shown.accountId, "YT2Vm");
+    assert.equal(shown.brokerAccounts.kotak.sessionHint.includes("•"), true);
+  } finally {
+    if (previous == null) delete process.env.T2S_MEMBER_DESK_FILE;
+    else process.env.T2S_MEMBER_DESK_FILE = previous;
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("the member profile does not show the desk Kotak Neo login", async () => {
   const member = { id: "u-kotak-wait", name: "Wait Kotak", email: "wait.kotak@gmail.com", role: "user" };
   installMemberBroker({

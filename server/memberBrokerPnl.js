@@ -421,7 +421,6 @@ async function kotakTradePost(creds, path, jData) {
       }
       if (!res.ok) {
         last = new Error(json?.errMsg || json?.message || `Kotak ${res.status}`);
-        if (res.status === 400) throw last;
         continue;
       }
       const stat = String(json?.stat || "").toLowerCase();
@@ -432,7 +431,6 @@ async function kotakTradePost(creds, path, jData) {
       return json;
     } catch (error) {
       last = error;
-      if (Number(error?.status) === 400) throw error;
     }
   }
   throw last || new Error("Kotak trade request failed.");
@@ -482,18 +480,62 @@ export function dhanAvailableBalance(funds) {
   return n == null ? null : round2(n);
 }
 
+function kotakMoney(value) {
+  if (value == null || value === "") return null;
+  const n = Number(String(value).replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function kotakMoneyField(row, keys) {
+  for (const key of keys) {
+    const n = kotakMoney(row?.[key]);
+    if (n != null) return n;
+  }
+  return null;
+}
+
+function kotakLimitRows(body) {
+  const rows = [];
+  const push = (value) => {
+    if (value == null) return;
+    if (typeof value === "string") {
+      try {
+        push(JSON.parse(value));
+      } catch {
+        /* Kotak sometimes wraps jData as text. Ignore text that is not JSON. */
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) push(item);
+      return;
+    }
+    if (typeof value === "object") rows.push(value);
+  };
+  push(body);
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    push(body.data);
+    if (body.data && typeof body.data === "object") push(body.data.data);
+  }
+  return rows;
+}
+
 export function kotakAvailableBalance(body) {
-  const root = body?.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body;
-  const rows = Array.isArray(root) ? root : root && typeof root === "object" ? [root] : [];
+  const rows = kotakLimitRows(body);
+  let firstNet = null;
+  for (const row of rows) {
+    const net = kotakMoneyField(row, ["Net", "net"]);
+    if (net == null) continue;
+    if (firstNet == null) firstNet = net;
+    const category = String(row.Category || row.category || "").toLowerCase();
+    if (!category || category === "net" || category.includes("client")) return round2(net);
+  }
+  if (firstNet != null) return round2(firstNet);
   let fallback = null;
   for (const row of rows) {
-    if (!row || typeof row !== "object") continue;
-    const category = String(row.Category || row.category || "net").toLowerCase();
-    const net = firstFinite(row, ["Net", "net"]);
-    if (net != null && category === "net") return round2(net);
-    const cash = firstFinite(row, ["NotionalCash", "notionalCash", "Cash", "cash"]);
+    const cash = kotakMoneyField(row, ["NotionalCash", "notionalCash", "Cash", "cash"]);
     if (cash == null || fallback != null) continue;
-    const used = firstFinite(row, ["MarginUsed", "marginUsed"]) || 0;
+    const used = kotakMoneyField(row, ["MarginUsed", "marginUsed"]) || 0;
     fallback = round2(Math.max(0, cash - used));
   }
   return fallback;

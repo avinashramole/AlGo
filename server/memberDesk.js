@@ -280,6 +280,16 @@ function slotCopiedFromAnotherBroker(map, brokerId) {
   return credentialsCopiedFromAnotherBroker(map, brokerId, map[brokerId]);
 }
 
+function kotakSlotIsOwn(slot = {}) {
+  const accountId = String(slot.accountId || "").trim();
+  const token = String(slot.brokerToken || "").trim();
+  const apiKey = String(slot.brokerApiKey || "").trim();
+  if (!accountId || !token || !apiKey) return false;
+  if (sessionUsesAdminKotak({ clientId: accountId, accessToken: token, apiKey })) return false;
+  if (slotMatchesDeskBroker({ accountId, brokerToken: token, brokerApiKey: apiKey }, "kotak")) return false;
+  return true;
+}
+
 function slotTokenCopiedFromAnotherBroker(map, brokerId) {
   const slot = map[brokerId];
   if (!slot?.brokerToken) return false;
@@ -304,11 +314,11 @@ function ownBrokerAccount(desk = {}, brokerId = desk.brokerId) {
       tokenUpdatedAt: snap.tokenUpdatedAt,
     };
   }
-  if (id === "kotak" && !slot.memberAdded) return emptyBrokerAccount();
   if (id === "kotak" && sessionUsesAdminKotak({ clientId: slot.accountId, accessToken: slot.brokerToken, apiKey: slot.brokerApiKey })) {
     return emptyBrokerAccount();
   }
   if (credentialsCopiedFromAnotherBroker(map, id, slot) || slotMatchesDeskBroker(slot, id)) return emptyBrokerAccount();
+  if (id === "kotak" && !slot.memberAdded && !kotakSlotIsOwn(slot)) return emptyBrokerAccount();
   return slot;
 }
 
@@ -387,7 +397,7 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   if (!id || id === "paper") return { ...emptyBrokerAccount(), leftoverToken: false };
   const map = brokerAccountsMap(desk);
   const slot = map[id] || emptyBrokerAccount();
-  const waitingForMember = id === "kotak" && !slot.memberAdded;
+  const waitingForMember = id === "kotak" && !slot.memberAdded && !kotakSlotIsOwn(slot);
   const adminKotak = id === "kotak" && sessionUsesAdminKotak({
     clientId: slot.accountId || desk.accountId,
     accessToken: slot.brokerToken || desk.brokerToken,
