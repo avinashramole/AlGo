@@ -685,7 +685,8 @@ export function queueLiveAlgoOrder(payload) {
   const securityId = contractSecurityId(priced);
   const stamped = securityId ? { ...priced, securityId } : priced;
   const deskBroker = payload.copyUserId ? stamped.brokerId : orderBrokerForDesk(stamped.brokerId);
-  const deskStamped = { ...stamped, brokerId: deskBroker };
+  const lane = payload.copyUserId ? (payload.lane === "individual" ? "individual" : "copy") : "master";
+  const deskStamped = { ...stamped, brokerId: deskBroker, lane };
   const brokers = liveAutoTradeBrokers({
     strategyName: deskStamped?.strategy,
     algoBrokerId: deskStamped?.brokerId || "dhan",

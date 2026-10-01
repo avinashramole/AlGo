@@ -127,6 +127,7 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   }
   return {
     ...base,
+    lane: desk.copy ? "copy" : "individual",
     brokerId: paper ? "paper" : brokerId,
     accountId,
     leftoverSlot,
@@ -258,6 +259,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
     ...payload,
     qty: target.qty,
     brokerId: target.brokerId,
+    lane: target.lane === "copy" ? "copy" : "individual",
     copyUserId: target.userId,
     paper: target.paper,
     copyBlocked: target.copyBlocked || "",
