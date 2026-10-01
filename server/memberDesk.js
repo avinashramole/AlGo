@@ -59,7 +59,12 @@ function keepSavedBrokerSecrets(nextStore, disk) {
         next.brokerApiKey = slot.brokerApiKey;
         kept = true;
       }
-      if (!String(next.brokerSessionToken || "").trim() && String(slot.brokerSessionToken || "").trim()) {
+      if (cur.clearSessionToken) {
+        next.brokerSessionToken = "";
+        delete next.clearSessionToken;
+        delete cur.clearSessionToken;
+        kept = true;
+      } else if (!String(next.brokerSessionToken || "").trim() && String(slot.brokerSessionToken || "").trim()) {
         next.brokerSessionToken = slot.brokerSessionToken;
         kept = true;
       }
@@ -254,7 +259,7 @@ function snapshotSelectedBrokerAccount(desk) {
   };
 }
 
-function syncSelectedBrokerAccount(desk) {
+function syncSelectedBrokerAccount(desk, { clearSessionToken = false } = {}) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   desk.brokerAccounts = brokerAccountsMap(desk);
   if (!brokerId || brokerId === "paper") return desk.brokerAccounts;
@@ -264,7 +269,7 @@ function syncSelectedBrokerAccount(desk) {
     accountId: snap.accountId || prev.accountId,
     brokerToken: snap.brokerToken || prev.brokerToken,
     brokerApiKey: snap.brokerApiKey || prev.brokerApiKey,
-    brokerSessionToken: snap.brokerSessionToken || prev.brokerSessionToken,
+    brokerSessionToken: clearSessionToken ? "" : snap.brokerSessionToken || prev.brokerSessionToken,
     brokerMobile: snap.brokerMobile || prev.brokerMobile,
     brokerMpin: snap.brokerMpin || prev.brokerMpin,
     brokerTotpSecret: snap.brokerTotpSecret || prev.brokerTotpSecret,
@@ -842,7 +847,9 @@ export function saveClientSettings(userId, patch = {}) {
   if (patch.brokerApiKey != null && String(patch.brokerApiKey).trim()) {
     desk.brokerApiKey = String(patch.brokerApiKey).trim();
   }
-  if (patch.brokerSessionToken != null && String(patch.brokerSessionToken).trim()) {
+  if (patch.clearSessionToken) {
+    desk.brokerSessionToken = "";
+  } else if (patch.brokerSessionToken != null && String(patch.brokerSessionToken).trim()) {
     desk.brokerSessionToken = String(patch.brokerSessionToken).trim();
   }
   if (patch.brokerMobile != null && String(patch.brokerMobile).trim()) {
@@ -856,7 +863,12 @@ export function saveClientSettings(userId, patch = {}) {
   }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   if (tokenWritten) enableLiveCopyFromToken(desk, patch);
-  syncSelectedBrokerAccount(desk);
+  syncSelectedBrokerAccount(desk, { clearSessionToken: Boolean(patch.clearSessionToken) });
+  if (patch.clearSessionToken) {
+    const id = String(desk.brokerId || "").trim().toLowerCase();
+    if (desk.brokerAccounts?.[id]) desk.brokerAccounts[id].clearSessionToken = true;
+    desk.brokerSessionToken = "";
+  }
   markOwnKotakAdded(desk, patch);
   persist();
   return normalizeClientSettings(desk);
@@ -1854,7 +1866,7 @@ export function selectMemberBroker({ user, brokerId } = {}) {
   };
 }
 
-export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken, mobile, mpin, totpSecret } = {}) {
+export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken, mobile, mpin, totpSecret, clearSessionToken = false } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   const wanted = String(brokerId || desk.brokerId || "paper").trim().toLowerCase();
@@ -1908,13 +1920,16 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (needsApi && !key && !priorKey) throw fail("Paste the API key.");
   if (key) desk.brokerApiKey = key;
   else if (deskLogin) desk.brokerApiKey = "";
-  if (sessionToken != null && String(sessionToken).trim()) {
+  if (clearSessionToken) {
+    desk.brokerSessionToken = "";
+  } else if (sessionToken != null && String(sessionToken).trim()) {
     desk.brokerSessionToken = String(sessionToken).trim();
   }
   if (String(mobile || "").trim()) desk.brokerMobile = kotakMobileNumber(mobile);
   if (String(mpin || "").trim()) desk.brokerMpin = String(mpin).trim();
   if (String(totpSecret || "").trim()) desk.brokerTotpSecret = String(totpSecret).trim();
-  syncSelectedBrokerAccount(desk);
+  syncSelectedBrokerAccount(desk, { clearSessionToken: Boolean(clearSessionToken) });
+  if (clearSessionToken && desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].clearSessionToken = true;
   if (desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].memberAdded = true;
   persist();
   return { ok: true, install: publicBrokerInstall(desk), brokerId: desk.brokerId };
