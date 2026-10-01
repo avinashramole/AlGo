@@ -46,14 +46,14 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/55 p-4"
+      className="fixed inset-0 z-[200] flex items-end justify-center overflow-y-auto bg-slate-900/55 p-3 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Run backtest"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl"
+        className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:p-5"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4">

@@ -38,7 +38,7 @@ export function Profile() {
   return (
     <div className="mx-auto max-w-3xl space-y-3">
       <h1 className="text-xl font-bold">Profile</h1>
-      <section className="card p-6">
+      <section className="card p-4 sm:p-6">
         <div className="mb-5 flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-lg font-extrabold text-white">
             {(user?.name || "T").slice(0, 1).toUpperCase()}
