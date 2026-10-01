@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -222,6 +222,38 @@ test("Kotak limits and positions are this user's account balance, MTM, and P&L",
   assert.equal(desk.wallet.mtm, 39);
   assert.equal(desk.report.realizedPnl, 120.5);
   assert.equal(desk.report.netPnl, 159.5);
+});
+
+test("Kotak balance logs in when the access token is the consumer key", () => {
+  const saved = {
+    brokerId: "kotak",
+    token: "same-consumer-key",
+    apiKey: "same-consumer-key",
+    sessionToken: "old-neo-sid",
+    clientId: "YT2VM",
+    mobile: "+919000000000",
+    mpin: "111111",
+    totpSecret: "GEZDGNBVGY3TQOJQ",
+  };
+  assert.equal(kotakTradeSession(saved), null);
+  assert.equal(kotakLimitHeaderSets(saved).length, 0);
+  assert.equal(kotakNeedsTradeLogin(saved), true);
+  const ready = {
+    brokerId: "kotak",
+    token: "trade-token-1452",
+    apiKey: "member-consumer",
+    sessionToken: "neo-sid-88",
+    clientId: "YT2VM",
+    mobile: "+919000000000",
+    mpin: "111111",
+    totpSecret: "GEZDGNBVGY3TQOJQ",
+  };
+  assert.equal(kotakNeedsTradeLogin(ready), false);
+  const loggedIn = applyKotakTradeSession(saved, { tradeToken: "session-token-9", tradeSid: "today-sid-9" });
+  const sets = kotakLimitHeaderSets(loggedIn);
+  assert.equal(sets[0].headers.Auth, "session-token-9");
+  assert.equal(sets[0].headers.Sid, "today-sid-9");
+  assert.equal(sets.some((row) => row.headers.Auth === "same-consumer-key"), false);
 });
 
 test("broker available balance is the user balance and leaves the wallet topup alone", () => {
