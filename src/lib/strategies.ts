@@ -158,11 +158,17 @@ export const RUN_MODES = [
 ];
 
 export const OPTION_OFFSETS = [
+  { id: -5, label: "ATM − 5" },
+  { id: -4, label: "ATM − 4" },
+  { id: -3, label: "ATM − 3" },
   { id: -2, label: "ATM − 2" },
   { id: -1, label: "ATM − 1" },
   { id: 0, label: "ATM" },
   { id: 1, label: "ATM + 1" },
   { id: 2, label: "ATM + 2" },
+  { id: 3, label: "ATM + 3" },
+  { id: 4, label: "ATM + 4" },
+  { id: 5, label: "ATM + 5" },
 ];
 
 export const OPERATORS: Array<{ id: ConditionOp; label: string }> = [
@@ -199,7 +205,7 @@ export function lotForSymbol(symbol?: string) {
 }
 
 export function strikeOffsetLabel(offset?: number) {
-  const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
+  const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
   return OPTION_OFFSETS.find((row) => row.id === n)?.label || "ATM";
 }
 

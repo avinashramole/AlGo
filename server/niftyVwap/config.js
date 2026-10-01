@@ -254,7 +254,7 @@ export function niftyFirstCandleConfig(algo = {}) {
   const timeframe = FIRST_CANDLE_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.timeframe;
   const barMinutes = firstCandleBarMinutes(timeframe);
   const expiryKind = String(algo.expiryKind || "").toLowerCase() === "monthly" ? "monthly" : "weekly";
-  const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(algo.strikeOffset, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.strikeOffset))));
+  const strikeOffset = Math.max(-5, Math.min(5, Math.round(num(algo.strikeOffset, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.strikeOffset))));
   const rawFirst = String(algo.firstBarStartIst || "").trim();
   const firstBarStartIst = parseIstHm(
     !rawFirst || (rawFirst === "09:15" && !String(algo.entryEvaluationIst || "").trim())

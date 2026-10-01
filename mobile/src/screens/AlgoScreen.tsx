@@ -26,6 +26,19 @@ const OPERATORS = [
   { id: "lte", label: "<=" },
   { id: "eq", label: "=" },
 ];
+const STRIKE_OFFSETS: Array<[string, string]> = [
+  ["-5", "ATM-5"],
+  ["-4", "ATM-4"],
+  ["-3", "ATM-3"],
+  ["-2", "ATM-2"],
+  ["-1", "ATM-1"],
+  ["0", "ATM"],
+  ["1", "ATM+1"],
+  ["2", "ATM+2"],
+  ["3", "ATM+3"],
+  ["4", "ATM+4"],
+  ["5", "ATM+5"],
+];
 const LEFTS = ["price", "vwap", "ema_fast", "ema_slow", "rsi", "macd", "supertrend", "or_high", "or_low"];
 const RIGHTS = ["vwap", "ema_slow", "supertrend", "or_high", "or_low", "lookback_high", "lookback_low", "value"];
 
@@ -329,13 +342,7 @@ export function AlgoScreen() {
             </View>
             <Text style={styles.muted}>Strike vs ATM</Text>
             <View style={styles.chips}>
-              {[
-                ["-2", "ATM-2"],
-                ["-1", "ATM-1"],
-                ["0", "ATM"],
-                ["1", "ATM+1"],
-                ["2", "ATM+2"],
-              ].map(([id, label]) => (
+              {STRIKE_OFFSETS.map(([id, label]) => (
                 <Chip key={id} label={label} on={draft.strikeOffset === id} onPress={() => setDraft({ ...draft, strikeOffset: id })} />
               ))}
             </View>
@@ -361,13 +368,7 @@ export function AlgoScreen() {
             </View>
             <Text style={styles.muted}>Strike vs ATM</Text>
             <View style={styles.chips}>
-              {[
-                ["-2", "ATM-2"],
-                ["-1", "ATM-1"],
-                ["0", "ATM"],
-                ["1", "ATM+1"],
-                ["2", "ATM+2"],
-              ].map(([id, label]) => (
+              {STRIKE_OFFSETS.map(([id, label]) => (
                 <Chip key={id} label={label} on={draft.strikeOffset === id} onPress={() => setDraft({ ...draft, strikeOffset: id })} />
               ))}
             </View>

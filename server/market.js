@@ -1357,7 +1357,7 @@ export function resolveAlgoTrade(algo) {
     };
   }
   const option = algo.optionType === "PE" ? "PE" : "CE";
-  const offset = Math.max(-2, Math.min(2, Math.round(Number(algo.strikeOffset) || 0)));
+  const offset = Math.max(-5, Math.min(5, Math.round(Number(algo.strikeOffset) || 0)));
   const und = getUnderlying(symbol);
   const pack = chainForSymbol(symbol);
   const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);

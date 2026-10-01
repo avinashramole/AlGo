@@ -246,7 +246,7 @@ export function formatConditionGroup(group, fallbackRow) {
 }
 
 export function strikeOffsetLabel(offset) {
-  const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
+  const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
   if (n === 0) return "ATM";
   return n > 0 ? `ATM+${n}` : `ATM${n}`;
 }
@@ -778,7 +778,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         : "live";
   const instrument = (input.instrument || existing.instrument) === "option" ? "option" : "future";
   const optionType = (input.optionType || existing.optionType) === "PE" ? "PE" : "CE";
-  const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
+  const strikeOffset = Math.max(-5, Math.min(5, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
   const next = {
     ...existing,
     id: existing.id || newAlgoId(),

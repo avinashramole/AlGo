@@ -884,7 +884,7 @@ function liveOptionHint(
 ) {
   const symbol = form.symbol || "NIFTY";
   const option = form.optionType === "PE" ? "PE" : "CE";
-  const offset = Math.max(-2, Math.min(2, Math.round(Number(form.strikeOffset) || 0)));
+  const offset = Math.max(-5, Math.min(5, Math.round(Number(form.strikeOffset) || 0)));
   const step = strikeStep(symbol);
   const sameDesk = data.optionMeta?.symbol === symbol;
   const rows = sameDesk ? data.optionChain || [] : [];

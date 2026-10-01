@@ -9,7 +9,7 @@ export function strikeForOffset(spot, step = 50, strikeOffset = 0) {
   const width = Number(step) || 50;
   const atm = atmStrike(spot, width);
   if (!atm) return 0;
-  const offset = Math.max(-2, Math.min(2, Math.round(Number(strikeOffset) || 0)));
+  const offset = Math.max(-5, Math.min(5, Math.round(Number(strikeOffset) || 0)));
   return atm + offset * width;
 }
 

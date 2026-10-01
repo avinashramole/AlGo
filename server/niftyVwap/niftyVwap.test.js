@@ -1260,6 +1260,11 @@ test("first candle ATM offset is applied to the strike", () => {
   assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 0), 22700);
   assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 2), 22800);
   assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, -2), 22600);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 5), 22950);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, -5), 22450);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 9), 22950);
+  assert.equal(niftyFirstCandleConfig({ strikeOffset: 5 }).strikeOffset, 5);
+  assert.equal(niftyFirstCandleConfig({ strikeOffset: -5 }).strikeOffset, -5);
 });
 
 test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
