@@ -90,6 +90,71 @@ function emptyQuotes(brokerId, reason) {
   };
 }
 
+function kotakFeedCreds(secrets) {
+  const ownReady = Boolean(secrets.credentialsInstalled && secrets.brokerToken && secrets.accountId && secrets.brokerApiKey);
+  if (!ownReady) return null;
+  return {
+    brokerId: "kotak",
+    accessToken: String(secrets.brokerToken).trim(),
+    clientId: String(secrets.accountId).trim(),
+    apiKey: String(secrets.brokerApiKey).trim(),
+    sessionToken: String(secrets.brokerSessionToken || "").trim(),
+  };
+}
+
+function kotakQuoteBoard(now, { live = false, indices = [], reason = "" } = {}) {
+  return {
+    indices,
+    source: "kotak",
+    brokerId: "kotak",
+    brokerName: brokerNameOf("kotak"),
+    live,
+    lastTickAt: live ? now : null,
+    reason,
+  };
+}
+
+async function kotakLiveBoard(user, secrets, { fetchQuotes, now }) {
+  const creds = kotakFeedCreds(secrets);
+  if (!creds) {
+    return kotakQuoteBoard(now, {
+      reason: "Index quotes use this user's own Kotak Neo key. Add Kotak Neo on Profile. The admin feed stays on the admin side.",
+    });
+  }
+  const hit = cache.get(user.id);
+  if (hit && now - hit.at < CACHE_MS) return hit.payload;
+  const pending = inflight.get(user.id);
+  if (pending) return pending;
+  const job = (async () => {
+    let quotes = [];
+    try {
+      quotes = await (typeof fetchQuotes === "function" ? fetchQuotes(creds) : fetchMemberBrokerQuotes(creds));
+    } catch {
+      quotes = [];
+    }
+    if (!quotes.length) {
+      return kotakQuoteBoard(now, { reason: "Kotak Neo did not return index quotes yet." });
+    }
+    const payload = {
+      indices: cardsFromMemberQuotes(user.id, quotes),
+      source: "kotak",
+      brokerId: "kotak",
+      brokerName: brokerNameOf("kotak"),
+      live: true,
+      lastTickAt: now,
+      reason: "",
+    };
+    cache.set(user.id, { at: now, payload });
+    return payload;
+  })();
+  inflight.set(user.id, job);
+  try {
+    return await job;
+  } finally {
+    inflight.delete(user.id);
+  }
+}
+
 export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() } = {}) {
   if (!user?.id) return emptyQuotes("paper", "Sign in first.");
   const secrets = peekClientSecrets(user.id);
@@ -97,7 +162,10 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
   const token = String(secrets.brokerToken || "").trim();
   const accountId = String(secrets.accountId || "").trim();
   const apiKey = String(secrets.brokerApiKey || "").trim();
-  if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
+  if (brokerId === "kotak") {
+    return kotakLiveBoard(user, secrets, { fetchQuotes, now });
+  }
+  if (brokerId === "paper" || !token || !accountId) {
     return emptyQuotes(
       brokerId,
       "Install your broker client ID and access token on My plan. Index quotes use your token, not the desk token.",

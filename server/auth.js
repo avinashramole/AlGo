@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import nodemailer from "nodemailer";
+import { writeFileAtomic } from "./atomicWrite.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = process.env.T2S_USERS_FILE || path.join(__dirname, "data", "users.json");
@@ -57,13 +58,56 @@ function loadSessions() {
   }
 }
 
-function persistSessions() {
-  try {
-    fs.mkdirSync(path.dirname(SESSIONS_FILE), { recursive: true });
-    fs.writeFileSync(SESSIONS_FILE, `${JSON.stringify(Object.fromEntries(sessions), null, 2)}\n`);
-  } catch (error) {
-    console.log(`Could not save sign-in sessions: ${error.message || error}`);
+const revokedSessionTokens = new Set();
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withFileLock(lockFile, fn) {
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  const started = Date.now();
+  for (;;) {
+    let fd;
+    try {
+      fd = fs.openSync(lockFile, "wx", 0o600);
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      try {
+        const stat = fs.statSync(lockFile);
+        if (Date.now() - stat.mtimeMs > 8000) fs.unlinkSync(lockFile);
+      } catch {
+        /* another process removed it */
+      }
+      if (Date.now() - started > 8000) throw fail("Accounts file is busy. Try again.", 503);
+      sleepMs(20);
+      continue;
+    }
+    try {
+      return fn();
+    } finally {
+      fs.closeSync(fd);
+      try {
+        fs.unlinkSync(lockFile);
+      } catch {
+        /* already unlocked */
+      }
+    }
   }
+}
+
+function persistSessions() {
+  withFileLock(`${SESSIONS_FILE}.lock`, () => {
+    const fromDisk = loadSessions();
+    for (const [token, value] of fromDisk) {
+      if (!sessions.has(token) && !revokedSessionTokens.has(token)) sessions.set(token, value);
+    }
+    const kept = new Map();
+    for (const [token, value] of sessions) {
+      if (!revokedSessionTokens.has(token)) kept.set(token, value);
+    }
+    writeFileAtomic(SESSIONS_FILE, `${JSON.stringify(Object.fromEntries(kept), null, 2)}\n`);
+  });
 }
 
 function mergeSessionsFromDisk() {
@@ -197,6 +241,7 @@ function publicUser(user) {
     authProvider: user.authProvider || (user.googleId ? "google" : user.password ? "password" : ""),
     createdAt: user.createdAt || "",
     lastLoginAt: user.lastLoginAt || "",
+    loginIp: user.loginIp || "",
     registered: isRegisteredUser(user),
     hasPassword: Boolean(user.password),
     thumbEnabled: Boolean(user.thumbHash),
@@ -215,14 +260,49 @@ function rebuildIndexes(users) {
   return { users, byEmail, byMobile, byId };
 }
 
+function saveUsers(users) {
+  const payload = users.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email || "",
+    mobile: row.mobile || "",
+    desk: row.desk,
+    role: resolveUserRole(row),
+    ...(row.googleId ? { googleId: row.googleId } : {}),
+    ...(row.authProvider ? { authProvider: row.authProvider } : {}),
+    ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+    ...(row.lastLoginAt ? { lastLoginAt: row.lastLoginAt } : {}),
+    ...(row.loginIp ? { loginIp: row.loginIp } : {}),
+    ...(row.password ? { password: row.password } : {}),
+    ...(row.thumbHash ? { thumbHash: row.thumbHash } : {}),
+  }));
+  writeFileAtomic(USERS_FILE, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+let store = null;
+let usersReadable = false;
+const revokedUserIds = new Set();
+
+function readUsersFile() {
+  if (!fs.existsSync(USERS_FILE)) return { readable: true, stored: [] };
+  const parsed = JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
+  if (!Array.isArray(parsed)) throw new Error("accounts file is not a list");
+  return { readable: true, stored: parsed };
+}
+
 function loadUsers() {
   let stored = [];
+  let readable = false;
   try {
-    stored = JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
-    if (!Array.isArray(stored)) stored = [];
-  } catch {
-    stored = [];
+    const read = readUsersFile();
+    stored = read.stored;
+    readable = read.readable;
+  } catch (error) {
+    console.log(`Could not read accounts: ${error.message || error}`);
+    readable = false;
   }
+  usersReadable = readable;
+  if (!readable && store?.users?.length) return store;
   const byId = new Map(SEED_USERS.map((row) => [row.id, { ...row }]));
   for (const row of stored) {
     if (!row || typeof row !== "object") continue;
@@ -238,13 +318,14 @@ function loadUsers() {
       authProvider: row.authProvider ? String(row.authProvider) : undefined,
       createdAt: row.createdAt ? String(row.createdAt) : undefined,
       lastLoginAt: row.lastLoginAt ? String(row.lastLoginAt) : undefined,
+      loginIp: row.loginIp ? String(row.loginIp) : undefined,
       password: row.password ? String(row.password) : undefined,
       thumbHash: row.thumbHash ? String(row.thumbHash) : undefined,
     };
-    if (RETIRED_ADMIN_IDS.has(id) && normalizeEmail(next.email) !== SOLE_ADMIN_EMAIL) continue;
-    if (RETIRED_ADMIN_EMAILS.has(normalizeEmail(next.email)) && normalizeEmail(next.email) !== SOLE_ADMIN_EMAIL) {
-      continue;
-    }
+    const email = normalizeEmail(next.email);
+    const retiredMember = RETIRED_ADMIN_EMAILS.has(email) && email !== SOLE_ADMIN_EMAIL;
+    if (retiredMember) next.role = "user";
+    if (RETIRED_ADMIN_IDS.has(id) && email !== SOLE_ADMIN_EMAIL && !retiredMember) continue;
     const seed = byId.get(id);
     byId.set(id, seed ? { ...seed, ...next, password: next.password || seed.password } : next);
   }
@@ -269,35 +350,49 @@ function loadUsers() {
   return rebuildIndexes(users);
 }
 
-function saveUsers(users) {
-  fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
-  const payload = users.map((row) => ({
-    id: row.id,
-    name: row.name,
-    email: row.email || "",
-    mobile: row.mobile || "",
-    desk: row.desk,
-    role: resolveUserRole(row),
-    ...(row.googleId ? { googleId: row.googleId } : {}),
-    ...(row.authProvider ? { authProvider: row.authProvider } : {}),
-    ...(row.createdAt ? { createdAt: row.createdAt } : {}),
-    ...(row.lastLoginAt ? { lastLoginAt: row.lastLoginAt } : {}),
-    ...(row.password ? { password: row.password } : {}),
-    ...(row.thumbHash ? { thumbHash: row.thumbHash } : {}),
-  }));
-  fs.writeFileSync(USERS_FILE, `${JSON.stringify(payload, null, 2)}\n`);
+store = loadUsers();
+if (usersReadable) {
+  try {
+    persist();
+  } catch (error) {
+    console.log(`Could not normalize accounts: ${error.message || error}`);
+  }
 }
 
-let store = loadUsers();
-try {
-  saveUsers(store.users);
-} catch {
-  /* keep memory copy if the users file is not writable */
+function withUsersLock(fn) {
+  return withFileLock(`${USERS_FILE}.lock`, fn);
+}
+
+function absorbDiskUsers() {
+  const disk = loadUsers();
+  if (!usersReadable || disk === store) return;
+  const ids = new Set(store.users.map((row) => row.id));
+  const emails = new Set(store.users.map((row) => row.email).filter(Boolean));
+  const mobiles = new Set(store.users.map((row) => row.mobile).filter(Boolean));
+  for (const row of disk.users) {
+    if (!row?.id || ids.has(row.id) || revokedUserIds.has(row.id)) continue;
+    if (row.email && emails.has(row.email)) continue;
+    if (row.mobile && mobiles.has(row.mobile)) continue;
+    store.users.push(row);
+    ids.add(row.id);
+    if (row.email) emails.add(row.email);
+    if (row.mobile) mobiles.add(row.mobile);
+  }
 }
 
 function persist() {
-  saveUsers(store.users);
-  store = rebuildIndexes(store.users);
+  withUsersLock(() => {
+    absorbDiskUsers();
+    if (!usersReadable) throw fail("Could not read accounts. Try again.", 503);
+    saveUsers(store.users);
+    store = rebuildIndexes(store.users);
+  });
+}
+
+function reloadUsers() {
+  const next = loadUsers();
+  if (!usersReadable) throw fail("Could not read accounts. Try again.", 503);
+  if (next !== store) store = next;
 }
 
 export function findUser(identifier) {
@@ -308,6 +403,37 @@ export function findUser(identifier) {
   if (isGmail(email) || email.includes("@")) return store.byEmail.get(email) || null;
   if (isMobile(mobile)) return store.byMobile.get(mobile) || null;
   return store.byEmail.get(email) || null;
+}
+
+export function clientAddress(req) {
+  const forwarded = String(req?.headers?.["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  const real = String(req?.headers?.["x-real-ip"] || "").trim();
+  const socket = String(req?.socket?.remoteAddress || req?.ip || "").trim();
+  return (forwarded || real || socket).replace(/^::ffff:/, "");
+}
+
+function looksLikeIp(value) {
+  const raw = String(value || "").trim();
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(raw)) {
+    return raw.split(".").every((part) => {
+      const n = Number(part);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  }
+  return raw.includes(":") && /^[0-9a-fA-F:]+$/.test(raw) && raw.length <= 45;
+}
+
+export function recordLoginIp(sessionToken, ip) {
+  const clean = String(ip || "").trim().replace(/^::ffff:/, "");
+  if (!looksLikeIp(clean)) return null;
+  reloadUsers();
+  const user = userFromToken(sessionToken);
+  if (!user) return null;
+  user.loginIp = clean;
+  persist();
+  return publicUser(user);
 }
 
 function issueSession(user) {
@@ -322,7 +448,7 @@ function issueSession(user) {
 }
 
 function userFromToken(token) {
-  const clean = String(token || "");
+  const clean = String(token || "").replace(/^Bearer\s+/i, "").trim();
   if (!clean) return null;
   let row = sessions.get(clean);
   if (!row) {
@@ -330,7 +456,49 @@ function userFromToken(token) {
     row = sessions.get(clean);
   }
   if (!row) return null;
-  return store.byId.get(row.userId) || findUser(row.email || row.mobile);
+  let user = store.byId.get(row.userId) || findUser(row.email || row.mobile);
+  if (!user) {
+    const next = loadUsers();
+    if (usersReadable && next !== store) store = next;
+    user = store.byId.get(row.userId) || findUser(row.email || row.mobile);
+  }
+  return user || null;
+}
+
+function readCookie(req, name) {
+  const raw = String(req?.headers?.cookie || "");
+  for (const part of raw.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 1) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    const value = part.slice(eq + 1).trim();
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return "";
+}
+
+function sessionRow(token) {
+  const clean = String(token || "").replace(/^Bearer\s+/i, "").trim();
+  if (!clean) return null;
+  if (sessions.has(clean)) return sessions.get(clean);
+  mergeSessionsFromDisk();
+  return sessions.get(clean) || null;
+}
+
+export function requestToken(req) {
+  const body = String(req?.body?.token || "").replace(/^Bearer\s+/i, "").trim();
+  const header = String(req?.headers?.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  const query = String(req?.query?.token || "").replace(/^Bearer\s+/i, "").trim();
+  const explicit = body || header || query;
+  const cookie = readCookie(req, "t2s-token");
+  if (!explicit) return cookie;
+  if (userFromToken(explicit)) return explicit;
+  if (!sessionRow(explicit) && cookie && cookie !== explicit && userFromToken(cookie)) return cookie;
+  return explicit;
 }
 
 function loadGmailCreds() {
@@ -485,7 +653,7 @@ function consumeOtp(channel, identifier, otp, purpose) {
 }
 
 export function loginWithPassword(identifier, password) {
-  store = loadUsers();
+  reloadUsers();
   const user = findUser(identifier || "");
   if (!user?.password || !checkPassword(password, user.password)) {
     throw fail("Wrong Gmail / mobile or password. New users: Sign up first.", 401);
@@ -602,6 +770,7 @@ export function verifyOtp({ email, mobile, identifier, otp, purpose } = {}) {
   if (intent === "reset") {
     return { ok: true, verified: true, channel, identifier: channel === "mobile" ? normalizeMobile(target) : normalizeEmail(target) };
   }
+  reloadUsers();
   const user = findUser(target);
   if (!user) throw fail("No account for that email / mobile. Sign up first.");
   return issueSession(user);
@@ -612,6 +781,7 @@ export function resetPassword({ email, mobile, identifier, otp, password } = {})
   const channel = isMobile(target) ? "mobile" : "gmail";
   if (String(password || "").length < 6) throw fail("Password must be at least 6 characters.");
   consumeOtp(channel, target, otp, "reset");
+  reloadUsers();
   const user = findUser(target);
   if (!user) throw fail("No account for that email / mobile. Sign up first.");
   user.password = hashPassword(password);
@@ -637,6 +807,7 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
     const wanted = channel === "mobile" ? "mobile" : "gmail";
     consumeOtp(wanted, wanted === "mobile" ? nextMobile : nextEmail, otp, "signup");
   }
+  reloadUsers();
   const emailUser = findUser(nextEmail);
   const mobileUser = findUser(nextMobile);
   if (emailUser?.password || (emailUser && isRegisteredUser(emailUser))) {
@@ -669,6 +840,7 @@ export function completeSignup({ name, email, mobile, identifier, otp, password,
 }
 
 export function enableThumb(sessionToken) {
+  reloadUsers();
   const user = userFromToken(sessionToken);
   if (!user) throw fail("Sign in first, then enable thumb.", 401);
   const raw = `thumb-${crypto.randomBytes(24).toString("hex")}`;
@@ -680,17 +852,29 @@ export function enableThumb(sessionToken) {
 export function loginWithThumb(thumbToken) {
   const token = String(thumbToken || "");
   if (!token.startsWith("thumb-")) throw fail("Thumb is not set on this device. Sign in with password or OTP first, then enable thumb.", 401);
+  reloadUsers();
   const user = store.users.find((row) => row.thumbHash && checkPassword(token, row.thumbHash));
   if (!user) throw fail("Thumb login expired. Sign in with password or OTP, then enable thumb again.", 401);
   return issueSession(user);
 }
 
 export function sessionUser(token, { reload = false } = {}) {
-  if (reload) store = loadUsers();
-  const user = userFromToken(token);
+  const memory = store;
+  if (reload) {
+    const next = loadUsers();
+    if (usersReadable && next !== store) store = next;
+  }
+  let user = userFromToken(token);
+  if (!user && memory && memory !== store) {
+    const disk = store;
+    store = memory;
+    user = userFromToken(token);
+    if (!user) store = disk;
+  }
   if (user) return publicUser(user);
   if (!reload) {
-    store = loadUsers();
+    const next = loadUsers();
+    if (usersReadable && next !== store) store = next;
     const again = userFromToken(token);
     return again ? publicUser(again) : null;
   }
@@ -698,7 +882,7 @@ export function sessionUser(token, { reload = false } = {}) {
 }
 
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {
-  store = loadUsers();
+  reloadUsers();
   const user = userFromToken(sessionToken);
   if (!user) throw fail("Sign in first.", 401);
   const nextName = String(name ?? user.name ?? "").trim();
@@ -725,7 +909,8 @@ export function updateProfile(sessionToken, { name, email, mobile } = {}) {
 }
 
 export function listPublicUsers() {
-  store = loadUsers();
+  const next = loadUsers();
+  if (usersReadable && next !== store) store = next;
   return store.users
     .map((row) => publicUser(row))
     .sort((a, b) => {
@@ -737,13 +922,14 @@ export function listPublicUsers() {
 }
 
 export function getPublicUser(id) {
-  store = loadUsers();
+  const next = loadUsers();
+  if (usersReadable && next !== store) store = next;
   const user = store.byId.get(String(id || "").trim());
   return user ? publicUser(user) : null;
 }
 
 export function adminUpdateUser(id, patch = {}) {
-  store = loadUsers();
+  reloadUsers();
   const user = store.byId.get(String(id || "").trim());
   if (!user) throw fail("User not found.", 404);
   if (patch.name != null) {
@@ -765,7 +951,7 @@ export function adminUpdateUser(id, patch = {}) {
 }
 
 export function deleteRegisteredUser(id, { actorId } = {}) {
-  store = loadUsers();
+  reloadUsers();
   const userId = String(id || "").trim();
   const user = store.byId.get(userId);
   if (!user) throw fail("Client not found.", 404);
@@ -774,10 +960,17 @@ export function deleteRegisteredUser(id, { actorId } = {}) {
     throw fail("The desk admin account cannot be deleted.");
   }
   if (resolveUserRole(user) === "admin") throw fail("Delete a member from All clients, not an admin.");
+  revokedUserIds.add(userId);
   store.users = store.users.filter((row) => row.id !== userId);
   persist();
   for (const [token, session] of [...sessions.entries()]) {
-    if (session.userId === userId) sessions.delete(token);
+    if (session.userId === userId) {
+      sessions.delete(token);
+      revokedSessionTokens.add(token);
+    }
+  }
+  for (const [token, session] of loadSessions()) {
+    if (session.userId === userId) revokedSessionTokens.add(token);
   }
   persistSessions();
   return { ok: true, id: userId };
@@ -786,7 +979,7 @@ export function deleteRegisteredUser(id, { actorId } = {}) {
 export const INITIAL_CLIENT_PASSWORD = "1234";
 
 export function adminCreateMember(patch = {}) {
-  store = loadUsers();
+  reloadUsers();
   const name = String(patch.name || "").trim();
   if (name.length < 2) throw fail("Enter the client name.");
   const mobile = normalizeMobile(patch.mobile);
@@ -889,6 +1082,18 @@ export function safeFrontendOrigin(next, env = process.env) {
   }
 }
 
+export function googleLoginSearch({ token, user } = {}) {
+  const query = new URLSearchParams();
+  query.set("google_token", String(token || ""));
+  const name = String(user?.name || "").trim();
+  const email = String(user?.email || "").trim();
+  const mobile = String(user?.mobile || "").trim();
+  if (name) query.set("google_name", name);
+  if (email) query.set("google_email", email);
+  if (mobile) query.set("google_mobile", mobile);
+  return query.toString();
+}
+
 export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
   const clientId = String(env.GOOGLE_CLIENT_ID || "").trim();
   if (!clientId || !String(env.GOOGLE_CLIENT_SECRET || "").trim()) {
@@ -913,6 +1118,7 @@ export function upsertGoogleUser({ email, name, googleId, env = process.env } = 
   if (!isGmail(normalized) && !adminEmailsFromEnv(env).has(normalized)) {
     throw fail("Use a Gmail address to continue with Google.", 401);
   }
+  reloadUsers();
   let user = store.byEmail.get(normalized);
   if (!user) {
     user = {
@@ -931,7 +1137,7 @@ export function upsertGoogleUser({ email, name, googleId, env = process.env } = 
     user.authProvider = user.authProvider || "google";
     user.createdAt = user.createdAt || new Date().toISOString();
     const nextName = String(name || "").trim();
-    if (nextName && (!user.name || user.name === "Trader")) user.name = nextName;
+    if (nextName && (!user.name || user.name === "Trader" || user.name === "Google user")) user.name = nextName;
   }
   user.email = normalized;
   if (!user.role) user.role = resolveUserRole(user, env);

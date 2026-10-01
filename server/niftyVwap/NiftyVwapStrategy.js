@@ -31,6 +31,16 @@ function niftyFutCandleText(signal, config) {
   return { open, close, clock: clock ? ` · ${clock}` : "" };
 }
 
+function trackedOptionStrike(state, spot, step, strikeOffset, option) {
+  if (state?.lockedOption === option && Number(state.lockedStrike) > 0) return Number(state.lockedStrike);
+  return OptionStrikeSelector.strikeForOffset(spot, step, strikeOffset);
+}
+
+function optionColorText(option, color, strike) {
+  const price = Number(strike) > 0 ? ` ${Number(strike)}` : "";
+  return `${option}${price} ${String(color || "").toUpperCase()}`;
+}
+
 function istMinutesToClose(now = Date.now()) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -66,6 +76,9 @@ export const NiftyVwapStrategy = {
             initialSlPct: config.initialSlPct,
             activationPct: config.trailingActivationPct,
             stepPct: config.trailingStepPct,
+            lockToEntry: config.lockToEntry === true,
+            trailEveryPct: config.trailingEveryPct,
+            trailShiftPct: config.trailingShiftPct,
           });
     if (config.useTrail !== false && nextStop > Number(state.stopPrice || 0)) {
       state.stopPrice = nextStop;
@@ -125,20 +138,27 @@ export const NiftyVwapStrategy = {
           return { action: "wait", reason: "wait-eval" };
         }
         const fut = futTapeLabel(config);
+        const ceTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "CE");
+        const peTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "PE");
+        const strikeNote = ceTrack && ceTrack === peTrack ? ` · STRIKE ${ceTrack}` : "";
         if (signal.niftyColor === "doji") {
-          algo.lastSignal = `NO TRADE · ${preview}${fut} DOJI O ${tape.open} C ${tape.close}${tape.clock} · next 5m`;
+          algo.lastSignal = `NO TRADE · ${preview}${fut} DOJI O ${tape.open} C ${tape.close}${tape.clock}${strikeNote} · next 5m`;
           return { action: "wait", reason: "first-doji" };
         }
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
           algo.lastSignal = signal.ceColor
-            ? `NO TRADE · ${preview}${fut} GREEN CE ${signal.ceColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : "WAIT CE 5m";
+            ? `NO TRADE · ${preview}${fut} GREEN ${optionColorText("CE", signal.ceColor, ceTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
+            : ceTrack
+              ? `WAIT CE ${ceTrack} 5m`
+              : "WAIT CE 5m";
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
           algo.lastSignal = signal.peColor
-            ? `NO TRADE · ${preview}${fut} RED PE ${signal.peColor.toUpperCase()} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : "WAIT PE 5m";
+            ? `NO TRADE · ${preview}${fut} RED ${optionColorText("PE", signal.peColor, peTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
+            : peTrack
+              ? `WAIT PE ${peTrack} 5m`
+              : "WAIT PE 5m";
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
         algo.lastSignal = "WAIT NEXT 5m";
@@ -216,14 +236,14 @@ export const NiftyVwapStrategy = {
       return { action: "rejected", result };
     }
     if (result?.duplicate || result?.queued === false) {
-      state.inFlight = false;
-      state.lastEntryBarTime = 0;
-      if (!state.fillPrice) PositionManager.clearOpen(state);
-      algo.lastSignal = "";
-      return { action: "skip", reason: "duplicate" };
+      state.buyPhase = "entry";
+      state.inFlight = true;
+      algo.lastSignal = "WAIT ORDER";
+      return { action: "skip", reason: "buy-active" };
     }
     const fill = fillFromResult(result, ltp);
     if (result?.queued) {
+      state.buyPhase = "entry";
       TradeLogger.record("queued", { symbol: pick.symbol, strategy: algo.name });
       algo.lastSignal = `BUY ${pick.option} SENDING`;
       return { action: "queued", pick, result };
@@ -252,7 +272,7 @@ export const NiftyVwapStrategy = {
     });
     algo.lastSignal =
       config.signalMode === "first-candle"
-        ? `BUY ATM ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${pick.option} GREEN O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
+        ? `BUY ${pick.strike} ${pick.option} · ${signal.previewCandle || signal.previewLive ? "PREVIEW " : ""}${futTapeLabel(config)} ${String(signal.niftyColor || "").toUpperCase()} + ${optionColorText(pick.option, "GREEN", pick.strike)} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)}${niftyFutCandleText(signal, config).clock}`
         : `BUY ${pick.option} O ${Number(signal.futuresOpen || 0).toFixed(2)} C ${Number(signal.futuresClose || 0).toFixed(2)} VWAP ${Number(signal.futuresVwap || 0).toFixed(2)}`;
     return { action: "entry", pick, fill, result };
   },
@@ -300,11 +320,13 @@ export const NiftyVwapStrategy = {
               barMs,
             });
     if (signal.barTime) state.lastProcessedBarTime = signal.barTime;
+    const buyLocked = state.buyPhase === "entry" || state.buyPhase === "open" || state.inFlight;
     if (
       config.signalMode === "first-candle" &&
       signal.ready &&
       signal.barTime &&
-      state.processedFirstBarTime !== signal.barTime
+      state.processedFirstBarTime !== signal.barTime &&
+      !(buyLocked && (signal.buyCe || signal.buyPe))
     ) {
       state.processedFirstBarTime = signal.barTime;
       TradeLogger.record("first-candle-signal", {
@@ -320,6 +342,7 @@ export const NiftyVwapStrategy = {
 
     const open = PositionManager.openFor(input.positions, algo.name, state);
     if (open) {
+      state.buyPhase = "open";
       if (!state.fillPrice) {
         const leg = PositionManager.niftyOptionLeg(open) || {};
         PositionManager.markFill(
@@ -355,14 +378,41 @@ export const NiftyVwapStrategy = {
       return { action: "skip", reason: "already-open" };
     }
 
-    if (state.inFlight && !open) {
-      const timedOut = state.lastEntryAt && now - state.lastEntryAt > 120_000;
-      if (!timedOut || RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime)) {
-        return { action: "skip", reason: "in-flight" };
+    if (state.buyPhase === "entry" && !open) {
+      const buys = (input.orders || []).filter(
+        (row) => !row?.copyUserId && String(row.strategy || "") === algo.name && String(row.side || "BUY").toUpperCase() !== "SELL",
+      );
+      const rejected =
+        buys.length > 0 &&
+        buys.every((row) => {
+          const status = String(row.status || "").toUpperCase();
+          return (status === "REJECTED" || status === "CANCELLED" || status === "FAILED" || status === "EXPIRED") && !(Number(row.filledQty) > 0);
+        });
+      const entryMs = Number(state.lastEntryAt) || 0;
+      const entryDay = entryMs > 0 ? sessionKeyIST(entryMs) : "";
+      const previousDay = !entryDay || entryDay < sessionKeyIST(now);
+      if ((rejected || previousDay) && !state.inFlight) {
+        state.buyPhase = "";
+        state.inFlight = false;
+        state.lastEntryBarTime = 0;
+        state.lastEntryAt = 0;
+        state.sentSignalBarTime = 0;
+        if (previousDay || !state.fillPrice) PositionManager.clearOpen(state);
+      } else {
+        algo.lastSignal = "WAIT ORDER";
+        return { action: "skip", reason: "buy-active" };
       }
+    }
+
+    if (state.buyPhase === "open" && !open) {
+      state.buyPhase = "";
       state.inFlight = false;
-      if (!state.fillPrice) PositionManager.clearOpen(state);
-      algo.lastSignal = "ORDER TIMEOUT";
+      PositionManager.clearOpen(state);
+    }
+
+    if (state.inFlight && !open) {
+      algo.lastSignal = "WAIT ORDER";
+      return { action: "skip", reason: "buy-active" };
     }
 
     if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) {
@@ -396,7 +446,7 @@ export function noteBrokerRejection(algo) {
   if (!algo) return;
   const state = runtimeState(algo);
   state.inFlight = false;
-  if (!state.fillPrice) PositionManager.clearOpen(state);
+  if (!state.fillPrice && state.buyPhase !== "open") PositionManager.clearOpen(state);
   algo.lastSignal = "REJECTED";
   TradeLogger.record("rejected", { strategy: algo.name, message: "broker-rejected" });
 }

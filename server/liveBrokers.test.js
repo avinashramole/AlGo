@@ -12,6 +12,7 @@ const {
   disconnectLiveBroker,
   fyersSymbol,
   isLiveBrokerReady,
+  kotakOrderAmo,
   nfoTradingSymbol,
   parseDeskFutureSymbol,
   parseDeskOptionSymbol,
@@ -65,7 +66,12 @@ test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
 
 test("Upstox crude copy uses the CRUDEOIL contract, not NIFTY or CRUDEOILM", () => {
   assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 8700 CE"), { root: "CRUDEOIL", strike: 8700, option: "CE" });
-  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 8700 CALL"), { root: "CRUDEOIL", strike: 8700, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 8700 CALL"), {
+    root: "CRUDEOIL",
+    strike: 8700,
+    option: "CE",
+    expiry: "2026-10-15",
+  });
   assert.deepEqual(parseDeskOptionSymbol("CRUDEOIL 15 OCT 26 8700 CALL"), {
     root: "CRUDEOIL",
     strike: 8700,
@@ -293,7 +299,7 @@ test("Upstox master file resolves crude, NIFTY options, and the NIFTY future whe
       ["MCX_FO|580473", 100, "LIMIT"],
       ["MCX_FO|580627", 100, "LIMIT"],
       ["NSE_FO|73899", 65, "MARKET"],
-      ["NSE_FO|51338", 65, "MARKET"],
+      ["NSE_FO|40704", 65, "MARKET"],
       ["NSE_FO|68407", 65, "MARKET"],
     ],
   );
@@ -327,11 +333,11 @@ test("Upstox switches a crude copy to NSE NSCOM when MCX orders are disabled and
       tick_size: 10,
     },
     {
-      trading_symbol: "NIFTY 22650 CE 27 OCT 26",
+      trading_symbol: "NIFTY 22650 CE 06 OCT 26",
       underlying_symbol: "NIFTY",
       instrument_type: "CE",
       strike_price: 22650,
-      expiry: "2026-10-27",
+      expiry: "2026-10-06",
       instrument_key: "NSE_FO|51338",
       lot_size: 65,
     },
@@ -570,8 +576,10 @@ test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on th
   assert.equal(placed.instrument_token, "NSE_FO|426269");
 });
 
-test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrument key", async () => {
-  assert.equal(upstoxExpiryDate("2026-10", "NIFTY"), "2026-10-27");
+test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrument key", async () => {
+  const day = upstoxExpiryDate("2026-10", "NIFTY");
+  assert.equal(day, "2026-10-06");
+  assert.notEqual(day, "2026-10-27");
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(String(url));
@@ -586,11 +594,11 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrum
           JSON.stringify({
             data: [
               {
-                trading_symbol: "NIFTY 27 OCT 26 23100 CE",
+                trading_symbol: "NIFTY 06 OCT 26 23100 CE",
                 underlying_symbol: "NIFTY",
                 instrument_type: "CE",
                 strike_price: 23100,
-                expiry: "2026-10-27",
+                expiry: "2026-10-06",
                 instrument_key: "NSE_FO|23100ce",
               },
             ],
@@ -613,13 +621,17 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the October monthly instrum
     fetchImpl,
   );
   assert.equal(live.orderId, "upx-oct");
-  assert.ok(calls.some((url) => url.includes("expiry_date=2026-10-27")));
+  assert.ok(calls.some((url) => url.includes(`expiry_date=${day}`)));
   assert.ok(calls.some((url) => url.includes("api-hft.upstox.com/v3/order/place")));
 });
 
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {
-  assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY26SEP24500CE");
-  assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY26SEP24500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY2691524500CE");
+  assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY2691524500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-06"), "NIFTY26O0622500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 06 OCT 22500 PUT"), "NIFTY26O0622500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-27"), "NIFTY26OCT22500PE");
+  assert.equal(nfoTradingSymbol("NIFTY-Oct2026-22500-PE"), "NIFTY26O0622500PE");
 });
 
 test("connectLiveBroker stores Zerodha after a profile probe and does not invent positions", async () => {
@@ -661,7 +673,7 @@ test("placeLiveBrokerOrder sends a Kite MARKET order", async () => {
   );
   assert.equal(live.orderId, "z-100");
   assert.equal(live.brokerId, "zerodha");
-  assert.match(String(calls[0].body), /NIFTY26SEP24500CE/);
+  assert.match(String(calls[0].body), /NIFTY2691524500CE/);
   assert.match(String(calls[0].body), /transaction_type=BUY/);
 });
 
@@ -894,4 +906,403 @@ test("member Zerodha copy uses the member token, not the admin session", async (
 test("disconnectLiveBroker clears the saved live session", () => {
   assert.equal(disconnectLiveBroker("zerodha"), true);
   assert.equal(isLiveBrokerReady("zerodha"), false);
+});
+
+test("a Nifty order at 15:45 IST is a Kotak after-market order", () => {
+  assert.equal(kotakOrderAmo({ symbol: "NIFTY 22900 CE" }, new Date("2026-10-01T10:15:33.000Z")), "YES");
+  assert.equal(kotakOrderAmo({ symbol: "NIFTY 22900 CE", orderAt: "2026-10-01T04:00:00.000Z" }), "NO");
+});
+
+test("Kotak Neo order is posted to the live place host, not the dead gw-napi host", async () => {
+  const savedKey = process.env.T2S_KOTAK_CONSUMER_KEY;
+  process.env.T2S_KOTAK_CONSUMER_KEY = "desk-should-not-send";
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), headers: options.headers || {}, body: options.body });
+    if (String(url).includes("gw-napi")) {
+      throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-22900" }) };
+  };
+  try {
+    const live = await placeLiveBrokerOrder(
+      "kotak",
+      {
+        copyUserId: "u-kotak-order",
+        brokerSession: { accessToken: "trade-token-1452", apiKey: "kotak-consumer-key", clientId: "YT2Vm", sessionToken: "neo-sid-88" },
+        symbol: "NIFTY 22900 CE",
+        expiry: "2026-10-06",
+        side: "BUY",
+        qty: 65,
+        price: 15.4,
+        type: "MARKET",
+        product: "MIS",
+        orderAt: "2026-10-01T10:15:33.000Z",
+      },
+      fetchImpl,
+    );
+    assert.equal(live.orderId, "k-22900");
+    assert.equal(live.brokerId, "kotak");
+    assert.equal(calls.some((row) => row.url.includes("gw-napi")), false);
+    assert.match(calls[0].url, /^https:\/\/mis\.kotaksecurities\.com\/quick\/order\/rule\/ms\/place/);
+    assert.equal(calls[0].headers.Auth, "trade-token-1452");
+    assert.equal(calls[0].headers.Sid, "neo-sid-88");
+    assert.equal(String(calls[0].headers.Sid).includes("YT2Vm"), false);
+    assert.equal(String(calls[0].headers.Auth).includes("kotak-consumer-key"), false);
+    assert.equal(calls[0].headers["neo-fin-key"], "neotradeapi");
+    assert.equal(calls[0].headers.Authorization, undefined);
+    assert.equal(String(calls[0].headers.Auth).startsWith("Bearer "), false);
+    const jData = JSON.parse(new URLSearchParams(calls[0].body).get("jData"));
+    assert.equal(jData.tt, "B");
+    assert.equal(jData.qt, "65");
+    assert.equal(jData.es, "nse_fo");
+    assert.equal(jData.pt, "MKT");
+    assert.equal(jData.pr, "0");
+    assert.equal(jData.am, "YES");
+    assert.equal(jData.os, "NEOTRADEAPI");
+    assert.equal(jData.ts, "NIFTY26O0622900CE");
+    assert.equal(String(calls[0].body).includes("desk-should-not-send"), false);
+  } finally {
+    if (savedKey == null) delete process.env.T2S_KOTAK_CONSUMER_KEY;
+    else process.env.T2S_KOTAK_CONSUMER_KEY = savedKey;
+  }
+});
+
+test("a member Kotak order without a Neo sid is refused before Kotak is called", async () => {
+  let called = false;
+  const fetchImpl = async () => {
+    called = true;
+    return { ok: true, status: 200, text: async () => "{}" };
+  };
+  const order = {
+    symbol: "NIFTY 22900 CE",
+    expiry: "2026-10-06",
+    side: "BUY",
+    qty: 65,
+    price: 15.4,
+    orderAt: "2026-10-01T12:55:22.000Z",
+  };
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "kotak",
+        {
+          copyUserId: "u-avinash",
+          brokerSession: { accessToken: "member-token-1452", apiKey: "member-consumer", clientId: "YT2Vm" },
+          ...order,
+        },
+        fetchImpl,
+      ),
+    /trade session|Neo sid/,
+  );
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "kotak",
+        {
+          copyUserId: "u-avinash",
+          brokerSession: { accessToken: "member-consumer", apiKey: "member-consumer", clientId: "YT2Vm", sessionToken: "YT2Vm" },
+          ...order,
+        },
+        fetchImpl,
+      ),
+    /trade session|Neo sid/,
+  );
+  assert.equal(called, false);
+});
+
+test("a member crude order opens that user's Kotak trade login and does not use the admin login", async () => {
+  const saved = {
+    mobile: process.env.T2S_KOTAK_MOBILE,
+    mpin: process.env.T2S_KOTAK_MPIN,
+    totp: process.env.T2S_KOTAK_TOTP_SECRET,
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_MOBILE = "9000000099";
+  process.env.T2S_KOTAK_MPIN = "111111";
+  process.env.T2S_KOTAK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-consumer";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-access-9f44";
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({
+      url: String(url),
+      auth: options.headers?.Authorization,
+      sid: options.headers?.sid || options.headers?.Sid,
+      sessionAuth: options.headers?.Auth,
+      body: options.body,
+    });
+    const target = String(url);
+    if (target.includes("tradeApiLogin")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
+    }
+    if (target.includes("tradeApiValidate")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: { token: "edit-token", sid: "edit-sid", baseUrl: "https://e22.kotaksecurities.com", hsServerId: "server-9" },
+          }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-crude" }) };
+  };
+  try {
+    const live = await placeLiveBrokerOrder(
+      "kotak",
+      {
+        copyUserId: "u-avinash",
+        brokerSession: {
+          accessToken: "member-access-1452",
+          apiKey: "member-consumer",
+          clientId: "YT2Vm",
+          mobile: "9876501234",
+          mpin: "654321",
+          totpSecret: "GEZDGNBVGY3TQOJQ",
+        },
+        symbol: "CRUDEOIL 8800 PE",
+        side: "BUY",
+        qty: 100,
+        price: 383.3,
+        type: "MARKET",
+        orderAt: "2026-10-01T14:00:15.000Z",
+      },
+      fetchImpl,
+    );
+    assert.equal(live.orderId, "k-crude");
+    assert.equal(live.status, "PENDING");
+    const login = calls.find((row) => row.url.includes("tradeApiLogin"));
+    assert.equal(login.auth, "member-access-1452");
+    assert.equal(String(login.body).includes("+919876501234"), true);
+    assert.equal(String(login.body).includes("YT2Vm"), true);
+    assert.equal(String(login.body).includes("9000000099"), false);
+    assert.equal(String(login.body).includes("GEZDGNBVGY3TQOJQ"), false);
+    assert.equal(String(login.body).includes("JBSWY3DPEHPK3PXP"), false);
+    assert.equal(String(login.auth).includes("admin-consumer"), false);
+    assert.equal(String(login.auth).includes("member-consumer"), false);
+    const place = calls.find((row) => row.url.includes("/quick/order/rule/ms/place"));
+    assert.match(place.url, /^https:\/\/e22\.kotaksecurities\.com\/quick\/order\/rule\/ms\/place\?sId=server-9$/);
+    assert.equal(place.sessionAuth, "edit-token");
+    assert.equal(place.sid, "edit-sid");
+    assert.equal(String(place.sid).includes("YT2Vm"), false);
+    assert.equal(String(place.sessionAuth).includes("member-access-1452"), false);
+    assert.equal(String(place.sessionAuth).includes("member-consumer"), false);
+    const jData = JSON.parse(new URLSearchParams(place.body).get("jData"));
+    assert.equal(jData.es, "mcx_fo");
+    assert.equal(jData.am, "NO");
+    assert.equal(jData.tt, "B");
+    assert.equal(jData.qt, "100");
+    assert.equal(String(JSON.stringify(live)).includes("654321"), false);
+    assert.equal(String(JSON.stringify(live)).includes("GEZDGNBVGY3TQOJQ"), false);
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_MOBILE", saved.mobile],
+      ["T2S_KOTAK_MPIN", saved.mpin],
+      ["T2S_KOTAK_TOTP_SECRET", saved.totp],
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("a member Kotak refusal stays on that user's own key and does not send the admin broker", async () => {
+  const saved = {
+    mobile: process.env.T2S_KOTAK_MOBILE,
+    mpin: process.env.T2S_KOTAK_MPIN,
+    totp: process.env.T2S_KOTAK_TOTP_SECRET,
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_MOBILE = "9000000099";
+  process.env.T2S_KOTAK_MPIN = "111111";
+  process.env.T2S_KOTAK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-consumer-key";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-access-token";
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), auth: options.headers?.Authorization, body: options.body });
+    if (String(url).includes("tradeApiLogin")) {
+      return {
+        ok: false,
+        status: 424,
+        text: async () => JSON.stringify({ error: [{ code: "424", message: "Consumer key user-own-key-1452 does not exist" }] }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "should-not-place" }) };
+  };
+  try {
+    await assert.rejects(
+      () =>
+        placeLiveBrokerOrder(
+          "kotak",
+          {
+            copyUserId: "u-avinash",
+            brokerSession: {
+              accessToken: "user-own-key-1452",
+              apiKey: "user-own-key-1452",
+              clientId: "YT2Vm",
+              mobile: "9922980000",
+              mpin: "654321",
+              totpSecret: "GEZDGNBVGY3TQOJQ",
+            },
+            symbol: "CRUDEOIL 8800 PE",
+            side: "BUY",
+            qty: 100,
+            type: "MARKET",
+          },
+          fetchImpl,
+        ),
+      (error) => {
+        assert.match(error.message, /YT2Vm/);
+        assert.match(error.message, /admin broker was not used/);
+        assert.equal(error.message.includes("user-own-key-1452"), false);
+        assert.equal(error.message.includes("admin-consumer-key"), false);
+        assert.equal(error.message.includes("YIX14"), false);
+        assert.equal(error.live?.status, "REJECTED");
+        return true;
+      },
+    );
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /tradeApiLogin/);
+    assert.equal(calls[0].auth, "user-own-key-1452");
+    assert.equal(String(calls[0].body).includes("+919922980000"), true);
+    assert.equal(String(calls[0].body).includes("YT2Vm"), true);
+    assert.equal(String(calls[0].body).includes("9000000099"), false);
+    assert.equal(String(calls[0].body).includes("YIX14"), false);
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_MOBILE", saved.mobile],
+      ["T2S_KOTAK_MPIN", saved.mpin],
+      ["T2S_KOTAK_TOTP_SECRET", saved.totp],
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("Kotak order network failure names the host instead of a bare fetch failed", async () => {
+  const fetchImpl = async (url) => {
+    throw Object.assign(new TypeError("fetch failed"), {
+      cause: { code: "ENOTFOUND", message: `getaddrinfo ENOTFOUND ${new URL(String(url)).host}` },
+    });
+  };
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "kotak",
+        {
+          copyUserId: "u-kotak-net",
+          brokerSession: { accessToken: "trade-token-1452", apiKey: "kotak-consumer-key", clientId: "YT2Vm", sessionToken: "neo-sid-88" },
+          symbol: "NIFTY 22900 CE",
+          expiry: "2026-10-06",
+          side: "BUY",
+          qty: 65,
+          orderAt: "2026-10-01T10:15:33.000Z",
+        },
+        fetchImpl,
+      ),
+    (error) => {
+      assert.match(error.message, /ENOTFOUND/);
+      assert.match(error.message, /kotaksecurities\.com/);
+      assert.notEqual(error.message, "fetch failed");
+      assert.equal(error.live?.status, "REJECTED");
+      assert.match(error.live?.reason || "", /ENOTFOUND/);
+      return true;
+    },
+  );
+});
+
+test("Kotak admin order logs in and places on the session base URL", async () => {
+  const saved = {
+    mobile: process.env.T2S_KOTAK_MOBILE,
+    mpin: process.env.T2S_KOTAK_MPIN,
+    totp: process.env.T2S_KOTAK_TOTP_SECRET,
+  };
+  process.env.T2S_KOTAK_MOBILE = "9000000000";
+  process.env.T2S_KOTAK_MPIN = "123456";
+  process.env.T2S_KOTAK_TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({
+      url: String(url),
+      auth: options.headers?.Authorization,
+      sid: options.headers?.sid || options.headers?.Sid,
+      sessionAuth: options.headers?.Auth,
+      body: options.body,
+    });
+    const target = String(url);
+    if (target.includes("/quotes/")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ exchange_token: "Nifty 50", ltp: 22421.95 }]) };
+    }
+    if (target.includes("tradeApiLogin")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
+    }
+    if (target.includes("tradeApiValidate")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: { token: "edit-token", sid: "edit-sid", baseUrl: "https://e22.kotaksecurities.com", hsServerId: "server-1" },
+          }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-session" }) };
+  };
+  try {
+    await connectLiveBroker(
+      "kotak",
+      { clientId: "YIX14", apiKey: "kotak-consumer-key", accessToken: "kotak-consumer-key" },
+      fetchImpl,
+    );
+    const live = await placeLiveBrokerOrder(
+      "kotak",
+      {
+        symbol: "NIFTY 22900 CE",
+        expiry: "2026-10-06",
+        side: "BUY",
+        qty: 65,
+        type: "MARKET",
+        orderAt: "2026-10-01T04:00:00.000Z",
+      },
+      fetchImpl,
+    );
+    assert.equal(live.orderId, "k-session");
+    assert.equal(calls.some((row) => row.url.includes("gw-napi")), false);
+    const place = calls.find((row) => row.url.includes("/quick/order/rule/ms/place"));
+    assert.match(place.url, /^https:\/\/e22\.kotaksecurities\.com\/quick\/order\/rule\/ms\/place\?sId=server-1$/);
+    assert.equal(place.sessionAuth, "edit-token");
+    assert.equal(place.sid, "edit-sid");
+    assert.equal(place.auth, undefined);
+    const jData = JSON.parse(new URLSearchParams(place.body).get("jData"));
+    assert.equal(jData.am, "NO");
+    assert.equal(jData.tt, "B");
+    const login = calls.find((row) => row.url.includes("tradeApiLogin"));
+    assert.equal(login.auth, "kotak-consumer-key");
+    assert.equal(String(login.body).includes("+919000000000"), true);
+    assert.equal(String(JSON.stringify(live)).includes("123456"), false);
+    assert.equal(String(JSON.stringify(live)).includes("JBSWY3DPEHPK3PXP"), false);
+  } finally {
+    disconnectLiveBroker("kotak");
+    if (saved.mobile == null) delete process.env.T2S_KOTAK_MOBILE;
+    else process.env.T2S_KOTAK_MOBILE = saved.mobile;
+    if (saved.mpin == null) delete process.env.T2S_KOTAK_MPIN;
+    else process.env.T2S_KOTAK_MPIN = saved.mpin;
+    if (saved.totp == null) delete process.env.T2S_KOTAK_TOTP_SECRET;
+    else process.env.T2S_KOTAK_TOTP_SECRET = saved.totp;
+  }
 });

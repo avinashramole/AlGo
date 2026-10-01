@@ -40,8 +40,8 @@ fs.writeFileSync(
 );
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
-const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill } = await import("./memberDesk.js");
-const { applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
+const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill, brokerAccountForLiveCopy } = await import("./memberDesk.js");
+const { adminAccountBalance, applyBrokerBooksToDesk, applyListedBalances, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
 const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
 const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
@@ -270,6 +270,142 @@ test("createClient refuses REAL when no broker is linked", () => {
   );
 });
 
+test("createClient stores a user's own Kotak Neo", () => {
+  const row = createClient({
+    name: "Kotak User",
+    mobile: "9001112233",
+    email: "kotak.user.new@gmail.com",
+    brokerId: "kotak",
+    accountId: "USERK1",
+    brokerApiKey: "user-consumer-key",
+    brokerToken: "user-access-token",
+    tradeMode: "paper",
+  });
+  assert.equal(row.brokerId, "kotak");
+  assert.equal(row.accountId, "USERK1");
+  assert.equal(row.credentialsInstalled, true);
+  assert.equal(peekClientSecrets(row.id).brokerToken, "user-access-token");
+  assert.equal(peekClientSecrets(row.id).brokerApiKey, "user-consumer-key");
+  const copy = brokerAccountForLiveCopy(row.id, "kotak");
+  assert.equal(copy.leftoverToken, false);
+  assert.equal(copy.brokerToken, "user-access-token");
+  const later = createClient({
+    name: "Kotak Later",
+    mobile: "9001112255",
+    brokerId: "kotak",
+    tradeMode: "paper",
+  });
+  assert.equal(later.brokerId, "kotak");
+  assert.equal(later.accountId, "");
+  assert.equal(later.credentialsInstalled, false);
+});
+
+test("createClient stores each live broker login on that user for algo copy", () => {
+  const cases = [
+    { name: "Dhan Copy User", mobile: "9002221001", brokerId: "dhan", accountId: "DHAN1", brokerToken: "dhan-user-token" },
+    { name: "Kite Copy User", mobile: "9002221002", brokerId: "zerodha", accountId: "ZR1", brokerApiKey: "kite-key", brokerToken: "kite-token" },
+    { name: "Fyers Copy User", mobile: "9002221003", brokerId: "fyers", accountId: "FY1", brokerApiKey: "fyers-app", brokerToken: "fyers-token" },
+    { name: "Angel Copy User", mobile: "9002221004", brokerId: "angelone", accountId: "AN1", brokerApiKey: "angel-key", brokerToken: "angel-token" },
+    {
+      name: "Upstox Copy User",
+      mobile: "9002221005",
+      brokerId: "upstox",
+      accountId: "UP1",
+      brokerApiKey: "upstox-key",
+      brokerSessionToken: "upstox-secret",
+      brokerToken: "upstox-token",
+    },
+  ];
+  for (const row of cases) {
+    const created = createClient({ ...row, tradeMode: "paper", copy: true });
+    assert.equal(created.brokerId, row.brokerId);
+    assert.equal(created.accountId, row.accountId);
+    assert.equal(created.credentialsInstalled, true);
+    const secrets = peekClientSecrets(created.id);
+    assert.equal(secrets.brokerToken, row.brokerToken);
+    if (row.brokerApiKey) assert.equal(secrets.brokerApiKey, row.brokerApiKey);
+    if (row.brokerSessionToken) assert.equal(secrets.brokerSessionToken, row.brokerSessionToken);
+    const shown = getMemberDesk({ user: { id: created.id, name: row.name, role: "user" }, enrollments: [], quote: () => 0 });
+    assert.equal(shown.install.accountId, row.accountId);
+    assert.equal(shown.install.installed, true);
+    const copies = memberCopyPayloads(
+      { strategy: "NIFTY VWAP ATM", side: "BUY", symbol: "NIFTY 24600 CE", qty: 65, lotSize: 65, brokerId: row.brokerId },
+      { id: "a4", name: "NIFTY VWAP ATM", mappingScope: "both" },
+    );
+    const copy = copies.find((item) => item.copyUserId === created.id);
+    assert.ok(copy);
+    assert.equal(copy.brokerId, row.brokerId);
+    assert.equal(copy.copyBlocked, "");
+    assert.equal(copy.account.clientId, row.accountId);
+    assert.equal(copy.account.accessToken, row.brokerToken);
+    if (row.brokerApiKey) assert.equal(copy.account.apiKey, row.brokerApiKey);
+    if (row.brokerSessionToken) assert.equal(copy.account.sessionToken, row.brokerSessionToken);
+  }
+  assert.throws(
+    () =>
+      createClient({
+        name: "Kite No Key",
+        mobile: "9002221006",
+        brokerId: "zerodha",
+        accountId: "ZR2",
+        brokerToken: "kite-token-only",
+      }),
+    /Zerodha API key/,
+  );
+  assert.equal(listPublicUsers().some((user) => user.mobile === "9002221006"), false);
+});
+
+test("createClient refuses the admin Kotak Neo and does not create the user", () => {
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-key-9f44";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-key-9f44";
+  const before = listPublicUsers().map((row) => row.id);
+  try {
+    assert.throws(
+      () =>
+        createClient({
+          name: "Bad Kotak",
+          mobile: "9001112244",
+          email: "bad.kotak.admin@gmail.com",
+          brokerId: "kotak",
+          accountId: "YIX14",
+          brokerApiKey: "admin-key-9f44",
+          brokerToken: "admin-key-9f44",
+        }),
+      /admin Kotak Neo/,
+    );
+    assert.throws(
+      () =>
+        createClient({
+          name: "Kotak No Key",
+          mobile: "9001112266",
+          email: "kotak.nokey@gmail.com",
+          brokerId: "kotak",
+          accountId: "USERK2",
+          brokerToken: "user-access-token-2",
+        }),
+      /consumer key/,
+    );
+    const ids = new Set(listPublicUsers().map((row) => row.id));
+    assert.deepEqual([...ids].filter((id) => !before.includes(id)), []);
+    assert.equal(listPublicUsers().some((row) => row.mobile === "9001112244" || row.mobile === "9001112266"), false);
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("position desk lists master first and a live ledger per member", () => {
   saveClientSettings("u-arpit", { tradeMode: "paper" });
   const desk = listPositionDesk(
@@ -299,6 +435,38 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(crypto.segment, "crypto");
   assert.equal(crypto.sellQty, 1);
   assert.equal(crypto.netQty, -1);
+});
+
+test("a listed Kotak balance stays on that user and does not replace the wallet margin", () => {
+  const rows = applyListedBalances(
+    [{ id: "u-avinash", name: "Avinash", margin: 0 }],
+    { "u-avinash": { balance: 88420.5, source: "kotak" } },
+  );
+  assert.equal(rows[0].margin, 0);
+  assert.equal(rows[0].brokerBalance, 88420.5);
+  assert.equal(rows[0].balanceSource, "kotak");
+  assert.equal(applyListedBalances([{ id: "u-avinash", margin: 0 }], {})[0].brokerBalance, undefined);
+});
+
+test("admin balance stays separate from each user balance", () => {
+  const own = adminAccountBalance(
+    [
+      { id: "dhan", name: "Dhan", funds: 80000 },
+      { id: "paper", name: "Paper", funds: 1000000 },
+    ],
+    "dhan",
+  );
+  assert.equal(own.adminBalance, 80000);
+  assert.equal(own.adminBrokerName, "Dhan");
+  const desk = listPositionDesk(listPublicUsers(), [], [], null, own.adminBalance);
+  assert.equal(desk.adminBalance, 80000);
+  assert.equal(desk.master.balance, 80000);
+  const usersTotal = desk.userBalances.reduce((sum, row) => sum + Number(row.balance || 0), 0);
+  assert.equal(desk.adminBalance, 80000);
+  assert.equal(usersTotal === 80000 && desk.userBalances.length > 0, false);
+  for (const row of desk.userBalances) {
+    assert.equal(row.balance, desk.clients.find((client) => client.id === row.id).balance);
+  }
 });
 
 test("closed trades stay on the position desk with live P&L and MTM", () => {
@@ -547,6 +715,23 @@ test("saveClient stores the client mobile on the user record", () => {
   const row = saveClient("u-arpit", { mobile: "9876507788", name: "ARPIT" });
   assert.equal(row.mobile, "9876507788");
   assert.equal(listPublicUsers().find((item) => item.id === "u-arpit").mobile, "9876507788");
+});
+
+test("a former admin Gmail added as a client stays on the client list", () => {
+  const created = createClient({
+    name: "Avinash Member",
+    email: "avinash.ramole86@gmail.com",
+    mobile: "9843210093",
+    brokerId: "dhan",
+    tradeMode: "paper",
+  });
+  assert.equal(created.email, "avinash.ramole86@gmail.com");
+  assert.equal(created.role, undefined);
+  const listed = listClients(listPublicUsers()).find((row) => row.email === "avinash.ramole86@gmail.com");
+  assert.equal(listed?.id, created.id);
+  assert.equal(listed?.name, "Avinash Member");
+  assert.equal(listed?.mobile, "9843210093");
+  assert.equal(listPublicUsers().find((row) => row.id === created.id)?.role, "user");
 });
 
 test("purgeOrphanMemberData removes leftover desks for accounts that are gone", () => {

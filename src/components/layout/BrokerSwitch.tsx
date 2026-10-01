@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
-import { headerBrokerLabel } from "../../lib/format";
+import { headerBrokerLabel, kotakAdminTape } from "../../lib/format";
 
 export function BrokerSwitch() {
   const { data, activate } = useMarket();
@@ -15,7 +15,7 @@ export function BrokerSwitch() {
         onChange={(event) => {
           void activate(event.target.value).catch(() => undefined);
         }}
-        title="Active order broker"
+        title="Default order broker"
       >
         {connected.map((item) => (
           <option key={item.id} value={item.id}>
@@ -26,9 +26,9 @@ export function BrokerSwitch() {
       {active ? (
         <span className="hidden rounded bg-emerald-50 px-1.5 py-1 text-[10px] font-extrabold text-up dark:bg-emerald-950/40 sm:inline">
           {headerBrokerLabel({
-            brokerId: active.id,
-            brokerName: active.name,
-            live: active.id === "dhan" ? Boolean(data.dhanFeed?.live) : Boolean(active.liveFeed || active.status === "LIVE"),
+            brokerId: kotakAdminTape(data) ? "kotak" : active.id,
+            brokerName: kotakAdminTape(data) ? "KOTAK" : active.name,
+            live: kotakAdminTape(data) ? Boolean(data.dhanFeed?.live) : active.id === "dhan" ? Boolean(data.dhanFeed?.live) : Boolean(active.liveFeed || active.status === "LIVE"),
             hasQuotes: true,
           })}
         </span>

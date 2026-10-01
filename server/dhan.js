@@ -489,6 +489,10 @@ export async function fetchMemberDhanPositions(token, clientId) {
   return dhanGet("/positions", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
 
+export async function fetchMemberDhanFunds(token, clientId) {
+  return dhanGet("/fundlimit", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
+}
+
 export async function fetchMemberDhanOrders(token, clientId) {
   return dhanGet("/orders", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
@@ -756,11 +760,18 @@ function mapDhanOrders(raw, algos = []) {
   const statusMap = {
     TRANSIT: "PENDING",
     PENDING: "PENDING",
+    OPEN: "PENDING",
     REJECTED: "REJECTED",
+    REJECT: "REJECTED",
+    REJECTION: "REJECTED",
     CANCELLED: "CANCELLED",
+    CANCELED: "CANCELLED",
     TRADED: "FILLED",
     PART_TRADED: "PARTIAL",
     EXPIRED: "CANCELLED",
+    FAILED: "FAILED",
+    FAILURE: "FAILED",
+    FAIL: "FAILED",
   };
   return asList(raw).map((row) => {
     const correlationId = String(row.correlationId || row.CorrelationId || row.correlationID || row.corrId || "");
@@ -886,12 +897,14 @@ async function pullAccount() {
   if (!accessToken) return;
   if (Date.now() < quoteBackoffUntil) return;
   try {
-    const [positionsPull, holdingsRaw, ordersRaw] = await Promise.all([
+    const [positionsPull, holdingsRaw, ordersPull] = await Promise.all([
       dhanGet("/positions", accessToken, clientId)
         .then((rows) => ({ ok: true, rows }))
         .catch(() => ({ ok: false, rows: [] })),
       dhanGet("/holdings", accessToken, clientId).catch(() => []),
-      dhanGet("/orders", accessToken, clientId).catch(() => []),
+      dhanGet("/orders", accessToken, clientId)
+        .then((rows) => ({ ok: true, rows }))
+        .catch(() => ({ ok: false, rows: [] })),
     ]);
     const positionsRaw = positionsPull.rows;
     if (positionsPull.ok) {
@@ -905,7 +918,7 @@ async function pullAccount() {
       (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
     );
     replaceDhanBook([...positions, ...holdings]);
-    replaceDhanOrders(mapDhanOrders(ordersRaw, snapshot().algos || []));
+    if (ordersPull.ok) replaceDhanOrders(mapDhanOrders(ordersPull.rows, snapshot().algos || []));
     setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
   } catch (error) {
     handleDhanPollError("positions", error);

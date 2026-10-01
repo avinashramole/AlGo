@@ -52,8 +52,10 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
   timeframe: "5m",
   initialSlPct: 20,
   targetPct: 40,
-  trailingActivationPct: 10,
-  trailingStepPct: 3,
+  trailingActivationPct: 20,
+  trailingStepPct: 5,
+  trailingEveryPct: 10,
+  trailingShiftPct: 5,
   vwapExitCandles: 5,
   maxPositions: 1,
   maxTradesPerDay: 5,
@@ -64,7 +66,7 @@ export const DEFAULT_NIFTY_FIRST_CANDLE_CONFIG = {
   lots: 1,
   lotSize: 65,
   signalMode: "first-candle",
-  useTrail: false,
+  useTrail: true,
   useVwapExit: false,
   expiryKind: "weekly",
   strikeOffset: 0,
@@ -110,6 +112,28 @@ export function parseIstHm(value, fallback = "09:00") {
 
 export function firstCandleBarMinutes(timeframe) {
   return FIRST_CANDLE_TIMEFRAMES[String(timeframe || "")] || 5;
+}
+
+export function addIstMinutes(hm, minutes, fallback = "09:00") {
+  const clock = parseIstHm(hm, fallback);
+  const [hour, minute] = clock.split(":").map(Number);
+  const total = (hour * 60 + minute + Math.max(0, Math.round(Number(minutes) || 0))) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** A 5m clock of 09:05 follows a change to 15m (09:15) or 1m (09:01). A custom time stays. */
+export function firstCandleEntryIst(firstBarStartIst, timeframe, storedEntry) {
+  const minutes = firstCandleBarMinutes(timeframe);
+  const start = parseIstHm(firstBarStartIst, "09:00");
+  const barClose = addIstMinutes(start, minutes, start);
+  const stored = String(storedEntry || "").trim();
+  if (!stored) return barClose;
+  const parsed = parseIstHm(stored, barClose);
+  const otherClocks = Object.values(FIRST_CANDLE_TIMEFRAMES)
+    .filter((step) => step !== minutes)
+    .map((step) => addIstMinutes(start, step, start));
+  if (otherClocks.includes(parsed)) return barClose;
+  return parsed;
 }
 
 export function isNiftyVwapAlgo(algo = {}) {
@@ -244,17 +268,40 @@ export function niftyVwapReversalConfig(algo = {}) {
   };
 }
 
+export function niftyFirstCandleTrail(algo = {}) {
+  const num = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  const every = num(algo.trailingEveryPct);
+  const shift = num(algo.trailingShiftPct);
+  const activation = num(algo.trailingActivationPct);
+  if (every > 0 && shift > 0) {
+    return {
+      trailingActivationPct: activation > 0 ? activation : DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingActivationPct,
+      trailingEveryPct: every,
+      trailingShiftPct: shift,
+    };
+  }
+  return {
+    trailingActivationPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingActivationPct,
+    trailingEveryPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingEveryPct,
+    trailingShiftPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingShiftPct,
+  };
+}
+
 export function niftyFirstCandleConfig(algo = {}) {
   const num = (value, fallback) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   };
+  const trail = niftyFirstCandleTrail(algo);
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.lots)));
   const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.lotSize)));
   const timeframe = FIRST_CANDLE_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.timeframe;
   const barMinutes = firstCandleBarMinutes(timeframe);
   const expiryKind = String(algo.expiryKind || "").toLowerCase() === "monthly" ? "monthly" : "weekly";
-  const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(algo.strikeOffset, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.strikeOffset))));
+  const strikeOffset = Math.max(-5, Math.min(5, Math.round(num(algo.strikeOffset, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.strikeOffset))));
   const rawFirst = String(algo.firstBarStartIst || "").trim();
   const firstBarStartIst = parseIstHm(
     !rawFirst || (rawFirst === "09:15" && !String(algo.entryEvaluationIst || "").trim())
@@ -272,8 +319,11 @@ export function niftyFirstCandleConfig(algo = {}) {
     timeframe,
     initialSlPct: Math.max(1, num(algo.initialSlPct ?? algo.slPct, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.initialSlPct)),
     targetPct: Math.max(1, num(algo.targetPct ?? algo.targetProfitPct, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.targetPct)),
-    trailingActivationPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingActivationPct,
-    trailingStepPct: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.trailingStepPct,
+    trailingActivationPct: trail.trailingActivationPct,
+    trailingStepPct: trail.trailingShiftPct,
+    trailingEveryPct: trail.trailingEveryPct,
+    trailingShiftPct: trail.trailingShiftPct,
+    lockToEntry: true,
     vwapExitCandles: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.vwapExitCandles,
     maxPositions: 1,
     maxTradesPerDay: (() => {
@@ -289,13 +339,13 @@ export function niftyFirstCandleConfig(algo = {}) {
     lotSize,
     qty: lots * lotSize,
     signalMode: "first-candle",
-    useTrail: false,
+    useTrail: true,
     useVwapExit: false,
     expiryKind,
     strikeOffset,
     dailyLiveIst: parseIstHm(algo.dailyLiveIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.dailyLiveIst),
     firstBarStartIst,
-    entryEvaluationIst: parseIstHm(algo.entryEvaluationIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.entryEvaluationIst),
+    entryEvaluationIst: firstCandleEntryIst(firstBarStartIst, timeframe, algo.entryEvaluationIst),
     endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.endTimeIst),
   };
 }
@@ -316,6 +366,8 @@ export function crudeFirstCandleConfig(algo = {}) {
     : DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.maxTradesPerDay;
   return {
     ...base,
+    useTrail: false,
+    lockToEntry: false,
     symbol: "CRUDEOIL",
     lotSize: Math.max(1, Math.round(Number(algo.lotSize) || DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.lotSize)),
     qty: Math.max(1, Math.round(Number(base.lots) || 1)) * Math.max(1, Math.round(Number(algo.lotSize) || DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.lotSize)),
@@ -441,6 +493,8 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     targetPct: cfg.targetPct,
     initialSlPct: cfg.initialSlPct,
     trailingActivationPct: cfg.trailingActivationPct,
+    trailingEveryPct: cfg.trailingEveryPct,
+    trailingShiftPct: cfg.trailingShiftPct,
     trailingStepPct: cfg.trailingStepPct,
     vwapExitCandles: cfg.vwapExitCandles,
     maxPositions: 1,
@@ -482,6 +536,10 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     firstBarStartIst: cfg.firstBarStartIst,
     entryEvaluationIst: cfg.entryEvaluationIst,
     endTimeIst: cfg.endTimeIst,
+    trailingActivationPct: cfg.trailingActivationPct,
+    trailingEveryPct: cfg.trailingEveryPct,
+    trailingShiftPct: cfg.trailingShiftPct,
+    trailingStepPct: cfg.trailingShiftPct,
     enabled: false,
   };
 }

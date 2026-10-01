@@ -6,9 +6,11 @@ import { writeFileAtomic } from "./atomicWrite.js";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
-import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
+import { sessionUsesAdminKotak } from "./brokerIsolation.js";
+import { LIVE_BROKER_CATALOG, kotakMobileNumber, liveBrokerSession } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
+import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -59,6 +61,18 @@ function keepSavedBrokerSecrets(nextStore, disk) {
       }
       if (!String(next.brokerSessionToken || "").trim() && String(slot.brokerSessionToken || "").trim()) {
         next.brokerSessionToken = slot.brokerSessionToken;
+        kept = true;
+      }
+      if (!String(next.brokerMobile || "").trim() && String(slot.brokerMobile || "").trim()) {
+        next.brokerMobile = slot.brokerMobile;
+        kept = true;
+      }
+      if (!String(next.brokerMpin || "").trim() && String(slot.brokerMpin || "").trim()) {
+        next.brokerMpin = slot.brokerMpin;
+        kept = true;
+      }
+      if (!String(next.brokerTotpSecret || "").trim() && String(slot.brokerTotpSecret || "").trim()) {
+        next.brokerTotpSecret = slot.brokerTotpSecret;
         kept = true;
       }
       if (kept) mem.brokerAccounts[brokerId] = next;
@@ -190,7 +204,24 @@ function writeBrokerToken(desk, token) {
 }
 
 function emptyBrokerAccount() {
-  return { accountId: "", brokerToken: "", brokerApiKey: "", brokerSessionToken: "", tokenUpdatedAt: "" };
+  return {
+    accountId: "",
+    brokerToken: "",
+    brokerApiKey: "",
+    brokerSessionToken: "",
+    brokerMobile: "",
+    brokerMpin: "",
+    brokerTotpSecret: "",
+    tokenUpdatedAt: "",
+  };
+}
+
+function tradeLoginFields(row = {}) {
+  return {
+    brokerMobile: String(row.brokerMobile || "").trim(),
+    brokerMpin: String(row.brokerMpin || "").trim(),
+    brokerTotpSecret: String(row.brokerTotpSecret || "").trim(),
+  };
 }
 
 function brokerAccountsMap(desk = {}) {
@@ -204,7 +235,9 @@ function brokerAccountsMap(desk = {}) {
       brokerToken: String(row?.brokerToken || "").trim(),
       brokerApiKey: String(row?.brokerApiKey || "").trim(),
       brokerSessionToken: String(row?.brokerSessionToken || "").trim(),
+      ...tradeLoginFields(row),
       tokenUpdatedAt: String(row?.tokenUpdatedAt || "").trim(),
+      memberAdded: Boolean(row?.memberAdded),
     };
   }
   return next;
@@ -216,6 +249,7 @@ function snapshotSelectedBrokerAccount(desk) {
     brokerToken: String(desk.brokerToken || "").trim(),
     brokerApiKey: String(desk.brokerApiKey || "").trim(),
     brokerSessionToken: String(desk.brokerSessionToken || "").trim(),
+    ...tradeLoginFields(desk),
     tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
   };
 }
@@ -231,9 +265,16 @@ function syncSelectedBrokerAccount(desk) {
     brokerToken: snap.brokerToken || prev.brokerToken,
     brokerApiKey: snap.brokerApiKey || prev.brokerApiKey,
     brokerSessionToken: snap.brokerSessionToken || prev.brokerSessionToken,
+    brokerMobile: snap.brokerMobile || prev.brokerMobile,
+    brokerMpin: snap.brokerMpin || prev.brokerMpin,
+    brokerTotpSecret: snap.brokerTotpSecret || prev.brokerTotpSecret,
     tokenUpdatedAt: snap.brokerToken ? snap.tokenUpdatedAt || prev.tokenUpdatedAt : prev.tokenUpdatedAt || snap.tokenUpdatedAt,
+    memberAdded: Boolean(prev.memberAdded),
   };
   if (!snap.brokerToken && prev.brokerToken) desk.brokerToken = prev.brokerToken;
+  if (!snap.brokerMobile && prev.brokerMobile) desk.brokerMobile = prev.brokerMobile;
+  if (!snap.brokerMpin && prev.brokerMpin) desk.brokerMpin = prev.brokerMpin;
+  if (!snap.brokerTotpSecret && prev.brokerTotpSecret) desk.brokerTotpSecret = prev.brokerTotpSecret;
   return desk.brokerAccounts;
 }
 
@@ -248,15 +289,42 @@ function migrateLegacyBrokerAccount(desk) {
   }
 }
 
-function slotCopiedFromAnotherBroker(map, brokerId) {
-  const slot = map[brokerId];
-  if (!slot || (!slot.accountId && !slot.brokerToken)) return false;
+function slotMatchesDeskBroker(slot, brokerId) {
+  const session = liveBrokerSession(brokerId);
+  if (!session || !slot) return false;
+  const accountId = String(slot.accountId || "").trim();
+  const token = String(slot.brokerToken || "").trim();
+  const apiKey = String(slot.brokerApiKey || "").trim();
+  const sessionId = String(session.clientId || "").trim();
+  const sessionToken = String(session.accessToken || "").trim();
+  const sessionKey = String(session.apiKey || "").trim();
+  if (token && sessionToken && token === sessionToken) return true;
+  return Boolean(accountId && sessionId && accountId === sessionId && apiKey && sessionKey && apiKey === sessionKey);
+}
+
+function credentialsCopiedFromAnotherBroker(map, brokerId, slot) {
+  if (!slot || (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey)) return false;
   return Object.entries(map).some(([id, other]) => {
     if (id === brokerId) return false;
-    const sameId = slot.accountId && slot.accountId === other.accountId;
-    const sameToken = slot.brokerToken && slot.brokerToken === other.brokerToken;
-    return Boolean(sameId || sameToken);
+    const sameId = slot.accountId && other.accountId && slot.accountId === other.accountId;
+    const sameToken = slot.brokerToken && other.brokerToken && slot.brokerToken === other.brokerToken;
+    const sameKey = slot.brokerApiKey && other.brokerApiKey && slot.brokerApiKey === other.brokerApiKey;
+    return Boolean(sameId || sameToken || sameKey);
   });
+}
+
+function slotCopiedFromAnotherBroker(map, brokerId) {
+  return credentialsCopiedFromAnotherBroker(map, brokerId, map[brokerId]);
+}
+
+function kotakSlotIsOwn(slot = {}) {
+  const accountId = String(slot.accountId || "").trim();
+  const token = String(slot.brokerToken || "").trim();
+  const apiKey = String(slot.brokerApiKey || "").trim();
+  if (!accountId || !token || !apiKey) return false;
+  if (sessionUsesAdminKotak({ clientId: accountId, accessToken: token, apiKey })) return false;
+  if (slotMatchesDeskBroker({ accountId, brokerToken: token, brokerApiKey: apiKey }, "kotak")) return false;
+  return true;
 }
 
 function slotTokenCopiedFromAnotherBroker(map, brokerId) {
@@ -268,18 +336,32 @@ function slotTokenCopiedFromAnotherBroker(map, brokerId) {
   });
 }
 
-function selectedBrokerAccount(desk = {}) {
+function ownBrokerAccount(desk = {}, brokerId = desk.brokerId) {
+  const id = knownBroker(brokerId) ? brokerId : "paper";
+  if (!id || id === "paper") return emptyBrokerAccount();
   const map = brokerAccountsMap(desk);
-  const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
-  if (!brokerId || brokerId === "paper") return emptyBrokerAccount();
-  const slot = map[brokerId] || emptyBrokerAccount();
-  if (slotCopiedFromAnotherBroker(map, brokerId)) {
-    return { ...slot, accountId: "" };
+  let slot = map[id] || emptyBrokerAccount();
+  if (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey && id === (knownBroker(desk.brokerId) ? desk.brokerId : "")) {
+    const snap = snapshotSelectedBrokerAccount(desk);
+    slot = {
+      accountId: snap.accountId,
+      brokerToken: snap.brokerToken,
+      brokerApiKey: snap.brokerApiKey,
+      brokerSessionToken: snap.brokerSessionToken,
+      ...tradeLoginFields(snap),
+      tokenUpdatedAt: snap.tokenUpdatedAt,
+    };
   }
-  if (slot.accountId || slot.brokerToken) return slot;
-  const snap = snapshotSelectedBrokerAccount(desk);
-  if (snap.accountId || snap.brokerToken) return snap;
+  if (id === "kotak" && sessionUsesAdminKotak({ clientId: slot.accountId, accessToken: slot.brokerToken, apiKey: slot.brokerApiKey })) {
+    return emptyBrokerAccount();
+  }
+  if (credentialsCopiedFromAnotherBroker(map, id, slot) || slotMatchesDeskBroker(slot, id)) return emptyBrokerAccount();
+  if (id === "kotak" && !slot.memberAdded && !kotakSlotIsOwn(slot)) return emptyBrokerAccount();
   return slot;
+}
+
+function selectedBrokerAccount(desk = {}) {
+  return ownBrokerAccount(desk);
 }
 
 function hydrateBrokerAccount(desk, brokerId) {
@@ -290,6 +372,9 @@ function hydrateBrokerAccount(desk, brokerId) {
     desk.brokerToken = "";
     desk.brokerApiKey = "";
     desk.brokerSessionToken = "";
+    desk.brokerMobile = "";
+    desk.brokerMpin = "";
+    desk.brokerTotpSecret = "";
     desk.brokerTokenUpdatedAt = "";
     return;
   }
@@ -299,6 +384,9 @@ function hydrateBrokerAccount(desk, brokerId) {
   desk.brokerToken = slot.brokerToken;
   desk.brokerApiKey = slot.brokerApiKey;
   desk.brokerSessionToken = slot.brokerSessionToken;
+  desk.brokerMobile = slot.brokerMobile || "";
+  desk.brokerMpin = slot.brokerMpin || "";
+  desk.brokerTotpSecret = slot.brokerTotpSecret || "";
   desk.brokerTokenUpdatedAt = slot.tokenUpdatedAt;
 }
 
@@ -323,16 +411,20 @@ export function publicBrokerAccounts(desk = {}) {
   }
   const out = {};
   for (const [id, slot] of Object.entries(map)) {
-    if (!slot.accountId && !slot.brokerToken && !slot.brokerApiKey) continue;
-    const copied = slotCopiedFromAnotherBroker(map, id);
+    const own = ownBrokerAccount(desk, id);
+    if (!own.accountId && !own.brokerToken && !own.brokerApiKey) continue;
     out[id] = {
-      accountId: copied ? "" : slot.accountId,
-      tokenHint: maskSecret(slot.brokerToken),
-      apiKeyHint: maskSecret(slot.brokerApiKey),
-      sessionHint: maskSecret(slot.brokerSessionToken),
-      installed: Boolean(slot.brokerToken),
-      oauthReady: Boolean(slot.brokerApiKey && slot.brokerSessionToken),
-      tokenUpdatedAt: slot.tokenUpdatedAt,
+      accountId: own.accountId,
+      tokenHint: maskSecret(own.brokerToken),
+      apiKeyHint: maskSecret(own.brokerApiKey),
+      sessionHint: maskSecret(own.brokerSessionToken),
+      hasTradeLogin: Boolean(own.brokerMobile && own.brokerMpin && own.brokerTotpSecret),
+      hasMpin: Boolean(own.brokerMpin),
+      hasTotp: Boolean(own.brokerTotpSecret),
+      tradeMobileHint: maskSecret(own.brokerMobile),
+      installed: Boolean(own.brokerToken),
+      oauthReady: Boolean(own.brokerApiKey && own.brokerSessionToken),
+      tokenUpdatedAt: own.brokerToken ? own.tokenUpdatedAt : "",
     };
   }
   return out;
@@ -352,14 +444,21 @@ export function brokerAccountForLiveCopy(userId, brokerId) {
   const id = String(brokerId || desk.brokerId || "").trim().toLowerCase();
   if (!id || id === "paper") return { ...emptyBrokerAccount(), leftoverToken: false };
   const map = brokerAccountsMap(desk);
-  const leftoverToken = slotTokenCopiedFromAnotherBroker(map, id);
   const slot = map[id] || emptyBrokerAccount();
+  const waitingForMember = id === "kotak" && !slot.memberAdded && !kotakSlotIsOwn(slot);
+  const adminKotak = id === "kotak" && sessionUsesAdminKotak({
+    clientId: slot.accountId || desk.accountId,
+    accessToken: slot.brokerToken || desk.brokerToken,
+    apiKey: slot.brokerApiKey || desk.brokerApiKey,
+  });
+  const leftoverToken = waitingForMember || adminKotak || slotTokenCopiedFromAnotherBroker(map, id) || slotMatchesDeskBroker(slot, id);
   if (leftoverToken) {
     return {
       ...emptyBrokerAccount(),
       leftoverToken: true,
-      brokerApiKey: slot.brokerApiKey,
-      brokerSessionToken: slot.brokerSessionToken,
+      adminKotak,
+      brokerApiKey: waitingForMember || adminKotak ? "" : slot.brokerApiKey,
+      brokerSessionToken: waitingForMember || adminKotak ? "" : slot.brokerSessionToken,
     };
   }
   return { ...slot, leftoverToken: false };
@@ -567,6 +666,7 @@ export function normalizeClientSettings(desk = {}) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const subscriptionMode = SUBSCRIPTION_MODES.includes(desk.subscriptionMode) ? desk.subscriptionMode : "copy";
   const groups = asGroups(desk.groups || desk.group);
+  const own = selectedBrokerAccount(desk);
   return {
     group: groups[0] || "ALL",
     groups,
@@ -575,17 +675,17 @@ export function normalizeClientSettings(desk = {}) {
     tradeMode,
     copy: Boolean(desk.copy),
     staticIp: String(desk.staticIp || "").trim(),
-    accountId: selectedBrokerAccount(desk).accountId,
+    accountId: own.accountId,
     brokerId,
     subscriptionMode,
     subscriptionUntil: String(desk.subscriptionUntil || "").trim(),
     mappedStrategy: String(desk.mappedStrategy || "").trim(),
     segments: asSegments(desk.segments),
     notifications: asNotifications(desk.notifications),
-    tokenHint: maskSecret(desk.brokerToken),
-    apiKeyHint: maskSecret(desk.brokerApiKey),
-    credentialsInstalled: Boolean(String(desk.brokerToken || "").trim()),
-    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
+    tokenHint: maskSecret(own.brokerToken),
+    apiKeyHint: maskSecret(own.brokerApiKey),
+    credentialsInstalled: Boolean(String(own.brokerToken || "").trim()),
+    tokenUpdatedAt: own.brokerToken ? String(own.tokenUpdatedAt || "").trim() : "",
     brokerAccounts: publicBrokerAccounts(desk),
     notes: String(desk.notes || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
@@ -613,24 +713,31 @@ export function brokerInstallFields(brokerId) {
 
 export function publicBrokerInstall(desk = {}) {
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
+  const own = ownBrokerAccount(desk);
   return {
     brokerId,
-    accountId: selectedBrokerAccount(desk).accountId,
-    tokenHint: maskSecret(desk.brokerToken),
-    apiKeyHint: maskSecret(desk.brokerApiKey),
-    sessionHint: maskSecret(desk.brokerSessionToken),
-    hasApiKey: Boolean(String(desk.brokerApiKey || "").trim()),
-    hasApiSecret: Boolean(String(desk.brokerSessionToken || "").trim()),
-    oauthReady: Boolean(String(desk.brokerApiKey || "").trim() && String(desk.brokerSessionToken || "").trim()),
-    installed: Boolean(String(desk.brokerToken || "").trim()),
-    tokenUpdatedAt: String(desk.brokerTokenUpdatedAt || "").trim(),
+    accountId: own.accountId,
+    tokenHint: maskSecret(own.brokerToken),
+    apiKeyHint: maskSecret(own.brokerApiKey),
+    sessionHint: maskSecret(own.brokerSessionToken),
+    hasTradeLogin: Boolean(own.brokerMobile && own.brokerMpin && own.brokerTotpSecret),
+    hasMpin: Boolean(own.brokerMpin),
+    hasTotp: Boolean(own.brokerTotpSecret),
+    tradeMobileHint: maskSecret(own.brokerMobile),
+    hasApiKey: Boolean(String(own.brokerApiKey || "").trim()),
+    hasApiSecret: Boolean(String(own.brokerSessionToken || "").trim()),
+    oauthReady: Boolean(String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim()),
+    installed: Boolean(String(own.brokerToken || "").trim()),
+    tokenUpdatedAt: own.brokerToken ? String(own.tokenUpdatedAt || "").trim() : "",
     fields: brokerInstallFields(brokerId),
     help:
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
         : brokerId === "upstox"
           ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token and retry every 15 minutes until 4:00 PM if it is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
-          : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
+          : brokerId === "kotak"
+            ? "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid. This does not start desk LIVE."
+            : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };
 }
 
@@ -657,6 +764,7 @@ export function peekClientBook(userId) {
 export function saveClientSettings(userId, patch = {}) {
   if (!userId) throw fail("Client required.");
   const desk = loadDesk(userId);
+  assertOwnKotakForSave(desk, patch);
   if (patch.group != null || patch.groups != null) {
     const groups = asGroups(patch.groups != null ? patch.groups : patch.group);
     desk.groups = groups;
@@ -722,11 +830,115 @@ export function saveClientSettings(userId, patch = {}) {
   if (patch.brokerSessionToken != null && String(patch.brokerSessionToken).trim()) {
     desk.brokerSessionToken = String(patch.brokerSessionToken).trim();
   }
+  if (patch.brokerMobile != null && String(patch.brokerMobile).trim()) {
+    desk.brokerMobile = kotakMobileNumber(patch.brokerMobile);
+  }
+  if (patch.brokerMpin != null && String(patch.brokerMpin).trim()) {
+    desk.brokerMpin = String(patch.brokerMpin).trim();
+  }
+  if (patch.brokerTotpSecret != null && String(patch.brokerTotpSecret).trim()) {
+    desk.brokerTotpSecret = String(patch.brokerTotpSecret).trim();
+  }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   if (tokenWritten) enableLiveCopyFromToken(desk, patch);
   syncSelectedBrokerAccount(desk);
+  markOwnKotakAdded(desk, patch);
   persist();
   return normalizeClientSettings(desk);
+}
+
+function normalizeBrokerSecret(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
+function prospectiveKotakLogin(desk = {}, patch = {}) {
+  const nextBroker = patch.brokerId != null
+    ? String(patch.brokerId || "").trim().toLowerCase()
+    : String(desk.brokerId || "").trim().toLowerCase();
+  if (nextBroker !== "kotak") return null;
+  const offeredId = patch.accountId != null ? String(patch.accountId || "").trim() : "";
+  const offeredToken = patch.brokerToken != null ? normalizeBrokerSecret(patch.brokerToken) : "";
+  const offeredKey = patch.brokerApiKey != null ? String(patch.brokerApiKey || "").trim() : "";
+  if (!offeredId && !offeredToken && !offeredKey) return null;
+  const currentBroker = String(desk.brokerId || "").trim().toLowerCase();
+  const switching = patch.brokerId != null && String(patch.brokerId || "").trim().toLowerCase() !== currentBroker;
+  const prev = brokerAccountsMap(desk).kotak || emptyBrokerAccount();
+  const baseId = switching ? String(prev.accountId || "").trim() : String(desk.accountId || prev.accountId || "").trim();
+  const baseToken = switching ? String(prev.brokerToken || "").trim() : String(desk.brokerToken || prev.brokerToken || "").trim();
+  const baseKey = switching ? String(prev.brokerApiKey || "").trim() : String(desk.brokerApiKey || prev.brokerApiKey || "").trim();
+  return {
+    accountId: patch.accountId != null ? offeredId : baseId,
+    token: offeredToken || baseToken,
+    apiKey: offeredKey || baseKey,
+  };
+}
+
+function prospectiveBrokerLogin(desk = {}, patch = {}) {
+  const nextBroker = patch.brokerId != null
+    ? String(patch.brokerId || "").trim().toLowerCase()
+    : String(desk.brokerId || "").trim().toLowerCase();
+  if (!nextBroker || nextBroker === "paper") return null;
+  const offeredId = patch.accountId != null ? String(patch.accountId || "").trim() : "";
+  const offeredToken = patch.brokerToken != null ? normalizeBrokerSecret(patch.brokerToken) : "";
+  const offeredKey = patch.brokerApiKey != null ? String(patch.brokerApiKey || "").trim() : "";
+  const offeredSecret = patch.brokerSessionToken != null ? String(patch.brokerSessionToken || "").trim() : "";
+  if (!offeredId && !offeredToken && !offeredKey && !offeredSecret) return null;
+  const currentBroker = String(desk.brokerId || "").trim().toLowerCase();
+  const switching = patch.brokerId != null && String(patch.brokerId || "").trim().toLowerCase() !== currentBroker;
+  const prev = brokerAccountsMap(desk)[nextBroker] || emptyBrokerAccount();
+  const baseId = switching ? String(prev.accountId || "").trim() : String(desk.accountId || prev.accountId || "").trim();
+  const baseToken = switching ? String(prev.brokerToken || "").trim() : String(desk.brokerToken || prev.brokerToken || "").trim();
+  const baseKey = switching ? String(prev.brokerApiKey || "").trim() : String(desk.brokerApiKey || prev.brokerApiKey || "").trim();
+  const baseSecret = switching ? String(prev.brokerSessionToken || "").trim() : String(desk.brokerSessionToken || prev.brokerSessionToken || "").trim();
+  return {
+    brokerId: nextBroker,
+    accountId: patch.accountId != null ? offeredId : baseId,
+    token: offeredToken || baseToken,
+    apiKey: offeredKey || baseKey,
+    sessionToken: offeredSecret || baseSecret,
+  };
+}
+
+const BROKER_KEY_REQUIRED = {
+  zerodha: "Paste the Zerodha API key.",
+  fyers: "Paste the Fyers app ID.",
+  kotak: "Paste the Kotak Neo consumer key.",
+  angelone: "Paste the Angel SmartAPI key.",
+};
+
+export function assertOwnKotakForSave(desk = {}, patch = {}) {
+  const login = prospectiveBrokerLogin(desk, patch);
+  if (!login) return;
+  if (login.brokerId === "kotak") {
+    if (sessionUsesAdminKotak({ clientId: login.accountId, accessToken: login.token, apiKey: login.apiKey })) {
+      throw fail("That login is the admin Kotak Neo. Add this user's own Kotak Neo client ID, consumer key, and access token.");
+    }
+    if (slotMatchesDeskBroker({ accountId: login.accountId, brokerToken: login.token, brokerApiKey: login.apiKey }, "kotak")) {
+      throw fail("That login is the desk Kotak Neo. Waiting for this user to add their own Kotak Neo.");
+    }
+  }
+  const keyMessage = BROKER_KEY_REQUIRED[login.brokerId];
+  if (login.token && keyMessage && !login.apiKey) throw fail(keyMessage);
+  if (login.brokerId === "upstox" && login.apiKey && !login.sessionToken && !login.token) {
+    throw fail("Paste the Upstox API secret with the API key, or paste today's trading access token.");
+  }
+}
+
+function markOwnKotakAdded(desk, patch = {}) {
+  if (String(desk.brokerId || "").trim().toLowerCase() !== "kotak") return;
+  const login = prospectiveKotakLogin(desk, patch);
+  if (!login?.accountId || !login.token || !login.apiKey) return;
+  if (sessionUsesAdminKotak({ clientId: login.accountId, accessToken: login.token, apiKey: login.apiKey })) return;
+  if (slotMatchesDeskBroker({ accountId: login.accountId, brokerToken: login.token, brokerApiKey: login.apiKey }, "kotak")) return;
+  const slot = desk.brokerAccounts?.kotak;
+  if (!slot?.accountId || !slot.brokerToken || !slot.brokerApiKey) return;
+  if (credentialsCopiedFromAnotherBroker(desk.brokerAccounts, "kotak", slot)) return;
+  slot.memberAdded = true;
 }
 
 export function assignedEgressIps(brokerId, exceptUserId = "") {
@@ -813,6 +1025,38 @@ function rowBelongsToStrategy(row, strategyId, strategyName) {
   if (strategyName && label === strategyName) return true;
   const text = String(row.text || "").toLowerCase();
   return Boolean(strategyName && text.includes(` · ${strategyName}`));
+}
+
+function rowBookMs(row) {
+  const ms = Date.parse(String(row?.createdAt || row?.openedAt || row?.closedAt || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** Drop one strategy's previous-day intraday rows. Today's open position stays. */
+export function clearPreviousIntradayStrategyBook({ strategyId, strategyName, today } = {}) {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  const day = String(today || "").trim();
+  if ((!id && !name) || !day) return 0;
+  let removed = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk || typeof desk !== "object") continue;
+    for (const key of ["positions", "closedTrades", "orders", "orderHistory", "alerts"]) {
+      const rows = Array.isArray(desk[key]) ? desk[key] : [];
+      const next = rows.filter((row) => {
+        if (!rowBelongsToStrategy(row, id, name)) return true;
+        const ms = rowBookMs(row);
+        if (!ms) return true;
+        return sessionKeyIST(ms) >= day;
+      });
+      if (next.length !== rows.length) {
+        desk[key] = next;
+        removed += rows.length - next.length;
+      }
+    }
+  }
+  if (removed) persist();
+  return removed;
 }
 
 /** Clear one strategy's orders on every user desk. Positions, plans, and tokens stay. */
@@ -963,6 +1207,17 @@ function loadDesk(userId) {
   return desk;
 }
 
+function brokerChoiceNote(row, { selected, saved, virtual }) {
+  if (virtual) return "Virtual paper book. Signals stay on the T2S desk.";
+  const detail = saved.installed
+    ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}.${selected ? "" : " Select it to make it the default."}`
+    : saved.oauthReady
+      ? `API key and secret saved for ${row.name}. Generate today's trading token.`
+      : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.";
+  if (!selected) return detail;
+  return `Default broker. Quotes, orders, balance, MTM, and P&L use this login${saved.accountId ? ` · ${saved.accountId}` : ""}. ${detail}`;
+}
+
 export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
   const accounts = publicBrokerAccounts(desk);
   return catalog.map((row) => {
@@ -985,13 +1240,7 @@ export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
       oauthReady: Boolean(saved.oauthReady),
       accountId: saved.accountId || "",
       mode: virtual ? "paper" : live ? "live" : "desk-managed",
-      note: virtual
-        ? "Virtual paper book. Signals stay on the T2S desk."
-        : saved.installed
-          ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}. Select it to update the ID or token.`
-          : saved.oauthReady
-            ? `API key and secret saved for ${row.name}. Generate today's trading token.`
-            : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.",
+      note: brokerChoiceNote(row, { selected, saved, virtual }),
     };
   });
 }
@@ -1087,13 +1336,74 @@ export function memberWorkingDhanCopies() {
   return out;
 }
 
+function sameCopyIdentity(alert, order) {
+  return (
+    String(alert?.symbol || "") === String(order?.symbol || "") &&
+    String(alert?.side || "BUY").toUpperCase() === String(order?.side || "BUY").toUpperCase() &&
+    Number(alert?.qty || 0) === Number(order?.qty || 0) &&
+    String(alert?.strategy || "") === String(order?.strategy || "")
+  );
+}
+
+function pickOrderForAlert(book, alert, used) {
+  const id = String(alert?.orderId || "");
+  if (id) {
+    const byId = book.find((row) => !used.has(row) && String(row.id) === id);
+    if (byId) return byId;
+  }
+  const candidates = book.filter((row) => !used.has(row) && sameCopyIdentity(alert, row));
+  const exact = candidates.find(
+    (row) => alert.createdAt && row.createdAt && String(row.createdAt) === String(alert.createdAt),
+  );
+  if (exact) return exact;
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function applyCopyAlertFromOrder(alert, order) {
+  const status = String(order?.status || "").toUpperCase();
+  if (!status) return false;
+  const reason = String(order?.reason || "").trim();
+  const text = buildCopyAlertText({
+    side: order.side,
+    qty: order.qty,
+    symbol: order.symbol,
+    strategy: order.strategy,
+    status,
+    reason,
+  });
+  const changed = alert.status !== status || alert.text !== text || String(alert.orderId || "") !== String(order.id || "");
+  alert.orderId = String(order.id || alert.orderId || "");
+  alert.status = status;
+  alert.text = text;
+  if (isTerminalMemberOrder(status)) alert.kind = "copy_rejected";
+  return changed;
+}
+
+/** Rewrite a PENDING copy alert once the member order is filled, rejected, or cancelled. */
+export function reconcileCopyAlerts(desk) {
+  if (!desk) return false;
+  desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
+  const book = [...(desk.orders || []), ...(desk.orderHistory || [])];
+  const used = new Set();
+  let changed = false;
+  for (const alert of desk.alerts) {
+    const current = String(alert?.status || "PENDING").toUpperCase();
+    if (!isWorkingMemberOrder(current)) continue;
+    const order = pickOrderForAlert(book, alert, used);
+    if (!order) continue;
+    used.add(order);
+    if (applyCopyAlertFromOrder(alert, order)) changed = true;
+  }
+  return changed;
+}
+
 /** Replace a stored PENDING copy with the status on that member's Dhan order book. */
 export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
   if (!userId) return [];
   const desk = loadDesk(userId);
   const byId = new Map();
   for (const row of Array.isArray(brokerOrders) ? brokerOrders : []) {
-    const id = String(row?.orderId || row?.dhanOrderId || row?.id || "").trim();
+    const id = String(row?.orderId || row?.dhanOrderId || row?.order_id || row?.id || "").trim();
     if (id) byId.set(id, row);
   }
   const updates = [];
@@ -1131,9 +1441,12 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
     if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
     if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
   }
-  if (!updates.length) return [];
-  desk.orders = working;
-  desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  if (updates.length) {
+    desk.orders = working;
+    desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  }
+  const alertsChanged = reconcileCopyAlerts(desk);
+  if (!updates.length && !alertsChanged) return [];
   persist();
   return updates;
 }
@@ -1309,6 +1622,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   placeMemberOrder(desk, order);
   const alert = {
     id: `na${crypto.randomBytes(6).toString("hex")}`,
+    orderId: String(order.id || ""),
     kind: error ? "copy_rejected" : "copy_order",
     text: buildCopyAlertText({
       side,
@@ -1317,6 +1631,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
       strategy: order.strategy,
       status: mapped,
       error,
+      reason: error ? "" : order.reason,
     }),
     symbol: order.symbol,
     side,
@@ -1451,6 +1766,7 @@ function planRows(book, enrollments = []) {
 export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook, ownBookOnly = false } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
+  if (reconcileCopyAlerts(desk)) persist();
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],
@@ -1493,7 +1809,14 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
     payments: publicPayments(admins),
     copyReady: Boolean(autoTrade && String(desk.brokerToken || "").trim()),
     alerts: publicAlerts(desk.alerts),
+    staticIp: String(desk.staticIp || "").trim(),
   };
+}
+
+export function saveMemberStaticIp({ user, staticIp } = {}) {
+  if (!user?.id) throw fail("Sign in first.", 401);
+  const saved = saveClientSettings(user.id, { staticIp: staticIp ?? "" });
+  return { ok: true, staticIp: saved.staticIp || "" };
 }
 
 export function selectMemberBroker({ user, brokerId } = {}) {
@@ -1516,7 +1839,7 @@ export function selectMemberBroker({ user, brokerId } = {}) {
   };
 }
 
-export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken } = {}) {
+export function installMemberBroker({ user, brokerId, clientId, apiKey, accessToken, sessionToken, mobile, mpin, totpSecret } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   const wanted = String(brokerId || desk.brokerId || "paper").trim().toLowerCase();
@@ -1528,29 +1851,51 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   if (wanted !== desk.brokerId) switchDeskBroker(desk, wanted);
   else syncSelectedBrokerAccount(desk);
   const slot = peekBrokerAccount(user.id, wanted);
-  const nextClientId = clientId != null ? String(clientId || "").trim() : String(slot.accountId || desk.accountId || "").trim();
+  const deskLogin = slotMatchesDeskBroker(slot, wanted) || slotMatchesDeskBroker(snapshotSelectedBrokerAccount(desk), wanted);
+  const priorId = deskLogin ? "" : String(slot.accountId || "").trim();
+  const priorToken = deskLogin ? "" : String(slot.brokerToken || "").trim();
+  const priorKey = deskLogin ? "" : String(slot.brokerApiKey || "").trim();
+  const priorSecret = deskLogin ? "" : String(slot.brokerSessionToken || "").trim();
+  const nextClientId = clientId != null ? String(clientId || "").trim() : priorId || (deskLogin ? "" : String(desk.accountId || "").trim());
   if (!nextClientId) throw fail("Paste the client ID.");
+  const offeredToken = String(accessToken || "").trim() || priorToken;
+  const offeredKey = String(apiKey || "").trim() || priorKey;
+  if (slotMatchesDeskBroker({ accountId: nextClientId, brokerToken: offeredToken, brokerApiKey: offeredKey }, wanted)) {
+    const name = catalog.find((row) => row.id === wanted)?.name || "broker";
+    throw fail(`That login is the desk ${name}. Waiting for this user to add their own ${name}.`);
+  }
+  if (wanted === "kotak" && sessionUsesAdminKotak({ clientId: nextClientId, accessToken: offeredToken, apiKey: offeredKey })) {
+    throw fail("That login is the admin Kotak Neo. This user needs their own Kotak Neo client ID and access token.");
+  }
   desk.accountId = nextClientId;
   const token = String(accessToken || "").trim();
-  const nextApiKey = String(apiKey || "").trim() || slot.brokerApiKey || desk.brokerApiKey;
-  const nextSecret = String(sessionToken || "").trim() || slot.brokerSessionToken || desk.brokerSessionToken;
+  const nextApiKey = offeredKey;
+  const nextSecret = String(sessionToken || "").trim() || priorSecret;
   const canMintUpstox = wanted === "upstox" && nextApiKey.length >= 8 && nextSecret.length >= 8;
-  if (!token && !slot.brokerToken && !desk.brokerToken && !canMintUpstox) {
+  if (!token && !priorToken && !canMintUpstox) {
     throw fail(wanted === "upstox" ? "Paste the trading access token, or API key + API secret to generate it." : "Paste the access token.");
   }
   if (token) {
     if (token.length < 6) throw fail("Access token is too short.");
     writeBrokerToken(desk, token);
+  } else if (deskLogin) {
+    desk.brokerToken = "";
+    desk.brokerTokenUpdatedAt = "";
   }
   desk.tradeMode = "real";
   const needsApi = fields.some((row) => row.id === "apiKey") && wanted !== "upstox";
   const key = String(apiKey || "").trim();
-  if (needsApi && !key && !slot.brokerApiKey && !desk.brokerApiKey) throw fail("Paste the API key.");
+  if (needsApi && !key && !priorKey) throw fail("Paste the API key.");
   if (key) desk.brokerApiKey = key;
+  else if (deskLogin) desk.brokerApiKey = "";
   if (sessionToken != null && String(sessionToken).trim()) {
     desk.brokerSessionToken = String(sessionToken).trim();
   }
+  if (String(mobile || "").trim()) desk.brokerMobile = kotakMobileNumber(mobile);
+  if (String(mpin || "").trim()) desk.brokerMpin = String(mpin).trim();
+  if (String(totpSecret || "").trim()) desk.brokerTotpSecret = String(totpSecret).trim();
   syncSelectedBrokerAccount(desk);
+  if (desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].memberAdded = true;
   persist();
   return { ok: true, install: publicBrokerInstall(desk), brokerId: desk.brokerId };
 }

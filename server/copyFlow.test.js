@@ -57,6 +57,7 @@ function installLive(user, brokerId, clientId, token, extra = {}) {
     clientId,
     accessToken: token,
     apiKey: extra.apiKey,
+    sessionToken: extra.sessionToken,
   });
 }
 
@@ -205,6 +206,66 @@ test("different strategies flow together: admin Dhan Nifty+Crude, members on Dha
     false,
     "Crude member must not receive Nifty",
   );
+});
+
+test("individual strategy and copy trading share one order queue onto Dhan, Upstox, and Kotak accounts", () => {
+  const individual = { id: "u-flow-individual-upstox", name: "Individual Upstox", email: "indiv@t2s.app", role: "user" };
+  const copier = { id: "u-flow-copy-kotak", name: "Copy Kotak", email: "copykotak@t2s.app", role: "user" };
+  installLive(individual, "upstox", "UPX3300", "individual-upstox-token");
+  saveClientSettings(individual.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: nifty.name,
+    tradeMode: "real",
+    brokerId: "upstox",
+  });
+  installLive(copier, "kotak", "KOTAKU1", "kotak-user-trade-token", {
+    apiKey: "kotak-user-consumer",
+    sessionToken: "kotak-user-sid",
+  });
+  saveClientSettings(copier.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    tradeMode: "real",
+    brokerId: "kotak",
+    brokerApiKey: "kotak-user-consumer",
+    brokerSessionToken: "kotak-user-sid",
+  });
+  replaceDhanBook([]);
+  drainPendingLiveAlgoOrders();
+  queueLiveAlgoOrder({
+    strategy: nifty.name,
+    side: "BUY",
+    symbol: "NIFTY 25100 CE",
+    qty: 65,
+    lotSize: 65,
+    brokerId: "dhan",
+  });
+  queueLiveAlgoOrder({
+    strategy: crude.name,
+    side: "BUY",
+    symbol: "CRUDEOIL 6300 CE",
+    qty: 100,
+    lotSize: 100,
+    brokerId: "dhan",
+  });
+  const queued = drainPendingLiveAlgoOrders();
+  const master = adminLegs(queued);
+  assert.ok(master.every((row) => row.lane === "master" && row.brokerId === "dhan"));
+  const own = queuedFor(queued, individual.id);
+  assert.equal(own.length, 1);
+  assert.equal(own[0].lane, "individual");
+  assert.equal(own[0].strategy, nifty.name);
+  assert.equal(own[0].brokerId, "upstox");
+  assert.equal(own[0].account.clientId, "UPX3300");
+  assert.equal(own[0].account.accessToken, "individual-upstox-token");
+  const copied = queuedFor(queued, copier.id);
+  assert.equal(copied.length, 2);
+  assert.ok(copied.every((row) => row.lane === "copy" && row.brokerId === "kotak"));
+  assert.ok(copied.every((row) => row.account.clientId === "KOTAKU1"));
+  assert.ok(copied.every((row) => row.account.accessToken === "kotak-user-trade-token"));
+  assert.ok(copied.every((row) => row.account.apiKey === "kotak-user-consumer"));
+  assert.ok(copied.every((row) => row.account.sessionToken === "kotak-user-sid"));
 });
 
 test("copy-master member on a different broker receives both strategies with the member token", () => {

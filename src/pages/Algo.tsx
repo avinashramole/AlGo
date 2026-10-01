@@ -13,6 +13,7 @@ import {
   contractLabel,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
+  niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
@@ -79,16 +80,18 @@ function kindMeta(algo: AlgoStrategy) {
     const maxTrades = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
     return {
       kind: "crude-first-candle" as const,
-      category: "CRUDE OIL FIRST 5M",
-      config: `CRUDE FUT · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
+      category: `CRUDE OIL FIRST ${(algo.timeframe || "5m").toUpperCase()}`,
+      config: `CRUDE FUT · ${algo.timeframe || "5m"} · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
     const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
+    const trail = niftyFirstCandleTrail(algo);
+    const tf = algo.timeframe || "5m";
     return {
       kind: "nifty-first-candle" as const,
-      category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      category: `SYSTEMATIC NIFTY FIRST ${tf.toUpperCase()}`,
+      config: `NIFTY FUT · ${tf} · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
@@ -408,6 +411,12 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
+function brokerFilledOrder(row: { status?: string; filledQty?: number }) {
+  const status = String(row.status || "").toUpperCase();
+  if (Number(row.filledQty || 0) > 0) return true;
+  return status === "FILLED" || status === "TRADED";
+}
+
 function AlgoCard({
   algo,
   clientIds,
@@ -427,7 +436,7 @@ function AlgoCard({
 }: {
   algo: AlgoStrategy;
   clientIds: Set<string> | null;
-  orders: Array<{ id: string }>;
+  orders: Array<{ id: string; status?: string; filledQty?: number }>;
   positions: Array<{ type?: string; pnl?: number; live?: boolean; brokerId?: string }>;
   busy: boolean;
   rangeOpen: boolean;
@@ -453,6 +462,7 @@ function AlgoCard({
       : positions.every((row) => row.type !== "SELL")
         ? "LONG"
         : "MIXED";
+  const filledOrders = orders.filter(brokerFilledOrder);
   const trades = Number(algo.lastBacktest?.trades || 0);
   const winRate = Number(algo.lastBacktest?.winRate ?? algo.winRate ?? 0);
   const drawdown = Number(algo.lastBacktest?.maxDrawdown || 0);
@@ -508,7 +518,7 @@ function AlgoCard({
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />
-        <Metric label="Total orders" value={String(orders.length)} hint={orders.length ? "Desk orders" : "No orders"} />
+        <Metric label="Total orders" value={String(filledOrders.length)} hint={filledOrders.length ? "Filled at the broker" : "No filled orders"} />
         <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
         <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />
       </div>

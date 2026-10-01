@@ -92,6 +92,19 @@ test("live preview candle keeps its own open and close while the 5m bar is still
     ),
     "LIVE NIFTY FUT RED CE RED PE GREEN O 22663.00 C 22647.50 · 09:20–09:25 IST · BUY PE",
   );
+  assert.equal(
+    formatLiveFuturePreview(
+      preview,
+      5,
+      {
+        ce: { open: 120, close: 140 },
+        pe: { open: 90, close: 70 },
+        ceStrike: 22550,
+        peStrike: 22550,
+      },
+    ),
+    "LIVE NIFTY FUT RED CE 22550 GREEN PE 22550 RED O 22663.00 C 22647.50 · 09:20–09:25 IST · NO TRADE PE 22550 RED",
+  );
   const closed = niftyFutureSignalBars("5m", now);
   assert.equal(closed.length, 1);
   assert.equal(closed[0].open, 22678.6);
@@ -218,4 +231,27 @@ test("crude future 5m close stamp keeps that candle open and close", () => {
     Date.now = realNow;
     setCrudeFutureChartCandles([]);
   }
+});
+
+test("changing the strategy to 15m builds 15-minute candles from 09:00", () => {
+  const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
+  const five = 5 * 60 * 1000;
+  setNiftyFutureChartCandles([
+    { time: open0900, open: 100, high: 110, low: 99, close: 108, volume: 1 },
+    { time: open0900 + five, open: 108, high: 112, low: 107, close: 111, volume: 1 },
+    { time: open0900 + 2 * five, open: 111, high: 115, low: 110, close: 114, volume: 1 },
+    { time: open0900 + 3 * five, open: 114, high: 120, low: 113, close: 118, volume: 1 },
+  ]);
+  const bars = niftyFutureSignalBars("15m", open0900 + 6 * five, {
+    sessionOpenMinutes: 9 * 60,
+    sessionCloseMinutes: 15 * 60 + 30,
+  });
+  assert.equal(bars.length, 2);
+  assert.equal(bars[0].time, open0900);
+  assert.equal(bars[0].open, 100);
+  assert.equal(bars[0].close, 114);
+  assert.equal(bars[1].time, open0900 + 3 * five);
+  assert.equal(bars[1].open, 114);
+  assert.equal(bars[1].close, 118);
+  setNiftyFutureChartCandles([]);
 });

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, CRUDE_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, CRUDE_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -246,7 +246,7 @@ export function formatConditionGroup(group, fallbackRow) {
 }
 
 export function strikeOffsetLabel(offset) {
-  const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
+  const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
   if (n === 0) return "ATM";
   return n > 0 ? `ATM+${n}` : `ATM${n}`;
 }
@@ -255,8 +255,8 @@ export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
-  if (isCrudeFirstCandleAlgo(algo)) return "CRUDE OIL ATM CE/PE first 5m";
-  if (isNiftyFirstCandleAlgo(algo)) return "NIFTY ATM CE/PE first 5m";
+  if (isCrudeFirstCandleAlgo(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isNiftyFirstCandleAlgo(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
@@ -290,7 +290,7 @@ export function summarizeAlgo(algo) {
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
-    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview 5m open/close at the next candle open · one signal places one order · max ${maxTrades} trades/day · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
+    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview ${tf} open/close at the next candle open · one signal places one order · max ${maxTrades} trades/day · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -302,7 +302,8 @@ export function summarizeAlgo(algo) {
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
     const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
     const atm = strikeOffsetLabel(algo.strikeOffset);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
+    const trail = niftyFirstCandleTrail(algo);
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -633,6 +634,10 @@ export function normalizeAlgo(input = {}, existing = {}) {
       firstBarStartIst: cfg.firstBarStartIst,
       entryEvaluationIst: cfg.entryEvaluationIst,
       endTimeIst: cfg.endTimeIst,
+      trailingActivationPct: cfg.trailingActivationPct,
+      trailingEveryPct: cfg.trailingEveryPct,
+      trailingShiftPct: cfg.trailingShiftPct,
+      trailingStepPct: cfg.trailingShiftPct,
       lastBacktest: existing.lastBacktest || null,
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
@@ -778,7 +783,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
         : "live";
   const instrument = (input.instrument || existing.instrument) === "option" ? "option" : "future";
   const optionType = (input.optionType || existing.optionType) === "PE" ? "PE" : "CE";
-  const strikeOffset = Math.max(-2, Math.min(2, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
+  const strikeOffset = Math.max(-5, Math.min(5, Math.round(num(input.strikeOffset, existing.strikeOffset || 0))));
   const next = {
     ...existing,
     id: existing.id || newAlgoId(),

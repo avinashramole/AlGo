@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
-import { isMcxSymbol } from "./optionChain.js";
+import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
+import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
+import { totpCode } from "./totp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const NFO_WEEK_MONTH = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "O", "N", "D"];
 
 export const LIVE_BROKER_CATALOG = [
   {
@@ -76,11 +78,14 @@ export const LIVE_BROKER_CATALOG = [
     segments: ["EQ", "FNO"],
     fields: [
       { id: "clientId", label: "Client ID", placeholder: "Kotak client id" },
-      { id: "apiKey", label: "Consumer key", placeholder: "Neo consumer key" },
-      { id: "accessToken", label: "Access token", secret: true, placeholder: "Neo access token" },
-      { id: "sessionToken", label: "Sid / session", secret: true, placeholder: "Neo sid (if required)" },
+      { id: "apiKey", label: "Consumer key", secret: true, placeholder: "Neo consumer key" },
+      { id: "accessToken", label: "Neo access token", secret: true, placeholder: "Access token from the Neo app" },
+      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile registered on this Kotak Neo" },
+      { id: "mpin", label: "MPIN", secret: true, placeholder: "Kotak Neo MPIN" },
+      { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
+      { id: "sessionToken", label: "Neo sid", secret: true, placeholder: "Sid from today's trade login, if already copied" },
     ],
-    help: "Use Kotak Neo developer credentials. Connect checks the Neo profile API, then live orders go to Neo place-order.",
+    help: "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid.",
   },
   {
     id: "angelone",
@@ -167,21 +172,35 @@ export function listLiveBrokerPublic() {
   return LIVE_BROKER_CATALOG.filter((row) => row.id !== "dhan").map((row) => liveBrokerPublic(row.id));
 }
 
-export function nfoTradingSymbol(symbol, expiry) {
-  const raw = String(symbol || "").toUpperCase().replace(/,/g, " ").replace(/\s+/g, " ").trim();
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\s+(\d{3,6})\s*(CE|PE)$/);
-  if (!named) {
-    const compact = raw.replace(/\s+/g, "");
-    return compact || raw;
+function nfoDateToken(ymd, root) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "";
+  const yy = ymd.slice(2, 4);
+  const monthIndex = Number(ymd.slice(5, 7)) - 1;
+  if (getUnderlying(root).weekly && isWeeklyOptionExpiry(ymd, root)) {
+    const code = NFO_WEEK_MONTH[monthIndex];
+    return code ? `${yy}${code}${ymd.slice(8, 10)}` : "";
   }
-  const root = named[1];
-  const strike = named[2];
-  const opt = named[3];
-  const ymd = String(expiry || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!ymd) return `${root}${strike}${opt}`;
-  const yy = ymd[1].slice(-2);
-  const mon = MONTHS[Number(ymd[2]) - 1] || "JAN";
-  return `${root}${yy}${mon}${strike}${opt}`;
+  return `${yy}${MONTHS[monthIndex] || "JAN"}`;
+}
+
+function resolveNfoExpiry(root, expiry, parsedExpiry) {
+  const raw = String(expiry || parsedExpiry || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const month = raw.match(/^(\d{4})-(\d{2})/);
+  if (month) return upstoxExpiryDate(`${month[1]}-${month[2]}`, root);
+  return "";
+}
+
+export function nfoTradingSymbol(symbol, expiry) {
+  const parsed = parseDeskOptionSymbol(symbol, { expiry });
+  if (!parsed) {
+    const compact = String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return compact || String(symbol || "").trim();
+  }
+  const ymd = resolveNfoExpiry(parsed.root, expiry, parsed.expiry);
+  const token = nfoDateToken(ymd, parsed.root);
+  if (!token) return `${parsed.root}${parsed.strike}${parsed.option}`;
+  return `${parsed.root}${token}${parsed.strike}${parsed.option}`;
 }
 
 export function fyersSymbol(symbol, expiry) {
@@ -209,12 +228,18 @@ const UPSTOX_EXPIRY_WEEKDAY = {
   SENSEX: "Thu",
 };
 
-/** October 2026 NIFTY monthly is the last Tuesday, 2026-10-27. */
+/** A month with no day uses the nearest weekly expiry, not the monthly last Tuesday. */
 export function upstoxExpiryDate(expiry, root = "NIFTY") {
   const raw = String(expiry || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const month = raw.match(/^(\d{4})-(\d{2})$/);
   if (!month) return "";
+  const und = getUnderlying(root);
+  const prefix = `${month[1]}-${month[2]}`;
+  if (und.weekly) {
+    const inMonth = upcomingExpiries(root, 16).filter((date) => date.startsWith(prefix) && isWeeklyOptionExpiry(date, root));
+    if (inMonth.length) return inMonth[0];
+  }
   const year = Number(month[1]);
   const mon = Number(month[2]);
   const weekday = UPSTOX_EXPIRY_WEEKDAY[String(root || "NIFTY").toUpperCase()] || "Tue";
@@ -232,14 +257,36 @@ function parseSymbolExpiry(token) {
   const raw = String(token || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-  const hit = raw.match(/^(?:(\d{1,2}))?([A-Z]{3})(\d{2}|\d{4})$/);
-  if (!hit) return "";
+  const hit = raw.match(/^(?:(\d{1,2}))?([A-Z]{3})(\d{2}|\d{4})?$/);
+  if (!hit || !hit[2]) return "";
   const mon = MONTHS.indexOf(hit[2]);
   if (mon < 0) return "";
-  const year = hit[3].length === 2 ? `20${hit[3]}` : hit[3];
   const month = String(mon + 1).padStart(2, "0");
-  if (hit[1]) return `${year}-${month}-${String(Number(hit[1])).padStart(2, "0")}`;
-  return `${year}-${month}`;
+  if (!hit[1] && hit[3]) {
+    const year = hit[3].length === 2 ? `20${hit[3]}` : hit[3];
+    return `${year}-${month}`;
+  }
+  if (!hit[1]) return "";
+  const day = String(Number(hit[1])).padStart(2, "0");
+  const year = hit[3]
+    ? hit[3].length === 2
+      ? `20${hit[3]}`
+      : hit[3]
+    : String(inferExpiryYear(mon, Number(hit[1])));
+  return `${year}-${month}-${day}`;
+}
+
+function inferExpiryYear(monthIndex, day) {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  let year = Number(today.slice(0, 4));
+  const ymd = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (ymd < today) year += 1;
+  return year;
 }
 
 const DESK_OPTION_ROOTS = "CRUDEOIL|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|NIFTY";
@@ -402,6 +449,7 @@ function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry, se
   if (wantDay) {
     const exact = scored.find((row) => row.exact);
     if (exact) return exact.row;
+    if (getUnderlying(wantRoot).weekly) return null;
   }
   const monthHits = wantMonth ? scored.filter((row) => row.month) : [];
   const pool = monthHits.length ? monthHits : scored;
@@ -645,8 +693,30 @@ function decorateUpstoxPlaceError(error) {
   return error instanceof Error ? error : fail(message, error?.status || 400);
 }
 
+function networkFail(error, url) {
+  const cause = error?.cause;
+  const code = String(cause?.code || cause?.errno || "").trim();
+  const causeText = String(cause?.message || "").trim();
+  let host = "";
+  try {
+    host = new URL(String(url)).host;
+  } catch {
+    host = "";
+  }
+  const detail = [code, causeText && causeText !== code ? causeText : ""].filter(Boolean).join(" ");
+  const lead = String(error?.message || "request failed");
+  const where = host ? ` ${host}` : "";
+  const message = detail ? `${lead} (${detail}${where})` : host ? `${lead} (${host})` : lead;
+  return fail(message, 0);
+}
+
 async function httpJson(fetchImpl, url, options = {}) {
-  const res = await fetchImpl(url, options);
+  let res;
+  try {
+    res = await fetchImpl(url, options);
+  } catch (error) {
+    throw networkFail(error, url);
+  }
   const text = await res.text();
   const body = jsonOf(res, text);
   if (!res.ok) {
@@ -710,22 +780,14 @@ async function probeFyers(fetchImpl, creds) {
 }
 
 async function probeKotak(fetchImpl, creds) {
-  if (creds.apiKey.length < 4 || creds.accessToken.length < 6) {
-    throw fail("Enter Kotak Neo consumer key and access token.");
-  }
-  const body = await httpJson(fetchImpl, "https://gw-napi.kotaksecurities.com/Orders/2.0/quick/user/profile", {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${creds.accessToken}`,
-      "neo-fin-key": creds.apiKey,
-      sid: creds.sessionToken || "",
-      Auth: creds.sessionToken || creds.accessToken,
-    },
+  const token = String(creds.apiKey || creds.accessToken || "").trim();
+  if (token.length < 4) throw fail("Enter Kotak Neo consumer key and access token.");
+  await httpJson(fetchImpl, "https://mis.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/all", {
+    headers: { Authorization: token, Accept: "application/json" },
   });
-  const data = body.data || body;
   return {
-    clientId: String(data.clientId || data.client_id || creds.clientId || ""),
-    profileName: String(data.name || data.clientName || "Kotak Neo"),
+    clientId: creds.clientId,
+    profileName: "Kotak Neo",
     funds: 0,
   };
 }
@@ -837,18 +899,319 @@ function orderSide(payload) {
   return String(payload.side || payload.transaction_type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
 }
 
+const KOTAK_ORDER_HOSTS = [
+  "https://mis.kotaksecurities.com",
+  "https://e21.kotaksecurities.com",
+  "https://e22.kotaksecurities.com",
+  "https://e41.kotaksecurities.com",
+  "https://e43.kotaksecurities.com",
+];
+
+const kotakTradeCache = new Map();
+
+function kotakEnv(name) {
+  return String(process.env[name] || "").trim();
+}
+
+export function kotakMobileNumber(value) {
+  const raw = String(value || "").trim().replace(/[\s-]/g, "");
+  if (!raw) return "";
+  if (raw.startsWith("+")) return raw;
+  if (/^\d{10}$/.test(raw)) return `+91${raw}`;
+  if (/^91\d{10}$/.test(raw)) return `+${raw}`;
+  return raw;
+}
+
+function istClock(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value || "";
+  return {
+    weekend: value("weekday") === "Sat" || value("weekday") === "Sun",
+    minutes: Number(value("hour")) * 60 + Number(value("minute")),
+  };
+}
+
+export function kotakOrderAmo(payload = {}, date = new Date()) {
+  if (payload.afterMarketOrder === true || payload.amo === true || String(payload.amo).toUpperCase() === "YES") return "YES";
+  const clock = payload.orderAt ? new Date(payload.orderAt) : date;
+  const when = Number.isNaN(clock.getTime()) ? new Date() : clock;
+  const { weekend, minutes } = istClock(when);
+  if (weekend) return "YES";
+  const crude = isMcxSymbol(payload.symbol) || String(payload.exchangeSegment || "") === "MCX_COMM";
+  const open = crude ? minutes >= 9 * 60 && minutes < 23 * 60 + 30 : minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
+  return open ? "NO" : "YES";
+}
+
+function kotakOrderBody({ payload, nfo, qty, side, product }) {
+  const limit = String(payload.type || "").toUpperCase() === "LIMIT" && Number(payload.price) > 0;
+  const segment = /SENSEX/i.test(`${nfo} ${payload.symbol || ""}`)
+    ? "bse_fo"
+    : isMcxSymbol(payload.symbol)
+      ? "mcx_fo"
+      : "nse_fo";
+  return {
+    am: kotakOrderAmo(payload),
+    dq: "0",
+    es: segment,
+    mp: "0",
+    pc: product === "NRML" ? "NRML" : "MIS",
+    pf: "N",
+    pr: limit ? String(payload.price) : "0",
+    pt: limit ? "L" : "MKT",
+    qt: String(qty),
+    rt: "DAY",
+    tp: "0",
+    ts: nfo,
+    tt: side === "SELL" ? "S" : "B",
+    os: "NEOTRADEAPI",
+  };
+}
+
+function kotakDeskCreds(session = {}, lane = "admin") {
+  const own = {
+    clientId: String(session.clientId || "").trim(),
+    apiKey: String(session.apiKey || "").trim(),
+    accessToken: String(session.accessToken || "").trim(),
+    sessionToken: String(session.sessionToken || "").trim(),
+    mobile: String(session.mobile || "").trim(),
+    mpin: String(session.mpin || "").trim(),
+    totpSecret: String(session.totpSecret || "").trim(),
+    baseUrl: String(session.baseUrl || "").replace(/\/$/, ""),
+    serverId: String(session.serverId || "").trim(),
+    tradeToken: String(session.tradeToken || "").trim(),
+    tradeSid: String(session.tradeSid || "").trim(),
+  };
+  if (lane === "member") return own;
+  return {
+    ...own,
+    clientId: own.clientId || kotakEnv("T2S_KOTAK_CLIENT_ID"),
+    apiKey: own.apiKey || kotakEnv("T2S_KOTAK_CONSUMER_KEY"),
+    accessToken: own.accessToken || kotakEnv("T2S_KOTAK_ACCESS_TOKEN") || kotakEnv("T2S_KOTAK_CONSUMER_KEY"),
+    mobile: own.mobile || kotakEnv("T2S_KOTAK_MOBILE"),
+    mpin: own.mpin || kotakEnv("T2S_KOTAK_MPIN"),
+    totpSecret: own.totpSecret || kotakEnv("T2S_KOTAK_TOTP_SECRET"),
+    baseUrl: own.baseUrl || kotakEnv("T2S_KOTAK_BASE_URL").replace(/\/$/, ""),
+    serverId: own.serverId || kotakEnv("T2S_KOTAK_SERVER_ID"),
+  };
+}
+
+function kotakBrokerMessage(body = {}, res = {}) {
+  const row = Array.isArray(body.error) ? body.error[0] : body.error;
+  const nested = row && typeof row === "object" ? row : {};
+  const data = body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : {};
+  const text = [nested.message, nested.msg, body.errMsg, body.emsg, data.errMsg, data.message, body.message]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean)[0];
+  return text || upstoxErrorMessage(body, res);
+}
+
+function kotakRejected(body) {
+  if (!body || typeof body !== "object") return false;
+  if (body.nOrdNo || body.orderId || body.data?.nOrdNo) return false;
+  const stat = String(body.stat || "").toLowerCase();
+  if (stat === "not_ok" || stat === "not ok" || stat === "error") return true;
+  if (Array.isArray(body.error) && body.error.length) return true;
+  return Boolean(body.errMsg || body.emsg);
+}
+
+async function kotakRequest(fetchImpl, url, options) {
+  let res;
+  try {
+    res = await fetchImpl(url, options);
+  } catch (error) {
+    throw networkFail(error, url);
+  }
+  const text = await res.text();
+  const body = jsonOf(res, text);
+  if (!res.ok || kotakRejected(body)) {
+    const error = fail(kotakBrokerMessage(body, res), res.ok ? 400 : res.status || 400);
+    error.body = body;
+    throw error;
+  }
+  return body;
+}
+
+function kotakHostMiss(error) {
+  const status = Number(error?.status || 0);
+  return status === 0 || status === 404 || status === 401 || status === 403;
+}
+
+function stampKotakPlaceError(error) {
+  if (!error || typeof error !== "object") return;
+  const reason = String(error.message || "Kotak Neo did not accept this order.");
+  error.live = { ...(error.live || {}), status: "REJECTED", reason, brokerId: "kotak" };
+}
+
+export function kotakLoginAuthorization(creds = {}) {
+  const token = String(creds.accessToken || "").trim();
+  const key = String(creds.apiKey || "").trim();
+  if (token && token !== key) return token;
+  return key || token;
+}
+
+export function canKotakTradeLogin(creds = {}) {
+  return Boolean(
+    String(creds.mobile || "").trim() &&
+      String(creds.mpin || "").trim() &&
+      String(creds.totpSecret || "").trim() &&
+      String(creds.clientId || "").trim() &&
+      kotakLoginAuthorization(creds),
+  );
+}
+
+export async function openKotakTradeSession(creds, fetchImpl = fetch) {
+  const authHeader = kotakLoginAuthorization(creds);
+  const key = `${creds.clientId}|${authHeader}`;
+  const cached = kotakTradeCache.get(key);
+  if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
+  const login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "neo-fin-key": "neotradeapi",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ mobileNumber: kotakMobileNumber(creds.mobile), ucc: creds.clientId, totp: totpCode(creds.totpSecret) }),
+  });
+  const view = login.data || login;
+  const viewToken = String(view.token || "").trim();
+  const viewSid = String(view.sid || "").trim();
+  if (!viewToken || !viewSid) throw fail("Kotak TOTP login did not return a trading session.");
+  const validated = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate", {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "neo-fin-key": "neotradeapi",
+      sid: viewSid,
+      Auth: viewToken,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ mpin: creds.mpin }),
+  });
+  const data = validated.data || validated;
+  const trade = {
+    tradeToken: String(data.token || "").trim(),
+    tradeSid: String(data.sid || "").trim(),
+    baseUrl: String(data.baseUrl || "").replace(/\/$/, ""),
+    serverId: String(data.hsServerId || data.serverId || "").trim(),
+    expires: Date.now() + 6 * 60 * 60 * 1000,
+  };
+  if (!trade.tradeToken || !trade.baseUrl) throw fail("Kotak MPIN login did not return a trading host.");
+  kotakTradeCache.set(key, trade);
+  return trade;
+}
+
+function kotakMemberTradePair(creds = {}) {
+  const sid = String(creds.sessionToken || "").trim();
+  const auth = String(creds.accessToken || "").trim();
+  const key = String(creds.apiKey || "").trim();
+  const clientId = String(creds.clientId || "").trim();
+  return {
+    sid: sid && sid !== clientId && sid !== key && sid !== auth ? sid : "",
+    auth: auth && auth !== key ? auth : "",
+  };
+}
+
+function kotakPlaceUrls(trade) {
+  const hosts = trade?.baseUrl ? [trade.baseUrl] : KOTAK_ORDER_HOSTS;
+  const query = trade?.serverId ? `?sId=${encodeURIComponent(trade.serverId)}` : "";
+  return hosts.map((host) => `${host}/quick/order/rule/ms/place${query}`);
+}
+
+async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product }) {
+  const creds = kotakDeskCreds(session, lane);
+  const savedToken = creds.tradeToken || (lane !== "member" && creds.sessionToken && creds.sessionToken !== creds.apiKey && creds.sessionToken !== creds.accessToken ? creds.sessionToken : "");
+  const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
+  const pastedTrade = Boolean(memberPair?.sid && memberPair?.auth);
+  let trade = null;
+  if (creds.baseUrl && savedToken) {
+    trade = { baseUrl: creds.baseUrl, tradeToken: savedToken, tradeSid: creds.tradeSid || creds.sessionToken, serverId: creds.serverId };
+  } else if (!pastedTrade && canKotakTradeLogin(creds)) {
+    trade = await openKotakTradeSession(creds, fetchImpl);
+  }
+  if (lane === "member" && !trade && (!memberPair.sid || !memberPair.auth)) {
+    const who = creds.clientId ? `client ID ${creds.clientId}` : "this user";
+    throw fail(
+      `Kotak Neo has no trade session for ${who}. The quote consumer key cannot place this order. On Profile, paste this user's trade-login mobile, MPIN, and TOTP, or paste the Neo sid and the session token from today's trade login.`,
+    );
+  }
+  const auth = trade?.tradeToken || memberPair?.auth || creds.accessToken || creds.apiKey;
+  const sid = trade?.tradeSid || memberPair?.sid || creds.sessionToken || creds.clientId;
+  if (!auth) throw fail("Kotak Neo has no access token for this order.");
+  const jData = kotakOrderBody({ payload, nfo, qty, side, product });
+  const headers = {
+    Auth: auth,
+    Sid: sid,
+    "neo-fin-key": "neotradeapi",
+    Accept: "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  const body = new URLSearchParams({ jData: JSON.stringify(jData) }).toString();
+  const urls = kotakPlaceUrls(trade);
+  console.log(`Kotak ${jData.am === "YES" ? "AMO " : ""}${side} ${jData.es} ${jData.pc} ${jData.pt} qty ${jData.qt} ${jData.ts}`);
+  let last = null;
+  for (const url of urls) {
+    try {
+      const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
+      const orderId = String(parsed.nOrdNo || parsed.data?.nOrdNo || parsed.orderId || "");
+      return {
+        orderId,
+        status: "PENDING",
+        brokerId: "kotak",
+        tradingSymbol: jData.ts,
+        reason: jData.am === "YES" ? "Sent to Kotak Neo as an after-market order." : "Sent to Kotak Neo.",
+      };
+    } catch (error) {
+      last = error;
+      if (!kotakHostMiss(error) || url === urls[urls.length - 1]) throw error;
+    }
+  }
+  throw last || fail("Kotak Neo order was not sent.");
+}
+
+function memberKotakOwnKeyError(error, session = {}) {
+  const raw = String(error?.message || "");
+  const key = String(session.apiKey || "").trim();
+  const token = String(session.accessToken || "").trim();
+  if (!/consumer key/i.test(raw) || !/does not exist|not linked/i.test(raw)) {
+    let message = raw;
+    if (key) message = message.split(key).join(credentialHint(key));
+    if (token && token !== key) message = message.split(token).join(credentialHint(token));
+    if (message === raw) return error instanceof Error ? error : new Error(message);
+    const next = new Error(message);
+    next.status = error?.status || 400;
+    return next;
+  }
+  const who = String(session.clientId || "").trim() ? `client ID ${String(session.clientId).trim()}` : "this user";
+  const next = new Error(
+    `Kotak Neo refused this user's own consumer key ${credentialHint(key || token)} for ${who}. The admin broker was not used. This key loads quotes. Orders need the trade consumer key from this user's own Kotak Neo API app.`,
+  );
+  next.status = error?.status || 424;
+  return next;
+}
+
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
   const brokerName = liveBrokerMeta(id)?.name || id;
   const { lane, session } = liveOrderSession(payload, liveBrokerSession(id), { brokerName });
   try {
-    return await placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl);
+    return await placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, lane);
   } catch (error) {
-    if (lane === "member") throw annotateMemberLiveAuthError(error, session, { brokerName });
-    throw error;
+    const owned = lane === "member" && String(id) === "kotak" ? memberKotakOwnKeyError(error, session) : error;
+    const wrapped = lane === "member" ? annotateMemberLiveAuthError(owned, session, { brokerName }) : owned;
+    if (String(id) === "kotak") stampKotakPlaceError(wrapped);
+    throw wrapped;
   }
 }
 
-async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
+async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, lane = "admin") {
   const qty = orderQty(payload);
   const side = orderSide(payload);
   const symbol = String(payload.symbol || "").trim();
@@ -1017,29 +1380,7 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl) {
   }
 
   if (id === "kotak") {
-    const body = await httpJson(fetchImpl, "https://gw-napi.kotaksecurities.com/Orders/2.0/quick/order/rule/ms/place", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        "neo-fin-key": session.apiKey,
-        sid: session.sessionToken || "",
-        Auth: session.sessionToken || session.accessToken,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        amo: "NO",
-        exchange_segment: /SENSEX/.test(nfo) ? "bse_fo" : "nse_fo",
-        product: product === "NRML" ? "NRML" : "MIS",
-        price: "0",
-        order_type: "MKT",
-        quantity: String(qty),
-        disclosed_quantity: "0",
-        validity: "DAY",
-        trading_symbol: nfo,
-        transaction_type: side,
-      }),
-    });
-    return { orderId: String(body.nOrdNo || body.data?.nOrdNo || body.orderId || ""), status: "PENDING", brokerId: "kotak" };
+    return placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product });
   }
 
   if (id === "angelone") {

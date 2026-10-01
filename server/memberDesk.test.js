@@ -28,6 +28,7 @@ const {
   memberWorkingDhanCopies,
   recordMemberCopyFill,
   saveClientSettings,
+  saveMemberStaticIp,
   selectMemberBroker,
   startWalletTopup,
   sweepMemberDailyBooks,
@@ -43,6 +44,15 @@ savePaymentSettings({
 
 const user = { id: "u-member", name: "Desk Member", email: "member.desk@gmail.com", role: "user" };
 const algo = { id: "a4", name: "NIFTY VWAP ATM" };
+
+test("a member can save a static IP on their own desk", () => {
+  const saved = saveMemberStaticIp({ user, staticIp: "203.0.113.44" });
+  assert.equal(saved.staticIp, "203.0.113.44");
+  assert.equal(getMemberDesk({ user, enrollments: [], quote: () => 0 }).staticIp, "203.0.113.44");
+  assert.throws(() => saveMemberStaticIp({ user, staticIp: "999.1.1.1" }), /IPv4 or IPv6/);
+  const cleared = saveMemberStaticIp({ user, staticIp: "" });
+  assert.equal(cleared.staticIp, "");
+});
 
 test("selectMemberBroker stores the chosen broker without secrets", () => {
   const row = selectMemberBroker({ user, brokerId: "dhan" });
@@ -534,6 +544,9 @@ test("broker order book replaces a pending copy with REJECTED and keeps the limi
   assert.equal(admin.status, "REJECTED");
   assert.match(admin.reason, /Insufficient funds/);
   assert.equal(memberWorkingDhanCopies().some((item) => item.userId === member.id), false);
+  const alert = (desk.alerts || []).find((row) => row.symbol === "NIFTY 22650 CE");
+  assert.equal(alert.status, "REJECTED");
+  assert.match(alert.text, /Copied BUY 65 NIFTY 22650 CE · NIFTY 5m first candle · REJECTED · Insufficient funds/);
 });
 
 test("fills and broker refusals stay on the member book; expired tickets stay off", () => {
@@ -642,4 +655,221 @@ test("deploy purge and a blank token patch keep the admin access token", () => {
   saveClientSettings(member.id, { brokerToken: "", notes: "deploy touch" });
   assert.equal(peekClientSecrets(member.id).brokerToken, "member-token-keep-deploy");
   assert.equal(peekBrokerAccount(member.id, "dhan").brokerToken, "member-token-keep-deploy");
+});
+
+test("admin save of a user's own Kotak Neo shows on the profile", () => {
+  const member = { id: "u-kotak-own", name: "Own Kotak", email: "own.kotak@gmail.com", role: "user" };
+  const saved = saveClientSettings(member.id, {
+    brokerId: "kotak",
+    accountId: "USERK1",
+    brokerApiKey: "user-consumer-key",
+    brokerToken: "user-access-token",
+  });
+  assert.equal(saved.accountId, "USERK1");
+  assert.equal(saved.credentialsInstalled, true);
+  const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(shown.install.accountId, "USERK1");
+  assert.equal(shown.install.installed, true);
+  assert.equal(shown.brokers.find((row) => row.id === "kotak").installed, true);
+  const copy = brokerAccountForLiveCopy(member.id, "kotak");
+  assert.equal(copy.brokerToken, "user-access-token");
+  assert.equal(copy.leftoverToken, false);
+});
+
+test("admin save refuses the admin Kotak Neo login", () => {
+  const member = { id: "u-kotak-admin", name: "Admin Kotak", email: "admin.kotak@gmail.com", role: "user" };
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YIX14";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-key-9f44";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-key-9f44";
+  try {
+    assert.throws(
+      () =>
+        saveClientSettings(member.id, {
+          brokerId: "kotak",
+          accountId: "YIX14",
+          brokerApiKey: "admin-key-9f44",
+          brokerToken: "admin-key-9f44",
+        }),
+      /admin Kotak Neo/,
+    );
+    const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+    assert.equal(shown.install.accountId, "");
+    assert.equal(shown.install.installed, false);
+    assert.equal(brokerAccountForLiveCopy(member.id, "kotak").brokerToken, "");
+  } finally {
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("a Kotak user's own login is used for balance when it was saved before the added flag", async () => {
+  const file = path.join(dir, "legacy-kotak-desk.json");
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  delete process.env.T2S_KOTAK_CLIENT_ID;
+  delete process.env.T2S_KOTAK_CONSUMER_KEY;
+  delete process.env.T2S_KOTAK_ACCESS_TOKEN;
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      "u-avinash-kotak": {
+        brokerId: "kotak",
+        accountId: "YT2Vm",
+        brokerToken: "trade-token-1452",
+        brokerApiKey: "member-consumer",
+        brokerSessionToken: "neo-sid-88",
+        brokerAccounts: {
+          kotak: {
+            accountId: "YT2Vm",
+            brokerToken: "trade-token-1452",
+            brokerApiKey: "member-consumer",
+            brokerSessionToken: "neo-sid-88",
+            memberAdded: false,
+          },
+        },
+      },
+    }),
+  );
+  const previous = process.env.T2S_MEMBER_DESK_FILE;
+  process.env.T2S_MEMBER_DESK_FILE = file;
+  try {
+    const fresh = await import(`./memberDesk.js?legacy-kotak=${Date.now()}`);
+    const slot = fresh.brokerAccountForLiveCopy("u-avinash-kotak", "kotak");
+    assert.equal(slot.leftoverToken, false);
+    assert.equal(slot.accountId, "YT2Vm");
+    assert.equal(slot.brokerToken, "trade-token-1452");
+    assert.equal(slot.brokerSessionToken, "neo-sid-88");
+    const shown = fresh.peekClientSettings("u-avinash-kotak");
+    assert.equal(shown.accountId, "YT2Vm");
+    assert.equal(shown.brokerAccounts.kotak.sessionHint.includes("•"), true);
+  } finally {
+    if (previous == null) delete process.env.T2S_MEMBER_DESK_FILE;
+    else process.env.T2S_MEMBER_DESK_FILE = previous;
+    for (const [name, value] of [
+      ["T2S_KOTAK_CLIENT_ID", saved.id],
+      ["T2S_KOTAK_CONSUMER_KEY", saved.key],
+      ["T2S_KOTAK_ACCESS_TOKEN", saved.token],
+    ]) {
+      if (value == null) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("the member profile does not show the desk Kotak Neo login", async () => {
+  const member = { id: "u-kotak-wait", name: "Wait Kotak", email: "wait.kotak@gmail.com", role: "user" };
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "YIX14",
+    apiKey: "cd-consumer-key-3e77",
+    accessToken: "kotak-desk-access-token",
+  });
+  const { connectLiveBroker } = await import("./liveBrokers.js");
+  await connectLiveBroker(
+    "kotak",
+    { clientId: "YIX14", apiKey: "cd-consumer-key-3e77", accessToken: "kotak-desk-access-token" },
+    async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ clientId: "YIX14", name: "Desk Kotak" }) }),
+  );
+  const shown = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(shown.install.accountId, "");
+  assert.equal(shown.install.apiKeyHint, "");
+  assert.equal(shown.install.tokenHint, "");
+  assert.equal(shown.install.installed, false);
+  const kotak = shown.brokers.find((row) => row.id === "kotak");
+  assert.equal(kotak.installed, false);
+  assert.equal(kotak.accountId, "");
+  assert.match(kotak.note, /own client ID/);
+  assert.equal(brokerAccountForLiveCopy(member.id, "kotak").brokerToken, "");
+  assert.equal(brokerAccountForLiveCopy(member.id, "kotak").leftoverToken, true);
+  assert.throws(
+    () =>
+      installMemberBroker({
+        user: member,
+        brokerId: "kotak",
+        clientId: "YIX14",
+        apiKey: "cd-consumer-key-3e77",
+        accessToken: "kotak-desk-access-token",
+      }),
+    /Waiting for this user to add their own Kotak Neo/,
+  );
+  assert.throws(
+    () =>
+      saveClientSettings(member.id, {
+        brokerId: "kotak",
+        accountId: "YIX14",
+        brokerApiKey: "cd-consumer-key-3e77",
+        brokerToken: "kotak-desk-access-token",
+      }),
+    /desk Kotak Neo/,
+  );
+  const own = installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "USER88",
+    apiKey: "member-consumer-key",
+    accessToken: "member-kotak-token",
+  });
+  assert.equal(own.install.accountId, "USER88");
+  assert.equal(own.install.installed, true);
+  assert.equal(own.install.apiKeyHint.includes("member-consumer-key"), false);
+  assert.match(own.install.apiKeyHint, /me••••/);
+  const kotakField = own.install.fields.find((row) => row.id === "apiKey");
+  assert.equal(kotakField.secret, true);
+  assert.equal(kotakField.label, "Consumer key");
+});
+
+test("a Kotak user's trade login stays on that user and is not returned on the profile view", async () => {
+  const member = { id: "u-yt2vm-login", name: "Avinash", email: "avinash.ramole86@gmail.com", role: "user" };
+  const saved = installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "YT2Vm",
+    apiKey: "member-consumer",
+    accessToken: "member-access-1452",
+    mobile: "9876501234",
+    mpin: "654321",
+    totpSecret: "GEZDGNBVGY3TQOJQ",
+  });
+  const view = JSON.stringify(saved.install);
+  assert.equal(view.includes("654321"), false);
+  assert.equal(view.includes("GEZDGNBVGY3TQOJQ"), false);
+  assert.equal(view.includes("9876501234"), false);
+  assert.equal(saved.install.hasTradeLogin, true);
+  assert.equal(saved.install.fields.some((row) => row.id === "mpin" && row.secret), true);
+  const slot = brokerAccountForLiveCopy(member.id, "kotak");
+  assert.equal(slot.leftoverToken, false);
+  assert.equal(slot.accountId, "YT2Vm");
+  assert.equal(slot.brokerMobile, "+919876501234");
+  assert.equal(slot.brokerMpin, "654321");
+  assert.equal(slot.brokerTotpSecret, "GEZDGNBVGY3TQOJQ");
+  saveClientSettings(member.id, { copy: true, tradeMode: "real", brokerId: "kotak" });
+  const { memberCopyPayloads } = await import("./liveCopy.js");
+  const copies = memberCopyPayloads(
+    { strategy: "CRUDE", symbol: "CRUDEOIL 8800 PE", side: "BUY", qty: 100, lotSize: 100, brokerId: "dhan" },
+    { id: "crude", mappingScope: "master" },
+  );
+  const row = copies.find((item) => item.copyUserId === member.id);
+  assert.ok(row);
+  assert.equal(row.brokerId, "kotak");
+  assert.equal(row.brokerSession.clientId, "YT2Vm");
+  assert.equal(row.brokerSession.accessToken, "member-access-1452");
+  assert.equal(row.brokerSession.mobile, "+919876501234");
+  assert.equal(row.brokerSession.mpin, "654321");
+  assert.equal(row.brokerSession.totpSecret, "GEZDGNBVGY3TQOJQ");
+  assert.equal(JSON.stringify(row.account).includes("YIX14"), false);
 });

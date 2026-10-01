@@ -9,12 +9,13 @@ import {
   saveClient,
   saveUserContact,
   type AuthUser,
+  type BrokerInstallField,
   type ClientBroker,
   type ClientRow,
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { forgetCachedClient, loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
-import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
+import { savedSecretForSubmit } from "../lib/formSecrets";
 import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
@@ -39,6 +40,8 @@ export function Users() {
   const [groupFor, setGroupFor] = useState<ClientRow | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [admins, setAdmins] = useState<AuthUser[]>([]);
+  const [adminBalance, setAdminBalance] = useState(0);
+  const [adminBrokerName, setAdminBrokerName] = useState("Admin");
 
   const load = useCallback(async () => {
     const hadRows = Boolean(peekClientList()?.clients.length);
@@ -52,6 +55,8 @@ export function Users() {
       setKnownIps(result.knownIps || []);
       setStrategies(result.strategies || []);
       setAdmins((users.users || []).filter((row) => row.role === "admin"));
+      setAdminBalance(Number(result.adminBalance) || 0);
+      setAdminBrokerName(result.adminBrokerName || "Admin");
       if (result.defaultUntil) setDefaultUntil(result.defaultUntil);
       setError("");
     } catch (err) {
@@ -149,7 +154,8 @@ export function Users() {
           </button>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Admin balance" value={`₹${formatNumber(adminBalance, 2)}`} hint={adminBrokerName} />
         <Stat label="Clients" value={clients.length} />
         <Stat label="LIVE books" value={live} />
         <Stat label="Paper only" value={clients.length - live} />
@@ -206,7 +212,7 @@ export function Users() {
               <th className="px-4 py-3">Copy</th>
               <th className="px-4 py-3">Static IP</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Margin</th>
+              <th className="px-4 py-3">Balance</th>
               <th className="px-4 py-3">Action</th>
             </tr>
           </thead>
@@ -280,7 +286,16 @@ export function Users() {
                   <td className="px-4 py-3 align-middle">
                     <StatusPill live={row.status === "LIVE"} />
                   </td>
-                  <td className="px-4 py-3 align-middle font-semibold">₹{formatNumber(row.margin, 2)}</td>
+                  <td className="px-4 py-3 align-middle font-semibold">
+                    <div>{clientBalanceText(row)}</div>
+                    {row.balanceSource ? (
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{row.balanceSource}</div>
+                    ) : row.brokerId === "kotak" && !row.brokerAccounts?.kotak?.sessionHint && !row.brokerAccounts?.kotak?.hasTradeLogin ? (
+                      <div className="text-[10px] font-semibold text-amber-700">Needs trade login</div>
+                    ) : row.brokerId === "kotak" ? (
+                      <div className="text-[10px] font-semibold text-amber-700">Kotak balance unavailable</div>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3 align-middle">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <ViewUserButton onClick={() => setView(row)} />
@@ -343,6 +358,7 @@ export function Users() {
         <EditModal
           row={edit}
           groups={groups}
+          brokers={brokers}
           onClose={() => setEdit(null)}
           onSaved={(client) => {
             upsertCachedClient(client);
@@ -438,7 +454,7 @@ function AdminMobileRow({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
     <section className="card px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
@@ -446,8 +462,16 @@ function Stat({ label, value }: { label: string; value: number }) {
         <UsersIcon size={18} className="text-brand-500" />
         {value}
       </div>
+      {hint ? <div className="mt-1 text-[11px] text-slate-400">{hint}</div> : null}
     </section>
   );
+}
+
+function clientBalanceText(row: ClientRow) {
+  const broker = Number(row.brokerBalance);
+  if (Number.isFinite(broker)) return `₹${formatNumber(broker, 2)}`;
+  if (row.brokerId === "kotak") return "—";
+  return `₹${formatNumber(Number(row.margin) || 0, 2)}`;
 }
 
 function BrokerCell({ row }: { row: ClientRow }) {
@@ -579,6 +603,10 @@ function AddClientModal({
   const [segments, setSegments] = useState<string[]>(["All segments"]);
   const [brokerToken, setBrokerToken] = useState("");
   const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerSessionToken, setBrokerSessionToken] = useState("");
+  const [tradeMobile, setTradeMobile] = useState("");
+  const [tradeMpin, setTradeMpin] = useState("");
+  const [tradeTotp, setTradeTotp] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -624,6 +652,10 @@ function AddClientModal({
         telegramId,
         brokerToken,
         brokerApiKey,
+        brokerSessionToken,
+        brokerMobile: tradeMobile,
+        brokerMpin: tradeMpin,
+        brokerTotpSecret: tradeTotp,
         notes,
         staticIp,
       });
@@ -698,6 +730,9 @@ function AddClientModal({
                     const row = catalog.find((item) => item.id === next);
                     setSegments(row?.segments?.includes("All segments") ? ["All segments"] : row?.segments?.slice(0, 1) || ["All segments"]);
                     setStaticIp("");
+                    setBrokerToken("");
+                    setBrokerApiKey("");
+                    setBrokerSessionToken("");
                   }}
                 >
                   {catalog.map((row) => (
@@ -817,34 +852,23 @@ function AddClientModal({
                 ))}
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--border)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{broker?.name || "Broker"} API and access token</div>
-              {needsBrokerApiKey(brokerId) ? (
-                <Field label="API key">
-                  <input
-                    className={inputClass}
-                    type="password"
-                    value={brokerApiKey}
-                    onChange={(event) => setBrokerApiKey(event.target.value)}
-                    placeholder="Broker API key / app id"
-                    autoComplete="off"
-                  />
-                </Field>
-              ) : null}
-              <Field label="Access Token *">
-                <input
-                  className={inputClass}
-                  type="password"
-                  value={brokerToken}
-                  onChange={(event) => setBrokerToken(event.target.value)}
-                  placeholder="Paste access token"
-                  autoComplete="off"
-                />
-                <span className="font-normal text-[11px] text-slate-500">
-                  Saved on admin Users and on the client My plan page. Required for Real mode. This does not start Dhan LIVE.
-                </span>
-              </Field>
-            </div>
+            <BrokerLoginFields
+              brokerId={brokerId}
+              brokerName={broker?.name || "Broker"}
+              fields={broker?.fields}
+              brokerApiKey={brokerApiKey}
+              brokerToken={brokerToken}
+              brokerSessionToken={brokerSessionToken}
+              tradeMobile={tradeMobile}
+              tradeMpin={tradeMpin}
+              tradeTotp={tradeTotp}
+              onApiKey={setBrokerApiKey}
+              onToken={setBrokerToken}
+              onSession={setBrokerSessionToken}
+              onTradeMobile={setTradeMobile}
+              onTradeMpin={setTradeMpin}
+              onTradeTotp={setTradeTotp}
+            />
             <Field label="Internal notes">
               <textarea
                 className="min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-sm"
@@ -895,7 +919,127 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 }
 
 function needsBrokerApiKey(brokerId: string) {
-  return ["zerodha", "fyers", "kotak", "angelone"].includes(brokerId);
+  return ["zerodha", "fyers", "kotak", "angelone", "upstox"].includes(brokerId);
+}
+
+function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
+  const listed = (fields || []).filter((field) => field.id !== "clientId");
+  if (listed.length) return listed;
+  if (brokerId === "paper") return [];
+  const extra: BrokerInstallField[] = [];
+  if (needsBrokerApiKey(brokerId)) {
+    extra.push({
+      id: "apiKey",
+      label: brokerId === "kotak" ? "Consumer key" : brokerId === "upstox" ? "API key" : brokerId === "fyers" ? "App ID" : "API key",
+      secret: true,
+      placeholder: brokerId === "kotak" ? "This client's Neo consumer key" : "This client's API key",
+    });
+  }
+  extra.push({
+    id: "accessToken",
+    label: brokerId === "kotak" ? "Neo access token" : "Access token",
+    secret: true,
+    placeholder: brokerId === "kotak" ? "Access token from the Neo app" : "Paste this client's access token",
+  });
+  if (brokerId === "kotak") {
+    extra.push(
+      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile registered on this Kotak Neo" },
+      { id: "mpin", label: "MPIN", secret: true, placeholder: "Kotak Neo MPIN" },
+      { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
+    );
+  }
+  if (brokerId === "upstox" || brokerId === "kotak") {
+    extra.push({
+      id: "sessionToken",
+      label: brokerId === "upstox" ? "API secret" : "Neo sid",
+      secret: true,
+      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Sid from today's trade login, if already copied",
+    });
+  }
+  return extra;
+}
+
+function BrokerLoginFields({
+  brokerId,
+  brokerName,
+  fields,
+  brokerApiKey,
+  brokerToken,
+  brokerSessionToken,
+  tradeMobile,
+  tradeMpin,
+  tradeTotp,
+  hints,
+  onApiKey,
+  onToken,
+  onSession,
+  onTradeMobile,
+  onTradeMpin,
+  onTradeTotp,
+}: {
+  brokerId: string;
+  brokerName: string;
+  fields?: BrokerInstallField[];
+  brokerApiKey: string;
+  brokerToken: string;
+  brokerSessionToken: string;
+  tradeMobile: string;
+  tradeMpin: string;
+  tradeTotp: string;
+  hints?: { apiKeyHint?: string; tokenHint?: string; sessionHint?: string; mobileHint?: string };
+  onApiKey: (value: string) => void;
+  onToken: (value: string) => void;
+  onSession: (value: string) => void;
+  onTradeMobile: (value: string) => void;
+  onTradeMpin: (value: string) => void;
+  onTradeTotp: (value: string) => void;
+}) {
+  const rows = brokerLoginFields(brokerId, fields);
+  if (!rows.length) return null;
+  const valueFor = (id: string) => {
+    if (id === "apiKey") return brokerApiKey;
+    if (id === "sessionToken") return brokerSessionToken;
+    if (id === "accessToken") return brokerToken;
+    if (id === "mobile") return tradeMobile;
+    if (id === "mpin") return tradeMpin;
+    if (id === "totpSecret") return tradeTotp;
+    return "";
+  };
+  const hintFor = (id: string) => {
+    if (id === "apiKey") return hints?.apiKeyHint;
+    if (id === "sessionToken") return hints?.sessionHint;
+    if (id === "accessToken") return hints?.tokenHint;
+    if (id === "mobile") return hints?.mobileHint;
+    return "";
+  };
+  const changeFor = (id: string, value: string) => {
+    if (id === "apiKey") onApiKey(value);
+    else if (id === "sessionToken") onSession(value);
+    else if (id === "mobile") onTradeMobile(value);
+    else if (id === "mpin") onTradeMpin(value);
+    else if (id === "totpSecret") onTradeTotp(value);
+    else if (id === "accessToken") onToken(value);
+  };
+  return (
+    <div className="rounded-xl border border-[var(--border)] p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
+      {rows.map((field) => (
+        <Field key={field.id} label={field.label}>
+          <input
+            className={inputClass}
+            type={field.secret ? "password" : "text"}
+            value={valueFor(field.id)}
+            onChange={(event) => changeFor(field.id, event.target.value)}
+            placeholder={hintFor(field.id) || field.placeholder || field.label}
+            autoComplete="off"
+          />
+        </Field>
+      ))}
+      <span className="font-normal text-[11px] text-slate-500">
+        Algo copies and this user's home use this login. The admin broker login is not saved on the user. This does not turn LIVE on.
+      </span>
+    </div>
+  );
 }
 
 const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
@@ -903,11 +1047,13 @@ const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var
 function EditModal({
   row,
   groups,
+  brokers,
   onClose,
   onSaved,
 }: {
   row: ClientRow;
   groups: string[];
+  brokers: ClientBroker[];
   onClose: () => void;
   onSaved: (client: ClientRow) => void;
 }) {
@@ -922,17 +1068,21 @@ function EditModal({
         accountId: source.accountId || "",
         tokenHint: source.tokenHint || "",
         apiKeyHint: source.apiKeyHint || "",
+        sessionHint: "",
+        tradeMobileHint: "",
         tokenUpdatedAt: source.tokenUpdatedAt || "",
       };
     }
-    return { accountId: "", tokenHint: "", apiKeyHint: "", tokenUpdatedAt: "" };
+    return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tradeMobileHint: "", tokenUpdatedAt: "" };
   };
   const [brokerId, setBrokerId] = useState(row.brokerId);
   const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
-  const [tokenFocused, setTokenFocused] = useState(false);
-  const [apiKeyFocused, setApiKeyFocused] = useState(false);
+  const [brokerSessionToken, setBrokerSessionToken] = useState("");
+  const [tradeMobile, setTradeMobile] = useState("");
+  const [tradeMpin, setTradeMpin] = useState("");
+  const [tradeTotp, setTradeTotp] = useState("");
   const selectedAccount = accountFor(brokerId);
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
@@ -944,8 +1094,10 @@ function EditModal({
     setAccountId(accountFor(row.brokerId, row).accountId || "");
     setBrokerToken("");
     setBrokerApiKey("");
-    setTokenFocused(false);
-    setApiKeyFocused(false);
+    setBrokerSessionToken("");
+    setTradeMobile("");
+    setTradeMpin("");
+    setTradeTotp("");
   }, [row.id, row.brokerId, row.accountId, row.tokenHint]);
 
   const onSubmit = async (event: FormEvent) => {
@@ -955,6 +1107,10 @@ function EditModal({
     try {
       const nextApiKey = savedSecretForSubmit(brokerApiKey);
       const nextToken = savedSecretForSubmit(brokerToken);
+      const nextSession = savedSecretForSubmit(brokerSessionToken);
+      const nextTradeMobile = savedSecretForSubmit(tradeMobile);
+      const nextTradeMpin = savedSecretForSubmit(tradeMpin);
+      const nextTradeTotp = savedSecretForSubmit(tradeTotp);
       const result = await saveClient(row.id, {
         name,
         mobile,
@@ -965,12 +1121,18 @@ function EditModal({
         group,
         ...(nextApiKey ? { brokerApiKey: nextApiKey } : {}),
         ...(nextToken ? { brokerToken: nextToken } : {}),
+        ...(nextSession ? { brokerSessionToken: nextSession } : {}),
+        ...(nextTradeMobile ? { brokerMobile: nextTradeMobile } : {}),
+        ...(nextTradeMpin ? { brokerMpin: nextTradeMpin } : {}),
+        ...(nextTradeTotp ? { brokerTotpSecret: nextTradeTotp } : {}),
       });
       setBrokerToken("");
       setBrokerApiKey("");
+      setBrokerSessionToken("");
+      setTradeMobile("");
+      setTradeMpin("");
+      setTradeTotp("");
       setAccountId(String(result.client.accountId || "").trim());
-      setTokenFocused(false);
-      setApiKeyFocused(false);
       onSaved(result.client);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -1009,19 +1171,17 @@ function EditModal({
               setAccountId(slot.accountId || "");
               setBrokerToken("");
               setBrokerApiKey("");
-              setTokenFocused(false);
-              setApiKeyFocused(false);
+              setBrokerSessionToken("");
+              setTradeMobile("");
+              setTradeMpin("");
+              setTradeTotp("");
             }}
           >
-            <option value="paper">PAPER</option>
-            <option value="dhan">DHAN</option>
-            <option value="upstox">UPSTOX</option>
-            <option value="zerodha">ZERODHA</option>
-            <option value="kotak">KOTAK</option>
-            <option value="angelone">ANGELONE</option>
-            <option value="aliceblue">ALICEBLUE</option>
-            <option value="sharekhan">SHAREKHAN</option>
-            <option value="fyers">FYERS</option>
+            {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.name}
+              </option>
+            ))}
           </select>
           <span className="font-normal text-[11px] text-slate-500">
             This user can keep a client ID and token on each broker. Selecting DHAN edits only the DHAN slot.
@@ -1043,41 +1203,36 @@ function EditModal({
             placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
           />
         </Field>
+        <BrokerLoginFields
+          brokerId={brokerId}
+          brokerName={(brokers.find((choice) => choice.id === brokerId)?.name || brokerId).toUpperCase()}
+          fields={brokers.find((choice) => choice.id === brokerId)?.fields}
+          brokerApiKey={brokerApiKey}
+          brokerToken={brokerToken}
+          brokerSessionToken={brokerSessionToken}
+          tradeMobile={tradeMobile}
+          tradeMpin={tradeMpin}
+          tradeTotp={tradeTotp}
+          hints={{
+            apiKeyHint: selectedAccount.apiKeyHint,
+            tokenHint: selectedAccount.tokenHint,
+            sessionHint: selectedAccount.sessionHint,
+            mobileHint: selectedAccount.tradeMobileHint,
+          }}
+          onApiKey={setBrokerApiKey}
+          onToken={setBrokerToken}
+          onSession={setBrokerSessionToken}
+          onTradeMobile={setTradeMobile}
+          onTradeMpin={setTradeMpin}
+          onTradeTotp={setTradeTotp}
+        />
         {brokerId !== "paper" ? (
-          <>
-            {needsBrokerApiKey(brokerId) ? (
-              <Field label="API key">
-                <input
-                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                  type="password"
-                  value={apiKeyFocused ? brokerApiKey : displaySavedSecret(brokerApiKey, selectedAccount.apiKeyHint)}
-                  onFocus={() => setApiKeyFocused(true)}
-                  onBlur={() => setApiKeyFocused(false)}
-                  onChange={(event) => setBrokerApiKey(event.target.value)}
-                  placeholder={selectedAccount.apiKeyHint || "Paste API key to replace"}
-                  autoComplete="off"
-                />
-              </Field>
-            ) : null}
-            <Field label="Access token">
-                <input
-                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                  type="password"
-                  value={tokenFocused ? brokerToken : displaySavedSecret(brokerToken, selectedAccount.tokenHint)}
-                  onFocus={() => setTokenFocused(true)}
-                  onBlur={() => setTokenFocused(false)}
-                  onChange={(event) => setBrokerToken(event.target.value)}
-                  placeholder={selectedAccount.tokenHint || "Paste access token to replace"}
-                  autoComplete="off"
-                />
-              <span className="font-normal text-[11px] text-slate-500">
-                {selectedAccount.tokenHint
-                  ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
-                  : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
-                Saving a token turns REAL and Copy on so this client can receive live orders. This does not start Dhan LIVE.
-              </span>
-            </Field>
-          </>
+          <span className="font-normal text-[11px] text-slate-500">
+            {selectedAccount.tokenHint
+              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
+              : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
+            Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
+          </span>
         ) : null}
         <Field label="Static IP">
           <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />

@@ -83,6 +83,45 @@ test("login gate answers health and login without Dhan", async (t) => {
       const session = await signed.json();
       assert.match(session.token, /^t2s-/);
       assert.equal(session.user.role, "admin");
+      const setCookie = signed.headers.get("set-cookie") || "";
+      assert.match(setCookie, /t2s-token=/);
+      const saved = await fetch(`http://127.0.0.1:${port}/api/me`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: setCookie.split(";")[0] },
+        body: JSON.stringify({ token: "", name: "Trade2Smart", email: "trades2smart@gmail.com", mobile: "9876500099" }),
+      });
+      assert.equal(saved.status, 200);
+      const profile = await saved.json();
+      assert.equal(profile.user.mobile, "9876500099");
+      const stamp = String(Date.now()).slice(-9);
+      const signedUp = await fetch(`http://127.0.0.1:${port}/api/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "New Member",
+          email: `new.member.${stamp}@gmail.com`,
+          mobile: `9${stamp}`,
+          password: "create123",
+        }),
+      });
+      assert.equal(signedUp.status, 201);
+      const member = await signedUp.json();
+      const memberSave = await fetch(`http://127.0.0.1:${port}/api/me`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${member.token}`,
+        },
+        body: JSON.stringify({
+          token: member.token,
+          name: "New Member Saved",
+          email: `new.member.${stamp}@gmail.com`,
+          mobile: `9${stamp}`,
+        }),
+      });
+      assert.equal(memberSave.status, 200);
+      const memberProfile = await memberSave.json();
+      assert.equal(memberProfile.user.name, "New Member Saved");
       return;
     } catch (error) {
       lastError = error;

@@ -179,6 +179,9 @@ export function MemberPlans() {
         apiKey: installValueForSubmit({ id: "apiKey", secret: true }, creds, hints),
         accessToken: installValueForSubmit({ id: "accessToken", secret: true }, creds, hints),
         sessionToken: installValueForSubmit({ id: "sessionToken", secret: true }, creds, hints),
+        mobile: installValueForSubmit({ id: "mobile", secret: true }, creds, hints),
+        mpin: installValueForSubmit({ id: "mpin", secret: true }, creds, hints),
+        totpSecret: installValueForSubmit({ id: "totpSecret", secret: true }, creds, hints),
       });
       loadGen.current += 1;
       setDesk((current) =>
@@ -359,8 +362,8 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Broker selection</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose the broker used for your live copies. Each live broker keeps its own client ID and access token — selecting
-          DHAN does not overwrite UPSTOX. Paper stays on this plan book only. Saving a token does not start desk LIVE.
+          Save more than one broker. The selected broker is the default: quotes, orders, balance, MTM, and P&L use that login.
+          Selecting DHAN does not overwrite UPSTOX. Paper stays on this plan book only. Saving a token does not start desk LIVE.
         </p>
         <p className="mt-2 text-xs font-semibold text-slate-500">
           {desk.copyReady
@@ -383,7 +386,7 @@ export function MemberPlans() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-extrabold">{row.name}</span>
-                {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Selected</span> : null}
+                {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Default</span> : null}
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
                 {row.virtual
@@ -405,7 +408,7 @@ export function MemberPlans() {
               void saveCredentials();
             }}
           >
-            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : "Client ID and access token"}</div>
+            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
             <p className="mt-1 text-xs text-slate-400">
               {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>
@@ -435,7 +438,7 @@ export function MemberPlans() {
                 disabled={busy === "creds"}
                 className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
               >
-                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : "Save client ID and access token"}
+                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : desk.brokerId === "kotak" ? "Save Kotak Neo session" : "Save client ID and access token"}
               </button>
               {desk.brokerId === "upstox" ? (
                 <button

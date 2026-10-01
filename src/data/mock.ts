@@ -35,6 +35,10 @@ export type Algo = {
   timeframe?: string;
   slPct?: number;
   targetPct?: number;
+  initialSlPct?: number;
+  trailingActivationPct?: number;
+  trailingEveryPct?: number;
+  trailingShiftPct?: number;
   indicator?: string;
   period?: number;
   fast?: number;
@@ -196,7 +200,11 @@ export const initialAlgos: Algo[] = [
     qty: 65,
     slPct: 20,
     targetPct: 40,
-    summary: "NIFTY 5m first candle · ATM options · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL 20% / TGT 40% · daily LIVE 09:00 IST",
+    initialSlPct: 20,
+    trailingActivationPct: 20,
+    trailingEveryPct: 10,
+    trailingShiftPct: 5,
+    summary: "NIFTY 5m first candle · ATM options · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL 20% / TGT 40% · trailing SL +20% to buy, then +5% every +10% · daily LIVE 09:00 IST",
     dailyLiveIst: "09:00",
     status: "PAUSED",
     pnl: 0,

@@ -128,6 +128,25 @@ test("initial SL is 20% and target is 40% of fill", () => {
   assert.equal(TrailingStopManager.targetPrice(200, 40), 280);
 });
 
+test("Nifty trail moves the stop to the buy price at +20% and then +5% every +10%", () => {
+  const args = {
+    entry: 100,
+    initialSlPct: 20,
+    activationPct: 20,
+    lockToEntry: true,
+    trailEveryPct: 10,
+    trailShiftPct: 5,
+    prevStop: 80,
+  };
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 119 }), 80);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 120 }), 100);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 129 }), 100);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 130 }), 105);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 140 }), 110);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 150 }), 115);
+  assert.equal(TrailingStopManager.nextStop({ ...args, mark: 125, prevStop: 105 }), 105);
+});
+
 test("trailing activates at +10% and steps +3% as in the spec", () => {
   const args = { entry: 200, initialSlPct: 20, activationPct: 10, stepPct: 3, prevStop: 160 };
   assert.equal(TrailingStopManager.nextStop({ ...args, mark: 210 }), 160);
@@ -409,7 +428,7 @@ test("duplicate-order prevention while in-flight", () => {
     ceLtp: 140,
     positions: [],
     adapter: { place: () => ({ queued: true }), exit: () => ({}) },
-  }).reason, "in-flight");
+  }).reason, "buy-active");
 });
 
 test("market-data disconnect pauses entries; reconnect clears the flag", () => {
@@ -507,9 +526,10 @@ test("duplicate live queue does not mark the strategy as filled", () => {
     adapter: { place: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }), exit: () => ({}) },
   });
   assert.equal(result.action, "skip");
-  assert.equal(result.reason, "duplicate");
-  assert.equal(algo.vwapState.inFlight, false);
-  assert.equal(algo.lastSignal, "");
+  assert.equal(result.reason, "buy-active");
+  assert.equal(algo.vwapState.buyPhase, "entry");
+  assert.equal(Number(algo.vwapState.fillPrice || 0), 0);
+  assert.equal(algo.lastSignal, "WAIT ORDER");
 });
 
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
@@ -1077,11 +1097,15 @@ test("first candle doji or option not green is no trade", () => {
   assert.equal(redPe.peColor, "red");
 });
 
-test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail", () => {
+test("first candle strategy buys ATM CE and trails the stop to the buy price at +20%", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "First candle CE" });
   const cfg = niftyFirstCandleConfig(algo);
   assert.equal(cfg.signalMode, "first-candle");
-  assert.equal(cfg.useTrail, false);
+  assert.equal(cfg.useTrail, true);
+  assert.equal(cfg.lockToEntry, true);
+  assert.equal(cfg.trailingActivationPct, 20);
+  assert.equal(cfg.trailingEveryPct, 10);
+  assert.equal(cfg.trailingShiftPct, 5);
   assert.equal(cfg.useVwapExit, false);
   assert.equal(cfg.initialSlPct, 20);
   assert.equal(cfg.targetPct, 40);
@@ -1127,6 +1151,55 @@ test("first candle strategy buys ATM CE and uses 20/40 stop target with no trail
   assert.equal(book.places.length, 1);
 });
 
+test("first candle trail uses a saved shift and keeps the old 10/3 row on 20/10/5", () => {
+  const saved = niftyFirstCandleConfig({
+    trailingActivationPct: 25,
+    trailingEveryPct: 8,
+    trailingShiftPct: 4,
+  });
+  assert.equal(saved.useTrail, true);
+  assert.equal(saved.lockToEntry, true);
+  assert.equal(saved.trailingActivationPct, 25);
+  assert.equal(saved.trailingEveryPct, 8);
+  assert.equal(saved.trailingShiftPct, 4);
+  assert.equal(saved.trailingStepPct, 4);
+  assert.equal(TrailingStopManager.nextStop({
+    entry: 100,
+    mark: 133,
+    prevStop: 80,
+    initialSlPct: saved.initialSlPct,
+    activationPct: saved.trailingActivationPct,
+    lockToEntry: saved.lockToEntry,
+    trailEveryPct: saved.trailingEveryPct,
+    trailShiftPct: saved.trailingShiftPct,
+  }), 104);
+  const legacy = niftyFirstCandleConfig({ trailingActivationPct: 10, trailingStepPct: 3 });
+  assert.equal(legacy.trailingActivationPct, 20);
+  assert.equal(legacy.trailingEveryPct, 10);
+  assert.equal(legacy.trailingShiftPct, 5);
+  assert.equal(crudeFirstCandleConfig({ trailingActivationPct: 25, trailingEveryPct: 8, trailingShiftPct: 4 }).useTrail, false);
+  const normalized = normalizeAlgo({
+    name: "Desk first candle",
+    kind: "nifty-first-candle",
+    trailingActivationPct: 25,
+    trailingEveryPct: 8,
+    trailingShiftPct: 4,
+  });
+  assert.equal(normalized.trailingActivationPct, 25);
+  assert.equal(normalized.trailingEveryPct, 8);
+  assert.equal(normalized.trailingShiftPct, 4);
+  assert.match(normalized.summary, /trailing SL \+25% to buy, then \+4% every \+8%/);
+  const leftover = normalizeAlgo({
+    name: "Desk first candle",
+    kind: "nifty-first-candle",
+    trailingActivationPct: 10,
+    trailingStepPct: 3,
+  });
+  assert.equal(leftover.trailingActivationPct, 20);
+  assert.equal(leftover.trailingEveryPct, 10);
+  assert.equal(leftover.trailingShiftPct, 5);
+});
+
 test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   const created = normalizeAlgo(defaultNiftyFirstCandleAlgo({ name: "Desk first candle", runMode: "live" }));
   assert.equal(isNiftyFirstCandleAlgo(created), true);
@@ -1167,7 +1240,24 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.qty, 130);
   assert.equal(updated.timeframe, "15m");
   assert.equal(updated.dailyLiveIst, "09:05");
-  assert.equal(updated.entryEvaluationIst, "09:05");
+  assert.equal(updated.entryEvaluationIst, "09:15");
+  assert.equal(niftyFirstCandleConfig(updated).barMinutes, 15);
+  assert.match(updated.summary, /preview 15m/);
+  assert.match(updated.summary, /09:00–09:15/);
+  const customClock = normalizeAlgo(
+    { name: "Desk first candle", timeframe: "15m", entryEvaluationIst: "09:20" },
+    created,
+  );
+  assert.equal(customClock.timeframe, "15m");
+  assert.equal(customClock.entryEvaluationIst, "09:20");
+  assert.equal(niftyFirstCandleConfig(customClock).barMinutes, 15);
+  const backToFive = normalizeAlgo(
+    { name: "Desk first candle", timeframe: "5m", entryEvaluationIst: "09:15" },
+    updated,
+  );
+  assert.equal(backToFive.timeframe, "5m");
+  assert.equal(backToFive.entryEvaluationIst, "09:05");
+  assert.equal(niftyFirstCandleConfig(backToFive).barMinutes, 5);
   assert.equal(updated.endTimeIst, "15:10");
   assert.equal(updated.eodSquareOffMinutes, 20);
   assert.equal(updated.expiryKind, "monthly");
@@ -1256,6 +1346,68 @@ test("first candle checks every later 5m candle and allows five trades a day", (
 test("first candle ATM offset is applied to the strike", () => {
   const pick = OptionStrikeSelector.select({ spot: 24540, step: 50, option: "CE", strikeOffset: 1 });
   assert.equal(pick.strike, 24600);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 0), 22700);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 2), 22800);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, -2), 22600);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 5), 22950);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, -5), 22450);
+  assert.equal(OptionStrikeSelector.strikeForOffset(22720, 50, 9), 22950);
+  assert.equal(niftyFirstCandleConfig({ strikeOffset: 5 }).strikeOffset, 5);
+  assert.equal(niftyFirstCandleConfig({ strikeOffset: -5 }).strikeOffset, -5);
+});
+
+test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
+  const plus = defaultNiftyFirstCandleAlgo({ name: "First candle plus two", strikeOffset: 2 });
+  const plusBook = bookAdapter();
+  const plusTick = NiftyVwapStrategy.tick({
+    algo: plus,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22680, 22720)],
+    ceBars: [firstBar(80, 96)],
+    peBars: [firstBar(110, 90)],
+    ceLtp: 96,
+    peLtp: 90,
+    ceSecurityId: "ce-22800",
+    peSecurityId: "pe-22800",
+    spot: 22720,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: plusBook.positions,
+    adapter: plusBook.adapter,
+  });
+  assert.equal(plusTick.action, "entry");
+  assert.equal(plusBook.places[0].strike, 22800);
+  assert.equal(plusBook.places[0].symbol, "NIFTY 22800 CE");
+  assert.equal(plusBook.places[0].securityId, "ce-22800");
+  assert.match(plus.lastSignal, /BUY 22800 CE/);
+
+  const minus = defaultNiftyFirstCandleAlgo({ name: "First candle minus two", strikeOffset: -2 });
+  const minusBook = bookAdapter();
+  const minusTick = NiftyVwapStrategy.tick({
+    algo: minus,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22720, 22680)],
+    ceBars: [firstBar(90, 70)],
+    peBars: [firstBar(80, 110)],
+    ceLtp: 70,
+    peLtp: 110,
+    ceSecurityId: "ce-22600",
+    peSecurityId: "pe-22600",
+    spot: 22720,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: minusBook.positions,
+    adapter: minusBook.adapter,
+  });
+  assert.equal(minusTick.action, "entry");
+  assert.equal(minusBook.places[0].strike, 22600);
+  assert.equal(minusBook.places[0].option, "PE");
+  assert.equal(minusBook.places[0].symbol, "NIFTY 22600 PE");
+  assert.equal(minusBook.places[0].securityId, "pe-22600");
 });
 
 test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
@@ -1285,7 +1437,7 @@ test("first candle no-trade line prints the Nifty future candle", () => {
   assert.equal(tick.action, "wait");
   assert.equal(tick.reason, "pe-not-green");
   assert.equal(book.places.length, 0);
-  assert.match(algo.lastSignal, /NO TRADE · PREVIEW NIFTY FUT RED PE RED O 22663\.00 C 22647\.50/);
+  assert.match(algo.lastSignal, /NO TRADE · PREVIEW NIFTY FUT RED PE 22650 RED O 22663\.00 C 22647\.50/);
   assert.match(algo.lastSignal, /09:00–09:05 IST/);
   assert.doesNotMatch(algo.lastSignal, /22678/);
 });
@@ -1376,7 +1528,7 @@ test("preview candle open and close buy CE when the next candle opens", () => {
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "CE");
   assert.equal(book.places[0].side, "BUY");
-  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN O 22663\.00 C 22680\.00/);
+  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE 22700 GREEN O 22663\.00 C 22680\.00/);
 });
 
 test("preview candle open and close buy PE at the next open, and the current close is ignored", () => {
@@ -1447,7 +1599,7 @@ test("preview candle open and close buy PE at the next open, and the current clo
   assert.equal(tick.action, "entry");
   assert.equal(book.places[0].option, "PE");
   assert.equal(book.places[0].side, "BUY");
-  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE GREEN O 22680\.00 C 22647\.50/);
+  assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE 22650 GREEN O 22680\.00 C 22647\.50/);
 });
 
 test("first candle duplicate bar and restart do not place a second order", () => {
@@ -1482,6 +1634,238 @@ test("first candle duplicate bar and restart do not place a second order", () =>
   });
   assert.ok(afterRestart.action === "hold" || afterRestart.reason === "duplicate-bar" || afterRestart.reason === "already-open");
   assert.equal(book.places.length, 1);
+});
+
+test("only one buy is sent until that order is squared off", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "One buy at a time" });
+  const places = [];
+  const adapter = {
+    place(payload) {
+      places.push(payload);
+      return { queued: true, status: "PENDING" };
+    },
+    exit() {
+      return { queued: true };
+    },
+  };
+  const tickAt = (n, extra = {}) => {
+    const time = T0_0900 + n * BAR;
+    return NiftyVwapStrategy.tick({
+      algo,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 360,
+      futuresBars: [{ time, open: 24500, high: 24580, low: 24490, close: 24540 + n, volume: 1000 }],
+      ceBars: [{ time, open: 100, high: 140, low: 98, close: 120 + n, volume: 500 }],
+      peBars: [firstBar(110, 96)],
+      ceLtp: 120 + n,
+      peLtp: 96,
+      spot: 24540,
+      step: 50,
+      expiry: "2026-08-27",
+      positions: extra.positions || [],
+      orders: extra.orders || [],
+      adapter,
+    });
+  };
+  const first = tickAt(0);
+  assert.equal(first.action, "queued");
+  assert.equal(places.length, 1);
+  assert.equal(algo.vwapState.buyPhase, "entry");
+  algo.vwapState.inFlight = false;
+  algo.vwapState.lastEntryAt = T0_0900;
+  const second = tickAt(1, {
+    orders: [{ id: "b1", strategy: algo.name, side: "BUY", status: "PENDING" }],
+  });
+  assert.equal(second.reason, "buy-active");
+  assert.equal(places.length, 1);
+  assert.equal(algo.lastSignal, "WAIT ORDER");
+  const held = tickAt(2, {
+    positions: [
+      {
+        symbol: "NIFTY 24550 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 120,
+        ltp: 122,
+        strategy: algo.name,
+        option: "CE",
+        strike: 24550,
+      },
+    ],
+    orders: [{ id: "b1", strategy: algo.name, side: "BUY", status: "FILLED", filledQty: 65 }],
+  });
+  assert.equal(places.length, 1);
+  assert.ok(held.action === "hold" || held.reason === "already-open");
+  assert.equal(algo.vwapState.buyPhase, "open");
+  const stillOpen = tickAt(3, {
+    positions: [
+      {
+        symbol: "NIFTY 24550 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 120,
+        ltp: 122,
+        strategy: algo.name,
+        option: "CE",
+        strike: 24550,
+      },
+    ],
+  });
+  assert.equal(places.length, 1);
+  assert.ok(stillOpen.action === "hold" || stillOpen.reason === "already-open");
+  PositionManager.clearOpen(algo.vwapState);
+  const afterSquareOff = tickAt(4, {
+    orders: [
+      { id: "s1", strategy: algo.name, side: "SELL", status: "FILLED", filledQty: 65 },
+      { id: "b1", strategy: algo.name, side: "BUY", status: "FILLED", filledQty: 65 },
+    ],
+  });
+  assert.equal(afterSquareOff.action, "queued");
+  assert.equal(places.length, 2);
+});
+
+test("a new session drops yesterday's buy lock and can send a new order", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "New session record" });
+  algo.vwapState = {
+    sessionDate: "2026-08-20",
+    buyPhase: "entry",
+    inFlight: true,
+    lastEntryAt: Date.parse("2026-08-20T04:00:00.000Z"),
+    lastEntryBarTime: Date.parse("2026-08-20T04:00:00.000Z"),
+    sessionTrades: 3,
+    fillPrice: 40,
+    lockedStrike: 22600,
+    lockedOption: "PE",
+  };
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [{ id: "old", strategy: algo.name, side: "BUY", status: "PENDING" }],
+    adapter: book.adapter,
+  });
+  assert.equal(algo.vwapState.sessionDate, "2026-08-21");
+  assert.notEqual(tick.reason, "buy-active");
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places.length, 1);
+  assert.equal(algo.vwapState.sessionTrades, 1);
+});
+
+test("an already-rolled session still releases yesterday's entry when nothing is open", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Rolled stale lock" });
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    buyPhase: "entry",
+    inFlight: false,
+    lastEntryAt: Date.parse("2026-08-20T04:00:00.000Z"),
+    lastEntryBarTime: Date.parse("2026-08-20T04:00:00.000Z"),
+    sessionTrades: 1,
+  };
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [],
+    adapter: book.adapter,
+  });
+  assert.notEqual(tick.reason, "buy-active");
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places.length, 1);
+  assert.equal(algo.vwapState.sessionTrades, 2);
+});
+
+test("same-day entry lock stays while the order book is still empty", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Same day lock" });
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    buyPhase: "entry",
+    inFlight: false,
+    lastEntryAt: T0_0900,
+    lastEntryBarTime: T0_0900,
+  };
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540), { time: T0_0900 + BAR, open: 24540, high: 24580, low: 24520, close: 24560, volume: 1000 }],
+    ceBars: [firstBar(100, 118), { time: T0_0900 + BAR, open: 118, high: 140, low: 110, close: 130, volume: 500 }],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 130,
+    peLtp: 96,
+    spot: 24560,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [],
+    adapter: { place: () => ({ queued: true, status: "PENDING" }), exit: () => ({}) },
+  });
+  assert.equal(tick.reason, "buy-active");
+  assert.equal(algo.lastSignal, "WAIT ORDER");
+  assert.equal(algo.vwapState.buyPhase, "entry");
+});
+
+test("a rejected buy is resolved and the next buy can be sent", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Rejected buy can retry" });
+  const places = [];
+  const adapter = {
+    place(payload) {
+      places.push(payload);
+      return { queued: true, status: "PENDING" };
+    },
+    exit() {
+      return { ok: true };
+    },
+  };
+  const tickAt = (n, orders = []) => {
+    const time = T0_0900 + n * BAR;
+    return NiftyVwapStrategy.tick({
+      algo,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 360,
+      futuresBars: [{ time, open: 24500, high: 24580, low: 24490, close: 24540 + n, volume: 1000 }],
+      ceBars: [{ time, open: 100, high: 140, low: 98, close: 120 + n, volume: 500 }],
+      peBars: [firstBar(110, 96)],
+      ceLtp: 120,
+      peLtp: 96,
+      spot: 24540,
+      step: 50,
+      expiry: "2026-08-27",
+      positions: [],
+      orders,
+      adapter,
+    });
+  };
+  assert.equal(tickAt(0).action, "queued");
+  algo.vwapState.inFlight = false;
+  const released = tickAt(1, [{ id: "rej-1", strategy: algo.name, side: "BUY", status: "REJECTED", filledQty: 0 }]);
+  assert.equal(released.action, "queued");
+  assert.equal(places.length, 2);
+  assert.equal(algo.vwapState.buyPhase, "entry");
 });
 
 test("normalizeAlgo rematerializes first candle even if kind was saved as indicator", () => {
@@ -1541,7 +1925,7 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
     adapter: book.adapter,
   });
   assert.equal(tick.action, "entry");
-  assert.match(crude.lastSignal, /PREVIEW CRUDE FUT GREEN \+ CE GREEN/);
+  assert.match(crude.lastSignal, /PREVIEW CRUDE FUT GREEN \+ CE 6100 GREEN/);
   assert.equal(book.places[0].symbol, "CRUDEOIL 6100 CE");
   assert.equal(book.places[0].qty, 100);
   assert.equal(book.places[0].lots, 1);
@@ -1567,7 +1951,7 @@ test("crude oil preview candle uses the same buy and leaves the nifty strategy u
     adapter: niftyBook.adapter,
   });
   assert.equal(niftyTick.action, "entry");
-  assert.match(niftyAlgo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE GREEN/);
+  assert.match(niftyAlgo.lastSignal, /PREVIEW NIFTY FUT GREEN \+ CE 22700 GREEN/);
   assert.match(niftyBook.places[0].symbol, /^NIFTY \d+ CE$/);
   assert.equal(niftyBook.places[0].qty, 65);
   assert.equal(niftyBook.places[0].lots, 1);

@@ -204,6 +204,8 @@ export type Snapshot = {
     targetPct?: number;
     initialSlPct?: number;
     trailingActivationPct?: number;
+    trailingEveryPct?: number;
+    trailingShiftPct?: number;
     trailingStepPct?: number;
     vwapExitCandles?: number;
     eodSquareOffMinutes?: number;
@@ -489,6 +491,7 @@ export type AuthUser = {
   authProvider?: string;
   createdAt?: string;
   lastLoginAt?: string;
+  loginIp?: string;
   registered?: boolean;
   hasPassword?: boolean;
   thumbEnabled?: boolean;
@@ -649,12 +652,17 @@ export type ClientRow = {
       accountId?: string;
       tokenHint?: string;
       apiKeyHint?: string;
+      sessionHint?: string;
+      hasTradeLogin?: boolean;
+      tradeMobileHint?: string;
       installed?: boolean;
       tokenUpdatedAt?: string;
     }
   >;
   notes?: string;
   margin: number;
+  brokerBalance?: number;
+  balanceSource?: string;
   createdAt?: string;
   lastLoginAt?: string;
 };
@@ -669,6 +677,9 @@ export type ClientsList = {
   strategies: Array<{ id: string; name: string }>;
   live: number;
   paper: number;
+  adminBalance?: number;
+  adminBrokerId?: string;
+  adminBrokerName?: string;
 };
 
 export function listClients() {
@@ -696,6 +707,9 @@ export function createClient(payload: {
   brokerToken?: string;
   brokerApiKey?: string;
   brokerSessionToken?: string;
+  brokerMobile?: string;
+  brokerMpin?: string;
+  brokerTotpSecret?: string;
   notes?: string;
   staticIp?: string;
 }) {
@@ -714,6 +728,9 @@ export function saveClient(
     brokerToken?: string;
     brokerApiKey?: string;
     brokerSessionToken?: string;
+    brokerMobile?: string;
+    brokerMpin?: string;
+    brokerTotpSecret?: string;
   },
 ) {
   return request<{ client: ClientRow }>(`/clients/${encodeURIComponent(id)}`, {
@@ -945,6 +962,8 @@ export type MemberBrokerChoice = {
 
 export type MemberWallet = {
   balance: number;
+  brokerBalance?: number;
+  brokerBalanceSource?: string;
   mtm: number;
   equity: number;
   updatedAt?: string;
@@ -994,6 +1013,10 @@ export type MemberBrokerInstall = {
   tokenHint?: string;
   apiKeyHint?: string;
   sessionHint?: string;
+  hasTradeLogin?: boolean;
+  hasMpin?: boolean;
+  hasTotp?: boolean;
+  tradeMobileHint?: string;
   hasApiKey?: boolean;
   hasApiSecret?: boolean;
   oauthReady?: boolean;
@@ -1032,6 +1055,7 @@ export type MemberDesk = {
   payments: PaymentPublic;
   copyReady?: boolean;
   alerts?: MemberCopyAlert[];
+  staticIp?: string;
 };
 
 export type MemberIndexQuote = {
@@ -1063,6 +1087,13 @@ export function getMemberDesk() {
   return request<MemberDesk>("/member/desk");
 }
 
+export function saveMemberIp(staticIp: string) {
+  return request<{ ok: boolean; staticIp: string }>("/member/ip", {
+    method: "POST",
+    body: JSON.stringify({ staticIp }),
+  });
+}
+
 export function selectMemberBroker(brokerId: string) {
   return request<{
     brokerId: string;
@@ -1082,6 +1113,9 @@ export function installMemberBroker(payload: {
   apiKey?: string;
   accessToken?: string;
   sessionToken?: string;
+  mobile?: string;
+  mpin?: string;
+  totpSecret?: string;
 }) {
   return request<{ ok: boolean; brokerId: string; install: MemberBrokerInstall }>("/member/broker/credentials", {
     method: "POST",
@@ -1121,7 +1155,12 @@ export function listWalletTopups() {
 }
 
 export function getMe(token: string) {
-  return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
+  const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
+  return request<{ user: AuthUser }>(`/me${suffix}`);
+}
+
+export function logoutSession() {
+  return request<{ ok: boolean }>("/logout", { method: "POST" }).catch(() => ({ ok: false }));
 }
 
 export function updateProfile(token: string, payload: { name: string; email?: string; mobile?: string }) {
@@ -1233,11 +1272,17 @@ export type PositionLedger = {
   unrealized?: number;
   open: number;
   brokerMtm?: number | null;
+  balance?: number;
+  balanceSource?: string;
 };
 
 export type PositionsDeskSnapshot = {
   master: PositionLedger;
   clients: PositionLedger[];
+  adminBalance?: number;
+  adminBrokerId?: string;
+  adminBrokerName?: string;
+  userBalances?: Array<{ id: string; name: string; balance: number }>;
   masterMtm: number;
   clientMtm: number;
   totalMtm: number;

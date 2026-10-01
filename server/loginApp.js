@@ -4,6 +4,7 @@ import {
   decodeOAuthState,
   enableThumb,
   googleAuthorizeUrl,
+  googleLoginSearch,
   googleOAuthConfigured,
   googleRedirectUri,
   loginWithGoogleCode,
@@ -13,6 +14,9 @@ import {
   requestOtp,
   resetPassword,
   safeFrontendOrigin,
+  clientAddress,
+  recordLoginIp,
+  requestToken,
   sessionUser,
   updateProfile,
   verifyOtp,
@@ -23,7 +27,19 @@ function queryValue(value) {
 }
 
 function readToken(req) {
-  return String(req.body?.token || req.query?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  return requestToken(req);
+}
+
+function sessionCookie(token, req, { maxAge = 60 * 60 * 24 * 30 } = {}) {
+  const secure = Boolean(req?.secure) || String(req?.headers?.["x-forwarded-proto"] || "") === "https";
+  const parts = [`t2s-token=${encodeURIComponent(token || "")}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${maxAge}`];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function keepSession(res, req, token) {
+  if (!token) return;
+  res.setHeader("Set-Cookie", sessionCookie(token, req));
 }
 
 export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
@@ -58,11 +74,17 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
         redirectUri: payload.redirectUri || googleRedirectUri(process.env, req),
       });
       try {
+        recordLoginIp(result.token, clientAddress(req));
+      } catch {
+        /* login still succeeds if the address cannot be stored */
+      }
+      try {
         queueLoginNotice(result.user);
       } catch (mailError) {
         console.error("[auth] Google login mail failed:", mailError?.message || mailError);
       }
-      res.redirect(`${next}/login?google_token=${encodeURIComponent(result.token)}`);
+      keepSession(res, req, result.token);
+      res.redirect(`${next}/login?${googleLoginSearch(result)}`);
     } catch (error) {
       console.error("[auth] Google callback failed:", error?.message || error);
       res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
@@ -72,7 +94,10 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
   app.post("/api/login", (req, res) => {
     try {
       const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
+      const noted = recordLoginIp(result.token, clientAddress(req));
+      if (noted) result.user = noted;
       queueLoginNotice(result.user);
+      keepSession(res, req, result.token);
       res.json(result);
     } catch (error) {
       res.status(error.status || 401).json({ error: error.message || "Login failed" });
@@ -105,7 +130,12 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
         otp: req.body?.otp,
         purpose: req.body?.purpose,
       });
-      if (result.token) queueLoginNotice(result.user);
+      if (result.token) {
+        const noted = recordLoginIp(result.token, clientAddress(req));
+        if (noted) result.user = noted;
+        queueLoginNotice(result.user);
+        keepSession(res, req, result.token);
+      }
       res.json(result);
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Could not verify code" });
@@ -116,6 +146,7 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
     try {
       const result = resetPassword(req.body || {});
       queueLoginNotice(result.user);
+      keepSession(res, req, result.token);
       res.json(result);
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Could not reset password" });
@@ -126,6 +157,7 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
     try {
       const result = completeSignup(req.body || {});
       queueLoginNotice(result.user);
+      keepSession(res, req, result.token);
       res.status(201).json(result);
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Sign up failed" });
@@ -134,7 +166,7 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
 
   app.post("/api/auth/thumb/enable", (req, res) => {
     try {
-      const token = String(req.body?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      const token = readToken(req);
       res.json(enableThumb(token));
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Could not enable thumb" });
@@ -145,14 +177,26 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
     try {
       const result = loginWithThumb(req.body?.thumbToken);
       queueLoginNotice(result.user);
+      keepSession(res, req, result.token);
       res.json(result);
     } catch (error) {
       res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
     }
   });
 
+  app.post("/api/logout", (_req, res) => {
+    res.setHeader("Set-Cookie", sessionCookie("", _req, { maxAge: 0 }));
+    res.json({ ok: true });
+  });
+
   app.get("/api/me", (req, res) => {
-    const user = sessionUser(readToken(req), { reload: true });
+    const token = readToken(req);
+    try {
+      recordLoginIp(token, clientAddress(req));
+    } catch {
+      /* the profile still loads when the address cannot be stored */
+    }
+    const user = sessionUser(token, { reload: true });
     if (!user) {
       res.status(401).json({ error: "Sign in first." });
       return;
@@ -162,7 +206,10 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
 
   app.post("/api/me", (req, res) => {
     try {
-      res.json(updateProfile(readToken(req), req.body || {}));
+      const token = readToken(req);
+      const saved = updateProfile(token, req.body || {});
+      keepSession(res, req, token);
+      res.json(saved);
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Could not update profile" });
     }

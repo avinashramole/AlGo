@@ -44,6 +44,8 @@ export type AlgoStrategy = {
   targetPct?: number;
   initialSlPct?: number;
   trailingActivationPct?: number;
+  trailingEveryPct?: number;
+  trailingShiftPct?: number;
   trailingStepPct?: number;
   vwapExitCandles?: number;
   maxPositions?: number;
@@ -158,11 +160,17 @@ export const RUN_MODES = [
 ];
 
 export const OPTION_OFFSETS = [
+  { id: -5, label: "ATM − 5" },
+  { id: -4, label: "ATM − 4" },
+  { id: -3, label: "ATM − 3" },
   { id: -2, label: "ATM − 2" },
   { id: -1, label: "ATM − 1" },
   { id: 0, label: "ATM" },
   { id: 1, label: "ATM + 1" },
   { id: 2, label: "ATM + 2" },
+  { id: 3, label: "ATM + 3" },
+  { id: 4, label: "ATM + 4" },
+  { id: 5, label: "ATM + 5" },
 ];
 
 export const OPERATORS: Array<{ id: ConditionOp; label: string }> = [
@@ -199,7 +207,7 @@ export function lotForSymbol(symbol?: string) {
 }
 
 export function strikeOffsetLabel(offset?: number) {
-  const n = Math.max(-2, Math.min(2, Math.round(Number(offset) || 0)));
+  const n = Math.max(-5, Math.min(5, Math.round(Number(offset) || 0)));
   return OPTION_OFFSETS.find((row) => row.id === n)?.label || "ATM";
 }
 
@@ -229,6 +237,51 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
     algo?.strategyType === "NIFTY_FIRST_CANDLE_5M" ||
     algo?.indicator === "NIFTY_FIRST_CANDLE"
   );
+}
+
+export function firstCandleMinutes(timeframe?: string) {
+  if (timeframe === "1m") return 1;
+  if (timeframe === "15m") return 15;
+  return 5;
+}
+
+export function addIstMinutes(hm: string | undefined, minutes: number, fallback = "09:00") {
+  const raw = String(hm || fallback).trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+  const hour = match ? Math.min(23, Math.max(0, Number(match[1]))) : 9;
+  const minute = match ? Math.min(59, Math.max(0, Number(match[2]))) : 0;
+  const total = (hour * 60 + minute + Math.max(0, Math.round(minutes))) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Moving 5m → 15m moves the 09:05 check to 09:15. A hand-typed time stays. */
+export function firstCandleEntryIst(firstBar?: string, timeframe?: string, stored?: string) {
+  const minutes = firstCandleMinutes(timeframe);
+  const start = addIstMinutes(firstBar || "09:00", 0);
+  const barClose = addIstMinutes(start, minutes);
+  const current = String(stored || "").trim();
+  if (!current) return barClose;
+  const otherClocks = [1, 5, 15].filter((step) => step !== minutes).map((step) => addIstMinutes(start, step));
+  if (otherClocks.includes(current)) return barClose;
+  return current;
+}
+
+export function niftyFirstCandleTrail(algo?: {
+  trailingActivationPct?: number;
+  trailingEveryPct?: number;
+  trailingShiftPct?: number;
+}) {
+  const every = Number(algo?.trailingEveryPct);
+  const shift = Number(algo?.trailingShiftPct);
+  const activation = Number(algo?.trailingActivationPct);
+  if (every > 0 && shift > 0) {
+    return {
+      activation: activation > 0 ? activation : 20,
+      every,
+      shift,
+    };
+  }
+  return { activation: 20, every: 10, shift: 5 };
 }
 
 export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
@@ -311,12 +364,13 @@ export function contractLabel(algo: {
   instrument?: string;
   optionType?: string;
   strikeOffset?: number;
+  timeframe?: string;
 }) {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
-  if (isCrudeFirstCandleKind(algo)) return "CRUDE OIL ATM CE/PE first 5m";
-  if (isNiftyFirstCandleKind(algo)) return "NIFTY ATM CE/PE first 5m";
+  if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isNiftyFirstCandleKind(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
@@ -655,8 +709,10 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       slPct: 20,
       initialSlPct: 20,
       targetPct: 40,
-      trailingActivationPct: 10,
-      trailingStepPct: 3,
+      trailingActivationPct: 20,
+      trailingEveryPct: 10,
+      trailingShiftPct: 5,
+      trailingStepPct: 5,
       vwapExitCandles: 5,
       maxPositions: 1,
       maxTradesPerDay: 5,

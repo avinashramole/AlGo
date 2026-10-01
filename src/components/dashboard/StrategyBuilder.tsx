@@ -15,6 +15,7 @@ import {
   groupsFromFlat,
   MAX_CONDITION_ROWS,
   contractLabel,
+  firstCandleEntryIst,
   strikeOffsetLabel,
   lotForSymbol,
   RUN_MODES,
@@ -24,6 +25,7 @@ import {
   isNiftyVwapHedgeKind,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
+  niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
@@ -68,10 +70,24 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       ) as StrategyKind;
       const synthesized = groupsFromFlat(algo);
       const crude = kind === "crude-first-candle";
+      const trail = kind === "nifty-first-candle" ? niftyFirstCandleTrail(algo) : null;
       setForm({
         ...emptyStrategy(kind),
         ...algo,
         kind,
+        ...(trail
+          ? {
+              trailingActivationPct: trail.activation,
+              trailingEveryPct: trail.every,
+              trailingShiftPct: trail.shift,
+              trailingStepPct: trail.shift,
+            }
+          : {}),
+        ...((kind === "nifty-first-candle" || crude)
+          ? {
+              entryEvaluationIst: firstCandleEntryIst(algo.firstBarStartIst, algo.timeframe, algo.entryEvaluationIst),
+            }
+          : {}),
         ...(crude
           ? {
               indicator: "CRUDE_FIRST_CANDLE",
@@ -130,15 +146,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (crudeFirst) {
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
-      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
+      const tf = form.timeframe || "5m";
+      return `CRUDE OIL ${tf} · monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
       const firstBar = form.firstBarStartIst || "09:00";
-      const evalAt = form.entryEvaluationIst || "09:05";
+      const tf = form.timeframe || "5m";
+      const evalAt = firstCandleEntryIst(firstBar, tf, form.entryEvaluationIst);
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
       const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · LIVE ${start} IST`;
+      const trail = niftyFirstCandleTrail(form);
+      return `NIFTY ${tf} · ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -424,7 +443,22 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
-            <select className={fieldClass} value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine && !firstCandle} onChange={(event) => set({ timeframe: event.target.value })}>
+            <select
+              className={fieldClass}
+              value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"}
+              disabled={engine && !firstCandle}
+              onChange={(event) => {
+                const timeframe = event.target.value;
+                if (firstCandle || crudeFirst) {
+                  set({
+                    timeframe,
+                    entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
+                  });
+                  return;
+                }
+                set({ timeframe });
+              }}
+            >
               {(reversal || hedge ? ["15m"] : vwap ? ["5m"] : firstCandle || crudeFirst || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
@@ -587,7 +621,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 Entry evaluation (IST)
-                <input className={fieldClass} value={form.entryEvaluationIst || "09:05"} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder="09:05" />
+                <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 End time (IST)
@@ -613,11 +647,44 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                     </option>
                   ))}
                 </select>
+                <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
               </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
               {crudeFirst ? null : (
+              <>
+              <p className="text-[11px] font-semibold text-slate-400 md:col-span-2" data-trailing-sl="nifty-first-candle">
+                Trailing SL: at this profit the stop moves to the buy price. Each further gain of the next percent lifts the stop by the shift percent. A pullback does not lower the stop.
+              </p>
+              <NumberField
+                label="Trailing SL to buy price at %"
+                value={niftyFirstCandleTrail(form).activation}
+                step={1}
+                onChange={(trailingActivationPct) => {
+                  const trail = niftyFirstCandleTrail(form);
+                  set({ trailingActivationPct, trailingEveryPct: trail.every, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                }}
+              />
+              <NumberField
+                label="Trailing SL every %"
+                value={niftyFirstCandleTrail(form).every}
+                step={1}
+                onChange={(trailingEveryPct) => {
+                  const trail = niftyFirstCandleTrail(form);
+                  set({ trailingActivationPct: trail.activation, trailingEveryPct, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                }}
+              />
+              <NumberField
+                label="Trailing SL shift %"
+                value={niftyFirstCandleTrail(form).shift}
+                step={1}
+                onChange={(trailingShiftPct) => {
+                  const trail = niftyFirstCandleTrail(form);
+                  set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
+                }}
+              />
               <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+              </>
               )}
               <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
@@ -868,27 +935,40 @@ function ConditionRowFields({
   );
 }
 
+function strikeStep(symbol?: string) {
+  const id = String(symbol || "NIFTY").toUpperCase();
+  if (id.includes("BANK") || id.includes("SENSEX")) return 100;
+  return 50;
+}
+
 function liveOptionHint(
   form: Partial<AlgoStrategy>,
   data: {
-    optionMeta?: { symbol?: string; expiry?: string; expiryLabel?: string };
+    optionMeta?: { symbol?: string; expiry?: string; expiryLabel?: string; spot?: number };
     optionChain?: Array<{ strike: number; atm?: boolean; callLtp?: number; putLtp?: number }>;
   },
 ) {
   const symbol = form.symbol || "NIFTY";
   const option = form.optionType === "PE" ? "PE" : "CE";
-  const offset = Math.round(Number(form.strikeOffset) || 0);
-  if (data.optionMeta?.symbol !== symbol) {
-    return `Open Options on ${symbol} to see live ${option} LTP`;
+  const offset = Math.max(-5, Math.min(5, Math.round(Number(form.strikeOffset) || 0)));
+  const step = strikeStep(symbol);
+  const sameDesk = data.optionMeta?.symbol === symbol;
+  const rows = sameDesk ? data.optionChain || [] : [];
+  const atm = rows.find((row) => row.atm);
+  const spot = sameDesk ? Number(data.optionMeta?.spot) : 0;
+  const atmPrice = atm ? Number(atm.strike) : spot > 0 ? Math.round(spot / step) * step : 0;
+  const want = atmPrice > 0 ? atmPrice + offset * step : 0;
+  if (!sameDesk) {
+    return `Open Options on ${symbol} to see live ${strikeOffsetLabel(offset)} ${option} LTP`;
   }
-  const rows = data.optionChain || [];
-  const atmIndex = rows.findIndex((row) => row.atm);
-  if (atmIndex < 0) return "Waiting for ATM on the option tape";
-  const row = rows[atmIndex + offset];
-  if (!row) return `No ${strikeOffsetLabel(offset)} strike on this tape`;
+  if (!(atmPrice > 0)) return "Waiting for ATM on the option tape";
+  const row = rows.find((item) => Number(item.strike) === want);
+  if (!row) return `${symbol} ${want} ${option} · no ${strikeOffsetLabel(offset)} strike on this tape`;
   const ltp = option === "PE" ? Number(row.putLtp) : Number(row.callLtp);
-  const expiry = data.optionMeta.expiryLabel || data.optionMeta.expiry || "";
-  return ltp > 0 ? `${symbol} ${row.strike} ${option} · LTP ${ltp} · ${expiry}` : `${symbol} ${row.strike} ${option} · waiting for LTP`;
+  const expiry = data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "";
+  return ltp > 0
+    ? `${symbol} ${row.strike} ${option} · ${strikeOffsetLabel(offset)} · LTP ${ltp}${expiry ? ` · ${expiry}` : ""}`
+    : `${symbol} ${row.strike} ${option} · ${strikeOffsetLabel(offset)} · waiting for LTP`;
 }
 
 function TypeCard({ active, title, text, onClick }: { active: boolean; title: string; text: string; onClick: () => void }) {

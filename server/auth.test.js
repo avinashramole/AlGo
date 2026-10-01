@@ -16,6 +16,7 @@ const {
   decodeOAuthState,
   encodeOAuthState,
   googleAuthorizeUrl,
+  googleLoginSearch,
   googleOAuthConfigured,
   googleRedirectUri,
   completeSignup,
@@ -27,9 +28,13 @@ const {
   requestOtp,
   resolveUserRole,
   safeFrontendOrigin,
+  clientAddress,
+  recordLoginIp,
+  requestToken,
   sessionUser,
   upsertGoogleUser,
   updateProfile,
+  adminCreateMember,
   adminUpdateUser,
   verifyOtp,
 } = await import("./auth.js");
@@ -141,6 +146,20 @@ test("upsertGoogleUser adds a member and keeps admin emails as admin", () => {
   assert.equal(admin.user.id, "admin");
 });
 
+test("google login hands the Gmail name and email to the profile", () => {
+  const email = `handoff.${Date.now()}@gmail.com`;
+  const first = upsertGoogleUser({ email, name: "Google user", googleId: "gid-handoff" });
+  const params = new URLSearchParams(googleLoginSearch(first));
+  assert.equal(params.get("google_email"), email);
+  assert.equal(params.get("google_name"), "Google user");
+  assert.equal(params.get("google_token"), first.token);
+  const again = upsertGoogleUser({ email, name: "Asha Google", googleId: "gid-handoff", });
+  assert.equal(again.user.name, "Asha Google");
+  assert.equal(again.user.email, email);
+  assert.equal(sessionUser(again.token, { reload: true }).email, email);
+  assert.equal(sessionUser(again.token, { reload: true }).name, "Asha Google");
+});
+
 test("upsertGoogleUser rejects non-Gmail accounts", () => {
   assert.throws(
     () => upsertGoogleUser({ email: "person@outlook.com", name: "Other", googleId: "gid-ms" }),
@@ -214,6 +233,31 @@ test("listPublicUsers includes registered Gmail members for admin", () => {
   assert.equal(member?.authProvider, "google");
   assert.ok(users.some((row) => row.id === "admin" && row.role === "admin"));
   assert.equal(users.some((row) => row.id === "avinash" || row.id === "segin"), false);
+});
+
+test("a former admin Gmail stays a member and can use the member dashboard", () => {
+  const email = "avinash.ramole86@gmail.com";
+  const created = upsertGoogleUser({ email, name: "Avinash", googleId: "gid-avinash-member" });
+  assert.equal(created.user.role, "user");
+  assert.equal(created.user.email, email);
+  const listed = listPublicUsers().find((row) => row.email === email);
+  assert.equal(listed?.id, created.user.id);
+  assert.equal(listed?.role, "user");
+  const saved = updateProfile(created.token, {
+    name: "Avinash Member",
+    email,
+    mobile: "9843210091",
+  });
+  assert.equal(saved.user.name, "Avinash Member");
+  assert.equal(saved.user.mobile, "9843210091");
+  const onDisk = JSON.parse(fs.readFileSync(usersFile, "utf8"));
+  assert.equal(onDisk.some((row) => row.email === email && row.role === "user"), true);
+  const client = adminCreateMember({
+    name: "Desk Client",
+    email: `desk.client.${Date.now()}@gmail.com`,
+    mobile: "9843210092",
+  });
+  assert.equal(listPublicUsers().some((row) => row.id === client.id && row.email === client.email), true);
 });
 
 test("sign-in session is saved so a restart does not ask to sign in again", () => {
@@ -423,6 +467,89 @@ test("name-only profile update keeps the saved admin mobile after disk reload", 
   assert.equal(fromUsers.mobile, "9876508882");
   const afterReload = updateProfile(session.token, { name: "Trade 2 Smart" });
   assert.equal(afterReload.user.mobile, "9876508882");
+});
+
+test("a Gmail login stores the client IP on the profile", () => {
+  const session = upsertGoogleUser({
+    email: `ip.member.${Date.now()}@gmail.com`,
+    name: "IP Member",
+    googleId: "gid-ip-member",
+  });
+  const noted = recordLoginIp(session.token, "150.129.129.108");
+  assert.equal(noted.loginIp, "150.129.129.108");
+  assert.equal(sessionUser(session.token, { reload: true }).loginIp, "150.129.129.108");
+  assert.equal(recordLoginIp(session.token, "not-an-ip"), null);
+  assert.equal(
+    clientAddress({ headers: { "x-forwarded-for": "203.0.113.10, 10.0.0.1" }, socket: { remoteAddress: "127.0.0.1" } }),
+    "203.0.113.10",
+  );
+});
+
+test("profile save still finds a sign-in written by the other process", () => {
+  const stamp = String(Date.now()).slice(-9);
+  const created = completeSignup({
+    name: "Gate Member",
+    email: `gate.member.${stamp}@gmail.com`,
+    mobile: `9${stamp}`,
+    password: "create123",
+  });
+  const users = JSON.parse(fs.readFileSync(usersFile, "utf8"));
+  users.push({
+    id: "u-other-proc",
+    name: "Other Proc",
+    email: `other.proc.${stamp}@gmail.com`,
+    mobile: `8${stamp}`,
+    desk: "Index Options",
+    role: "user",
+    authProvider: "google",
+  });
+  fs.writeFileSync(usersFile, `${JSON.stringify(users, null, 2)}\n`);
+  const sessions = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
+  sessions["t2s-other-proc"] = {
+    userId: "u-other-proc",
+    email: `other.proc.${stamp}@gmail.com`,
+    mobile: `8${stamp}`,
+    at: Date.now(),
+  };
+  fs.writeFileSync(sessionsFile, `${JSON.stringify(sessions, null, 2)}\n`);
+  completeSignup({
+    name: "Next Member",
+    email: `next.member.${stamp}@gmail.com`,
+    mobile: `7${stamp}`,
+    password: "create123",
+  });
+  assert.equal(sessionUser("t2s-other-proc").email, `other.proc.${stamp}@gmail.com`);
+  const saved = updateProfile("t2s-other-proc", {
+    name: "Other Saved",
+    email: `other.proc.${stamp}@gmail.com`,
+    mobile: `8${stamp}`,
+  });
+  assert.equal(saved.user.name, "Other Saved");
+  assert.equal(sessionUser(created.token).id, created.user.id);
+  assert.equal(
+    requestToken({ body: { token: "" }, headers: { cookie: "t2s-token=t2s-other-proc" } }),
+    "t2s-other-proc",
+  );
+  assert.equal(
+    requestToken({
+      body: { token: "t2s-not-a-session" },
+      headers: { authorization: "Bearer t2s-not-a-session", cookie: "t2s-token=t2s-other-proc" },
+    }),
+    "t2s-other-proc",
+  );
+});
+
+test("a broken accounts file is not replaced with the seed list", () => {
+  const before = fs.readFileSync(usersFile, "utf8");
+  fs.writeFileSync(usersFile, "{");
+  try {
+    const listed = listPublicUsers();
+    assert.ok(listed.some((row) => row.id === "admin"));
+    assert.equal(fs.readFileSync(usersFile, "utf8"), "{");
+  } finally {
+    fs.writeFileSync(usersFile, before);
+    listPublicUsers();
+  }
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {

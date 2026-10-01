@@ -3,6 +3,7 @@ import {
   enableThumb as enableThumbApi,
   getMe,
   googleAuthStatus,
+  logoutSession,
   login as loginRequest,
   loginThumb as loginThumbApi,
   requestOtp as requestOtpApi,
@@ -55,8 +56,22 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+let memoryToken = "";
+
 function readToken() {
-  return localStorage.getItem("t2s-token") || sessionStorage.getItem("t2s-token") || "";
+  return memoryToken || localStorage.getItem("t2s-token") || sessionStorage.getItem("t2s-token") || "";
+}
+
+function clearStoredSession() {
+  memoryToken = "";
+  localStorage.removeItem("t2s-token");
+  localStorage.removeItem("t2s-user");
+  sessionStorage.removeItem("t2s-token");
+  sessionStorage.removeItem("t2s-user");
+}
+
+function signedOut(error: unknown) {
+  return /sign in first/i.test(error instanceof Error ? error.message : String(error || ""));
 }
 
 function readUser(): AuthUser | null {
@@ -70,6 +85,7 @@ function readUser(): AuthUser | null {
 }
 
 function persist(user: AuthUser, token: string, remember = true) {
+  memoryToken = token;
   const keep = remember ? localStorage : sessionStorage;
   const drop = remember ? sessionStorage : localStorage;
   keep.setItem("t2s-token", token);
@@ -150,11 +166,42 @@ async function verifyDeviceThumb() {
   }
 }
 
+function preferAccount(current: AuthUser | null, next: AuthUser): AuthUser {
+  const nextName = String(next.name || "").trim();
+  const currentName = String(current?.name || "").trim();
+  const name =
+    nextName && nextName !== "Google user"
+      ? nextName
+      : currentName && currentName !== "Google user"
+        ? currentName
+        : nextName || currentName;
+  return {
+    ...current,
+    ...next,
+    name,
+    email: next.email || current?.email || "",
+    mobile: next.mobile || current?.mobile || "",
+    authProvider: next.authProvider || current?.authProvider || "",
+    loginIp: next.loginIp || current?.loginIp || "",
+  };
+}
+
 function bootFromWindow() {
   if (typeof window === "undefined") return readUser();
-  const googleToken = new URLSearchParams(window.location.search).get("google_token") || "";
+  const params = new URLSearchParams(window.location.search);
+  const googleToken = params.get("google_token") || "";
   if (!googleToken) return readUser();
-  const pending = { name: "Google user", email: "", desk: "Index Options", role: "user" as const };
+  const email = params.get("google_email")?.trim() || "";
+  const mobile = params.get("google_mobile")?.trim() || "";
+  const given = params.get("google_name")?.trim() || "";
+  const pending: AuthUser = {
+    name: given || (email.includes("@") ? email.split("@")[0] : "Google user"),
+    email,
+    mobile,
+    desk: "Index Options",
+    role: "user",
+    authProvider: "google",
+  };
   persist(pending, googleToken, true);
   return pending;
 }
@@ -164,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
   const [ready, setReady] = useState(() => {
     const token = readToken();
-    if (!token || token === "t2s-offline-token") return true;
+    if (token === "t2s-offline-token") return true;
     return readUser()?.role === "admin";
   });
 
@@ -175,10 +222,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshMe = useCallback(async () => {
     const token = readToken();
-    if (!token || token === "t2s-offline-token") return;
-    const row = await getMe(token);
-    persistUser(row.user);
-    setUser(row.user);
+    if (token === "t2s-offline-token") return;
+    const apply = (next: AuthUser) => {
+      const merged = preferAccount(readUser(), next);
+      persistUser(merged);
+      setUser(merged);
+    };
+    try {
+      const row = await getMe(token);
+      apply(row.user);
+      return;
+    } catch (error) {
+      if (!signedOut(error)) throw error;
+    }
+    try {
+      const row = await getMe("");
+      apply(row.user);
+    } catch (error) {
+      if (!signedOut(error)) throw error;
+      const current = readUser();
+      if (current?.email) {
+        setUser(current);
+        return;
+      }
+      clearStoredSession();
+      setUser(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -192,18 +261,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     const token = readToken();
-    if (!token || token === "t2s-offline-token") {
+    if (token === "t2s-offline-token") {
       setReady(true);
       return;
     }
-    void getMe(token)
-      .then((row) => {
-        persistUser(row.user);
-        setUser(row.user);
+    void refreshMe()
+      .catch((error) => {
+        if (signedOut(error) && !readUser()?.email) {
+          clearStoredSession();
+          setUser(null);
+        }
       })
-      .catch(() => undefined)
       .finally(() => setReady(true));
-  }, []);
+  }, [refreshMe]);
 
   const value = useMemo(
     () => ({
@@ -261,17 +331,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       updateProfile: async (payload: { name: string; email?: string; mobile?: string }) => {
         const token = readToken();
-        const result = await updateProfileApi(token, payload);
-        persistUser(result.user);
-        setUser(result.user);
+        try {
+          const result = await updateProfileApi(token, payload);
+          persistUser(result.user);
+          setUser(result.user);
+        } catch (error) {
+          if (!signedOut(error) || !token) throw error;
+          clearStoredSession();
+          const result = await updateProfileApi("", payload);
+          persistUser(result.user);
+          setUser(result.user);
+        }
       },
       applyUser,
       refreshMe,
       logout: () => {
-        localStorage.removeItem("t2s-token");
-        localStorage.removeItem("t2s-user");
-        sessionStorage.removeItem("t2s-token");
-        sessionStorage.removeItem("t2s-user");
+        void logoutSession();
+        clearStoredSession();
         setUser(null);
       },
     }),

@@ -5,7 +5,7 @@ import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 
-const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "CANCELLED"] as const;
+const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "FAILED", "CANCELLED"] as const;
 
 export function Orders() {
   const { data, cancel } = useMarket();
@@ -19,6 +19,7 @@ export function Orders() {
     PARTIAL: orders.filter((row) => row.status === "PARTIAL").length,
     FILLED: orders.filter((row) => row.status === "FILLED").length,
     REJECTED: orders.filter((row) => row.status === "REJECTED").length,
+    FAILED: orders.filter((row) => row.status === "FAILED").length,
     CANCELLED: orders.filter((row) => row.status === "CANCELLED").length,
   };
 
@@ -55,7 +56,7 @@ export function Orders() {
         <Stat label="Orders" value={String(orders.length)} />
         <Stat label="Pending" value={String(counts.PENDING + counts.PARTIAL)} />
         <Stat label="Filled" value={String(counts.FILLED)} />
-        <Stat label="Rejected" value={String(counts.REJECTED)} />
+        <Stat label="Rejected / failed" value={String(counts.REJECTED + counts.FAILED)} />
       </div>
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((id) => (
@@ -101,7 +102,7 @@ export function Orders() {
                       {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
                     </div>
                     {row.reason ? (
-                      <div className={cn("mt-1 text-[11px]", row.status === "REJECTED" ? "text-down" : "text-slate-400")}>
+                      <div className={cn("mt-1 text-[11px]", row.status === "REJECTED" || row.status === "FAILED" ? "text-down" : "text-slate-400")}>
                         {row.reason}
                       </div>
                     ) : null}
@@ -162,7 +163,7 @@ export function Orders() {
                         <td className="px-4 py-3">
                           <StatusBadge status={row.status} />
                           {row.reason ? (
-                            <div className={cn("mt-1 text-[10px]", row.status === "REJECTED" ? "text-down" : "text-slate-400")}>
+                            <div className={cn("mt-1 text-[10px]", row.status === "REJECTED" || row.status === "FAILED" ? "text-down" : "text-slate-400")}>
                               {row.reason}
                             </div>
                           ) : null}

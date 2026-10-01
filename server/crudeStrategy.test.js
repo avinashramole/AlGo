@@ -82,6 +82,34 @@ test("option-chain BUY goes to Dhan when LIVE even if Paper is selected", () => 
   );
 });
 
+test("nifty first candle ATM+2 and ATM-2 resolve to 22800 and 22600, not the ATM strike", () => {
+  const expiry = "2026-10-06";
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry,
+    expiries: [expiry],
+    spot: 22720,
+    source: "dhan",
+    rows: [
+      { strike: 22600, atm: false, callLtp: 180, putLtp: 40, callId: "ce-22600", putId: "pe-22600" },
+      { strike: 22700, atm: true, callLtp: 110, putLtp: 95, callId: "ce-22700", putId: "pe-22700" },
+      { strike: 22800, atm: false, callLtp: 48, putLtp: 170, callId: "ce-22800", putId: "pe-22800" },
+    ],
+  });
+  const plus = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle", strikeOffset: 2 });
+  const plusTrade = resolveAlgoTrade(plus);
+  assert.equal(plusTrade.strike, 22800);
+  assert.equal(plusTrade.securityId, "ce-22800");
+  assert.match(String(plusTrade.symbol), /22800/);
+  assert.doesNotMatch(String(plusTrade.symbol), /22700/);
+
+  const minus = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "nifty-first-candle", strikeOffset: -2 });
+  const minusTrade = resolveAlgoTrade(minus);
+  assert.equal(minusTrade.strike, 22600);
+  assert.equal(minusTrade.securityId, "ce-22600");
+  assert.match(String(minusTrade.symbol), /22600/);
+});
+
 test("resolveAlgoTrade uses the CRUDEOIL option chain and keeps it after switching to NIFTY", () => {
   applySyntheticOptionChain("CRUDEOIL");
   const algo = normalizeAlgo({
@@ -436,6 +464,104 @@ test("tickMarket still evaluates live algos from last Dhan quotes when the socke
     const after = snapshot().algos.find((row) => row.id === liveAlgo.id);
     assert.equal(typeof after?.lastSignal, "string");
     assert.notEqual(String(after.lastSignal || "").trim(), "");
+  }
+});
+
+test("rejected admin and user orders do not use the max, only an executed fill does", () => {
+  const created = createAlgo({
+    name: "NIFTY executed max",
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "PENDING", orderId: "pend-1" },
+      null,
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "REJECTED", orderId: "rej-admin" },
+      new Error("Admin broker rejected"),
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE", copyUserId: "u-copy" },
+      { status: "REJECTED", orderId: "rej-user" },
+      new Error("User broker rejected"),
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE", copyUserId: "u-copy" },
+      { status: "TRADED", orderId: "user-fill", filledQty: 65 },
+      null,
+    );
+    assert.equal(Number(getAlgo(created.id)?.vwapState?.sessionTrades || 0), 0);
+
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "TRADED", orderId: "fill-1", filledQty: 65 },
+      null,
+    );
+    noteLiveAlgoOrderResult(
+      { strategy: created.name, side: "BUY", option: "CE" },
+      { status: "FILLED", orderId: "fill-1", filledQty: 65 },
+      null,
+    );
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 1);
+
+    replaceDhanOrders([
+      {
+        id: "pend-book",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "PENDING",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 0,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 1);
+    replaceDhanOrders([
+      {
+        id: "pend-book",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "REJECTED",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 0,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 1);
+    replaceDhanOrders([
+      {
+        id: "late-fill",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "FILLED",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 65,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 2);
+    replaceDhanOrders([
+      {
+        id: "late-fill",
+        symbol: "NIFTY 22800 CE",
+        side: "BUY",
+        qty: 65,
+        status: "FILLED",
+        brokerId: "dhan",
+        strategy: created.name,
+        filledQty: 65,
+      },
+    ]);
+    assert.equal(getAlgo(created.id)?.vwapState?.sessionTrades, 2);
+  } finally {
+    deleteAlgo(created.id);
   }
 });
 

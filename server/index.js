@@ -11,13 +11,13 @@ import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSav
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
-import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, sessionUser } from "./auth.js";
+import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
-import { applyBrokerBooksToDesk, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
+import { adminAccountBalance, applyBrokerBooksToDesk, applyListedBalances, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
   assignStaticIp,
@@ -27,10 +27,11 @@ import {
   unassignStaticIp,
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
-import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
-import { attachMemberBrokerPnl, readMemberBrokerPnl } from "./memberBrokerPnl.js";
+import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, saveMemberStaticIp, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
+import { attachMemberBrokerBalance, attachMemberBrokerPnl, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
+import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
 import {
@@ -194,7 +195,7 @@ function safeSnapshot() {
 attachLoginRoutes(app);
 
 function readToken(req) {
-  return String(req.body?.token || req.query?.token || req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  return requestToken(req);
 }
 
 function deskGuard(req, res, next) {
@@ -350,6 +351,7 @@ app.get("/api/member/desk", async (req, res) => {
       },
     });
     await attachMemberBrokerPnl(desk, user.id);
+    await attachMemberBrokerBalance(desk, user.id);
     res.json(desk);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
@@ -409,6 +411,14 @@ app.post("/api/member/broker/upstox/token", async (req, res) => {
   }
 });
 
+app.post("/api/member/ip", (req, res) => {
+  try {
+    res.json(saveMemberStaticIp({ user: memberAuth(req), staticIp: req.body?.staticIp }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save IP" });
+  }
+});
+
 app.post("/api/member/broker/credentials", (req, res) => {
   try {
     res.json(
@@ -419,6 +429,9 @@ app.post("/api/member/broker/credentials", (req, res) => {
         apiKey: req.body?.apiKey ?? req.body?.brokerApiKey,
         accessToken: req.body?.accessToken ?? req.body?.brokerToken,
         sessionToken: req.body?.sessionToken ?? req.body?.brokerSessionToken,
+        mobile: req.body?.mobile ?? req.body?.brokerMobile,
+        mpin: req.body?.mpin ?? req.body?.brokerMpin,
+        totpSecret: req.body?.totpSecret ?? req.body?.brokerTotpSecret,
       }),
     );
   } catch (error) {
@@ -472,11 +485,22 @@ app.post("/api/users/:id", (req, res) => {
   }
 });
 
-app.get("/api/clients", (_req, res) => {
-  res.json({
-    ...clientStatus(listPublicUsers()),
-    strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
-  });
+app.get("/api/clients", async (_req, res) => {
+  try {
+    const book = publicBrokers();
+    const status = clientStatus(listPublicUsers());
+    const balances = await Promise.all(
+      (status.clients || []).map(async (client) => [client.id, await readMemberBrokerBalance(client.id)]),
+    );
+    res.json({
+      ...status,
+      clients: applyListedBalances(status.clients, Object.fromEntries(balances)),
+      ...adminAccountBalance(book.brokers, book.activeBrokerId),
+      strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || "Could not load clients" });
+  }
 });
 
 app.get("/api/clients/:id/detail", async (req, res) => {
@@ -495,6 +519,7 @@ app.get("/api/clients/:id/detail", async (req, res) => {
       },
     });
     await attachMemberBrokerPnl(detail, req.params.id);
+    await attachMemberBrokerBalance(detail, req.params.id);
     res.json(detail);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load client detail" });
@@ -629,10 +654,31 @@ app.get("/api/positions/desk", async (_req, res) => {
   try {
     await refreshAdminBrokerBook().catch(() => undefined);
     const snap = safeSnapshot() || {};
-    const desk = listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || [], getAdminBrokerBook());
+    const own = adminAccountBalance(snap.brokers, snap.activeBrokerId);
+    const desk = listPositionDesk(
+      listPublicUsers(),
+      snap.positions || [],
+      snap.closedTrades || [],
+      getAdminBrokerBook(),
+      own.adminBalance,
+    );
+    desk.adminBrokerId = own.adminBrokerId;
+    desk.adminBrokerName = own.adminBrokerName;
     const loaded = await Promise.all(
       (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerPnl(client.id)]),
     );
+    const balances = await Promise.all(
+      (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerBalance(client.id)]),
+    );
+    const byBalance = Object.fromEntries(balances);
+    for (const client of desk.clients || []) {
+      const hit = byBalance[client.id];
+      if (hit && Number.isFinite(Number(hit.balance))) {
+        client.balance = Number(hit.balance);
+        client.balanceSource = hit.source || "";
+      }
+    }
+    desk.userBalances = (desk.clients || []).map((row) => ({ id: row.id, name: row.name, balance: row.balance }));
     res.json(applyBrokerBooksToDesk(desk, Object.fromEntries(loaded)));
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not load positions" });
@@ -1272,6 +1318,7 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
+  startKotakAdminQuoteFeed();
   startUpstoxDailyTokenScheduler();
   startMemberDailyBookScheduler();
   if (skipLiveAlgos()) {

@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   connectLiveBroker,
   disconnectLiveBroker,
@@ -8,6 +11,10 @@ import {
   liveBrokerPublic,
 } from "./liveBrokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
+
+function defaultBrokerFile() {
+  return process.env.T2S_ACTIVE_BROKER_FILE || path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "active-broker.json");
+}
 
 export const MAIN_BROKER_ID = "dhan";
 
@@ -45,7 +52,40 @@ const connections = {
   },
 };
 
-let activeBrokerId = MAIN_BROKER_ID;
+function savedDefaultBrokerId() {
+  try {
+    const row = JSON.parse(fs.readFileSync(defaultBrokerFile(), "utf8"));
+    const id = String(row?.activeBrokerId || "").trim().toLowerCase();
+    if (catalog.some((item) => item.id === id) && id !== "paper") return id;
+  } catch {
+    /* the first boot keeps Dhan as the default */
+  }
+  return MAIN_BROKER_ID;
+}
+
+function persistDefaultBroker() {
+  try {
+    const file = defaultBrokerFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify({ activeBrokerId }, null, 2)}\n`);
+  } catch (error) {
+    console.log(`Could not save the default broker: ${error?.message || error}`);
+  }
+}
+
+let activeBrokerId = savedDefaultBrokerId();
+
+export function reloadDefaultBroker() {
+  activeBrokerId = savedDefaultBrokerId();
+  return activeBrokerId;
+}
+
+export function orderBrokerForDesk(requested) {
+  const asked = String(requested || "").trim().toLowerCase();
+  const selected = String(activeBrokerId || MAIN_BROKER_ID).trim().toLowerCase() || MAIN_BROKER_ID;
+  if (!asked || asked === "paper" || asked === MAIN_BROKER_ID) return selected === "paper" ? MAIN_BROKER_ID : selected;
+  return asked;
+}
 
 function hydrateSavedLiveBrokers() {
   for (const row of listLiveBrokerPublic()) {
@@ -158,7 +198,6 @@ export function markDhanLive({ clientId, funds, marginUsed, keyHint, displayName
     displayName: displayName || "Dhan",
     liveFeed: true,
   };
-  activeBrokerId = MAIN_BROKER_ID;
   return publicAccount(catalog.find((item) => item.id === MAIN_BROKER_ID));
 }
 
@@ -184,7 +223,10 @@ export function disconnectBroker(id) {
   if (id === "paper") return { error: "Paper trading stays connected" };
   disconnectLiveBroker(id);
   delete connections[id];
-  if (activeBrokerId === id) activeBrokerId = MAIN_BROKER_ID;
+  if (activeBrokerId === id) {
+    activeBrokerId = MAIN_BROKER_ID;
+    persistDefaultBroker();
+  }
   return { ok: true, ...listBrokers() };
 }
 
@@ -209,6 +251,7 @@ export function activateBroker(id) {
   if (!meta) return { error: "Unknown broker" };
   if (!connections[id]?.connected && !isLiveBrokerReady(id) && id !== "paper") return { error: "Connect this broker first" };
   activeBrokerId = id;
+  if (id !== "paper") persistDefaultBroker();
   return { ok: true, ...listBrokers() };
 }
 

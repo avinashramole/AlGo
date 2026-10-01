@@ -8,6 +8,7 @@ import {
   pickCrudeSearchHit,
   quotesFromAngelPayload,
   quotesFromFyersPayload,
+  quotesFromKotakPayload,
   quotesFromUpstoxPayload,
   quotesFromZerodhaPayload,
   resetUpstoxInstrumentCache,
@@ -99,6 +100,95 @@ test("Angel quote payload maps symbol tokens", () => {
   assert.equal(quotes[0].ltp, 25002);
   assert.equal(quotes[0].close, 24900);
   assert.equal(quotes[0].prevClose, 24900);
+});
+
+test("Kotak Neo quote payload maps index LTP and yesterday close", () => {
+  const quotes = quotesFromKotakPayload([
+    {
+      exchange_token: "Nifty 50",
+      display_symbol: "Nifty 50-IN",
+      exchange: "nse_cm",
+      ltp: "22421.9500",
+      change: "-198.5000",
+      ohlc: { close: "22620.4500" },
+    },
+    { exchange_token: "Nifty Bank", exchange: "nse_cm", ltp: "54450.7500", ohlc: { close: "54633.0500" } },
+    { exchange_token: "INDIA VIX", exchange: "nse_cm", ltp: "14.5200", ohlc: { close: "14.8000" } },
+  ]);
+  const nifty = quotes.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.ltp, 22421.95);
+  assert.equal(nifty.close, 22620.45);
+  assert.equal(nifty.kind, "index");
+  assert.equal(quotes.find((row) => row.symbol === "BANKNIFTY").ltp, 54450.75);
+  assert.equal(quotes.find((row) => row.symbol === "INDIA VIX").ltp, 14.52);
+});
+
+test("fetchMemberBrokerQuotes calls Kotak with the plain consumer key", async () => {
+  const seen = [];
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "kotak",
+    apiKey: "kotak-consumer-key",
+    accessToken: "kotak-consumer-key",
+    clientId: "YIX14",
+    fetchImpl: async (url, options) => {
+      seen.push({ url, auth: options.headers.Authorization });
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            { exchange_token: "Nifty 50", exchange: "nse_cm", ltp: "22421.9500", ohlc: { close: "22620.4500" } },
+          ]),
+      };
+    },
+  });
+  assert.match(seen[0].url, /mis\.kotaksecurities\.com\/script-details\/1\.0\/quotes\/neosymbol\//);
+  assert.match(seen[0].url, /Nifty%2050/);
+  assert.equal(seen[0].auth, "kotak-consumer-key");
+  assert.equal(quotes[0].ltp, 22421.95);
+  assert.equal(String(JSON.stringify(quotes)).includes("kotak-consumer-key"), false);
+  assert.equal(String(JSON.stringify(quotes)).includes("YIX14"), false);
+});
+
+test("Kotak crude is requested on MCX after the index quotes", async () => {
+  const seen = [];
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "kotak",
+    apiKey: "member-consumer-key",
+    accessToken: "trade-token-1452",
+    clientId: "YT2Vm",
+    fetchImpl: async (url) => {
+      const raw = decodeURIComponent(String(url));
+      seen.push(raw);
+      if (raw.includes("mcx_fo|CRUDEOIL/")) {
+        return { ok: false, status: 400, text: async () => JSON.stringify({ message: "invalid symbol" }) };
+      }
+      if (raw.includes("mcx_fo|CRUDEOIL")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              { exchange_token: "CRUDEOILM26OCTFUT", trading_symbol: "CRUDEOILM26OCTFUT", ltp: "5000" },
+              { exchange_token: "CRUDEOIL26OCTFUT", trading_symbol: "CRUDEOIL26OCTFUT", exchange: "mcx_fo", ltp: "6124.5", ohlc: { close: "6100" } },
+            ]),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ exchange_token: "Nifty 50", exchange: "nse_cm", ltp: "22421.95", ohlc: { close: "22620.45" } }]),
+      };
+    },
+  });
+  assert.match(seen[0], /nse_cm\|Nifty 50/);
+  assert.ok(seen.some((url) => url.includes("mcx_fo|CRUDEOIL")));
+  assert.equal(quotes.find((row) => row.symbol === "NIFTY 50").ltp, 22421.95);
+  const crude = quotes.find((row) => row.symbol === "CRUDEOIL");
+  assert.equal(crude.ltp, 6124.5);
+  assert.equal(crude.kind, "future");
+  assert.equal(JSON.stringify(quotes).includes("YT2Vm"), false);
+  assert.equal(JSON.stringify(quotes).includes("trade-token-1452"), false);
 });
 
 test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async () => {

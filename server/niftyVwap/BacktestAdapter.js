@@ -145,7 +145,7 @@ export function runNiftyVwapBacktest(algo, candles = []) {
       const bar = session[i];
       futAll.push(bar);
       const spot = Number(bar.close);
-      const strike = OptionStrikeSelector.atmStrike(spot, 50);
+      const strike = OptionStrikeSelector.strikeForOffset(spot, 50, cfg.strikeOffset);
       const expiry = sessionKeyIST(bar.time);
       const ceBar = optionBarAt(bar, "CE", { symbol: cfg.symbol, strike });
       const peBar = optionBarAt(bar, "PE", { symbol: cfg.symbol, strike });

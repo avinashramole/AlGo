@@ -72,6 +72,63 @@ test("each order keeps the strategy that placed it", () => {
   );
 });
 
+test("a resent SELL of the same contract shows the BUY strategy", () => {
+  const name = resolveOrderStrategy(
+    {
+      id: "sell-22400",
+      symbol: "NIFTY-Oct2026-22400-PE",
+      side: "SELL",
+      status: "FILLED",
+      strategy: "",
+      correlationId: "t2s1770000099",
+    },
+    {
+      previous: [
+        {
+          id: "buy-22400",
+          symbol: "NIFTY-Oct2026-22400-PE",
+          side: "BUY",
+          strategy: "NIFTY 5m first candle",
+        },
+      ],
+    },
+  );
+  assert.equal(name, "NIFTY 5m first candle");
+});
+
+test("a SELL inherits the strategy when the symbols differ but the contract is the same", () => {
+  const name = resolveOrderStrategy(
+    { id: "sell-2", symbol: "NIFTY-Oct2026-22400-PE", side: "SELL", strategy: "" },
+    {
+      previous: [{ id: "buy-2", symbol: "NIFTY 22400 PE", side: "BUY", strategy: "NIFTY 5m first candle" }],
+    },
+  );
+  assert.equal(name, "NIFTY 5m first candle");
+});
+
+test("a SELL stays blank when two strategies bought that contract", () => {
+  const name = resolveOrderStrategy(
+    { id: "sell-3", symbol: "NIFTY-Oct2026-22400-PE", side: "SELL", strategy: "" },
+    {
+      previous: [
+        { id: "buy-a", symbol: "NIFTY-Oct2026-22400-PE", side: "BUY", strategy: "NIFTY 5m first candle" },
+        { id: "buy-b", symbol: "NIFTY 22400 PE", side: "BUY", strategy: "NIFTY 15m VWAP hedge" },
+      ],
+    },
+  );
+  assert.equal(name, "");
+});
+
+test("a new BUY does not inherit another order's strategy", () => {
+  const name = resolveOrderStrategy(
+    { id: "buy-new", symbol: "NIFTY-Oct2026-22400-PE", side: "BUY", strategy: "", correlationId: "" },
+    {
+      previous: [{ id: "buy-old", symbol: "NIFTY-Oct2026-22400-PE", side: "BUY", strategy: "NIFTY 5m first candle" }],
+    },
+  );
+  assert.equal(name, "");
+});
+
 test("does not copy one strategy name onto every NIFTY order", () => {
   const name = resolveOrderStrategy(
     { id: "new", symbol: "NIFTY 24500 CE", strategy: "", correlationId: "" },

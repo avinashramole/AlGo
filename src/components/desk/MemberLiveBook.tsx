@@ -27,7 +27,9 @@ export function MemberLiveBook({
       status === "OPEN" ||
       status === "REJECTED" ||
       status === "FAILED" ||
-      status === "CANCELLED";
+      status === "CANCELLED" ||
+      status === "FILLED" ||
+      status === "TRADED";
     if (!show) return false;
     seen.add(row.id);
     return true;
@@ -61,7 +63,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order book</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Status is the broker order book. A rejected order stays here with the broker reason. The book and open positions clear at 8:00 AM IST.
+          Status is the broker order book. A fill stays here as FILLED, a rejection as REJECTED, and a failure as FAILED. The book and open positions clear at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -84,7 +86,16 @@ export function MemberLiveBook({
                 </td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
-                <td className={cn("px-4 py-3 text-xs font-bold uppercase", String(row.status || "").toUpperCase() === "REJECTED" ? "text-down" : "")}>
+                <td
+                  className={cn(
+                    "px-4 py-3 text-xs font-bold uppercase",
+                    /^(REJECTED|FAILED)$/i.test(String(row.status || ""))
+                      ? "text-down"
+                      : /^(FILLED|TRADED)$/i.test(String(row.status || ""))
+                        ? "text-up"
+                        : "",
+                  )}
+                >
                   {row.status}
                   {row.reason ? <div className="mt-1 font-medium normal-case text-down">{row.reason}</div> : null}
                 </td>

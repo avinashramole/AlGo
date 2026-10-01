@@ -127,6 +127,8 @@ export type Snapshot = {
     targetPct?: number;
     initialSlPct?: number;
     trailingActivationPct?: number;
+    trailingEveryPct?: number;
+    trailingShiftPct?: number;
     trailingStepPct?: number;
     vwapExitCandles?: number;
     indicator?: string;

@@ -1,6 +1,6 @@
-import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
+import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, orderBrokerForDesk, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
-import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
+import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, withAdminBrokerPnl } from "./memberBrokerPnl.js";
@@ -27,7 +27,7 @@ import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp 
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { listPublicUsers } from "./auth.js";
-import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore } from "./strategies.js";
+import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
@@ -41,10 +41,12 @@ import {
   NiftyVwapStrategy,
   noteBrokerRejection,
   noteFeedReconnect,
+  OptionStrikeSelector,
   optionEngineConfig,
   parseIstHm,
   PaperTradingAdapter,
   PositionManager,
+  resetSession,
   runtimeState,
   runNiftyVwapBacktest,
   VwapSignalEngine,
@@ -503,6 +505,47 @@ function orderBrokerId(row) {
   return String(row?.brokerId || "dhan").trim().toLowerCase() || "dhan";
 }
 
+function orderIsWorking(row) {
+  const status = orderStatusText(row);
+  if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
+  const qty = Number(row?.qty) || 0;
+  const filled = Number(row?.filledQty) || 0;
+  if (qty > 0 && filled >= qty) return false;
+  return true;
+}
+
+function strategyBuyUnresolved(strategyName) {
+  const name = realStrategyName(strategyName) || String(strategyName || "");
+  if (!name) return false;
+  const algo = (state.algos || []).find((item) => item.name === name);
+  const phase = String(algo?.vwapState?.buyPhase || "");
+  if (phase === "entry" || phase === "open") return true;
+  if (
+    pendingLiveAlgoOrders.some(
+      (row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === name && liveOrderSide(row) === "BUY",
+    )
+  ) {
+    return true;
+  }
+  if (
+    (state.orders || []).some(
+      (row) =>
+        !row.copyUserId &&
+        (realStrategyName(row.strategy) || row.strategy) === name &&
+        liveOrderSide(row) === "BUY" &&
+        orderIsWorking(row),
+    )
+  ) {
+    return true;
+  }
+  return (state.positions || []).some(
+    (row) =>
+      (realStrategyName(row.strategy) || row.strategy) === name &&
+      Number(row.qty) > 0 &&
+      String(row.type || "BUY").toUpperCase() !== "CLOSED",
+  );
+}
+
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
@@ -523,7 +566,8 @@ function enqueueLiveAlgoOrder(payload) {
     if (orderBrokerId(row) !== brokerId) return false;
     if (!strategy || row.strategy !== strategy) return false;
     if (liveOrderSide(row) !== side) return false;
-    return String(row.role || "") === role;
+    if (String(row.role || "") !== role) return false;
+    return sameLiveContract(payload, row);
   });
   if (sameStrategyRole) {
     return { ok: true, queued: false, status: "PENDING", duplicate: true };
@@ -537,6 +581,9 @@ function enqueueLiveAlgoOrder(payload) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
+    if (!copyUserId && strategy && strategyBuyUnresolved(strategy)) {
+      return { ok: true, queued: false, status: "PENDING", duplicate: true };
+    }
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
     const openSameStrategy =
       !copyUserId &&
@@ -567,13 +614,15 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
     symbol: order.symbol || payload.symbol,
     price: order.price || payload.price,
   };
-  const copies = memberCopyPayloads(next, { mappingScope: "both", mappedClientIds: [] });
+  const algo = liveCopyAlgo(next);
+  const copies = memberCopyPayloads(next, algo);
   if (!copies.length) {
+    const mapped = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0;
     console.log(
-      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — Copy ON + saved token copies even if the user is logged off`,
+      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — ${mapped ? `${mapped} mapped client(s) on ${algo.name || next.strategy}, scope ${algo.mappingScope || "both"}` : "Copy ON + saved token copies even if the user is logged off"}`,
     );
   }
-  dispatchMemberCopies(next, { mappingScope: "both", mappedClientIds: [] });
+  dispatchMemberCopies(next, algo);
   if (order && typeof order === "object") order.copiedToMembers = true;
   return { queued: true, copies: copies.length };
 }
@@ -635,17 +684,20 @@ export function queueLiveAlgoOrder(payload) {
   const priced = sameBookOrder(payload);
   const securityId = contractSecurityId(priced);
   const stamped = securityId ? { ...priced, securityId } : priced;
+  const deskBroker = payload.copyUserId ? stamped.brokerId : orderBrokerForDesk(stamped.brokerId);
+  const lane = payload.copyUserId ? (payload.lane === "individual" ? "individual" : "copy") : "master";
+  const deskStamped = { ...stamped, brokerId: deskBroker, lane };
   const brokers = liveAutoTradeBrokers({
-    strategyName: stamped?.strategy,
-    algoBrokerId: stamped?.brokerId || "dhan",
+    strategyName: deskStamped?.strategy,
+    algoBrokerId: deskStamped?.brokerId || "dhan",
   });
-  const targets = brokers.length ? brokers : [orderBrokerId(stamped)];
+  const targets = brokers.length ? brokers : [orderBrokerId(deskStamped)];
   let last = { ok: true, queued: true, status: "PENDING" };
   for (const brokerId of targets) {
-    last = enqueueLiveAlgoOrder({ ...stamped, brokerId });
+    last = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
-  const algo = liveCopyAlgo(stamped);
-  for (const copy of memberCopyPayloads(stamped, algo || {})) {
+  const algo = liveCopyAlgo(deskStamped);
+  for (const copy of memberCopyPayloads(deskStamped, algo || {})) {
     last = enqueueLiveAlgoOrder(copy);
   }
   queueMicrotask(() => {
@@ -663,8 +715,10 @@ export function queueLivePositionExit(pos) {
   const strategy =
     resolveOrderStrategy(pos, {
       previous: state.orders || [],
+      orders: state.orders || [],
       algos: state.algos || [],
       positions: state.positions || [],
+      forPosition: true,
     }) || realStrategyName(pos.strategy);
   return queueLiveAlgoOrder({
     symbol: pos.symbol,
@@ -686,7 +740,7 @@ export function queueLivePositionExit(pos) {
 
 export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {
   const status = String(live?.status || "").toUpperCase();
-  const failed = Boolean(error) || status === "REJECTED" || status === "CANCELLED";
+  const failed = Boolean(error) || ["REJECTED", "CANCELLED", "FAILED", "EXPIRED"].includes(status);
   if (failed) {
     const text = String(error?.message || live?.reason || "Dhan did not accept the order")
       .replace(/\s+/g, " ")
@@ -697,6 +751,60 @@ export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {
   const opt = payload.option ? ` ${String(payload.option).toUpperCase()}` : "";
   const id = live?.orderId ? ` ${live.orderId}` : "";
   return { accepted: true, lastSignal: `${side}${opt} AT BROKER${id}` };
+}
+
+function orderStatusText(row) {
+  return String(row?.status || "").toUpperCase();
+}
+
+function orderWasRejected(row) {
+  return ["REJECTED", "CANCELLED", "FAILED", "EXPIRED"].includes(orderStatusText(row));
+}
+
+function orderWasExecuted(row, error) {
+  if (error || !row || row.copyUserId) return false;
+  if (orderWasRejected(row)) return false;
+  const status = orderStatusText(row);
+  if (status === "FILLED" || status === "TRADED" || status === "PARTIAL" || status === "PART_TRADED") return true;
+  return Number(row.filledQty || 0) > 0;
+}
+
+function firstCandleAlgoNamed(name) {
+  const clean = realStrategyName(name) || String(name || "");
+  if (!clean) return null;
+  return (
+    (state.algos || []).find((item) => item.name === clean && isFirstCandleAlgo(item)) || null
+  );
+}
+
+function rememberExecutedEntry(algo, orderId) {
+  if (!isFirstCandleAlgo(algo)) return;
+  const vs = runtimeState(algo);
+  if (!Array.isArray(vs.executedOrderIds)) vs.executedOrderIds = [];
+  const id = String(orderId || "").trim();
+  if (id && vs.executedOrderIds.includes(id)) return;
+  if (id) vs.executedOrderIds.push(id);
+  vs.sessionTrades = Number(vs.sessionTrades || 0) + 1;
+}
+
+function dropCountedEntry(algo, orderId) {
+  if (!isFirstCandleAlgo(algo)) return;
+  const vs = runtimeState(algo);
+  const id = String(orderId || "").trim();
+  if (!id || !Array.isArray(vs.executedOrderIds) || !vs.executedOrderIds.includes(id)) return;
+  vs.executedOrderIds = vs.executedOrderIds.filter((item) => item !== id);
+  vs.sessionTrades = Math.max(0, Number(vs.sessionTrades || 0) - 1);
+}
+
+function syncExecutedTradeCount(previousRow, nextRow) {
+  if (!nextRow || nextRow.copyUserId) return;
+  if (String(nextRow.side || "BUY").toUpperCase() === "SELL") return;
+  const algo = firstCandleAlgoNamed(nextRow.strategy);
+  if (!algo) return;
+  const wasExecuted = orderWasExecuted(previousRow);
+  const nowExecuted = orderWasExecuted(nextRow);
+  if (!wasExecuted && nowExecuted) rememberExecutedEntry(algo, nextRow.id);
+  if (wasExecuted && orderWasRejected(nextRow) && !(Number(nextRow.filledQty) > 0)) dropCountedEntry(algo, nextRow.id);
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
@@ -720,14 +828,16 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
     else noteBrokerRejection(algo);
     algo.lastSignal = next.lastSignal;
     if (!isNiftyVwapHedgeAlgo(algo) && !isCrudeFirstCandleAlgo(algo)) runtimeState(algo).lastEntryBarTime = 0;
+    if (isFirstCandleAlgo(algo) && payload.side !== "SELL") dropCountedEntry(algo, live?.orderId);
     return;
   }
   algo.lastSignal = next.lastSignal;
   if (isNiftyVwapHedgeAlgo(algo)) return;
   const vs = runtimeState(algo);
   vs.inFlight = false;
-  if (isFirstCandleAlgo(algo) && payload.side !== "SELL") {
-    vs.sessionTrades = Number(vs.sessionTrades || 0) + 1;
+  if (String(payload.side || "BUY").toUpperCase() !== "SELL" && vs.buyPhase !== "open") vs.buyPhase = "entry";
+  if (isFirstCandleAlgo(algo) && payload.side !== "SELL" && orderWasExecuted(live)) {
+    rememberExecutedEntry(algo, live?.orderId);
   }
 }
 
@@ -844,21 +954,80 @@ export function liveOptionSampleTime(now, barMinutes = 5, sessionOpen) {
   return open || 0;
 }
 
+function rowBookMs(row) {
+  const ms = Date.parse(String(row?.createdAt || row?.openedAt || row?.closedAt || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function dropPreviousIntradayBook(algo, today = VwapSignalEngine.sessionKeyIST(Date.now())) {
+  const strategyId = String(algo?.id || "").trim();
+  const strategyName = String(algo?.name || "").trim().toLowerCase();
+  const day = String(today || "").trim();
+  if ((!strategyId && !strategyName) || !day) return;
+  const keep = (row) => {
+    if (!rowBelongsToStrategy(row, strategyId, strategyName)) return true;
+    const ms = rowBookMs(row);
+    if (!ms) return true;
+    return VwapSignalEngine.sessionKeyIST(ms) >= day;
+  };
+  state.orders = (state.orders || []).filter(keep);
+  state.positions = (state.positions || []).filter(keep);
+  state.closedTrades = (state.closedTrades || []).filter(keep);
+  clearPreviousIntradayStrategyBook({ strategyId, strategyName: algo?.name, today: day });
+}
+
+function beginStrategyRecord(algo) {
+  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
+    const vs = runtimeState(algo);
+    PositionManager.clearOpen(vs);
+    vs.lastEntryBarTime = 0;
+    vs.lastEntryAt = 0;
+    vs.sentSignalBarTime = 0;
+    vs.processedFirstBarTime = 0;
+    vs.inFlight = false;
+    vs.exitQueued = false;
+  }
+  if (isNiftyVwapHedgeAlgo(algo)) {
+    const hs = hedgeState(algo);
+    hs.inFlight = false;
+    hs.pendingRole = "";
+  }
+}
+
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const now = Date.now();
+  const today = VwapSignalEngine.sessionKeyIST(now);
+  dropPreviousIntradayBook(algo, today);
   const crude = isCrudeFirstCandleAlgo(algo);
   const root = crude ? "CRUDEOIL" : "NIFTY";
   const session = crude ? mcxMarketSession() : isNiftyFirstCandleAlgo(algo) ? firstCandleWatchSession(algo) : nseMarketSession();
   const config = optionEngineConfig(algo);
   const vs = runtimeState(algo);
+  if (vs.sessionDate && vs.sessionDate !== today) {
+    resetSession(vs, today);
+    persistAlgos();
+  }
+  const barSession = isFirstCandleAlgo(algo) ? firstCandleBarSession(config, crude) : undefined;
+  const sampledTf = String(config.timeframe || "5m");
+  if (isFirstCandleAlgo(algo) && vs.sampledTimeframe && vs.sampledTimeframe !== sampledTf) {
+    vs.ceBars = [];
+    vs.peBars = [];
+    vs.processedFirstBarTime = 0;
+  }
+  if (isFirstCandleAlgo(algo)) vs.sampledTimeframe = sampledTf;
   const positions = crude ? positionsForStrategyName(algo, mode) : positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
   const showLivePreview = () => {
     if (!isFirstCandleAlgo(algo) || !feedLive) return;
-    const closed = signalBars(config.timeframe || "5m", Date.now());
+    const closed = signalBars(config.timeframe || "5m", Date.now(), barSession);
     const preview = closed[closed.length - 1] || null;
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
+    const und = getUnderlying(root);
+    const spotNow = Number(getChainSpot(root)) || 0;
+    const selected = OptionStrikeSelector.strikeForOffset(spotNow, und.step, config.strikeOffset);
+    const ceStrike = vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0 ? Number(vs.lockedStrike) : selected || Number(vs.ceStrike) || 0;
+    const peStrike = vs.lockedOption === "PE" && Number(vs.lockedStrike) > 0 ? Number(vs.lockedStrike) : selected || Number(vs.peStrike) || 0;
     stampLiveFuturePreview(
       algo,
       config.timeframe || "5m",
@@ -866,8 +1035,11 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       {
         ce: preview ? sameTime(vs.ceBars, preview.time) : null,
         pe: preview ? sameTime(vs.peBars, preview.time) : null,
+        ceStrike,
+        peStrike,
       },
       signalBars,
+      barSession,
     );
   };
   if (mode === "live" && !session.open && !open) return;
@@ -876,9 +1048,9 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const futuresBars = feedLive
     ? crude
-      ? crudeFutureSignalBars(config.timeframe || "5m", now)
+      ? crudeFutureSignalBars(config.timeframe || "5m", now, barSession)
       : isNiftyFirstCandleAlgo(algo)
-        ? niftyFutureSignalBars(config.timeframe || "5m", now)
+        ? niftyFutureSignalBars(config.timeframe || "5m", now, barSession)
         : getCandles(config.timeframe || "5m")
     : [];
   const lastBar = futuresBars[futuresBars.length - 1];
@@ -901,7 +1073,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const livePreview =
     isFirstCandleAlgo(algo) && feedLive
-      ? (crude ? crudeFuturePreviewBar : niftyFuturePreviewBar)(config.timeframe || "5m", now)
+      ? (crude ? crudeFuturePreviewBar : niftyFuturePreviewBar)(config.timeframe || "5m", now, barSession)
       : null;
   if (feedLive && !open && !futuresBars.length && !livePreview) {
     algo.lastSignal = crude ? "WAIT CRUDE FUT" : isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
@@ -909,9 +1081,9 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     return;
   }
   const spot = Number(getChainSpot(root)) || Number(lastBar?.close) || 0;
-  const atm = atmStrike(spot, und.step);
-  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : atm;
-  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : atm;
+  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;
@@ -930,7 +1102,12 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
-          queueLiveOrder: (payload) => queueLiveAlgoOrder({ ...payload, brokerId: algo.brokerId || "dhan" }),
+          queueLiveOrder: (payload) =>
+            queueLiveAlgoOrder({
+              ...payload,
+              strategy: realStrategyName(payload.strategy) || algo.name,
+              brokerId: algo.brokerId || "dhan",
+            }),
           squareOff,
         })
       : PaperTradingAdapter({ placeOrder, squareOff });
@@ -954,6 +1131,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     ceSecurityId,
     peSecurityId,
     positions,
+    orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,
   });
   showLivePreview();
@@ -1022,6 +1200,7 @@ function hedgeAdapter(mode, algo) {
 
 function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
   const now = Date.now();
+  dropPreviousIntradayBook(algo, VwapSignalEngine.sessionKeyIST(now));
   const session = nseMarketSession();
   const config = niftyVwapHedgeConfig(algo);
   const positions = positionsForHedge(algo, mode);
@@ -1142,7 +1321,8 @@ function resolveCrudeFirstCandleTrade(algo) {
   const pack = chainForSymbol(symbol);
   const vs = algo.vwapState || {};
   const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
-  const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
+  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, algo.strikeOffset);
+  const strike = Number(vs.lockedStrike) || selected;
   const option = vs.lockedOption === "PE" ? "PE" : vs.lockedOption === "CE" ? "CE" : "";
   const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
@@ -1151,7 +1331,7 @@ function resolveCrudeFirstCandleTrade(algo) {
   const liveChain = pack?.meta?.source === "dhan";
   const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
   const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
-  const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ATM`;
+  const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"} ${strikeOffsetLabel(algo.strikeOffset)}`;
   let hint = "";
   if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
   else if (!row) hint = `No ${strike} ATM on the ${symbol} tape yet`;
@@ -1182,7 +1362,9 @@ export function resolveAlgoTrade(algo) {
     const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
     const vs = algo.vwapState || {};
     const hs = algo.hedgeState || {};
-    const strike = Number(vs.lockedStrike) || atmStrike(spot, und.step);
+    const offset = isNiftyFirstCandleAlgo(algo) ? algo.strikeOffset : 0;
+    const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, offset);
+    const strike = Number(vs.lockedStrike) || selected;
     const option =
       vs.lockedOption === "PE" || hs.primarySide === "PE"
         ? "PE"
@@ -1202,7 +1384,7 @@ export function resolveAlgoTrade(algo) {
     const liveChain = pack?.meta?.source === "dhan";
     const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
     const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
-    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ATM`;
+    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ${strikeOffsetLabel(offset)}`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
     else if (
@@ -1252,7 +1434,7 @@ export function resolveAlgoTrade(algo) {
     };
   }
   const option = algo.optionType === "PE" ? "PE" : "CE";
-  const offset = Math.max(-2, Math.min(2, Math.round(Number(algo.strikeOffset) || 0)));
+  const offset = Math.max(-5, Math.min(5, Math.round(Number(algo.strikeOffset) || 0)));
   const und = getUnderlying(symbol);
   const pack = chainForSymbol(symbol);
   const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
@@ -1354,6 +1536,10 @@ function sanePrevClose(ltp, prev, { loose = false } = {}) {
 
 export function setDhanFeed(patch) {
   state.dhanFeed = { ...state.dhanFeed, ...patch };
+}
+
+export function adminQuoteFeed() {
+  return { live: Boolean(state.dhanFeed.live), source: String(state.dhanFeed.source || "") };
 }
 
 const LAST_QUOTES_FILE = process.env.T2S_QUOTE_CACHE || path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "last-quotes.json");
@@ -1856,11 +2042,8 @@ export function armNiftyFirstCandleDailyLive(now = new Date()) {
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = "WAIT";
-    if (isNiftyOptionEngineAlgo(algo)) {
-      const vs = runtimeState(algo);
-      vs.inFlight = false;
-      vs.exitQueued = false;
-    }
+    dropPreviousIntradayBook(algo);
+    beginStrategyRecord(algo);
   }
   persistAlgos();
   state.notifications.unshift(`NIFTY 5m first candle · daily LIVE 09:00 IST · ${result.armedIds.join(",")}`);
@@ -1904,20 +2087,12 @@ export function toggleAlgo(id, patch = {}) {
   if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   if (starting) {
     resetStrategyOrders(algo);
+    dropPreviousIntradayBook(algo);
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = isNiftyTestAlgo(algo) ? "NO SIGNAL" : "WAIT";
-    if (isNiftyOptionEngineAlgo(algo)) {
-      const vs = runtimeState(algo);
-      vs.inFlight = false;
-      vs.exitQueued = false;
-    }
-    if (isNiftyVwapHedgeAlgo(algo)) {
-      const hs = hedgeState(algo);
-      hs.inFlight = false;
-      hs.pendingRole = "";
-    }
+    beginStrategyRecord(algo);
   }
   if (algo.runMode === "paper") {
     algo.brokerId = "paper";
@@ -2243,6 +2418,10 @@ function runPaperAlgos() {
       continue;
     }
     const side = wantBuy ? "BUY" : "SELL";
+    if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
+      algo.lastSignal = "WAIT ORDER";
+      continue;
+    }
     placeOrder({
       ...algoOrderFields(algo, side, trade),
       brokerId: "paper",
@@ -2282,6 +2461,10 @@ function runLiveAlgos() {
         (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
       );
       if (algo.lastLiveSide === side && openLive) continue;
+      if (side === "BUY" && (openLive || strategyBuyUnresolved(algo.name))) {
+        algo.lastSignal = "WAIT ORDER";
+        continue;
+      }
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || trade.kind !== "future" || !(trade.ltp > 0)) continue;
       queueLiveAlgoOrder({
@@ -2305,6 +2488,10 @@ function runLiveAlgos() {
       (row) => !isPaperRow(row) && realStrategyName(row.strategy) === algo.name && Number(row.qty) > 0,
     );
     if (openLive) continue;
+    if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
+      algo.lastSignal = "WAIT ORDER";
+      continue;
+    }
     const trade = resolveAlgoTrade(algo);
     if (!trade) continue;
     if (trade.kind === "option" && !(trade.strike && trade.expiry && trade.ltp > 0)) {
@@ -2329,14 +2516,34 @@ function runLiveAlgos() {
   }
 }
 
-function mapLiveStatus(status) {
+function orderFeedStatus(status) {
   const raw = String(status || "").toUpperCase();
   if (raw === "TRADED") return "FILLED";
-  if (raw === "REJECTED" || raw === "CANCELLED") return raw;
-  if (raw === "EXPIRED") return "CANCELLED";
+  if (raw === "REJECT" || raw === "REJECTION" || raw === "REJECTED") return "REJECTED";
+  if (raw === "FAIL" || raw === "FAILURE" || raw === "FAILED") return "FAILED";
+  if (raw === "CANCELED" || raw === "CANCELLED" || raw === "EXPIRED") return "CANCELLED";
   if (raw === "PART_TRADED") return "PARTIAL";
-  if (raw === "PENDING" || raw === "TRANSIT") return "PENDING";
+  if (raw === "TRANSIT" || raw === "OPEN" || raw === "PENDING") return "PENDING";
   return raw || "PENDING";
+}
+
+function orderFeedDay(row) {
+  const ms = Date.parse(String(row?.createdAt || ""));
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  return VwapSignalEngine.sessionKeyIST(ms);
+}
+
+function keepOmittedDhanOrder(row, today) {
+  const status = orderFeedStatus(row?.status);
+  if (status !== "FILLED" && status !== "REJECTED" && status !== "FAILED" && status !== "CANCELLED" && status !== "PARTIAL") {
+    return false;
+  }
+  const day = orderFeedDay(row);
+  return !day || day >= today;
+}
+
+function mapLiveStatus(status) {
+  return orderFeedStatus(status);
 }
 
 function liveRejectReason(live, fallback) {
@@ -2522,7 +2729,7 @@ export function placeOrder(payload) {
       ) || stampedStrategy || realStrategyName(payload.strategy),
     correlationId,
     brokerId,
-    brokerName: live ? "Dhan" : demoDhan ? "Dhan (demo)" : account.name,
+    brokerName: live ? (brokerId === "dhan" ? "Dhan" : account.name) : demoDhan ? "Dhan (demo)" : account.name,
     live: Boolean(live),
     sim: !live && !isPaper,
     paper: isPaper,
@@ -2563,7 +2770,7 @@ export function placeOrder(payload) {
   const strategyNote = order.strategy ? ` · ${order.strategy}` : "";
   state.notifications.unshift(
     live
-      ? `Dhan ${order.status}: ${order.side} ${order.symbol}${strategyNote}`
+      ? `${brokerId === "dhan" ? "Dhan" : account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`
       : demoDhan
         ? `Desk demo ${order.status}: ${order.side} ${order.symbol}${strategyNote} (not sent to Dhan)`
         : `${account.name} ${order.status}: ${order.side} ${order.symbol}${strategyNote}`,
@@ -2682,8 +2889,10 @@ export function squareOff(id) {
     strategy:
       resolveOrderStrategy(pos, {
         previous: state.orders || [],
+        orders: state.orders || [],
         algos: state.algos || [],
         positions: state.positions || [],
+        forPosition: true,
       }) || realStrategyName(pos.strategy),
     brokerId: account.id,
     brokerName: account.name,
@@ -2718,23 +2927,64 @@ export function replaceDhanOrders(rows) {
   const incoming = Array.isArray(rows) ? rows : [];
   const previous = state.orders || [];
   const previousDhan = new Map(
-    previous.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]),
+    previous.filter((row) => row.brokerId === "dhan" && !row.copyUserId).map((row) => [String(row.id), row]),
   );
+  const incomingIds = new Set();
   const tagged = incoming.map((row) => {
-    const existing = previousDhan.get(String(row.id));
-    return {
+    const id = String(row.id);
+    incomingIds.add(id);
+    const existing = previousDhan.get(id);
+    const next = {
       ...row,
+      status: orderFeedStatus(row.status),
+      createdAt: existing?.createdAt || row.createdAt || new Date().toISOString(),
       price: mergeDhanOrderPrice(row, existing),
       filledQty: Number(row.filledQty || existing?.filledQty || 0),
+      reason: String(row.reason || existing?.reason || ""),
       strategy: resolveOrderStrategy(row, {
         previous,
+        orders: previous,
         algos: state.algos || [],
         positions: state.positions || [],
       }),
     };
+    syncExecutedTradeCount(existing, next);
+    return next;
   });
-  const others = previous.filter((row) => row.brokerId !== "dhan" || row.copyUserId);
-  state.orders = [...tagged, ...others];
+  for (const row of tagged) {
+    if (realStrategyName(row.strategy)) continue;
+    const strategy = resolveOrderStrategy(row, {
+      previous,
+      orders: tagged,
+      algos: state.algos || [],
+      positions: state.positions || [],
+    });
+    if (strategy) row.strategy = strategy;
+  }
+  const today = VwapSignalEngine.sessionKeyIST(Date.now());
+  const kept = [];
+  for (const row of previous) {
+    if (row.copyUserId || row.brokerId !== "dhan") {
+      kept.push(row);
+      continue;
+    }
+    if (incomingIds.has(String(row.id))) continue;
+    if (!keepOmittedDhanOrder(row, today)) continue;
+    const status = orderFeedStatus(row.status);
+    const normalized = status === row.status ? row : { ...row, status };
+    if (realStrategyName(normalized.strategy)) {
+      kept.push(normalized);
+      continue;
+    }
+    const strategy = resolveOrderStrategy(normalized, {
+      previous,
+      orders: [...tagged, ...kept],
+      algos: state.algos || [],
+      positions: state.positions || [],
+    });
+    kept.push(strategy ? { ...normalized, strategy } : normalized);
+  }
+  state.orders = [...tagged, ...kept];
 }
 
 export function refreshCopyOrdersFromBroker(userId, updates = []) {
@@ -2987,7 +3237,7 @@ function futureCandleSource() {
   return niftyFutureMinuteBars;
 }
 
-function aggregateFutureBars(source, minutes, now, includeForming) {
+function aggregateFutureBars(source, minutes, now, includeForming, session = {}) {
   const barMs = minutes * 60_000;
   if (barsMatchMinutes(source, minutes)) {
     return source
@@ -2996,9 +3246,19 @@ function aggregateFutureBars(source, minutes, now, includeForming) {
   }
   return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
     closeLabeled: false,
-    sessionOpenMinutes: 9 * 60 + 15,
+    sessionOpenMinutes: session.sessionOpenMinutes ?? 9 * 60 + 15,
+    sessionCloseMinutes: session.sessionCloseMinutes,
     includeForming,
   });
+}
+
+function firstCandleBarSession(config, crude) {
+  const open = parseIstHm(config?.firstBarStartIst, "09:00");
+  const [hour, minute] = open.split(":").map(Number);
+  return {
+    sessionOpenMinutes: hour * 60 + minute,
+    sessionCloseMinutes: crude ? 23 * 60 + 30 : 15 * 60 + 30,
+  };
 }
 
 const MCX_SESSION_OPEN = 9 * 60;
@@ -3066,7 +3326,7 @@ function crudeCandleSource() {
   return liveCandleCache.get("CRUDEOIL") || [];
 }
 
-function aggregateCrudeBars(source, minutes, now, includeForming) {
+function aggregateCrudeBars(source, minutes, now, includeForming, session = {}) {
   const barMs = minutes * 60_000;
   if (barsMatchMinutes(source, minutes)) {
     return source
@@ -3074,42 +3334,42 @@ function aggregateCrudeBars(source, minutes, now, includeForming) {
       .map((bar) => ({ ...bar }));
   }
   return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
-    sessionOpenMinutes: MCX_SESSION_OPEN,
-    sessionCloseMinutes: MCX_SESSION_CLOSE,
+    sessionOpenMinutes: session.sessionOpenMinutes ?? MCX_SESSION_OPEN,
+    sessionCloseMinutes: session.sessionCloseMinutes ?? MCX_SESSION_CLOSE,
     includeForming,
   });
 }
 
-export function crudeFutureSignalBars(timeframe = "5m", now = Date.now()) {
+export function crudeFutureSignalBars(timeframe = "5m", now = Date.now(), session) {
   const source = crudeCandleSource();
   if (!source.length) return [];
-  return aggregateCrudeBars(source, futureBarMinutes(timeframe), now, false);
+  return aggregateCrudeBars(source, futureBarMinutes(timeframe), now, false, session);
 }
 
-export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now()) {
+export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now(), session) {
   const source = crudeCandleSource();
   if (!source.length) return null;
   const minutes = futureBarMinutes(timeframe);
   const barMs = minutes * 60_000;
-  const rows = aggregateCrudeBars(source, minutes, now, true);
+  const rows = aggregateCrudeBars(source, minutes, now, true, session);
   const last = rows[rows.length - 1];
   if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
   if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
   return last;
 }
 
-export function niftyFutureSignalBars(timeframe = "5m", now = Date.now()) {
+export function niftyFutureSignalBars(timeframe = "5m", now = Date.now(), session) {
   const source = futureCandleSource();
   if (!source.length) return [];
-  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false);
+  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false, session);
 }
 
-export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now()) {
+export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), session) {
   const source = futureCandleSource();
   if (!source.length) return null;
   const minutes = futureBarMinutes(timeframe);
   const barMs = minutes * 60_000;
-  const rows = aggregateFutureBars(source, minutes, now, true);
+  const rows = aggregateFutureBars(source, minutes, now, true, session);
   const last = rows[rows.length - 1];
   if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
   if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
@@ -3128,6 +3388,23 @@ export function livePreviewCondition(bar, ce, pe) {
   return { nifty: "", ceColor, peColor, condition: "" };
 }
 
+function strikeToken(value) {
+  const n = Number(value);
+  return n > 0 ? String(n) : "";
+}
+
+function withTrackedStrike(label, ceStrike, peStrike) {
+  const ce = strikeToken(ceStrike);
+  const pe = strikeToken(peStrike);
+  let text = String(label || "");
+  if (ce) text = text.replace(/\bCE\b(?! \d)/, `CE ${ce}`);
+  if (pe) text = text.replace(/\bPE\b(?! \d)/, `PE ${pe}`);
+  if (/\b(?:CE|PE) \d/.test(text)) return text;
+  if (ce && pe && ce === pe) return text ? `${text} · STRIKE ${ce}` : `STRIKE ${ce}`;
+  const extra = [ce ? `CE ${ce}` : "", pe ? `PE ${pe}` : ""].filter(Boolean).join(" ");
+  return extra ? (text ? `${text} · ${extra}` : extra) : text;
+}
+
 export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "NIFTY FUT") {
   if (!bar || !(Number(bar.open) > 0) || !(Number(bar.close) > 0)) return "";
   const wall = VwapSignalEngine.istWallTime(bar.time);
@@ -3136,21 +3413,23 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "
   const pad = (value) => String(value).padStart(2, "0");
   const clock = `${pad(wall.hour)}:${pad(wall.minute)}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)} IST`;
   const rule = livePreviewCondition(bar, legs.ce, legs.pe);
+  const ceStrike = legs.ceStrike;
+  const peStrike = legs.peStrike;
   const parts = [
     rule.nifty ? `${root} ${rule.nifty.toUpperCase()}` : "",
-    rule.ceColor ? `CE ${rule.ceColor.toUpperCase()}` : "",
-    rule.peColor ? `PE ${rule.peColor.toUpperCase()}` : "",
+    rule.ceColor ? withTrackedStrike(`CE ${rule.ceColor.toUpperCase()}`, ceStrike, 0) : "",
+    rule.peColor ? withTrackedStrike(`PE ${rule.peColor.toUpperCase()}`, 0, peStrike) : "",
   ].filter(Boolean);
   const head = parts.length ? `${parts.join(" ")} ` : "";
-  const condition = rule.condition ? ` · ${rule.condition}` : "";
+  const condition = rule.condition ? ` · ${withTrackedStrike(rule.condition, ceStrike, peStrike)}` : "";
   return `LIVE ${head}O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}${condition}`;
 }
 
-function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = niftyFutureSignalBars) {
+function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = niftyFutureSignalBars, session) {
   if (!isFirstCandleAlgo(algo)) return;
   const root = isCrudeFirstCandleAlgo(algo) ? "CRUDE FUT" : "NIFTY FUT";
   const minutes = futureBarMinutes(timeframe);
-  const closed = signalBars(timeframe, now);
+  const closed = signalBars(timeframe, now, session);
   const preview = closed[closed.length - 1] || null;
   const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
   const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
