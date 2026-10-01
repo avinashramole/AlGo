@@ -1065,7 +1065,7 @@ test("Kotak admin order logs in and places on the session base URL", async () =>
     assert.equal(jData.tt, "B");
     const login = calls.find((row) => row.url.includes("tradeApiLogin"));
     assert.equal(login.auth, "kotak-consumer-key");
-    assert.equal(String(login.body).includes("9000000000"), true);
+    assert.equal(String(login.body).includes("+919000000000"), true);
     assert.equal(String(JSON.stringify(live)).includes("123456"), false);
     assert.equal(String(JSON.stringify(live)).includes("JBSWY3DPEHPK3PXP"), false);
   } finally {

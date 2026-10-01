@@ -910,6 +910,15 @@ function kotakEnv(name) {
   return String(process.env[name] || "").trim();
 }
 
+export function kotakMobileNumber(value) {
+  const raw = String(value || "").trim().replace(/[\s-]/g, "");
+  if (!raw) return "";
+  if (raw.startsWith("+")) return raw;
+  if (/^\d{10}$/.test(raw)) return `+91${raw}`;
+  if (/^91\d{10}$/.test(raw)) return `+${raw}`;
+  return raw;
+}
+
 function istClock(date) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Kolkata",
@@ -1048,7 +1057,7 @@ async function openKotakTradeSession(creds, fetchImpl) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({ mobileNumber: creds.mobile, ucc: creds.clientId, totp: totpCode(creds.totpSecret) }),
+    body: JSON.stringify({ mobileNumber: kotakMobileNumber(creds.mobile), ucc: creds.clientId, totp: totpCode(creds.totpSecret) }),
   });
   const view = login.data || login;
   const viewToken = String(view.token || "").trim();
