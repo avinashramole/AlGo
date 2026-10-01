@@ -9,6 +9,7 @@ import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./d
 import { LIVE_BROKER_CATALOG } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
+import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -813,6 +814,38 @@ function rowBelongsToStrategy(row, strategyId, strategyName) {
   if (strategyName && label === strategyName) return true;
   const text = String(row.text || "").toLowerCase();
   return Boolean(strategyName && text.includes(` · ${strategyName}`));
+}
+
+function rowBookMs(row) {
+  const ms = Date.parse(String(row?.createdAt || row?.openedAt || row?.closedAt || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** Drop one strategy's previous-day intraday rows. Today's open position stays. */
+export function clearPreviousIntradayStrategyBook({ strategyId, strategyName, today } = {}) {
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim().toLowerCase();
+  const day = String(today || "").trim();
+  if ((!id && !name) || !day) return 0;
+  let removed = 0;
+  for (const desk of Object.values(store)) {
+    if (!desk || typeof desk !== "object") continue;
+    for (const key of ["positions", "closedTrades", "orders", "orderHistory", "alerts"]) {
+      const rows = Array.isArray(desk[key]) ? desk[key] : [];
+      const next = rows.filter((row) => {
+        if (!rowBelongsToStrategy(row, id, name)) return true;
+        const ms = rowBookMs(row);
+        if (!ms) return true;
+        return sessionKeyIST(ms) >= day;
+      });
+      if (next.length !== rows.length) {
+        desk[key] = next;
+        removed += rows.length - next.length;
+      }
+    }
+  }
+  if (removed) persist();
+  return removed;
 }
 
 /** Clear one strategy's orders on every user desk. Positions, plans, and tokens stay. */

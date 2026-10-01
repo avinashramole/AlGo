@@ -1636,6 +1636,109 @@ test("only one buy is sent until that order is squared off", () => {
   assert.equal(places.length, 2);
 });
 
+test("a new session drops yesterday's buy lock and can send a new order", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "New session record" });
+  algo.vwapState = {
+    sessionDate: "2026-08-20",
+    buyPhase: "entry",
+    inFlight: true,
+    lastEntryAt: Date.parse("2026-08-20T04:00:00.000Z"),
+    lastEntryBarTime: Date.parse("2026-08-20T04:00:00.000Z"),
+    sessionTrades: 3,
+    fillPrice: 40,
+    lockedStrike: 22600,
+    lockedOption: "PE",
+  };
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [{ id: "old", strategy: algo.name, side: "BUY", status: "PENDING" }],
+    adapter: book.adapter,
+  });
+  assert.equal(algo.vwapState.sessionDate, "2026-08-21");
+  assert.notEqual(tick.reason, "buy-active");
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places.length, 1);
+  assert.equal(algo.vwapState.sessionTrades, 1);
+});
+
+test("an already-rolled session still releases yesterday's entry when nothing is open", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Rolled stale lock" });
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    buyPhase: "entry",
+    inFlight: false,
+    lastEntryAt: Date.parse("2026-08-20T04:00:00.000Z"),
+    lastEntryBarTime: Date.parse("2026-08-20T04:00:00.000Z"),
+    sessionTrades: 1,
+  };
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [],
+    adapter: book.adapter,
+  });
+  assert.notEqual(tick.reason, "buy-active");
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places.length, 1);
+  assert.equal(algo.vwapState.sessionTrades, 2);
+});
+
+test("same-day entry lock stays while the order book is still empty", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Same day lock" });
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    buyPhase: "entry",
+    inFlight: false,
+    lastEntryAt: T0_0900,
+    lastEntryBarTime: T0_0900,
+  };
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540), { time: T0_0900 + BAR, open: 24540, high: 24580, low: 24520, close: 24560, volume: 1000 }],
+    ceBars: [firstBar(100, 118), { time: T0_0900 + BAR, open: 118, high: 140, low: 110, close: 130, volume: 500 }],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 130,
+    peLtp: 96,
+    spot: 24560,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [],
+    adapter: { place: () => ({ queued: true, status: "PENDING" }), exit: () => ({}) },
+  });
+  assert.equal(tick.reason, "buy-active");
+  assert.equal(algo.lastSignal, "WAIT ORDER");
+  assert.equal(algo.vwapState.buyPhase, "entry");
+});
+
 test("a rejected buy is resolved and the next buy can be sent", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "Rejected buy can retry" });
   const places = [];

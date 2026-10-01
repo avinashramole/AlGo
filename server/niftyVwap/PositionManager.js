@@ -73,7 +73,7 @@ export function resetSession(state, sessionDate) {
   state.lastEntryAt = 0;
   state.sessionTrades = 0;
   state.executedOrderIds = [];
-  if (state.buyPhase !== "entry" && state.buyPhase !== "open") state.buyPhase = "";
+  state.buyPhase = "";
   state.sentSignalBarTime = 0;
   state.processedFirstBarTime = 0;
   state.ceBars = [];

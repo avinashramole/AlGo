@@ -368,10 +368,16 @@ export const NiftyVwapStrategy = {
           const status = String(row.status || "").toUpperCase();
           return (status === "REJECTED" || status === "CANCELLED" || status === "FAILED" || status === "EXPIRED") && !(Number(row.filledQty) > 0);
         });
-      if (rejected && !state.inFlight) {
+      const entryMs = Number(state.lastEntryAt) || 0;
+      const entryDay = entryMs > 0 ? sessionKeyIST(entryMs) : "";
+      const previousDay = !entryDay || entryDay < sessionKeyIST(now);
+      if ((rejected || previousDay) && !state.inFlight) {
         state.buyPhase = "";
         state.inFlight = false;
-        if (!state.fillPrice) PositionManager.clearOpen(state);
+        state.lastEntryBarTime = 0;
+        state.lastEntryAt = 0;
+        state.sentSignalBarTime = 0;
+        if (previousDay || !state.fillPrice) PositionManager.clearOpen(state);
       } else {
         algo.lastSignal = "WAIT ORDER";
         return { action: "skip", reason: "buy-active" };

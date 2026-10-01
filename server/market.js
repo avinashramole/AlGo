@@ -1,6 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
-import { clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
+import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, withAdminBrokerPnl } from "./memberBrokerPnl.js";
@@ -46,6 +46,7 @@ import {
   parseIstHm,
   PaperTradingAdapter,
   PositionManager,
+  resetSession,
   runtimeState,
   runNiftyVwapBacktest,
   VwapSignalEngine,
@@ -945,13 +946,59 @@ export function liveOptionSampleTime(now, barMinutes = 5, sessionOpen) {
   return open || 0;
 }
 
+function rowBookMs(row) {
+  const ms = Date.parse(String(row?.createdAt || row?.openedAt || row?.closedAt || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function dropPreviousIntradayBook(algo, today = VwapSignalEngine.sessionKeyIST(Date.now())) {
+  const strategyId = String(algo?.id || "").trim();
+  const strategyName = String(algo?.name || "").trim().toLowerCase();
+  const day = String(today || "").trim();
+  if ((!strategyId && !strategyName) || !day) return;
+  const keep = (row) => {
+    if (!rowBelongsToStrategy(row, strategyId, strategyName)) return true;
+    const ms = rowBookMs(row);
+    if (!ms) return true;
+    return VwapSignalEngine.sessionKeyIST(ms) >= day;
+  };
+  state.orders = (state.orders || []).filter(keep);
+  state.positions = (state.positions || []).filter(keep);
+  state.closedTrades = (state.closedTrades || []).filter(keep);
+  clearPreviousIntradayStrategyBook({ strategyId, strategyName: algo?.name, today: day });
+}
+
+function beginStrategyRecord(algo) {
+  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
+    const vs = runtimeState(algo);
+    PositionManager.clearOpen(vs);
+    vs.lastEntryBarTime = 0;
+    vs.lastEntryAt = 0;
+    vs.sentSignalBarTime = 0;
+    vs.processedFirstBarTime = 0;
+    vs.inFlight = false;
+    vs.exitQueued = false;
+  }
+  if (isNiftyVwapHedgeAlgo(algo)) {
+    const hs = hedgeState(algo);
+    hs.inFlight = false;
+    hs.pendingRole = "";
+  }
+}
+
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const now = Date.now();
+  const today = VwapSignalEngine.sessionKeyIST(now);
+  dropPreviousIntradayBook(algo, today);
   const crude = isCrudeFirstCandleAlgo(algo);
   const root = crude ? "CRUDEOIL" : "NIFTY";
   const session = crude ? mcxMarketSession() : isNiftyFirstCandleAlgo(algo) ? firstCandleWatchSession(algo) : nseMarketSession();
   const config = optionEngineConfig(algo);
   const vs = runtimeState(algo);
+  if (vs.sessionDate && vs.sessionDate !== today) {
+    resetSession(vs, today);
+    persistAlgos();
+  }
   const positions = crude ? positionsForStrategyName(algo, mode) : positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
@@ -1124,6 +1171,7 @@ function hedgeAdapter(mode, algo) {
 
 function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
   const now = Date.now();
+  dropPreviousIntradayBook(algo, VwapSignalEngine.sessionKeyIST(now));
   const session = nseMarketSession();
   const config = niftyVwapHedgeConfig(algo);
   const positions = positionsForHedge(algo, mode);
@@ -1961,11 +2009,8 @@ export function armNiftyFirstCandleDailyLive(now = new Date()) {
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = "WAIT";
-    if (isNiftyOptionEngineAlgo(algo)) {
-      const vs = runtimeState(algo);
-      vs.inFlight = false;
-      vs.exitQueued = false;
-    }
+    dropPreviousIntradayBook(algo);
+    beginStrategyRecord(algo);
   }
   persistAlgos();
   state.notifications.unshift(`NIFTY 5m first candle · daily LIVE 09:00 IST · ${result.armedIds.join(",")}`);
@@ -2009,20 +2054,12 @@ export function toggleAlgo(id, patch = {}) {
   if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   if (starting) {
     resetStrategyOrders(algo);
+    dropPreviousIntradayBook(algo);
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
     algo.lastSignal = isNiftyTestAlgo(algo) ? "NO SIGNAL" : "WAIT";
-    if (isNiftyOptionEngineAlgo(algo)) {
-      const vs = runtimeState(algo);
-      vs.inFlight = false;
-      vs.exitQueued = false;
-    }
-    if (isNiftyVwapHedgeAlgo(algo)) {
-      const hs = hedgeState(algo);
-      hs.inFlight = false;
-      hs.pendingRole = "";
-    }
+    beginStrategyRecord(algo);
   }
   if (algo.runMode === "paper") {
     algo.brokerId = "paper";
