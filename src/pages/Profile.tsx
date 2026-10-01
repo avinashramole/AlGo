@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { MemberAccountSetup } from "../components/desk/MemberAccountSetup";
+import { isGmailMember, MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { useAuth } from "../context/AuthContext";
 import { formatMobile } from "../lib/format";
 
@@ -36,7 +36,7 @@ export function Profile() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-3">
+    <div className="mx-auto max-w-3xl space-y-3">
       <h1 className="text-xl font-bold">Profile</h1>
       <section className="card p-6">
         <div className="mb-5 flex items-center gap-4">
@@ -56,35 +56,37 @@ export function Profile() {
           <Row label="Login IP" value={user?.loginIp || "Not captured yet"} />
         </dl>
       </section>
-      <MemberAccountSetup showProfile={false} />
-      <section className="card p-5">
-        <div className="mb-3 text-sm font-bold">Edit profile</div>
-        <form onSubmit={onSave}>
-          <label className="mb-3 block text-sm font-semibold">
-            Name
-            <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
-          <label className="mb-3 block text-sm font-semibold">
-            Email
-            <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
-          </label>
-          <label className="mb-3 block text-sm font-semibold">
-            Mobile no
-            <input
-              className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal"
-              value={mobile}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
-              placeholder="98xxxxxxxx"
-            />
-          </label>
-          {note ? <p className="mb-3 text-sm font-semibold text-slate-500">{note}</p> : null}
-          <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
-            {busy ? "Saving..." : "Save profile"}
-          </button>
-        </form>
-      </section>
+      <MemberAccountSetup />
+      {isGmailMember(user) ? null : (
+        <section className="card p-5">
+          <div className="mb-3 text-sm font-bold">Edit profile</div>
+          <form onSubmit={onSave}>
+            <label className="mb-3 block text-sm font-semibold">
+              Name
+              <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+            </label>
+            <label className="mb-3 block text-sm font-semibold">
+              Email
+              <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+            </label>
+            <label className="mb-3 block text-sm font-semibold">
+              Mobile no
+              <input
+                className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal"
+                value={mobile}
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="98xxxxxxxx"
+              />
+            </label>
+            {note ? <p className="mb-3 text-sm font-semibold text-slate-500">{note}</p> : null}
+            <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
+              {busy ? "Saving..." : "Save profile"}
+            </button>
+          </form>
+        </section>
+      )}
       <button type="button" onClick={logout} className="h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
         Log out
       </button>

@@ -3,7 +3,6 @@ import { Bell, Shield, UserRound, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getMemberDesk, getMemberQuotes, type MemberCopyAlert, type MemberDesk, type MemberIndexQuote } from "../api/client";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
-import { MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { useAuth } from "../context/AuthContext";
 import { cn, formatInr, formatIst } from "../lib/format";
@@ -43,8 +42,6 @@ export function UserHome() {
         <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
         <h1 className="mt-1 text-2xl font-extrabold">{user?.email || ""}</h1>
       </section>
-
-      <MemberAccountSetup />
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
@@ -87,7 +84,7 @@ export function UserHome() {
         <article className="card p-5">
           <UserRound size={18} className="text-brand-500" />
           <h2 className="mt-3 text-sm font-bold">Your profile</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Name, Gmail, and mobile for this account.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Name, Gmail, mobile, broker, and static IP.</p>
           <Link to="/profile" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
             Open profile
           </Link>
