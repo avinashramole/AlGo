@@ -29,6 +29,7 @@ const {
   safeFrontendOrigin,
   clientAddress,
   recordLoginIp,
+  requestToken,
   sessionUser,
   upsertGoogleUser,
   updateProfile,
@@ -441,6 +442,73 @@ test("a Gmail login stores the client IP on the profile", () => {
     clientAddress({ headers: { "x-forwarded-for": "203.0.113.10, 10.0.0.1" }, socket: { remoteAddress: "127.0.0.1" } }),
     "203.0.113.10",
   );
+});
+
+test("profile save still finds a sign-in written by the other process", () => {
+  const stamp = String(Date.now()).slice(-9);
+  const created = completeSignup({
+    name: "Gate Member",
+    email: `gate.member.${stamp}@gmail.com`,
+    mobile: `9${stamp}`,
+    password: "create123",
+  });
+  const users = JSON.parse(fs.readFileSync(usersFile, "utf8"));
+  users.push({
+    id: "u-other-proc",
+    name: "Other Proc",
+    email: `other.proc.${stamp}@gmail.com`,
+    mobile: `8${stamp}`,
+    desk: "Index Options",
+    role: "user",
+    authProvider: "google",
+  });
+  fs.writeFileSync(usersFile, `${JSON.stringify(users, null, 2)}\n`);
+  const sessions = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
+  sessions["t2s-other-proc"] = {
+    userId: "u-other-proc",
+    email: `other.proc.${stamp}@gmail.com`,
+    mobile: `8${stamp}`,
+    at: Date.now(),
+  };
+  fs.writeFileSync(sessionsFile, `${JSON.stringify(sessions, null, 2)}\n`);
+  completeSignup({
+    name: "Next Member",
+    email: `next.member.${stamp}@gmail.com`,
+    mobile: `7${stamp}`,
+    password: "create123",
+  });
+  assert.equal(sessionUser("t2s-other-proc").email, `other.proc.${stamp}@gmail.com`);
+  const saved = updateProfile("t2s-other-proc", {
+    name: "Other Saved",
+    email: `other.proc.${stamp}@gmail.com`,
+    mobile: `8${stamp}`,
+  });
+  assert.equal(saved.user.name, "Other Saved");
+  assert.equal(sessionUser(created.token).id, created.user.id);
+  assert.equal(
+    requestToken({ body: { token: "" }, headers: { cookie: "t2s-token=t2s-other-proc" } }),
+    "t2s-other-proc",
+  );
+  assert.equal(
+    requestToken({
+      body: { token: "t2s-not-a-session" },
+      headers: { authorization: "Bearer t2s-not-a-session", cookie: "t2s-token=t2s-other-proc" },
+    }),
+    "t2s-other-proc",
+  );
+});
+
+test("a broken accounts file is not replaced with the seed list", () => {
+  const before = fs.readFileSync(usersFile, "utf8");
+  fs.writeFileSync(usersFile, "{");
+  try {
+    const listed = listPublicUsers();
+    assert.ok(listed.some((row) => row.id === "admin"));
+    assert.equal(fs.readFileSync(usersFile, "utf8"), "{");
+  } finally {
+    fs.writeFileSync(usersFile, before);
+    listPublicUsers();
+  }
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {

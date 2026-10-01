@@ -1132,7 +1132,12 @@ export function listWalletTopups() {
 }
 
 export function getMe(token: string) {
-  return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
+  const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
+  return request<{ user: AuthUser }>(`/me${suffix}`);
+}
+
+export function logoutSession() {
+  return request<{ ok: boolean }>("/logout", { method: "POST" }).catch(() => ({ ok: false }));
 }
 
 export function updateProfile(token: string, payload: { name: string; email?: string; mobile?: string }) {
