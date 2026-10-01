@@ -17,7 +17,7 @@ import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmen
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
-import { applyBrokerBooksToDesk, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
+import { adminAccountBalance, applyBrokerBooksToDesk, clientStatus, createClient, deleteClient, getClientDetail, listPositionDesk, saveClient } from "./clients.js";
 import {
   addStaticIp,
   assignStaticIp,
@@ -28,7 +28,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, saveMemberStaticIp, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
-import { attachMemberBrokerPnl, readMemberBrokerPnl } from "./memberBrokerPnl.js";
+import { attachMemberBrokerBalance, attachMemberBrokerPnl, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
@@ -350,6 +350,7 @@ app.get("/api/member/desk", async (req, res) => {
       },
     });
     await attachMemberBrokerPnl(desk, user.id);
+    await attachMemberBrokerBalance(desk, user.id);
     res.json(desk);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
@@ -481,8 +482,10 @@ app.post("/api/users/:id", (req, res) => {
 });
 
 app.get("/api/clients", (_req, res) => {
+  const book = publicBrokers();
   res.json({
     ...clientStatus(listPublicUsers()),
+    ...adminAccountBalance(book.brokers, book.activeBrokerId),
     strategies: listAlgos().map((row) => ({ id: row.id, name: row.name })),
   });
 });
@@ -637,10 +640,31 @@ app.get("/api/positions/desk", async (_req, res) => {
   try {
     await refreshAdminBrokerBook().catch(() => undefined);
     const snap = safeSnapshot() || {};
-    const desk = listPositionDesk(listPublicUsers(), snap.positions || [], snap.closedTrades || [], getAdminBrokerBook());
+    const own = adminAccountBalance(snap.brokers, snap.activeBrokerId);
+    const desk = listPositionDesk(
+      listPublicUsers(),
+      snap.positions || [],
+      snap.closedTrades || [],
+      getAdminBrokerBook(),
+      own.adminBalance,
+    );
+    desk.adminBrokerId = own.adminBrokerId;
+    desk.adminBrokerName = own.adminBrokerName;
     const loaded = await Promise.all(
       (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerPnl(client.id)]),
     );
+    const balances = await Promise.all(
+      (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerBalance(client.id)]),
+    );
+    const byBalance = Object.fromEntries(balances);
+    for (const client of desk.clients || []) {
+      const hit = byBalance[client.id];
+      if (hit && Number.isFinite(Number(hit.balance))) {
+        client.balance = Number(hit.balance);
+        client.balanceSource = hit.source || "";
+      }
+    }
+    desk.userBalances = (desk.clients || []).map((row) => ({ id: row.id, name: row.name, balance: row.balance }));
     res.json(applyBrokerBooksToDesk(desk, Object.fromEntries(loaded)));
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not load positions" });

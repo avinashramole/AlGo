@@ -39,6 +39,8 @@ export function Users() {
   const [groupFor, setGroupFor] = useState<ClientRow | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [admins, setAdmins] = useState<AuthUser[]>([]);
+  const [adminBalance, setAdminBalance] = useState(0);
+  const [adminBrokerName, setAdminBrokerName] = useState("Admin");
 
   const load = useCallback(async () => {
     const hadRows = Boolean(peekClientList()?.clients.length);
@@ -52,6 +54,8 @@ export function Users() {
       setKnownIps(result.knownIps || []);
       setStrategies(result.strategies || []);
       setAdmins((users.users || []).filter((row) => row.role === "admin"));
+      setAdminBalance(Number(result.adminBalance) || 0);
+      setAdminBrokerName(result.adminBrokerName || "Admin");
       if (result.defaultUntil) setDefaultUntil(result.defaultUntil);
       setError("");
     } catch (err) {
@@ -149,7 +153,8 @@ export function Users() {
           </button>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Admin balance" value={`₹${formatNumber(adminBalance, 2)}`} hint={adminBrokerName} />
         <Stat label="Clients" value={clients.length} />
         <Stat label="LIVE books" value={live} />
         <Stat label="Paper only" value={clients.length - live} />
@@ -206,7 +211,7 @@ export function Users() {
               <th className="px-4 py-3">Copy</th>
               <th className="px-4 py-3">Static IP</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Margin</th>
+              <th className="px-4 py-3">Balance</th>
               <th className="px-4 py-3">Action</th>
             </tr>
           </thead>
@@ -438,7 +443,7 @@ function AdminMobileRow({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
     <section className="card px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
@@ -446,6 +451,7 @@ function Stat({ label, value }: { label: string; value: number }) {
         <UsersIcon size={18} className="text-brand-500" />
         {value}
       </div>
+      {hint ? <div className="mt-1 text-[11px] text-slate-400">{hint}</div> : null}
     </section>
   );
 }

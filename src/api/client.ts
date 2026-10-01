@@ -672,6 +672,9 @@ export type ClientsList = {
   strategies: Array<{ id: string; name: string }>;
   live: number;
   paper: number;
+  adminBalance?: number;
+  adminBrokerId?: string;
+  adminBrokerName?: string;
 };
 
 export function listClients() {
@@ -948,6 +951,8 @@ export type MemberBrokerChoice = {
 
 export type MemberWallet = {
   balance: number;
+  brokerBalance?: number;
+  brokerBalanceSource?: string;
   mtm: number;
   equity: number;
   updatedAt?: string;
@@ -1249,11 +1254,17 @@ export type PositionLedger = {
   unrealized?: number;
   open: number;
   brokerMtm?: number | null;
+  balance?: number;
+  balanceSource?: string;
 };
 
 export type PositionsDeskSnapshot = {
   master: PositionLedger;
   clients: PositionLedger[];
+  adminBalance?: number;
+  adminBrokerId?: string;
+  adminBrokerName?: string;
+  userBalances?: Array<{ id: string; name: string; balance: number }>;
   masterMtm: number;
   clientMtm: number;
   totalMtm: number;

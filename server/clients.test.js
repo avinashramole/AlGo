@@ -41,7 +41,7 @@ fs.writeFileSync(
 
 const { listPublicUsers, loginWithPassword } = await import("./auth.js");
 const { saveClientSettings, installMemberBroker, getMemberDesk, listDeskRecords, peekBrokerAccount, peekClientSecrets, recordMemberCopyFill } = await import("./memberDesk.js");
-const { applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
+const { adminAccountBalance, applyBrokerBooksToDesk, asClosedLedgerPosition, asLedgerPosition, clientStatus, createClient, deleteClient, listClients, listPositionDesk, purgeOrphanMemberData, saveClient } = await import("./clients.js");
 const { enrollStrategy, listEnrollments, savePaymentSettings } = await import("./subscriptions.js");
 const { messagingHandleForUser, upsertMessagingContact } = await import("./messaging.js");
 const { listLiveCopyTargets, memberCopyPayloads } = await import("./liveCopy.js");
@@ -299,6 +299,27 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(crypto.segment, "crypto");
   assert.equal(crypto.sellQty, 1);
   assert.equal(crypto.netQty, -1);
+});
+
+test("admin balance stays separate from each user balance", () => {
+  const own = adminAccountBalance(
+    [
+      { id: "dhan", name: "Dhan", funds: 80000 },
+      { id: "paper", name: "Paper", funds: 1000000 },
+    ],
+    "dhan",
+  );
+  assert.equal(own.adminBalance, 80000);
+  assert.equal(own.adminBrokerName, "Dhan");
+  const desk = listPositionDesk(listPublicUsers(), [], [], null, own.adminBalance);
+  assert.equal(desk.adminBalance, 80000);
+  assert.equal(desk.master.balance, 80000);
+  const usersTotal = desk.userBalances.reduce((sum, row) => sum + Number(row.balance || 0), 0);
+  assert.equal(desk.adminBalance, 80000);
+  assert.equal(usersTotal === 80000 && desk.userBalances.length > 0, false);
+  for (const row of desk.userBalances) {
+    assert.equal(row.balance, desk.clients.find((client) => client.id === row.id).balance);
+  }
 });
 
 test("closed trades stay on the position desk with live P&L and MTM", () => {

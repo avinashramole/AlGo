@@ -8,7 +8,7 @@ import { cn, formatNumber } from "../lib/format";
 type ModeFilter = "all" | "paper" | "real";
 type SegmentFilter = "all" | "indian" | "crypto";
 
-const emptyDesk: PositionsDeskSnapshot = {
+  const emptyDesk: PositionsDeskSnapshot = {
   master: {
     id: "master",
     name: "Master",
@@ -20,8 +20,12 @@ const emptyDesk: PositionsDeskSnapshot = {
     mtm: 0,
     realized: 0,
     open: 0,
+    balance: 0,
   },
   clients: [],
+  adminBalance: 0,
+  adminBrokerName: "Admin",
+  userBalances: [],
   masterMtm: 0,
   clientMtm: 0,
   totalMtm: 0,
@@ -237,6 +241,11 @@ export function PositionsDesk() {
 
   const masterBlock = ledgers.find((row) => row.ledger.kind === "master");
   const clientBlocks = ledgers.filter((row) => row.ledger.kind === "client");
+  const userBalanceRows = (desk.clients || []).map((row) => ({
+    id: row.id,
+    name: row.name || row.title,
+    balance: Number(row.balance) || 0,
+  }));
   const adminMtm = Number.isFinite(desk.master.brokerMtm) ? Number(desk.master.unrealized || 0) : masterBlock?.unrealized || 0;
   const adminPnl = Number.isFinite(desk.master.brokerMtm) ? Number(desk.master.realized || 0) : masterBlock?.realized || 0;
   const clientMtm = clientBlocks.reduce((sum, row) => sum + row.unrealized, 0);
@@ -307,6 +316,31 @@ export function PositionsDesk() {
       </div>
 
       <PortfolioSummary />
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <section className="card p-4">
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Admin balance</div>
+          <div className={cn("mt-2 text-2xl font-bold", moneyClass(Number(desk.adminBalance) || 0))}>
+            {rupee(Number(desk.adminBalance) || 0)}
+          </div>
+          <p className="mt-1 text-xs text-slate-400">{desk.adminBrokerName || "Admin"} account</p>
+        </section>
+        <section className="card p-4">
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">User balances</div>
+          {userBalanceRows.length ? (
+            <ul className="mt-2 max-h-40 space-y-1.5 overflow-auto">
+              {userBalanceRows.map((row) => (
+                <li key={row.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="truncate font-semibold">{row.name}</span>
+                  <span className={cn("font-bold", moneyClass(row.balance))}>{rupee(row.balance)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-slate-400">No user balances yet.</p>
+          )}
+        </section>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<TrendingUp size={18} />} label="Admin MTM" value={rupee(adminMtm)} tone={moneyClass(adminMtm)} />
@@ -398,6 +432,9 @@ function LedgerCard({
           <div>
             <div className="text-sm font-bold">{ledger.title}</div>
             <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{ledger.subtitle}</div>
+            <div className={cn("text-xs font-semibold", moneyClass(Number(ledger.balance) || 0))}>
+              Balance {rupee(Number(ledger.balance) || 0)}
+            </div>
           </div>
         </div>
         <div className="text-right">

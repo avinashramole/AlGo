@@ -45,7 +45,8 @@ export function UserHome() {
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
+        <Stat label="Your balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
         <Stat label="Open MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
         <Stat label="Realized P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
         <Stat label="Net P&L" value={formatInr(report?.netPnl || 0)} signed={report?.netPnl} />
@@ -115,6 +116,12 @@ function CopyAlerts({ alerts }: { alerts: MemberCopyAlert[] }) {
       ))}
     </ul>
   );
+}
+
+function memberBalance(desk: MemberDesk | null) {
+  const broker = Number(desk?.wallet.brokerBalance);
+  if (Number.isFinite(broker)) return broker;
+  return Number(desk?.wallet.balance) || 0;
 }
 
 function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {

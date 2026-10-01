@@ -422,7 +422,16 @@ export function applyBrokerBooksToDesk(desk, booksByUserId = {}) {
   };
 }
 
-export function listPositionDesk(users = [], masterPositions = [], masterClosed = [], brokerBook = null) {
+export function adminAccountBalance(brokers = [], activeBrokerId = "") {
+  const active = (brokers || []).find((row) => row.id === activeBrokerId) || null;
+  return {
+    adminBalance: round2(active?.funds || 0),
+    adminBrokerId: active?.id || String(activeBrokerId || ""),
+    adminBrokerName: active?.name || "Admin",
+  };
+}
+
+export function listPositionDesk(users = [], masterPositions = [], masterClosed = [], brokerBook = null, adminFunds = null) {
   const useBroker = brokerBook && Number.isFinite(Number(brokerBook.mtm));
   const localClosed = useBroker ? (masterClosed || []).filter(isPaperLedgerRow) : masterClosed;
   const masterBook = ledgerBook(masterPositions, localClosed);
@@ -438,6 +447,7 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
     masterBook.unrealized = round2(Number(brokerBook.unrealizedPnl || 0) + paperMtm);
     masterBook.brokerMtm = masterBook.mtm;
   }
+  const adminBalance = Number.isFinite(Number(adminFunds)) ? round2(adminFunds) : 0;
   const master = {
     id: "master",
     name: "Master",
@@ -446,6 +456,7 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
     subtitle: "PRIMARY MASTER ACCOUNT",
     tradeMode: masterBook.positions.some((row) => !row.paper) ? "real" : "paper",
     ...masterBook,
+    balance: adminBalance,
   };
   const clients = listClients(users).map((client) => {
     const book = peekClientBook(client.id);
@@ -457,11 +468,14 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
       subtitle: "CLIENT ACCOUNT",
       tradeMode: client.tradeMode,
       ...ledgerBook(book.positions, book.closedTrades),
+      balance: round2(client.margin || 0),
     };
   });
   return {
     master,
     clients,
+    adminBalance,
+    userBalances: clients.map((row) => ({ id: row.id, name: row.name, balance: row.balance })),
     masterMtm: master.mtm,
     clientMtm: round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),
     totalMtm: round2(master.mtm + clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0)),

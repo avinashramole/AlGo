@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanMasterBook, dhanPnlFromTrades, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -155,4 +155,15 @@ test("Upstox short-term positions use realised and unrealised", () => {
   assert.equal(desk.report.unrealizedPnl, 18.25);
   assert.equal(desk.report.netPnl, 326.25);
   assert.equal(desk.wallet.mtm, 18.25);
+});
+
+test("broker available balance is the user balance and leaves the wallet topup alone", () => {
+  assert.equal(dhanAvailableBalance({ availabelBalance: 15234.5, utilizedAmount: 900 }), 15234.5);
+  assert.equal(upstoxAvailableBalance({ data: { equity: { available_margin: 4200.25 }, commodity: { available_margin: 800 } } }), 4200.25);
+  const desk = localDesk();
+  desk.wallet.balance = 2500;
+  applyBrokerBalance(desk, { balance: 15234.5, source: "dhan" });
+  assert.equal(desk.wallet.balance, 2500);
+  assert.equal(desk.wallet.brokerBalance, 15234.5);
+  assert.equal(desk.wallet.brokerBalanceSource, "dhan");
 });

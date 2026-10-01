@@ -1,6 +1,8 @@
 const CACHE_MS = 9000;
 const cache = new Map();
 const inflight = new Map();
+const balanceCache = new Map();
+const balanceInflight = new Map();
 
 function round2(value) {
   return Number((Number(value) || 0).toFixed(2));
@@ -404,6 +406,98 @@ export async function readMemberBrokerPnl(userId) {
     });
   inflight.set(key, job);
   return job;
+}
+
+export function dhanAvailableBalance(funds) {
+  const n = firstFinite(funds, ["availabelBalance", "availableBalance", "availablBalance", "sodLimit"]);
+  return n == null ? null : round2(n);
+}
+
+export function upstoxAvailableBalance(body) {
+  const data = body?.data && typeof body.data === "object" ? body.data : body || {};
+  const equity = finite(data.equity?.available_margin);
+  const commodity = finite(data.commodity?.available_margin);
+  if (equity == null && commodity == null) return null;
+  if (equity != null && equity > 0) return round2(equity);
+  if (commodity != null) return round2(commodity);
+  return round2(equity || 0);
+}
+
+async function upstoxFunds(token) {
+  const { ipv4Request } = await import("./ipv4.js");
+  const res = await ipv4Request("https://api.upstox.com/v2/user/get-funds-and-margin", {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    timeoutMs: 8000,
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    const message = json?.errors?.[0]?.message || json?.message || `Upstox funds ${res.status}`;
+    throw new Error(message);
+  }
+  return json;
+}
+
+async function fetchBrokerBalance(userId) {
+  const creds = await memberBrokerCredentials(userId);
+  if (!creds) return null;
+  if (creds.brokerId === "dhan") {
+    const { fetchMemberDhanFunds } = await import("./dhan.js");
+    const available = dhanAvailableBalance(await fetchMemberDhanFunds(creds.token, creds.clientId));
+    return available == null ? null : { balance: available, source: "dhan" };
+  }
+  const available = upstoxAvailableBalance(await upstoxFunds(creds.token));
+  return available == null ? null : { balance: available, source: "upstox" };
+}
+
+export async function readMemberBrokerBalance(userId) {
+  const key = String(userId || "").trim();
+  if (!key) return null;
+  const hit = balanceCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+  if (balanceInflight.has(key)) return balanceInflight.get(key);
+  const job = fetchBrokerBalance(key)
+    .then((value) => {
+      balanceCache.set(key, { at: Date.now(), value: value || null });
+      return value || null;
+    })
+    .catch((error) => {
+      balanceCache.set(key, { at: Date.now(), value: null });
+      console.log(`member broker balance kept local ${key}: ${error?.message || error}`);
+      return null;
+    })
+    .finally(() => {
+      balanceInflight.delete(key);
+    });
+  balanceInflight.set(key, job);
+  return job;
+}
+
+export function applyBrokerBalance(desk, balance) {
+  if (!desk || !balance || !Number.isFinite(Number(balance.balance))) return desk;
+  const wallet = desk.wallet && typeof desk.wallet === "object" ? desk.wallet : {};
+  desk.wallet = {
+    ...wallet,
+    brokerBalance: round2(balance.balance),
+    brokerBalanceSource: String(balance.source || ""),
+  };
+  return desk;
+}
+
+export async function attachMemberBrokerBalance(desk, userId, load = readMemberBrokerBalance) {
+  if (!desk || !userId) return desk;
+  try {
+    const balance = await load(userId);
+    if (balance) applyBrokerBalance(desk, balance);
+  } catch (error) {
+    console.log(`member broker balance kept local ${userId}: ${error?.message || error}`);
+  }
+  return desk;
 }
 
 export async function attachMemberBrokerPnl(desk, userId, load = readMemberBrokerPnl) {

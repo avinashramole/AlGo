@@ -489,6 +489,10 @@ export async function fetchMemberDhanPositions(token, clientId) {
   return dhanGet("/positions", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
 
+export async function fetchMemberDhanFunds(token, clientId) {
+  return dhanGet("/fundlimit", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
+}
+
 export async function fetchMemberDhanOrders(token, clientId) {
   return dhanGet("/orders", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
