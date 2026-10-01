@@ -163,6 +163,7 @@ test("a new Kotak Neo user sees the desk live feed instead of a waiting board", 
   let fetches = 0;
   const mine = await memberQuotesForUser(member, {
     now: Date.now() + 30_000,
+    deskKotak: null,
     fetchQuotes: async () => {
       fetches += 1;
       return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 }];
@@ -183,6 +184,34 @@ test("a new Kotak Neo user sees the desk live feed instead of a waiting board", 
   assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
   assert.equal(String(JSON.stringify(mine)).includes("YIX14"), false);
   assert.equal(String(JSON.stringify(mine)).includes("kotak-desk-token"), false);
+});
+
+test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", async () => {
+  const member = { id: "u-shivam-live", name: "Shivam Fintech", email: "shivam.live@gmail.com", role: "user" };
+  saveClientSettings(member.id, { brokerId: "kotak", tradeMode: "paper" });
+  const seen = [];
+  const mine = await memberQuotesForUser(member, {
+    now: Date.now() + 60_000,
+    deskKotak: { clientId: "YIX14", apiKey: "kotak-consumer-key", accessToken: "kotak-consumer-key" },
+    fetchQuotes: async (creds) => {
+      seen.push(creds);
+      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22421.95, close: 22620.45 }];
+    },
+    deskQuotes: () => ({ indices: [] }),
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].apiKey, "kotak-consumer-key");
+  assert.equal(seen[0].accessToken, "kotak-consumer-key");
+  assert.equal(seen[0].clientId, "YIX14");
+  assert.equal(mine.brokerId, "kotak");
+  assert.equal(mine.brokerName, "KOTAK");
+  assert.equal(mine.live, true);
+  assert.equal(mine.source, "kotak");
+  assert.equal(mine.reason, "");
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 22421.95);
+  const body = JSON.stringify(mine);
+  assert.equal(body.includes("kotak-consumer-key"), false);
+  assert.equal(body.includes("YIX14"), false);
 });
 
 test("paper members stay on an empty board even if admin quotes exist", async () => {

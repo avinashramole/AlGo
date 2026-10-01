@@ -1,3 +1,4 @@
+import { liveBrokerSession } from "./liveBrokers.js";
 import { brokerNeedsApiKey, fetchMemberBrokerQuotes, supportedMemberQuoteBroker } from "./memberBrokerQuotes.js";
 import { memberIndexQuote } from "./market.js";
 import { peekClientSecrets } from "./memberDesk.js";
@@ -90,6 +91,41 @@ function emptyQuotes(brokerId, reason) {
   };
 }
 
+function kotakFeedCreds(secrets, deskKotak) {
+  const ownReady = Boolean(secrets.credentialsInstalled && secrets.brokerToken && secrets.accountId && secrets.brokerApiKey);
+  if (ownReady) {
+    return {
+      brokerId: "kotak",
+      accessToken: String(secrets.brokerToken).trim(),
+      clientId: String(secrets.accountId).trim(),
+      apiKey: String(secrets.brokerApiKey).trim(),
+      sessionToken: String(secrets.brokerSessionToken || "").trim(),
+    };
+  }
+  const envKey = String(process.env.T2S_KOTAK_CONSUMER_KEY || "").trim();
+  const envToken = String(process.env.T2S_KOTAK_ACCESS_TOKEN || envKey).trim();
+  if (envKey || envToken) {
+    return {
+      brokerId: "kotak",
+      accessToken: envToken || envKey,
+      clientId: String(process.env.T2S_KOTAK_CLIENT_ID || "").trim(),
+      apiKey: envKey || envToken,
+      sessionToken: "",
+    };
+  }
+  const session = deskKotak === null ? null : deskKotak || liveBrokerSession("kotak");
+  const apiKey = String(session?.apiKey || "").trim();
+  const accessToken = String(session?.accessToken || apiKey).trim();
+  if (!apiKey && !accessToken) return null;
+  return {
+    brokerId: "kotak",
+    accessToken,
+    clientId: String(session?.clientId || "").trim(),
+    apiKey: apiKey || accessToken,
+    sessionToken: String(session?.sessionToken || "").trim(),
+  };
+}
+
 async function deskLiveBoard(brokerId, now, deskQuotes) {
   const load = typeof deskQuotes === "function" ? deskQuotes : () => import("./market.js").then((mod) => mod.memberQuotes());
   const desk = (await load()) || {};
@@ -106,15 +142,50 @@ async function deskLiveBoard(brokerId, now, deskQuotes) {
   };
 }
 
-export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now = Date.now() } = {}) {
+async function kotakLiveBoard(user, secrets, { fetchQuotes, deskQuotes, deskKotak, now }) {
+  const creds = kotakFeedCreds(secrets, deskKotak);
+  if (!creds) return deskLiveBoard("kotak", now, deskQuotes);
+  const hit = cache.get(user.id);
+  if (hit && now - hit.at < CACHE_MS) return hit.payload;
+  const pending = inflight.get(user.id);
+  if (pending) return pending;
+  const job = (async () => {
+    let quotes = [];
+    try {
+      quotes = await (typeof fetchQuotes === "function" ? fetchQuotes(creds) : fetchMemberBrokerQuotes(creds));
+    } catch {
+      quotes = [];
+    }
+    if (!quotes.length) return deskLiveBoard("kotak", now, deskQuotes);
+    const payload = {
+      indices: cardsFromMemberQuotes(user.id, quotes),
+      source: "kotak",
+      brokerId: "kotak",
+      brokerName: brokerNameOf("kotak"),
+      live: true,
+      lastTickAt: now,
+      reason: "",
+    };
+    cache.set(user.id, { at: now, payload });
+    return payload;
+  })();
+  inflight.set(user.id, job);
+  try {
+    return await job;
+  } finally {
+    inflight.delete(user.id);
+  }
+}
+
+export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, deskKotak, now = Date.now() } = {}) {
   if (!user?.id) return emptyQuotes("paper", "Sign in first.");
   const secrets = peekClientSecrets(user.id);
   const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
   const token = String(secrets.brokerToken || "").trim();
   const accountId = String(secrets.accountId || "").trim();
   const apiKey = String(secrets.brokerApiKey || "").trim();
-  if (brokerId === "kotak" && !(secrets.credentialsInstalled && token && accountId && apiKey)) {
-    return deskLiveBoard(brokerId, now, deskQuotes);
+  if (brokerId === "kotak") {
+    return kotakLiveBoard(user, secrets, { fetchQuotes, deskQuotes, deskKotak, now });
   }
   if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
     return emptyQuotes(
@@ -123,7 +194,6 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now =
     );
   }
   if (!supportedMemberQuoteBroker(brokerId)) {
-    if (brokerId === "kotak") return deskLiveBoard(brokerId, now, deskQuotes);
     return emptyQuotes(
       brokerId,
       `Your selected broker is ${brokerId}. Index cards are wired for Dhan, Upstox, Zerodha, Fyers, and Angel — install that broker token on My plan.`,
@@ -144,7 +214,6 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now =
     } catch {
       quotes = [];
     }
-    if (brokerId === "kotak" && !quotes.length) return deskLiveBoard(brokerId, now, deskQuotes);
     const payload = {
       indices: cardsFromMemberQuotes(user.id, quotes),
       source: "member",

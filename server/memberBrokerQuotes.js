@@ -111,12 +111,45 @@ export function crudeQuoteFromPayload(payload) {
   return null;
 }
 
+const KOTAK_QUOTE_BASES = [
+  "https://mis.kotaksecurities.com",
+  "https://e21.kotaksecurities.com",
+  "https://e22.kotaksecurities.com",
+  "https://e41.kotaksecurities.com",
+  "https://e43.kotaksecurities.com",
+];
+
+const KOTAK_INDEX_TOKENS = [
+  { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", token: "Nifty 50", segment: "nse_cm" },
+  { symbol: "BANKNIFTY", parent: "BANKNIFTY", kind: "index", token: "Nifty Bank", segment: "nse_cm" },
+  { symbol: "FINNIFTY", parent: "FINNIFTY", kind: "index", token: "Nifty Fin Service", segment: "nse_cm" },
+  { symbol: "SENSEX", parent: "SENSEX", kind: "index", token: "SENSEX", segment: "bse_cm" },
+  { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index", token: "INDIA VIX", segment: "nse_cm" },
+];
+
 export function brokerNeedsApiKey(brokerId) {
   return ["zerodha", "fyers", "kotak", "angelone"].includes(String(brokerId || "").toLowerCase());
 }
 
 export function supportedMemberQuoteBroker(brokerId) {
-  return ["dhan", "upstox", "zerodha", "fyers", "angelone"].includes(String(brokerId || "").toLowerCase());
+  return ["dhan", "upstox", "zerodha", "fyers", "angelone", "kotak"].includes(String(brokerId || "").toLowerCase());
+}
+
+export function quotesFromKotakPayload(payload) {
+  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  const quotes = [];
+  for (const spec of KOTAK_INDEX_TOKENS) {
+    const row = rows.find((item) => {
+      const token = String(item?.exchange_token || item?.instrument_token || "").trim().toUpperCase();
+      return token === spec.token.toUpperCase();
+    });
+    if (!row) continue;
+    const last = pickNumber(row.ltp, row.last_traded_price);
+    const prev = pickNumber(row.ohlc?.close, row.close);
+    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change));
+    if (next) quotes.push(next);
+  }
+  return quotes;
 }
 
 function quoteRow(instrument, ltp, close, netChange) {
@@ -408,6 +441,25 @@ async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
   }
 }
 
+async function fetchKotakQuotes({ accessToken, apiKey, fetchImpl }) {
+  const token = String(apiKey || accessToken || "").trim();
+  if (!token) return [];
+  const neo = KOTAK_INDEX_TOKENS.map((row) => `${row.segment}|${row.token}`).join(",");
+  const path = `/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neo)}/all`;
+  for (const base of KOTAK_QUOTE_BASES) {
+    try {
+      const payload = await readJson(fetchImpl, `${base}${path}`, {
+        headers: { Authorization: token, Accept: "application/json" },
+      });
+      const quotes = quotesFromKotakPayload(payload);
+      if (quotes.length) return quotes;
+    } catch {
+      /* next Kotak host */
+    }
+  }
+  return [];
+}
+
 async function fetchAngelQuotes({ accessToken, apiKey, clientId, fetchImpl }) {
   const exchangeTokens = {};
   for (const instrument of INDEX_INSTRUMENTS) {
@@ -444,6 +496,7 @@ export async function fetchMemberBrokerQuotes({
   const token = String(accessToken || "").trim();
   const key = String(apiKey || "").trim();
   const accountId = String(clientId || "").trim();
+  if (id === "kotak") return fetchKotakQuotes({ accessToken: token, apiKey: key, fetchImpl });
   if (!token) return [];
   if (id === "dhan") return fetchDhan({ accessToken: token, clientId: accountId });
   if (id === "upstox") return fetchUpstoxQuotes({ accessToken: token, fetchImpl });
