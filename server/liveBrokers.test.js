@@ -929,7 +929,7 @@ test("Kotak Neo order is posted to the live place host, not the dead gw-napi hos
       "kotak",
       {
         copyUserId: "u-kotak-order",
-        brokerSession: { accessToken: "kotak-consumer-key", apiKey: "kotak-consumer-key", clientId: "YIX14" },
+        brokerSession: { accessToken: "trade-token-1452", apiKey: "kotak-consumer-key", clientId: "YT2Vm", sessionToken: "neo-sid-88" },
         symbol: "NIFTY 22900 CE",
         expiry: "2026-10-06",
         side: "BUY",
@@ -945,8 +945,10 @@ test("Kotak Neo order is posted to the live place host, not the dead gw-napi hos
     assert.equal(live.brokerId, "kotak");
     assert.equal(calls.some((row) => row.url.includes("gw-napi")), false);
     assert.match(calls[0].url, /^https:\/\/mis\.kotaksecurities\.com\/quick\/order\/rule\/ms\/place/);
-    assert.equal(calls[0].headers.Auth, "kotak-consumer-key");
-    assert.equal(calls[0].headers.Sid, "YIX14");
+    assert.equal(calls[0].headers.Auth, "trade-token-1452");
+    assert.equal(calls[0].headers.Sid, "neo-sid-88");
+    assert.equal(String(calls[0].headers.Sid).includes("YT2Vm"), false);
+    assert.equal(String(calls[0].headers.Auth).includes("kotak-consumer-key"), false);
     assert.equal(calls[0].headers["neo-fin-key"], "neotradeapi");
     assert.equal(calls[0].headers.Authorization, undefined);
     assert.equal(String(calls[0].headers.Auth).startsWith("Bearer "), false);
@@ -966,6 +968,49 @@ test("Kotak Neo order is posted to the live place host, not the dead gw-napi hos
   }
 });
 
+test("a member Kotak order without a Neo sid is refused before Kotak is called", async () => {
+  let called = false;
+  const fetchImpl = async () => {
+    called = true;
+    return { ok: true, status: 200, text: async () => "{}" };
+  };
+  const order = {
+    symbol: "NIFTY 22900 CE",
+    expiry: "2026-10-06",
+    side: "BUY",
+    qty: 65,
+    price: 15.4,
+    orderAt: "2026-10-01T12:55:22.000Z",
+  };
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "kotak",
+        {
+          copyUserId: "u-avinash",
+          brokerSession: { accessToken: "member-token-1452", apiKey: "member-consumer", clientId: "YT2Vm" },
+          ...order,
+        },
+        fetchImpl,
+      ),
+    /trade session|Neo sid/,
+  );
+  await assert.rejects(
+    () =>
+      placeLiveBrokerOrder(
+        "kotak",
+        {
+          copyUserId: "u-avinash",
+          brokerSession: { accessToken: "member-consumer", apiKey: "member-consumer", clientId: "YT2Vm", sessionToken: "YT2Vm" },
+          ...order,
+        },
+        fetchImpl,
+      ),
+    /trade session|Neo sid/,
+  );
+  assert.equal(called, false);
+});
+
 test("Kotak order network failure names the host instead of a bare fetch failed", async () => {
   const fetchImpl = async (url) => {
     throw Object.assign(new TypeError("fetch failed"), {
@@ -978,7 +1023,7 @@ test("Kotak order network failure names the host instead of a bare fetch failed"
         "kotak",
         {
           copyUserId: "u-kotak-net",
-          brokerSession: { accessToken: "kotak-consumer-key", apiKey: "kotak-consumer-key", clientId: "YIX14" },
+          brokerSession: { accessToken: "trade-token-1452", apiKey: "kotak-consumer-key", clientId: "YT2Vm", sessionToken: "neo-sid-88" },
           symbol: "NIFTY 22900 CE",
           expiry: "2026-10-06",
           side: "BUY",

@@ -533,7 +533,7 @@ export function Brokers() {
               </label>
             ) : null}
             <label className="mt-3 block text-xs font-semibold">
-              {selected.id === "dhan" ? "Access token" : selected.id === "angelone" ? "JWT token" : "Access token"}
+              {selected.id === "dhan" ? "Access token" : selected.id === "angelone" ? "JWT token" : selected.id === "kotak" ? "Trade session token" : "Access token"}
               <input
                 type="password"
                 className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
@@ -544,7 +544,7 @@ export function Brokers() {
             </label>
             {selected.id === "kotak" ? (
               <label className="mt-3 block text-xs font-semibold">
-                Sid / session
+                Neo sid
                 <input
                   type="password"
                   className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"

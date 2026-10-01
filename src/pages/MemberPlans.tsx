@@ -405,7 +405,7 @@ export function MemberPlans() {
               void saveCredentials();
             }}
           >
-            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : "Client ID and access token"}</div>
+            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
             <p className="mt-1 text-xs text-slate-400">
               {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>
@@ -435,7 +435,7 @@ export function MemberPlans() {
                 disabled={busy === "creds"}
                 className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
               >
-                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : "Save client ID and access token"}
+                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : desk.brokerId === "kotak" ? "Save Kotak Neo session" : "Save client ID and access token"}
               </button>
               {desk.brokerId === "upstox" ? (
                 <button

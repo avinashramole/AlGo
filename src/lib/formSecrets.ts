@@ -105,10 +105,17 @@ export function installFlags(install?: InstallHints | null) {
   };
 }
 
-function installBits(install?: InstallHints | null) {
+function installBits(install?: InstallHints | null, brokerId = "") {
+  const id = String(brokerId || install?.brokerId || "").trim().toLowerCase();
   const flags = installFlags(install);
   const bits: string[] = [];
   if (flags.hasClientId) bits.push(`Client ID ${String(install?.accountId || "").trim()}`);
+  if (id === "kotak") {
+    if (flags.hasApiKey) bits.push(`consumer key ${String(install?.apiKeyHint || "").trim() || "saved"}`);
+    if (flags.hasApiSecret) bits.push(`Neo sid ${String(install?.sessionHint || "").trim() || "saved"}`);
+    if (flags.hasTradingToken) bits.push(`trade session ${String(install?.tokenHint || "").trim() || "saved"}`);
+    return { flags, bits };
+  }
   if (flags.hasApiKey) bits.push(`API key ${String(install?.apiKeyHint || "").trim() || "saved"}`);
   if (flags.hasApiSecret) bits.push(`API secret ${String(install?.sessionHint || "").trim() || "saved"}`);
   if (flags.hasTradingToken) bits.push(`trading token ${String(install?.tokenHint || "").trim() || "saved"}`);
@@ -117,7 +124,17 @@ function installBits(install?: InstallHints | null) {
 
 export function describeBrokerInstall(install?: InstallHints | null, brokerId = "") {
   const id = String(brokerId || install?.brokerId || "").trim().toLowerCase();
-  const { flags, bits } = installBits(install);
+  const { flags, bits } = installBits(install, id);
+  if (id === "kotak") {
+    const line = bits.join(" · ");
+    if (!flags.hasApiSecret || !flags.hasTradingToken) {
+      const need = !flags.hasApiSecret
+        ? "Paste the Neo sid and the session token from today's trade login. The consumer key is only for quotes."
+        : "Paste the session token from today's trade login.";
+      return line ? `${line}. ${need}` : `Waiting for you to add Kotak Neo. ${need}`;
+    }
+    return line;
+  }
   if (flags.hasTradingToken) return bits.join(" · ");
   if (flags.oauthReady) {
     return bits.length
@@ -129,7 +146,6 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
       id === "upstox" ? "Save API key and API secret, then generate today's token." : "No access token installed yet."
     }`;
   }
-  if (id === "kotak") return "Waiting for you to add Kotak Neo.";
   return id === "upstox"
     ? "No API key, API secret, or trading token stored yet."
     : "No access token installed yet.";
@@ -137,7 +153,7 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
 
 export function describeBrokerSave(install?: InstallHints | null, brokerId = "") {
   const id = String(brokerId || install?.brokerId || "").trim().toLowerCase();
-  const { flags, bits } = installBits(install);
+  const { flags, bits } = installBits(install, id);
   const saved = bits.length ? bits.join(" · ") : "Credentials";
   if (id === "upstox" && flags.oauthReady && !flags.hasTradingToken) {
     return `${saved} saved on this account. Tap Get today's trading token next. Desk LIVE was not started.`;

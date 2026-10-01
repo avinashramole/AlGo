@@ -81,6 +81,22 @@ test("My plan says when API key and secret are saved but the trading token is no
   );
 });
 
+test("Kotak My plan asks for the Neo sid when only the consumer key and access token are saved", () => {
+  const install = {
+    brokerId: "kotak",
+    accountId: "YT2Vm",
+    apiKeyHint: "co••••key",
+    tokenHint: "••••1452",
+    hasApiKey: true,
+    installed: true,
+  };
+  const line = describeBrokerInstall(install, "kotak");
+  assert.match(line, /YT2Vm/);
+  assert.match(line, /Neo sid/);
+  assert.match(line, /trade login/);
+  assert.equal(line.includes("OAuth"), false);
+});
+
 test("a masked token is never submitted as a replacement secret", () => {
   assert.equal(savedSecretForSubmit(""), "");
   assert.equal(savedSecretForSubmit(SECRET_FIELD_MASK), "");

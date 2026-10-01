@@ -150,6 +150,47 @@ test("fetchMemberBrokerQuotes calls Kotak with the plain consumer key", async ()
   assert.equal(String(JSON.stringify(quotes)).includes("YIX14"), false);
 });
 
+test("Kotak crude is requested on MCX after the index quotes", async () => {
+  const seen = [];
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "kotak",
+    apiKey: "member-consumer-key",
+    accessToken: "trade-token-1452",
+    clientId: "YT2Vm",
+    fetchImpl: async (url) => {
+      const raw = decodeURIComponent(String(url));
+      seen.push(raw);
+      if (raw.includes("mcx_fo|CRUDEOIL/")) {
+        return { ok: false, status: 400, text: async () => JSON.stringify({ message: "invalid symbol" }) };
+      }
+      if (raw.includes("mcx_fo|CRUDEOIL")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              { exchange_token: "CRUDEOILM26OCTFUT", trading_symbol: "CRUDEOILM26OCTFUT", ltp: "5000" },
+              { exchange_token: "CRUDEOIL26OCTFUT", trading_symbol: "CRUDEOIL26OCTFUT", exchange: "mcx_fo", ltp: "6124.5", ohlc: { close: "6100" } },
+            ]),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ exchange_token: "Nifty 50", exchange: "nse_cm", ltp: "22421.95", ohlc: { close: "22620.45" } }]),
+      };
+    },
+  });
+  assert.match(seen[0], /nse_cm\|Nifty 50/);
+  assert.ok(seen.some((url) => url.includes("mcx_fo|CRUDEOIL")));
+  assert.equal(quotes.find((row) => row.symbol === "NIFTY 50").ltp, 22421.95);
+  const crude = quotes.find((row) => row.symbol === "CRUDEOIL");
+  assert.equal(crude.ltp, 6124.5);
+  assert.equal(crude.kind, "future");
+  assert.equal(JSON.stringify(quotes).includes("YT2Vm"), false);
+  assert.equal(JSON.stringify(quotes).includes("trade-token-1452"), false);
+});
+
 test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async () => {
   resetUpstoxInstrumentCache();
   const seen = [];

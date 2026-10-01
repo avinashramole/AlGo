@@ -263,6 +263,17 @@ test("a member Kotak order refuses the admin login instead of calling Kotak", ()
     assert.match(wrapped.message, /This user is not the admin/);
     assert.equal(wrapped.message.includes("not the admin login"), false);
     assert.equal(wrapped.message.includes("admin-key-9f44"), false);
+    const member = annotateMemberLiveAuthError(
+      Object.assign(new Error("invalid session token"), { status: 401 }),
+      { clientId: "YT2Vm", accessToken: "member-token-1452", apiKey: "member-consumer" },
+      { brokerName: "Kotak Neo" },
+    );
+    assert.match(member.message, /invalid session token/);
+    assert.match(member.message, /client ID YT2Vm/);
+    assert.match(member.message, /Neo sid/);
+    assert.match(member.message, /trade login/);
+    assert.equal(member.message.includes("OAuth access_token"), false);
+    assert.equal(member.message.includes("member-token-1452"), false);
   } finally {
     if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;
     else process.env.T2S_KOTAK_CLIENT_ID = saved.id;

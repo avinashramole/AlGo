@@ -910,12 +910,17 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
   if (brokerId === "upstox" || brokerId === "kotak") {
     extra.push({
       id: "sessionToken",
-      label: brokerId === "upstox" ? "API secret" : "Sid / session",
+      label: brokerId === "upstox" ? "API secret" : "Neo sid",
       secret: true,
-      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Neo sid, if Kotak gave one",
+      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Sid from today's trade login",
     });
   }
-  extra.push({ id: "accessToken", label: "Access token", secret: true, placeholder: "Paste this client's access token" });
+  extra.push({
+    id: "accessToken",
+    label: brokerId === "kotak" ? "Trade session token" : "Access token",
+    secret: true,
+    placeholder: brokerId === "kotak" ? "Session token from today's trade login" : "Paste this client's access token",
+  });
   return extra;
 }
 

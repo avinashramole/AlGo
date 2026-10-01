@@ -83,6 +83,13 @@ export function annotateMemberLiveAuthError(error, session = {}, { brokerName = 
   }
   const clientId = String(session.clientId || "").trim();
   const who = clientId ? `client ID ${clientId}` : "no client ID";
+  if (/kotak/i.test(brokerName)) {
+    const next = new Error(
+      `${message}. Kotak Neo used this member's ${who} and access token ${credentialHint(session.accessToken)}. That is not a trade session. Paste this user's Neo sid and the session token from today's trade login on Profile. The consumer key is only for quotes.`,
+    );
+    next.status = status || 401;
+    return next;
+  }
   const tokenHint = `Paste today's ${brokerName} OAuth access_token on My plan — not an Analytics/extended token, and not the admin login.`;
   const next = new Error(
     `${message}. ${brokerName} used this member's ${who} and access token ${credentialHint(session.accessToken)} — not the admin login. ${tokenHint}`,

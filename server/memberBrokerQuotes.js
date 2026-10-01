@@ -152,6 +152,34 @@ export function quotesFromKotakPayload(payload) {
   return quotes;
 }
 
+export function kotakCrudeSymbols(dates = upcomingExpiries("CRUDEOIL", 2)) {
+  const codes = ["CRUDEOIL"];
+  for (const ymd of dates || []) {
+    const code = frontMonthFutCode("CRUDEOIL", ymd);
+    if (code) codes.push(code);
+  }
+  return [...new Set(codes)];
+}
+
+function kotakRowBlob(row = {}) {
+  return `${row.trading_symbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""}`.toUpperCase();
+}
+
+export function quoteFromKotakCrude(payload) {
+  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  const hits = rows.filter((item) => {
+    const blob = kotakRowBlob(item);
+    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
+    const kind = `${item?.instrument_type || ""} ${item?.exchange_token || ""}`.toUpperCase();
+    if (/\b(CE|PE)\b/.test(kind) && !/FUT/.test(kind)) return false;
+    return true;
+  });
+  const row = hits[0];
+  if (!row) return null;
+  const last = pickNumber(row.ltp, row.last_traded_price);
+  return quoteRow(CRUDE_INSTRUMENT, last, pickNumber(row.ohlc?.close, row.close), pickSignedNumber(row.change, row.per_change));
+}
+
 function quoteRow(instrument, ltp, close, netChange) {
   const price = Number(ltp);
   if (!Number.isFinite(price) || price <= 0) return null;
@@ -441,23 +469,43 @@ async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
   }
 }
 
+async function fetchKotakNeo(fetchImpl, token, neo) {
+  const path = `/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neo)}/all`;
+  let last = null;
+  for (const base of KOTAK_QUOTE_BASES) {
+    try {
+      return await readJson(fetchImpl, `${base}${path}`, {
+        headers: { Authorization: token, Accept: "application/json" },
+      });
+    } catch (error) {
+      last = error;
+    }
+  }
+  if (last) throw last;
+  return null;
+}
+
 async function fetchKotakQuotes({ accessToken, apiKey, fetchImpl }) {
   const token = String(apiKey || accessToken || "").trim();
   if (!token) return [];
-  const neo = KOTAK_INDEX_TOKENS.map((row) => `${row.segment}|${row.token}`).join(",");
-  const path = `/script-details/1.0/quotes/neosymbol/${encodeURIComponent(neo)}/all`;
-  for (const base of KOTAK_QUOTE_BASES) {
+  const indexNeo = KOTAK_INDEX_TOKENS.map((row) => `${row.segment}|${row.token}`).join(",");
+  let quotes = [];
+  try {
+    quotes = quotesFromKotakPayload(await fetchKotakNeo(fetchImpl, token, indexNeo));
+  } catch {
+    quotes = [];
+  }
+  for (const code of kotakCrudeSymbols()) {
     try {
-      const payload = await readJson(fetchImpl, `${base}${path}`, {
-        headers: { Authorization: token, Accept: "application/json" },
-      });
-      const quotes = quotesFromKotakPayload(payload);
-      if (quotes.length) return quotes;
+      const crude = quoteFromKotakCrude(await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`));
+      if (!crude) continue;
+      quotes = quotes.filter((row) => row.symbol !== "CRUDEOIL").concat(crude);
+      break;
     } catch {
-      /* next Kotak host */
+      /* the next crude contract; index quotes stay */
     }
   }
-  return [];
+  return quotes;
 }
 
 async function fetchAngelQuotes({ accessToken, apiKey, clientId, fetchImpl }) {
