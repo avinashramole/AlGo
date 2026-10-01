@@ -2486,14 +2486,34 @@ function runLiveAlgos() {
   }
 }
 
-function mapLiveStatus(status) {
+function orderFeedStatus(status) {
   const raw = String(status || "").toUpperCase();
   if (raw === "TRADED") return "FILLED";
-  if (raw === "REJECTED" || raw === "CANCELLED") return raw;
-  if (raw === "EXPIRED") return "CANCELLED";
+  if (raw === "REJECT" || raw === "REJECTION" || raw === "REJECTED") return "REJECTED";
+  if (raw === "FAIL" || raw === "FAILURE" || raw === "FAILED") return "FAILED";
+  if (raw === "CANCELED" || raw === "CANCELLED" || raw === "EXPIRED") return "CANCELLED";
   if (raw === "PART_TRADED") return "PARTIAL";
-  if (raw === "PENDING" || raw === "TRANSIT") return "PENDING";
+  if (raw === "TRANSIT" || raw === "OPEN" || raw === "PENDING") return "PENDING";
   return raw || "PENDING";
+}
+
+function orderFeedDay(row) {
+  const ms = Date.parse(String(row?.createdAt || ""));
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  return VwapSignalEngine.sessionKeyIST(ms);
+}
+
+function keepOmittedDhanOrder(row, today) {
+  const status = orderFeedStatus(row?.status);
+  if (status !== "FILLED" && status !== "REJECTED" && status !== "FAILED" && status !== "CANCELLED" && status !== "PARTIAL") {
+    return false;
+  }
+  const day = orderFeedDay(row);
+  return !day || day >= today;
+}
+
+function mapLiveStatus(status) {
+  return orderFeedStatus(status);
 }
 
 function liveRejectReason(live, fallback) {
@@ -2875,14 +2895,20 @@ export function replaceDhanOrders(rows) {
   const incoming = Array.isArray(rows) ? rows : [];
   const previous = state.orders || [];
   const previousDhan = new Map(
-    previous.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]),
+    previous.filter((row) => row.brokerId === "dhan" && !row.copyUserId).map((row) => [String(row.id), row]),
   );
+  const incomingIds = new Set();
   const tagged = incoming.map((row) => {
-    const existing = previousDhan.get(String(row.id));
+    const id = String(row.id);
+    incomingIds.add(id);
+    const existing = previousDhan.get(id);
     const next = {
       ...row,
+      status: orderFeedStatus(row.status),
+      createdAt: existing?.createdAt || row.createdAt || new Date().toISOString(),
       price: mergeDhanOrderPrice(row, existing),
       filledQty: Number(row.filledQty || existing?.filledQty || 0),
+      reason: String(row.reason || existing?.reason || ""),
       strategy: resolveOrderStrategy(row, {
         previous,
         algos: state.algos || [],
@@ -2892,8 +2918,19 @@ export function replaceDhanOrders(rows) {
     syncExecutedTradeCount(existing, next);
     return next;
   });
-  const others = previous.filter((row) => row.brokerId !== "dhan" || row.copyUserId);
-  state.orders = [...tagged, ...others];
+  const today = VwapSignalEngine.sessionKeyIST(Date.now());
+  const kept = [];
+  for (const row of previous) {
+    if (row.copyUserId || row.brokerId !== "dhan") {
+      kept.push(row);
+      continue;
+    }
+    if (incomingIds.has(String(row.id))) continue;
+    if (!keepOmittedDhanOrder(row, today)) continue;
+    const status = orderFeedStatus(row.status);
+    kept.push(status === row.status ? row : { ...row, status });
+  }
+  state.orders = [...tagged, ...kept];
 }
 
 export function refreshCopyOrdersFromBroker(userId, updates = []) {
