@@ -80,17 +80,18 @@ function kindMeta(algo: AlgoStrategy) {
     const maxTrades = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
     return {
       kind: "crude-first-candle" as const,
-      category: "CRUDE OIL FIRST 5M",
-      config: `CRUDE FUT · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
+      category: `CRUDE OIL FIRST ${(algo.timeframe || "5m").toUpperCase()}`,
+      config: `CRUDE FUT · ${algo.timeframe || "5m"} · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
     const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
     const trail = niftyFirstCandleTrail(algo);
+    const tf = algo.timeframe || "5m";
     return {
       kind: "nifty-first-candle" as const,
-      category: "SYSTEMATIC NIFTY FIRST 5M",
-      config: `NIFTY FUT · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      category: `SYSTEMATIC NIFTY FIRST ${tf.toUpperCase()}`,
+      config: `NIFTY FUT · ${tf} · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {

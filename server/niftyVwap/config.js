@@ -114,6 +114,28 @@ export function firstCandleBarMinutes(timeframe) {
   return FIRST_CANDLE_TIMEFRAMES[String(timeframe || "")] || 5;
 }
 
+export function addIstMinutes(hm, minutes, fallback = "09:00") {
+  const clock = parseIstHm(hm, fallback);
+  const [hour, minute] = clock.split(":").map(Number);
+  const total = (hour * 60 + minute + Math.max(0, Math.round(Number(minutes) || 0))) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** A 5m clock of 09:05 follows a change to 15m (09:15) or 1m (09:01). A custom time stays. */
+export function firstCandleEntryIst(firstBarStartIst, timeframe, storedEntry) {
+  const minutes = firstCandleBarMinutes(timeframe);
+  const start = parseIstHm(firstBarStartIst, "09:00");
+  const barClose = addIstMinutes(start, minutes, start);
+  const stored = String(storedEntry || "").trim();
+  if (!stored) return barClose;
+  const parsed = parseIstHm(stored, barClose);
+  const otherClocks = Object.values(FIRST_CANDLE_TIMEFRAMES)
+    .filter((step) => step !== minutes)
+    .map((step) => addIstMinutes(start, step, start));
+  if (otherClocks.includes(parsed)) return barClose;
+  return parsed;
+}
+
 export function isNiftyVwapAlgo(algo = {}) {
   return (
     algo.kind === NIFTY_VWAP_KIND ||
@@ -323,7 +345,7 @@ export function niftyFirstCandleConfig(algo = {}) {
     strikeOffset,
     dailyLiveIst: parseIstHm(algo.dailyLiveIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.dailyLiveIst),
     firstBarStartIst,
-    entryEvaluationIst: parseIstHm(algo.entryEvaluationIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.entryEvaluationIst),
+    entryEvaluationIst: firstCandleEntryIst(firstBarStartIst, timeframe, algo.entryEvaluationIst),
     endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.endTimeIst),
   };
 }

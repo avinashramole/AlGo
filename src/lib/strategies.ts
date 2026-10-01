@@ -239,6 +239,33 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
   );
 }
 
+export function firstCandleMinutes(timeframe?: string) {
+  if (timeframe === "1m") return 1;
+  if (timeframe === "15m") return 15;
+  return 5;
+}
+
+export function addIstMinutes(hm: string | undefined, minutes: number, fallback = "09:00") {
+  const raw = String(hm || fallback).trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+  const hour = match ? Math.min(23, Math.max(0, Number(match[1]))) : 9;
+  const minute = match ? Math.min(59, Math.max(0, Number(match[2]))) : 0;
+  const total = (hour * 60 + minute + Math.max(0, Math.round(minutes))) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Moving 5m → 15m moves the 09:05 check to 09:15. A hand-typed time stays. */
+export function firstCandleEntryIst(firstBar?: string, timeframe?: string, stored?: string) {
+  const minutes = firstCandleMinutes(timeframe);
+  const start = addIstMinutes(firstBar || "09:00", 0);
+  const barClose = addIstMinutes(start, minutes);
+  const current = String(stored || "").trim();
+  if (!current) return barClose;
+  const otherClocks = [1, 5, 15].filter((step) => step !== minutes).map((step) => addIstMinutes(start, step));
+  if (otherClocks.includes(current)) return barClose;
+  return current;
+}
+
 export function niftyFirstCandleTrail(algo?: {
   trailingActivationPct?: number;
   trailingEveryPct?: number;
@@ -337,12 +364,13 @@ export function contractLabel(algo: {
   instrument?: string;
   optionType?: string;
   strikeOffset?: number;
+  timeframe?: string;
 }) {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
-  if (isCrudeFirstCandleKind(algo)) return "CRUDE OIL ATM CE/PE first 5m";
-  if (isNiftyFirstCandleKind(algo)) return "NIFTY ATM CE/PE first 5m";
+  if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isNiftyFirstCandleKind(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {

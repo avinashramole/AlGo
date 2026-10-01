@@ -255,8 +255,8 @@ export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
-  if (isCrudeFirstCandleAlgo(algo)) return "CRUDE OIL ATM CE/PE first 5m";
-  if (isNiftyFirstCandleAlgo(algo)) return "NIFTY ATM CE/PE first 5m";
+  if (isCrudeFirstCandleAlgo(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
+  if (isNiftyFirstCandleAlgo(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
   const symbol = algo.symbol || "NIFTY";
   if (algo.instrument === "option") {
@@ -290,7 +290,7 @@ export function summarizeAlgo(algo) {
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
-    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview 5m open/close at the next candle open · one signal places one order · max ${maxTrades} trades/day · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
+    return `CRUDE OIL FUT first candle · ${tf} · monthly ATM · preview ${tf} open/close at the next candle open · one signal places one order · max ${maxTrades} trades/day · preview CRUDE FUT green + preview ATM CE green → BUY CE · preview CRUDE FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -303,7 +303,7 @@ export function summarizeAlgo(algo) {
     const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
     const atm = strikeOffsetLabel(algo.strikeOffset);
     const trail = niftyFirstCandleTrail(algo);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview 5m open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

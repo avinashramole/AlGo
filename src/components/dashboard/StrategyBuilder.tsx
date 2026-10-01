@@ -15,6 +15,7 @@ import {
   groupsFromFlat,
   MAX_CONDITION_ROWS,
   contractLabel,
+  firstCandleEntryIst,
   strikeOffsetLabel,
   lotForSymbol,
   RUN_MODES,
@@ -82,6 +83,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               trailingStepPct: trail.shift,
             }
           : {}),
+        ...((kind === "nifty-first-candle" || crude)
+          ? {
+              entryEvaluationIst: firstCandleEntryIst(algo.firstBarStartIst, algo.timeframe, algo.entryEvaluationIst),
+            }
+          : {}),
         ...(crude
           ? {
               indicator: "CRUDE_FIRST_CANDLE",
@@ -140,16 +146,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (crudeFirst) {
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
-      return `CRUDE OIL monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
+      const tf = form.timeframe || "5m";
+      return `CRUDE OIL ${tf} · monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
       const firstBar = form.firstBarStartIst || "09:00";
-      const evalAt = form.entryEvaluationIst || "09:05";
+      const tf = form.timeframe || "5m";
+      const evalAt = firstCandleEntryIst(firstBar, tf, form.entryEvaluationIst);
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
       const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
       const trail = niftyFirstCandleTrail(form);
-      return `NIFTY ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${start} IST`;
+      return `NIFTY ${tf} · ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${start} IST`;
     }
     if (isNiftyVwapKind(form)) {
       return `NIFTY ATM CE/PE · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · 5m VWAP · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}%`;
@@ -435,7 +443,22 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
-            <select className={fieldClass} value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"} disabled={engine && !firstCandle} onChange={(event) => set({ timeframe: event.target.value })}>
+            <select
+              className={fieldClass}
+              value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"}
+              disabled={engine && !firstCandle}
+              onChange={(event) => {
+                const timeframe = event.target.value;
+                if (firstCandle || crudeFirst) {
+                  set({
+                    timeframe,
+                    entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
+                  });
+                  return;
+                }
+                set({ timeframe });
+              }}
+            >
               {(reversal || hedge ? ["15m"] : vwap ? ["5m"] : firstCandle || crudeFirst || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
@@ -598,7 +621,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 Entry evaluation (IST)
-                <input className={fieldClass} value={form.entryEvaluationIst || "09:05"} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder="09:05" />
+                <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 End time (IST)

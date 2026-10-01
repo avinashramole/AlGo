@@ -1004,12 +1004,20 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     resetSession(vs, today);
     persistAlgos();
   }
+  const barSession = isFirstCandleAlgo(algo) ? firstCandleBarSession(config, crude) : undefined;
+  const sampledTf = String(config.timeframe || "5m");
+  if (isFirstCandleAlgo(algo) && vs.sampledTimeframe && vs.sampledTimeframe !== sampledTf) {
+    vs.ceBars = [];
+    vs.peBars = [];
+    vs.processedFirstBarTime = 0;
+  }
+  if (isFirstCandleAlgo(algo)) vs.sampledTimeframe = sampledTf;
   const positions = crude ? positionsForStrategyName(algo, mode) : positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
   const showLivePreview = () => {
     if (!isFirstCandleAlgo(algo) || !feedLive) return;
-    const closed = signalBars(config.timeframe || "5m", Date.now());
+    const closed = signalBars(config.timeframe || "5m", Date.now(), barSession);
     const preview = closed[closed.length - 1] || null;
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
     const und = getUnderlying(root);
@@ -1028,6 +1036,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
         peStrike,
       },
       signalBars,
+      barSession,
     );
   };
   if (mode === "live" && !session.open && !open) return;
@@ -1036,9 +1045,9 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const futuresBars = feedLive
     ? crude
-      ? crudeFutureSignalBars(config.timeframe || "5m", now)
+      ? crudeFutureSignalBars(config.timeframe || "5m", now, barSession)
       : isNiftyFirstCandleAlgo(algo)
-        ? niftyFutureSignalBars(config.timeframe || "5m", now)
+        ? niftyFutureSignalBars(config.timeframe || "5m", now, barSession)
         : getCandles(config.timeframe || "5m")
     : [];
   const lastBar = futuresBars[futuresBars.length - 1];
@@ -1061,7 +1070,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const livePreview =
     isFirstCandleAlgo(algo) && feedLive
-      ? (crude ? crudeFuturePreviewBar : niftyFuturePreviewBar)(config.timeframe || "5m", now)
+      ? (crude ? crudeFuturePreviewBar : niftyFuturePreviewBar)(config.timeframe || "5m", now, barSession)
       : null;
   if (feedLive && !open && !futuresBars.length && !livePreview) {
     algo.lastSignal = crude ? "WAIT CRUDE FUT" : isNiftyFirstCandleAlgo(algo) ? "WAIT NIFTY FUT" : "WAIT CANDLES";
@@ -3221,7 +3230,7 @@ function futureCandleSource() {
   return niftyFutureMinuteBars;
 }
 
-function aggregateFutureBars(source, minutes, now, includeForming) {
+function aggregateFutureBars(source, minutes, now, includeForming, session = {}) {
   const barMs = minutes * 60_000;
   if (barsMatchMinutes(source, minutes)) {
     return source
@@ -3230,9 +3239,19 @@ function aggregateFutureBars(source, minutes, now, includeForming) {
   }
   return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
     closeLabeled: false,
-    sessionOpenMinutes: 9 * 60 + 15,
+    sessionOpenMinutes: session.sessionOpenMinutes ?? 9 * 60 + 15,
+    sessionCloseMinutes: session.sessionCloseMinutes,
     includeForming,
   });
+}
+
+function firstCandleBarSession(config, crude) {
+  const open = parseIstHm(config?.firstBarStartIst, "09:00");
+  const [hour, minute] = open.split(":").map(Number);
+  return {
+    sessionOpenMinutes: hour * 60 + minute,
+    sessionCloseMinutes: crude ? 23 * 60 + 30 : 15 * 60 + 30,
+  };
 }
 
 const MCX_SESSION_OPEN = 9 * 60;
@@ -3300,7 +3319,7 @@ function crudeCandleSource() {
   return liveCandleCache.get("CRUDEOIL") || [];
 }
 
-function aggregateCrudeBars(source, minutes, now, includeForming) {
+function aggregateCrudeBars(source, minutes, now, includeForming, session = {}) {
   const barMs = minutes * 60_000;
   if (barsMatchMinutes(source, minutes)) {
     return source
@@ -3308,42 +3327,42 @@ function aggregateCrudeBars(source, minutes, now, includeForming) {
       .map((bar) => ({ ...bar }));
   }
   return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
-    sessionOpenMinutes: MCX_SESSION_OPEN,
-    sessionCloseMinutes: MCX_SESSION_CLOSE,
+    sessionOpenMinutes: session.sessionOpenMinutes ?? MCX_SESSION_OPEN,
+    sessionCloseMinutes: session.sessionCloseMinutes ?? MCX_SESSION_CLOSE,
     includeForming,
   });
 }
 
-export function crudeFutureSignalBars(timeframe = "5m", now = Date.now()) {
+export function crudeFutureSignalBars(timeframe = "5m", now = Date.now(), session) {
   const source = crudeCandleSource();
   if (!source.length) return [];
-  return aggregateCrudeBars(source, futureBarMinutes(timeframe), now, false);
+  return aggregateCrudeBars(source, futureBarMinutes(timeframe), now, false, session);
 }
 
-export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now()) {
+export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now(), session) {
   const source = crudeCandleSource();
   if (!source.length) return null;
   const minutes = futureBarMinutes(timeframe);
   const barMs = minutes * 60_000;
-  const rows = aggregateCrudeBars(source, minutes, now, true);
+  const rows = aggregateCrudeBars(source, minutes, now, true, session);
   const last = rows[rows.length - 1];
   if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
   if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
   return last;
 }
 
-export function niftyFutureSignalBars(timeframe = "5m", now = Date.now()) {
+export function niftyFutureSignalBars(timeframe = "5m", now = Date.now(), session) {
   const source = futureCandleSource();
   if (!source.length) return [];
-  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false);
+  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false, session);
 }
 
-export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now()) {
+export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), session) {
   const source = futureCandleSource();
   if (!source.length) return null;
   const minutes = futureBarMinutes(timeframe);
   const barMs = minutes * 60_000;
-  const rows = aggregateFutureBars(source, minutes, now, true);
+  const rows = aggregateFutureBars(source, minutes, now, true, session);
   const last = rows[rows.length - 1];
   if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
   if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
@@ -3399,11 +3418,11 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "
   return `LIVE ${head}O ${Number(bar.open).toFixed(2)} C ${Number(bar.close).toFixed(2)} · ${clock}${condition}`;
 }
 
-function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = niftyFutureSignalBars) {
+function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = niftyFutureSignalBars, session) {
   if (!isFirstCandleAlgo(algo)) return;
   const root = isCrudeFirstCandleAlgo(algo) ? "CRUDE FUT" : "NIFTY FUT";
   const minutes = futureBarMinutes(timeframe);
-  const closed = signalBars(timeframe, now);
+  const closed = signalBars(timeframe, now, session);
   const preview = closed[closed.length - 1] || null;
   const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
   const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");

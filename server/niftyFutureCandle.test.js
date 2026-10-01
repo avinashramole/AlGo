@@ -232,3 +232,26 @@ test("crude future 5m close stamp keeps that candle open and close", () => {
     setCrudeFutureChartCandles([]);
   }
 });
+
+test("changing the strategy to 15m builds 15-minute candles from 09:00", () => {
+  const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
+  const five = 5 * 60 * 1000;
+  setNiftyFutureChartCandles([
+    { time: open0900, open: 100, high: 110, low: 99, close: 108, volume: 1 },
+    { time: open0900 + five, open: 108, high: 112, low: 107, close: 111, volume: 1 },
+    { time: open0900 + 2 * five, open: 111, high: 115, low: 110, close: 114, volume: 1 },
+    { time: open0900 + 3 * five, open: 114, high: 120, low: 113, close: 118, volume: 1 },
+  ]);
+  const bars = niftyFutureSignalBars("15m", open0900 + 6 * five, {
+    sessionOpenMinutes: 9 * 60,
+    sessionCloseMinutes: 15 * 60 + 30,
+  });
+  assert.equal(bars.length, 2);
+  assert.equal(bars[0].time, open0900);
+  assert.equal(bars[0].open, 100);
+  assert.equal(bars[0].close, 114);
+  assert.equal(bars[1].time, open0900 + 3 * five);
+  assert.equal(bars[1].open, 114);
+  assert.equal(bars[1].close, 118);
+  setNiftyFutureChartCandles([]);
+});

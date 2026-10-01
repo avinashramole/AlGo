@@ -1240,7 +1240,24 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.qty, 130);
   assert.equal(updated.timeframe, "15m");
   assert.equal(updated.dailyLiveIst, "09:05");
-  assert.equal(updated.entryEvaluationIst, "09:05");
+  assert.equal(updated.entryEvaluationIst, "09:15");
+  assert.equal(niftyFirstCandleConfig(updated).barMinutes, 15);
+  assert.match(updated.summary, /preview 15m/);
+  assert.match(updated.summary, /09:00–09:15/);
+  const customClock = normalizeAlgo(
+    { name: "Desk first candle", timeframe: "15m", entryEvaluationIst: "09:20" },
+    created,
+  );
+  assert.equal(customClock.timeframe, "15m");
+  assert.equal(customClock.entryEvaluationIst, "09:20");
+  assert.equal(niftyFirstCandleConfig(customClock).barMinutes, 15);
+  const backToFive = normalizeAlgo(
+    { name: "Desk first candle", timeframe: "5m", entryEvaluationIst: "09:15" },
+    updated,
+  );
+  assert.equal(backToFive.timeframe, "5m");
+  assert.equal(backToFive.entryEvaluationIst, "09:05");
+  assert.equal(niftyFirstCandleConfig(backToFive).barMinutes, 5);
   assert.equal(updated.endTimeIst, "15:10");
   assert.equal(updated.eodSquareOffMinutes, 20);
   assert.equal(updated.expiryKind, "monthly");
