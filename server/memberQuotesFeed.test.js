@@ -151,7 +151,7 @@ test("member cards show daily change vs yesterday close for every index", () => 
   assert.equal(again.find((row) => row.symbol === "NIFTY 50").change, 140);
 });
 
-test("a new Kotak Neo user sees the desk live feed instead of a waiting board", async () => {
+test("Shivam Fintech on Kotak does not receive the admin Dhan tape", async () => {
   const member = { id: "u-shivam-kotak", name: "Shivam Fintech", email: "shivam.fintech@gmail.com", role: "user" };
   saveClientSettings(member.id, {
     brokerId: "kotak",
@@ -178,10 +178,11 @@ test("a new Kotak Neo user sees the desk live feed instead of a waiting board", 
   assert.equal(fetches, 0);
   assert.equal(mine.brokerId, "kotak");
   assert.equal(mine.brokerName, "KOTAK");
-  assert.equal(mine.live, true);
-  assert.equal(mine.reason, "");
-  assert.equal(mine.source, "desk");
-  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
+  assert.equal(mine.source, "kotak");
+  assert.equal(mine.live, false);
+  assert.deepEqual(mine.indices, []);
+  assert.match(mine.reason, /Kotak Neo/);
+  assert.equal(String(JSON.stringify(mine)).includes("25111.25"), false);
   assert.equal(String(JSON.stringify(mine)).includes("YIX14"), false);
   assert.equal(String(JSON.stringify(mine)).includes("kotak-desk-token"), false);
 });
@@ -202,7 +203,9 @@ test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", 
       seen.push(creds);
       return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22421.95, close: 22620.45 }];
     },
-    deskQuotes: () => ({ indices: [] }),
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
+    }),
   });
   assert.equal(seen.length, 1);
   assert.equal(seen[0].apiKey, "kotak-consumer-key");
@@ -219,6 +222,68 @@ test("Shivam Fintech on Kotak Neo sees live index prices from the Kotak token", 
   assert.equal(body.includes("kotak-consumer-key"), false);
   assert.equal(body.includes("YIX14"), false);
   assert.equal(body.includes("JBSWY3DPEHPK3PXP"), false);
+  assert.equal(body.includes("25111.25"), false);
+});
+
+test("an empty Kotak quote does not fill in the admin Dhan tape", async () => {
+  const member = { id: "u-shivam-empty", name: "Shivam Fintech", email: "shivam.empty@gmail.com", role: "user" };
+  saveClientSettings(member.id, { brokerId: "kotak", tradeMode: "paper" });
+  const mine = await memberQuotesForUser(member, {
+    now: Date.now() + 90_000,
+    deskKotak: {
+      clientId: "YIX14",
+      apiKey: "kotak-consumer-key",
+      accessToken: "kotak-consumer-key",
+    },
+    fetchQuotes: async () => [],
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
+    }),
+  });
+  assert.equal(mine.source, "kotak");
+  assert.equal(mine.brokerId, "kotak");
+  assert.equal(mine.live, false);
+  assert.deepEqual(mine.indices, []);
+  assert.match(mine.reason, /Kotak Neo/);
+  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
+});
+
+test("Shivam Fintech quotes use his own Kotak token, not the admin Dhan tape", async () => {
+  const member = { id: "u-shivam-own", name: "Shivam Fintech", email: "shivam.own@gmail.com", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "SHIVAM1",
+    apiKey: "shivam-consumer-key",
+    accessToken: "shivam-access-token",
+  });
+  const seen = [];
+  const mine = await memberQuotesForUser(member, {
+    now: Date.now() + 120_000,
+    deskKotak: {
+      clientId: "YIX14",
+      apiKey: "desk-consumer-key",
+      accessToken: "desk-access-token",
+    },
+    fetchQuotes: async (creds) => {
+      seen.push(creds);
+      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22480.1, close: 22620.45 }];
+    },
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [], future: 25140, lot: 65 }],
+    }),
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].clientId, "SHIVAM1");
+  assert.equal(seen[0].apiKey, "shivam-consumer-key");
+  assert.equal(seen[0].accessToken, "shivam-access-token");
+  assert.equal(mine.source, "kotak");
+  assert.equal(mine.live, true);
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 22480.1);
+  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
+  assert.equal(JSON.stringify(mine).includes("shivam-access-token"), false);
+  assert.equal(JSON.stringify(mine).includes("desk-consumer-key"), false);
 });
 
 test("paper members stay on an empty board even if admin quotes exist", async () => {

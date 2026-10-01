@@ -134,25 +134,25 @@ function kotakFeedCreds(secrets, deskKotak) {
   };
 }
 
-async function deskLiveBoard(brokerId, now, deskQuotes) {
-  const load = typeof deskQuotes === "function" ? deskQuotes : () => import("./market.js").then((mod) => mod.memberQuotes());
-  const desk = (await load()) || {};
-  const indices = Array.isArray(desk.indices) ? desk.indices : [];
-  const live = indices.some((row) => Number(row?.price) > 0);
+function kotakQuoteBoard(now, { live = false, indices = [], reason = "" } = {}) {
   return {
     indices,
-    source: "desk",
-    brokerId,
-    brokerName: brokerNameOf(brokerId),
+    source: "kotak",
+    brokerId: "kotak",
+    brokerName: brokerNameOf("kotak"),
     live,
     lastTickAt: live ? now : null,
-    reason: "",
+    reason,
   };
 }
 
-async function kotakLiveBoard(user, secrets, { fetchQuotes, deskQuotes, deskKotak, now }) {
+async function kotakLiveBoard(user, secrets, { fetchQuotes, deskKotak, now }) {
   const creds = kotakFeedCreds(secrets, deskKotak);
-  if (!creds) return deskLiveBoard("kotak", now, deskQuotes);
+  if (!creds) {
+    return kotakQuoteBoard(now, {
+      reason: "Index quotes use this user's Kotak Neo key. Add it on the server, then the Kotak feed fills in.",
+    });
+  }
   const hit = cache.get(user.id);
   if (hit && now - hit.at < CACHE_MS) return hit.payload;
   const pending = inflight.get(user.id);
@@ -164,7 +164,9 @@ async function kotakLiveBoard(user, secrets, { fetchQuotes, deskQuotes, deskKota
     } catch {
       quotes = [];
     }
-    if (!quotes.length) return deskLiveBoard("kotak", now, deskQuotes);
+    if (!quotes.length) {
+      return kotakQuoteBoard(now, { reason: "Kotak Neo did not return index quotes yet." });
+    }
     const payload = {
       indices: cardsFromMemberQuotes(user.id, quotes),
       source: "kotak",
@@ -185,7 +187,7 @@ async function kotakLiveBoard(user, secrets, { fetchQuotes, deskQuotes, deskKota
   }
 }
 
-export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, deskKotak, now = Date.now() } = {}) {
+export async function memberQuotesForUser(user, { fetchQuotes, deskKotak, now = Date.now() } = {}) {
   if (!user?.id) return emptyQuotes("paper", "Sign in first.");
   const secrets = peekClientSecrets(user.id);
   const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
@@ -193,7 +195,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, deskK
   const accountId = String(secrets.accountId || "").trim();
   const apiKey = String(secrets.brokerApiKey || "").trim();
   if (brokerId === "kotak") {
-    return kotakLiveBoard(user, secrets, { fetchQuotes, deskQuotes, deskKotak, now });
+    return kotakLiveBoard(user, secrets, { fetchQuotes, deskKotak, now });
   }
   if (brokerId === "paper" || secrets.tradeMode !== "real" || !token || !accountId) {
     return emptyQuotes(
