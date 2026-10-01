@@ -184,13 +184,21 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
   if (hit && now - hit.at < CACHE_MS) return hit.payload;
   const pending = inflight.get(user.id);
   if (pending) return pending;
+  if (brokerId === "fyers" && !token.startsWith("eyJ")) {
+    return emptyQuotes(
+      brokerId,
+      "Paste the Fyers access token from setAccessToken. It is the long value that starts with eyJ. The app secret cannot start the data feed.",
+    );
+  }
   const creds = { brokerId, accessToken: token, clientId: accountId, apiKey };
   const job = (async () => {
     let quotes = [];
+    let failure = "";
     try {
       quotes = await (typeof fetchQuotes === "function" ? fetchQuotes(creds) : fetchMemberBrokerQuotes(creds));
-    } catch {
+    } catch (error) {
       quotes = [];
+      failure = String(error?.message || "").replace(/\s+/g, " ").trim().slice(0, 180);
     }
     const payload = {
       indices: cardsFromMemberQuotes(user.id, quotes),
@@ -201,7 +209,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
       lastTickAt: quotes.length ? now : null,
       reason: quotes.length
         ? ""
-        : `Your ${brokerId} token did not return index quotes yet. Check the token on My plan.`,
+        : failure || `Your ${brokerId} token did not return index quotes yet. Check the token on My plan.`,
     };
     cache.set(user.id, { at: now, payload });
     return payload;

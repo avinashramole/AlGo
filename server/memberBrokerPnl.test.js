@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, fyersAuthorization, fyersAvailableBalance, fyersRequestHeaders, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -259,6 +259,19 @@ test("Kotak balance logs in when the access token is the consumer key", () => {
 test("broker available balance is the user balance and leaves the wallet topup alone", () => {
   assert.equal(dhanAvailableBalance({ availabelBalance: 15234.5, utilizedAmount: 900 }), 15234.5);
   assert.equal(upstoxAvailableBalance({ data: { equity: { available_margin: 4200.25 }, commodity: { available_margin: 800 } } }), 4200.25);
+  assert.equal(fyersAuthorization("APPID-200", "eyJ.access.token"), "APPID-200:eyJ.access.token");
+  assert.match(fyersRequestHeaders("APPID-200", "eyJ.access.token")["User-Agent"], /Mozilla/);
+  assert.equal(
+    fyersAvailableBalance({
+      code: 200,
+      s: "ok",
+      fund_limit: [
+        { id: 1, title: "Total Balance", equityAmount: 58.15, commodityAmount: 0 },
+        { id: 10, title: "Available Balance", equityAmount: 58.15, commodityAmount: 1.5 },
+      ],
+    }),
+    59.65,
+  );
   const desk = localDesk();
   desk.wallet.balance = 2500;
   applyBrokerBalance(desk, { balance: 15234.5, source: "dhan" });

@@ -1,4 +1,5 @@
 import { fetchDhanTapeQuotes } from "./dhan.js";
+import { fyersRequestHeaders } from "./fyersClient.js";
 import { upcomingExpiries } from "./optionChain.js";
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -442,17 +443,25 @@ async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
   }
 }
 
+export function fyersQuoteError(payload) {
+  if (String(payload?.s || "").toLowerCase() !== "error") return "";
+  return String(payload?.message || "Fyers did not return quotes.").trim();
+}
+
 async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
   const symbols = INDEX_INSTRUMENTS.map((row) => FYERS_KEYS[row.symbol]).join(",");
+  const headers = fyersRequestHeaders(apiKey, accessToken);
   const payload = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(symbols)}`, {
-    headers: { Authorization: `${apiKey}:${accessToken}` },
+    headers,
   });
+  const failed = fyersQuoteError(payload);
+  if (failed) throw new Error(failed);
   const quotes = quotesFromFyersPayload(payload);
   const crudeKey = crudeInstrumentKey("fyers");
   if (!crudeKey) return quotes;
   try {
     const extra = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(crudeKey)}`, {
-      headers: { Authorization: `${apiKey}:${accessToken}` },
+      headers,
     });
     const keyed = {};
     for (const row of extra?.d || []) {

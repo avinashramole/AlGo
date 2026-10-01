@@ -1,3 +1,5 @@
+import { fyersAuthorization, fyersRequestHeaders } from "./fyersClient.js";
+
 const CACHE_MS = 9000;
 const cache = new Map();
 const inflight = new Map();
@@ -364,7 +366,7 @@ async function memberBrokerCredentials(userId) {
   const { brokerAccountForLiveCopy, peekClientSecrets } = await import("./memberDesk.js");
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "").trim().toLowerCase();
-  if (brokerId !== "dhan" && brokerId !== "upstox" && brokerId !== "kotak") return null;
+  if (brokerId !== "dhan" && brokerId !== "upstox" && brokerId !== "kotak" && brokerId !== "fyers") return null;
   const slot = brokerAccountForLiveCopy(userId, brokerId);
   if (slot.leftoverToken) return null;
   const token = String(slot.brokerToken || desk.brokerToken || "").trim();
@@ -382,6 +384,11 @@ async function memberBrokerCredentials(userId) {
     if ((!token || token === apiKey) && !apiKey && !login.mobile) return null;
     if (!token && !apiKey && !login.mobile) return null;
     return { brokerId: "kotak", token, clientId, apiKey, sessionToken, ...login };
+  }
+  if (brokerId === "fyers") {
+    const apiKey = String(slot.brokerApiKey || desk.brokerApiKey || "").trim();
+    if (!token || !apiKey) return null;
+    return { brokerId, token, clientId, apiKey };
   }
   if (!token) return null;
   if (brokerId === "dhan" && !clientId) return null;
@@ -721,6 +728,42 @@ async function upstoxFunds(token) {
   return json;
 }
 
+export function fyersAvailableBalance(payload) {
+  const rows = Array.isArray(payload?.fund_limit) ? payload.fund_limit : [];
+  const available =
+    rows.find((row) => Number(row?.id) === 10) ||
+    rows.find((row) => /available balance/i.test(String(row?.title || "")));
+  if (!available) return null;
+  const equity = Number(available.equityAmount);
+  const commodity = Number(available.commodityAmount);
+  if (!Number.isFinite(equity) && !Number.isFinite(commodity)) return null;
+  return round2((Number.isFinite(equity) ? equity : 0) + (Number.isFinite(commodity) ? commodity : 0));
+}
+
+export { fyersAuthorization, fyersRequestHeaders };
+
+async function fyersFunds(appId, accessToken) {
+  const authorization = fyersAuthorization(appId, accessToken);
+  if (!authorization) throw new Error("Fyers App ID and access token are required.");
+  const { ipv4Request } = await import("./ipv4.js");
+  const res = await ipv4Request("https://api-t1.fyers.in/api/v3/funds", {
+    headers: fyersRequestHeaders(appId, accessToken),
+    timeoutMs: 8000,
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  const message = String(json?.message || "").trim();
+  if (!res.ok || String(json?.s || "").toLowerCase() === "error") {
+    throw new Error(message || `Fyers funds ${res.status}`);
+  }
+  return json;
+}
+
 async function fetchBrokerBalance(userId) {
   const creds = await withKotakTradeLogin(await memberBrokerCredentials(userId));
   if (!creds) return null;
@@ -746,6 +789,10 @@ async function fetchBrokerBalance(userId) {
     }
     if (last) throw last;
     return null;
+  }
+  if (creds.brokerId === "fyers") {
+    const available = fyersAvailableBalance(await fyersFunds(creds.apiKey, creds.token));
+    return available == null ? null : { balance: available, source: "fyers" };
   }
   const available = upstoxAvailableBalance(await upstoxFunds(creds.token));
   return available == null ? null : { balance: available, source: "upstox" };

@@ -65,9 +65,9 @@ export const LIVE_BROKER_CATALOG = [
     fields: [
       { id: "clientId", label: "Client ID", placeholder: "Fyers client id" },
       { id: "apiKey", label: "App ID", placeholder: "FYERS app id" },
-      { id: "accessToken", label: "Access token", secret: true, placeholder: "FYERS access token" },
+      { id: "accessToken", label: "Access token", secret: true, placeholder: "Long token from setAccessToken, starts with eyJ" },
     ],
-    help: "Create an app on myapi.fyers.in. Authorization is appId:accessToken. Orders use POST /api/v3/orders/sync.",
+    help: "Create an app on myapi.fyers.in. setAppId is the App ID. setAccessToken is the long token that starts with eyJ. Funds use get_funds and quotes use the same App ID and access token.",
   },
   {
     id: "kotak",
@@ -768,8 +768,9 @@ async function probeFyers(fetchImpl, creds) {
   if (creds.apiKey.length < 4 || creds.accessToken.length < 6) {
     throw fail("Enter Fyers App ID and access token.");
   }
+  const { fyersRequestHeaders } = await import("./fyersClient.js");
   const body = await httpJson(fetchImpl, "https://api-t1.fyers.in/api/v3/profile", {
-    headers: { Authorization: `${creds.apiKey}:${creds.accessToken}` },
+    headers: fyersRequestHeaders(creds.apiKey, creds.accessToken),
   });
   const data = body.data || body;
   return {
@@ -1357,12 +1358,10 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, la
   }
 
   if (id === "fyers") {
+    const { fyersRequestHeaders } = await import("./fyersClient.js");
     const body = await httpJson(fetchImpl, "https://api-t1.fyers.in/api/v3/orders/sync", {
       method: "POST",
-      headers: {
-        Authorization: `${session.apiKey}:${session.accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: fyersRequestHeaders(session.apiKey, session.accessToken, { "Content-Type": "application/json" }),
       body: JSON.stringify({
         symbol: fyersSymbol(symbol, expiry),
         qty,
