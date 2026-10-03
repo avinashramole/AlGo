@@ -223,8 +223,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-900/40 p-3 sm:items-center sm:p-4">
+      <div className="card max-h-[92dvh] w-full max-w-2xl overflow-y-auto p-4 sm:p-5" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <div className="text-lg font-bold">{title}</div>

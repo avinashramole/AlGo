@@ -50,7 +50,7 @@ export function PriceChart() {
   const tools = [Crosshair, Minus, Spline, Square, Type, PenLine, Ruler];
 
   return (
-    <section className="card flex min-h-[430px] flex-col p-4">
+    <section className="card flex min-h-0 flex-col p-3 sm:min-h-[430px] sm:p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -60,10 +60,10 @@ export function PriceChart() {
               {dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : "WAIT"}
             </span>
           </div>
-          <div className="mt-1 flex items-end gap-3">
+          <div className="mt-1 flex flex-wrap items-end gap-x-3 gap-y-1">
             <div className="text-2xl font-extrabold leading-none">{formatQuote(ohlc.close)}</div>
-            <div className="mb-0.5 text-xs font-medium text-slate-500">
-              O {formatQuote(ohlc.open)} &nbsp; H {formatQuote(ohlc.high)} &nbsp; L {formatQuote(ohlc.low)} &nbsp; C {formatQuote(ohlc.close)}
+            <div className="mb-0.5 min-w-0 text-xs font-medium text-slate-500">
+              O {formatQuote(ohlc.open)} H {formatQuote(ohlc.high)} L {formatQuote(ohlc.low)} C {formatQuote(ohlc.close)}
             </div>
           </div>
         </div>
@@ -88,14 +88,14 @@ export function PriceChart() {
         </div>
       </div>
       <div className="flex min-h-0 flex-1 gap-2">
-        <div className="flex flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1">
+        <div className="hidden flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1 sm:flex">
           {tools.map((Icon, i) => (
             <button key={i} type="button" className="icon-btn h-8 w-8">
               <Icon size={14} />
             </button>
           ))}
         </div>
-        <div className="min-h-[320px] flex-1">
+        <div className="min-h-[220px] min-w-0 flex-1 sm:min-h-[320px]">
           <CandleChart candles={candles} dark={theme === "dark"} />
         </div>
       </div>
