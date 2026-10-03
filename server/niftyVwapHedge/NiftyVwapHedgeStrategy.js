@@ -1,3 +1,4 @@
+import { liveExitPrice } from "../executionSpeed.js";
 import { OptionStrikeSelector } from "../niftyVwap/OptionStrikeSelector.js";
 import { sessionBars, lastBarVwapReversal, aggregateSessionBars } from "../niftyVwap/VwapSignalEngine.js";
 import { niftyVwapHedgeConfig } from "./config.js";
@@ -203,8 +204,21 @@ export const NiftyVwapHedgeStrategy = {
       positions.find((row) => state.hedgeSide && row.option === state.hedgeSide);
 
     if (primaryPos && state.primaryEntryPrice > 0) {
-      const mark = Number(primaryPos.ltp || primaryPos.avg);
+      const sideNow = state.primarySide || primaryPos.option || "";
+      const chain = sideNow === "PE" ? Number(input.peLtp) : Number(input.ceLtp);
+      const mark =
+        liveExitPrice({
+          chain,
+          tick: primaryPos.ltp,
+          avg: primaryPos.avg || state.primaryEntryPrice,
+          ticked: primaryPos.ticked === true,
+        }) || Number(primaryPos.ltp || primaryPos.avg);
+      const dip = mark;
       if (mark >= state.primaryTargetPrice) {
+        if (input.targetResting) {
+          algo.lastSignal = "EXIT PRIMARY AT BROKER";
+          return { action: "exit-pending", reason: "primary-target" };
+        }
         const closed = input.adapter.exit(primaryPos);
         if (closed?.queued) {
           state.inFlight = true;
@@ -222,7 +236,7 @@ export const NiftyVwapHedgeStrategy = {
         resetHedgeCycle(state);
         return { action: "exit-primary", reason: "primary-target" };
       }
-      if (!state.hedgeEntered && !hedgePos && mark <= state.hedgeTriggerPrice && !state.inFlight) {
+      if (!state.hedgeEntered && !hedgePos && dip <= state.hedgeTriggerPrice && !state.inFlight) {
         if (totalLots(positions, config.lotSize) + config.hedgeLots > config.maxTotalLots) {
           algo.lastSignal = "MAX 3 LOTS";
           return { action: "skip", reason: "max-lots" };

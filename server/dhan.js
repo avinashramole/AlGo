@@ -44,6 +44,7 @@ import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import { adminBookFromDhan } from "./memberBrokerPnl.js";
 import { looksLikePrevClose } from "./quoteDayChange.js";
+import { crossBuyLimit, needsScripMasterLookup } from "./executionSpeed.js";
 import {
   canAutoGenerate,
   clearTokenBackoff,
@@ -891,6 +892,24 @@ function handleDhanPollError(area, error) {
     return;
   }
   setDhanFeed({ error: error.message || `Dhan ${area} request failed` });
+}
+
+let fastAccountTimer = null;
+function scheduleFastAccountSync() {
+  if (fastAccountTimer) clearTimeout(fastAccountTimer);
+  const again = () => {
+    fastAccountTimer = setTimeout(() => {
+      fastAccountTimer = null;
+      void pullAccount();
+    }, 1400);
+    fastAccountTimer.unref?.();
+  };
+  fastAccountTimer = setTimeout(() => {
+    fastAccountTimer = null;
+    void pullAccount();
+    again();
+  }, 500);
+  fastAccountTimer.unref?.();
 }
 
 async function pullAccount() {
@@ -1834,7 +1853,7 @@ export async function placeDhanOrder(payload = {}) {
   const desk = getOptionMeta();
   const wantedExpiry = normalizeExpiry(payload.expiry);
   let scripSecurityId = "";
-  if (wantedExpiry) {
+  if (needsScripMasterLookup(payload)) {
     scripSecurityId = await resolveTradableSecurityId({
       symbol: payload.symbol,
       expiry: wantedExpiry,
@@ -1876,6 +1895,8 @@ export async function placeDhanOrder(payload = {}) {
     error.status = 400;
     throw error;
   }
+  const priced = crossBuyLimit(payload);
+  if (priced !== payload) payload.price = priced.price;
   const orderType = String(payload.type || "MARKET").toUpperCase() === "LIMIT" ? "LIMIT" : "MARKET";
   const useAmo = payload.afterMarketOrder === true || payload.amo === true || !liveSessionOpenForOrder(payload);
   const ipPromise = creds.lane === "admin" ? fetchDhanIp() : Promise.resolve(null);
@@ -1953,6 +1974,7 @@ export async function placeDhanOrder(payload = {}) {
   }
   if (!account) {
     void pullAccount();
+    scheduleFastAccountSync();
   }
   return {
     orderId,

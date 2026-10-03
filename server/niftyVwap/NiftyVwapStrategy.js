@@ -1,3 +1,4 @@
+import { liveExitPrice } from "../executionSpeed.js";
 import { exchangeSegmentFor } from "../optionChain.js";
 import { optionEngineConfig } from "./config.js";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
@@ -63,15 +64,23 @@ function fillFromResult(result, fallbackPrice) {
 }
 
 export const NiftyVwapStrategy = {
-  manageOpen({ algo, config, signal, open, mark, now, minutesToClose, adapter }) {
+  manageOpen({ algo, config, signal, open, mark, now, minutesToClose, adapter, targetResting }) {
     const state = runtimeState(algo);
     if (!(mark > 0) || !(state.fillPrice > 0)) return { action: "hold" };
+    const live = liveExitPrice({
+      chain: mark,
+      tick: open.ltp,
+      avg: open.avg || state.fillPrice,
+      ticked: open.ticked === true,
+    });
+    const trailMark = live || Number(mark);
+    const stopMark = trailMark;
     const nextStop =
       config.useTrail === false
         ? Number(state.stopPrice || TrailingStopManager.initialStop(state.fillPrice, config.initialSlPct))
-        : TrailingStopManager.nextStop({
+          : TrailingStopManager.nextStop({
             entry: state.fillPrice,
-            mark,
+            mark: trailMark,
             prevStop: state.stopPrice,
             initialSlPct: config.initialSlPct,
             activationPct: config.trailingActivationPct,
@@ -82,7 +91,7 @@ export const NiftyVwapStrategy = {
           });
     if (config.useTrail !== false && nextStop > Number(state.stopPrice || 0)) {
       state.stopPrice = nextStop;
-      if (TrailingStopManager.profitPct(state.fillPrice, mark) >= config.trailingActivationPct) {
+      if (TrailingStopManager.profitPct(state.fillPrice, trailMark) >= config.trailingActivationPct) {
         state.trailActive = true;
       }
     }
@@ -90,12 +99,16 @@ export const NiftyVwapStrategy = {
     const against = open.option === "PE" ? signal.againstPe : signal.againstCe;
     state.consecutiveAgainst = against;
     let reason = "";
-    if (TrailingStopManager.hitStop(mark, state.stopPrice)) reason = "sl";
-    else if (TrailingStopManager.hitTarget(mark, state.targetPrice)) reason = "target";
+    if (TrailingStopManager.hitStop(stopMark, state.stopPrice)) reason = "sl";
+    else if (TrailingStopManager.hitTarget(trailMark, state.targetPrice)) reason = "target";
     else if (config.useVwapExit !== false && against >= config.vwapExitCandles) reason = "vwap-exit";
     else if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) reason = "eod";
     if (!reason) return { action: "hold", stop: state.stopPrice };
-    const closed = adapter.exit({ ...open, ltp: mark });
+    if (reason === "target" && targetResting) {
+      algo.lastSignal = "EXIT TARGET AT BROKER";
+      return { action: "exit-pending", reason: "target" };
+    }
+    const closed = adapter.exit({ ...open, ltp: trailMark });
     if (closed?.error) {
       TradeLogger.record("exit-failed", { reason: closed.error, message: closed.error });
       return { action: "exit-failed", reason: closed.error };
@@ -370,6 +383,7 @@ export const NiftyVwapStrategy = {
         now,
         minutesToClose,
         adapter: input.adapter,
+        targetResting: input.targetResting === true,
       });
     }
 

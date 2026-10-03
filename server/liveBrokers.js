@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
+import { crossBuyLimit } from "./executionSpeed.js";
 import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
 import { totpCode } from "./totp.js";
 
@@ -1199,10 +1200,11 @@ function memberKotakOwnKeyError(error, session = {}) {
 }
 
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
+  const priced = crossBuyLimit(payload);
   const brokerName = liveBrokerMeta(id)?.name || id;
-  const { lane, session } = liveOrderSession(payload, liveBrokerSession(id), { brokerName });
+  const { lane, session } = liveOrderSession(priced, liveBrokerSession(id), { brokerName });
   try {
-    return await placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, lane);
+    return await placeConnectedLiveBrokerOrder(id, priced, session, fetchImpl, lane);
   } catch (error) {
     const owned = lane === "member" && String(id) === "kotak" ? memberKotakOwnKeyError(error, session) : error;
     const wrapped = lane === "member" ? annotateMemberLiveAuthError(owned, session, { brokerName }) : owned;
