@@ -1410,6 +1410,113 @@ test("first candle ATM+2 and ATM-2 orders use that strike, not ATM", () => {
   assert.equal(minusBook.places[0].securityId, "pe-22600");
 });
 
+test("a live option tick at the target exits while the chain price is still behind", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Target tick" });
+  const book = bookAdapter();
+  const entry = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 103.5)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 103.5,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(entry.action, "entry");
+  algo.vwapState.targetPrice = 145;
+  book.positions[0].ltp = 145;
+  book.positions[0].ticked = true;
+  book.positions[0].securityId = "ce-24500";
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(100, 103.5), bar(1, 120)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 120,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hit.action, "exit");
+  assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 1);
+});
+
+test("a target already resting at the broker is not sold a second time", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Target resting" });
+  const book = bookAdapter();
+  NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 103.5)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 103.5,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  algo.vwapState.targetPrice = 145;
+  book.positions[0].ltp = 145;
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(100, 103.5), bar(1, 145)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 145,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+    targetResting: true,
+  });
+  assert.equal(hit.action, "exit-pending");
+  assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 0);
+  assert.equal(book.positions.length, 1);
+});
+
+test("live exit keeps the contract id so the broker send does not wait on a lookup", () => {
+  const queued = [];
+  const live = LiveTradingAdapter({
+    queueLiveOrder: (row) => {
+      queued.push(row);
+      return { ok: true, queued: true, status: "PENDING" };
+    },
+  });
+  const result = live.exit({
+    symbol: "NIFTY 24500 CE",
+    qty: 65,
+    strike: 24500,
+    option: "CE",
+    expiry: "2026-08-27",
+    securityId: "998877",
+    strategy: "NIFTY 5m first candle",
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, true);
+  assert.equal(queued[0].securityId, "998877");
+  assert.equal(queued[0].type, "MARKET");
+  assert.equal(queued[0].cancelArmedTarget, true);
+});
+
 test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
   assert.equal(TrailingStopManager.initialStop(100, 20), 80);
   assert.equal(TrailingStopManager.targetPrice(100, 40), 140);

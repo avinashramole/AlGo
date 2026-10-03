@@ -24,6 +24,7 @@ import { optionBacktestWindow } from "./niftyOptionHistory.js";
 import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
+import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { listPublicUsers } from "./auth.js";
@@ -646,6 +647,143 @@ function contractSecurityId(payload = {}) {
 
 let notifyLiveAlgoOrders = () => {};
 
+const armedTargetSells = new Map();
+
+function strategyKey(name) {
+  return String(realStrategyName(name) || name || "").trim();
+}
+
+function rememberArmedTarget(strategy, info = {}) {
+  const key = strategyKey(strategy);
+  if (!key) return;
+  const prev = armedTargetSells.get(key) || {};
+  armedTargetSells.set(key, { ...prev, ...info, strategy: key });
+}
+
+function targetSellResting(strategy, open) {
+  const key = strategyKey(strategy);
+  const armed = armedTargetSells.get(key);
+  if (armed?.copied) {
+    const same = open && armed.positionId && String(open.id) === String(armed.positionId);
+    if (same) return true;
+    armedTargetSells.delete(key);
+  }
+  const pending = pendingLiveAlgoOrders.some(
+    (row) => !row.copyUserId && row.role === "target" && strategyKey(row.strategy) === key,
+  );
+  if (pending) return true;
+  if (armed?.orderId && !armed.suppressed) {
+    const order = (state.orders || []).find((row) => String(row.id) === String(armed.orderId));
+    const status = orderStatusText(order);
+    if (!order || !["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return true;
+  }
+  return (state.orders || []).some(
+    (row) =>
+      !row.copyUserId &&
+      row.role === "target" &&
+      strategyKey(row.strategy) === key &&
+      orderIsWorking(row) &&
+      sameLiveContract(open || {}, row),
+  );
+}
+
+export function suppressArmedTarget(strategy) {
+  const key = strategyKey(strategy);
+  if (!key) return "";
+  const armed = armedTargetSells.get(key);
+  if (armed) armed.suppressed = true;
+  for (let i = pendingLiveAlgoOrders.length - 1; i >= 0; i -= 1) {
+    const row = pendingLiveAlgoOrders[i];
+    if (!row.copyUserId && row.role === "target" && strategyKey(row.strategy) === key) {
+      pendingLiveAlgoOrders.splice(i, 1);
+    }
+  }
+  return armed?.orderId ? String(armed.orderId) : "";
+}
+
+export function takeSuppressedTargetOrder(payload = {}) {
+  if (payload.role !== "target") return "";
+  const key = strategyKey(payload.strategy);
+  const armed = armedTargetSells.get(key);
+  if (!armed?.suppressed) return "";
+  const id = String(armed.orderId || "");
+  armed.orderId = "";
+  return id;
+}
+
+function noteArmedTargetResult(payload, live, error) {
+  if (payload?.role !== "target" || payload?.copyUserId) return;
+  const key = strategyKey(payload.strategy);
+  if (!key) return;
+  const failed = Boolean(error) || ["REJECTED", "CANCELLED", "FAILED", "EXPIRED"].includes(String(live?.status || "").toUpperCase());
+  if (failed) {
+    const armed = armedTargetSells.get(key);
+    if (armed && !armed.orderId) armedTargetSells.delete(key);
+    return;
+  }
+  const orderId = String(live?.orderId || "");
+  rememberArmedTarget(key, { orderId, pending: false });
+}
+
+function fanOutFilledTarget(row) {
+  const key = strategyKey(row?.strategy);
+  const armed = armedTargetSells.get(key);
+  if (!armed || armed.copied || !armed.orderId) return;
+  if (String(row?.id) !== String(armed.orderId)) return;
+  if (orderFeedStatus(row.status) !== "FILLED") return;
+  armed.copied = true;
+  const algo = (state.algos || []).find((item) => strategyKey(item.name) === key) || {};
+  dispatchMemberExitCopies(armed.position || {}, algo, { enqueueLiveOrder: enqueueLiveAlgoOrder });
+}
+
+function armLiveTarget({ algo, open, target, mark, mode }) {
+  if (mode !== "live" || !open || !(Number(open.qty) > 0)) return false;
+  const key = strategyKey(algo?.name);
+  const goal = Number(target);
+  const plan = planTargetExit({ mark, target: goal, resting: targetSellResting(key, open) });
+  if (plan.action === "resting" || plan.action === "wait-resting") return true;
+  if (plan.action !== "arm") return false;
+  if (runtimeState(algo).exitQueued) return false;
+  const queued = queueLiveAlgoOrder({
+    symbol: open.symbol,
+    side: "SELL",
+    qty: Math.abs(Number(open.qty) || 0),
+    price: plan.price,
+    type: "LIMIT",
+    product: open.product || "MIS",
+    securityId: open.securityId,
+    strategy: algo.name,
+    brokerId: open.brokerId && open.brokerId !== "paper" ? open.brokerId : algo.brokerId || "dhan",
+    strike: open.strike,
+    option: open.option,
+    expiry: open.expiry,
+    kind: open.kind || "option",
+    role: "target",
+    skipMemberCopy: true,
+    exchangeSegment: exchangeSegmentFor(open.symbol),
+  });
+  if (queued?.queued) {
+    rememberArmedTarget(key, {
+      pending: true,
+      positionId: String(open.id || ""),
+      position: {
+        symbol: open.symbol,
+        type: "BUY",
+        qty: Math.abs(Number(open.qty) || 0),
+        product: open.product || "MIS",
+        securityId: open.securityId,
+        strike: open.strike,
+        option: open.option,
+        expiry: open.expiry,
+        strategy: algo.name,
+        brokerId: open.brokerId && open.brokerId !== "paper" ? open.brokerId : algo.brokerId || "dhan",
+        kind: open.kind || "option",
+      },
+    });
+  }
+  return true;
+}
+
 export function onLiveAlgoOrders(fn) {
   notifyLiveAlgoOrders = typeof fn === "function" ? fn : () => {};
 }
@@ -696,10 +834,13 @@ export function queueLiveAlgoOrder(payload) {
   for (const brokerId of targets) {
     last = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
-  const algo = liveCopyAlgo(deskStamped);
-  for (const copy of memberCopyPayloads(deskStamped, algo || {})) {
-    last = enqueueLiveAlgoOrder(copy);
+  if (!payload.skipMemberCopy) {
+    const algo = liveCopyAlgo(deskStamped);
+    for (const copy of memberCopyPayloads(deskStamped, algo || {})) {
+      last = enqueueLiveAlgoOrder(copy);
+    }
   }
+  if (typeof onLiveBookChange === "function") onLiveBookChange();
   queueMicrotask(() => {
     try {
       notifyLiveAlgoOrders();
@@ -808,6 +949,7 @@ function syncExecutedTradeCount(previousRow, nextRow) {
 }
 
 export function noteLiveAlgoOrderResult(payload, live, error) {
+  noteArmedTargetResult(payload, live, error);
   if (payload?.copyUserId) return;
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
@@ -1099,6 +1241,24 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
   const ceSecurityId = optionLegId(ceStrike, "CE", root);
   const peSecurityId = optionLegId(peStrike, "PE", root);
+  let targetResting = false;
+  if (open && mode === "live") {
+    const leg = PositionManager.niftyOptionLeg(open);
+    const chainMark = (leg?.option || open.option) === "PE" ? peLtp : ceLtp;
+    const live = liveExitPrice({
+      chain: chainMark,
+      tick: open.ltp,
+      avg: open.avg || vs.fillPrice,
+      ticked: open.ticked === true,
+    });
+    targetResting = armLiveTarget({
+      algo,
+      open,
+      target: vs.targetPrice,
+      mark: live || chainMark || open.ltp,
+      mode,
+    });
+  }
   const adapter =
     mode === "live"
       ? LiveTradingAdapter({
@@ -1133,6 +1293,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     positions,
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,
+    targetResting,
   });
   showLivePreview();
   if (
@@ -1227,6 +1388,27 @@ function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
   const peId = optionLegId(atm, "PE");
   const pending = pendingLiveAlgoOrders.filter((row) => row.strategy === algo.name);
   const orders = (state.orders || []).filter((row) => row.strategy === algo.name);
+  const primary =
+    positions.find((row) => (row.role || "") === "primary") ||
+    positions.find((row) => row.option && row.option === hs.primarySide) ||
+    null;
+  let targetResting = false;
+  if (mode === "live" && primary && Number(hs.primaryTargetPrice) > 0) {
+    const chainMark = (hs.primarySide || primary.option) === "PE" ? peLtp : ceLtp;
+    const live = liveExitPrice({
+      chain: chainMark,
+      tick: primary.ltp,
+      avg: primary.avg || hs.primaryEntryPrice,
+      ticked: primary.ticked === true,
+    });
+    targetResting = armLiveTarget({
+      algo,
+      open: primary,
+      target: hs.primaryTargetPrice,
+      mark: live || chainMark || primary.ltp,
+      mode,
+    });
+  }
   NiftyVwapHedgeStrategy.tick({
     algo,
     config,
@@ -1246,6 +1428,7 @@ function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
     ceSecurityId: ceId,
     peSecurityId: peId,
     adapter: hedgeAdapter(mode, algo),
+    targetResting,
   });
 }
 
@@ -1782,6 +1965,8 @@ export function quoteSymbol(symbol) {
   return liveLtpForSymbol(symbol);
 }
 
+setLivePriceReader(quoteSymbol);
+
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
   const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
@@ -1860,14 +2045,46 @@ export function onDhanBookChanged(fn) {
 }
 
 export function livePositionQuoteTargets() {
-  return (state.positions || [])
-    .filter((row) => row.securityId && (row.live || row.brokerId === "dhan") && !isPaperRow(row))
-    .map((row) => ({
+  const out = [];
+  const seen = new Set();
+  const add = (row) => {
+    const securityId = String(row?.securityId || "").trim();
+    if (!securityId || securityId === "0") return;
+    const segment = row.segment || exchangeSegmentFor(row.symbol);
+    const key = `${segment}:${securityId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
       symbol: row.symbol,
-      segment: exchangeSegmentFor(row.symbol),
-      securityId: Number(row.securityId) || row.securityId,
-      kind: isOptionContract(row.symbol, row.option) ? "option" : "future",
-    }));
+      segment,
+      securityId: Number(securityId) || securityId,
+      kind: row.kind || (isOptionContract(row.symbol, row.option) ? "option" : "future"),
+    });
+  };
+  for (const row of state.positions || []) {
+    if (isPaperRow(row) || !row.securityId) continue;
+    if (!(row.live || row.brokerId === "dhan")) continue;
+    add(row);
+  }
+  for (const row of pendingLiveAlgoOrders) {
+    if (row.copyUserId) continue;
+    if (row.brokerId && row.brokerId !== "dhan") continue;
+    add({ ...row, kind: "option" });
+  }
+  for (const algo of state.algos || []) {
+    if (!algo.enabled || algo.runMode !== "live") continue;
+    const vs = algo.vwapState || algo.hedgeState || {};
+    const root = isCrudeFirstCandleAlgo(algo) ? "CRUDEOIL" : "NIFTY";
+    const strike = Number(vs.lockedStrike || vs.primaryStrike) || 0;
+    const option = vs.lockedOption === "PE" || vs.primarySide === "PE" ? "PE" : vs.lockedOption === "CE" || vs.primarySide === "CE" ? "CE" : "";
+    if (!(strike > 0) || !option) continue;
+    add({
+      symbol: vs.lockedSymbol || `${root} ${strike} ${option}`,
+      securityId: optionLegId(strike, option, root),
+      kind: "option",
+    });
+  }
+  return out;
 }
 
 export function snapshot() {
@@ -2985,6 +3202,7 @@ export function replaceDhanOrders(rows) {
     kept.push(strategy ? { ...normalized, strategy } : normalized);
   }
   state.orders = [...tagged, ...kept];
+  for (const row of tagged) fanOutFilledTarget(row);
 }
 
 export function refreshCopyOrdersFromBroker(userId, updates = []) {
@@ -3676,8 +3894,33 @@ function dayChange(index, quote, ltp) {
   };
 }
 
+function paintOptionPremium(quote) {
+  const parsed = parseOptionContract(quote?.symbol);
+  if (quote?.kind !== "option" && !parsed) return;
+  const ltp = Number(quote?.ltp);
+  if (!isSaneOptionLtp(ltp)) return;
+  const price = round2(ltp);
+  const securityId = String(quote.securityId || "");
+  const paint = (rows) => {
+    if (!Array.isArray(rows)) return;
+    for (const row of rows) {
+      const callId = String(row.callId || row.callSecurityId || "");
+      const putId = String(row.putId || row.putSecurityId || "");
+      if (securityId && securityId === putId) row.putLtp = price;
+      else if (securityId && securityId === callId) row.callLtp = price;
+      else if (parsed && Number(row.strike) === parsed.strike) {
+        if (parsed.option === "PE") row.putLtp = price;
+        else row.callLtp = price;
+      }
+    }
+  };
+  paint(state.optionChain);
+  for (const pack of optionChainCache.values()) paint(pack?.rows);
+}
+
 export function applyLiveQuotes(quotes) {
   for (const quote of quotes) {
+    paintOptionPremium(quote);
     const indexSymbol =
       INDEX_ALIASES[quote.parent] ||
       INDEX_ALIASES[quote.symbol] ||

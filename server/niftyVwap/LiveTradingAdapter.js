@@ -27,11 +27,14 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
           strike: position.strike,
           option: position.option,
           expiry: position.expiry,
+          securityId: position.securityId,
+          exchangeSegment: position.exchangeSegment,
           kind: "option",
           product: "MIS",
           type: "MARKET",
           strategy: position.strategy,
           brokerId: position.brokerId || "dhan",
+          cancelArmedTarget: true,
         });
         return { ok: true, queued: true };
       }

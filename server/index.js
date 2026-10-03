@@ -66,6 +66,8 @@ import {
   fanOutAdminOrderCopies,
   noteLiveAlgoOrderResult,
   onLiveAlgoOrders,
+  suppressArmedTarget,
+  takeSuppressedTargetOrder,
   bookRejectedLiveOrder,
   bookMemberCopyOnAdminDesk,
   queueLivePositionExit,
@@ -104,10 +106,17 @@ app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-let flushingLiveAlgos = false;
-let flushAgain = false;
-
 async function sendLiveBrokerOrder(payload) {
+  if (payload?.cancelArmedTarget) {
+    const cancelId = suppressArmedTarget(payload.strategy);
+    if (cancelId) {
+      try {
+        await cancelDhanOrder(cancelId);
+      } catch (error) {
+        console.log(`Target limit cancel failed: ${error?.message || error}`);
+      }
+    }
+  }
   const adminPayload = adminLiveOrderPayload(payload);
   const brokerId = String(adminPayload.brokerId || "dhan");
   if (brokerId === "dhan") {
@@ -123,19 +132,13 @@ async function sendLiveBrokerOrder(payload) {
 }
 
 async function flushLiveAlgoOrders() {
-  if (flushingLiveAlgos) {
-    flushAgain = true;
-    return;
-  }
   const queued = drainPendingLiveAlgoOrders();
   if (!queued.length) return;
-  flushingLiveAlgos = true;
-  try {
-    const outcomes = await sendQueuedLiveOrders(queued, {
-      sendAdmin: (payload) => sendLiveBrokerOrder(payload),
-      sendCopy: (payload) => sendMemberCopyOrder(payload),
-    });
-    for (const item of outcomes) {
+  const outcomes = await sendQueuedLiveOrders(queued, {
+    sendAdmin: (payload) => sendLiveBrokerOrder(payload),
+    sendCopy: (payload) => sendMemberCopyOrder(payload),
+  });
+  for (const item of outcomes) {
       const payload = item.payload || {};
       const brokerId = item.brokerId || String(payload.brokerId || "dhan");
       if (payload.copyUserId) {
@@ -162,6 +165,14 @@ async function flushLiveAlgoOrders() {
         const live = item.value;
         const order = placeOrder({ ...payload, brokerId, live, copiedToMembers: true });
         noteLiveAlgoOrderResult(payload, live, null);
+        const cancelId = takeSuppressedTargetOrder(payload);
+        if (cancelId) {
+          try {
+            await cancelDhanOrder(cancelId);
+          } catch (error) {
+            console.log(`Target limit cancel failed: ${error?.message || error}`);
+          }
+        }
         if (order?.error) console.log(`Strategy live fill book: ${order.error}`);
         continue;
       }
@@ -170,13 +181,6 @@ async function flushLiveAlgoOrders() {
       if (order?.error) console.log(`Strategy live fill book: ${order.error}`);
       console.log(`Strategy live order failed: ${item.error?.message || item.error}`);
     }
-  } finally {
-    flushingLiveAlgos = false;
-    if (flushAgain) {
-      flushAgain = false;
-      await flushLiveAlgoOrders();
-    }
-  }
 }
 
 onLiveAlgoOrders(() => {
