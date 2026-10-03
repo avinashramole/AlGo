@@ -171,7 +171,15 @@ type MarketContextValue = {
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (
     id: string,
-    payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
+    payload: {
+      clientId?: string;
+      apiKey?: string;
+      accessToken?: string;
+      sessionToken?: string;
+      mobile?: string;
+      mpin?: string;
+      totpSecret?: string;
+    },
   ) => Promise<void>;
   enableAuto: (payload: {
     clientId?: string;
@@ -515,7 +523,15 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       connect: async (
         id: string,
-        payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string },
+        payload: {
+          clientId?: string;
+          apiKey?: string;
+          accessToken?: string;
+          sessionToken?: string;
+          mobile?: string;
+          mpin?: string;
+          totpSecret?: string;
+        },
       ) => {
         const result = await connectBroker(id, payload);
         if (result.snapshot) mergeSnapshot(result.snapshot);
