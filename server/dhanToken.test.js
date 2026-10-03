@@ -12,6 +12,7 @@ import {
   jwtExpiryIso,
   lastDailyResetAt,
   keepAlivePlan,
+  savedTokenBootAction,
   loadDhanSession,
   pickSavedDhanAccess,
   saveDhanSession,
@@ -435,7 +436,7 @@ test("keepAlivePlan keeps a long-lived JWT on restart and still mints at 8:00 IS
       remainingMs: 5 * 60 * 1000,
       now: tenThirty,
     }),
-    { action: "reuse", because: "restart-keeps-token" },
+    { action: "mint", because: "daily-reset" },
   );
   assert.deepEqual(
     keepAlivePlan({
@@ -445,7 +446,92 @@ test("keepAlivePlan keeps a long-lived JWT on restart and still mints at 8:00 IS
       remainingMs: Number.NaN,
       now: tenThirty,
     }),
-    { action: "reuse", because: "restart-keeps-token" },
+    { action: "mint", because: "daily-reset" },
+  );
+});
+
+test("savedTokenBootAction reconnects a saved JWT and renews when Dhan rejects it", () => {
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      canAutoGenerate: true,
+      tokenLooksAlive: true,
+      started: true,
+      tokenStillGood: true,
+    }),
+    { action: "live", because: "saved-token" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      canAutoGenerate: true,
+      tokenLooksAlive: true,
+      tokenStillGood: true,
+    }),
+    { action: "retry", because: "saved-token-kept" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      canAutoGenerate: true,
+      tokenLooksAlive: true,
+      tokenStillGood: true,
+      authRejected: true,
+    }),
+    { action: "renew", because: "dhan-rejected-token" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      tokenLooksAlive: true,
+      tokenStillGood: true,
+      authRejected: true,
+    }),
+    { action: "renew", because: "dhan-rejected-token" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({ canAutoGenerate: true }),
+    { action: "renew", because: "needs-token" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      canAutoGenerate: true,
+      tokenLooksAlive: true,
+      tokenStillGood: false,
+    }),
+    { action: "renew", because: "needs-token" },
+  );
+  assert.deepEqual(savedTokenBootAction({}), { action: "fail", because: "expired-no-creds" });
+  assert.deepEqual(
+    savedTokenBootAction({ hasToken: true, hasClientId: true, feedStopped: true, tokenStillGood: true }),
+    { action: "hold", because: "feed-stopped" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      authRejected: true,
+      tokenLooksAlive: true,
+      rateLimited: true,
+      tokenStillGood: true,
+    }),
+    { action: "wait", because: "rate-limit" },
+  );
+  assert.deepEqual(
+    savedTokenBootAction({
+      hasToken: true,
+      hasClientId: true,
+      authRejected: true,
+      canAutoGenerate: true,
+      blocked: true,
+    }),
+    { action: "wait", because: "cooldown" },
   );
 });
 

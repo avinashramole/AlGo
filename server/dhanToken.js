@@ -294,10 +294,44 @@ function insideDailyResetWindow(now = Date.now()) {
 }
 
 /**
+ * After a restart, start the feed with a saved JWT that Dhan still accepts.
+ * Call RenewToken (then PIN + TOTP) when that JWT is missing, expired, or Dhan rejected it.
+ * A JWT with more than 20 minutes left is not replaced on a healthy restart.
+ */
+export function savedTokenBootAction({
+  feedStopped = false,
+  hasToken = false,
+  hasClientId = false,
+  canAutoGenerate = false,
+  tokenLooksAlive = false,
+  started = false,
+  authRejected = false,
+  rateLimited = false,
+  blocked = false,
+  tokenStillGood = false,
+} = {}) {
+  if (feedStopped) return { action: "hold", because: "feed-stopped" };
+  if (started) return { action: "live", because: "saved-token" };
+  if (blocked) return { action: "wait", because: "cooldown" };
+  if (rateLimited) return { action: "wait", because: "rate-limit" };
+  const canRenew = Boolean(canAutoGenerate || tokenLooksAlive);
+  const savedStartable = Boolean(hasToken && hasClientId && tokenStillGood && !authRejected);
+  if (savedStartable) return { action: "retry", because: "saved-token-kept" };
+  if (canRenew && (authRejected || canAutoGenerate || !tokenStillGood || !hasToken)) {
+    return { action: "renew", because: authRejected ? "dhan-rejected-token" : "needs-token" };
+  }
+  if (!canRenew && (!tokenStillGood || !hasToken)) {
+    return { action: "fail", because: "expired-no-creds" };
+  }
+  if (hasToken && hasClientId) return { action: "retry", because: "saved-token-kept" };
+  return { action: "fail", because: "no-client-or-creds" };
+}
+
+/**
  * Decide whether keep-alive should mint a new Dhan token or reuse the current JWT.
  * The 8:00 IST job still mints while this process is already running.
- * A restart or deploy keeps a JWT that has more than 20 minutes left, including
- * a restart that happens inside the 8:00 IST window.
+ * A restart keeps a JWT with more than 20 minutes left. A missing, expired, or
+ * sub-20-minute JWT is minted on boot when PIN + TOTP are saved.
  */
 export function keepAlivePlan({
   reason = "schedule",
@@ -316,14 +350,11 @@ export function keepAlivePlan({
   }
   const tokenStillGood = Number.isFinite(remainingMs) && remainingMs > TOKEN_STILL_GOOD_MS;
   const userAsked = reason === "save" || reason === "api" || reason === "auth";
-  // A deploy/restart must not mint, even inside the 8:00 IST window and even when the JWT is short.
-  // The 8:00 job still mints only while this process is already running.
+  // A healthy restart keeps a JWT that still has more than 20 minutes, even inside the 8:00 IST window.
+  // A short or dead JWT is not stuck on "reuse" — boot falls through and mints when PIN + TOTP exist.
   if (tokenStillGood && needsFresh && !userAsked && (reason === "boot" || !insideDailyResetWindow(now))) {
     if (reason === "boot") return { action: "reuse", because: "restart-keeps-token" };
     return { action: "wait", because: "restart-keeps-token" };
-  }
-  if (reason === "boot" && needsFresh) {
-    return { action: "reuse", because: "restart-keeps-token" };
   }
   if (canAutoGenerate && needsFresh) {
     return { action: "mint", because: "daily-reset" };
