@@ -19,6 +19,9 @@ export function Brokers() {
   const [dhanTokenFocused, setDhanTokenFocused] = useState(false);
   const [dhanPin, setDhanPin] = useState("");
   const [dhanTotp, setDhanTotp] = useState("");
+  const [kotakMobile, setKotakMobile] = useState("");
+  const [kotakMpin, setKotakMpin] = useState("");
+  const [kotakTotp, setKotakTotp] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -65,7 +68,18 @@ export function Brokers() {
       if (selected.id === "dhan") {
         await submitDhan(clientId, secret);
       } else {
-        await connect(selected.id, { clientId, apiKey, accessToken: secret, sessionToken });
+        await connect(selected.id, {
+          clientId,
+          apiKey,
+          accessToken: secret,
+          sessionToken,
+          mobile: selected.id === "kotak" ? kotakMobile : undefined,
+          mpin: selected.id === "kotak" ? kotakMpin : undefined,
+          totpSecret: selected.id === "kotak" ? kotakTotp : undefined,
+        });
+        setKotakMobile("");
+        setKotakMpin("");
+        setKotakTotp("");
       }
       setSelected(null);
       setSecret("");
@@ -543,7 +557,7 @@ export function Brokers() {
               </label>
             ) : null}
             <label className="mt-3 block text-xs font-semibold">
-              {selected.id === "dhan" ? "Access token" : selected.id === "angelone" ? "JWT token" : selected.id === "kotak" ? "Trade session token" : "Access token"}
+              {selected.id === "angelone" ? "JWT token" : "Access token"}
               <input
                 type="password"
                 className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
@@ -553,16 +567,55 @@ export function Brokers() {
               />
             </label>
             {selected.id === "kotak" ? (
-              <label className="mt-3 block text-xs font-semibold">
-                Neo sid
-                <input
-                  type="password"
-                  className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-                  value={sessionToken}
-                  onChange={(event) => setSessionToken(event.target.value)}
-                  autoComplete="off"
-                />
-              </label>
+              <>
+                <label className="mt-3 block text-xs font-semibold">
+                  Trade login mobile
+                  <input
+                    className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                    value={kotakMobile}
+                    onChange={(event) => setKotakMobile(event.target.value.replace(/[^\d+]/g, "").slice(0, 13))}
+                    placeholder="+91XXXXXXXXXX"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="mt-3 block text-xs font-semibold">
+                  MPIN
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                    value={kotakMpin}
+                    onChange={(event) => setKotakMpin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="Kotak Neo MPIN"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="mt-3 block text-xs font-semibold">
+                  TOTP secret
+                  <input
+                    type="password"
+                    className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                    value={kotakTotp}
+                    onChange={(event) => setKotakTotp(event.target.value)}
+                    placeholder="Setup TOTP secret, or the current 6-digit code"
+                    autoComplete="off"
+                  />
+                </label>
+                <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                  Admin orders call Kotak <b>tradeApiLogin</b> with this access token, mobile, client ID, and TOTP, then{" "}
+                  <b>tradeApiValidate</b> with the MPIN, then place on the host Kotak returns.
+                </p>
+                <label className="mt-3 block text-xs font-semibold">
+                  Neo sid (optional)
+                  <input
+                    type="password"
+                    className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+                    value={sessionToken}
+                    onChange={(event) => setSessionToken(event.target.value)}
+                    autoComplete="off"
+                  />
+                </label>
+              </>
             ) : null}
             {error && <div className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div>}
             <div className="mt-4 flex gap-2">

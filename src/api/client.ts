@@ -1424,7 +1424,16 @@ export function startDhanFeed() {
 
 export function connectBroker(
   id: string,
-  payload: { clientId?: string; apiKey?: string; accessToken?: string; sessionToken?: string; jwtToken?: string },
+  payload: {
+    clientId?: string;
+    apiKey?: string;
+    accessToken?: string;
+    sessionToken?: string;
+    jwtToken?: string;
+    mobile?: string;
+    mpin?: string;
+    totpSecret?: string;
+  },
 ) {
   return request<{ snapshot: Snapshot }>(`/brokers/${id}/connect`, {
     method: "POST",

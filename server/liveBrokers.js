@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
 import { crossBuyLimit } from "./executionSpeed.js";
 import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
-import { totpCode } from "./totp.js";
+import { ipv4Request } from "./ipv4.js";
+import { totpCodes } from "./totp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = process.env.T2S_BROKER_SESSIONS_FILE || path.join(__dirname, "data", "broker-sessions.json");
@@ -86,7 +87,7 @@ export const LIVE_BROKER_CATALOG = [
       { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
       { id: "sessionToken", label: "Neo sid", secret: true, placeholder: "Sid from today's trade login, if already copied" },
     ],
-    help: "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid.",
+    help: "Quotes use the Neo consumer key. Admin orders call tradeApiLogin with the access token, mobile, client ID, and TOTP, then tradeApiValidate with the MPIN, then place on the host Kotak returns. The client ID is not the sid.",
   },
   {
     id: "angelone",
@@ -731,7 +732,10 @@ function requiredToken(payload) {
   const apiKey = String(payload.apiKey || payload.appId || payload.consumerKey || "").trim();
   const clientId = String(payload.clientId || payload.userId || payload.clientCode || "").trim();
   const sessionToken = String(payload.sessionToken || payload.sid || "").trim();
-  return { accessToken, apiKey, clientId, sessionToken };
+  const mobile = String(payload.mobile || "").trim();
+  const mpin = String(payload.mpin || "").trim();
+  const totpSecret = String(payload.totpSecret || payload.totp || "").trim();
+  return { accessToken, apiKey, clientId, sessionToken, mobile, mpin, totpSecret };
 }
 
 async function probeZerodha(fetchImpl, creds) {
@@ -832,12 +836,16 @@ export async function connectLiveBroker(id, payload = {}, fetchImpl = fetch) {
   const probe = PROBES[meta.id];
   if (!probe) throw fail("Unknown live broker.");
   const profile = await probe(fetchImpl, creds);
+  const previous = sessions[meta.id] || {};
   sessions[meta.id] = {
     id: meta.id,
     clientId: profile.clientId || creds.clientId,
     apiKey: creds.apiKey,
     accessToken: creds.accessToken,
-    sessionToken: creds.sessionToken,
+    sessionToken: creds.sessionToken || previous.sessionToken || "",
+    mobile: creds.mobile || previous.mobile || "",
+    mpin: creds.mpin || previous.mpin || "",
+    totpSecret: creds.totpSecret || previous.totpSecret || "",
     keyHint: hintOf(creds.accessToken || creds.apiKey),
     profileName: profile.profileName,
     funds: Number(profile.funds) || 0,
@@ -909,6 +917,34 @@ const KOTAK_ORDER_HOSTS = [
 ];
 
 const kotakTradeCache = new Map();
+
+export function clearKotakTradeCache() {
+  kotakTradeCache.clear();
+}
+
+function kotakTransport(fetchImpl) {
+  if (fetchImpl && fetchImpl !== fetch) return fetchImpl;
+  return (url, options = {}) =>
+    ipv4Request(url, {
+      method: options.method || "GET",
+      headers: options.headers,
+      body: options.body,
+      timeoutMs: 20000,
+    });
+}
+
+export function kotakTotpCandidates(value, at = Date.now()) {
+  const raw = String(value || "").trim();
+  if (/^\d{6}$/.test(raw)) return [raw];
+  try {
+    return totpCodes(raw, at);
+  } catch {
+    throw fail(
+      "Kotak TOTP secret is not valid. Paste the Setup TOTP secret from Kotak Neo, or the current 6-digit code.",
+      400,
+    );
+  }
+}
 
 function kotakEnv(name) {
   return String(process.env[name] || "").trim();
@@ -1071,16 +1107,32 @@ export async function openKotakTradeSession(creds, fetchImpl = fetch) {
   const key = `${creds.clientId}|${authHeader}`;
   const cached = kotakTradeCache.get(key);
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
-  const login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      "neo-fin-key": "neotradeapi",
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ mobileNumber: kotakMobileNumber(creds.mobile), ucc: creds.clientId, totp: totpCode(creds.totpSecret) }),
-  });
+  const codes = kotakTotpCandidates(creds.totpSecret);
+  let login = null;
+  let lastLoginError = null;
+  for (const totp of codes) {
+    try {
+      login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "neo-fin-key": "neotradeapi",
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          mobileNumber: kotakMobileNumber(creds.mobile),
+          ucc: creds.clientId,
+          totp,
+        }),
+      });
+      break;
+    } catch (error) {
+      lastLoginError = error;
+      if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
+    }
+  }
+  if (!login) throw lastLoginError || fail("Kotak TOTP login did not return a trading session.");
   const view = login.data || login;
   const viewToken = String(view.token || "").trim();
   const viewSid = String(view.sid || "").trim();
@@ -1129,24 +1181,34 @@ function kotakPlaceUrls(trade) {
 
 async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product }) {
   const creds = kotakDeskCreds(session, lane);
-  const savedToken = creds.tradeToken || (lane !== "member" && creds.sessionToken && creds.sessionToken !== creds.apiKey && creds.sessionToken !== creds.accessToken ? creds.sessionToken : "");
+  const transport = kotakTransport(fetchImpl);
   const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
   const pastedTrade = Boolean(memberPair?.sid && memberPair?.auth);
   let trade = null;
-  if (creds.baseUrl && savedToken) {
-    trade = { baseUrl: creds.baseUrl, tradeToken: savedToken, tradeSid: creds.tradeSid || creds.sessionToken, serverId: creds.serverId };
-  } else if (!pastedTrade && canKotakTradeLogin(creds)) {
-    trade = await openKotakTradeSession(creds, fetchImpl);
+  if (!pastedTrade && canKotakTradeLogin(creds)) {
+    trade = await openKotakTradeSession(creds, transport);
+  } else if (creds.baseUrl && creds.tradeToken) {
+    trade = {
+      baseUrl: creds.baseUrl,
+      tradeToken: creds.tradeToken,
+      tradeSid: creds.tradeSid || creds.sessionToken,
+      serverId: creds.serverId,
+    };
   }
-  if (lane === "member" && !trade && (!memberPair.sid || !memberPair.auth)) {
+  if (lane === "member" && !trade && (!memberPair?.sid || !memberPair?.auth)) {
     const who = creds.clientId ? `client ID ${creds.clientId}` : "this user";
     throw fail(
       `Kotak Neo has no trade session for ${who}. The quote consumer key cannot place this order. On Profile, paste this user's trade-login mobile, MPIN, and TOTP, or paste the Neo sid and the session token from today's trade login.`,
     );
   }
-  const auth = trade?.tradeToken || memberPair?.auth || creds.accessToken || creds.apiKey;
-  const sid = trade?.tradeSid || memberPair?.sid || creds.sessionToken || creds.clientId;
-  if (!auth) throw fail("Kotak Neo has no access token for this order.");
+  if (lane !== "member" && !trade) {
+    throw fail(
+      "Kotak Neo admin order was not sent. Save the access token, trade-login mobile, MPIN, and TOTP secret on Brokers. The desk calls tradeApiLogin, then tradeApiValidate, then places on the host Kotak returns.",
+    );
+  }
+  const auth = trade?.tradeToken || memberPair?.auth || "";
+  const sid = trade?.tradeSid || memberPair?.sid || "";
+  if (!auth || !sid) throw fail("Kotak Neo has no trade session for this order.");
   const jData = kotakOrderBody({ payload, nfo, qty, side, product });
   const headers = {
     Auth: auth,
@@ -1161,8 +1223,9 @@ async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, si
   let last = null;
   for (const url of urls) {
     try {
-      const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
+      const parsed = await kotakRequest(transport, url, { method: "POST", headers, body });
       const orderId = String(parsed.nOrdNo || parsed.data?.nOrdNo || parsed.orderId || "");
+      if (!orderId) throw fail("Kotak Neo did not return an order number.");
       return {
         orderId,
         status: "PENDING",
