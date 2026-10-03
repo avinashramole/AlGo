@@ -1372,7 +1372,7 @@ async function bootBackground() {
       console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
       console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
     }
-    const booted = await withTimeout(bootDhanFromEnv(), 20_000, "Dhan boot timed out after 20s");
+    const booted = await withTimeout(bootDhanFromEnv(), 60_000, "Dhan boot timed out after 60s");
     if (booted) {
       console.log("Dhan live feed started (saved token or PIN + TOTP)");
     } else if (process.env.DHAN_ACCESS_TOKEN) {

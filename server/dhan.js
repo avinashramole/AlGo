@@ -55,6 +55,7 @@ import {
   isDhanInvalidTotpError,
   isDhanRateLimitError,
   keepAlivePlan,
+  savedTokenBootAction,
   loadDhanSession,
   loadTokenBackoff,
   markDhanAutoStart,
@@ -115,6 +116,7 @@ let futureInstruments = [];
 let lastTickAt = 0;
 const lastTickAtByFamily = { nse: 0, mcx: 0 };
 let keepAlivePromise = null;
+let savedTokenRejected = false;
 let lastKeepAliveAt = 0;
 let credentialsBlockedUntil = persistedBackoff.credentialsBlockedUntil;
 let quoteBackoffUntil = 0;
@@ -1566,16 +1568,11 @@ function savedDhanAccess() {
 
 export async function ensureDhanLiveFromSavedToken() {
   if (isDhanLive()) return { live: true, started: false };
-  const { session, token, id } = savedDhanAccess();
-  if (dhanFeedWasStopped(session)) return { live: false, reason: "feed-stopped" };
-  if (!token || !id) return { live: false, reason: "no-token" };
-  try {
-    await startDhanLive({ accessToken: token, clientId: id, loginId: session.loginId || id });
-    return { live: true, started: true };
-  } catch (error) {
-    console.log(`09:20 daily LIVE Dhan start failed: ${error.message || error}`);
-    return { live: false, reason: error.message || "start-failed" };
+  const connected = await connectSavedDhan();
+  if (!connected.live) {
+    console.log(`Dhan saved-token start failed: ${connected.reason || "not-live"}`);
   }
+  return { live: connected.live, started: connected.live, reason: connected.reason || "" };
 }
 
 export function getDhanCredentials() {
@@ -2043,6 +2040,7 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     throw error;
   }
   accessToken = cleanToken;
+  savedTokenRejected = false;
   const apiId = configuredDhanClientId(profile, enteredId);
   clientId = apiId;
   usedFallback = false;
@@ -2195,9 +2193,15 @@ function ensureTokenWatchdog() {
   if (tokenWatchdogTimer) return;
   tokenWatchdogTimer = setInterval(() => {
     try {
-      if (!canAutoGenerate()) return;
       if (Date.now() < credentialsBlockedUntil) return;
       if (Date.now() < keepAliveBackoffUntil) return;
+      if (savedTokenRejected) {
+        void keepDhanTokenFresh("auth").catch((err) => {
+          console.warn("[dhan] token watchdog:", err?.message || err);
+        });
+        return;
+      }
+      if (!canAutoGenerate()) return;
       const session = loadDhanSession();
       if (!needsFreshAccessToken(session)) return;
       if (tokenMsRemaining() > 20 * 60 * 1000) return;
@@ -2294,6 +2298,10 @@ async function resumeSavedFeed(session, reason, { refreshIfLive = false } = {}) 
     console.log(`Dhan data feed kept the saved token after ${reason}`);
   } catch (error) {
     console.log(`Dhan saved access token kept after ${reason}. Data feed resume failed: ${error.message || error}`);
+    if (isDhanAuthExpiredError(error)) {
+      savedTokenRejected = true;
+      console.log("Dhan rejected the saved token. RenewToken will run without a Reset click.");
+    }
     if (isDhanRateLimitError(error)) {
       noteKeepAliveBackoff(Math.min(5 * 60 * 1000, error.retryAfterMs || 30_000));
     }
@@ -2307,6 +2315,7 @@ async function keepDhanTokenFresh(reason = "schedule") {
   if (
     reason !== "auth" &&
     reason !== "api" &&
+    !savedTokenRejected &&
     !needsFreshNow &&
     Date.now() - lastKeepAliveAt < 45_000
   ) {
@@ -2316,6 +2325,17 @@ async function keepDhanTokenFresh(reason = "schedule") {
 
   keepAlivePromise = (async () => {
     try {
+      if (savedTokenRejected || reason === "auth") {
+        if (Date.now() < credentialsBlockedUntil || Date.now() < keepAliveBackoffUntil) {
+          scheduleTokenKeepAlive();
+          return;
+        }
+        console.log("Dhan saved token was not accepted. Renewing automatically (RenewToken, then PIN + TOTP).");
+        await rotateDhanAccessToken({ reason: "auth" });
+        savedTokenRejected = false;
+        scheduleTokenKeepAlive();
+        return;
+      }
       const session = loadDhanSession();
       const plan = keepAlivePlan({
         reason,
@@ -2328,6 +2348,15 @@ async function keepDhanTokenFresh(reason = "schedule") {
       if (plan.action === "wait" || plan.action === "reuse") {
         if (!(plan.action === "wait" && (plan.because === "generate-429" || reason === "auth"))) {
           await resumeSavedFeed(session, reason, { refreshIfLive: plan.action === "reuse" });
+        }
+        if (
+          savedTokenRejected &&
+          Date.now() >= credentialsBlockedUntil &&
+          Date.now() >= keepAliveBackoffUntil
+        ) {
+          console.log("Dhan rejected the saved token during resume. Renewing automatically.");
+          await rotateDhanAccessToken({ reason: "auth" });
+          savedTokenRejected = false;
         }
         if (!(plan.action === "wait" && reason === "auth")) scheduleTokenKeepAlive();
         return;
@@ -2451,6 +2480,73 @@ async function startDhanWithRetry(token, id, attempts = 4) {
   throw lastError;
 }
 
+function tokenLooksAliveNow(session, token) {
+  const expiry = Date.parse(
+    resolveTokenExpiry({
+      accessToken: token || session.accessToken,
+      expiryTime: session.expiryTime,
+    }) || "",
+  );
+  return Boolean(token) && Number.isFinite(expiry) && expiry > Date.now();
+}
+
+/**
+ * Start the quote feed from the saved JWT. If Dhan rejects it, or the JWT is missing
+ * or nearly expired, renew the same way as Reset token now (RenewToken, then PIN + TOTP).
+ * A saved JWT that Dhan accepts is not replaced.
+ */
+export async function connectSavedDhan() {
+  const { session, token, id } = savedDhanAccess();
+  const feedStopped = dhanFeedWasStopped(session);
+  const remaining = tokenMsRemaining();
+  const tokenStillGood = Number.isFinite(remaining) && remaining > 20 * 60 * 1000;
+  const blocked = Date.now() < keepAliveBackoffUntil || Date.now() < credentialsBlockedUntil;
+  let started = false;
+  let authRejected = false;
+  let rateLimited = false;
+  let startError = null;
+  if (!feedStopped && token && id) {
+    try {
+      await startDhanWithRetry(token, id, 2);
+      started = true;
+      savedTokenRejected = false;
+    } catch (error) {
+      startError = error;
+      authRejected = isDhanAuthExpiredError(error);
+      rateLimited = isDhanRateLimitError(error);
+      if (authRejected) savedTokenRejected = true;
+      if (rateLimited) noteKeepAliveBackoff(Math.min(60_000, error.retryAfterMs || 15_000));
+    }
+  }
+  const decision = savedTokenBootAction({
+    feedStopped,
+    hasToken: Boolean(token),
+    hasClientId: Boolean(id),
+    canAutoGenerate: canAutoGenerate(),
+    tokenLooksAlive: tokenLooksAliveNow(session, token),
+    started,
+    authRejected,
+    rateLimited,
+    blocked,
+    tokenStillGood,
+  });
+  if (decision.action === "live") {
+    return { live: true, reason: decision.because };
+  }
+  if (decision.action === "renew") {
+    savedTokenRejected = true;
+    console.log(
+      `Dhan did not connect from the saved token (${startError?.message || decision.because}). Renewing automatically — same path as Reset token now.`,
+    );
+    await keepDhanTokenFresh("auth");
+    return { live: isDhanLive(), reason: isDhanLive() ? "renewed" : decision.because };
+  }
+  if (startError) {
+    console.log(`Dhan saved access token kept. Data feed did not start: ${startError.message || startError}`);
+  }
+  return { live: false, reason: decision.because, error: startError };
+}
+
 export async function bootDhanFromEnv() {
   console.log(
     `Dhan daily token reset is set: ${String(TOKEN_RENEW_HOUR_IST).padStart(2, "0")}:00 AM IST · next 8:00 AM IST ${istStamp(nextDailyRenewalAt())}`,
@@ -2470,35 +2566,46 @@ export async function bootDhanFromEnv() {
     tokenHint: savedStatus.tokenHint,
     clientId: savedStatus.clientId || id || null,
   });
-  const resume = feedResumesOnBoot({ ...session, accessToken: token || session.accessToken });
-  if (!token || !id || !resume) {
+  const connected = await connectSavedDhan();
+  if (connected.live) {
     console.log(
-      token && dhanFeedWasStopped(session)
-        ? "Dhan saved access token kept. Stop data feed left the feed off. Restart did not remove the token."
-        : token
-          ? "Dhan saved access token kept. Client ID is missing, so the data feed did not start. The token was not removed."
-          : "No Dhan access token saved. Paste it on Brokers. Restart did not remove a saved token.",
+      connected.reason === "renewed"
+        ? "Dhan connected after restart by renewing the access token. Reset token now was not required."
+        : "Dhan saved access token kept. Restart turned the data feed back on and did not replace the token.",
     );
     scheduleTokenKeepAlive();
-    return false;
-  }
-  try {
-    await startDhanWithRetry(token, id);
-    console.log("Dhan saved access token kept. Restart turned the data feed back on and did not replace the token.");
     return true;
-  } catch (error) {
-    const rate = isDhanRateLimitError(error);
-    console.log(`Dhan saved access token kept after restart. Data feed did not start: ${error.message || error}`);
+  }
+  const stopped = dhanFeedWasStopped(session);
+  console.log(
+    stopped
+      ? "Dhan saved access token kept. Stop data feed left the feed off. Restart did not remove the token."
+      : connected.reason === "saved-token-kept"
+        ? `Dhan saved access token kept. Data feed will retry${connected.error ? `: ${connected.error.message || connected.error}` : "."}`
+        : connected.reason === "rate-limit" || connected.reason === "cooldown"
+          ? "Dhan token renew is in cooldown. The saved token was kept and will retry."
+          : token && !id
+            ? "Dhan saved access token kept. Client ID is missing, so the data feed did not start. The token was not removed."
+            : token
+              ? "Dhan saved access token kept after restart. Automatic renew did not start the data feed yet."
+              : "No Dhan access token saved. Paste it on Brokers, or save PIN + TOTP so restart can generate one.",
+  );
+  const renewAttempted = connected.reason === "dhan-rejected-token" || connected.reason === "needs-token";
+  if (!renewAttempted) {
+    const rate = connected.reason === "rate-limit" || connected.reason === "cooldown";
     setDhanFeed({
       live: false,
       source: "idle",
       error: rate
-        ? "Dhan 429 while starting the saved token. The token was not removed. The data feed stays on and will retry."
-        : `Saved token was kept. Data feed will retry: ${error.message || error}`,
+        ? "Dhan 429 while starting the saved token. The token was not removed. The data feed will retry."
+        : stopped
+          ? null
+          : connected.error
+            ? `Saved token was kept. Data feed will retry: ${connected.error.message || connected.error}`
+            : null,
       ...dhanTokenStatus(),
     });
-    if (rate) noteKeepAliveBackoff(Math.min(60_000, error.retryAfterMs || 15_000));
-    scheduleTokenKeepAlive();
-    return false;
   }
+  scheduleTokenKeepAlive();
+  return false;
 }
