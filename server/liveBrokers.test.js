@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { setLivePriceReader } from "./executionSpeed.js";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-live-brokers-"));
 process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
@@ -1226,6 +1227,45 @@ test("Kotak order network failure names the host instead of a bare fetch failed"
       return true;
     },
   );
+});
+
+test("a Kotak limit keeps its own price when the Dhan quote is higher", async () => {
+  setLivePriceReader(() => 999);
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), body: options.body });
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-own-price" }) };
+  };
+  try {
+    const live = await placeLiveBrokerOrder(
+      "kotak",
+      {
+        copyUserId: "u-kotak-price",
+        brokerSession: {
+          accessToken: "trade-token-1452",
+          apiKey: "kotak-consumer-key",
+          clientId: "YT2Vm",
+          sessionToken: "neo-sid-88",
+        },
+        symbol: "NIFTY 22900 CE",
+        expiry: "2026-10-06",
+        side: "BUY",
+        qty: 65,
+        type: "LIMIT",
+        price: 15.4,
+        orderAt: "2026-10-01T04:00:00.000Z",
+      },
+      fetchImpl,
+    );
+    assert.equal(live.orderId, "k-own-price");
+    const place = calls.find((row) => String(row.url).includes("/quick/order/rule/ms/place"));
+    const jData = JSON.parse(new URLSearchParams(place.body).get("jData"));
+    assert.equal(jData.pr, "15.4");
+    assert.equal(jData.pt, "L");
+    assert.equal(calls.some((row) => String(row.url).includes("dhan.co")), false);
+  } finally {
+    setLivePriceReader(() => 0);
+  }
 });
 
 test("kotakTotpCandidates sends a 6-digit code and generates from a secret", () => {

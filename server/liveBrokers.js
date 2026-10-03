@@ -2,9 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
-import { crossBuyLimit } from "./executionSpeed.js";
 import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
-import { ipv4Request } from "./ipv4.js";
 import { totpCodes } from "./totp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -836,16 +834,16 @@ export async function connectLiveBroker(id, payload = {}, fetchImpl = fetch) {
   const probe = PROBES[meta.id];
   if (!probe) throw fail("Unknown live broker.");
   const profile = await probe(fetchImpl, creds);
-  const previous = sessions[meta.id] || {};
+  const previous = meta.id === "kotak" ? sessions[meta.id] || {} : {};
   sessions[meta.id] = {
     id: meta.id,
     clientId: profile.clientId || creds.clientId,
     apiKey: creds.apiKey,
     accessToken: creds.accessToken,
-    sessionToken: creds.sessionToken || previous.sessionToken || "",
-    mobile: creds.mobile || previous.mobile || "",
-    mpin: creds.mpin || previous.mpin || "",
-    totpSecret: creds.totpSecret || previous.totpSecret || "",
+    sessionToken: meta.id === "kotak" ? creds.sessionToken || previous.sessionToken || "" : creds.sessionToken,
+    mobile: meta.id === "kotak" ? creds.mobile || previous.mobile || "" : "",
+    mpin: meta.id === "kotak" ? creds.mpin || previous.mpin || "" : "",
+    totpSecret: meta.id === "kotak" ? creds.totpSecret || previous.totpSecret || "" : "",
     keyHint: hintOf(creds.accessToken || creds.apiKey),
     profileName: profile.profileName,
     funds: Number(profile.funds) || 0,
@@ -920,17 +918,6 @@ const kotakTradeCache = new Map();
 
 export function clearKotakTradeCache() {
   kotakTradeCache.clear();
-}
-
-function kotakTransport(fetchImpl) {
-  if (fetchImpl && fetchImpl !== fetch) return fetchImpl;
-  return (url, options = {}) =>
-    ipv4Request(url, {
-      method: options.method || "GET",
-      headers: options.headers,
-      body: options.body,
-      timeoutMs: 20000,
-    });
 }
 
 export function kotakTotpCandidates(value, at = Date.now()) {
@@ -1181,12 +1168,11 @@ function kotakPlaceUrls(trade) {
 
 async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product }) {
   const creds = kotakDeskCreds(session, lane);
-  const transport = kotakTransport(fetchImpl);
   const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
   const pastedTrade = Boolean(memberPair?.sid && memberPair?.auth);
   let trade = null;
   if (!pastedTrade && canKotakTradeLogin(creds)) {
-    trade = await openKotakTradeSession(creds, transport);
+    trade = await openKotakTradeSession(creds, fetchImpl);
   } else if (creds.baseUrl && creds.tradeToken) {
     trade = {
       baseUrl: creds.baseUrl,
@@ -1223,7 +1209,7 @@ async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, si
   let last = null;
   for (const url of urls) {
     try {
-      const parsed = await kotakRequest(transport, url, { method: "POST", headers, body });
+      const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
       const orderId = String(parsed.nOrdNo || parsed.data?.nOrdNo || parsed.orderId || "");
       if (!orderId) throw fail("Kotak Neo did not return an order number.");
       return {
@@ -1263,11 +1249,10 @@ function memberKotakOwnKeyError(error, session = {}) {
 }
 
 export async function placeLiveBrokerOrder(id, payload = {}, fetchImpl = fetch) {
-  const priced = crossBuyLimit(payload);
   const brokerName = liveBrokerMeta(id)?.name || id;
-  const { lane, session } = liveOrderSession(priced, liveBrokerSession(id), { brokerName });
+  const { lane, session } = liveOrderSession(payload, liveBrokerSession(id), { brokerName });
   try {
-    return await placeConnectedLiveBrokerOrder(id, priced, session, fetchImpl, lane);
+    return await placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, lane);
   } catch (error) {
     const owned = lane === "member" && String(id) === "kotak" ? memberKotakOwnKeyError(error, session) : error;
     const wrapped = lane === "member" ? annotateMemberLiveAuthError(owned, session, { brokerName }) : owned;
