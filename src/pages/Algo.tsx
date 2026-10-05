@@ -659,7 +659,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl">
+      <div className="relative z-10 mb-16 flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl md:mb-0">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-bold">Map clients · {algo.name}</h2>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">

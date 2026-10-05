@@ -230,7 +230,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
-      <div className="card max-h-[92vh] w-full max-w-md overflow-y-auto p-3" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
+      <div className="card mb-16 max-h-[92vh] w-full max-w-md overflow-y-auto p-3 md:mb-0" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-sm font-bold">{title}</div>
@@ -527,7 +527,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           {vwap ? (
             <>
               <SettingsHead>Risk</SettingsHead>
-              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
                 <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
                 <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
                 <NumberField label="Trail on %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
@@ -539,7 +539,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ) : reversal ? (
             <>
               <SettingsHead>Risk</SettingsHead>
-              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
                 <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
                 <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
                 <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
@@ -548,7 +548,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ) : niftyTest ? (
             <>
               <SettingsHead>Schedule</SettingsHead>
-              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
                 <SettingsRow label="Start">
                   <input
                     name="nifty test"
@@ -566,7 +566,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ) : firstCandle || crudeFirst ? (
             <>
               <SettingsHead>Schedule</SettingsHead>
-              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
                 <SettingsRow label="Start LIVE">
                   <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
                 </SettingsRow>
@@ -605,7 +605,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   Trailing SL
                 </div>
               )}
-              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
                 <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
                 <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
                 {crudeFirst ? null : (
@@ -698,7 +698,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           {engine || crudeFirst || firstCandle || vwap || reversal ? null : (
             <>
               <SettingsHead>Risk</SettingsHead>
-              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
                 <NumberField label="Stop %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
                 <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
               </div>
