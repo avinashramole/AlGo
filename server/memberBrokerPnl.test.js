@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, fyersAvailableBalance, fyersMasterBook, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -259,10 +259,53 @@ test("Kotak balance logs in when the access token is the consumer key", () => {
 test("broker available balance is the user balance and leaves the wallet topup alone", () => {
   assert.equal(dhanAvailableBalance({ availabelBalance: 15234.5, utilizedAmount: 900 }), 15234.5);
   assert.equal(upstoxAvailableBalance({ data: { equity: { available_margin: 4200.25 }, commodity: { available_margin: 800 } } }), 4200.25);
+  assert.equal(
+    fyersAvailableBalance({
+      s: "ok",
+      fund_limit: [
+        { id: 1, title: "Total Balance", equityAmount: 9000 },
+        { id: 10, title: "Available Balance", equityAmount: 1875.5 },
+      ],
+    }),
+    1875.5,
+  );
   const desk = localDesk();
   desk.wallet.balance = 2500;
   applyBrokerBalance(desk, { balance: 15234.5, source: "dhan" });
   assert.equal(desk.wallet.balance, 2500);
   assert.equal(desk.wallet.brokerBalance, 15234.5);
   assert.equal(desk.wallet.brokerBalanceSource, "dhan");
+});
+
+test("Fyers positions book uses netPositions and overall P&L", () => {
+  const book = fyersMasterBook({
+    s: "ok",
+    overall: { pl_realized: 40, pl_unrealized: -12.5 },
+    netPositions: [
+      {
+        symbol: "NSE:NIFTY26O0622500CE",
+        netQty: 65,
+        side: 1,
+        buyAvg: 12.1,
+        ltp: 11.9,
+        realized_profit: 0,
+        unrealized_profit: -13,
+        productType: "INTRADAY",
+      },
+      {
+        symbol: "NSE:NIFTY26O0622500PE",
+        netQty: 0,
+        side: 1,
+        realized_profit: 40,
+        unrealized_profit: 0,
+        productType: "INTRADAY",
+      },
+    ],
+  });
+  assert.equal(book.source, "fyers");
+  assert.equal(book.realizedPnl, 40);
+  assert.equal(book.unrealizedPnl, -12.5);
+  assert.equal(book.open.length, 1);
+  assert.equal(book.open[0].qty, 65);
+  assert.equal(book.closed.length, 1);
 });

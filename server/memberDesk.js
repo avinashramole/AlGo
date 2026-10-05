@@ -755,7 +755,9 @@ export function publicBrokerInstall(desk = {}) {
         ? "Paper is virtual. No API key or access token."
         : brokerId === "upstox"
           ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token and retry every 15 minutes until 4:00 PM if it is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
-          : brokerId === "kotak"
+          : brokerId === "fyers"
+            ? "Active Fyers client: UCC (DA02189) + App ID (Z2MCJB4OXH-200) + today's access token. App must allow Market Data and Order Placement. Quotes use GET /data/quotes and copies use POST /api/v3/orders/sync with Authorization AppID:token. Token dies at end of day. This does not start desk LIVE."
+            : brokerId === "kotak"
             ? "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid. This does not start desk LIVE."
             : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
   };

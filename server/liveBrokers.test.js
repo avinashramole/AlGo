@@ -11,6 +11,8 @@ process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
 const {
   connectLiveBroker,
   disconnectLiveBroker,
+  fyersAuthHeader,
+  fyersPlaceOrderBody,
   fyersSymbol,
   isLiveBrokerReady,
   clearKotakTradeCache,
@@ -634,10 +636,57 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrume
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {
   assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY2691524500CE");
   assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY2691524500PE");
+  assert.equal(fyersAuthHeader("Z2MCJB4OXH-200", "fyers-today-token"), "Z2MCJB4OXH-200:fyers-today-token");
+  const market = fyersPlaceOrderBody({ side: "BUY", qty: 65, symbol: "NIFTY 22500 CE", expiry: "2026-10-06" });
+  assert.equal(market.symbol, "NSE:NIFTY26O0622500CE");
+  assert.equal(market.type, 2);
+  assert.equal(market.side, 1);
+  assert.equal(market.productType, "INTRADAY");
+  assert.equal(market.offlineOrder, false);
+  assert.equal(market.orderTag, "t2scopy");
+  const limit = fyersPlaceOrderBody({ side: "SELL", qty: 65, orderType: "LIMIT", price: 12.1, symbol: "NIFTY 22500 CE", expiry: "2026-10-06" });
+  assert.equal(limit.type, 1);
+  assert.equal(limit.side, -1);
+  assert.equal(limit.limitPrice, 12.1);
   assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-06"), "NIFTY26O0622500PE");
   assert.equal(nfoTradingSymbol("NIFTY 06 OCT 22500 PUT"), "NIFTY26O0622500PE");
   assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-27"), "NIFTY26OCT22500PE");
   assert.equal(nfoTradingSymbol("NIFTY-Oct2026-22500-PE"), "NIFTY26O0622500PE");
+});
+
+test("Fyers member copy places a v3 sync order with App ID:token", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), headers: options.headers, body: options.body });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ s: "ok", code: 1101, id: "fyers-ord-1", message: "Order submitted" }),
+    };
+  };
+  const live = await placeLiveBrokerOrder(
+    "fyers",
+    {
+      copyUserId: "u-fyers-da02189",
+      brokerSession: { accessToken: "fyers-today-token", apiKey: "Z2MCJB4OXH-200", clientId: "DA02189" },
+      symbol: "NIFTY 22500 CE",
+      expiry: "2026-10-06",
+      side: "BUY",
+      qty: 65,
+      orderType: "LIMIT",
+      price: 12.1,
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "fyers-ord-1");
+  assert.equal(live.brokerId, "fyers");
+  assert.equal(calls[0].url, "https://api-t1.fyers.in/api/v3/orders/sync");
+  assert.equal(calls[0].headers.Authorization, "Z2MCJB4OXH-200:fyers-today-token");
+  const placed = JSON.parse(calls[0].body);
+  assert.equal(placed.symbol, "NSE:NIFTY26O0622500CE");
+  assert.equal(placed.type, 1);
+  assert.equal(placed.limitPrice, 12.1);
+  assert.equal(placed.offlineOrder, false);
 });
 
 test("connectLiveBroker stores Zerodha after a profile probe and does not invent positions", async () => {

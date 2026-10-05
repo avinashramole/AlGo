@@ -445,7 +445,7 @@ async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
 async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
   const symbols = INDEX_INSTRUMENTS.map((row) => FYERS_KEYS[row.symbol]).join(",");
   const payload = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(symbols)}`, {
-    headers: { Authorization: `${apiKey}:${accessToken}` },
+    headers: { Authorization: `${String(apiKey || "").trim()}:${String(accessToken || "").trim()}` },
   });
   const quotes = quotesFromFyersPayload(payload);
   const crudeKey = crudeInstrumentKey("fyers");

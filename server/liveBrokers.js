@@ -63,11 +63,11 @@ export const LIVE_BROKER_CATALOG = [
     auth: "oauth",
     segments: ["EQ", "FNO"],
     fields: [
-      { id: "clientId", label: "Client ID", placeholder: "Fyers client id" },
-      { id: "apiKey", label: "App ID", placeholder: "FYERS app id" },
-      { id: "accessToken", label: "Access token", secret: true, placeholder: "FYERS access token" },
+      { id: "clientId", label: "UCC / Client ID", placeholder: "DA02189" },
+      { id: "apiKey", label: "App ID", placeholder: "Z2MCJB4OXH-200" },
+      { id: "accessToken", label: "Access token", secret: true, placeholder: "Today's FYERS access token from myapi.fyers.in" },
     ],
-    help: "Create an app on myapi.fyers.in. Authorization is appId:accessToken. Orders use POST /api/v3/orders/sync.",
+    help: "Active Fyers client needs UCC + App ID + today's access token. Turn on Market Data and Order Placement on the app (myapi.fyers.in). Every call uses Authorization AppID:accessToken on api-t1.fyers.in — quotes GET /data/quotes, funds GET /api/v3/funds, orders POST /api/v3/orders/sync. The token dies at end of day. This is the v3 trading API, not the API Connect website button.",
   },
   {
     id: "kotak",
@@ -207,6 +207,57 @@ export function fyersSymbol(symbol, expiry) {
   const nfo = nfoTradingSymbol(symbol, expiry);
   if (nfo.includes(":")) return nfo;
   return `NSE:${nfo}`;
+}
+
+export function fyersAuthHeader(apiKey, accessToken) {
+  const appId = String(apiKey || "").trim();
+  const token = String(accessToken || "").trim();
+  if (!appId || !token) return "";
+  return `${appId}:${token}`;
+}
+
+export function assertFyersOk(body, fallback = "Fyers request failed.") {
+  const status = String(body?.s || body?.status || "").toLowerCase();
+  if (status && status !== "ok" && status !== "success") {
+    throw fail(String(body?.message || body?.errmsg || fallback), Number(body?.code) === -16 || Number(body?.code) === -8 ? 401 : 400);
+  }
+  return body;
+}
+
+export function fyersOrderType(payload = {}) {
+  const kind = String(payload.orderType || payload.type || "").toUpperCase();
+  const limit = Number(payload.price || payload.limitPrice || 0);
+  const stop = Number(payload.triggerPrice || payload.stopPrice || 0);
+  if (kind === "SL-L" || kind === "SL-LIMIT" || kind === "STOP-LIMIT") {
+    return { type: 4, limitPrice: limit > 0 ? limit : stop, stopPrice: stop };
+  }
+  if (kind === "SL" || kind === "SL-M" || kind === "STOP" || kind === "SLM") {
+    return { type: 3, limitPrice: 0, stopPrice: stop };
+  }
+  if (kind === "LIMIT" || (limit > 0 && kind !== "MARKET")) {
+    return { type: 1, limitPrice: limit, stopPrice: 0 };
+  }
+  return { type: 2, limitPrice: 0, stopPrice: 0 };
+}
+
+export function fyersPlaceOrderBody(payload = {}, { symbol, qty, side, product } = {}) {
+  const typed = fyersOrderType(payload);
+  const productType = String(product || payload.product || "MIS").toUpperCase() === "NRML" ? "MARGIN" : "INTRADAY";
+  return {
+    symbol: symbol || fyersSymbol(payload.symbol, payload.expiry),
+    qty: Math.max(1, Math.round(Number(qty || payload.qty) || 1)),
+    type: typed.type,
+    side: String(side || payload.side || "BUY").toUpperCase() === "SELL" ? -1 : 1,
+    productType,
+    limitPrice: typed.limitPrice,
+    stopPrice: typed.stopPrice,
+    disclosedQty: 0,
+    validity: "DAY",
+    offlineOrder: false,
+    stopLoss: 0,
+    takeProfit: 0,
+    orderTag: "t2scopy",
+  };
 }
 
 const UPSTOX_INDEX_KEYS = {
@@ -769,11 +820,14 @@ async function probeUpstox(fetchImpl, creds) {
 
 async function probeFyers(fetchImpl, creds) {
   if (creds.apiKey.length < 4 || creds.accessToken.length < 6) {
-    throw fail("Enter Fyers App ID and access token.");
+    throw fail("Enter Fyers App ID and today's access token.");
   }
-  const body = await httpJson(fetchImpl, "https://api-t1.fyers.in/api/v3/profile", {
-    headers: { Authorization: `${creds.apiKey}:${creds.accessToken}` },
-  });
+  const body = assertFyersOk(
+    await httpJson(fetchImpl, "https://api-t1.fyers.in/api/v3/profile", {
+      headers: { Authorization: fyersAuthHeader(creds.apiKey, creds.accessToken) },
+    }),
+    "Fyers did not accept this App ID + access token.",
+  );
   const data = body.data || body;
   return {
     clientId: String(data.fy_id || data.display_name || creds.clientId || ""),
@@ -1440,26 +1494,26 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, la
   }
 
   if (id === "fyers") {
-    const body = await httpJson(fetchImpl, "https://api-t1.fyers.in/api/v3/orders/sync", {
-      method: "POST",
-      headers: {
-        Authorization: `${session.apiKey}:${session.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        symbol: fyersSymbol(symbol, expiry),
-        qty,
-        type: 2,
-        side: side === "SELL" ? -1 : 1,
-        productType: product === "NRML" ? "MARGIN" : "INTRADAY",
-        limitPrice: 0,
-        stopPrice: 0,
-        disclosedQty: 0,
-        validity: "DAY",
-        offlineOrder: false,
+    const auth = fyersAuthHeader(session.apiKey, session.accessToken);
+    if (!auth) throw fail("Paste this user's Fyers App ID with today's access token.");
+    const order = fyersPlaceOrderBody(payload, { symbol: fyersSymbol(symbol, expiry), qty, side, product });
+    const body = assertFyersOk(
+      await httpJson(fetchImpl, "https://api-t1.fyers.in/api/v3/orders/sync", {
+        method: "POST",
+        headers: {
+          Authorization: auth,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(order),
       }),
-    });
-    return { orderId: String(body.id || body.data?.id || ""), status: "PENDING", brokerId: "fyers" };
+      "Fyers did not accept the order.",
+    );
+    return {
+      orderId: String(body.id || body.data?.id || body.id_fyers || ""),
+      status: Number(body.code) === 1101 || Number(body.code) === 200 ? "PENDING" : "PENDING",
+      brokerId: "fyers",
+      tradingsymbol: order.symbol,
+    };
   }
 
   if (id === "kotak") {

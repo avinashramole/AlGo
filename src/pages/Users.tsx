@@ -932,14 +932,24 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
       id: "apiKey",
       label: brokerId === "kotak" ? "Consumer key" : brokerId === "upstox" ? "API key" : brokerId === "fyers" ? "App ID" : "API key",
       secret: true,
-      placeholder: brokerId === "kotak" ? "This client's Neo consumer key" : "This client's API key",
+      placeholder:
+        brokerId === "kotak"
+          ? "This client's Neo consumer key"
+          : brokerId === "fyers"
+            ? "Z2MCJB4OXH-200"
+            : "This client's API key",
     });
   }
   extra.push({
     id: "accessToken",
     label: brokerId === "kotak" ? "Neo access token" : "Access token",
     secret: true,
-    placeholder: brokerId === "kotak" ? "Access token from the Neo app" : "Paste this client's access token",
+    placeholder:
+      brokerId === "kotak"
+        ? "Access token from the Neo app"
+        : brokerId === "fyers"
+          ? "Today's FYERS access token from myapi.fyers.in"
+          : "Paste this client's access token",
   });
   if (brokerId === "kotak") {
     extra.push(
