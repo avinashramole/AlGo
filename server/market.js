@@ -736,52 +736,11 @@ function fanOutFilledTarget(row) {
   dispatchMemberExitCopies(armed.position || {}, algo, { enqueueLiveOrder: enqueueLiveAlgoOrder });
 }
 
-function armLiveTarget({ algo, open, target, mark, mode }) {
+export function armLiveTarget({ algo, open, target, mark, mode }) {
   if (mode !== "live" || !open || !(Number(open.qty) > 0)) return false;
   const key = strategyKey(algo?.name);
-  const goal = Number(target);
-  const plan = planTargetExit({ mark, target: goal, resting: targetSellResting(key, open) });
-  if (plan.action === "resting" || plan.action === "wait-resting") return true;
-  if (plan.action !== "arm") return false;
-  if (runtimeState(algo).exitQueued) return false;
-  const queued = queueLiveAlgoOrder({
-    symbol: open.symbol,
-    side: "SELL",
-    qty: Math.abs(Number(open.qty) || 0),
-    price: plan.price,
-    type: "LIMIT",
-    product: open.product || "MIS",
-    securityId: open.securityId,
-    strategy: algo.name,
-    brokerId: open.brokerId && open.brokerId !== "paper" ? open.brokerId : algo.brokerId || "dhan",
-    strike: open.strike,
-    option: open.option,
-    expiry: open.expiry,
-    kind: open.kind || "option",
-    role: "target",
-    skipMemberCopy: true,
-    exchangeSegment: exchangeSegmentFor(open.symbol),
-  });
-  if (queued?.queued) {
-    rememberArmedTarget(key, {
-      pending: true,
-      positionId: String(open.id || ""),
-      position: {
-        symbol: open.symbol,
-        type: "BUY",
-        qty: Math.abs(Number(open.qty) || 0),
-        product: open.product || "MIS",
-        securityId: open.securityId,
-        strike: open.strike,
-        option: open.option,
-        expiry: open.expiry,
-        strategy: algo.name,
-        brokerId: open.brokerId && open.brokerId !== "paper" ? open.brokerId : algo.brokerId || "dhan",
-        kind: open.kind || "option",
-      },
-    });
-  }
-  return true;
+  const plan = planTargetExit({ mark, target: Number(target), resting: targetSellResting(key, open) });
+  return plan.action === "resting" || plan.action === "wait-resting";
 }
 
 export function onLiveAlgoOrders(fn) {

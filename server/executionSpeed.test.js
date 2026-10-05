@@ -43,10 +43,12 @@ test("target uses the live tick when the chain snapshot is still behind", () => 
   assert.equal(insane.mark, 145);
 });
 
-test("target limit rests under 145 and does not stack once it is working", () => {
-  assert.deepEqual(planTargetExit({ mark: 144.5, target: 145, resting: false }), { action: "arm", price: 145 });
-  assert.equal(planTargetExit({ mark: 145, target: 145, resting: true }).action, "wait-resting");
+test("after a buy the target is tracked until TGT is hit, not parked as a limit sell", () => {
+  assert.deepEqual(planTargetExit({ mark: 111.45, target: 161.28, resting: false }), { action: "track" });
+  assert.deepEqual(planTargetExit({ mark: 144.5, target: 145, resting: false }), { action: "track" });
   assert.equal(planTargetExit({ mark: 145, target: 145, resting: false }).action, "market");
+  assert.equal(planTargetExit({ mark: 80, target: 145, resting: false }).action, "track");
+  assert.equal(planTargetExit({ mark: 145, target: 145, resting: true }).action, "wait-resting");
   assert.equal(planTargetExit({ mark: 144, target: 145, resting: true }).action, "resting");
   assert.equal(planTargetExit({ mark: 0, target: 145 }).action, "none");
 });
