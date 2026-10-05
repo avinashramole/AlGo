@@ -8,7 +8,7 @@ export function SignalFeed() {
       <div className="mb-1.5 text-xs font-bold">Signals</div>
       <div className="grid gap-1.5">
         {!data.signals.length ? (
-          <div className="px-1 py-2 text-center text-[11px] text-slate-400">No live signals yet.</div>
+          <div className="text-[11px] text-slate-400">No live signals yet.</div>
         ) : null}
         {data.signals.map((signal) => (
           <article key={signal.id} className="flex items-center gap-2 rounded-md border border-[var(--border)] px-2 py-1.5">

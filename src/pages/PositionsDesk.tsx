@@ -342,7 +342,7 @@ export function PositionsDesk() {
         </section>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <StatCard icon={<TrendingUp size={18} />} label="Admin MTM" value={rupee(adminMtm)} tone={moneyClass(adminMtm)} />
         <StatCard icon={<Wallet size={18} />} label="Admin P&L" value={rupee(adminPnl)} tone={moneyClass(adminPnl)} />
         <StatCard icon={<UserRound size={18} />} label="Client MTM" value={rupee(clientMtm)} tone={moneyClass(clientMtm)} />

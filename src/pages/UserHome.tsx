@@ -45,7 +45,7 @@ export function UserHome() {
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <Stat label="Balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
         <Stat label="MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
         <Stat label="P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />

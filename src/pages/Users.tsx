@@ -167,7 +167,7 @@ export function Users() {
           </button>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Stat label="Admin balance" value={`₹${formatNumber(adminBalance, 2)}`} hint={adminBrokerName} />
         <Stat label="Clients" value={clients.length} />
         <Stat label="LIVE books" value={live} />
