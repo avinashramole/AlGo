@@ -767,6 +767,45 @@ export function peekClientSettings(userId) {
   return normalizeClientSettings(desk);
 }
 
+function sameMemberContract(left, right) {
+  const a = String(left || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  const b = String(right || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return Boolean(a && a === b);
+}
+
+export function repairMemberPositionMarks(userId, marks = {}) {
+  if (!userId) return peekClientBook(userId);
+  const desk = loadDesk(userId);
+  desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+  const fills = [...desk.orders, ...desk.orderHistory].filter(
+    (row) => isExecutedMemberOrder(row?.status) && Number(row?.price) > 0,
+  );
+  let changed = false;
+  desk.positions = desk.positions.map((row) => {
+    let avg = Number(row.avg || 0);
+    if (!(avg > 0)) {
+      const fill = fills.find(
+        (item) => sameMemberContract(item.symbol, row.symbol) && Number(item.qty || 0) === Number(row.qty || 0),
+      ) || fills.find((item) => sameMemberContract(item.symbol, row.symbol));
+      if (fill) avg = Number(fill.price);
+    }
+    const quoted = Number(marks[row.symbol] ?? marks[String(row.symbol || "").toUpperCase()] ?? 0);
+    const ltp = quoted > 0 ? quoted : Number(row.ltp || avg || 0);
+    const dir = row.type === "SELL" ? -1 : 1;
+    const pnl = round2((ltp - avg) * Number(row.qty || 0) * dir);
+    if (avg !== Number(row.avg || 0) || ltp !== Number(row.ltp || 0) || pnl !== Number(row.pnl || 0)) changed = true;
+    return { ...row, avg, ltp, pnl };
+  });
+  if (changed) persist();
+  return peekClientBook(userId);
+}
+
 export function peekClientBook(userId) {
   const desk = store[userId];
   if (!desk) {

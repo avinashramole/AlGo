@@ -27,6 +27,8 @@ const {
   persistAdminBrokerSecrets,
   purgeMemberDesksExcept,
   applyMemberDhanOrderStatuses,
+  peekClientBook,
+  repairMemberPositionMarks,
   memberWorkingDhanCopies,
   memberWorkingKotakCopies,
   recordMemberCopyFill,
@@ -632,6 +634,27 @@ test("a Kotak FILLED book stamps the missing buy price onto the open position", 
   const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
   assert.equal(desk.positions[0].avg, 12.1);
   assert.equal(desk.positions[0].ltp, 12.1);
+});
+
+test("repairMemberPositionMarks writes a FILLED price and quote LTP onto a 0-avg row", () => {
+  const member = { id: "u-repair-mtm", name: "Repair Mtm", email: "repairmtm@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY26O0622850CE", side: "BUY", qty: 65, strategy: algo.name, brokerId: "kotak" },
+    live: { orderId: "k-repair", status: "PENDING" },
+  });
+  applyMemberDhanOrderStatuses(member.id, [
+    { orderId: "k-repair", orderStatus: "complete", filledQty: 65, averageTradedPrice: 12.1 },
+  ]);
+  const stored = peekClientBook(member.id);
+  stored.positions[0].avg = 0;
+  stored.positions[0].ltp = 0;
+  stored.positions[0].pnl = 0;
+  const repaired = repairMemberPositionMarks(member.id, { NIFTY26O0622850CE: 13.4 });
+  assert.equal(repaired.positions[0].avg, 12.1);
+  assert.equal(repaired.positions[0].ltp, 13.4);
+  assert.equal(repaired.positions[0].pnl, Number(((13.4 - 12.1) * 65).toFixed(2)));
 });
 
 test("fills and broker refusals stay on the member book; expired tickets stay off", () => {

@@ -165,6 +165,46 @@ function kotakRowBlob(row = {}) {
   return `${row.trading_symbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""}`.toUpperCase();
 }
 
+export function ltpFromKotakQuotePayload(payload) {
+  const rows = [];
+  const push = (value) => {
+    if (value == null) return;
+    if (Array.isArray(value)) {
+      for (const item of value) push(item);
+      return;
+    }
+    if (typeof value === "object") {
+      rows.push(value);
+      if (value.data && value.data !== value) push(value.data);
+    }
+  };
+  push(payload);
+  for (const row of rows) {
+    const inner = row.v && typeof row.v === "object" ? { ...row, ...row.v } : row;
+    const n = pickNumber(inner.ltp, inner.last_traded_price, inner.lp, inner.lastPrice, inner.last_price, inner.close);
+    if (n > 0) return n;
+  }
+  return 0;
+}
+
+export async function fetchKotakSymbolLtp(symbol, tokens = [], fetchImpl = fetch) {
+  const compact = String(symbol || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  if (!compact) return 0;
+  const auths = [...new Set((Array.isArray(tokens) ? tokens : [tokens]).map((item) => String(item || "").trim()).filter(Boolean))];
+  for (const token of auths) {
+    try {
+      const payload = await fetchKotakNeo(fetchImpl, token, `nse_fo|${compact}`);
+      const ltp = ltpFromKotakQuotePayload(payload);
+      if (ltp > 0) return ltp;
+    } catch {
+      /* next token or host */
+    }
+  }
+  return 0;
+}
+
 export function quoteFromKotakCrude(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   const hits = rows.filter((item) => {

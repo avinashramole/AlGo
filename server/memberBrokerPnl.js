@@ -562,9 +562,10 @@ async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_
         if (res.status === 401 || res.status === 403) throw last;
         continue;
       }
-      const stat = String(json?.stat || "").toLowerCase();
+      const stat = String(json?.stat || json?.data?.stat || "").toLowerCase();
       if (stat === "not_ok" || stat === "not ok" || stat === "error") {
-        last = new Error(json?.errMsg || json?.emsg || "Kotak refused this request.");
+        if (kotakPositionRows(json)?.some((row) => row && typeof row === "object")) return json;
+        last = new Error(json?.errMsg || json?.emsg || json?.data?.emsg || "Kotak refused this request.");
         continue;
       }
       return json;
@@ -575,25 +576,154 @@ async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_
   throw last || new Error("Kotak trade request failed.");
 }
 
+function kotakBookHasMarks(book) {
+  if (!book) return false;
+  if (Number(book.mtm) || Number(book.realizedPnl) || Number(book.unrealizedPnl)) return true;
+  if ((book.open || []).some((row) => Number(row.avg) > 0 || Number(row.ltp) > 0 || Number(row.pnl))) return true;
+  if ((book.closed || []).some((row) => Number(row.pnl) || Number(row.realized))) return true;
+  return false;
+}
+
+export function bookFromMemberPositions(positions = [], closed = [], source = "kotak") {
+  const open = [];
+  let unrealized = 0;
+  let realized = 0;
+  for (const row of closed || []) {
+    const pnl = Number(row.pnl || row.realized || 0);
+    if (!Number.isFinite(pnl)) continue;
+    realized += pnl;
+  }
+  for (const row of positions || []) {
+    const qty = Math.abs(Number(row.qty || 0));
+    if (!qty) continue;
+    const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+    const avg = Number(row.avg || row.entry || 0);
+    const ltp = Number(row.ltp || row.exit || avg || 0);
+    const marked = Number(row.pnl);
+    const pnl = Number.isFinite(marked) ? marked : round2((ltp - avg) * qty * (type === "SELL" ? -1 : 1));
+    unrealized += pnl;
+    open.push({
+      id: String(row.id || `local-${open.length}`),
+      symbol: String(row.symbol || ""),
+      side: type,
+      type,
+      qty,
+      avg,
+      ltp,
+      entry: avg,
+      exit: ltp,
+      pnl: round2(pnl),
+      realized: 0,
+      product: row.product || "MIS",
+      brokerId: row.brokerId || source,
+      live: true,
+      paper: false,
+      closed: false,
+    });
+  }
+  return {
+    realizedPnl: round2(realized),
+    unrealizedPnl: round2(unrealized),
+    mtm: round2(realized + unrealized),
+    source,
+    closed: (closed || [])
+      .filter((row) => Number(row.pnl || row.realized))
+      .map((row, index) => ({
+        id: String(row.id || `local-closed-${index}`),
+        symbol: String(row.symbol || ""),
+        side: String(row.side || row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+        type: String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+        qty: Math.abs(Number(row.qty) || 0),
+        entry: Number(row.entry || row.avg || 0),
+        exit: Number(row.exit || row.ltp || 0),
+        pnl: round2(row.pnl != null ? row.pnl : row.realized),
+        realized: round2(row.realized != null ? row.realized : row.pnl),
+        product: row.product || "MIS",
+        brokerId: row.brokerId || source,
+        live: true,
+        paper: false,
+        closed: true,
+      })),
+    open,
+  };
+}
+
+export function mergeKotakBooks(broker, local) {
+  if (kotakBookHasMarks(broker)) {
+    const open = (broker.open || []).map((row, index) => {
+      const hit = (local?.open || []).find((item) => String(item.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === String(row.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, ""));
+      const avg = Number(row.avg) > 0 ? Number(row.avg) : Number(hit?.avg || 0);
+      const ltp = Number(row.ltp) > 0 ? Number(row.ltp) : Number(hit?.ltp || avg || 0);
+      const qty = Math.abs(Number(row.qty || hit?.qty || 0));
+      const type = String(row.type || row.side || hit?.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+      const pnl = Number(row.pnl) || round2((ltp - avg) * qty * (type === "SELL" ? -1 : 1));
+      return { ...row, avg, ltp, entry: avg, exit: ltp, pnl, qty };
+    });
+    const unrealized = round2(open.reduce((sum, row) => sum + Number(row.pnl || 0), 0));
+    const realized = round2(broker.realizedPnl);
+    return {
+      ...broker,
+      open,
+      unrealizedPnl: Number(broker.unrealizedPnl) || unrealized,
+      mtm: round2(realized + (Number(broker.unrealizedPnl) || unrealized)),
+    };
+  }
+  return local && (local.open?.length || local.closed?.length) ? { ...local, source: local.source || "kotak" } : broker || local || null;
+}
+
 async function fetchKotakMasterBook(creds) {
   const sets = kotakLimitHeaderSets(creds);
+  const bodies = [{}, { st: "DAY" }, { st: "ALL" }, { seg: "ALL" }];
   if (!sets.length) {
+    for (const body of bodies) {
+      try {
+        const book = kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", body));
+        if (book) return book;
+      } catch {
+        /* next body */
+      }
+    }
     return kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", {}));
   }
   let last = null;
   for (const set of sets) {
-    try {
-      const hosts = set.headers.Auth ? KOTAK_TRADE_HOSTS : ["https://mis.kotaksecurities.com"];
-      const book = kotakMasterBook(
-        await kotakTradePost(creds, "/quick/user/positions", {}, set.headers, hosts),
-      );
-      if (book) return book;
-    } catch (error) {
-      last = error;
+    const hosts = set.headers.Auth ? KOTAK_TRADE_HOSTS : ["https://mis.kotaksecurities.com"];
+    for (const body of bodies) {
+      try {
+        const book = kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", body, set.headers, hosts));
+        if (book) return book;
+      } catch (error) {
+        last = error;
+      }
     }
   }
   if (last) throw last;
   return null;
+}
+
+async function fillKotakBookLtps(book, creds) {
+  if (!book?.open?.length) return book;
+  const missing = book.open.filter((row) => !(Number(row.ltp) > 0));
+  if (!missing.length) return book;
+  const { fetchKotakSymbolLtp } = await import("./memberBrokerQuotes.js");
+  const tokens = [creds.apiKey, creds.token, creds.accessToken];
+  const open = [];
+  for (const row of book.open) {
+    let ltp = Number(row.ltp || 0);
+    if (!(ltp > 0) && row.symbol) ltp = await fetchKotakSymbolLtp(row.symbol, tokens);
+    const avg = Number(row.avg || 0);
+    const qty = Math.abs(Number(row.qty || 0));
+    const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+    const pnl = Number(row.pnl) || round2((ltp - avg) * qty * (type === "SELL" ? -1 : 1));
+    open.push({ ...row, ltp: ltp || avg, pnl });
+  }
+  const unrealized = round2(open.reduce((sum, row) => sum + Number(row.pnl || 0), 0));
+  return {
+    ...book,
+    open,
+    unrealizedPnl: unrealized,
+    mtm: round2(Number(book.realizedPnl || 0) + unrealized),
+  };
 }
 
 async function withKotakTradeLogin(creds) {
@@ -622,7 +752,24 @@ async function fetchBrokerPnl(userId) {
     return dhanMasterBook(await fetchMemberDhanPositions(creds.token, creds.clientId));
   }
   if (creds.brokerId === "kotak") {
-    return fetchKotakMasterBook(creds);
+    const { repairMemberPositionMarks, peekClientBook } = await import("./memberDesk.js");
+    const localDesk = repairMemberPositionMarks(userId);
+    const local = bookFromMemberPositions(localDesk.positions, localDesk.closedTrades, "kotak");
+    let broker = null;
+    try {
+      broker = await fetchKotakMasterBook(creds);
+    } catch (error) {
+      console.log(`member Kotak positions ${userId}: ${error?.message || error}`);
+    }
+    const merged = mergeKotakBooks(broker, local);
+    const marked = await fillKotakBookLtps(merged, creds);
+    if (marked?.open?.length) {
+      const ltpBySymbol = Object.fromEntries(marked.open.map((row) => [row.symbol, row.ltp]));
+      repairMemberPositionMarks(userId, ltpBySymbol);
+      const refreshed = peekClientBook(userId);
+      return mergeKotakBooks(marked, bookFromMemberPositions(refreshed.positions, refreshed.closedTrades, "kotak"));
+    }
+    return marked;
   }
   return upstoxMasterBook(await upstoxPositions(creds.token));
 }

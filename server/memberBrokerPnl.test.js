@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, bookFromMemberPositions, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, mergeKotakBooks, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -266,6 +266,28 @@ test("Kotak Neo nested, string, and lowercase position rows still show live MTM"
   assert.equal(desk.wallet.mtm, 84.5);
   assert.equal(desk.report.netPnl, 84.5);
   assert.equal(desk.report.daily.find((row) => row.date === "2026-10-05").pnl, 84.5);
+});
+
+test("a 0-price Kotak broker row keeps the local fill and live MTM", () => {
+  const local = bookFromMemberPositions([
+    { id: "1", symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 12.1, ltp: 13.4, pnl: 84.5 },
+  ]);
+  assert.equal(local.unrealizedPnl, 84.5);
+  const merged = mergeKotakBooks(
+    {
+      mtm: 0,
+      realizedPnl: 0,
+      unrealizedPnl: 0,
+      source: "kotak",
+      open: [{ symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 0, ltp: 0, pnl: 0 }],
+      closed: [],
+    },
+    local,
+  );
+  assert.equal(merged.open[0].avg, 12.1);
+  assert.equal(merged.open[0].ltp, 13.4);
+  assert.equal(merged.unrealizedPnl, 84.5);
+  assert.equal(merged.mtm, 84.5);
 });
 
 test("Kotak balance logs in when the access token is the consumer key", () => {

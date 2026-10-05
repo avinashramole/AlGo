@@ -450,29 +450,35 @@ export function enrichOpenLtps(positions = [], quote) {
 }
 
 function refreshLedgerMarks(client, quote) {
-  if (!client || typeof quote !== "function") return client;
-  const positions = enrichOpenLtps(client.positions, quote);
-  if (Number.isFinite(Number(client.brokerMtm))) return { ...client, positions };
+  if (!client) return client;
+  const positions = typeof quote === "function" ? enrichOpenLtps(client.positions, quote) : client.positions || [];
   const open = positions.filter((row) => !row.closed);
-  const unrealized = round2(open.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const marked = round2(open.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
   const realized = round2(client.realized);
+  const brokerReady = Number.isFinite(Number(client.brokerMtm)) && (Number(client.unrealized) || Number(client.realized) || Number(client.brokerMtm));
+  if (brokerReady) return { ...client, positions };
   return {
     ...client,
     positions,
-    unrealized,
-    mtm: round2(realized + unrealized),
+    unrealized: marked,
+    mtm: round2(realized + marked),
     open: open.length,
   };
+}
+
+function brokerBookHasMarks(book) {
+  if (!book || !Number.isFinite(Number(book.mtm))) return false;
+  if (Number(book.mtm) || Number(book.realizedPnl) || Number(book.unrealizedPnl)) return true;
+  if ((book.open || []).some((row) => Number(row.avg) > 0 || Number(row.ltp) > 0 || Number(row.pnl))) return true;
+  if ((book.closed || []).some((row) => Number(row.pnl) || Number(row.realized))) return true;
+  return false;
 }
 
 export function applyBrokerBooksToDesk(desk, booksByUserId = {}, quote) {
   if (!desk) return desk;
   const clients = (desk.clients || []).map((client) => {
     const book = booksByUserId?.[client.id];
-    const next =
-      book && Number.isFinite(Number(book.mtm)) && ((book.open || []).length || (book.closed || []).length || book.mtm)
-        ? applyBrokerBookToLedger(client, book)
-        : client;
+    const next = brokerBookHasMarks(book) ? applyBrokerBookToLedger(client, book) : client;
     return refreshLedgerMarks(next, quote);
   });
   const clientMtm = round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
