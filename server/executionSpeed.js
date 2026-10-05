@@ -64,11 +64,11 @@ export function exitMarks(input = {}) {
 }
 
 /**
- * Rest a LIMIT sell at the target while price is still under it, so the exchange
- * fills 145 itself. Once price is already there, MARKET — unless that limit is
- * already working, because a second sell would double the exit.
+ * After a BUY, do not park a TGT LIMIT sell. Track the live mark and only
+ * exit when TGT (or SL, handled by the strategy tick) is actually hit.
+ * A leftover working target sell is left alone so a second sell cannot double the exit.
  */
-export function planTargetExit({ mark, target, resting, tick = 0.05 } = {}) {
+export function planTargetExit({ mark, target, resting } = {}) {
   const px = Number(mark);
   const goal = Number(target);
   if (!(goal > 0) || !(px > 0)) return { action: "none" };
@@ -77,5 +77,5 @@ export function planTargetExit({ mark, target, resting, tick = 0.05 } = {}) {
     return { action: "market" };
   }
   if (resting) return { action: "resting" };
-  return { action: "arm", price: roundTick(goal, tick) };
+  return { action: "track" };
 }
