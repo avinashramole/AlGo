@@ -1,3 +1,5 @@
+import { getPublicUser } from "./auth.js";
+import { firstKotakMobile } from "./liveBrokers.js";
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
 import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
@@ -135,7 +137,10 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     brokerToken: paper ? "" : token,
     brokerApiKey: apiKey,
     brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
-    brokerMobile: leftoverSlot || paper ? "" : slot.brokerMobile || desk.brokerMobile || "",
+    brokerMobile:
+      leftoverSlot || paper
+        ? ""
+        : firstKotakMobile(slot.brokerMobile, desk.brokerMobile, getPublicUser(userId)?.mobile),
     brokerMpin: leftoverSlot || paper ? "" : slot.brokerMpin || desk.brokerMpin || "",
     brokerTotpSecret: leftoverSlot || paper ? "" : slot.brokerTotpSecret || desk.brokerTotpSecret || "",
     paper,

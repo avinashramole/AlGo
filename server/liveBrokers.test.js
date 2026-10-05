@@ -14,6 +14,9 @@ const {
   fyersSymbol,
   isLiveBrokerReady,
   clearKotakTradeCache,
+  firstKotakMobile,
+  kotakMobileNumber,
+  kotakMobileNumberCandidates,
   kotakOrderAmo,
   kotakTotpCandidates,
   nfoTradingSymbol,
@@ -1265,6 +1268,97 @@ test("a Kotak limit keeps its own price when the Dhan quote is higher", async ()
     assert.equal(calls.some((row) => String(row.url).includes("dhan.co")), false);
   } finally {
     setLivePriceReader(() => 0);
+  }
+});
+
+test("kotakMobileNumber keeps the Users-list 10-digit number as +91 for Neo login", () => {
+  assert.equal(kotakMobileNumber("9922980000"), "+919922980000");
+  assert.equal(kotakMobileNumber("+91 99229 80000"), "+919922980000");
+  assert.equal(kotakMobileNumber("+91-9922980000"), "+919922980000");
+  assert.equal(kotakMobileNumber("919922980000"), "+919922980000");
+  assert.deepEqual(kotakMobileNumberCandidates("9922980000"), [
+    "+919922980000",
+    "+91-9922980000",
+    "9922980000",
+    "919922980000",
+  ]);
+  assert.equal(firstKotakMobile("", "not-a-phone", "9922980000"), "9922980000");
+  assert.equal(firstKotakMobile("+919922980000", "9000000000"), "+919922980000");
+});
+
+test("Kotak trade login retries MobileNumber formats after Neo rejects +91", async () => {
+  clearKotakTradeCache();
+  const saved = {
+    mobile: process.env.T2S_KOTAK_MOBILE,
+    mpin: process.env.T2S_KOTAK_MPIN,
+    totp: process.env.T2S_KOTAK_TOTP_SECRET,
+  };
+  delete process.env.T2S_KOTAK_MOBILE;
+  delete process.env.T2S_KOTAK_MPIN;
+  delete process.env.T2S_KOTAK_TOTP_SECRET;
+  const mobiles = [];
+  const fetchImpl = async (url, options = {}) => {
+    const target = String(url);
+    if (target.includes("tradeApiLogin")) {
+      const sent = JSON.parse(options.body);
+      mobiles.push(sent.mobileNumber);
+      if (sent.mobileNumber === "+919922980000") {
+        return {
+          ok: false,
+          status: 400,
+          text: async () => JSON.stringify({ error: [{ message: "Invalid field 'MobileNumber'; must be a valid mobile number" }] }),
+        };
+      }
+      if (sent.mobileNumber === "9922980000" || sent.mobileNumber === "+91-9922980000") {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
+      }
+      return { ok: false, status: 400, text: async () => JSON.stringify({ message: "unexpected mobile" }) };
+    }
+    if (target.includes("tradeApiValidate")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: { token: "edit-token", sid: "edit-sid", baseUrl: "https://e22.kotaksecurities.com", hsServerId: "server-2" },
+          }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-mobile" }) };
+  };
+  try {
+    const live = await placeLiveBrokerOrder(
+      "kotak",
+      {
+        copyUserId: "u-9922980000",
+        brokerSession: {
+          accessToken: "member-access-9922",
+          apiKey: "member-consumer-9922",
+          clientId: "YT2Vm",
+          mobile: "9922980000",
+          mpin: "654321",
+          totpSecret: "123456",
+        },
+        symbol: "NIFTY 22500 PE",
+        side: "BUY",
+        qty: 65,
+        price: 115.2,
+        type: "LIMIT",
+      },
+      fetchImpl,
+    );
+    assert.equal(live.orderId, "k-mobile");
+    assert.deepEqual(mobiles[0], "+919922980000");
+    assert.ok(mobiles.includes("+91-9922980000") || mobiles.includes("9922980000"));
+    assert.equal(mobiles.includes(""), false);
+  } finally {
+    clearKotakTradeCache();
+    if (saved.mobile == null) delete process.env.T2S_KOTAK_MOBILE;
+    else process.env.T2S_KOTAK_MOBILE = saved.mobile;
+    if (saved.mpin == null) delete process.env.T2S_KOTAK_MPIN;
+    else process.env.T2S_KOTAK_MPIN = saved.mpin;
+    if (saved.totp == null) delete process.env.T2S_KOTAK_TOTP_SECRET;
+    else process.env.T2S_KOTAK_TOTP_SECRET = saved.totp;
   }
 });
 

@@ -9,6 +9,8 @@ process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
+process.env.T2S_USERS_FILE = path.join(dir, "users.json");
+process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 
 const { enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const {

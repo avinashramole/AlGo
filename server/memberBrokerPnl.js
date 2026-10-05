@@ -372,8 +372,10 @@ async function memberBrokerCredentials(userId) {
   if (brokerId === "kotak") {
     const apiKey = String(slot.brokerApiKey || desk.brokerApiKey || "").trim();
     const sessionToken = String(slot.brokerSessionToken || desk.brokerSessionToken || "").trim();
+    const { getPublicUser } = await import("./auth.js");
+    const { firstKotakMobile } = await import("./liveBrokers.js");
     const login = {
-      mobile: String(slot.brokerMobile || desk.brokerMobile || "").trim(),
+      mobile: firstKotakMobile(slot.brokerMobile, desk.brokerMobile, getPublicUser(userId)?.mobile),
       mpin: String(slot.brokerMpin || desk.brokerMpin || "").trim(),
       totpSecret: String(slot.brokerTotpSecret || desk.brokerTotpSecret || "").trim(),
     };
