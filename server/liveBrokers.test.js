@@ -1282,9 +1282,9 @@ test("kotakMobileNumber keeps the Users-list 10-digit number as +91 for Neo logi
   assert.equal(kotakMobileNumber("+91-9922980000"), "+919922980000");
   assert.equal(kotakMobileNumber("919922980000"), "+919922980000");
   assert.deepEqual(kotakMobileNumberCandidates("9922980000"), [
+    "+919922980000",
     "9922980000",
     "+91-9922980000",
-    "+919922980000",
     "919922980000",
   ]);
   assert.equal(firstKotakMobile("", "not-a-phone", "9922980000"), "9922980000");
@@ -1307,7 +1307,7 @@ test("Kotak trade login sends the Users-list 10-digit mobile first", async () =>
     if (target.includes("tradeApiLogin")) {
       const sent = JSON.parse(options.body);
       logins.push({ mobile: kotakLoginMobile(sent), key: sent.mobileNumber ? "mobileNumber" : "MobileNumber", auth: options.headers?.Authorization });
-      if (sent.mobileNumber === "9922980000") {
+      if (sent.mobileNumber === "+919922980000") {
         return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
       }
       return {
@@ -1350,7 +1350,7 @@ test("Kotak trade login sends the Users-list 10-digit mobile first", async () =>
       fetchImpl,
     );
     assert.equal(live.orderId, "k-mobile");
-    assert.deepEqual(logins[0], { mobile: "9922980000", key: "mobileNumber", auth: "member-access-9922" });
+    assert.deepEqual(logins[0], { mobile: "+919922980000", key: "mobileNumber", auth: "member-access-9922" });
     assert.equal(logins.length, 1);
   } finally {
     clearKotakTradeCache();
@@ -1363,18 +1363,19 @@ test("Kotak trade login sends the Users-list 10-digit mobile first", async () =>
   }
 });
 
-test("Kotak trade login retries MobileNumber key and consumer key after Neo rejects the Users number", async () => {
+test("a new Kotak copy retries Neo v6 TOTP login after tradeApiLogin rejects MobileNumber", async () => {
   clearKotakTradeCache();
   const logins = [];
   const fetchImpl = async (url, options = {}) => {
-    if (String(url).includes("tradeApiLogin")) {
+    const target = String(url);
+    if (target.includes("tradeApiLogin") || target.includes("/v6/totp/login")) {
       const sent = JSON.parse(options.body);
       logins.push({
+        url: target,
         mobile: kotakLoginMobile(sent),
         key: sent.MobileNumber ? "MobileNumber" : "mobileNumber",
-        auth: options.headers?.Authorization,
       });
-      if (sent.MobileNumber === "9922980000" && options.headers?.Authorization === "member-consumer-new") {
+      if (target.includes("/v6/totp/login") && sent.mobileNumber === "+919922980000") {
         return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
       }
       return {
@@ -1383,7 +1384,7 @@ test("Kotak trade login retries MobileNumber key and consumer key after Neo reje
         text: async () => JSON.stringify({ error: ["Invalid field 'MobileNumber'; must be a valid mobile number"] }),
       };
     }
-    if (String(url).includes("tradeApiValidate")) {
+    if (target.includes("tradeApiValidate") || target.includes("/v6/totp/validate")) {
       return {
         ok: true,
         status: 200,
@@ -1404,6 +1405,7 @@ test("Kotak trade login retries MobileNumber key and consumer key after Neo reje
         apiKey: "member-consumer-new",
         clientId: "NEWK1",
         mobile: "9922980000",
+        profileMobile: "9922980000",
         mpin: "654321",
         totpSecret: "123456",
       },
@@ -1416,9 +1418,9 @@ test("Kotak trade login retries MobileNumber key and consumer key after Neo reje
     fetchImpl,
   );
   assert.equal(live.orderId, "k-retry");
-  assert.deepEqual(logins[0], { mobile: "9922980000", key: "mobileNumber", auth: "member-access-new" });
-  assert.deepEqual(logins.at(-1), { mobile: "9922980000", key: "MobileNumber", auth: "member-consumer-new" });
-  assert.equal(logins.some((row) => row.mobile !== "9922980000"), false);
+  assert.match(logins[0].url, /tradeApiLogin/);
+  assert.equal(logins[0].mobile, "+919922980000");
+  assert.ok(logins.some((row) => row.url.includes("/v6/totp/login") && row.mobile === "+919922980000"));
 });
 
 test("a Kotak copy with empty trade mobile uses the Users-list number", async () => {
@@ -1427,7 +1429,7 @@ test("a Kotak copy with empty trade mobile uses the Users-list number", async ()
   const fetchImpl = async (url, options = {}) => {
     if (String(url).includes("tradeApiLogin")) {
       mobiles.push(kotakLoginMobile(options.body));
-      if (JSON.parse(options.body).mobileNumber === "9922980000") {
+      if (JSON.parse(options.body).mobileNumber === "+919922980000") {
         return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
       }
       return {
@@ -1470,14 +1472,14 @@ test("a Kotak copy with empty trade mobile uses the Users-list number", async ()
     fetchImpl,
   );
   assert.equal(live.orderId, "k-profile");
-  assert.equal(mobiles[0], "9922980000");
+  assert.equal(mobiles[0], "+919922980000");
   assert.equal(mobiles.includes(""), false);
 });
 
 test("Kotak trade login names the Users mobile when every Neo format is rejected", async () => {
   clearKotakTradeCache();
   const fetchImpl = async (url) => {
-    if (String(url).includes("tradeApiLogin")) {
+    if (String(url).includes("tradeApiLogin") || String(url).includes("/v6/totp/login")) {
       return {
         ok: false,
         status: 400,
@@ -1603,7 +1605,7 @@ test("Kotak admin order calls tradeApiLogin even when a Neo sid and base URL are
     assert.equal(login.fin, "neotradeapi");
     assert.match(login.type, /application\/json/);
     assert.deepEqual(JSON.parse(login.body), {
-      mobileNumber: "9876543210",
+      mobileNumber: "+919876543210",
       ucc: "YIX14",
       totp: "654321",
     });

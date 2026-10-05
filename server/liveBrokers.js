@@ -959,7 +959,7 @@ export function kotakMobileNumberCandidates(...values) {
   }
   const out = [];
   for (const digits of digitsList) {
-    for (const form of [digits, `+91-${digits}`, `+91${digits}`, `91${digits}`]) {
+    for (const form of [`+91${digits}`, digits, `+91-${digits}`, `91${digits}`]) {
       if (!out.includes(form)) out.push(form);
     }
   }
@@ -1158,36 +1158,46 @@ export async function openKotakTradeSession(creds, fetchImpl = fetch) {
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
   const codes = kotakTotpCandidates(creds.totpSecret);
   const profileMobile = creds.profileMobile || (creds.copyUserId ? getPublicUser(creds.copyUserId)?.mobile : "");
-  const mobiles = kotakMobileNumberCandidates(creds.mobile, profileMobile);
+  const mobiles = kotakMobileNumberCandidates(profileMobile, creds.mobile);
   if (!mobiles.length) {
     throw fail("Kotak trade-login mobile must be a valid 10-digit Indian mobile number. Use the number shown on Users.");
   }
   const auths = [authHeader];
   const consumerKey = String(creds.apiKey || "").trim();
   if (consumerKey && consumerKey !== authHeader) auths.push(consumerKey);
+  const loginUrls = [
+    "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin",
+    "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/login",
+  ];
   let login = null;
+  let loginAuth = authHeader;
+  let loginUrl = loginUrls[0];
   let lastLoginError = null;
   totpLoop: for (const totp of codes) {
-    for (const mobileNumber of mobiles) {
-      for (const authorization of auths) {
-        for (const body of [{ mobileNumber, ucc: creds.clientId, totp }, { MobileNumber: mobileNumber, ucc: creds.clientId, totp }]) {
-          try {
-            login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
-              method: "POST",
-              headers: {
-                Authorization: authorization,
-                "neo-fin-key": "neotradeapi",
-                "Content-Type": "application/json",
-                Accept: "application/json",
-              },
-              body: JSON.stringify(body),
-            });
-            break totpLoop;
-          } catch (error) {
-            lastLoginError = error;
-            if (isKotakMobileFieldError(error)) continue;
-            if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
-            continue totpLoop;
+    for (const url of loginUrls) {
+      for (const mobileNumber of mobiles) {
+        for (const authorization of auths) {
+          for (const body of [{ mobileNumber, ucc: creds.clientId, totp }, { MobileNumber: mobileNumber, ucc: creds.clientId, totp }]) {
+            try {
+              login = await kotakRequest(fetchImpl, url, {
+                method: "POST",
+                headers: {
+                  Authorization: authorization,
+                  "neo-fin-key": "neotradeapi",
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify(body),
+              });
+              loginAuth = authorization;
+              loginUrl = url;
+              break totpLoop;
+            } catch (error) {
+              lastLoginError = error;
+              if (isKotakMobileFieldError(error)) continue;
+              if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
+              continue totpLoop;
+            }
           }
         }
       }
@@ -1206,18 +1216,38 @@ export async function openKotakTradeSession(creds, fetchImpl = fetch) {
   const viewToken = String(view.token || "").trim();
   const viewSid = String(view.sid || "").trim();
   if (!viewToken || !viewSid) throw fail("Kotak TOTP login did not return a trading session.");
-  const validated = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate", {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      "neo-fin-key": "neotradeapi",
-      sid: viewSid,
-      Auth: viewToken,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ mpin: creds.mpin }),
-  });
+  const validateUrls = String(loginUrl).includes("/v6/totp/")
+    ? [
+        "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/validate",
+        "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate",
+      ]
+    : [
+        "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate",
+        "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/validate",
+      ];
+  let validated = null;
+  let lastValidateError = null;
+  for (const url of validateUrls) {
+    try {
+      validated = await kotakRequest(fetchImpl, url, {
+        method: "POST",
+        headers: {
+          Authorization: loginAuth || authHeader,
+          "neo-fin-key": "neotradeapi",
+          sid: viewSid,
+          Auth: viewToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ mpin: creds.mpin }),
+      });
+      break;
+    } catch (error) {
+      lastValidateError = error;
+      if (url === validateUrls[validateUrls.length - 1]) throw error;
+    }
+  }
+  if (!validated) throw lastValidateError || fail("Kotak MPIN login did not return a trading host.");
   const data = validated.data || validated;
   const trade = {
     tradeToken: String(data.token || "").trim(),

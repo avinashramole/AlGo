@@ -113,7 +113,7 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   }
   const profileMobile = leftoverSlot || paper ? "" : String(getPublicUser(userId)?.mobile || "").trim();
   const brokerMobile =
-    leftoverSlot || paper ? "" : firstKotakMobile(slot.brokerMobile, desk.brokerMobile, profileMobile);
+    leftoverSlot || paper ? "" : firstKotakMobile(profileMobile, slot.brokerMobile, desk.brokerMobile);
   if (
     brokerId === "kotak" &&
     profileMobile &&
