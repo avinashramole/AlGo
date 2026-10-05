@@ -657,72 +657,65 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-3 md:items-center">
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-base font-bold">Map clients to strategy</h2>
+      <div className="relative z-10 flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-bold">Map clients · {algo.name}</h2>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 pb-4">
-          <div className="flex items-center gap-3 rounded-xl bg-[var(--bg)] px-4 py-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--card)] text-slate-400">
-              <Users size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-bold">{algo.name}</div>
-              <div className="text-xs text-slate-400">Choose where this strategy will execute</div>
-            </div>
-          </div>
-          <label className="grid gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-            Mapping scope
-            <select
-              className="h-11 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold normal-case tracking-normal text-[var(--text)]"
-              value={scope}
-              onChange={(event) => setScope(event.target.value as MappingScope)}
-            >
-              <option value="both">Master + selected clients</option>
-              <option value="master">Master only</option>
-              <option value="clients">Selected clients only</option>
-            </select>
-          </label>
-          <div className="space-y-2">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <section className="overflow-hidden rounded-xl border border-[var(--border)]">
+            <div className="bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Scope</div>
+            <label className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-1.5">
+              <span className="w-[6.25rem] shrink-0 text-xs text-slate-500">Mapping</span>
+              <select
+                className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 text-[13px] font-semibold"
+                value={scope}
+                onChange={(event) => setScope(event.target.value as MappingScope)}
+              >
+                <option value="both">Master + selected clients</option>
+                <option value="master">Master only</option>
+                <option value="clients">Selected clients only</option>
+              </select>
+            </label>
+            <div className="bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Clients</div>
             {clients.map((row) => {
               const checked = picked.includes(row.id);
               return (
                 <label
                   key={row.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5"
+                  className="flex cursor-pointer items-center gap-2 border-t border-[var(--border)] px-3 py-1.5"
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggleId(row.id)} />
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-600 text-[10px] font-bold text-white">
                     {(row.name || "?").trim().charAt(0).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold">{row.name}</span>
                     <span className="block text-[11px] text-slate-400">
-                      {row.brokerName} · {row.linked || row.tradeMode === "real" ? "Active account" : "Paper account"}
+                      {row.brokerName} · {row.linked || row.tradeMode === "real" ? "Active" : "Paper"}
                     </span>
                   </span>
                 </label>
               );
             })}
             {!clients.length ? (
-              <p className="py-6 text-center text-sm text-slate-400">
-                {loaded ? "No clients yet. Add one on All clients first." : "Loading clients…"}
+              <p className="border-t border-[var(--border)] px-3 py-4 text-center text-xs text-slate-400">
+                {loaded ? "No clients yet. Add one on Users first." : "Loading…"}
               </p>
             ) : null}
-          </div>
-          {error ? <p className="text-xs font-semibold text-down">{error}</p> : null}
+          </section>
+          {error ? <p className="mt-2 text-xs font-semibold text-down">{error}</p> : null}
         </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          <button type="button" onClick={onClose} className="h-10 rounded-xl px-4 text-sm font-semibold">
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-[var(--border)] text-sm font-semibold">
             Cancel
           </button>
-          <button type="button" disabled={busy} onClick={() => void save()} className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
-            {busy ? "Saving..." : "Save mapping"}
+          <button type="button" disabled={busy} onClick={() => void save()} className="h-8 flex-1 rounded-md bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
+            {busy ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
