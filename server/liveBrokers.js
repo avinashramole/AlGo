@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getPublicUser } from "./auth.js";
 import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
 import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
 import { totpCodes } from "./totp.js";
@@ -950,13 +951,24 @@ export function kotakMobileNumber(value) {
   return String(value || "").trim().replace(/[\s-]/g, "");
 }
 
-export function kotakMobileNumberCandidates(value) {
-  const digits = indianMobileDigits(value);
-  if (!digits) {
-    const formatted = kotakMobileNumber(value);
-    return formatted ? [formatted] : [];
+export function kotakMobileNumberCandidates(...values) {
+  const digitsList = [];
+  for (const value of values) {
+    const digits = indianMobileDigits(value);
+    if (digits && !digitsList.includes(digits)) digitsList.push(digits);
   }
-  return [...new Set([`+91${digits}`, `+91-${digits}`, digits, `91${digits}`])];
+  const out = [];
+  for (const digits of digitsList) {
+    for (const form of [`+91-${digits}`, digits, `+91${digits}`, `91${digits}`]) {
+      if (!out.includes(form)) out.push(form);
+    }
+  }
+  if (out.length) return out;
+  for (const value of values) {
+    const formatted = kotakMobileNumber(value);
+    if (formatted && !out.includes(formatted)) out.push(formatted);
+  }
+  return out;
 }
 
 export function firstKotakMobile(...values) {
@@ -1027,7 +1039,9 @@ function kotakDeskCreds(session = {}, lane = "admin") {
     apiKey: String(session.apiKey || "").trim(),
     accessToken: String(session.accessToken || "").trim(),
     sessionToken: String(session.sessionToken || "").trim(),
-    mobile: String(session.mobile || "").trim(),
+    mobile: String(session.mobile || session.profileMobile || "").trim(),
+    profileMobile: String(session.profileMobile || "").trim(),
+    copyUserId: String(session.copyUserId || "").trim(),
     mpin: String(session.mpin || "").trim(),
     totpSecret: String(session.totpSecret || "").trim(),
     baseUrl: String(session.baseUrl || "").replace(/\/$/, ""),
@@ -1119,7 +1133,8 @@ export async function openKotakTradeSession(creds, fetchImpl = fetch) {
   const cached = kotakTradeCache.get(key);
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
   const codes = kotakTotpCandidates(creds.totpSecret);
-  const mobiles = kotakMobileNumberCandidates(creds.mobile);
+  const profileMobile = creds.profileMobile || (creds.copyUserId ? getPublicUser(creds.copyUserId)?.mobile : "");
+  const mobiles = kotakMobileNumberCandidates(creds.mobile, profileMobile);
   if (!mobiles.length) {
     throw fail("Kotak trade-login mobile must be a valid 10-digit Indian mobile number.");
   }

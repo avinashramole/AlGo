@@ -1,7 +1,7 @@
 import { getPublicUser } from "./auth.js";
 import { firstKotakMobile } from "./liveBrokers.js";
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
-import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
+import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMemberCopyFill, saveClientSettings, sizeCopyQty } from "./memberDesk.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { exchangeSegmentFor } from "./optionChain.js";
@@ -111,6 +111,16 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
       copyBlocked: `Paste this user's ${brokerKeyLabel(brokerId)} with the access token.`,
     };
   }
+  const profileMobile = leftoverSlot || paper ? "" : String(getPublicUser(userId)?.mobile || "").trim();
+  const brokerMobile =
+    leftoverSlot || paper ? "" : firstKotakMobile(slot.brokerMobile, desk.brokerMobile, profileMobile);
+  if (
+    brokerId === "kotak" &&
+    profileMobile &&
+    !String(slot.brokerMobile || desk.brokerMobile || "").trim()
+  ) {
+    saveClientSettings(userId, { brokerMobile: profileMobile });
+  }
   if (!paper && !token && !leftoverSlot && !canMintUpstox) {
     const copyBlocked =
       brokerId === "dhan"
@@ -137,10 +147,8 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     brokerToken: paper ? "" : token,
     brokerApiKey: apiKey,
     brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
-    brokerMobile:
-      leftoverSlot || paper
-        ? ""
-        : firstKotakMobile(slot.brokerMobile, desk.brokerMobile, getPublicUser(userId)?.mobile),
+    brokerMobile,
+    profileMobile,
     brokerMpin: leftoverSlot || paper ? "" : slot.brokerMpin || desk.brokerMpin || "",
     brokerTotpSecret: leftoverSlot || paper ? "" : slot.brokerTotpSecret || desk.brokerTotpSecret || "",
     paper,
@@ -280,7 +288,8 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           accessToken: target.brokerToken,
           apiKey: target.brokerApiKey,
           sessionToken: target.brokerSessionToken,
-          mobile: target.brokerMobile || "",
+          mobile: target.brokerMobile || target.profileMobile || "",
+          profileMobile: target.profileMobile || "",
           mpin: target.brokerMpin || "",
           totpSecret: target.brokerTotpSecret || "",
           leftoverSlot: Boolean(target.leftoverSlot),
@@ -292,7 +301,8 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
           accessToken: target.brokerToken,
           apiKey: target.brokerApiKey,
           sessionToken: target.brokerSessionToken,
-          mobile: target.brokerMobile || "",
+          mobile: target.brokerMobile || target.profileMobile || "",
+          profileMobile: target.profileMobile || "",
           mpin: target.brokerMpin || "",
           totpSecret: target.brokerTotpSecret || "",
           leftoverSlot: Boolean(target.leftoverSlot),

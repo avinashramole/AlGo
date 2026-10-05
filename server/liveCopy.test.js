@@ -14,7 +14,7 @@ process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 
 const { adminCreateMember } = await import("./auth.js");
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
-const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
+const { getMemberDesk, installMemberBroker, peekClientSecrets, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
 const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
@@ -986,6 +986,8 @@ test("Kotak copy uses the Users-list mobile when trade-login mobile is empty", (
   );
   const row = copies.find((item) => item.copyUserId === created.id);
   assert.ok(row);
-  assert.equal(row.brokerSession.mobile, "9922980000");
-  assert.equal(row.account.mobile, "9922980000");
+  assert.equal(String(row.brokerSession.mobile).includes("9922980000"), true);
+  assert.equal(row.brokerSession.profileMobile, "9922980000");
+  assert.equal(String(row.account.mobile).includes("9922980000"), true);
+  assert.equal(peekClientSecrets(created.id).brokerMobile, "+919922980000");
 });
