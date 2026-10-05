@@ -270,6 +270,21 @@ test("createClient refuses REAL when no broker is linked", () => {
   );
 });
 
+test("createClient accepts +91 Users mobile and stores it on Kotak", () => {
+  const row = createClient({
+    name: "Neo Plus User",
+    mobile: "+919922980000",
+    email: "neo.plus.user@gmail.com",
+    brokerId: "kotak",
+    accountId: "NEWK91",
+    brokerApiKey: "user-consumer-9922",
+    brokerToken: "user-access-9922",
+    tradeMode: "paper",
+  });
+  assert.equal(row.mobile, "9922980000");
+  assert.equal(peekClientSecrets(row.id).brokerMobile, "+919922980000");
+});
+
 test("createClient stores a user's own Kotak Neo", () => {
   const row = createClient({
     name: "Kotak User",

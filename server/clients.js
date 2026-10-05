@@ -1,5 +1,6 @@
 import { catalog } from "./brokers.js";
 import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser, listPublicUsers } from "./auth.js";
+import { kotakMobileNumber } from "./liveBrokers.js";
 import {
   assignedEgressIps,
   brokerInstallFields,
@@ -75,7 +76,7 @@ function fillKotakTradeMobile(patch = {}, profileMobile = "", current = {}) {
   const brokerId = String(patch.brokerId || current.brokerId || "").trim().toLowerCase();
   if (brokerId !== "kotak") return patch;
   if (String(patch.brokerMobile || current.brokerMobile || "").trim()) return patch;
-  const mobile = String(profileMobile || "").trim();
+  const mobile = kotakMobileNumber(profileMobile);
   if (!mobile) return patch;
   return { ...patch, brokerMobile: mobile };
 }
