@@ -999,6 +999,7 @@ function BrokerLoginFields({
   tradeMpin,
   tradeTotp,
   hints,
+  compact = false,
   onApiKey,
   onToken,
   onSession,
@@ -1016,6 +1017,7 @@ function BrokerLoginFields({
   tradeMpin: string;
   tradeTotp: string;
   hints?: { apiKeyHint?: string; tokenHint?: string; sessionHint?: string; mobileHint?: string };
+  compact?: boolean;
   onApiKey: (value: string) => void;
   onToken: (value: string) => void;
   onSession: (value: string) => void;
@@ -1049,29 +1051,29 @@ function BrokerLoginFields({
     else if (id === "totpSecret") onTradeTotp(value);
     else if (id === "accessToken") onToken(value);
   };
+  const fieldsGrid = rows.map((field) => (
+    <Field key={field.id} label={field.label} compact={compact}>
+      <input
+        className={compact ? compactInputClass : inputClass}
+        type={field.secret ? "password" : "text"}
+        value={valueFor(field.id)}
+        onChange={(event) => changeFor(field.id, event.target.value)}
+        placeholder={hintFor(field.id) || field.placeholder || field.label}
+        autoComplete="off"
+      />
+    </Field>
+  ));
+  if (compact) return <>{fieldsGrid}</>;
   return (
-    <div className="rounded-xl border border-[var(--border)] p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
-      {rows.map((field) => (
-        <Field key={field.id} label={field.label}>
-          <input
-            className={inputClass}
-            type={field.secret ? "password" : "text"}
-            value={valueFor(field.id)}
-            onChange={(event) => changeFor(field.id, event.target.value)}
-            placeholder={hintFor(field.id) || field.placeholder || field.label}
-            autoComplete="off"
-          />
-        </Field>
-      ))}
-      <span className="font-normal text-[11px] text-slate-500">
-        Algo copies and this user's home use this login. The admin broker login is not saved on the user. This does not turn LIVE on.
-      </span>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="col-span-full text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
+      {fieldsGrid}
     </div>
   );
 }
 
 const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
+const compactInputClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 text-sm";
 
 function EditModal({
   row,
@@ -1172,126 +1174,138 @@ function EditModal({
     }
   };
 
+  const savedSlots = Object.entries(row.brokerAccounts || {})
+    .map(([id, slot]) => `${id.toUpperCase()}${slot.accountId ? ` ${slot.accountId}` : ""}${slot.installed ? " · token" : ""}`)
+    .join(" · ");
+  const tokenLine = selectedAccount.tokenHint
+    ? `${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""}`
+    : brokerId === "fyers"
+      ? "No today's token — Get today's token after App Secret is saved"
+      : `No ${brokerId.toUpperCase()} token yet`;
+
   return (
-    <Modal title={`Edit ${row.name}`} onClose={onClose}>
+    <Modal title={`Edit ${row.name}`} wide onClose={onClose}>
       <form onSubmit={(event) => void onSubmit(event)} className="grid gap-3">
-        <Field label="Name">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={name} onChange={(event) => setName(event.target.value)} />
-        </Field>
-        <Field label="Mobile no">
-          <input
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-            value={mobile}
-            inputMode="numeric"
-            maxLength={10}
-            onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
-            placeholder="10-digit mobile"
-          />
-        </Field>
-        <Field label="Telegram chat id">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="Chat id from BotFather /start" />
-        </Field>
-        <Field label="Broker">
-          <select
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-            value={brokerId}
-            onChange={(event) => {
-              const next = event.target.value;
-              setBrokerId(next);
-              const slot = accountFor(next);
-              setAccountId(slot.accountId || "");
-              setBrokerToken("");
-              setBrokerApiKey("");
-              setBrokerSessionToken("");
-              setTradeMobile("");
-              setTradeMpin("");
-              setTradeTotp("");
-            }}
-          >
-            {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
-              <option key={choice.id} value={choice.id}>
-                {choice.name}
-              </option>
-            ))}
-          </select>
-          <span className="font-normal text-[11px] text-slate-500">
-            This user can keep a client ID and token on each broker. Selecting DHAN edits only the DHAN slot.
-          </span>
-        </Field>
-        {Object.keys(row.brokerAccounts || {}).length ? (
-          <p className="text-[11px] text-slate-500">
-            Saved:{" "}
-            {Object.entries(row.brokerAccounts || {})
-              .map(([id, slot]) => `${id.toUpperCase()}${slot.accountId ? ` ${slot.accountId}` : ""}${slot.installed ? " · token" : ""}`)
-              .join(" · ")}
-          </p>
-        ) : null}
-        <Field label="Client ID">
-          <input
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-            value={accountId}
-            onChange={(event) => setAccountId(event.target.value)}
-            placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
-          />
-        </Field>
-        <BrokerLoginFields
-          brokerId={brokerId}
-          brokerName={(brokers.find((choice) => choice.id === brokerId)?.name || brokerId).toUpperCase()}
-          fields={brokers.find((choice) => choice.id === brokerId)?.fields}
-          brokerApiKey={brokerApiKey}
-          brokerToken={brokerToken}
-          brokerSessionToken={brokerSessionToken}
-          tradeMobile={tradeMobile}
-          tradeMpin={tradeMpin}
-          tradeTotp={tradeTotp}
-          hints={{
-            apiKeyHint: selectedAccount.apiKeyHint,
-            tokenHint: selectedAccount.tokenHint,
-            sessionHint: selectedAccount.sessionHint,
-            mobileHint: selectedAccount.tradeMobileHint,
-          }}
-          onApiKey={setBrokerApiKey}
-          onToken={setBrokerToken}
-          onSession={setBrokerSessionToken}
-          onTradeMobile={setTradeMobile}
-          onTradeMpin={setTradeMpin}
-          onTradeTotp={setTradeTotp}
-        />
+        <section className="rounded-xl border border-[var(--border)]">
+          <div className="border-b border-[var(--border)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Profile</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
+            <Field label="Name" compact>
+              <input className={compactInputClass} value={name} onChange={(event) => setName(event.target.value)} />
+            </Field>
+            <Field label="Mobile" compact>
+              <input
+                className={compactInputClass}
+                value={mobile}
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="10-digit mobile"
+              />
+            </Field>
+            <Field label="Telegram" compact>
+              <input className={compactInputClass} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="Chat id" />
+            </Field>
+            <Field label="Broker" compact>
+              <select
+                className={compactInputClass}
+                value={brokerId}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setBrokerId(next);
+                  const slot = accountFor(next);
+                  setAccountId(slot.accountId || "");
+                  setBrokerToken("");
+                  setBrokerApiKey("");
+                  setBrokerSessionToken("");
+                  setTradeMobile("");
+                  setTradeMpin("");
+                  setTradeTotp("");
+                }}
+              >
+                {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
+                  <option key={choice.id} value={choice.id}>
+                    {choice.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </section>
+
         {brokerId !== "paper" ? (
-          <span className="font-normal text-[11px] text-slate-500">
-            {selectedAccount.tokenHint
-              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. ${brokerId === "fyers" ? "Get today's token again to replace the expired one." : "Paste a new token to replace it."}`
-              : brokerId === "fyers"
-                ? "Fyers does not show a pasteable access token. Save App ID + App Secret, then Get today's token and log in as this Fyers user."
-                : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
-            Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
-          </span>
+          <section className="rounded-xl border border-[var(--border)]">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{brokerId.toUpperCase()} login</span>
+              <span className="truncate text-[11px] text-slate-500">{savedSlots || tokenLine}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
+              <Field label="Client ID" compact>
+                <input
+                  className={compactInputClass}
+                  value={accountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                  placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
+                />
+              </Field>
+              <BrokerLoginFields
+                brokerId={brokerId}
+                brokerName={(brokers.find((choice) => choice.id === brokerId)?.name || brokerId).toUpperCase()}
+                fields={brokers.find((choice) => choice.id === brokerId)?.fields}
+                brokerApiKey={brokerApiKey}
+                brokerToken={brokerToken}
+                brokerSessionToken={brokerSessionToken}
+                tradeMobile={tradeMobile}
+                tradeMpin={tradeMpin}
+                tradeTotp={tradeTotp}
+                compact
+                hints={{
+                  apiKeyHint: selectedAccount.apiKeyHint,
+                  tokenHint: selectedAccount.tokenHint,
+                  sessionHint: selectedAccount.sessionHint,
+                  mobileHint: selectedAccount.tradeMobileHint,
+                }}
+                onApiKey={setBrokerApiKey}
+                onToken={setBrokerToken}
+                onSession={setBrokerSessionToken}
+                onTradeMobile={setTradeMobile}
+                onTradeMpin={setTradeMpin}
+                onTradeTotp={setTradeTotp}
+              />
+            </div>
+            <p className="border-t border-[var(--border)] px-3 py-1.5 text-[11px] text-slate-500">
+              {tokenLine}. Copies use this login. Desk LIVE stays off.
+            </p>
+          </section>
         ) : null}
-        <Field label="Static IP">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />
-        </Field>
-        <Field label="Group">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" list="client-groups" value={group} onChange={(event) => setGroup(event.target.value)} />
-          <datalist id="client-groups">
-            {groups.map((item) => (
-              <option key={item} value={item} />
-            ))}
-          </datalist>
-        </Field>
-        {note ? <p className="text-xs font-semibold text-slate-500">{note}</p> : null}
-        {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
-        <p className="text-[11px] text-slate-500">
-          {formatMobile(mobile)} · Saving REAL or Copy does not start Dhan LIVE.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={busy || tokenBusy} className="h-10 flex-1 rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-50">
+
+        <section className="rounded-xl border border-[var(--border)]">
+          <div className="border-b border-[var(--border)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Desk</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
+            <Field label="Static IP" compact>
+              <input className={compactInputClass} value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />
+            </Field>
+            <Field label="Group" compact>
+              <input className={compactInputClass} list="client-groups" value={group} onChange={(event) => setGroup(event.target.value)} />
+              <datalist id="client-groups">
+                {groups.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+            </Field>
+          </div>
+        </section>
+
+        {note ? <p className="text-[11px] font-semibold text-slate-500">{note}</p> : null}
+        {error ? <p className="text-[11px] font-semibold text-rose-500">{error}</p> : null}
+        <div className="flex items-center gap-2">
+          <button type="submit" disabled={busy || tokenBusy} className="h-9 flex-1 rounded-lg bg-brand-500 text-sm font-semibold text-white disabled:opacity-50">
             {busy ? "Saving..." : "Save"}
           </button>
           {brokerId === "fyers" ? (
             <button
               type="button"
               disabled={busy || tokenBusy}
-              className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500 disabled:opacity-50"
+              className="h-9 rounded-lg border border-brand-500 px-3 text-sm font-semibold text-brand-500 disabled:opacity-50"
               onClick={() => {
                 void (async () => {
                   setTokenBusy(true);
@@ -1377,11 +1391,16 @@ function GroupModal({
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+function Modal({ title, wide, onClose, children }: { title: string; wide?: boolean; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
+      <div
+        className={cn(
+          "relative z-10 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl",
+          wide ? "max-h-[92dvh] max-w-xl overflow-y-auto" : "max-w-md",
+        )}
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">{title}</h2>
           <button type="button" className="text-slate-400" onClick={onClose}>
@@ -1394,9 +1413,9 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, compact, children }: { label: string; compact?: boolean; children: ReactNode }) {
   return (
-    <label className="grid gap-1 text-xs font-semibold text-slate-400">
+    <label className={cn("grid text-xs font-semibold text-slate-400", compact ? "gap-0.5" : "gap-1")}>
       {label}
       {children}
     </label>
