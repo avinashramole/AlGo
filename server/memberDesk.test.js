@@ -439,14 +439,18 @@ test("Upstox API key and secret stay on the public install before a trading toke
   assert.equal(saved.install.hasApiKey, true);
   assert.equal(saved.install.hasApiSecret, true);
   assert.equal(saved.install.oauthReady, true);
+  assert.equal(saved.install.autoRenew, true);
+  assert.equal(saved.install.autoRenewLabel, "8:00 AM IST");
   assert.match(saved.install.apiKeyHint, /•/);
   assert.match(saved.install.sessionHint, /•/);
   assert.equal(String(saved.install.apiKeyHint).includes("upstox-api-key-55555555"), false);
   const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
   assert.equal(desk.install.oauthReady, true);
+  assert.equal(desk.install.autoRenew, true);
   const card = desk.brokers.find((row) => row.id === "upstox");
   assert.equal(card.oauthReady, true);
   assert.equal(card.installed, false);
+  assert.match(card.note, /Auto token · 8:00 AM IST/);
   assert.match(card.note, /Generate today's trading token/);
 });
 

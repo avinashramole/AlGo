@@ -146,16 +146,16 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
   if (flags.hasTradingToken) return bits.join(" · ");
   if (flags.oauthReady) {
     return bits.length
-      ? `${bits.join(" · ")}. No trading token yet — tap Get today's trading token.`
-      : "API key and secret saved. No trading token yet — tap Get today's trading token.";
+      ? `${bits.join(" · ")}. Auto token · 8:00 AM IST. No trading token yet — tap Get today's trading token.`
+      : "API key and secret saved. Auto token · 8:00 AM IST. No trading token yet — tap Get today's trading token.";
   }
   if (bits.length) {
     return `${bits.join(" · ")}. ${
-      id === "upstox" ? "Save API key and API secret, then generate today's token." : "No access token installed yet."
+      id === "upstox" ? "Save API key and API secret to turn on Auto token · 8:00 AM IST." : "No access token installed yet."
     }`;
   }
   return id === "upstox"
-    ? "No API key, API secret, or trading token stored yet."
+    ? "No API key, API secret, or trading token stored yet. Save them for Auto token · 8:00 AM IST."
     : "No access token installed yet.";
 }
 
@@ -164,7 +164,7 @@ export function describeBrokerSave(install?: InstallHints | null, brokerId = "")
   const { flags, bits } = installBits(install, id);
   const saved = bits.length ? bits.join(" · ") : "Credentials";
   if (id === "upstox" && flags.oauthReady && !flags.hasTradingToken) {
-    return `${saved} saved on this account. Tap Get today's trading token next. Desk LIVE was not started.`;
+    return `${saved} saved on this account. Auto token · 8:00 AM IST. Tap Get today's trading token next. Desk LIVE was not started.`;
   }
   if (flags.hasTradingToken) {
     return `${saved} saved on this account. Live copy now uses this token. Desk LIVE was not started.`;

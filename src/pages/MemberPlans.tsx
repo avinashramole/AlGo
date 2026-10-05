@@ -394,7 +394,9 @@ export function MemberPlans() {
                   : row.installed
                     ? `Token saved${row.accountId ? ` · ${row.accountId}` : ""}`
                     : row.oauthReady
-                      ? "API key and secret saved · generate today's token"
+                      ? row.id === "upstox"
+                        ? "API key and secret saved · Auto token · 8:00 AM"
+                        : "API key and secret saved · generate today's token"
                       : "Needs this broker's ID and token"}
               </div>
             </button>
@@ -409,6 +411,9 @@ export function MemberPlans() {
             }}
           >
             <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
+            {desk.brokerId === "upstox" && desk.install?.oauthReady ? (
+              <p className="mt-1 text-xs font-semibold text-brand-500">Auto token · 8:00 AM IST · same morning reset as admin Dhan</p>
+            ) : null}
             <p className="mt-1 text-xs text-slate-400">
               {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>

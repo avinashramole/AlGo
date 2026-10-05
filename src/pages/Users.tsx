@@ -500,9 +500,11 @@ function BrokerCell({ row }: { row: ClientRow }) {
         <span className="block text-[11px] font-extrabold tracking-wide">{row.brokerName}</span>
         <span className="block text-[11px] text-slate-500">
           {row.accountId || "Not linked"}
-          {row.credentialsInstalled || row.tokenHint
-            ? ` · token ${row.tokenHint || "saved"}${row.tokenUpdatedAt ? ` · ${formatIst(row.tokenUpdatedAt)}` : ""}`
-            : " · no access token"}
+          {row.autoRenew || row.brokerAccounts?.upstox?.oauthReady
+            ? " · Auto token · 8:00 AM"
+            : row.credentialsInstalled || row.tokenHint
+              ? ` · token ${row.tokenHint || "saved"}${row.tokenUpdatedAt ? ` · ${formatIst(row.tokenUpdatedAt)}` : ""}`
+              : " · no access token"}
         </span>
       </span>
     </div>
@@ -869,6 +871,11 @@ function AddClientModal({
               onTradeMpin={setTradeMpin}
               onTradeTotp={setTradeTotp}
             />
+            {brokerId === "upstox" ? (
+              <p className="text-[11px] font-semibold text-slate-500">
+                Auto token · 8:00 AM IST — same morning reset as admin Dhan PIN + TOTP. Save API key + API secret once. Restart does not start LIVE.
+              </p>
+            ) : null}
             <Field label="Internal notes">
               <textarea
                 className="min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-sm"
@@ -1070,10 +1077,11 @@ function EditModal({
         apiKeyHint: source.apiKeyHint || "",
         sessionHint: "",
         tradeMobileHint: "",
+        oauthReady: Boolean(source.autoRenew),
         tokenUpdatedAt: source.tokenUpdatedAt || "",
       };
     }
-    return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tradeMobileHint: "", tokenUpdatedAt: "" };
+    return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tradeMobileHint: "", oauthReady: false, tokenUpdatedAt: "" };
   };
   const [brokerId, setBrokerId] = useState(row.brokerId);
   const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
@@ -1228,10 +1236,24 @@ function EditModal({
         />
         {brokerId !== "paper" ? (
           <span className="font-normal text-[11px] text-slate-500">
-            {selectedAccount.tokenHint
-              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
-              : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
-            Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
+            {brokerId === "upstox" ? (
+              <>
+                {selectedAccount.oauthReady || row.autoRenew
+                  ? "Auto token · 8:00 AM IST — same morning reset as admin Dhan PIN + TOTP. Save API key + API secret once."
+                  : "Save API key + API secret to turn on Auto token · 8:00 AM IST (same as admin Dhan)."}
+                {selectedAccount.tokenHint
+                  ? ` Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""}.`
+                  : " No trading token yet."}{" "}
+                Restart does not start desk LIVE.
+              </>
+            ) : (
+              <>
+                {selectedAccount.tokenHint
+                  ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
+                  : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
+                Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
+              </>
+            )}
           </span>
         ) : null}
         <Field label="Static IP">

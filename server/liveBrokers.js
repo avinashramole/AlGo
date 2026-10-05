@@ -53,7 +53,7 @@ export const LIVE_BROKER_CATALOG = [
       { id: "sessionToken", label: "API secret", secret: true, placeholder: "Developer app API secret" },
       { id: "accessToken", label: "Trading access token", secret: true, placeholder: "Filled after Get today's token" },
     ],
-    help: "Upstox needs a daily trading access token, not the Analytics token. Save API key + API secret, then Get today's trading token and approve the Upstox app notification.",
+    help: "Upstox needs a daily trading access token, not the Analytics token. Save API key + API secret once. Auto token · 8:00 AM IST — same morning reset as admin Dhan PIN + TOTP. The server silently refreshes when a refresh token is saved, otherwise Get today's trading token and approve the Upstox app notification.",
   },
   {
     id: "fyers",

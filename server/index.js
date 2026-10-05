@@ -74,7 +74,15 @@ import {
   routeManualOrderBrokerId,
 } from "./market.js";
 import { startFirstCandleDailyLiveScheduler, startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
-import { startUpstoxDailyTokenScheduler } from "./upstoxDailyToken.js";
+import { keepMemberUpstoxTokenFresh, startUpstoxDailyTokenScheduler } from "./upstoxDailyToken.js";
+
+function kickMemberUpstoxAutoToken(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return;
+  void keepMemberUpstoxTokenFresh(id).catch((error) => {
+    console.log(`Upstox 8:00 AM auto token after save: ${error.message || error}`);
+  });
+}
 import {
   attachHttpServerGuards,
   attachProcessGuards,
@@ -398,6 +406,7 @@ app.get("/api/upstox/callback", async (req, res) => {
     receiveUpstoxAccessToken({
       client_id: creds.apiKey,
       access_token: minted.accessToken,
+      refresh_token: minted.refreshToken,
       user_id: minted.userId,
       expires_at: minted.expiresAt,
     });
@@ -425,20 +434,21 @@ app.post("/api/member/ip", (req, res) => {
 
 app.post("/api/member/broker/credentials", (req, res) => {
   try {
-    res.json(
-      installMemberBroker({
-        user: memberAuth(req),
-        brokerId: req.body?.brokerId,
-        clientId: req.body?.clientId ?? req.body?.accountId,
-        apiKey: req.body?.apiKey ?? req.body?.brokerApiKey,
-        accessToken: req.body?.accessToken ?? req.body?.brokerToken,
-        sessionToken: req.body?.sessionToken ?? req.body?.brokerSessionToken,
-        clearSessionToken: req.body?.clearSessionToken,
-        mobile: req.body?.mobile ?? req.body?.brokerMobile,
-        mpin: req.body?.mpin ?? req.body?.brokerMpin,
-        totpSecret: req.body?.totpSecret ?? req.body?.brokerTotpSecret,
-      }),
-    );
+    const user = memberAuth(req);
+    const result = installMemberBroker({
+      user,
+      brokerId: req.body?.brokerId,
+      clientId: req.body?.clientId ?? req.body?.accountId,
+      apiKey: req.body?.apiKey ?? req.body?.brokerApiKey,
+      accessToken: req.body?.accessToken ?? req.body?.brokerToken,
+      sessionToken: req.body?.sessionToken ?? req.body?.brokerSessionToken,
+      clearSessionToken: req.body?.clearSessionToken,
+      mobile: req.body?.mobile ?? req.body?.brokerMobile,
+      mpin: req.body?.mpin ?? req.body?.brokerMpin,
+      totpSecret: req.body?.totpSecret ?? req.body?.brokerTotpSecret,
+    });
+    kickMemberUpstoxAutoToken(user.id);
+    res.json(result);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not install broker token" });
   }
@@ -533,7 +543,9 @@ app.get("/api/clients/:id/detail", async (req, res) => {
 
 app.post("/api/clients", (req, res) => {
   try {
-    res.status(201).json({ client: createClient(req.body || {}) });
+    const client = createClient(req.body || {});
+    kickMemberUpstoxAutoToken(client.id);
+    res.status(201).json({ client });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not create client" });
   }
@@ -541,7 +553,9 @@ app.post("/api/clients", (req, res) => {
 
 app.post("/api/clients/:id", (req, res) => {
   try {
-    res.json({ client: saveClient(req.params.id, req.body || {}) });
+    const client = saveClient(req.params.id, req.body || {});
+    kickMemberUpstoxAutoToken(client.id);
+    res.json({ client });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not save client" });
   }

@@ -63,6 +63,8 @@ function asClient(user, desk, handle = {}) {
     apiKeyHint: desk.apiKeyHint,
     credentialsInstalled: Boolean(desk.credentialsInstalled),
     tokenUpdatedAt: desk.tokenUpdatedAt || "",
+    autoRenew: Boolean(desk.autoRenew),
+    autoRenewLabel: String(desk.autoRenewLabel || ""),
     brokerAccounts: desk.brokerAccounts || {},
     notes: desk.notes,
     margin: desk.margin,

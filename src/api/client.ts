@@ -646,6 +646,8 @@ export type ClientRow = {
   apiKeyHint?: string;
   credentialsInstalled?: boolean;
   tokenUpdatedAt?: string;
+  autoRenew?: boolean;
+  autoRenewLabel?: string;
   brokerAccounts?: Record<
     string,
     {
@@ -656,6 +658,10 @@ export type ClientRow = {
       hasTradeLogin?: boolean;
       tradeMobileHint?: string;
       installed?: boolean;
+      oauthReady?: boolean;
+      autoRenew?: boolean;
+      autoRenewLabel?: string;
+      hasRefreshToken?: boolean;
       tokenUpdatedAt?: string;
     }
   >;
@@ -1020,6 +1026,9 @@ export type MemberBrokerInstall = {
   hasApiKey?: boolean;
   hasApiSecret?: boolean;
   oauthReady?: boolean;
+  autoRenew?: boolean;
+  autoRenewLabel?: string;
+  hasRefreshToken?: boolean;
   installed?: boolean;
   tokenUpdatedAt?: string;
   fields: BrokerInstallField[];
