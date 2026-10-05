@@ -6,6 +6,7 @@ import {
   createClient,
   deleteClient,
   listUsers,
+  requestClientFyersToken,
   saveClient,
   saveUserContact,
   type AuthUser,
@@ -32,6 +33,7 @@ export function Users() {
   const [strategies, setStrategies] = useState<Array<{ id: string; name: string }>>(seeded?.strategies || []);
   const [defaultUntil, setDefaultUntil] = useState(seeded?.defaultUntil || defaultUntilDate);
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(!seeded?.clients.length);
   const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState("");
@@ -77,6 +79,17 @@ export function Users() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [load, location.key]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("fyers") === "connected") {
+      setNote("Today's Fyers access token was saved on that user. Search FYERS or the UCC to open them.");
+      setError("");
+    }
+    if (params.get("fyers") === "error") {
+      setError(params.get("message") || "Fyers login failed");
+    }
+  }, [location.search]);
+
   const patchRow = async (id: string, payload: Parameters<typeof saveClient>[1]) => {
     setSavingId(id);
     setError("");
@@ -114,7 +127,7 @@ export function Users() {
     const needle = query.trim().toLowerCase();
     if (!needle) return clients;
     return clients.filter((row) =>
-      [row.name, row.email, row.mobile, row.brokerName, row.accountId, row.group, row.status].some((value) =>
+      [row.name, row.email, row.mobile, row.brokerName, row.brokerId, row.accountId, row.group, row.status, row.tokenHint].some((value) =>
         String(value || "").toLowerCase().includes(needle),
       ),
     );
@@ -164,11 +177,12 @@ export function Users() {
         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
         <input
           className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-9 pr-3 text-sm"
-          placeholder="Search client, broker, account..."
+          placeholder="Search client, FYERS, DA02189, mobile..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
+      {note ? <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/40">{note}</div> : null}
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down dark:bg-rose-950/40">{error}</div> : null}
       <section className="card overflow-x-auto p-0">
         <div className="px-4 pt-4 text-sm font-bold">Desk admins</div>
@@ -948,7 +962,7 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
       brokerId === "kotak"
         ? "Access token from the Neo app"
         : brokerId === "fyers"
-          ? "Today's FYERS access token from myapi.fyers.in"
+          ? "Filled after Get today's token"
           : "Paste this client's access token",
   });
   if (brokerId === "kotak") {
@@ -958,12 +972,17 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
       { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
     );
   }
-  if (brokerId === "upstox" || brokerId === "kotak") {
+  if (brokerId === "upstox" || brokerId === "kotak" || brokerId === "fyers") {
     extra.push({
       id: "sessionToken",
-      label: brokerId === "upstox" ? "API secret" : "Neo sid",
+      label: brokerId === "upstox" ? "API secret" : brokerId === "fyers" ? "App Secret" : "Neo sid",
       secret: true,
-      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Sid from today's trade login, if already copied",
+      placeholder:
+        brokerId === "upstox"
+          ? "Upstox API secret"
+          : brokerId === "fyers"
+            ? "App Secret from the Fyers app (not the access token)"
+            : "Sid from today's trade login, if already copied",
     });
   }
   return extra;
@@ -1097,7 +1116,9 @@ function EditModal({
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tokenBusy, setTokenBusy] = useState(false);
 
   useEffect(() => {
     setBrokerId(row.brokerId);
@@ -1239,8 +1260,10 @@ function EditModal({
         {brokerId !== "paper" ? (
           <span className="font-normal text-[11px] text-slate-500">
             {selectedAccount.tokenHint
-              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
-              : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
+              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. ${brokerId === "fyers" ? "Get today's token again to replace the expired one." : "Paste a new token to replace it."}`
+              : brokerId === "fyers"
+                ? "Fyers does not show a pasteable access token. Save App ID + App Secret, then Get today's token and log in as this Fyers user."
+                : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
             Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
           </span>
         ) : null}
@@ -1255,13 +1278,41 @@ function EditModal({
             ))}
           </datalist>
         </Field>
+        {note ? <p className="text-xs font-semibold text-slate-500">{note}</p> : null}
         {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
         <p className="text-[11px] text-slate-500">
           {formatMobile(mobile)} · Saving REAL or Copy does not start Dhan LIVE.
         </p>
-        <button type="submit" disabled={busy} className="h-10 rounded-xl bg-brand-500 text-sm font-semibold text-white">
-          {busy ? "Saving..." : "Save"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={busy || tokenBusy} className="h-10 flex-1 rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-50">
+            {busy ? "Saving..." : "Save"}
+          </button>
+          {brokerId === "fyers" ? (
+            <button
+              type="button"
+              disabled={busy || tokenBusy}
+              className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500 disabled:opacity-50"
+              onClick={() => {
+                void (async () => {
+                  setTokenBusy(true);
+                  setError("");
+                  setNote("");
+                  try {
+                    const result = await requestClientFyersToken(row.id);
+                    setNote(result.message || "Open the Fyers login. Today's token is saved after the Fyers user signs in.");
+                    if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Could not start Fyers login for today's token");
+                  } finally {
+                    setTokenBusy(false);
+                  }
+                })();
+              }}
+            >
+              {tokenBusy ? "Opening Fyers..." : "Get today's token"}
+            </button>
+          ) : null}
+        </div>
       </form>
     </Modal>
   );

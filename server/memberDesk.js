@@ -551,6 +551,30 @@ export function findUserIdByUpstoxAccount(accountId) {
   return "";
 }
 
+export function findUserIdByFyersApiKey(apiKey) {
+  const wanted = String(apiKey || "").trim();
+  if (!wanted) return "";
+  for (const userId of Object.keys(store)) {
+    const slot = peekBrokerAccount(userId, "fyers");
+    if (String(slot.brokerApiKey || "").trim() === wanted) return userId;
+    const desk = store[userId];
+    if (String(desk?.brokerId || "") === "fyers" && String(desk?.brokerApiKey || "").trim() === wanted) return userId;
+  }
+  return "";
+}
+
+export function findUserIdByFyersAccount(accountId) {
+  const wanted = String(accountId || "").trim();
+  if (!wanted) return "";
+  for (const userId of Object.keys(store)) {
+    const slot = peekBrokerAccount(userId, "fyers");
+    if (String(slot.accountId || "").trim() === wanted) return userId;
+    const desk = store[userId];
+    if (String(desk?.brokerId || "") === "fyers" && String(desk?.accountId || "").trim() === wanted) return userId;
+  }
+  return "";
+}
+
 export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, expiresAt } = {}) {
   const token = String(accessToken || "").trim();
   if (!userId || !token) throw fail("Upstox access token is missing.");
@@ -574,6 +598,37 @@ export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, ex
   const view = {
     ...desk,
     brokerId: "upstox",
+    accountId: slot.accountId,
+    brokerToken: slot.brokerToken,
+    brokerApiKey: slot.brokerApiKey,
+    brokerSessionToken: slot.brokerSessionToken,
+    brokerTokenUpdatedAt: slot.tokenUpdatedAt,
+  };
+  return { ok: true, userId, install: publicBrokerInstall(view) };
+}
+
+export function saveMemberFyersAccessToken(userId, { accessToken, accountId } = {}) {
+  const token = String(accessToken || "").trim();
+  if (!userId || !token) throw fail("Fyers access token is missing.");
+  const desk = loadDesk(userId);
+  migrateLegacyBrokerAccount(desk);
+  syncSelectedBrokerAccount(desk);
+  desk.brokerAccounts = brokerAccountsMap(desk);
+  const slot = { ...(desk.brokerAccounts.fyers || emptyBrokerAccount()) };
+  slot.brokerToken = token;
+  slot.tokenUpdatedAt = new Date().toISOString();
+  if (accountId && !String(slot.accountId || "").trim()) slot.accountId = String(accountId).trim();
+  desk.brokerAccounts.fyers = slot;
+  if (desk.brokerId === "fyers") {
+    desk.brokerToken = token;
+    desk.brokerTokenUpdatedAt = slot.tokenUpdatedAt;
+    if (accountId && !String(desk.accountId || "").trim()) desk.accountId = String(accountId).trim();
+    desk.tradeMode = "real";
+  }
+  persist();
+  const view = {
+    ...desk,
+    brokerId: "fyers",
     accountId: slot.accountId,
     brokerToken: slot.brokerToken,
     brokerApiKey: slot.brokerApiKey,
@@ -756,7 +811,7 @@ export function publicBrokerInstall(desk = {}) {
         : brokerId === "upstox"
           ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token and retry every 15 minutes until 4:00 PM if it is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
           : brokerId === "fyers"
-            ? "Active Fyers client: UCC (DA02189) + App ID (Z2MCJB4OXH-200) + today's access token. App must allow Market Data and Order Placement. Quotes use GET /data/quotes and copies use POST /api/v3/orders/sync with Authorization AppID:token. Token dies at end of day. This does not start desk LIVE."
+            ? "Fyers does not show a copy-paste access token on myapi.fyers.in. Save UCC (DA02189) + App ID (Z2MCJB4OXH-200) + App Secret, set the app redirect to https://trade2smart.com/api/fyers/callback, then tap Get today's token and log in as the Fyers user. App must allow Market Data and Order Placement. Token dies at end of day. This does not start desk LIVE."
             : brokerId === "kotak"
             ? "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid. This does not start desk LIVE."
             : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
@@ -955,6 +1010,9 @@ export function assertOwnKotakForSave(desk = {}, patch = {}) {
   if (login.token && keyMessage && !login.apiKey) throw fail(keyMessage);
   if (login.brokerId === "upstox" && login.apiKey && !login.sessionToken && !login.token) {
     throw fail("Paste the Upstox API secret with the API key, or paste today's trading access token.");
+  }
+  if (login.brokerId === "fyers" && login.apiKey && !login.sessionToken && !login.token) {
+    throw fail("Paste the Fyers App Secret with the App ID, then Get today's token. Fyers does not show a pasteable access token.");
   }
 }
 
@@ -1908,9 +1966,16 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   const token = String(accessToken || "").trim();
   const nextApiKey = offeredKey;
   const nextSecret = String(sessionToken || "").trim() || priorSecret;
-  const canMintUpstox = wanted === "upstox" && nextApiKey.length >= 8 && nextSecret.length >= 8;
-  if (!token && !priorToken && !canMintUpstox) {
-    throw fail(wanted === "upstox" ? "Paste the trading access token, or API key + API secret to generate it." : "Paste the access token.");
+  const canMintOauth =
+    (wanted === "upstox" || wanted === "fyers") && nextApiKey.length >= 8 && nextSecret.length >= 8;
+  if (!token && !priorToken && !canMintOauth) {
+    throw fail(
+      wanted === "upstox"
+        ? "Paste the trading access token, or API key + API secret to generate it."
+        : wanted === "fyers"
+          ? "Paste today's access token, or App ID + App Secret so the user can Get today's token."
+          : "Paste the access token.",
+    );
   }
   if (token) {
     if (token.length < 6) throw fail("Access token is too short.");
@@ -1920,9 +1985,10 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
     desk.brokerTokenUpdatedAt = "";
   }
   desk.tradeMode = "real";
-  const needsApi = fields.some((row) => row.id === "apiKey") && wanted !== "upstox";
+  const needsApi = fields.some((row) => row.id === "apiKey") && wanted !== "upstox" && wanted !== "fyers";
   const key = String(apiKey || "").trim();
   if (needsApi && !key && !priorKey) throw fail("Paste the API key.");
+  if (wanted === "fyers" && !key && !priorKey) throw fail("Paste the Fyers App ID.");
   if (key) desk.brokerApiKey = key;
   else if (deskLogin) desk.brokerApiKey = "";
   if (clearSessionToken) {

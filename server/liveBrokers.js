@@ -65,9 +65,10 @@ export const LIVE_BROKER_CATALOG = [
     fields: [
       { id: "clientId", label: "UCC / Client ID", placeholder: "DA02189" },
       { id: "apiKey", label: "App ID", placeholder: "Z2MCJB4OXH-200" },
-      { id: "accessToken", label: "Access token", secret: true, placeholder: "Today's FYERS access token from myapi.fyers.in" },
+      { id: "sessionToken", label: "App Secret", secret: true, placeholder: "App Secret from the Fyers app (not the access token)" },
+      { id: "accessToken", label: "Access token", secret: true, placeholder: "Filled after Get today's token" },
     ],
-    help: "Active Fyers client needs UCC + App ID + today's access token. Turn on Market Data and Order Placement on the app (myapi.fyers.in). Every call uses Authorization AppID:accessToken on api-t1.fyers.in — quotes GET /data/quotes, funds GET /api/v3/funds, orders POST /api/v3/orders/sync. The token dies at end of day. This is the v3 trading API, not the API Connect website button.",
+    help: "Fyers does not show a copy-paste access token. Save UCC + App ID + App Secret, set redirect URI to https://trade2smart.com/api/fyers/callback, then Get today's token and log in as the Fyers user. App must allow Market Data and Order Placement. Copies use POST /api/v3/orders/sync with Authorization AppID:token. The token dies at end of day.",
   },
   {
     id: "kotak",

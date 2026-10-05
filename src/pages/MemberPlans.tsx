@@ -6,6 +6,7 @@ import {
   getMemberDesk,
   installMemberBroker,
   listEnrollments,
+  requestMemberFyersToken,
   requestMemberUpstoxToken,
   selectMemberBroker,
   strategyCatalog,
@@ -87,6 +88,12 @@ export function MemberPlans() {
     if (params.get("upstox") === "error") {
       setError(params.get("message") || "Upstox login failed");
     }
+    if (params.get("fyers") === "connected") {
+      setCredNote("Today's Fyers access token saved. Live copy will use this token.");
+    }
+    if (params.get("fyers") === "error") {
+      setError(params.get("message") || "Fyers login failed");
+    }
   }, []);
 
   const pickBroker = async (brokerId: string) => {
@@ -135,6 +142,33 @@ export function MemberPlans() {
       );
     } finally {
       if (gen === tokenWaitGen.current) setTokenWait(false);
+    }
+  };
+
+  const requestFyersToken = async () => {
+    const gen = ++tokenWaitGen.current;
+    setBusy("fyers-token");
+    setError("");
+    setCredNote("");
+    const before = desk?.install
+      ? {
+          tokenHint: desk.install.tokenHint,
+          tokenUpdatedAt: desk.install.tokenUpdatedAt,
+          installed: desk.install.installed,
+        }
+      : null;
+    try {
+      const result = await requestMemberFyersToken();
+      if (gen !== tokenWaitGen.current) return;
+      setCredNote(result.message || "Open the Fyers login. Today's token is saved after the Fyers user signs in.");
+      if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
+      setBusy("");
+      await waitForTradingToken(before, gen);
+    } catch (err) {
+      if (gen !== tokenWaitGen.current) return;
+      setError(err instanceof Error ? err.message : "Could not start Fyers login for today's token");
+    } finally {
+      if (gen === tokenWaitGen.current) setBusy("");
     }
   };
 
@@ -408,7 +442,7 @@ export function MemberPlans() {
               void saveCredentials();
             }}
           >
-            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
+            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "fyers" ? "Fyers App ID and today's token" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
             <p className="mt-1 text-xs text-slate-400">
               {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
             </p>
@@ -438,7 +472,15 @@ export function MemberPlans() {
                 disabled={busy === "creds"}
                 className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
               >
-                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : desk.brokerId === "kotak" ? "Save Kotak Neo session" : "Save client ID and access token"}
+                {busy === "creds"
+                  ? "Saving..."
+                  : desk.brokerId === "upstox"
+                    ? "Save API key and secret"
+                    : desk.brokerId === "fyers"
+                      ? "Save App ID and App Secret"
+                      : desk.brokerId === "kotak"
+                        ? "Save Kotak Neo session"
+                        : "Save client ID and access token"}
               </button>
               {desk.brokerId === "upstox" ? (
                 <button
@@ -452,6 +494,20 @@ export function MemberPlans() {
                     : tokenWait
                       ? "Waiting for token..."
                       : "Get today's trading token"}
+                </button>
+              ) : null}
+              {desk.brokerId === "fyers" ? (
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void requestFyersToken()}
+                  className="h-10 rounded-xl border border-brand-500 px-4 text-xs font-semibold text-brand-500 disabled:opacity-50"
+                >
+                  {busy === "fyers-token"
+                    ? "Opening Fyers..."
+                    : tokenWait
+                      ? "Waiting for token..."
+                      : "Get today's token"}
                 </button>
               ) : null}
             </div>

@@ -27,9 +27,17 @@ import {
   unassignStaticIp,
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
-import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, saveMemberStaticIp, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
+import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, saveMemberFyersAccessToken, saveMemberStaticIp, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
 import { attachMemberBrokerBalance, attachMemberBrokerPnl, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
+import {
+  exchangeFyersAuthCode,
+  fyersAuthCodeFromQuery,
+  fyersOauthCreds,
+  parseFyersOauthState,
+  startClientFyersToken,
+  startMemberFyersToken,
+} from "./fyersAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
@@ -214,7 +222,8 @@ function deskGuard(req, res, next) {
     pathname === "/api/auth/signup" ||
     pathname.startsWith("/api/auth/thumb") ||
     pathname === "/api/upstox/token" ||
-    pathname === "/api/upstox/callback"
+    pathname === "/api/upstox/callback" ||
+    pathname === "/api/fyers/callback"
   ) {
     next();
     return;
@@ -412,6 +421,46 @@ app.post("/api/member/broker/upstox/token", async (req, res) => {
     res.json(await startMemberUpstoxToken(memberAuth(req)));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not request Upstox trading token" });
+  }
+});
+
+app.get("/api/fyers/callback", async (req, res) => {
+  const parsed = parseFyersOauthState(req.query?.state);
+  const dest = parsed.next === "users" ? "/users" : "/plans";
+  try {
+    const userId = parsed.userId;
+    if (!userId) throw Object.assign(new Error("Fyers login is missing the member state."), { status: 400 });
+    const desk = peekClientSecrets(userId);
+    const slot = peekBrokerAccount(userId, "fyers");
+    const creds = fyersOauthCreds(slot, desk);
+    const minted = await exchangeFyersAuthCode({
+      code: fyersAuthCodeFromQuery(req.query || {}),
+      apiKey: creds.apiKey,
+      apiSecret: creds.apiSecret,
+    });
+    saveMemberFyersAccessToken(userId, {
+      accessToken: minted.accessToken,
+      accountId: minted.accountId,
+    });
+    res.redirect(302, `${dest}?fyers=connected`);
+  } catch (error) {
+    res.redirect(302, `${dest}?fyers=error&message=${encodeURIComponent(error.message || "Fyers login failed")}`);
+  }
+});
+
+app.post("/api/member/broker/fyers/token", async (req, res) => {
+  try {
+    res.json(await startMemberFyersToken(memberAuth(req)));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start Fyers login for today's token" });
+  }
+});
+
+app.post("/api/clients/:id/fyers/token", async (req, res) => {
+  try {
+    res.json(await startClientFyersToken(req.params.id));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start Fyers login for today's token" });
   }
 });
 
