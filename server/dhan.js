@@ -531,7 +531,14 @@ export function requestMemberOrderSync(userId = "") {
   if (running) return running;
   const last = memberOrderSyncAt.get(id) || 0;
   if (Date.now() - last < 12_000) return Promise.resolve();
-  const job = syncMemberDhanOrders(id === "*" ? "" : id).finally(() => {
+  const job = Promise.all([
+    syncMemberDhanOrders(id === "*" ? "" : id),
+    import("./memberBrokerPnl.js")
+      .then(({ syncMemberKotakOrders }) => syncMemberKotakOrders(id === "*" ? "" : id))
+      .catch((error) => {
+        console.log(`member Kotak order sync: ${error?.message || error}`);
+      }),
+  ]).finally(() => {
     memberOrderSyncAt.set(id, Date.now());
     memberOrderSyncJob.delete(id);
   });

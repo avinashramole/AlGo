@@ -270,6 +270,21 @@ test("createClient refuses REAL when no broker is linked", () => {
   );
 });
 
+test("createClient accepts +91 Users mobile and stores it on Kotak", () => {
+  const row = createClient({
+    name: "Neo Plus User",
+    mobile: "+919922980000",
+    email: "neo.plus.user@gmail.com",
+    brokerId: "kotak",
+    accountId: "NEWK91",
+    brokerApiKey: "user-consumer-9922",
+    brokerToken: "user-access-9922",
+    tradeMode: "paper",
+  });
+  assert.equal(row.mobile, "9922980000");
+  assert.equal(peekClientSecrets(row.id).brokerMobile, "+919922980000");
+});
+
 test("createClient stores a user's own Kotak Neo", () => {
   const row = createClient({
     name: "Kotak User",
@@ -648,6 +663,49 @@ test("client MTM uses each user's broker book instead of the local copy loss", (
   assert.equal(paper.mtm, -10);
   assert.equal(desk.clientMtm, 298);
   assert.equal(desk.totalMtm, 60.75);
+});
+
+test("admin desk marks a 0 LTP client row from the live quote", () => {
+  const desk = applyBrokerBooksToDesk(
+    {
+      masterMtm: 0,
+      master: { mtm: 0 },
+      clients: [
+        {
+          id: "u-kotak",
+          kind: "client",
+          tradeMode: "real",
+          positions: [
+            {
+              id: "local-0",
+              symbol: "NIFTY26O0622850CE",
+              type: "BUY",
+              qty: 65,
+              buyQty: 65,
+              buyPrice: 12.1,
+              netQty: 65,
+              avg: 12.1,
+              ltp: 0,
+              mtm: 0,
+              realized: 0,
+              closed: false,
+            },
+          ],
+          mtm: 0,
+          realized: 0,
+          open: 1,
+        },
+      ],
+      clientMtm: 0,
+      totalMtm: 0,
+    },
+    {},
+    (symbol) => (String(symbol).includes("22850") ? 13.4 : 0),
+  );
+  const row = desk.clients[0].positions[0];
+  assert.equal(row.ltp, 13.4);
+  assert.equal(row.mtm, Number(((13.4 - 12.1) * 65).toFixed(2)));
+  assert.equal(desk.clients[0].mtm, row.mtm);
 });
 
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {

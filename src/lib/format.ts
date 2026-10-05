@@ -29,10 +29,15 @@ export function quoteDayChange(item: { price?: number; change?: number; changePc
   return { change: Number(item?.change) || 0, changePct: Number(item?.changePct) || 0 };
 }
 
-export function formatMobile(value?: string) {
+export function inputIndianMobile(value?: string) {
   let digits = String(value || "").replace(/\D/g, "");
-  if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
-  if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
+  if (digits.startsWith("91") && digits.length > 10) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length > 10) digits = digits.slice(1);
+  return digits.slice(0, 10);
+}
+
+export function formatMobile(value?: string) {
+  const digits = inputIndianMobile(value);
   if (digits.length === 10) return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
   return String(value || "").trim() || "Not added";
 }

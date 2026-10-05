@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, bookFromMemberPositions, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, mergeKotakBooks, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -51,6 +51,23 @@ test("an empty broker book is zero, not the local copy sum", () => {
   assert.equal(desk.report.unrealizedPnl, 0);
   assert.equal(desk.report.netPnl, 0);
   assert.equal(desk.wallet.mtm, 0);
+});
+
+test("a 0-price Kotak book does not wipe a marked user MTM", async () => {
+  const desk = localDesk();
+  desk.wallet.mtm = 84.5;
+  desk.positions = [{ id: "1", symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 12.1, ltp: 13.4, pnl: 84.5 }];
+  await attachMemberBrokerPnl(desk, "user-1", async () => ({
+    realizedPnl: 0,
+    unrealizedPnl: 0,
+    mtm: 0,
+    source: "kotak",
+    open: [{ symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 0, ltp: 0, pnl: 0 }],
+    closed: [],
+  }));
+  assert.equal(desk.wallet.mtm, 84.5);
+  assert.equal(desk.positions[0].avg, 12.1);
+  assert.equal(desk.positions[0].pnl, 84.5);
 });
 
 test("a broker payload without P&L fields is ignored", async () => {
@@ -222,6 +239,72 @@ test("Kotak limits and positions are this user's account balance, MTM, and P&L",
   assert.equal(desk.wallet.mtm, 39);
   assert.equal(desk.report.realizedPnl, 120.5);
   assert.equal(desk.report.netPnl, 159.5);
+});
+
+test("Kotak Neo nested, string, and lowercase position rows still show live MTM", () => {
+  const nested = kotakMasterBook({
+    data: {
+      stat: "Ok",
+      data: [
+        {
+          tSym: "NIFTY26O0622850CE",
+          flBuyQty: "65",
+          flSellQty: "0",
+          buyAmt: "786.50",
+          lp: "13.40",
+          urmtom: "84.5",
+          rlmtom: "0",
+          prod: "MIS",
+        },
+      ],
+    },
+  });
+  assert.equal(nested.source, "kotak");
+  assert.equal(nested.open.length, 1);
+  assert.equal(nested.open[0].symbol, "NIFTY26O0622850CE");
+  assert.equal(nested.open[0].avg, 12.1);
+  assert.equal(nested.open[0].ltp, 13.4);
+  assert.equal(nested.unrealizedPnl, 84.5);
+  assert.equal(nested.mtm, 84.5);
+  const asText = kotakMasterBook({
+    data: JSON.stringify([
+      { trdSym: "NIFTY26O0622850CE", netQty: "65", avgPrc: "12.10", ltp: "13.40", urMtom: "84.5", rlMtom: "0", prod: "MIS" },
+    ]),
+  });
+  assert.equal(asText.open[0].ltp, 13.4);
+  assert.equal(asText.open[0].avg, 12.1);
+  const desk = localDesk();
+  desk.positions = [{ id: "local-0", symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 0, ltp: 0, pnl: 0 }];
+  desk.report.date = "2026-10-05";
+  desk.report.daily = [{ date: "2026-10-05", pnl: 0, trades: 1 }];
+  applyBrokerPnl(desk, nested);
+  assert.equal(desk.positions[0].avg, 12.1);
+  assert.equal(desk.positions[0].ltp, 13.4);
+  assert.equal(desk.wallet.mtm, 84.5);
+  assert.equal(desk.report.netPnl, 84.5);
+  assert.equal(desk.report.daily.find((row) => row.date === "2026-10-05").pnl, 84.5);
+});
+
+test("a 0-price Kotak broker row keeps the local fill and live MTM", () => {
+  const local = bookFromMemberPositions([
+    { id: "1", symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 12.1, ltp: 13.4, pnl: 84.5 },
+  ]);
+  assert.equal(local.unrealizedPnl, 84.5);
+  const merged = mergeKotakBooks(
+    {
+      mtm: 0,
+      realizedPnl: 0,
+      unrealizedPnl: 0,
+      source: "kotak",
+      open: [{ symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 0, ltp: 0, pnl: 0 }],
+      closed: [],
+    },
+    local,
+  );
+  assert.equal(merged.open[0].avg, 12.1);
+  assert.equal(merged.open[0].ltp, 13.4);
+  assert.equal(merged.unrealizedPnl, 84.5);
+  assert.equal(merged.mtm, 84.5);
 });
 
 test("Kotak balance logs in when the access token is the consumer key", () => {

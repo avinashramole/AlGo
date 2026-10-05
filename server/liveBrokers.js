@@ -959,7 +959,7 @@ export function kotakMobileNumberCandidates(...values) {
   }
   const out = [];
   for (const digits of digitsList) {
-    for (const form of [`+91-${digits}`, digits, `+91${digits}`, `91${digits}`]) {
+    for (const form of [`+91${digits}`, digits, `+91-${digits}`, `91${digits}`]) {
       if (!out.includes(form)) out.push(form);
     }
   }
@@ -979,7 +979,16 @@ export function firstKotakMobile(...values) {
 }
 
 function isKotakMobileFieldError(error) {
-  return /invalid field ['"]?mobile\s*number['"]?|must be a valid mobile number/i.test(String(error?.message || ""));
+  const text = [error?.message, error?.body && JSON.stringify(error.body)].filter(Boolean).join(" ");
+  return /invalid field ['"]?mobile\s*number['"]?|must be a valid mobile number/i.test(text);
+}
+
+function kotakMobileHint(...values) {
+  for (const value of values) {
+    const digits = indianMobileDigits(value);
+    if (digits) return `${digits.slice(0, 2)}••••${digits.slice(-4)}`;
+  }
+  return "";
 }
 
 function istClock(date) {
@@ -1033,14 +1042,22 @@ function kotakOrderBody({ payload, nfo, qty, side, product }) {
   };
 }
 
+function kotakUsersMobile(session = {}) {
+  return (
+    String(session.profileMobile || "").trim() ||
+    (session.copyUserId ? String(getPublicUser(session.copyUserId)?.mobile || "").trim() : "") ||
+    String(session.mobile || "").trim()
+  );
+}
+
 function kotakDeskCreds(session = {}, lane = "admin") {
   const own = {
     clientId: String(session.clientId || "").trim(),
     apiKey: String(session.apiKey || "").trim(),
     accessToken: String(session.accessToken || "").trim(),
     sessionToken: String(session.sessionToken || "").trim(),
-    mobile: String(session.mobile || session.profileMobile || "").trim(),
-    profileMobile: String(session.profileMobile || "").trim(),
+    mobile: String(session.mobile || kotakUsersMobile(session) || "").trim(),
+    profileMobile: String(session.profileMobile || kotakUsersMobile(session) || "").trim(),
     copyUserId: String(session.copyUserId || "").trim(),
     mpin: String(session.mpin || "").trim(),
     totpSecret: String(session.totpSecret || "").trim(),
@@ -1066,8 +1083,23 @@ function kotakDeskCreds(session = {}, lane = "admin") {
 function kotakBrokerMessage(body = {}, res = {}) {
   const row = Array.isArray(body.error) ? body.error[0] : body.error;
   const nested = row && typeof row === "object" ? row : {};
+  const asString = typeof row === "string" ? row.trim() : "";
   const data = body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : {};
-  const text = [nested.message, nested.msg, body.errMsg, body.emsg, data.errMsg, data.message, body.message]
+  const field = nested.field || nested.Field;
+  const fieldText = field ? `Invalid field '${field}'; ${nested.message || nested.msg || "must be a valid mobile number"}` : "";
+  const text = [
+    nested.message,
+    nested.msg,
+    asString,
+    fieldText,
+    nested.MobileNumber,
+    nested.mobileNumber,
+    body.errMsg,
+    body.emsg,
+    data.errMsg,
+    data.message,
+    body.message,
+  ]
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter(Boolean)[0];
   return text || upstoxErrorMessage(body, res);
@@ -1106,7 +1138,14 @@ function kotakHostMiss(error) {
 
 function stampKotakPlaceError(error) {
   if (!error || typeof error !== "object") return;
-  const reason = String(error.message || "Kotak Neo did not accept this order.");
+  let reason = String(error.message || "Kotak Neo did not accept this order.");
+  if (isKotakMobileFieldError({ message: reason, body: error.body })) {
+    reason =
+      String(error.message || "").includes("Users mobile")
+        ? reason
+        : "Kotak Neo rejected the Users-list mobile. Paste the 10-digit number shown on Users — the mobile registered on this Kotak Neo TOTP.";
+    error.message = reason;
+  }
   error.live = { ...(error.live || {}), status: "REJECTED", reason, brokerId: "kotak" };
 }
 
@@ -1119,7 +1158,7 @@ export function kotakLoginAuthorization(creds = {}) {
 
 export function canKotakTradeLogin(creds = {}) {
   return Boolean(
-    String(creds.mobile || "").trim() &&
+    String(creds.mobile || creds.profileMobile || "").trim() &&
       String(creds.mpin || "").trim() &&
       String(creds.totpSecret || "").trim() &&
       String(creds.clientId || "").trim() &&
@@ -1127,63 +1166,102 @@ export function canKotakTradeLogin(creds = {}) {
   );
 }
 
-export async function openKotakTradeSession(creds, fetchImpl = fetch) {
+export async function openKotakTradeSession(creds, fetchImpl = fetch, lane = "admin") {
   const authHeader = kotakLoginAuthorization(creds);
   const key = `${creds.clientId}|${authHeader}`;
   const cached = kotakTradeCache.get(key);
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
   const codes = kotakTotpCandidates(creds.totpSecret);
-  const profileMobile = creds.profileMobile || (creds.copyUserId ? getPublicUser(creds.copyUserId)?.mobile : "");
-  const mobiles = kotakMobileNumberCandidates(creds.mobile, profileMobile);
+  const profileMobile = creds.profileMobile || kotakUsersMobile(creds);
+  const mobiles = kotakMobileNumberCandidates(profileMobile, creds.mobile);
   if (!mobiles.length) {
-    throw fail("Kotak trade-login mobile must be a valid 10-digit Indian mobile number.");
+    throw fail("Kotak trade-login mobile must be a valid 10-digit Indian mobile number. Use the number shown on Users.");
   }
+  const auths = [authHeader];
+  const consumerKey = String(creds.apiKey || "").trim();
+  if (consumerKey && consumerKey !== authHeader) auths.push(consumerKey);
+  const classicLogin = "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin";
+  const v6Login = "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/login";
+  const loginUrls = lane === "member" ? [v6Login, classicLogin] : [classicLogin, v6Login];
   let login = null;
+  let loginAuth = authHeader;
+  let loginUrl = loginUrls[0];
   let lastLoginError = null;
-  for (const totp of codes) {
-    for (const mobileNumber of mobiles) {
-      try {
-        login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
-          method: "POST",
-          headers: {
-            Authorization: authHeader,
-            "neo-fin-key": "neotradeapi",
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            mobileNumber,
-            ucc: creds.clientId,
-            totp,
-          }),
-        });
-        break;
-      } catch (error) {
-        lastLoginError = error;
-        if (isKotakMobileFieldError(error) && mobileNumber !== mobiles[mobiles.length - 1]) continue;
-        if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
-        break;
+  totpLoop: for (const totp of codes) {
+    for (const url of loginUrls) {
+      for (const mobileNumber of mobiles) {
+        for (const authorization of auths) {
+          for (const body of [{ mobileNumber, ucc: creds.clientId, totp }, { MobileNumber: mobileNumber, ucc: creds.clientId, totp }]) {
+            try {
+              login = await kotakRequest(fetchImpl, url, {
+                method: "POST",
+                headers: {
+                  Authorization: authorization,
+                  "neo-fin-key": "neotradeapi",
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                body: JSON.stringify(body),
+              });
+              loginAuth = authorization;
+              loginUrl = url;
+              break totpLoop;
+            } catch (error) {
+              lastLoginError = error;
+              if (isKotakMobileFieldError(error)) continue;
+              if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
+              continue totpLoop;
+            }
+          }
+        }
       }
     }
-    if (login) break;
   }
-  if (!login) throw lastLoginError || fail("Kotak TOTP login did not return a trading session.");
+  if (!login) {
+    const hint = kotakMobileHint(creds.mobile, profileMobile);
+    const rejected = lastLoginError && isKotakMobileFieldError(lastLoginError);
+    throw rejected
+      ? fail(
+          `Kotak Neo rejected Users mobile${hint ? ` ${hint}` : ""}. Paste the 10-digit number shown on Users — the mobile registered on this Kotak Neo TOTP.`,
+        )
+      : lastLoginError || fail("Kotak TOTP login did not return a trading session.");
+  }
   const view = login.data || login;
   const viewToken = String(view.token || "").trim();
   const viewSid = String(view.sid || "").trim();
   if (!viewToken || !viewSid) throw fail("Kotak TOTP login did not return a trading session.");
-  const validated = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate", {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      "neo-fin-key": "neotradeapi",
-      sid: viewSid,
-      Auth: viewToken,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ mpin: creds.mpin }),
-  });
+  const validateUrls = String(loginUrl).includes("/v6/totp/")
+    ? [
+        "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/validate",
+        "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate",
+      ]
+    : [
+        "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate",
+        "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/validate",
+      ];
+  let validated = null;
+  let lastValidateError = null;
+  for (const url of validateUrls) {
+    try {
+      validated = await kotakRequest(fetchImpl, url, {
+        method: "POST",
+        headers: {
+          Authorization: loginAuth || authHeader,
+          "neo-fin-key": "neotradeapi",
+          sid: viewSid,
+          Auth: viewToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ mpin: creds.mpin }),
+      });
+      break;
+    } catch (error) {
+      lastValidateError = error;
+      if (url === validateUrls[validateUrls.length - 1]) throw error;
+    }
+  }
+  if (!validated) throw lastValidateError || fail("Kotak MPIN login did not return a trading host.");
   const data = validated.data || validated;
   const trade = {
     tradeToken: String(data.token || "").trim(),
@@ -1214,13 +1292,98 @@ function kotakPlaceUrls(trade) {
   return hosts.map((host) => `${host}/quick/order/rule/ms/place${query}`);
 }
 
+export function mapKotakOrdSt(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (/reject/.test(raw)) return "REJECTED";
+  if (/cancel|expired/.test(raw)) return "CANCELLED";
+  if (/complete|traded|filled/.test(raw) && !/pending|partial|part/.test(raw)) return "FILLED";
+  if (/part/.test(raw)) return "PARTIAL";
+  if (/open|pending|received|transit|trigger|queued/.test(raw)) return "PENDING";
+  return "";
+}
+
+export function kotakOrderRows(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data?.data)) return body.data.data;
+  if (Array.isArray(body?.data)) return body.data;
+  if (body?.nOrdNo || body?.ordSt) return [body];
+  return [];
+}
+
+export function normalizeKotakBrokerOrder(row = {}) {
+  const orderId = String(row.nOrdNo || row.orderId || row.nOrdNo || "").trim();
+  const orderStatus = mapKotakOrdSt(row.ordSt || row.stat || row.status || row.orderStatus);
+  const filledQty = Number(row.fldQty || row.filledQty || 0);
+  const price = Number(row.avgPrc || row.averageTradedPrice || row.tradedPrice || row.prc || 0);
+  const reason = String(row.rejRsn || row.ordUsrMsg || row.reason || "")
+    .replace(/^(-+|NA)$/i, "")
+    .trim();
+  return {
+    orderId,
+    orderStatus,
+    filledQty: Number.isFinite(filledQty) ? filledQty : 0,
+    averageTradedPrice: Number.isFinite(price) && price > 0 ? price : 0,
+    price: Number.isFinite(price) && price > 0 ? price : 0,
+    reason,
+  };
+}
+
+export function pickKotakHistoryState(rows) {
+  const mapped = (Array.isArray(rows) ? rows : []).map(normalizeKotakBrokerOrder).filter((row) => row.orderId);
+  const rank = { REJECTED: 4, FILLED: 3, CANCELLED: 3, PARTIAL: 2, PENDING: 1 };
+  return mapped.sort((left, right) => (rank[right.orderStatus] || 0) - (rank[left.orderStatus] || 0))[0] || null;
+}
+
+function kotakHistoryUrls(trade) {
+  const hosts = trade?.baseUrl ? [trade.baseUrl] : KOTAK_ORDER_HOSTS;
+  const query = trade?.serverId ? `?sId=${encodeURIComponent(trade.serverId)}` : "";
+  return hosts.map((host) => `${host}/quick/order/history${query}`);
+}
+
+async function readKotakPlacedOrder({ trade, orderId, fetchImpl, headers }) {
+  const body = new URLSearchParams({ jData: JSON.stringify({ nOrdNo: orderId }) }).toString();
+  let last = null;
+  for (const url of kotakHistoryUrls(trade)) {
+    try {
+      const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
+      const viewed = pickKotakHistoryState(kotakOrderRows(parsed));
+      if (viewed?.orderId) return viewed;
+    } catch (error) {
+      last = error;
+      if (!kotakHostMiss(error) || url === kotakHistoryUrls(trade).at(-1)) break;
+    }
+  }
+  return null;
+}
+
+function kotakLiveFromPlace({ orderId, tradingSymbol, amo, viewed }) {
+  const pending = {
+    orderId,
+    status: "PENDING",
+    brokerId: "kotak",
+    tradingSymbol,
+    reason: amo === "YES" ? "Sent to Kotak Neo as an after-market order." : "Sent to Kotak Neo.",
+  };
+  if (!viewed?.orderStatus || viewed.orderStatus === "PENDING") return pending;
+  return {
+    ...pending,
+    status: viewed.orderStatus,
+    filledQty: viewed.filledQty,
+    price: viewed.averageTradedPrice || viewed.price || 0,
+    reason:
+      viewed.reason ||
+      (viewed.orderStatus === "FILLED" ? "Filled on Kotak Neo." : viewed.orderStatus === "REJECTED" ? "Rejected on Kotak Neo." : pending.reason),
+  };
+}
+
 async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product }) {
   const creds = kotakDeskCreds(session, lane);
   const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
   const pastedTrade = Boolean(memberPair?.sid && memberPair?.auth);
   let trade = null;
   if (!pastedTrade && canKotakTradeLogin(creds)) {
-    trade = await openKotakTradeSession(creds, fetchImpl);
+    trade = await openKotakTradeSession(creds, fetchImpl, lane);
   } else if (creds.baseUrl && creds.tradeToken) {
     trade = {
       baseUrl: creds.baseUrl,
@@ -1260,13 +1423,13 @@ async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, si
       const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
       const orderId = String(parsed.nOrdNo || parsed.data?.nOrdNo || parsed.orderId || "");
       if (!orderId) throw fail("Kotak Neo did not return an order number.");
-      return {
-        orderId,
-        status: "PENDING",
-        brokerId: "kotak",
-        tradingSymbol: jData.ts,
-        reason: jData.am === "YES" ? "Sent to Kotak Neo as an after-market order." : "Sent to Kotak Neo.",
-      };
+      let viewed = null;
+      try {
+        viewed = await readKotakPlacedOrder({ trade: trade || { baseUrl: new URL(url).origin, serverId: trade?.serverId }, orderId, fetchImpl, headers });
+      } catch {
+        viewed = null;
+      }
+      return kotakLiveFromPlace({ orderId, tradingSymbol: jData.ts, amo: jData.am, viewed });
     } catch (error) {
       last = error;
       if (!kotakHostMiss(error) || url === urls[urls.length - 1]) throw error;

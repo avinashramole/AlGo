@@ -221,7 +221,11 @@ export function PositionsDesk() {
     for (const ledger of books) {
       const positions = filterRows(ledger, mode, segment);
       const summed = positions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);
-      const useBook = Number.isFinite(ledger.brokerMtm) && mode !== "paper" && segment === "all";
+      const useBook =
+        Number.isFinite(ledger.brokerMtm) &&
+        mode !== "paper" &&
+        segment === "all" &&
+        Boolean(Number(ledger.unrealized) || Number(ledger.realized) || Number(ledger.brokerMtm));
       const realized = useBook
         ? Number(ledger.realized || 0)
         : positions.filter(isClosedLedger).reduce((sum, row) => sum + Number(row.realized || row.mtm || 0), 0);

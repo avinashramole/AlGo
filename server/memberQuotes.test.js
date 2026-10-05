@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { memberIndexQuote } from "./market.js";
+import { memberIndexQuote, optionContractFromSymbol } from "./market.js";
+import { ltpFromKotakQuotePayload } from "./memberBrokerQuotes.js";
 
 test("memberIndexQuote drops VWAP but keeps India VIX", () => {
   const vix = memberIndexQuote({ symbol: "INDIA VIX", name: "VIX", price: 13.2, change: 0.1, changePct: 0.76 });
@@ -45,4 +46,16 @@ test("memberIndexQuote keeps Crude Oil cards", () => {
   assert.equal(row.future, 6128);
   assert.equal(row.lot, 100);
   assert.equal(row.vwap, undefined);
+});
+
+test("Kotak option quote payloads expose LTP for MTM", () => {
+  assert.equal(ltpFromKotakQuotePayload([{ trading_symbol: "NIFTY26O0622850CE", ltp: "13.40" }]), 13.4);
+  assert.equal(ltpFromKotakQuotePayload({ data: { lp: 13.4 } }), 13.4);
+});
+
+test("Kotak compact option symbols keep the strike for live LTP", () => {
+  assert.deepEqual(optionContractFromSymbol("NIFTY26O0622850CE"), { index: "NIFTY", strike: 22850, opt: "CE" });
+  assert.deepEqual(optionContractFromSymbol("NIFTY26OCT22500PE"), { index: "NIFTY", strike: 22500, opt: "PE" });
+  assert.deepEqual(optionContractFromSymbol("NIFTY2691524500CE"), { index: "NIFTY", strike: 24500, opt: "CE" });
+  assert.deepEqual(optionContractFromSymbol("NIFTY 22850 CE"), { index: "NIFTY", strike: 22850, opt: "CE" });
 });

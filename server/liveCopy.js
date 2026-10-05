@@ -1,5 +1,5 @@
 import { getPublicUser } from "./auth.js";
-import { firstKotakMobile } from "./liveBrokers.js";
+import { firstKotakMobile, kotakMobileNumber } from "./liveBrokers.js";
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
 import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMemberCopyFill, saveClientSettings, sizeCopyQty } from "./memberDesk.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
@@ -113,7 +113,7 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
   }
   const profileMobile = leftoverSlot || paper ? "" : String(getPublicUser(userId)?.mobile || "").trim();
   const brokerMobile =
-    leftoverSlot || paper ? "" : firstKotakMobile(slot.brokerMobile, desk.brokerMobile, profileMobile);
+    leftoverSlot || paper ? "" : kotakMobileNumber(firstKotakMobile(profileMobile, slot.brokerMobile, desk.brokerMobile));
   if (
     brokerId === "kotak" &&
     profileMobile &&

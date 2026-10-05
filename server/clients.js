@@ -1,5 +1,6 @@
 import { catalog } from "./brokers.js";
 import { adminCreateMember, adminUpdateUser, deleteRegisteredUser, getPublicUser, listPublicUsers } from "./auth.js";
+import { kotakMobileNumber } from "./liveBrokers.js";
 import {
   assignedEgressIps,
   brokerInstallFields,
@@ -75,7 +76,7 @@ function fillKotakTradeMobile(patch = {}, profileMobile = "", current = {}) {
   const brokerId = String(patch.brokerId || current.brokerId || "").trim().toLowerCase();
   if (brokerId !== "kotak") return patch;
   if (String(patch.brokerMobile || current.brokerMobile || "").trim()) return patch;
-  const mobile = String(profileMobile || "").trim();
+  const mobile = kotakMobileNumber(profileMobile);
   if (!mobile) return patch;
   return { ...patch, brokerMobile: mobile };
 }
@@ -433,12 +434,52 @@ function applyBrokerBookToLedger(ledger, brokerBook) {
   };
 }
 
-export function applyBrokerBooksToDesk(desk, booksByUserId = {}) {
+export function enrichOpenLtps(positions = [], quote) {
+  if (typeof quote !== "function") return positions;
+  return (positions || []).map((row) => {
+    if (!row || row.closed || Number(row.netQty || row.qty || 0) === 0) return row;
+    const quoted = Number(quote(row.symbol));
+    if (!(quoted > 0)) return row;
+    const avg = Number(row.buyPrice || row.avg || 0);
+    const qty = Math.abs(Number(row.netQty || row.qty || 0));
+    const type = String(row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+    const brokerMarked = Boolean(row.brokerBook) && Number.isFinite(Number(row.mtm));
+    const mtm = brokerMarked ? Number(row.mtm) : round2((quoted - avg) * qty * (type === "SELL" ? -1 : 1));
+    return { ...row, ltp: quoted, mtm };
+  });
+}
+
+function refreshLedgerMarks(client, quote) {
+  if (!client) return client;
+  const positions = typeof quote === "function" ? enrichOpenLtps(client.positions, quote) : client.positions || [];
+  const open = positions.filter((row) => !row.closed);
+  const marked = round2(open.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const realized = round2(client.realized);
+  const brokerReady = Number.isFinite(Number(client.brokerMtm)) && (Number(client.unrealized) || Number(client.realized) || Number(client.brokerMtm));
+  if (brokerReady) return { ...client, positions };
+  return {
+    ...client,
+    positions,
+    unrealized: marked,
+    mtm: round2(realized + marked),
+    open: open.length,
+  };
+}
+
+function brokerBookHasMarks(book) {
+  if (!book || !Number.isFinite(Number(book.mtm))) return false;
+  if (Number(book.mtm) || Number(book.realizedPnl) || Number(book.unrealizedPnl)) return true;
+  if ((book.open || []).some((row) => Number(row.avg) > 0 || Number(row.ltp) > 0 || Number(row.pnl))) return true;
+  if ((book.closed || []).some((row) => Number(row.pnl) || Number(row.realized))) return true;
+  return false;
+}
+
+export function applyBrokerBooksToDesk(desk, booksByUserId = {}, quote) {
   if (!desk) return desk;
   const clients = (desk.clients || []).map((client) => {
     const book = booksByUserId?.[client.id];
-    if (!book || !Number.isFinite(Number(book.mtm))) return client;
-    return applyBrokerBookToLedger(client, book);
+    const next = brokerBookHasMarks(book) ? applyBrokerBookToLedger(client, book) : client;
+    return refreshLedgerMarks(next, quote);
   });
   const clientMtm = round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
   const masterMtm = Number(desk.masterMtm ?? desk.master?.mtm ?? 0);

@@ -767,6 +767,43 @@ export function peekClientSettings(userId) {
   return normalizeClientSettings(desk);
 }
 
+function sameMemberContract(left, right) {
+  const a = String(left || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  const b = String(right || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return Boolean(a && a === b);
+}
+
+export function repairMemberPositionMarks(userId, marks = {}) {
+  if (!userId) return peekClientBook(userId);
+  const desk = loadDesk(userId);
+  desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+  const fills = [...desk.orders, ...desk.orderHistory].filter((row) => Number(row?.price) > 0);
+  let changed = false;
+  desk.positions = desk.positions.map((row) => {
+    let avg = Number(row.avg || 0);
+    if (!(avg > 0)) {
+      const fill = fills.find(
+        (item) => sameMemberContract(item.symbol, row.symbol) && Number(item.qty || 0) === Number(row.qty || 0),
+      ) || fills.find((item) => sameMemberContract(item.symbol, row.symbol));
+      if (fill) avg = Number(fill.price);
+    }
+    const quoted = Number(marks[row.symbol] ?? marks[String(row.symbol || "").toUpperCase()] ?? 0);
+    const ltp = quoted > 0 ? quoted : Number(row.ltp || avg || 0);
+    const dir = row.type === "SELL" ? -1 : 1;
+    const pnl = round2((ltp - avg) * Number(row.qty || 0) * dir);
+    if (avg !== Number(row.avg || 0) || ltp !== Number(row.ltp || 0) || pnl !== Number(row.pnl || 0)) changed = true;
+    return { ...row, avg, ltp, pnl };
+  });
+  if (changed) persist();
+  return peekClientBook(userId);
+}
+
 export function peekClientBook(userId) {
   const desk = store[userId];
   if (!desk) {
@@ -1305,7 +1342,7 @@ export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
   if (paper || !live) return "FILLED";
   const raw = String(status || live.status || "PENDING").toUpperCase();
   if (raw === "TRANSIT" || raw === "OPEN") return "PENDING";
-  if (raw === "TRADED") return "FILLED";
+  if (raw === "TRADED" || raw === "COMPLETE" || raw === "COMPLETED") return "FILLED";
   if (raw === "PART_TRADED") return "PARTIAL";
   if (raw === "REJECTED" || raw === "REJECT" || raw === "REJECTION") return "REJECTED";
   if (raw === "FAIL" || raw === "FAILURE") return "FAILED";
@@ -1320,6 +1357,27 @@ function brokerOrderPrice(row) {
 
 function brokerOrderReason(row) {
   return String(row?.omsErrorDescription || row?.rejectedReason || row?.reason || row?.errorMessage || "").trim();
+}
+
+function stampMemberPositionFill(desk, order, price) {
+  if (!(Number(price) > 0) || !desk) return;
+  const symbol = String(order?.symbol || "");
+  const strategy = String(order?.strategy || "");
+  const side = order?.side === "SELL" ? "SELL" : "BUY";
+  const qty = Number(order?.qty || 0);
+  const openedAt = String(order?.createdAt || "");
+  const row = (desk.positions || []).find((item) => {
+    const same =
+      item.symbol === symbol &&
+      String(item.strategy || "") === strategy &&
+      (item.type === side || item.side === side) &&
+      Number(item.qty) === qty;
+    const sameTime = !openedAt || !item.openedAt || String(item.openedAt) === openedAt;
+    return same && sameTime;
+  });
+  if (!row) return;
+  if (!(Number(row.avg) > 0)) row.avg = Number(price);
+  if (!(Number(row.ltp) > 0)) row.ltp = Number(price);
 }
 
 function dropUnfilledMemberPosition(desk, order) {
@@ -1342,6 +1400,31 @@ function dropUnfilledMemberPosition(desk, order) {
     removed = true;
     return false;
   });
+}
+
+export function memberWorkingKotakCopies() {
+  const out = [];
+  for (const userId of Object.keys(store)) {
+    if (!userId || userId === "admin") continue;
+    const desk = store[userId] || {};
+    const working = (Array.isArray(desk.orders) ? desk.orders : []).filter(
+      (row) => isWorkingMemberOrder(row?.status) && String(row.brokerId || "").toLowerCase() === "kotak" && !row.paper,
+    );
+    if (!working.length) continue;
+    const slot = brokerAccountForLiveCopy(userId, "kotak");
+    if (slot.leftoverToken) continue;
+    out.push({
+      userId,
+      token: String(slot.brokerToken || (desk.brokerId === "kotak" ? desk.brokerToken : "") || "").trim(),
+      clientId: String(slot.accountId || (desk.brokerId === "kotak" ? desk.accountId : "") || "").trim(),
+      apiKey: String(slot.brokerApiKey || desk.brokerApiKey || "").trim(),
+      sessionToken: String(slot.brokerSessionToken || desk.brokerSessionToken || "").trim(),
+      mobile: String(slot.brokerMobile || desk.brokerMobile || "").trim(),
+      mpin: String(slot.brokerMpin || desk.brokerMpin || "").trim(),
+      totpSecret: String(slot.brokerTotpSecret || desk.brokerTotpSecret || "").trim(),
+    });
+  }
+  return out;
 }
 
 export function memberWorkingDhanCopies() {
@@ -1465,6 +1548,7 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
       working.push(updated);
       continue;
     }
+    if (isExecutedMemberOrder(status) && nextPrice > 0) stampMemberPositionFill(desk, updated, nextPrice);
     if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
     if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
   }
@@ -1797,6 +1881,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   if (reconcileCopyAlerts(desk)) persist();
+  repairMemberPositionMarks(user.id);
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],
@@ -1806,7 +1891,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   };
   const hasOwn = own.positions.length || own.orders.length || own.orderHistory.length || own.closedTrades.length;
   const book = hasOwn || ownBookOnly ? own : liveBookForPlans(liveBook, enrollments, brokerId);
-  if (!book.positions.length && typeof quote === "function") {
+  if (book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
   const report = buildReport({

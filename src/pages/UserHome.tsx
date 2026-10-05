@@ -47,9 +47,9 @@ export function UserHome() {
 
       <div className="grid gap-3 md:grid-cols-4">
         <Stat label="Balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
-        <Stat label="MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
-        <Stat label="P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
-        <Stat label="Net P&L" value={formatInr(report?.netPnl || 0)} signed={report?.netPnl} />
+        <Stat label="Live MTM" value={formatInr(memberLiveMtm(desk))} signed={memberLiveMtm(desk)} />
+        <Stat label="Daily P&L" value={formatInr(memberDailyPnl(desk))} signed={memberDailyPnl(desk)} />
+        <Stat label="Net P&L" value={formatInr(memberDailyPnl(desk))} signed={memberDailyPnl(desk)} />
       </div>
       {desk?.brokerId === "kotak" && !Number.isFinite(Number(desk.wallet.brokerBalance)) ? (
         <p className="text-xs text-slate-500">
@@ -127,6 +127,27 @@ function memberBalance(desk: MemberDesk | null) {
   const broker = Number(desk?.wallet.brokerBalance);
   if (Number.isFinite(broker)) return broker;
   return Number(desk?.wallet.balance) || 0;
+}
+
+function memberLiveMtm(desk: MemberDesk | null) {
+  const wallet = Number(desk?.wallet?.mtm);
+  if (Number.isFinite(wallet) && wallet !== 0) return wallet;
+  const fromPos = (desk?.positions || []).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+  if (fromPos) return fromPos;
+  return Number.isFinite(wallet) ? wallet : 0;
+}
+
+function memberDailyPnl(desk: MemberDesk | null) {
+  const live = memberLiveMtm(desk);
+  const report = desk?.report;
+  const net = Number(report?.netPnl);
+  if (Number.isFinite(net) && net !== 0) return net;
+  const today = (report?.daily || []).find((row) => row.date === report?.date);
+  if (today) {
+    const day = Number(today.pnl || 0) + Number(today.unrealized || 0);
+    if (day) return day;
+  }
+  return live;
 }
 
 function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {

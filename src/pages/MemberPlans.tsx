@@ -276,9 +276,10 @@ export function MemberPlans() {
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Stat label="Wallet balance" value={formatInr(desk.wallet.balance)} signed={desk.wallet.balance} />
-        <Stat label="Open MTM" value={formatInr(desk.wallet.mtm)} signed={desk.wallet.mtm} />
+      <div className="grid gap-3 md:grid-cols-4">
+        <Stat label="Wallet balance" value={formatInr(memberPlanBalance(desk))} signed={memberPlanBalance(desk)} />
+        <Stat label="Live MTM" value={formatInr(desk.wallet.mtm)} signed={desk.wallet.mtm} />
+        <Stat label="Daily P&L" value={formatInr(memberPlanDailyPnl(desk))} signed={memberPlanDailyPnl(desk)} />
         <Stat label="Equity" value={formatInr(desk.wallet.equity)} signed={desk.wallet.equity} />
       </div>
 
@@ -567,6 +568,20 @@ export function MemberPlans() {
       ) : null}
     </div>
   );
+}
+
+function memberPlanBalance(desk: MemberDesk) {
+  const broker = Number(desk.wallet.brokerBalance);
+  if (Number.isFinite(broker)) return broker;
+  return Number(desk.wallet.balance) || 0;
+}
+
+function memberPlanDailyPnl(desk: MemberDesk) {
+  const report = desk.report;
+  if (report?.brokerPnl) return Number(report.netPnl || 0);
+  const today = (report?.daily || []).find((row) => row.date === report?.date);
+  if (today) return Number(today.pnl || 0) + Number(today.unrealized || 0);
+  return Number(report?.netPnl || 0);
 }
 
 function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {

@@ -16,7 +16,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { forgetCachedClient, loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
 import { savedSecretForSubmit } from "../lib/formSecrets";
-import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
+import { cn, formatIst, formatMobile, formatNumber, inputIndianMobile } from "../lib/format";
 
 type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
@@ -434,10 +434,10 @@ function AdminMobileRow({
           className="h-9 w-36 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-semibold"
           value={mobile}
           inputMode="numeric"
-          maxLength={10}
+          maxLength={16}
           disabled={locked}
-          placeholder="10-digit mobile"
-          onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+          placeholder="9922980000 or +919922980000"
+          onChange={(event) => setMobile(inputIndianMobile(event.target.value))}
         />
       </td>
       <td className="px-4 py-3">
@@ -707,9 +707,9 @@ function AddClientModal({
                   className={inputClass}
                   value={mobile}
                   inputMode="numeric"
-                  maxLength={10}
-                  onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
-                  placeholder="9xxxxxxxxx"
+                  maxLength={16}
+                  onChange={(event) => setMobile(inputIndianMobile(event.target.value))}
+                  placeholder="9922980000 or +919922980000"
                 />
                 <span className="font-normal text-[11px] text-slate-500">Client portal login number · initial password 1234</span>
               </Field>
@@ -943,7 +943,7 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
   });
   if (brokerId === "kotak") {
     extra.push(
-      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile registered on this Kotak Neo" },
+      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "+919922980000 or 10-digit Users mobile" },
       { id: "mpin", label: "MPIN", secret: true, placeholder: "Kotak Neo MPIN" },
       { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
     );
@@ -1152,9 +1152,9 @@ function EditModal({
             className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
             value={mobile}
             inputMode="numeric"
-            maxLength={10}
-            onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
-            placeholder="10-digit mobile"
+            maxLength={16}
+            onChange={(event) => setMobile(inputIndianMobile(event.target.value))}
+            placeholder="9922980000 or +919922980000"
           />
         </Field>
         <Field label="Telegram chat id">

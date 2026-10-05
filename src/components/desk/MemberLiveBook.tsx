@@ -50,7 +50,8 @@ export function MemberLiveBook({
               <div>
                 <div className="font-semibold">{row.symbol}</div>
                 <div className="text-[11px] text-slate-400">
-                  {row.strategy} · {row.qty} qty · LTP {formatNumber(row.ltp)}
+                  {row.strategy ? `${row.strategy} · ` : ""}
+                  {row.qty} qty · avg {formatNumber(row.avg)} · LTP {formatNumber(row.ltp)}
                 </div>
               </div>
               <div className={cn("font-bold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</div>
