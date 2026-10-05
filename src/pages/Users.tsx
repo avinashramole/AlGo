@@ -932,6 +932,13 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
   );
 }
 
+function compactFieldLabel(field: BrokerInstallField) {
+  if (field.id === "accessToken") return /neo/i.test(field.label) ? "Neo token" : "Token";
+  if (field.id === "totpSecret") return "TOTP";
+  if (field.id === "mobile") return "Mobile";
+  return field.label;
+}
+
 function needsBrokerApiKey(brokerId: string) {
   return ["zerodha", "fyers", "kotak", "angelone", "upstox"].includes(brokerId);
 }
@@ -1052,7 +1059,7 @@ function BrokerLoginFields({
     else if (id === "accessToken") onToken(value);
   };
   const fieldsGrid = rows.map((field) => (
-    <Field key={field.id} label={field.label} compact={compact}>
+    <Field key={field.id} label={compact ? compactFieldLabel(field) : field.label} compact={compact}>
       <input
         className={compact ? compactInputClass : inputClass}
         type={field.secret ? "password" : "text"}
