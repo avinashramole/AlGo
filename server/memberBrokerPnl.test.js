@@ -53,6 +53,23 @@ test("an empty broker book is zero, not the local copy sum", () => {
   assert.equal(desk.wallet.mtm, 0);
 });
 
+test("a 0-price Kotak book does not wipe a marked user MTM", async () => {
+  const desk = localDesk();
+  desk.wallet.mtm = 84.5;
+  desk.positions = [{ id: "1", symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 12.1, ltp: 13.4, pnl: 84.5 }];
+  await attachMemberBrokerPnl(desk, "user-1", async () => ({
+    realizedPnl: 0,
+    unrealizedPnl: 0,
+    mtm: 0,
+    source: "kotak",
+    open: [{ symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 0, ltp: 0, pnl: 0 }],
+    closed: [],
+  }));
+  assert.equal(desk.wallet.mtm, 84.5);
+  assert.equal(desk.positions[0].avg, 12.1);
+  assert.equal(desk.positions[0].pnl, 84.5);
+});
+
 test("a broker payload without P&L fields is ignored", async () => {
   const desk = localDesk();
   const pnl = brokerPnlFromDhanRows([{ tradingSymbol: "NIFTY", netQty: 65 }]);

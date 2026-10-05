@@ -364,8 +364,23 @@ function stampBrokerDaily(report, realized, unrealized) {
   return daily;
 }
 
+function brokerPnlHasMarks(pnl) {
+  if (!pnl) return false;
+  if (pnl.empty) return true;
+  if (Number(pnl.realizedPnl) || Number(pnl.unrealizedPnl) || Number(pnl.mtm)) return true;
+  if ((pnl.open || []).some((row) => Number(row.avg) > 0 || Number(row.ltp) > 0 || Number(row.pnl))) return true;
+  if ((pnl.closed || []).some((row) => Number(row.pnl) || Number(row.realized))) return true;
+  return false;
+}
+
+function deskAlreadyMarked(desk) {
+  if (Number(desk?.wallet?.mtm)) return true;
+  return (desk?.positions || []).some((row) => Number(row.avg) > 0 || Number(row.pnl) || Number(row.ltp) > 0);
+}
+
 export function applyBrokerPnl(desk, pnl) {
   if (!desk || !pnl) return desk;
+  if (!brokerPnlHasMarks(pnl) && deskAlreadyMarked(desk)) return desk;
   const realized = round2(pnl.realizedPnl);
   const unrealized = round2(pnl.unrealizedPnl);
   const gross = round2(realized + unrealized);

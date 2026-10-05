@@ -138,13 +138,16 @@ function memberLiveMtm(desk: MemberDesk | null) {
 }
 
 function memberDailyPnl(desk: MemberDesk | null) {
+  const live = memberLiveMtm(desk);
   const report = desk?.report;
-  if (report?.brokerPnl) return Number(report.netPnl || 0);
-  const today = (report?.daily || []).find((row) => row.date === report?.date);
-  if (today) return Number(today.pnl || 0) + Number(today.unrealized || 0);
   const net = Number(report?.netPnl);
   if (Number.isFinite(net) && net !== 0) return net;
-  return memberLiveMtm(desk);
+  const today = (report?.daily || []).find((row) => row.date === report?.date);
+  if (today) {
+    const day = Number(today.pnl || 0) + Number(today.unrealized || 0);
+    if (day) return day;
+  }
+  return live;
 }
 
 function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {

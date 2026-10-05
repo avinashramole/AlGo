@@ -589,6 +589,30 @@ test("Kotak Neo complete moves a pending user copy to FILLED on the order book",
   assert.equal(memberWorkingKotakCopies().some((item) => item.userId === member.id), false);
 });
 
+test("getMemberDesk stamps a pending copy price before marking MTM", () => {
+  const member = { id: "u-pending-mtm", name: "Pending Mtm", email: "pendingmtm@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY26O0622850CE", side: "BUY", qty: 65, price: 12.1, strategy: algo.name, brokerId: "kotak" },
+    live: { orderId: "k-pending-mtm", status: "PENDING", price: 12.1 },
+  });
+  const stored = peekClientBook(member.id);
+  stored.positions[0].avg = 0;
+  stored.positions[0].ltp = 0;
+  stored.positions[0].pnl = 0;
+  const desk = getMemberDesk({
+    user: member,
+    enrollments: [],
+    algos: [algo],
+    quote: (symbol) => (String(symbol).includes("22850") ? 13.4 : 0),
+    ownBookOnly: true,
+  });
+  assert.equal(desk.positions[0].avg, 12.1);
+  assert.equal(desk.positions[0].ltp, 13.4);
+  assert.equal(desk.wallet.mtm, Number(((13.4 - 12.1) * 65).toFixed(2)));
+});
+
 test("open member positions mark live MTM from the quote", () => {
   const member = { id: "u-live-mtm", name: "Live Mtm", email: "livemtm@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "kotak" });

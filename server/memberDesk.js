@@ -783,9 +783,7 @@ export function repairMemberPositionMarks(userId, marks = {}) {
   desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
   desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
   desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
-  const fills = [...desk.orders, ...desk.orderHistory].filter(
-    (row) => isExecutedMemberOrder(row?.status) && Number(row?.price) > 0,
-  );
+  const fills = [...desk.orders, ...desk.orderHistory].filter((row) => Number(row?.price) > 0);
   let changed = false;
   desk.positions = desk.positions.map((row) => {
     let avg = Number(row.avg || 0);
@@ -1883,6 +1881,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   if (reconcileCopyAlerts(desk)) persist();
+  repairMemberPositionMarks(user.id);
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],
