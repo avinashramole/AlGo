@@ -361,7 +361,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   ))}
                 </div>
               </SettingsRow>
-              <SettingsRow label="Strike" hint={liveOptionHint(form, data)}>
+              <SettingsRow label="Strike" title={liveOptionHint(form, data)}>
                 <select className={fieldClass} value={form.strikeOffset ?? 0} onChange={(event) => set({ strikeOffset: Number(event.target.value) })}>
                   {OPTION_OFFSETS.map((row) => (
                     <option key={row.id} value={row.id}>
@@ -373,12 +373,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             </>
           ) : null}
 
-          {engine ? null : (
+          {engine || crudeFirst || niftyTest ? null : (
           <SettingsRow label="Underlying">
             <select
               className={fieldClass}
-              value={crudeFirst ? "CRUDEOIL" : niftyTest ? "NIFTY" : form.symbol || "NIFTY"}
-              disabled={engine || niftyTest || crudeFirst}
+              value={form.symbol || "NIFTY"}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -394,16 +393,16 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             </select>
           </SettingsRow>
           )}
-          {engine ? null : (
+          {engine || crudeFirst || niftyTest ? null : (
           <SettingsRow label="Side">
-            <select className={fieldClass} value={niftyTest ? "BOTH" : form.side || "BUY"} disabled={engine || niftyTest || crudeFirst} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+            <select className={fieldClass} value={form.side || "BUY"} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
               <option value="SELL">SELL</option>
               <option value="BOTH">BOTH</option>
             </select>
           </SettingsRow>
           )}
-          <SettingsRow label="Lots" hint={lotsHint}>
+          <SettingsRow label="Lots" title={lotsHint}>
             <input
               className={fieldClass}
               type="number"
@@ -440,7 +439,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               ))}
             </select>
           </SettingsRow>
-          <SettingsRow label="Broker" hint={form.runMode === "live" ? "Saving does not start LIVE." : "Paper fills are virtual."}>
+          <SettingsRow label="Broker" title={form.runMode === "live" ? "Saving does not start LIVE." : "Paper fills are virtual."}>
             <select
               className={fieldClass}
               value={form.runMode === "live" ? form.brokerId || "dhan" : "paper"}
@@ -528,51 +527,59 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           {vwap ? (
             <>
               <SettingsHead>Risk</SettingsHead>
-              <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-              <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField label="Trail on %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
-              <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
-              <NumberField label="VWAP exit" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
-              <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+                <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+                <NumberField label="Trail on %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
+                <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
+                <NumberField label="VWAP exit" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
+                <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              </div>
             </>
           ) : reversal ? (
             <>
               <SettingsHead>Risk</SettingsHead>
-              <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-              <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+                <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
+                <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              </div>
             </>
           ) : niftyTest ? (
             <>
               <SettingsHead>Schedule</SettingsHead>
-              <SettingsRow label="Start">
-                <input
-                  name="nifty test"
-                  className={fieldClass}
-                  value={form.startTimeIst || "09:15"}
-                  onChange={(event) => set({ startTimeIst: event.target.value })}
-                  placeholder="09:15"
-                />
-              </SettingsRow>
-              <SettingsRow label="End">
-                <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
-              </SettingsRow>
+              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+                <SettingsRow label="Start">
+                  <input
+                    name="nifty test"
+                    className={fieldClass}
+                    value={form.startTimeIst || "09:15"}
+                    onChange={(event) => set({ startTimeIst: event.target.value })}
+                    placeholder="09:15"
+                  />
+                </SettingsRow>
+                <SettingsRow label="End">
+                  <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
+                </SettingsRow>
+              </div>
             </>
           ) : firstCandle || crudeFirst ? (
             <>
               <SettingsHead>Schedule</SettingsHead>
-              <SettingsRow label="Start LIVE">
-                <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
-              </SettingsRow>
-              <SettingsRow label="First candle">
-                <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
-              </SettingsRow>
-              <SettingsRow label="Evaluate">
-                <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
-              </SettingsRow>
-              <SettingsRow label="End">
-                <input className={fieldClass} value={form.endTimeIst || (crudeFirst ? "23:15" : "15:15")} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder={crudeFirst ? "23:15" : "15:15"} />
-              </SettingsRow>
+              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+                <SettingsRow label="Start LIVE">
+                  <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
+                </SettingsRow>
+                <SettingsRow label="First candle">
+                  <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
+                </SettingsRow>
+                <SettingsRow label="Evaluate">
+                  <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
+                </SettingsRow>
+                <SettingsRow label="End">
+                  <input className={fieldClass} value={form.endTimeIst || (crudeFirst ? "23:15" : "15:15")} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder={crudeFirst ? "23:15" : "15:15"} />
+                </SettingsRow>
+              </div>
               <SettingsRow label="Expiry">
                 {crudeFirst ? (
                   <input className={fieldClass} value="Monthly MCX" readOnly />
@@ -583,7 +590,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   </select>
                 )}
               </SettingsRow>
-              <SettingsRow label="Strike" hint={liveOptionHint(form, data)}>
+              <SettingsRow label="Strike" title={liveOptionHint(form, data)}>
                 <select className={fieldClass} value={form.strikeOffset ?? 0} onChange={(event) => set({ strikeOffset: Number(event.target.value) })}>
                   {OPTION_OFFSETS.map((row) => (
                     <option key={row.id} value={row.id}>
@@ -593,44 +600,48 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 </select>
               </SettingsRow>
               <SettingsHead>Risk</SettingsHead>
-              <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-              <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
               {crudeFirst ? null : (
-                <>
-                  <div className="sr-only" data-trailing-sl="nifty-first-candle">
-                    Trailing SL
-                  </div>
-                  <NumberField
-                    label="Trail to buy"
-                    value={niftyFirstCandleTrail(form).activation}
-                    step={1}
-                    onChange={(trailingActivationPct) => {
-                      const trail = niftyFirstCandleTrail(form);
-                      set({ trailingActivationPct, trailingEveryPct: trail.every, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
-                    }}
-                  />
-                  <NumberField
-                    label="Trail every"
-                    value={niftyFirstCandleTrail(form).every}
-                    step={1}
-                    onChange={(trailingEveryPct) => {
-                      const trail = niftyFirstCandleTrail(form);
-                      set({ trailingActivationPct: trail.activation, trailingEveryPct, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
-                    }}
-                  />
-                  <NumberField
-                    label="Trail shift"
-                    value={niftyFirstCandleTrail(form).shift}
-                    step={1}
-                    onChange={(trailingShiftPct) => {
-                      const trail = niftyFirstCandleTrail(form);
-                      set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
-                    }}
-                  />
-                  <NumberField label="Max trades" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
-                </>
+                <div className="sr-only" data-trailing-sl="nifty-first-candle">
+                  Trailing SL
+                </div>
               )}
-              <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+                <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+                {crudeFirst ? null : (
+                  <>
+                    <NumberField
+                      label="Trail to buy"
+                      value={niftyFirstCandleTrail(form).activation}
+                      step={1}
+                      onChange={(trailingActivationPct) => {
+                        const trail = niftyFirstCandleTrail(form);
+                        set({ trailingActivationPct, trailingEveryPct: trail.every, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                      }}
+                    />
+                    <NumberField
+                      label="Trail every"
+                      value={niftyFirstCandleTrail(form).every}
+                      step={1}
+                      onChange={(trailingEveryPct) => {
+                        const trail = niftyFirstCandleTrail(form);
+                        set({ trailingActivationPct: trail.activation, trailingEveryPct, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                      }}
+                    />
+                    <NumberField
+                      label="Trail shift"
+                      value={niftyFirstCandleTrail(form).shift}
+                      step={1}
+                      onChange={(trailingShiftPct) => {
+                        const trail = niftyFirstCandleTrail(form);
+                        set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
+                      }}
+                    />
+                    <NumberField label="Max trades" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+                  </>
+                )}
+                <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              </div>
             </>
           ) : hedge ? null : (
             <>
@@ -687,8 +698,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           {engine || crudeFirst || firstCandle || vwap || reversal ? null : (
             <>
               <SettingsHead>Risk</SettingsHead>
-              <NumberField label="Stop %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
-              <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
+              <div className="grid grid-cols-2 [&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
+                <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
+              </div>
             </>
           )}
         </section>
@@ -915,14 +928,11 @@ function SettingsHead({ children }: { children: ReactNode }) {
   );
 }
 
-function SettingsRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function SettingsRow({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
   return (
-    <label className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-1.5">
-      <span className="w-[6.25rem] shrink-0 text-xs text-slate-500">{label}</span>
-      <div className="min-w-0 flex-1">
-        {children}
-        {hint ? <div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{hint}</div> : null}
-      </div>
+    <label className="flex items-center gap-2 border-t border-[var(--border)] px-2.5 py-1.5" title={title}>
+      <span className="w-[5.5rem] shrink-0 text-xs text-slate-500">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
     </label>
   );
 }

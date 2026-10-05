@@ -670,7 +670,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
           <section className="overflow-hidden rounded-xl border border-[var(--border)]">
             <div className="bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Scope</div>
             <label className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-1.5">
-              <span className="w-[6.25rem] shrink-0 text-xs text-slate-500">Mapping</span>
+              <span className="w-[5.5rem] shrink-0 text-xs text-slate-500">Mapping</span>
               <select
                 className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 text-[13px] font-semibold"
                 value={scope}
