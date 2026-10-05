@@ -937,13 +937,37 @@ function kotakEnv(name) {
   return String(process.env[name] || "").trim();
 }
 
+export function indianMobileDigits(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
+  return /^[6-9]\d{9}$/.test(digits) ? digits : "";
+}
+
 export function kotakMobileNumber(value) {
-  const raw = String(value || "").trim().replace(/[\s-]/g, "");
-  if (!raw) return "";
-  if (raw.startsWith("+")) return raw;
-  if (/^\d{10}$/.test(raw)) return `+91${raw}`;
-  if (/^91\d{10}$/.test(raw)) return `+${raw}`;
-  return raw;
+  const digits = indianMobileDigits(value);
+  if (digits) return `+91${digits}`;
+  return String(value || "").trim().replace(/[\s-]/g, "");
+}
+
+export function kotakMobileNumberCandidates(value) {
+  const digits = indianMobileDigits(value);
+  if (!digits) {
+    const formatted = kotakMobileNumber(value);
+    return formatted ? [formatted] : [];
+  }
+  return [...new Set([`+91${digits}`, `+91-${digits}`, digits, `91${digits}`])];
+}
+
+export function firstKotakMobile(...values) {
+  for (const value of values) {
+    if (indianMobileDigits(value)) return String(value || "").trim();
+  }
+  return String(values.find((value) => String(value || "").trim()) || "").trim();
+}
+
+function isKotakMobileFieldError(error) {
+  return /invalid field ['"]?mobile\s*number['"]?|must be a valid mobile number/i.test(String(error?.message || ""));
 }
 
 function istClock(date) {
@@ -1095,29 +1119,38 @@ export async function openKotakTradeSession(creds, fetchImpl = fetch) {
   const cached = kotakTradeCache.get(key);
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
   const codes = kotakTotpCandidates(creds.totpSecret);
+  const mobiles = kotakMobileNumberCandidates(creds.mobile);
+  if (!mobiles.length) {
+    throw fail("Kotak trade-login mobile must be a valid 10-digit Indian mobile number.");
+  }
   let login = null;
   let lastLoginError = null;
   for (const totp of codes) {
-    try {
-      login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
-        method: "POST",
-        headers: {
-          Authorization: authHeader,
-          "neo-fin-key": "neotradeapi",
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          mobileNumber: kotakMobileNumber(creds.mobile),
-          ucc: creds.clientId,
-          totp,
-        }),
-      });
-      break;
-    } catch (error) {
-      lastLoginError = error;
-      if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
+    for (const mobileNumber of mobiles) {
+      try {
+        login = await kotakRequest(fetchImpl, "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            "neo-fin-key": "neotradeapi",
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            mobileNumber,
+            ucc: creds.clientId,
+            totp,
+          }),
+        });
+        break;
+      } catch (error) {
+        lastLoginError = error;
+        if (isKotakMobileFieldError(error) && mobileNumber !== mobiles[mobiles.length - 1]) continue;
+        if (!/invalid totp/i.test(String(error?.message || "")) || totp === codes[codes.length - 1]) throw error;
+        break;
+      }
     }
+    if (login) break;
   }
   if (!login) throw lastLoginError || fail("Kotak TOTP login did not return a trading session.");
   const view = login.data || login;

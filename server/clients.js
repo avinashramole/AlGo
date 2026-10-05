@@ -10,6 +10,7 @@ import {
   listClientGroups,
   listTopups,
   peekClientBook,
+  peekClientSecrets,
   peekClientSettings,
   removeDesk,
   removeOrphanDesks,
@@ -68,6 +69,15 @@ function asClient(user, desk, handle = {}) {
     createdAt: user.createdAt || "",
     lastLoginAt: user.lastLoginAt || "",
   };
+}
+
+function fillKotakTradeMobile(patch = {}, profileMobile = "", current = {}) {
+  const brokerId = String(patch.brokerId || current.brokerId || "").trim().toLowerCase();
+  if (brokerId !== "kotak") return patch;
+  if (String(patch.brokerMobile || current.brokerMobile || "").trim()) return patch;
+  const mobile = String(profileMobile || "").trim();
+  if (!mobile) return patch;
+  return { ...patch, brokerMobile: mobile };
 }
 
 function settingsPatch(patch = {}) {
@@ -153,7 +163,7 @@ export function createClient(patch = {}) {
     email: patch.email,
   });
   saveClientSettings(user.id, {
-    ...settingsPatch(patch),
+    ...settingsPatch(fillKotakTradeMobile(patch, user.mobile, {})),
     copy: patch.copy == null ? true : Boolean(patch.copy),
     brokerId,
     sizingKind: patch.sizingKind || "multiplier",
@@ -197,8 +207,11 @@ export function saveClient(userId, patch = {}) {
       ...(patch.mobile != null ? { mobile: patch.mobile } : {}),
     });
   }
-  saveClientSettings(userId, settingsPatch(patch));
   const next = getPublicUser(userId);
+  saveClientSettings(
+    userId,
+    settingsPatch(fillKotakTradeMobile(patch, next?.mobile, peekClientSecrets(userId))),
+  );
   const handle = messagingHandleForUser(userId);
   const telegramId = patch.telegramId != null ? String(patch.telegramId).trim() : handle.telegramId;
   const mobile = patch.mobile != null ? String(next.mobile || "").trim() : handle.mobile || next.mobile;

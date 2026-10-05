@@ -9,7 +9,10 @@ process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
+process.env.T2S_USERS_FILE = path.join(dir, "users.json");
+process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 
+const { adminCreateMember } = await import("./auth.js");
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
 const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
@@ -962,4 +965,27 @@ test("Shivam Fintech's copy does not send the admin Kotak login", () => {
     if (saved.token == null) delete process.env.T2S_KOTAK_ACCESS_TOKEN;
     else process.env.T2S_KOTAK_ACCESS_TOKEN = saved.token;
   }
+});
+
+test("Kotak copy uses the Users-list mobile when trade-login mobile is empty", () => {
+  const created = adminCreateMember({ name: "Mobile User", mobile: "9922980000", email: "mobile9922@gmail.com" });
+  selectMemberBroker({ user: created, brokerId: "kotak" });
+  installMemberBroker({
+    user: created,
+    brokerId: "kotak",
+    clientId: "YT2Vm",
+    apiKey: "member-consumer-9922",
+    accessToken: "member-access-9922",
+    mpin: "654321",
+    totpSecret: "GEZDGNBVGY3TQOJQ",
+  });
+  saveClientSettings(created.id, { copy: true, tradeMode: "real", brokerId: "kotak", subscriptionUntil: "2026-12-31" });
+  const copies = memberCopyPayloads(
+    { strategy: "NIFTY 5m first candle", symbol: "NIFTY 22500 PE", side: "BUY", qty: 65, price: 115.2, brokerId: "dhan" },
+    { id: "a-mobile", name: "NIFTY 5m first candle", mappingScope: "both", mappedClientIds: [created.id] },
+  );
+  const row = copies.find((item) => item.copyUserId === created.id);
+  assert.ok(row);
+  assert.equal(row.brokerSession.mobile, "9922980000");
+  assert.equal(row.account.mobile, "9922980000");
 });

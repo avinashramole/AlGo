@@ -1323,7 +1323,6 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
-  startKotakAdminQuoteFeed();
   startUpstoxDailyTokenScheduler();
   startMemberDailyBookScheduler();
   if (skipLiveAlgos()) {
@@ -1364,6 +1363,7 @@ async function bootBackground() {
   }
   if (skipDhanBoot()) {
     console.log("Dhan boot skipped (T2S_SKIP_DHAN_BOOT). API is answering on this port.");
+    startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
     return;
   }
   try {
@@ -1381,4 +1381,5 @@ async function bootBackground() {
   } catch (error) {
     console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }
+  startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
 }

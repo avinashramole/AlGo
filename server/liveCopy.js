@@ -1,6 +1,9 @@
+import { getPublicUser } from "./auth.js";
+import { firstKotakMobile } from "./liveBrokers.js";
 import { enrollmentActive, listEnrollments } from "./subscriptions.js";
 import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMemberCopyFill, sizeCopyQty } from "./memberDesk.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
+import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { exchangeSegmentFor } from "./optionChain.js";
 
 let pendingCopySends = [];
@@ -134,7 +137,10 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     brokerToken: paper ? "" : token,
     brokerApiKey: apiKey,
     brokerSessionToken: leftoverSlot || paper ? "" : slot.brokerSessionToken || desk.brokerSessionToken,
-    brokerMobile: leftoverSlot || paper ? "" : slot.brokerMobile || desk.brokerMobile || "",
+    brokerMobile:
+      leftoverSlot || paper
+        ? ""
+        : firstKotakMobile(slot.brokerMobile, desk.brokerMobile, getPublicUser(userId)?.mobile),
     brokerMpin: leftoverSlot || paper ? "" : slot.brokerMpin || desk.brokerMpin || "",
     brokerTotpSecret: leftoverSlot || paper ? "" : slot.brokerTotpSecret || desk.brokerTotpSecret || "",
     paper,
@@ -295,22 +301,38 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
 }
 
 export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder } = {}) {
+  const live = [];
   for (const copy of memberCopyPayloads(payload, algo || {})) {
     if (copy.paper || copy.brokerId === "paper") {
       recordMemberCopyFill({ userId: copy.copyUserId, payload: copy, paper: true });
+      continue;
+    }
+    if (copy.copyBlocked) {
+      recordMemberCopyFill({
+        userId: copy.copyUserId,
+        payload: copy,
+        error: new Error(copy.copyBlocked),
+      });
+      console.log(`Member copy skipped ${copy.copyUserId}: ${copy.copyBlocked}`);
       continue;
     }
     if (typeof enqueueLiveOrder === "function") {
       enqueueLiveOrder(copy);
       continue;
     }
-    pendingCopySends.push(
-      sendMemberCopyOrder(copy).catch((error) => {
-        console.log(`Member copy order failed: ${error.message || error}`);
-        return null;
-      }),
-    );
+    live.push(copy);
   }
+  if (!live.length) return;
+  pendingCopySends.push(
+    sendQueuedLiveOrders(live, {
+      sendCopy: (copy) => sendMemberCopyOrder(copy),
+    }).then((outcomes) => {
+      for (const item of outcomes) {
+        if (!item.ok) console.log(`Member copy order failed: ${item.error?.message || item.error}`);
+      }
+      return outcomes;
+    }),
+  );
 }
 
 export function awaitMemberCopySends() {

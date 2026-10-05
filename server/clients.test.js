@@ -286,6 +286,7 @@ test("createClient stores a user's own Kotak Neo", () => {
   assert.equal(row.credentialsInstalled, true);
   assert.equal(peekClientSecrets(row.id).brokerToken, "user-access-token");
   assert.equal(peekClientSecrets(row.id).brokerApiKey, "user-consumer-key");
+  assert.equal(peekClientSecrets(row.id).brokerMobile, "+919001112233");
   const copy = brokerAccountForLiveCopy(row.id, "kotak");
   assert.equal(copy.leftoverToken, false);
   assert.equal(copy.brokerToken, "user-access-token");

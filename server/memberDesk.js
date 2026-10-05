@@ -1603,6 +1603,9 @@ export function peekClientSecrets(userId) {
     brokerToken: String(desk.brokerToken || "").trim(),
     brokerApiKey: String(desk.brokerApiKey || "").trim(),
     brokerSessionToken: String(desk.brokerSessionToken || "").trim(),
+    brokerMobile: String(desk.brokerMobile || "").trim(),
+    brokerMpin: String(desk.brokerMpin || "").trim(),
+    brokerTotpSecret: String(desk.brokerTotpSecret || "").trim(),
   };
 }
 

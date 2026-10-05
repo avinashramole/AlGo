@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { drainPendingLiveAlgoOrders, liveAlgoBrokerSignal, onLiveAlgoOrders, queueLiveAlgoOrder } from "./market.js";
+import { armLiveTarget, drainPendingLiveAlgoOrders, liveAlgoBrokerSignal, onLiveAlgoOrders, queueLiveAlgoOrder } from "./market.js";
 
 test("broker accept is AT BROKER and a reject names the reason", () => {
   const accepted = liveAlgoBrokerSignal({
@@ -71,4 +71,35 @@ test("a strategy order asks for the broker send immediately", async () => {
   assert.equal(calls, 1);
   onLiveAlgoOrders(() => {});
   drainPendingLiveAlgoOrders();
+});
+
+test("after a live buy no TGT limit is sent until the mark hits target or stop", () => {
+  drainPendingLiveAlgoOrders();
+  const open = {
+    id: "p-22500pe",
+    symbol: "NIFTY 22500 PE",
+    qty: 65,
+    avg: 111.45,
+    ltp: 111.45,
+    product: "MIS",
+    securityId: "sec-22500pe",
+    strike: 22500,
+    option: "PE",
+    expiry: "2026-10-06",
+    brokerId: "dhan",
+  };
+  const resting = armLiveTarget({
+    algo: { name: "NIFTY 5m first candle" },
+    open,
+    target: 155.99,
+    mark: 111.45,
+    mode: "live",
+  });
+  assert.equal(resting, false);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.length, 0);
+  assert.equal(
+    queued.some((row) => row.side === "SELL" && row.role === "target"),
+    false,
+  );
 });

@@ -34,3 +34,41 @@ export function headerBrokerLabel({
   if (hasQuotes) return label;
   return `${label} · wait`;
 }
+
+export function adminLiveTape(
+  data: {
+    dhanFeed?: { source?: string; live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };
+    optionMeta?: { source?: string };
+  } = {},
+) {
+  const feed = data?.dhanFeed;
+  const source = String(feed?.source || "");
+  const lastTickAt = Number(feed?.lastTickAt) > 0 ? Number(feed.lastTickAt) : null;
+  const dhanLive = Boolean(feed?.live) && source !== "kotak";
+  const quotes = Boolean(feed?.live || feed?.hasQuotes || feed?.lastTickAt || data?.optionMeta?.source === "dhan");
+  if (dhanLive || (quotes && source !== "kotak")) {
+    return {
+      brokerId: "dhan",
+      brokerName: "DHAN",
+      live: dhanLive,
+      hasQuotes: quotes,
+      lastTickAt,
+    };
+  }
+  if (source === "kotak" && Boolean(feed?.live || feed?.hasQuotes || feed?.lastTickAt)) {
+    return {
+      brokerId: "kotak",
+      brokerName: "KOTAK",
+      live: Boolean(feed?.live),
+      hasQuotes: true,
+      lastTickAt,
+    };
+  }
+  return {
+    brokerId: "dhan",
+    brokerName: "DHAN",
+    live: false,
+    hasQuotes: quotes,
+    lastTickAt,
+  };
+}
