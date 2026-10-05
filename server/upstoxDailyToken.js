@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { lastDailyResetAt, nextDailyRenewalAt, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
 import { listUpstoxOauthTargets, noteMemberUpstoxTokenAsk } from "./memberDesk.js";
-import { requestUpstoxTradingTokenForUser } from "./upstoxAuth.js";
+import { renewUpstoxAccessTokenForUser, requestUpstoxTradingTokenForUser } from "./upstoxAuth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -106,6 +106,43 @@ export function saveUpstoxDailyAskedYmd(ymd, at = Date.now()) {
   return saveUpstoxDailyState(ymd, at).lastAskedYmd;
 }
 
+export async function renewOrAskUpstoxForUser(
+  userId,
+  { fetchImpl = fetch, notify, firstWave = false } = {},
+) {
+  const id = String(userId || "").trim();
+  if (!id) return { userId: "", action: "skipped", reason: "missing_user" };
+  try {
+    const renewed = await renewUpstoxAccessTokenForUser(id, fetchImpl);
+    if (renewed.ok) return { userId: id, action: "renewed", reason: "refresh" };
+  } catch (error) {
+    console.log(`Upstox silent renew failed for ${id}: ${error.message || error}`);
+  }
+  const result = await requestUpstoxTradingTokenForUser(id, fetchImpl);
+  if (!result.ok) return { userId: id, action: "skipped", reason: result.reason || "missing_oauth" };
+  if (firstWave && typeof notify === "function") {
+    notify(id, {
+      text: "Asked Upstox for today's trading token. Approve the Upstox app or WhatsApp notification.",
+    });
+  }
+  return { userId: id, action: "asked", expiresAt: result.expiresAt || "" };
+}
+
+export async function keepMemberUpstoxTokenFresh(
+  userId,
+  { fetchImpl = fetch, now = new Date(), notify = noteMemberUpstoxTokenAsk } = {},
+) {
+  const id = String(userId || "").trim();
+  const at = now instanceof Date ? now : new Date(now);
+  const row = listUpstoxOauthTargets().find((item) => item.userId === id);
+  if (!row) return { ok: false, userId: id, action: "skipped", reason: "missing_oauth" };
+  if (tradingTokenFreshAfterReset(row.tokenUpdatedAt, at.getTime())) {
+    return { ok: true, userId: id, action: "skipped", reason: "already-fresh" };
+  }
+  const result = await renewOrAskUpstoxForUser(id, { fetchImpl, notify, firstWave: true });
+  return { ok: result.action === "renewed" || result.action === "asked", ...result };
+}
+
 export async function askUpstoxDailyTokens({
   now = new Date(),
   lastAskedYmd = "",
@@ -116,11 +153,12 @@ export async function askUpstoxDailyTokens({
 } = {}) {
   const at = now instanceof Date ? now : new Date(now);
   if (!shouldAskUpstoxDailyTokens({ now: at, lastAskedYmd, retry })) {
-    return { asked: [], skipped: [], failed: [], lastAskedYmd, reason: "not-window" };
+    return { asked: [], renewed: [], skipped: [], failed: [], lastAskedYmd, reason: "not-window" };
   }
   const firstWave = istYmd(at) !== String(lastAskedYmd || "");
   const rows = Array.isArray(targets) ? targets : listUpstoxOauthTargets();
   const asked = [];
+  const renewed = [];
   const skipped = [];
   const failed = [];
   for (const row of rows) {
@@ -131,17 +169,16 @@ export async function askUpstoxDailyTokens({
       continue;
     }
     try {
-      const result = await requestUpstoxTradingTokenForUser(userId, fetchImpl);
-      if (!result.ok) {
-        skipped.push({ userId, reason: result.reason || "missing_oauth" });
+      const result = await renewOrAskUpstoxForUser(userId, { fetchImpl, notify, firstWave });
+      if (result.action === "renewed") {
+        renewed.push({ userId });
         continue;
       }
-      asked.push({ userId, expiresAt: result.expiresAt || "" });
-      if (firstWave && typeof notify === "function") {
-        notify(userId, {
-          text: "Asked Upstox for today's trading token. Approve the Upstox app or WhatsApp notification.",
-        });
+      if (result.action === "asked") {
+        asked.push({ userId, expiresAt: result.expiresAt || "" });
+        continue;
       }
+      skipped.push({ userId, reason: result.reason || "missing_oauth" });
     } catch (error) {
       failed.push({ userId, error: String(error.message || error) });
       console.log(`Upstox 08:00 IST ask failed for ${userId}: ${error.message || error}`);
@@ -150,10 +187,11 @@ export async function askUpstoxDailyTokens({
   const ymd = istYmd(at);
   return {
     asked,
+    renewed,
     skipped,
     failed,
     lastAskedYmd: ymd,
-    reason: asked.length ? "asked" : rows.length ? "none-ready" : "no-oauth-users",
+    reason: renewed.length || asked.length ? (asked.length ? "asked" : "renewed") : rows.length ? "none-ready" : "no-oauth-users",
   };
 }
 
@@ -198,11 +236,12 @@ export function startUpstoxDailyTokenScheduler({
       saveAskedYmd(result.lastAskedYmd, getNow());
     }
     const asked = result?.asked?.length || 0;
+    const renewed = result?.renewed?.length || 0;
     const skipped = result?.skipped?.length || 0;
     const failed = result?.failed?.length || 0;
     if (result && result.reason !== "not-window") {
       console.log(
-        `Upstox 08:00 IST trading tokens · asked ${asked} · skipped ${skipped} · failed ${failed} · approve in the Upstox app`,
+        `Upstox 08:00 IST trading tokens · renewed ${renewed} · asked ${asked} · skipped ${skipped} · failed ${failed} · same morning reset as admin Dhan`,
       );
     }
     if (!stopped) scheduleNext(result?.lastAskedYmd || loadAskedYmd());
@@ -211,7 +250,7 @@ export function startUpstoxDailyTokenScheduler({
   scheduleNext();
   const next = nextUpstoxDailyTokenAt(getNow(), loadAskedYmd(), leftover(), Number(loadAskAt()) || 0);
   console.log(
-    `Upstox daily trading token is set: ${UPSTOX_DAILY_TOKEN_LABEL} for every stored API key + secret · next ${new Date(next).toISOString()} · restart does not start LIVE`,
+    `Upstox daily trading token is set: ${UPSTOX_DAILY_TOKEN_LABEL} for every stored API key + secret · silent refresh when saved, else ask + approve · next ${new Date(next).toISOString()} · restart does not start LIVE`,
   );
   return () => {
     stopped = true;

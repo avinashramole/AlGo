@@ -43,7 +43,8 @@ export function adminLiveTape(
 ) {
   const feed = data?.dhanFeed;
   const source = String(feed?.source || "");
-  const lastTickAt = Number(feed?.lastTickAt) > 0 ? Number(feed.lastTickAt) : null;
+  const tick = Number(feed?.lastTickAt);
+  const lastTickAt = tick > 0 ? tick : null;
   const dhanLive = Boolean(feed?.live) && source !== "kotak";
   const quotes = Boolean(feed?.live || feed?.hasQuotes || feed?.lastTickAt || data?.optionMeta?.source === "dhan");
   if (dhanLive || (quotes && source !== "kotak")) {

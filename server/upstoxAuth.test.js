@@ -13,7 +13,9 @@ process.env.T2S_PUBLIC_URL = "https://trade2smart.com";
 const { installMemberBroker, peekBrokerAccount, peekClientSecrets, selectMemberBroker } = await import("./memberDesk.js");
 const {
   exchangeUpstoxAuthCode,
+  exchangeUpstoxRefreshToken,
   receiveUpstoxAccessToken,
+  renewUpstoxAccessTokenForUser,
   requestUpstoxTradingToken,
   startMemberUpstoxToken,
   upstoxAuthorizeUrl,
@@ -73,7 +75,11 @@ test("auth-code exchange stores the trading access token, not the analytics toke
     return {
       ok: true,
       status: 200,
-      json: async () => ({ access_token: "upstox-trading-token-64MI", user_id: "393216" }),
+      json: async () => ({
+        access_token: "upstox-trading-token-64MI",
+        refresh_token: "upstox-refresh-token-64MI",
+        user_id: "393216",
+      }),
     };
   };
   const minted = await exchangeUpstoxAuthCode(
@@ -81,13 +87,16 @@ test("auth-code exchange stores the trading access token, not the analytics toke
     fetchImpl,
   );
   assert.equal(minted.accessToken, "upstox-trading-token-64MI");
+  assert.equal(minted.refreshToken, "upstox-refresh-token-64MI");
   const saved = receiveUpstoxAccessToken({
     client_id: "upstox-api-key-11111111",
     access_token: minted.accessToken,
+    refresh_token: minted.refreshToken,
     user_id: "393216",
   });
   assert.equal(saved.ok, true);
   assert.equal(peekBrokerAccount(member.id, "upstox").brokerToken, "upstox-trading-token-64MI");
+  assert.equal(peekBrokerAccount(member.id, "upstox").brokerRefreshToken, "upstox-refresh-token-64MI");
   assert.equal(peekClientSecrets(member.id).brokerToken, "upstox-trading-token-64MI");
 });
 
@@ -155,6 +164,51 @@ test("saving an Upstox webhook token does not switch the selected Dhan desk", ()
   assert.equal(peekClientSecrets(dual.id).brokerId, "dhan");
   assert.equal(peekClientSecrets(dual.id).brokerToken, "dhan-keep-this-token");
   assert.equal(peekBrokerAccount(dual.id, "upstox").brokerToken, "upstox-arrived-while-dhan-selected");
+});
+
+test("refresh-token exchange mints a new trading token without an app tap", async () => {
+  const fetchImpl = async (_url, options) => {
+    assert.match(String(options.body), /grant_type=refresh_token/);
+    assert.match(String(options.body), /upstox-refresh-token-64MI/);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "upstox-trading-token-renewed", refresh_token: "upstox-refresh-token-next", user_id: "393216" }),
+    };
+  };
+  const minted = await exchangeUpstoxRefreshToken(
+    {
+      apiKey: "upstox-api-key-11111111",
+      apiSecret: "upstox-api-secret-22222222",
+      refreshToken: "upstox-refresh-token-64MI",
+    },
+    fetchImpl,
+  );
+  assert.equal(minted.accessToken, "upstox-trading-token-renewed");
+  const saved = await renewUpstoxAccessTokenForUser(member.id, fetchImpl);
+  assert.equal(saved.ok, true);
+  assert.equal(peekBrokerAccount(member.id, "upstox").brokerToken, "upstox-trading-token-renewed");
+  assert.equal(peekBrokerAccount(member.id, "upstox").brokerRefreshToken, "upstox-refresh-token-next");
+});
+
+test("Get today's token silently renews when a refresh token is already saved", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), body: String(options?.body || "") });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "upstox-trading-token-silent", refresh_token: "upstox-refresh-token-silent", user_id: "393216" }),
+    };
+  };
+  const started = await startMemberUpstoxToken(member, fetchImpl);
+  assert.equal(started.ok, true);
+  assert.equal(started.renewed, true);
+  assert.equal(started.asked, false);
+  assert.equal(started.hasTradingToken, true);
+  assert.match(started.message, /8:00 AM IST/);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].body, /grant_type=refresh_token/);
 });
 
 test("Get today's token says it is waiting when no trading token exists yet", async () => {

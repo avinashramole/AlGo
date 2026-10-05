@@ -10,7 +10,7 @@ process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_UPSTOX_DAILY_TOKEN_FILE = path.join(dir, "upstox-daily-token.json");
 
-const { installMemberBroker, listUpstoxOauthTargets } = await import("./memberDesk.js");
+const { installMemberBroker, listUpstoxOauthTargets, saveMemberUpstoxAccessToken } = await import("./memberDesk.js");
 const {
   UPSTOX_RETRY_MS,
   askUpstoxDailyTokens,
@@ -21,6 +21,7 @@ const {
   shouldAskUpstoxDailyTokens,
   startUpstoxDailyTokenScheduler,
   tradingTokenFreshAfterReset,
+  keepMemberUpstoxTokenFresh,
 } = await import("./upstoxDailyToken.js");
 
 const SEVEN_AM = Date.parse("2026-09-18T01:30:00.000Z"); // 07:00 IST
@@ -59,6 +60,7 @@ test("only desks with stored Upstox API key and secret are daily-token targets",
   assert.deepEqual(ids, ["u-upx-fresh", "u-upx-ready"]);
   const row = listUpstoxOauthTargets().find((item) => item.userId === "u-upx-ready");
   assert.equal(row.hasTradingToken, false);
+  assert.equal(row.hasRefreshToken, false);
   assert.equal(listUpstoxOauthTargets().find((item) => item.userId === "u-upx-fresh").hasTradingToken, true);
 });
 
@@ -108,6 +110,75 @@ test("08:00 IST asks every stored key/secret except a token minted after the res
   assert.ok(calls.some((url) => url.includes("upstox-api-key-11111111")));
   assert.ok(calls.some((url) => url.includes("upstox-api-key-33333333")));
   assert.deepEqual(notified.sort(), ["u-upx-fresh", "u-upx-ready"]);
+  assert.equal(result.renewed.length, 0);
+});
+
+test("08:00 IST silently renews when a refresh token is stored, same as admin Dhan", async () => {
+  const silent = { id: "u-upx-silent", name: "Silent", email: "silent@t2s.app", role: "user" };
+  installMemberBroker({
+    user: silent,
+    brokerId: "upstox",
+    clientId: "393219",
+    apiKey: "upstox-api-key-77777777",
+    sessionToken: "upstox-api-secret-88888888",
+  });
+  saveMemberUpstoxAccessToken(silent.id, {
+    accessToken: "upstox-trading-token-old",
+    refreshToken: "upstox-refresh-token-old",
+    accountId: "393219",
+  });
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), body: String(options?.body || "") });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: "upstox-trading-token-morning",
+        refresh_token: "upstox-refresh-token-morning",
+        user_id: "393219",
+      }),
+    };
+  };
+  const result = await askUpstoxDailyTokens({
+    now: EIGHT_05,
+    lastAskedYmd: "",
+    fetchImpl,
+    targets: listUpstoxOauthTargets()
+      .filter((row) => row.userId === silent.id)
+      .map((row) => ({ ...row, tokenUpdatedAt: "" })),
+    notify: () => undefined,
+  });
+  assert.equal(result.reason, "renewed");
+  assert.deepEqual(result.renewed.map((row) => row.userId), ["u-upx-silent"]);
+  assert.equal(result.asked.length, 0);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].body, /grant_type=refresh_token/);
+});
+
+test("saving API key + secret kicks a token now, then the 8:00 IST job keeps it fresh", async () => {
+  const kick = { id: "u-upx-kick", name: "Kick", email: "kick@t2s.app", role: "user" };
+  installMemberBroker({
+    user: kick,
+    brokerId: "upstox",
+    clientId: "393220",
+    apiKey: "upstox-api-key-99999999",
+    sessionToken: "upstox-api-secret-00000000",
+  });
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "success", data: { notifier_url: "https://trade2smart.com/api/upstox/token" } }),
+    };
+  };
+  const result = await keepMemberUpstoxTokenFresh(kick.id, { fetchImpl, now: SEVEN_AM, notify: () => undefined });
+  assert.equal(result.ok, true);
+  assert.equal(result.action, "asked");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].includes("upstox-api-key-99999999"));
 });
 
 test("a token updated after 8:00 IST is skipped on the same morning run", async () => {

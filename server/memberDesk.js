@@ -80,6 +80,10 @@ function keepSavedBrokerSecrets(nextStore, disk) {
         next.brokerTotpSecret = slot.brokerTotpSecret;
         kept = true;
       }
+      if (!String(next.brokerRefreshToken || "").trim() && String(slot.brokerRefreshToken || "").trim()) {
+        next.brokerRefreshToken = slot.brokerRefreshToken;
+        kept = true;
+      }
       if (kept) mem.brokerAccounts[brokerId] = next;
     }
   }
@@ -217,6 +221,7 @@ function emptyBrokerAccount() {
     brokerMobile: "",
     brokerMpin: "",
     brokerTotpSecret: "",
+    brokerRefreshToken: "",
     tokenUpdatedAt: "",
   };
 }
@@ -241,6 +246,7 @@ function brokerAccountsMap(desk = {}) {
       brokerApiKey: String(row?.brokerApiKey || "").trim(),
       brokerSessionToken: String(row?.brokerSessionToken || "").trim(),
       ...tradeLoginFields(row),
+      brokerRefreshToken: String(row?.brokerRefreshToken || "").trim(),
       tokenUpdatedAt: String(row?.tokenUpdatedAt || "").trim(),
       memberAdded: Boolean(row?.memberAdded),
     };
@@ -443,6 +449,9 @@ export function publicBrokerAccounts(desk = {}) {
       tradeMobileHint: maskSecret(own.brokerMobile),
       installed: Boolean(own.brokerToken),
       oauthReady: Boolean(own.brokerApiKey && own.brokerSessionToken),
+      autoRenew: id === "upstox" && Boolean(own.brokerApiKey && own.brokerSessionToken),
+      autoRenewLabel: id === "upstox" && own.brokerApiKey && own.brokerSessionToken ? "8:00 AM IST" : "",
+      hasRefreshToken: Boolean(String(own.brokerRefreshToken || "").trim()),
       tokenUpdatedAt: own.brokerToken ? own.tokenUpdatedAt : "",
     };
   }
@@ -498,6 +507,7 @@ export function listUpstoxOauthTargets() {
       userId,
       accountId: leftover ? "" : String(slot.accountId || (desk.brokerId === "upstox" ? desk.accountId : "") || "").trim(),
       hasTradingToken: Boolean(token),
+      hasRefreshToken: Boolean(String(slot.brokerRefreshToken || "").trim()),
       tokenUpdatedAt: leftover ? "" : String(slot.tokenUpdatedAt || (desk.brokerId === "upstox" ? desk.brokerTokenUpdatedAt : "") || "").trim(),
     });
   }
@@ -551,7 +561,7 @@ export function findUserIdByUpstoxAccount(accountId) {
   return "";
 }
 
-export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, expiresAt } = {}) {
+export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, expiresAt, refreshToken } = {}) {
   const token = String(accessToken || "").trim();
   if (!userId || !token) throw fail("Upstox access token is missing.");
   const desk = loadDesk(userId);
@@ -561,6 +571,8 @@ export function saveMemberUpstoxAccessToken(userId, { accessToken, accountId, ex
   const slot = { ...(desk.brokerAccounts.upstox || emptyBrokerAccount()) };
   slot.brokerToken = token;
   slot.tokenUpdatedAt = new Date().toISOString();
+  const nextRefresh = String(refreshToken || "").trim();
+  if (nextRefresh) slot.brokerRefreshToken = nextRefresh;
   if (accountId && !String(slot.accountId || "").trim()) slot.accountId = String(accountId).trim();
   desk.brokerAccounts.upstox = slot;
   if (desk.brokerId === "upstox") {
@@ -706,6 +718,8 @@ export function normalizeClientSettings(desk = {}) {
     apiKeyHint: maskSecret(own.brokerApiKey),
     credentialsInstalled: Boolean(String(own.brokerToken || "").trim()),
     tokenUpdatedAt: own.brokerToken ? String(own.tokenUpdatedAt || "").trim() : "",
+    autoRenew: brokerId === "upstox" && Boolean(String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim()),
+    autoRenewLabel: brokerId === "upstox" && String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim() ? "8:00 AM IST" : "",
     brokerAccounts: publicBrokerAccounts(desk),
     notes: String(desk.notes || "").trim(),
     margin: round2(desk.wallet?.balance || 0),
@@ -747,6 +761,9 @@ export function publicBrokerInstall(desk = {}) {
     hasApiKey: Boolean(String(own.brokerApiKey || "").trim()),
     hasApiSecret: Boolean(String(own.brokerSessionToken || "").trim()),
     oauthReady: Boolean(String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim()),
+    autoRenew: brokerId === "upstox" && Boolean(String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim()),
+    autoRenewLabel: brokerId === "upstox" && String(own.brokerApiKey || "").trim() && String(own.brokerSessionToken || "").trim() ? "8:00 AM IST" : "",
+    hasRefreshToken: Boolean(String(own.brokerRefreshToken || "").trim()),
     installed: Boolean(String(own.brokerToken || "").trim()),
     tokenUpdatedAt: own.brokerToken ? String(own.tokenUpdatedAt || "").trim() : "",
     fields: brokerInstallFields(brokerId),
@@ -754,7 +771,7 @@ export function publicBrokerInstall(desk = {}) {
       brokerId === "paper"
         ? "Paper is virtual. No API key or access token."
         : brokerId === "upstox"
-          ? "Store API key + API secret from the Upstox developer app. At 8:00 AM IST we ask Upstox for today's trading token and retry every 15 minutes until 4:00 PM if it is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
+          ? "Store API key + API secret from the Upstox developer app. Auto token · 8:00 AM IST — same morning reset as admin Dhan PIN + TOTP. The server silently refreshes when a refresh token is saved, otherwise it asks Upstox and retries every 15 minutes until 4:00 PM if the token is still missing — approve the app / WhatsApp notification. You can also tap Get today's trading token. Do not paste the Analytics token. Set the app notifier URL to https://trade2smart.com/api/upstox/token."
           : brokerId === "kotak"
             ? "Quotes use the Neo consumer key. Orders open this user's trade login (mobile, MPIN, and TOTP) with the Neo access token, or use a pasted Neo sid and session token. The client ID is not the sid. This does not start desk LIVE."
             : "Each broker keeps its own client ID and access token. Saving DHAN does not overwrite UPSTOX. This does not start desk LIVE.",
@@ -1239,7 +1256,9 @@ function brokerChoiceNote(row, { selected, saved, virtual }) {
   const detail = saved.installed
     ? `This user's ${row.name} token is saved${saved.accountId ? ` · ${saved.accountId}` : ""}.${selected ? "" : " Select it to make it the default."}`
     : saved.oauthReady
-      ? `API key and secret saved for ${row.name}. Generate today's trading token.`
+      ? row.id === "upstox"
+        ? `API key and secret saved for ${row.name}. Auto token · 8:00 AM IST. Generate today's trading token.`
+        : `API key and secret saved for ${row.name}. Generate today's trading token.`
       : "Install this broker's own client ID and access token. It stays saved when you switch to another broker.";
   if (!selected) return detail;
   return `Default broker. Quotes, orders, balance, MTM, and P&L use this login${saved.accountId ? ` · ${saved.accountId}` : ""}. ${detail}`;
