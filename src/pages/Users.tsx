@@ -6,6 +6,7 @@ import {
   createClient,
   deleteClient,
   listUsers,
+  requestClientFyersToken,
   saveClient,
   saveUserContact,
   type AuthUser,
@@ -32,6 +33,7 @@ export function Users() {
   const [strategies, setStrategies] = useState<Array<{ id: string; name: string }>>(seeded?.strategies || []);
   const [defaultUntil, setDefaultUntil] = useState(seeded?.defaultUntil || defaultUntilDate);
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(!seeded?.clients.length);
   const [query, setQuery] = useState("");
   const [savingId, setSavingId] = useState("");
@@ -77,6 +79,17 @@ export function Users() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [load, location.key]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("fyers") === "connected") {
+      setNote("Today's Fyers access token was saved on that user. Search FYERS or the UCC to open them.");
+      setError("");
+    }
+    if (params.get("fyers") === "error") {
+      setError(params.get("message") || "Fyers login failed");
+    }
+  }, [location.search]);
+
   const patchRow = async (id: string, payload: Parameters<typeof saveClient>[1]) => {
     setSavingId(id);
     setError("");
@@ -114,7 +127,7 @@ export function Users() {
     const needle = query.trim().toLowerCase();
     if (!needle) return clients;
     return clients.filter((row) =>
-      [row.name, row.email, row.mobile, row.brokerName, row.accountId, row.group, row.status].some((value) =>
+      [row.name, row.email, row.mobile, row.brokerName, row.brokerId, row.accountId, row.group, row.status, row.tokenHint].some((value) =>
         String(value || "").toLowerCase().includes(needle),
       ),
     );
@@ -124,37 +137,37 @@ export function Users() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">All clients</h1>
-          <p className="text-sm text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-base font-bold">All clients</h1>
+          <p className="hidden text-xs text-slate-400 sm:block">
             Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.{" "}
             <Link to="/settings/ips" className="font-semibold text-brand-500">
               IP management
             </Link>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => void load()}
             disabled={busy}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 text-xs font-semibold disabled:opacity-60"
           >
             <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
             Refresh
           </button>
           <button
             type="button"
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-brand-500 px-2.5 text-xs font-semibold text-white"
             onClick={() => setShowAdd(true)}
           >
-            <Plus size={16} />
+            <Plus size={14} />
             Add client
           </button>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Stat label="Admin balance" value={`₹${formatNumber(adminBalance, 2)}`} hint={adminBrokerName} />
         <Stat label="Clients" value={clients.length} />
         <Stat label="LIVE books" value={live} />
@@ -163,12 +176,13 @@ export function Users() {
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
         <input
-          className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-9 pr-3 text-sm"
-          placeholder="Search client, broker, account..."
+          className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] pl-9 pr-3 text-sm"
+          placeholder="Search client, FYERS, DA02189, mobile..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
+      {note ? <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/40">{note}</div> : null}
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down dark:bg-rose-950/40">{error}</div> : null}
       <section className="card overflow-x-auto p-0">
         <div className="px-4 pt-4 text-sm font-bold">Desk admins</div>
@@ -456,13 +470,13 @@ function AdminMobileRow({
 
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
-    <section className="card px-4 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 flex items-center gap-2 text-2xl font-extrabold">
-        <UsersIcon size={18} className="text-brand-500" />
+    <section className="card px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-0.5 flex items-center gap-1.5 text-base font-extrabold">
+        <UsersIcon size={14} className="text-brand-500" />
         {value}
       </div>
-      {hint ? <div className="mt-1 text-[11px] text-slate-400">{hint}</div> : null}
+      {hint ? <div className="mt-0.5 truncate text-[10px] text-slate-400">{hint}</div> : null}
     </section>
   );
 }
@@ -589,7 +603,7 @@ function AddClientModal({
   const [brokerId, setBrokerId] = useState("dhan");
   const [sizingKind, setSizingKind] = useState<SizingKind>("multiplier");
   const [sizingValue, setSizingValue] = useState("1");
-  const [tradeMode, setTradeMode] = useState<TradeMode>("paper");
+  const [tradeMode, setTradeMode] = useState<TradeMode>("real");
   const [subscriptionMode, setSubscriptionMode] = useState<NonNullable<ClientRow["subscriptionMode"]>>("copy");
   const [subscriptionUntil, setSubscriptionUntil] = useState(defaultUntil || defaultUntilDate());
   const [mappedStrategy, setMappedStrategy] = useState("");
@@ -727,6 +741,7 @@ function AddClientModal({
                   onChange={(event) => {
                     const next = event.target.value;
                     setBrokerId(next);
+                    setTradeMode(next === "paper" ? "paper" : "real");
                     const row = catalog.find((item) => item.id === next);
                     setSegments(row?.segments?.includes("All segments") ? ["All segments"] : row?.segments?.slice(0, 1) || ["All segments"]);
                     setStaticIp("");
@@ -755,8 +770,8 @@ function AddClientModal({
             </Field>
             <Field label="Order mode">
               <select className={inputClass} value={tradeMode} onChange={(event) => setTradeMode(event.target.value as TradeMode)}>
-                <option value="paper">Paper</option>
-                <option value="real">Real</option>
+                <option value="real">Real · live orders on this broker</option>
+                <option value="paper">Paper · virtual only</option>
               </select>
               <span className="font-normal text-[11px] text-slate-500">
                 Add broker credentials below before enabling real orders. Real mode does not start Dhan LIVE on the desk.
@@ -918,6 +933,13 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
   );
 }
 
+function compactFieldLabel(field: BrokerInstallField) {
+  if (field.id === "accessToken") return /neo/i.test(field.label) ? "Neo token" : "Token";
+  if (field.id === "totpSecret") return "TOTP";
+  if (field.id === "mobile") return "Mobile";
+  return field.label;
+}
+
 function needsBrokerApiKey(brokerId: string) {
   return ["zerodha", "fyers", "kotak", "angelone", "upstox"].includes(brokerId);
 }
@@ -932,14 +954,24 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
       id: "apiKey",
       label: brokerId === "kotak" ? "Consumer key" : brokerId === "upstox" ? "API key" : brokerId === "fyers" ? "App ID" : "API key",
       secret: true,
-      placeholder: brokerId === "kotak" ? "This client's Neo consumer key" : "This client's API key",
+      placeholder:
+        brokerId === "kotak"
+          ? "This client's Neo consumer key"
+          : brokerId === "fyers"
+            ? "Z2MCJB4OXH-200"
+            : "This client's API key",
     });
   }
   extra.push({
     id: "accessToken",
     label: brokerId === "kotak" ? "Neo access token" : "Access token",
     secret: true,
-    placeholder: brokerId === "kotak" ? "Access token from the Neo app" : "Paste this client's access token",
+    placeholder:
+      brokerId === "kotak"
+        ? "Access token from the Neo app"
+        : brokerId === "fyers"
+          ? "Filled after Get today's token"
+          : "Paste this client's access token",
   });
   if (brokerId === "kotak") {
     extra.push(
@@ -948,12 +980,17 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
       { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
     );
   }
-  if (brokerId === "upstox" || brokerId === "kotak") {
+  if (brokerId === "upstox" || brokerId === "kotak" || brokerId === "fyers") {
     extra.push({
       id: "sessionToken",
-      label: brokerId === "upstox" ? "API secret" : "Neo sid",
+      label: brokerId === "upstox" ? "API secret" : brokerId === "fyers" ? "App Secret" : "Neo sid",
       secret: true,
-      placeholder: brokerId === "upstox" ? "Upstox API secret" : "Sid from today's trade login, if already copied",
+      placeholder:
+        brokerId === "upstox"
+          ? "Upstox API secret"
+          : brokerId === "fyers"
+            ? "App Secret from the Fyers app (not the access token)"
+            : "Sid from today's trade login, if already copied",
     });
   }
   return extra;
@@ -970,6 +1007,7 @@ function BrokerLoginFields({
   tradeMpin,
   tradeTotp,
   hints,
+  compact = false,
   onApiKey,
   onToken,
   onSession,
@@ -987,6 +1025,7 @@ function BrokerLoginFields({
   tradeMpin: string;
   tradeTotp: string;
   hints?: { apiKeyHint?: string; tokenHint?: string; sessionHint?: string; mobileHint?: string };
+  compact?: boolean;
   onApiKey: (value: string) => void;
   onToken: (value: string) => void;
   onSession: (value: string) => void;
@@ -1020,29 +1059,29 @@ function BrokerLoginFields({
     else if (id === "totpSecret") onTradeTotp(value);
     else if (id === "accessToken") onToken(value);
   };
+  const fieldsGrid = rows.map((field) => (
+    <Field key={field.id} label={compact ? compactFieldLabel(field) : field.label} compact={compact}>
+      <input
+        className={compact ? compactInputClass : inputClass}
+        type={field.secret ? "password" : "text"}
+        value={valueFor(field.id)}
+        onChange={(event) => changeFor(field.id, event.target.value)}
+        placeholder={hintFor(field.id) || field.placeholder || field.label}
+        autoComplete="off"
+      />
+    </Field>
+  ));
+  if (compact) return <>{fieldsGrid}</>;
   return (
-    <div className="rounded-xl border border-[var(--border)] p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
-      {rows.map((field) => (
-        <Field key={field.id} label={field.label}>
-          <input
-            className={inputClass}
-            type={field.secret ? "password" : "text"}
-            value={valueFor(field.id)}
-            onChange={(event) => changeFor(field.id, event.target.value)}
-            placeholder={hintFor(field.id) || field.placeholder || field.label}
-            autoComplete="off"
-          />
-        </Field>
-      ))}
-      <span className="font-normal text-[11px] text-slate-500">
-        Algo copies and this user's home use this login. The admin broker login is not saved on the user. This does not turn LIVE on.
-      </span>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="col-span-full text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
+      {fieldsGrid}
     </div>
   );
 }
 
 const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
+const compactInputClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 text-[13px]";
 
 function EditModal({
   row,
@@ -1076,6 +1115,8 @@ function EditModal({
     return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tradeMobileHint: "", tokenUpdatedAt: "" };
   };
   const [brokerId, setBrokerId] = useState(row.brokerId);
+  const [tradeMode, setTradeMode] = useState<TradeMode>(row.tradeMode === "real" ? "real" : "paper");
+  const [copy, setCopy] = useState(Boolean(row.copy));
   const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
@@ -1087,10 +1128,14 @@ function EditModal({
   const [staticIp, setStaticIp] = useState(row.staticIp || "");
   const [group, setGroup] = useState(row.group || "ALL");
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tokenBusy, setTokenBusy] = useState(false);
 
   useEffect(() => {
     setBrokerId(row.brokerId);
+    setTradeMode(row.tradeMode === "real" ? "real" : "paper");
+    setCopy(Boolean(row.copy));
     setAccountId(accountFor(row.brokerId, row).accountId || "");
     setBrokerToken("");
     setBrokerApiKey("");
@@ -1098,7 +1143,7 @@ function EditModal({
     setTradeMobile("");
     setTradeMpin("");
     setTradeTotp("");
-  }, [row.id, row.brokerId, row.accountId, row.tokenHint]);
+  }, [row.id, row.brokerId, row.accountId, row.tokenHint, row.tradeMode, row.copy]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1117,6 +1162,8 @@ function EditModal({
         telegramId,
         brokerId,
         accountId,
+        tradeMode: brokerId === "paper" ? "paper" : tradeMode,
+        copy,
         staticIp,
         group,
         ...(nextApiKey ? { brokerApiKey: nextApiKey } : {}),
@@ -1141,117 +1188,166 @@ function EditModal({
     }
   };
 
+  const savedSlots = Object.entries(row.brokerAccounts || {})
+    .map(([id, slot]) => `${id.toUpperCase()}${slot.accountId ? ` ${slot.accountId}` : ""}${slot.installed ? " · token" : ""}`)
+    .join(" · ");
+  const tokenLine = selectedAccount.tokenHint
+    ? `${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""}`
+    : brokerId === "fyers"
+      ? "No today's token — Get today's token after App Secret is saved"
+      : `No ${brokerId.toUpperCase()} token yet`;
+
   return (
-    <Modal title={`Edit ${row.name}`} onClose={onClose}>
-      <form onSubmit={(event) => void onSubmit(event)} className="grid gap-3">
-        <Field label="Name">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={name} onChange={(event) => setName(event.target.value)} />
-        </Field>
-        <Field label="Mobile no">
-          <input
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-            value={mobile}
-            inputMode="numeric"
-            maxLength={10}
-            onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
-            placeholder="10-digit mobile"
-          />
-        </Field>
-        <Field label="Telegram chat id">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="Chat id from BotFather /start" />
-        </Field>
-        <Field label="Broker">
-          <select
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-            value={brokerId}
-            onChange={(event) => {
-              const next = event.target.value;
-              setBrokerId(next);
-              const slot = accountFor(next);
-              setAccountId(slot.accountId || "");
-              setBrokerToken("");
-              setBrokerApiKey("");
-              setBrokerSessionToken("");
-              setTradeMobile("");
-              setTradeMpin("");
-              setTradeTotp("");
-            }}
-          >
-            {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
-              <option key={choice.id} value={choice.id}>
-                {choice.name}
-              </option>
-            ))}
-          </select>
-          <span className="font-normal text-[11px] text-slate-500">
-            This user can keep a client ID and token on each broker. Selecting DHAN edits only the DHAN slot.
-          </span>
-        </Field>
-        {Object.keys(row.brokerAccounts || {}).length ? (
-          <p className="text-[11px] text-slate-500">
-            Saved:{" "}
-            {Object.entries(row.brokerAccounts || {})
-              .map(([id, slot]) => `${id.toUpperCase()}${slot.accountId ? ` ${slot.accountId}` : ""}${slot.installed ? " · token" : ""}`)
-              .join(" · ")}
-          </p>
-        ) : null}
-        <Field label="Client ID">
-          <input
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-            value={accountId}
-            onChange={(event) => setAccountId(event.target.value)}
-            placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
-          />
-        </Field>
-        <BrokerLoginFields
-          brokerId={brokerId}
-          brokerName={(brokers.find((choice) => choice.id === brokerId)?.name || brokerId).toUpperCase()}
-          fields={brokers.find((choice) => choice.id === brokerId)?.fields}
-          brokerApiKey={brokerApiKey}
-          brokerToken={brokerToken}
-          brokerSessionToken={brokerSessionToken}
-          tradeMobile={tradeMobile}
-          tradeMpin={tradeMpin}
-          tradeTotp={tradeTotp}
-          hints={{
-            apiKeyHint: selectedAccount.apiKeyHint,
-            tokenHint: selectedAccount.tokenHint,
-            sessionHint: selectedAccount.sessionHint,
-            mobileHint: selectedAccount.tradeMobileHint,
-          }}
-          onApiKey={setBrokerApiKey}
-          onToken={setBrokerToken}
-          onSession={setBrokerSessionToken}
-          onTradeMobile={setTradeMobile}
-          onTradeMpin={setTradeMpin}
-          onTradeTotp={setTradeTotp}
-        />
-        {brokerId !== "paper" ? (
-          <span className="font-normal text-[11px] text-slate-500">
-            {selectedAccount.tokenHint
-              ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
-              : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
-            Saving a token turns REAL and Copy on so this client can receive algo orders. This does not turn desk LIVE on.
-          </span>
-        ) : null}
-        <Field label="Static IP">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />
-        </Field>
-        <Field label="Group">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" list="client-groups" value={group} onChange={(event) => setGroup(event.target.value)} />
-          <datalist id="client-groups">
-            {groups.map((item) => (
-              <option key={item} value={item} />
-            ))}
-          </datalist>
-        </Field>
-        {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
-        <p className="text-[11px] text-slate-500">
-          {formatMobile(mobile)} · Saving REAL or Copy does not start Dhan LIVE.
-        </p>
-        <button type="submit" disabled={busy} className="h-10 rounded-xl bg-brand-500 text-sm font-semibold text-white">
-          {busy ? "Saving..." : "Save"}
-        </button>
+    <Modal title={`Edit ${row.name}`} wide onClose={onClose}>
+      <form onSubmit={(event) => void onSubmit(event)} className="grid gap-2">
+        <section className="overflow-hidden rounded-xl border border-[var(--border)]">
+          <SettingsHead>Profile</SettingsHead>
+          <Field label="Name" compact>
+            <input className={compactInputClass} value={name} onChange={(event) => setName(event.target.value)} />
+          </Field>
+          <Field label="Mobile" compact>
+            <input
+              className={compactInputClass}
+              value={mobile}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+              placeholder="10-digit"
+            />
+          </Field>
+          <Field label="Telegram" compact>
+            <input className={compactInputClass} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="Chat id" />
+          </Field>
+          <Field label="Broker" compact>
+            <select
+              className={compactInputClass}
+              value={brokerId}
+              onChange={(event) => {
+                const next = event.target.value;
+                setBrokerId(next);
+                setTradeMode(next === "paper" ? "paper" : "real");
+                const slot = accountFor(next);
+                setAccountId(slot.accountId || "");
+                setBrokerToken("");
+                setBrokerApiKey("");
+                setBrokerSessionToken("");
+                setTradeMobile("");
+                setTradeMpin("");
+                setTradeTotp("");
+              }}
+            >
+              {(brokers.length ? brokers : [{ id: "paper", name: "PAPER" }, { id: "dhan", name: "DHAN" }, { id: "upstox", name: "UPSTOX" }, { id: "zerodha", name: "ZERODHA" }, { id: "kotak", name: "KOTAK" }, { id: "fyers", name: "FYERS" }, { id: "angelone", name: "ANGELONE" }]).map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {brokerId !== "paper" ? (
+            <>
+              <SettingsHead>
+                <span>{brokerId.toUpperCase()} login</span>
+                <span className="ml-auto truncate font-medium normal-case tracking-normal text-slate-500">{savedSlots || tokenLine}</span>
+              </SettingsHead>
+              <Field label="Client ID" compact>
+                <input
+                  className={compactInputClass}
+                  value={accountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                  placeholder={brokerId === "dhan" ? "Dhan client ID" : "Client ID"}
+                />
+              </Field>
+              <BrokerLoginFields
+                brokerId={brokerId}
+                brokerName={(brokers.find((choice) => choice.id === brokerId)?.name || brokerId).toUpperCase()}
+                fields={brokers.find((choice) => choice.id === brokerId)?.fields}
+                brokerApiKey={brokerApiKey}
+                brokerToken={brokerToken}
+                brokerSessionToken={brokerSessionToken}
+                tradeMobile={tradeMobile}
+                tradeMpin={tradeMpin}
+                tradeTotp={tradeTotp}
+                compact
+                hints={{
+                  apiKeyHint: selectedAccount.apiKeyHint,
+                  tokenHint: selectedAccount.tokenHint,
+                  sessionHint: selectedAccount.sessionHint,
+                  mobileHint: selectedAccount.tradeMobileHint,
+                }}
+                onApiKey={setBrokerApiKey}
+                onToken={setBrokerToken}
+                onSession={setBrokerSessionToken}
+                onTradeMobile={setTradeMobile}
+                onTradeMpin={setTradeMpin}
+                onTradeTotp={setTradeTotp}
+              />
+            </>
+          ) : null}
+
+          <SettingsHead>Desk</SettingsHead>
+          <Field label="Mode" compact>
+            <select
+              className={compactInputClass}
+              value={brokerId === "paper" ? "paper" : tradeMode}
+              disabled={brokerId === "paper"}
+              onChange={(event) => setTradeMode(event.target.value as TradeMode)}
+            >
+              <option value="real">REAL · live orders on this broker</option>
+              <option value="paper">PAPER · virtual only</option>
+            </select>
+          </Field>
+          <Field label="Copy" compact>
+            <select className={compactInputClass} value={copy ? "on" : "off"} onChange={(event) => setCopy(event.target.value === "on")}>
+              <option value="on">ON · copy admin fills to this user</option>
+              <option value="off">OFF</option>
+            </select>
+          </Field>
+          <Field label="Static IP" compact>
+            <input className={compactInputClass} value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />
+          </Field>
+          <Field label="Group" compact>
+            <input className={compactInputClass} list="client-groups" value={group} onChange={(event) => setGroup(event.target.value)} />
+            <datalist id="client-groups">
+              {groups.map((item) => (
+                <option key={item} value={item} />
+              ))}
+            </datalist>
+          </Field>
+        </section>
+
+        {note ? <p className="px-0.5 text-[11px] font-semibold text-slate-500">{note}</p> : null}
+        {error ? <p className="px-0.5 text-[11px] font-semibold text-rose-500">{error}</p> : null}
+        <div className="flex items-center gap-2">
+          <button type="submit" disabled={busy || tokenBusy} className="h-8 flex-1 rounded-md bg-brand-500 text-sm font-semibold text-white disabled:opacity-50">
+            {busy ? "Saving..." : "Save"}
+          </button>
+          {brokerId === "fyers" ? (
+            <button
+              type="button"
+              disabled={busy || tokenBusy}
+              className="h-8 rounded-md border border-brand-500 px-3 text-sm font-semibold text-brand-500 disabled:opacity-50"
+              onClick={() => {
+                void (async () => {
+                  setTokenBusy(true);
+                  setError("");
+                  setNote("");
+                  try {
+                    const result = await requestClientFyersToken(row.id);
+                    setNote(result.message || "Open the Fyers login. Today's token is saved after the Fyers user signs in.");
+                    if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Could not start Fyers login for today's token");
+                  } finally {
+                    setTokenBusy(false);
+                  }
+                })();
+              }}
+            >
+              {tokenBusy ? "Opening..." : "Get today's token"}
+            </button>
+          ) : null}
+        </div>
       </form>
     </Modal>
   );
@@ -1316,12 +1412,17 @@ function GroupModal({
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+function Modal({ title, wide, onClose, children }: { title: string; wide?: boolean; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
+      <div
+        className={cn(
+          "relative z-10 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl",
+          wide ? "max-h-[92dvh] max-w-md overflow-y-auto" : "max-w-md",
+        )}
+      >
+        <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-bold">{title}</h2>
           <button type="button" className="text-slate-400" onClick={onClose}>
             <X size={16} />
@@ -1333,7 +1434,23 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function SettingsHead({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-t border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 first:border-t-0">
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, compact, children }: { label: string; compact?: boolean; children: ReactNode }) {
+  if (compact) {
+    return (
+      <label className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-1.5">
+        <span className="w-[5.5rem] shrink-0 text-xs text-slate-500">{label}</span>
+        <div className="min-w-0 flex-1">{children}</div>
+      </label>
+    );
+  }
   return (
     <label className="grid gap-1 text-xs font-semibold text-slate-400">
       {label}

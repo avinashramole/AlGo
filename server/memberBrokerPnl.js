@@ -364,7 +364,7 @@ async function memberBrokerCredentials(userId) {
   const { brokerAccountForLiveCopy, peekClientSecrets } = await import("./memberDesk.js");
   const desk = peekClientSecrets(userId);
   const brokerId = String(desk.brokerId || "").trim().toLowerCase();
-  if (brokerId !== "dhan" && brokerId !== "upstox" && brokerId !== "kotak") return null;
+  if (brokerId !== "dhan" && brokerId !== "upstox" && brokerId !== "kotak" && brokerId !== "fyers") return null;
   const slot = brokerAccountForLiveCopy(userId, brokerId);
   if (slot.leftoverToken) return null;
   const token = String(slot.brokerToken || desk.brokerToken || "").trim();
@@ -387,6 +387,11 @@ async function memberBrokerCredentials(userId) {
   }
   if (!token) return null;
   if (brokerId === "dhan" && !clientId) return null;
+  if (brokerId === "fyers") {
+    const apiKey = String(slot.brokerApiKey || desk.brokerApiKey || "").trim();
+    if (!apiKey) return null;
+    return { brokerId, token, clientId, apiKey };
+  }
   return { brokerId, token, clientId };
 }
 
@@ -534,6 +539,9 @@ async function fetchBrokerPnl(userId) {
   }
   if (creds.brokerId === "kotak") {
     return kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", {}));
+  }
+  if (creds.brokerId === "fyers") {
+    return fyersMasterBook(await fyersGet(creds, "/api/v3/positions"));
   }
   return upstoxMasterBook(await upstoxPositions(creds.token));
 }
@@ -697,6 +705,103 @@ export function kotakMasterBook(raw) {
   };
 }
 
+export function fyersAvailableBalance(body) {
+  const rows = Array.isArray(body?.fund_limit) ? body.fund_limit : Array.isArray(body?.data?.fund_limit) ? body.data.fund_limit : [];
+  const available = rows.find((row) => Number(row?.id) === 10) || rows.find((row) => /available/i.test(String(row?.title || "")));
+  const n = firstFinite(available || {}, ["equityAmount", "equity_amount", "amount"]);
+  return n == null ? null : round2(n);
+}
+
+export function fyersMasterBook(raw) {
+  const rows = Array.isArray(raw?.netPositions)
+    ? raw.netPositions
+    : Array.isArray(raw?.data?.netPositions)
+      ? raw.data.netPositions
+      : positionRows(raw);
+  const overall = raw?.overall || raw?.data?.overall || {};
+  const realizedOverall = firstFinite(overall, ["pl_realized", "realized_profit", "realizedPnl"]);
+  const unrealizedOverall = firstFinite(overall, ["pl_unrealized", "unrealized_profit", "unrealizedPnl"]);
+  if (!rows?.length && realizedOverall == null && unrealizedOverall == null) return null;
+  if (!rows?.length) {
+    return {
+      realizedPnl: round2(realizedOverall || 0),
+      unrealizedPnl: round2(unrealizedOverall || 0),
+      mtm: round2((realizedOverall || 0) + (unrealizedOverall || 0)),
+      source: "fyers",
+      empty: true,
+      closed: [],
+      open: [],
+    };
+  }
+  const closed = [];
+  const open = [];
+  let realized = 0;
+  let unrealized = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const qty = Number(row.netQty ?? row.qty ?? row.net_qty ?? 0);
+    const realizedLeg = firstFinite(row, ["realized_profit", "realizedProfit", "pl_realized"]) || 0;
+    const unrealizedLeg = firstFinite(row, ["unrealized_profit", "unrealizedProfit", "pl", "unrealized"]) || 0;
+    realized += realizedLeg;
+    unrealized += unrealizedLeg;
+    const symbol = String(row.symbol || row.tradingSymbol || "");
+    const side = Number(row.side) < 0 || qty < 0 ? "SELL" : "BUY";
+    const avg = Number(row.avgPrice || row.buyAvg || row.sellAvg || row.costPrice || 0);
+    const ltp = Number(row.ltp || row.last_price || avg);
+    const leg = {
+      id: `fyers-${row.id || row.fyToken || symbol || open.length + closed.length}-${row.productType || "INTRADAY"}`,
+      symbol,
+      side,
+      type: side,
+      qty: Math.abs(qty),
+      avg,
+      ltp,
+      entry: avg,
+      exit: ltp,
+      pnl: round2(realizedLeg + unrealizedLeg),
+      realized: round2(realizedLeg),
+      product: row.productType || "INTRADAY",
+      brokerId: "fyers",
+      live: true,
+      paper: false,
+    };
+    if (!qty) closed.push({ ...leg, closed: true });
+    else open.push({ ...leg, closed: false });
+  }
+  return {
+    realizedPnl: round2(realizedOverall != null ? realizedOverall : realized),
+    unrealizedPnl: round2(unrealizedOverall != null ? unrealizedOverall : unrealized),
+    mtm: round2((realizedOverall != null ? realizedOverall : realized) + (unrealizedOverall != null ? unrealizedOverall : unrealized)),
+    source: "fyers",
+    empty: !open.length && !closed.length,
+    closed,
+    open,
+  };
+}
+
+async function fyersGet(creds, path) {
+  const { fyersAuthHeader, assertFyersOk } = await import("./liveBrokers.js");
+  const auth = fyersAuthHeader(creds.apiKey, creds.token);
+  if (!auth) throw new Error("Paste this user's Fyers App ID with today's access token.");
+  const { ipv4Request } = await import("./ipv4.js");
+  const res = await ipv4Request(`https://api-t1.fyers.in${path}`, {
+    headers: { Authorization: auth, Accept: "application/json" },
+    timeoutMs: 8000,
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    throw new Error(json?.message || `Fyers ${path} ${res.status}`);
+  }
+  assertFyersOk(json, `Fyers ${path} failed.`);
+  return json;
+}
+
 export function upstoxAvailableBalance(body) {
   const data = body?.data && typeof body.data === "object" ? body.data : body || {};
   const equity = finite(data.equity?.available_margin);
@@ -734,6 +839,10 @@ async function fetchBrokerBalance(userId) {
     const { fetchMemberDhanFunds } = await import("./dhan.js");
     const available = dhanAvailableBalance(await fetchMemberDhanFunds(creds.token, creds.clientId));
     return available == null ? null : { balance: available, source: "dhan" };
+  }
+  if (creds.brokerId === "fyers") {
+    const available = fyersAvailableBalance(await fyersGet(creds, "/api/v3/funds"));
+    return available == null ? null : { balance: available, source: "fyers" };
   }
   if (creds.brokerId === "kotak") {
     const sets = kotakLimitHeaderSets(creds);

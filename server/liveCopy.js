@@ -115,7 +115,9 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     const copyBlocked =
       brokerId === "dhan"
         ? "This member has no Dhan Client ID + Access Token. Install them on My plan."
-        : `This member has no ${brokerId} access token. Install it on My plan.`;
+        : brokerId === "fyers"
+          ? "This member has no today's Fyers access token. Save App ID + App Secret, then tap Get today's token and log in. Fyers does not show a pasteable token."
+          : `This member has no ${brokerId} access token. Install it on My plan.`;
     return {
       ...base,
       brokerId,

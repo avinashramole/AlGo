@@ -81,6 +81,23 @@ test("My plan says when API key and secret are saved but the trading token is no
   );
 });
 
+test("Fyers My plan asks for Get today's token after App ID and App Secret are saved", () => {
+  const install = {
+    brokerId: "fyers",
+    accountId: "DA02189",
+    apiKeyHint: "Z2••••-200",
+    sessionHint: "fy••••2222",
+    hasApiKey: true,
+    hasApiSecret: true,
+    oauthReady: true,
+    installed: false,
+  };
+  assert.match(describeBrokerInstall(install, "fyers"), /App ID/);
+  assert.match(describeBrokerInstall(install, "fyers"), /App Secret/);
+  assert.match(describeBrokerInstall(install, "fyers"), /No trading token yet/);
+  assert.match(describeBrokerSave(install, "fyers"), /Tap Get today's trading token/);
+});
+
 test("Kotak My plan asks for the Neo sid when only the consumer key and access token are saved", () => {
   const install = {
     brokerId: "kotak",

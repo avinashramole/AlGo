@@ -450,6 +450,27 @@ test("Upstox API key and secret stay on the public install before a trading toke
   assert.match(card.note, /Generate today's trading token/);
 });
 
+test("Fyers App ID and App Secret stay on the public install before today's token exists", () => {
+  const member = { id: "u-fyers-oauth", name: "Fyers OAuth", email: "fyersoauth@t2s.app", role: "user" };
+  const saved = installMemberBroker({
+    user: member,
+    brokerId: "fyers",
+    clientId: "DA02189",
+    apiKey: "Z2MCJB4OXH-200",
+    sessionToken: "fyers-app-secret-55555555",
+  });
+  assert.equal(saved.install.installed, false);
+  assert.equal(saved.install.hasApiKey, true);
+  assert.equal(saved.install.hasApiSecret, true);
+  assert.equal(saved.install.oauthReady, true);
+  assert.match(saved.install.help, /Get today's token/);
+  const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  const card = desk.brokers.find((row) => row.id === "fyers");
+  assert.equal(card.oauthReady, true);
+  assert.equal(card.installed, false);
+  assert.match(card.note, /Generate today's trading token/);
+});
+
 test("member own book ignores the regular admin desk book", () => {
   const member = { id: "u-own-book", name: "Own Book", email: "ownbook@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "dhan" });

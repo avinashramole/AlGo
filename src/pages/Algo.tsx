@@ -1,4 +1,4 @@
-import { Activity, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
@@ -205,32 +205,29 @@ export function Algo() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <TabChip label="Copy Algos" on={tab === "copy"} onClick={() => setTab("copy")} />
-        <TabChip label="TradingView Integration" on={tab === "tradingview"} onClick={() => setTab("tradingview")} />
+        <TabChip label="TradingView" on={tab === "tradingview"} onClick={() => setTab("tradingview")} />
       </div>
 
       {tab === "tradingview" ? (
-        <section className="card p-8">
-          <h1 className="text-xl font-bold">TradingView Integration</h1>
-          <p className="mt-1 text-sm text-slate-400">
+        <section className="card p-3">
+          <h1 className="text-sm font-bold">TradingView</h1>
+          <p className="mt-1 text-xs text-slate-400">
             Webhook alerts stay on this tab later. Copy Algos on this desk are unchanged. This does not start LIVE.
           </p>
         </section>
       ) : (
         <>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold">Algo</h1>
-              <p className="text-sm text-slate-400">Signals, strategies, and live control in one workspace</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-base font-bold">Algo</h1>
+            <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
                 disabled={busyId === "all" || !canStartAll}
                 onClick={() => void startOrStopAll(true)}
-                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+                className="h-8 rounded-md border border-[var(--border)] px-2.5 text-xs font-semibold disabled:opacity-60"
               >
                 Start all
               </button>
@@ -238,17 +235,17 @@ export function Algo() {
                 type="button"
                 disabled={busyId === "all" || !canStopAll}
                 onClick={() => void startOrStopAll(false)}
-                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+                className="h-8 rounded-md border border-[var(--border)] px-2.5 text-xs font-semibold disabled:opacity-60"
               >
                 Stop all
               </button>
-              <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
-                <Plus size={16} />
+              <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1 rounded-md bg-brand-500 px-2.5 text-xs font-semibold text-white">
+                <Plus size={14} />
                 Add strategy
               </button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {(
               [
                 ["all", "All"],
@@ -261,7 +258,7 @@ export function Algo() {
                 type="button"
                 onClick={() => setFilter(id)}
                 className={cn(
-                  "rounded-full px-3 py-1.5 text-xs font-semibold",
+                  "h-7 rounded-full px-2.5 text-[11px] font-semibold",
                   filter === id ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950" : "border border-[var(--border)] bg-[var(--card)]",
                 )}
               >
@@ -271,7 +268,7 @@ export function Algo() {
           </div>
           <SignalFeed />
           {rows.length ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               {rows.map((algo) => (
                 <AlgoCard
                   key={algo.id}
@@ -311,10 +308,10 @@ export function Algo() {
               ))}
             </div>
           ) : (
-            <section className="card p-8 text-center">
-              <div className="text-base font-bold">No strategies in this view</div>
-              <p className="mt-1 text-sm text-slate-400">Add a NIFTY 5m or CRUDE OIL strategy to start the desk.</p>
-              <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
+            <section className="card p-3 text-center">
+              <div className="text-sm font-bold">No strategies in this view</div>
+              <p className="mt-1 text-xs text-slate-400">Add a NIFTY 5m or CRUDE OIL strategy to start the desk.</p>
+              <button type="button" onClick={openAdd} className="mt-2 h-8 rounded-md bg-brand-500 px-3 text-xs font-semibold text-white">
                 Add strategy
               </button>
             </section>
@@ -387,7 +384,7 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
   };
 
   return (
-    <label className="mt-2 flex w-full flex-wrap items-center gap-2 text-sm font-bold text-[var(--text)]" data-trade-limit="crude">
+    <label className="mt-1.5 flex items-center gap-2 text-xs text-slate-500" data-trade-limit="crude" title="One signal places one order">
       Trade limit
       <input
         type="number"
@@ -395,7 +392,7 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
         max={20}
         inputMode="numeric"
         aria-label="Trade limit"
-        className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
+        className="h-8 w-14 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-center text-sm font-semibold text-[var(--text)]"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onBlur={() => void save()}
@@ -406,7 +403,7 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
           }
         }}
       />
-      <span className="font-medium text-slate-400">{saving ? "Saving..." : "Change this number. One signal places one order."}</span>
+      {saving ? <span className="text-[10px] text-slate-400">Saving...</span> : null}
     </label>
   );
 }
@@ -479,127 +476,87 @@ function AlgoCard({
   const status = statusLabel(algo);
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
+  const broker = algo.runMode === "live" ? brokerName(defaultBrokers, algo.brokerId || "dhan") : algo.runMode === "paper" ? "Paper" : "Research";
+  const summary = [contract, meta.config, broker].filter(Boolean).join(" · ");
+
   return (
-    <section className="card flex w-full flex-col p-4" data-strategy-card={algo.id}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] text-slate-400">
-            <Activity size={16} />
+    <section className="card flex w-full flex-col p-3" data-strategy-card={algo.id}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-sm font-bold">{algo.name}</h2>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                status === "LIVE"
+                  ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
+                  : status === "PAPER"
+                    ? "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
+                    : "bg-[var(--bg)] text-slate-400",
+              )}
+            >
+              {status}
+            </span>
           </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold">{algo.name}</h2>
-            {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
-            <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
-            <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
-            {algo.runMode === "live" ? (
-              <div className="mt-1 text-[11px] font-semibold text-slate-500">
-                Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
-              </div>
-            ) : null}
-            <div className="mt-1 text-[11px] text-slate-500">{contract}</div>
-            {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
-              <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
-            ) : null}
+          <div className="mt-0.5 truncate text-[11px] text-slate-400" title={summary}>
+            {summary}
           </div>
+          {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold",
-            status === "LIVE"
-              ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
-              : status === "PAPER"
-                ? "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
-                : "bg-[var(--bg)] text-slate-400",
-          )}
-        >
-          {status}
-        </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />
-        <Metric label="Total orders" value={String(filledOrders.length)} hint={filledOrders.length ? "Filled at the broker" : "No filled orders"} />
-        <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
-        <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-4 gap-1">
+        <Metric label="MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} />
         <Metric label="P&L" value={formatInr(bookPnl)} tone={moneyClass(bookPnl)} />
-        <Metric label="Trades" value={String(trades)} />
-        <Metric label="Win rate" value={`${formatNumber(winRate, 1)}%`} />
-        <Metric label="Drawdown" value={rupee(drawdown)} tone={moneyClass(-Math.abs(drawdown))} />
+        <Metric label="Pos" value={positionLabel} />
+        <Metric label="Map" value={String(mapped)} />
+      </div>
+      <div className="mt-1 truncate text-[11px] text-slate-400">
+        {filledOrders.length} orders · {trades} trades · {formatNumber(winRate, 1)}% win · DD {rupee(drawdown)}
+        {brokerMtm && positions.length ? " · Dhan open" : ""}
+        {` · ${activity}`}
       </div>
 
-      <div className="mt-4 text-xs text-slate-400">
-        <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>
-        <div className="mt-1">{activity}</div>
-        {algo.lastBacktest?.timeframe || algo.lastBacktest?.optionSource ? (
-          <div className="mt-1 text-[11px] text-slate-500">
-            {algo.lastBacktest.timeframe ? `Replay ${algo.lastBacktest.timeframe}` : ""}
-            {algo.lastBacktest.reused ? " · reused stored Dhan history" : ""}
-            {algo.lastBacktest.optionSource
-              ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${
-                  algo.lastBacktest.optionSource === "stored"
-                    ? "stored Dhan history"
-                    : algo.lastBacktest.optionSource === "mixed"
-                      ? "stored Dhan history + synth gaps"
-                      : "synthesized from index"
-                }`
-              : ""}
-            {algo.lastBacktest.optionHistory?.overwritten?.length
-              ? ` · replaced ${algo.lastBacktest.optionHistory.overwritten.length} day${algo.lastBacktest.optionHistory.overwritten.length === 1 ? "" : "s"}`
-              : ""}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onEdit} className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <button type="button" onClick={onEdit} className="inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] font-semibold">
           <Pencil size={12} />
           Edit
         </button>
-        <button type="button" onClick={onBacktest} className="h-9 rounded-full border border-[var(--border)] px-3 text-xs font-semibold">
+        <button type="button" onClick={onMap} className="inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] font-semibold">
+          <Users size={12} />
+          Map clients
+        </button>
+        <button type="button" onClick={onBacktest} className="h-8 rounded-md border border-[var(--border)] px-2 text-[11px] font-semibold">
           {busy && rangeOpen ? "Testing..." : "Backtest"}
         </button>
-        <button type="button" onClick={onDelete} className="inline-flex h-9 items-center gap-1 rounded-full border border-rose-200 px-3 text-xs font-semibold text-down dark:border-rose-900">
+        <button type="button" onClick={onDelete} className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-200 px-2 text-[11px] font-semibold text-down dark:border-rose-900">
           <Trash2 size={12} />
           Delete
         </button>
-      </div>
-
-      {rangeOpen ? (
-        <div className="mt-3">
-          <BacktestRangeInline busy={busy} error={rangeError} onCancel={onCancelRange} onRun={onRunBacktest} />
-        </div>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
-        <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold">
-          <Users size={15} />
-          Map clients
-        </button>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={onExit} className="h-10 rounded-xl px-3 text-sm font-semibold text-down disabled:opacity-60">
-            Exit position
+        <span className="ml-auto flex flex-wrap gap-1.5">
+          <button type="button" disabled={busy} onClick={onExit} aria-label="Exit position" title="Exit position" className="h-8 rounded-md px-2 text-[11px] font-semibold text-down disabled:opacity-60">
+            Exit
           </button>
           {algo.runMode === "backtest" ? (
-            <button type="button" disabled className="h-10 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500 dark:bg-slate-800">
-              Research only
+            <button type="button" disabled className="h-8 rounded-md bg-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-800">
+              Research
             </button>
           ) : (
             <button
               type="button"
               disabled={busy}
               onClick={onStart}
-              className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              className="h-8 rounded-md bg-brand-500 px-2.5 text-[11px] font-semibold text-white disabled:opacity-60"
             >
               {algo.enabled ? "Stop strategy" : "Start strategy"}
             </button>
           )}
-        </div>
+        </span>
       </div>
-      {isNiftyVwapHedgeKind(algo) || isNiftyVwapReversalKind(algo) ? (
-        <div className="mt-2 text-[11px] text-slate-500">
-          Saving or mapping clients does not start LIVE. LIVE arms automatically at 09:20 IST on session days.
+
+      {rangeOpen ? (
+        <div className="mt-2">
+          <BacktestRangeInline busy={busy} error={rangeError} onCancel={onCancelRange} onRun={onRunBacktest} />
         </div>
       ) : null}
     </section>
@@ -657,72 +614,65 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-3 md:items-center">
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-base font-bold">Map clients to strategy</h2>
+      <div className="relative z-10 mb-16 flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl md:mb-0">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-bold">Map clients · {algo.name}</h2>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 pb-4">
-          <div className="flex items-center gap-3 rounded-xl bg-[var(--bg)] px-4 py-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--card)] text-slate-400">
-              <Users size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-bold">{algo.name}</div>
-              <div className="text-xs text-slate-400">Choose where this strategy will execute</div>
-            </div>
-          </div>
-          <label className="grid gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-            Mapping scope
-            <select
-              className="h-11 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold normal-case tracking-normal text-[var(--text)]"
-              value={scope}
-              onChange={(event) => setScope(event.target.value as MappingScope)}
-            >
-              <option value="both">Master + selected clients</option>
-              <option value="master">Master only</option>
-              <option value="clients">Selected clients only</option>
-            </select>
-          </label>
-          <div className="space-y-2">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <section className="overflow-hidden rounded-xl border border-[var(--border)]">
+            <div className="bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Scope</div>
+            <label className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-1.5">
+              <span className="w-[5.5rem] shrink-0 text-xs text-slate-500">Mapping</span>
+              <select
+                className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 text-[13px] font-semibold"
+                value={scope}
+                onChange={(event) => setScope(event.target.value as MappingScope)}
+              >
+                <option value="both">Master + selected clients</option>
+                <option value="master">Master only</option>
+                <option value="clients">Selected clients only</option>
+              </select>
+            </label>
+            <div className="bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Clients</div>
             {clients.map((row) => {
               const checked = picked.includes(row.id);
               return (
                 <label
                   key={row.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5"
+                  className="flex cursor-pointer items-center gap-2 border-t border-[var(--border)] px-3 py-1.5"
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggleId(row.id)} />
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-600 text-[10px] font-bold text-white">
                     {(row.name || "?").trim().charAt(0).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold">{row.name}</span>
                     <span className="block text-[11px] text-slate-400">
-                      {row.brokerName} · {row.linked || row.tradeMode === "real" ? "Active account" : "Paper account"}
+                      {row.brokerName} · {row.linked || row.tradeMode === "real" ? "Active" : "Paper"}
                     </span>
                   </span>
                 </label>
               );
             })}
             {!clients.length ? (
-              <p className="py-6 text-center text-sm text-slate-400">
-                {loaded ? "No clients yet. Add one on All clients first." : "Loading clients…"}
+              <p className="border-t border-[var(--border)] px-3 py-4 text-center text-xs text-slate-400">
+                {loaded ? "No clients yet. Add one on Users first." : "Loading…"}
               </p>
             ) : null}
-          </div>
-          {error ? <p className="text-xs font-semibold text-down">{error}</p> : null}
+          </section>
+          {error ? <p className="mt-2 text-xs font-semibold text-down">{error}</p> : null}
         </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          <button type="button" onClick={onClose} className="h-10 rounded-xl px-4 text-sm font-semibold">
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-[var(--border)] text-sm font-semibold">
             Cancel
           </button>
-          <button type="button" disabled={busy} onClick={() => void save()} className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
-            {busy ? "Saving..." : "Save mapping"}
+          <button type="button" disabled={busy} onClick={() => void save()} className="h-8 flex-1 rounded-md bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
+            {busy ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -736,7 +686,7 @@ function TabChip({ label, on, onClick }: { label: string; on: boolean; onClick: 
       type="button"
       onClick={onClick}
       className={cn(
-        "h-9 rounded-full px-3 text-xs font-semibold",
+        "h-8 rounded-full px-2.5 text-[11px] font-semibold",
         on ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950" : "border border-[var(--border)] bg-[var(--card)] text-slate-500",
       )}
     >
@@ -745,12 +695,11 @@ function TabChip({ label, on, onClick }: { label: string; on: boolean; onClick: 
   );
 }
 
-function Metric({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
+function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</div>
-      <div className={cn("mt-1 text-sm font-bold", tone)}>{value}</div>
-      {hint ? <div className="text-[10px] text-slate-500">{hint}</div> : null}
+    <div className="min-w-0 rounded-md bg-[var(--bg)] px-1.5 py-1">
+      <div className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={cn("truncate text-xs font-bold", tone)}>{value}</div>
     </div>
   );
 }

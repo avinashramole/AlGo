@@ -124,6 +124,12 @@ function installBits(install?: InstallHints | null, brokerId = "") {
     if (install?.hasTradeLogin) bits.push("trade login saved");
     return { flags, bits };
   }
+  if (id === "fyers") {
+    if (flags.hasApiKey) bits.push(`App ID ${String(install?.apiKeyHint || "").trim() || "saved"}`);
+    if (flags.hasApiSecret) bits.push(`App Secret ${String(install?.sessionHint || "").trim() || "saved"}`);
+    if (flags.hasTradingToken) bits.push(`today's token ${String(install?.tokenHint || "").trim() || "saved"}`);
+    return { flags, bits };
+  }
   if (flags.hasApiKey) bits.push(`API key ${String(install?.apiKeyHint || "").trim() || "saved"}`);
   if (flags.hasApiSecret) bits.push(`API secret ${String(install?.sessionHint || "").trim() || "saved"}`);
   if (flags.hasTradingToken) bits.push(`trading token ${String(install?.tokenHint || "").trim() || "saved"}`);
@@ -147,23 +153,31 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
   if (flags.oauthReady) {
     return bits.length
       ? `${bits.join(" · ")}. No trading token yet — tap Get today's trading token.`
-      : "API key and secret saved. No trading token yet — tap Get today's trading token.";
+      : id === "fyers"
+        ? "App ID and App Secret saved. No today's token yet — tap Get today's token and log in."
+        : "API key and secret saved. No trading token yet — tap Get today's trading token.";
   }
   if (bits.length) {
     return `${bits.join(" · ")}. ${
-      id === "upstox" ? "Save API key and API secret, then generate today's token." : "No access token installed yet."
+      id === "upstox"
+        ? "Save API key and API secret, then generate today's token."
+        : id === "fyers"
+          ? "Save App ID and App Secret, then Get today's token. Fyers does not show a pasteable access token."
+          : "No access token installed yet."
     }`;
   }
   return id === "upstox"
     ? "No API key, API secret, or trading token stored yet."
-    : "No access token installed yet.";
+    : id === "fyers"
+      ? "No App ID, App Secret, or today's token stored yet."
+      : "No access token installed yet.";
 }
 
 export function describeBrokerSave(install?: InstallHints | null, brokerId = "") {
   const id = String(brokerId || install?.brokerId || "").trim().toLowerCase();
   const { flags, bits } = installBits(install, id);
   const saved = bits.length ? bits.join(" · ") : "Credentials";
-  if (id === "upstox" && flags.oauthReady && !flags.hasTradingToken) {
+  if ((id === "upstox" || id === "fyers") && flags.oauthReady && !flags.hasTradingToken) {
     return `${saved} saved on this account. Tap Get today's trading token next. Desk LIVE was not started.`;
   }
   if (flags.hasTradingToken) {

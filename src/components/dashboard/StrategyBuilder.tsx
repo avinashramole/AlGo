@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMarket } from "../../context/MarketContext";
 import { cn } from "../../lib/format";
 import {
@@ -42,7 +42,7 @@ type Props = {
   onClose: () => void;
 };
 
-const fieldClass = "mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold";
+const fieldClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 text-[13px] font-semibold";
 
 export function StrategyBuilder({ open, algo, onClose }: Props) {
   const { data, saveAlgo } = useMarket();
@@ -222,13 +222,19 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
   if (!open) return null;
 
+  const lotsHint = hedge
+    ? "Primary 1 · hedge 2"
+    : form.symbol === "CRUDEOIL"
+      ? `qty ${lots}`
+      : `${lots * lotSize} qty`;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-bold">{title}</div>
-            <div className="text-xs text-slate-400">{preview}</div>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
+      <div className="card mb-16 max-h-[92vh] w-full max-w-md overflow-y-auto p-3 md:mb-0" data-edit-strategy={editing ? algo?.id || "open" : "new"}>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold">{title}</div>
+            <div className="truncate text-[11px] text-slate-400">{preview}</div>
           </div>
           <button type="button" onClick={onClose} className="icon-btn">
             <X size={16} />
@@ -236,11 +242,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
 
         {editing ? null : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="mb-2 grid grid-cols-2 gap-1.5">
           <TypeCard
             active={crudeFirst}
-            title="CRUDE OIL 5m first candle"
-            text="Same preview-candle buy as Nifty 5m. Crude future green + ATM CE green → BUY CE. Crude future red + ATM PE green → BUY PE. MCX. Paused until Start."
+            title="CRUDE 5m first candle"
+            text="MCX ATM CE/PE from the crude future candle."
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
@@ -258,7 +264,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY 5m first candle"
-            text="Every 5m NIFTY FUT candle, up to 5 trades a day. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
+            text="ATM CE/PE from the NIFTY future candle."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -276,7 +282,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         )}
 
         {editing ? null : (
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mb-2 grid grid-cols-3 gap-1.5">
           {RUN_MODES.map((mode) => (
             <TypeCard
               key={mode.id}
@@ -294,107 +300,84 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        <label className="mt-4 block text-xs font-semibold text-slate-500">
-          Strategy name
-          <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
-        </label>
-
-        {crudeFirst ? (
-          <label className="mt-4 block text-xs font-semibold text-slate-500" data-trade-limit="crude">
-            Trade limit
-            <input
-              type="number"
-              min={1}
-              max={20}
-              inputMode="numeric"
-              aria-label="Trade limit"
-              className={fieldClass}
-              value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
-              onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
-            />
-            <span className="mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
-          </label>
-        ) : null}
-
-        {niftyTest ? (
-          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
-            Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
-          </div>
-        ) : crudeFirst || firstCandle ? null : engine ? (
-          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-[11px] font-semibold text-slate-500">
-            {hedge
-              ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
-              : reversal
-              ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
-              : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
-          </div>
-        ) : (
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        {!engine && !crudeFirst && !niftyTest && !firstCandle && !editing ? (
+        <div className="mb-2 grid grid-cols-2 gap-1.5">
           <TypeCard
             active={(form.instrument || "future") === "future"}
             title="Index future"
-            text="Trade the current-month future at live LTP"
+            text="Current-month future at LTP"
             onClick={() => set({ instrument: "future" })}
           />
           <TypeCard
             active={form.instrument === "option"}
             title="Option CE / PE"
-            text="ATM ± 2 from the live option tape. Paper fills virtual. Live sends the same contract to Dhan."
+            text="ATM ± 2 from the option tape"
             onClick={() => set({ instrument: "option", optionType: form.optionType || "CE", strikeOffset: form.strikeOffset || 0 })}
           />
         </div>
-        )}
-
-        {!engine && !crudeFirst && !niftyTest && form.instrument === "option" ? (
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <div>
-              <div className="text-xs font-semibold text-slate-500">Call or put</div>
-              <div className="mt-1 grid grid-cols-2 gap-2">
-                {(["CE", "PE"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => set({ optionType: option })}
-                    className={cn(
-                      "h-10 rounded-lg border text-sm font-bold",
-                      (form.optionType || "CE") === option
-                        ? option === "CE"
-                          ? "border-emerald-500 bg-emerald-50 text-up dark:bg-emerald-950/40"
-                          : "border-rose-400 bg-rose-50 text-down dark:bg-rose-950/40"
-                        : "border-[var(--border)] bg-[var(--bg)]",
-                    )}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label className="text-xs font-semibold text-slate-500">
-              Strike
-              <select
-                className={fieldClass}
-                value={form.strikeOffset ?? 0}
-                onChange={(event) => set({ strikeOffset: Number(event.target.value) })}
-              >
-                {OPTION_OFFSETS.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.label}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
-            </label>
-          </div>
         ) : null}
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {engine ? null : (
-          <label className="text-xs font-semibold text-slate-500">
-            Underlying
+        <section className="overflow-hidden rounded-xl border border-[var(--border)]">
+          <SettingsHead>Strategy</SettingsHead>
+          <SettingsRow label="Name">
+            <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="Strategy name" />
+          </SettingsRow>
+          {crudeFirst ? (
+            <SettingsRow label="Trade limit">
+              <div data-trade-limit="crude">
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  inputMode="numeric"
+                  aria-label="Trade limit"
+                  className={fieldClass}
+                  value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+                  onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+                />
+              </div>
+            </SettingsRow>
+          ) : null}
+          {!engine && !crudeFirst && !niftyTest && form.instrument === "option" ? (
+            <>
+              <SettingsRow label="Call / Put">
+                <div className="grid grid-cols-2 gap-1">
+                  {(["CE", "PE"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => set({ optionType: option })}
+                      className={cn(
+                        "h-8 rounded-md border text-xs font-bold",
+                        (form.optionType || "CE") === option
+                          ? option === "CE"
+                            ? "border-emerald-500 bg-emerald-50 text-up dark:bg-emerald-950/40"
+                            : "border-rose-400 bg-rose-50 text-down dark:bg-rose-950/40"
+                          : "border-[var(--border)] bg-[var(--bg)]",
+                      )}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </SettingsRow>
+              <SettingsRow label="Strike" title={liveOptionHint(form, data)}>
+                <select className={fieldClass} value={form.strikeOffset ?? 0} onChange={(event) => set({ strikeOffset: Number(event.target.value) })}>
+                  {OPTION_OFFSETS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+            </>
+          ) : null}
+
+          {engine || crudeFirst || niftyTest ? null : (
+          <SettingsRow label="Underlying">
             <select
               className={fieldClass}
-              value={crudeFirst ? "CRUDEOIL" : niftyTest ? "NIFTY" : form.symbol || "NIFTY"}
-              disabled={engine || niftyTest || crudeFirst}
+              value={form.symbol || "NIFTY"}
               onChange={(event) => {
                 const symbol = event.target.value;
                 const nextLot = lotForSymbol(symbol);
@@ -408,20 +391,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 </option>
               ))}
             </select>
-          </label>
+          </SettingsRow>
           )}
-          {engine ? null : (
-          <label className="text-xs font-semibold text-slate-500">
-            Side
-            <select className={fieldClass} value={niftyTest ? "BOTH" : form.side || "BUY"} disabled={engine || niftyTest || crudeFirst} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
+          {engine || crudeFirst || niftyTest ? null : (
+          <SettingsRow label="Side">
+            <select className={fieldClass} value={form.side || "BUY"} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
               <option value="BUY">BUY</option>
               <option value="SELL">SELL</option>
               <option value="BOTH">BOTH</option>
             </select>
-          </label>
+          </SettingsRow>
           )}
-          <label className="text-xs font-semibold text-slate-500">
-            Lots
+          <SettingsRow label="Lots" title={lotsHint}>
             <input
               className={fieldClass}
               type="number"
@@ -433,16 +414,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 set({ lots: nextLots, lotSize, qty: nextLots * lotSize });
               }}
             />
-            <span className="mt-1 block font-medium text-slate-400">
-              {hedge
-                ? "Primary 1 lot (65) · hedge 2 lots (130) · max 3 lots"
-                : form.symbol === "CRUDEOIL"
-                  ? `1 lot · Dhan qty ${lots} (size ${lotSize})`
-                  : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
-            </span>
-          </label>
-          <label className="text-xs font-semibold text-slate-500">
-            Timeframe
+          </SettingsRow>
+          <SettingsRow label="Timeframe">
             <select
               className={fieldClass}
               value={reversal || hedge ? "15m" : vwap ? "5m" : form.timeframe || "5m"}
@@ -465,9 +438,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 </option>
               ))}
             </select>
-          </label>
-          <label className="text-xs font-semibold text-slate-500">
-            Broker
+          </SettingsRow>
+          <SettingsRow label="Broker" title={form.runMode === "live" ? "Saving does not start LIVE." : "Paper fills are virtual."}>
             <select
               className={fieldClass}
               value={form.runMode === "live" ? form.brokerId || "dhan" : "paper"}
@@ -481,165 +453,144 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 </option>
               ))}
             </select>
-            {form.runMode !== "live" ? (
-              <span className="mt-1 block font-medium text-slate-400">Paper uses live quotes. Fills are virtual — they never go to a broker.</span>
-            ) : (
-              <span className="mt-1 block font-medium text-slate-400">
-                Live orders go to this broker after you connect it on Brokers. Saving does not start LIVE.
-              </span>
-            )}
-          </label>
-        </div>
+          </SettingsRow>
 
-        {engine || niftyTest || crudeFirst ? null : kind === "indicator" ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-500 md:col-span-2">
-              Indicator
-              <select
-                className={fieldClass}
-                value={form.indicator || "VWAP"}
-                onChange={(event) => {
-                  const indicator = event.target.value;
-                  const next = defaultConditions("indicator", indicator, form.pattern);
-                  set({ indicator, ...next, ...groupsFromFlat(next) });
-                }}
-              >
-                {INDICATORS.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {form.indicator === "RSI" ? <NumberField label="RSI period" value={form.period || 14} onChange={(period) => set({ period })} /> : null}
-            {form.indicator === "EMA" ? (
-              <>
-                <NumberField label="Fast EMA" value={form.fast || 9} onChange={(fast) => set({ fast })} />
-                <NumberField label="Slow EMA" value={form.slow || 21} onChange={(slow) => set({ slow })} />
-              </>
-            ) : null}
-            {form.indicator === "SUPERTREND" ? (
-              <>
-                <NumberField label="ATR period" value={form.period || 10} onChange={(period) => set({ period })} />
-                <NumberField label="Multiplier" value={form.multiplier || 3} onChange={(multiplier) => set({ multiplier })} />
-              </>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-500 md:col-span-2">
-              Price action
-              <select
-                className={fieldClass}
-                value={form.pattern || "ORB"}
-                onChange={(event) => {
-                  const pattern = event.target.value;
-                  const next = defaultConditions("price-action", form.indicator, pattern);
-                  set({ pattern, ...next, ...groupsFromFlat(next) });
-                }}
-              >
-                {PATTERNS.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {form.pattern === "ORB" ? (
-              <label className="text-xs font-semibold text-slate-500">
-                Opening range
-                <select className={fieldClass} value={form.rangeMinutes || 15} onChange={(event) => set({ rangeMinutes: Number(event.target.value) })}>
-                  <option value={15}>First 15 minutes</option>
-                  <option value={30}>First 30 minutes</option>
-                  <option value={60}>First 60 minutes</option>
-                </select>
-              </label>
-            ) : null}
-            {form.pattern === "BREAKOUT" || form.pattern === "SR_BOUNCE" ? (
-              <NumberField label="Lookback bars" value={form.lookback || 20} onChange={(lookback) => set({ lookback })} />
-            ) : null}
-          </div>
-        )}
-
-        {vwap ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-[11px] font-semibold text-slate-400">
-              Close above / close below use the last completed 5m candle only. BUY CE when futures close above VWAP. BUY PE when futures close below VWAP. ATM option must also close above its own VWAP.
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <NumberField label="Initial stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-              <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField label="Trail activate %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
-              <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
-              <NumberField label="VWAP exit candles" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
-              <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
-            </div>
-          </div>
-        ) : reversal ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-[11px] font-semibold text-slate-400">
-              Entry only after the 15-minute NIFTY futures candle closes. OPEN below VWAP and CLOSE above VWAP buys weekly ATM CE. OPEN above VWAP and CLOSE below VWAP buys weekly ATM PE. Never monthly. Option stop 15% / target 30%. One position. Square-off before 15:30.
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-              <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
-              <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
-            </div>
-          </div>
-        ) : niftyTest ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-[11px] font-semibold text-slate-400">
-              No first-candle check. While Nifty Test is started, every live Nifty future tick is checked. Current candle close above its open → BUY. Close below its open → SELL. Equal open is no trade.
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-500">
-                nifty test
-                <input
-                  name="nifty test"
+          {engine || niftyTest || crudeFirst ? null : kind === "indicator" ? (
+            <>
+              <SettingsHead>Rules</SettingsHead>
+              <SettingsRow label="Indicator">
+                <select
                   className={fieldClass}
-                  value={form.startTimeIst || "09:15"}
-                  onChange={(event) => set({ startTimeIst: event.target.value })}
-                  placeholder="09:15"
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                End time (IST)
-                <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
-              </label>
-            </div>
-          </div>
-        ) : firstCandle || crudeFirst ? (
-          <div className="mt-4 space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-500">
-                Start LIVE (IST)
-                <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                First candle start (IST)
-                <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                Entry evaluation (IST)
-                <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                End time (IST)
-                <input className={fieldClass} value={form.endTimeIst || (crudeFirst ? "23:15" : "15:15")} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder={crudeFirst ? "23:15" : "15:15"} />
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                Expiry
+                  value={form.indicator || "VWAP"}
+                  onChange={(event) => {
+                    const indicator = event.target.value;
+                    const next = defaultConditions("indicator", indicator, form.pattern);
+                    set({ indicator, ...next, ...groupsFromFlat(next) });
+                  }}
+                >
+                  {INDICATORS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+              {form.indicator === "RSI" ? <NumberField label="RSI period" value={form.period || 14} onChange={(period) => set({ period })} /> : null}
+              {form.indicator === "EMA" ? (
+                <>
+                  <NumberField label="Fast EMA" value={form.fast || 9} onChange={(fast) => set({ fast })} />
+                  <NumberField label="Slow EMA" value={form.slow || 21} onChange={(slow) => set({ slow })} />
+                </>
+              ) : null}
+              {form.indicator === "SUPERTREND" ? (
+                <>
+                  <NumberField label="ATR period" value={form.period || 10} onChange={(period) => set({ period })} />
+                  <NumberField label="Multiplier" value={form.multiplier || 3} onChange={(multiplier) => set({ multiplier })} />
+                </>
+              ) : null}
+            </>
+          ) : engine || niftyTest || crudeFirst ? null : (
+            <>
+              <SettingsHead>Rules</SettingsHead>
+              <SettingsRow label="Pattern">
+                <select
+                  className={fieldClass}
+                  value={form.pattern || "ORB"}
+                  onChange={(event) => {
+                    const pattern = event.target.value;
+                    const next = defaultConditions("price-action", form.indicator, pattern);
+                    set({ pattern, ...next, ...groupsFromFlat(next) });
+                  }}
+                >
+                  {PATTERNS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+              {form.pattern === "ORB" ? (
+                <SettingsRow label="Range">
+                  <select className={fieldClass} value={form.rangeMinutes || 15} onChange={(event) => set({ rangeMinutes: Number(event.target.value) })}>
+                    <option value={15}>First 15 minutes</option>
+                    <option value={30}>First 30 minutes</option>
+                    <option value={60}>First 60 minutes</option>
+                  </select>
+                </SettingsRow>
+              ) : null}
+              {form.pattern === "BREAKOUT" || form.pattern === "SR_BOUNCE" ? (
+                <NumberField label="Lookback" value={form.lookback || 20} onChange={(lookback) => set({ lookback })} />
+              ) : null}
+            </>
+          )}
+
+          {vwap ? (
+            <>
+              <SettingsHead>Risk</SettingsHead>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+                <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+                <NumberField label="Trail on %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
+                <NumberField label="Trail step %" value={form.trailingStepPct || 3} step={0.5} onChange={(trailingStepPct) => set({ trailingStepPct })} />
+                <NumberField label="VWAP exit" value={form.vwapExitCandles || 5} step={1} onChange={(vwapExitCandles) => set({ vwapExitCandles })} />
+                <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              </div>
+            </>
+          ) : reversal ? (
+            <>
+              <SettingsHead>Risk</SettingsHead>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+                <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
+                <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              </div>
+            </>
+          ) : niftyTest ? (
+            <>
+              <SettingsHead>Schedule</SettingsHead>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
+                <SettingsRow label="Start">
+                  <input
+                    name="nifty test"
+                    className={fieldClass}
+                    value={form.startTimeIst || "09:15"}
+                    onChange={(event) => set({ startTimeIst: event.target.value })}
+                    placeholder="09:15"
+                  />
+                </SettingsRow>
+                <SettingsRow label="End">
+                  <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
+                </SettingsRow>
+              </div>
+            </>
+          ) : firstCandle || crudeFirst ? (
+            <>
+              <SettingsHead>Schedule</SettingsHead>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
+                <SettingsRow label="Start LIVE">
+                  <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
+                </SettingsRow>
+                <SettingsRow label="First candle">
+                  <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
+                </SettingsRow>
+                <SettingsRow label="Evaluate">
+                  <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
+                </SettingsRow>
+                <SettingsRow label="End">
+                  <input className={fieldClass} value={form.endTimeIst || (crudeFirst ? "23:15" : "15:15")} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder={crudeFirst ? "23:15" : "15:15"} />
+                </SettingsRow>
+              </div>
+              <SettingsRow label="Expiry">
                 {crudeFirst ? (
                   <input className={fieldClass} value="Monthly MCX" readOnly />
                 ) : (
-                <select className={fieldClass} value={form.expiryKind || "weekly"} onChange={(event) => set({ expiryKind: event.target.value as "weekly" | "monthly" })}>
-                  <option value="weekly">Nearest weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
+                  <select className={fieldClass} value={form.expiryKind || "weekly"} onChange={(event) => set({ expiryKind: event.target.value as "weekly" | "monthly" })}>
+                    <option value="weekly">Nearest weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
                 )}
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                Strike
+              </SettingsRow>
+              <SettingsRow label="Strike" title={liveOptionHint(form, data)}>
                 <select className={fieldClass} value={form.strikeOffset ?? 0} onChange={(event) => set({ strikeOffset: Number(event.target.value) })}>
                   {OPTION_OFFSETS.map((row) => (
                     <option key={row.id} value={row.id}>
@@ -647,145 +598,127 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                     </option>
                   ))}
                 </select>
-                <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
-              </label>
-              <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
-              <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+              </SettingsRow>
+              <SettingsHead>Risk</SettingsHead>
               {crudeFirst ? null : (
-              <>
-              <p className="text-[11px] font-semibold text-slate-400 md:col-span-2" data-trailing-sl="nifty-first-candle">
-                Trailing SL: at this profit the stop moves to the buy price. Each further gain of the next percent lifts the stop by the shift percent. A pullback does not lower the stop.
-              </p>
-              <NumberField
-                label="Trailing SL to buy price at %"
-                value={niftyFirstCandleTrail(form).activation}
-                step={1}
-                onChange={(trailingActivationPct) => {
-                  const trail = niftyFirstCandleTrail(form);
-                  set({ trailingActivationPct, trailingEveryPct: trail.every, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
-                }}
-              />
-              <NumberField
-                label="Trailing SL every %"
-                value={niftyFirstCandleTrail(form).every}
-                step={1}
-                onChange={(trailingEveryPct) => {
-                  const trail = niftyFirstCandleTrail(form);
-                  set({ trailingActivationPct: trail.activation, trailingEveryPct, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
-                }}
-              />
-              <NumberField
-                label="Trailing SL shift %"
-                value={niftyFirstCandleTrail(form).shift}
-                step={1}
-                onChange={(trailingShiftPct) => {
-                  const trail = niftyFirstCandleTrail(form);
-                  set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
-                }}
-              />
-              <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
-              </>
+                <div className="sr-only" data-trailing-sl="nifty-first-candle">
+                  Trailing SL
+                </div>
               )}
-              <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
-            </div>
-          </div>
-        ) : hedge ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-[11px] font-semibold text-slate-400">
-              Completed 15-minute NIFTY futures candle only. Open below VWAP and close above buys 1 lot weekly ATM CE. Open above VWAP and close below buys 1 lot weekly ATM PE. Primary target is fill × 1.40. There is no stop on the primary. At fill × 0.80 buy 2 lots of the opposite ATM weekly option once. Exit every open leg when realized + unrealized − charges reaches 5% of cycle starting capital.
-            </p>
-          </div>
-        ) : (
-        <div className="mt-4 space-y-3">
-          {String(form.symbol || algo?.symbol || "").toUpperCase() === "CRUDEOIL" || /crude/i.test(String(form.name || algo?.name || "")) ? (
-            <label className="block text-xs font-semibold text-slate-500" data-trade-limit="crude">
-              Trade limit
-              <input
-                type="number"
-                min={1}
-                max={20}
-                inputMode="numeric"
-                aria-label="Trade limit"
-                className={fieldClass}
-                value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
-                onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
-              />
-              <span className="mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
-            </label>
-          ) : null}
-          <ConditionGroupEditor
-            label="BUY when"
-            group={
-              form.buyConditions ||
-              groupsFromFlat(form).buyConditions
-            }
-            onChange={(buyConditions) =>
-              set({
-                buyConditions,
-                buyLeft: buyConditions.rows[0]?.left,
-                buyOp: buyConditions.rows[0]?.op,
-                buyRight: buyConditions.rows[0]?.right,
-                buyValue: buyConditions.rows[0]?.value,
-              })
-            }
-          />
-          <ConditionGroupEditor
-            label="SELL when"
-            group={
-              form.sellConditions ||
-              groupsFromFlat(form).sellConditions
-            }
-            onChange={(sellConditions) =>
-              set({
-                sellConditions,
-                sellLeft: sellConditions.rows[0]?.left,
-                sellOp: sellConditions.rows[0]?.op,
-                sellRight: sellConditions.rows[0]?.right,
-                sellValue: sellConditions.rows[0]?.value,
-              })
-            }
-          />
-          <p className="text-[11px] font-semibold text-slate-400">
-            Add extra rows for multiple conditions. AND means every row must be true. OR means any one row can fire. Close above / close below use the last completed candle only.
-          </p>
-        </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
+                <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
+                {crudeFirst ? null : (
+                  <>
+                    <NumberField
+                      label="Trail to buy"
+                      value={niftyFirstCandleTrail(form).activation}
+                      step={1}
+                      onChange={(trailingActivationPct) => {
+                        const trail = niftyFirstCandleTrail(form);
+                        set({ trailingActivationPct, trailingEveryPct: trail.every, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                      }}
+                    />
+                    <NumberField
+                      label="Trail every"
+                      value={niftyFirstCandleTrail(form).every}
+                      step={1}
+                      onChange={(trailingEveryPct) => {
+                        const trail = niftyFirstCandleTrail(form);
+                        set({ trailingActivationPct: trail.activation, trailingEveryPct, trailingShiftPct: trail.shift, trailingStepPct: trail.shift });
+                      }}
+                    />
+                    <NumberField
+                      label="Trail shift"
+                      value={niftyFirstCandleTrail(form).shift}
+                      step={1}
+                      onChange={(trailingShiftPct) => {
+                        const trail = niftyFirstCandleTrail(form);
+                        set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
+                      }}
+                    />
+                    <NumberField label="Max trades" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
+                  </>
+                )}
+                <NumberField label="EOD mins" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
+              </div>
+            </>
+          ) : hedge ? null : (
+            <>
+              <SettingsHead>Rules</SettingsHead>
+              {String(form.symbol || algo?.symbol || "").toUpperCase() === "CRUDEOIL" || /crude/i.test(String(form.name || algo?.name || "")) ? (
+                <SettingsRow label="Trade limit">
+                  <div data-trade-limit="crude">
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      inputMode="numeric"
+                      aria-label="Trade limit"
+                      className={fieldClass}
+                      value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+                      onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+                    />
+                  </div>
+                </SettingsRow>
+              ) : null}
+              <div className="border-t border-[var(--border)] px-3 py-2">
+                <ConditionGroupEditor
+                  label="BUY when"
+                  group={form.buyConditions || groupsFromFlat(form).buyConditions}
+                  onChange={(buyConditions) =>
+                    set({
+                      buyConditions,
+                      buyLeft: buyConditions.rows[0]?.left,
+                      buyOp: buyConditions.rows[0]?.op,
+                      buyRight: buyConditions.rows[0]?.right,
+                      buyValue: buyConditions.rows[0]?.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="border-t border-[var(--border)] px-3 py-2">
+                <ConditionGroupEditor
+                  label="SELL when"
+                  group={form.sellConditions || groupsFromFlat(form).sellConditions}
+                  onChange={(sellConditions) =>
+                    set({
+                      sellConditions,
+                      sellLeft: sellConditions.rows[0]?.left,
+                      sellOp: sellConditions.rows[0]?.op,
+                      sellRight: sellConditions.rows[0]?.right,
+                      sellValue: sellConditions.rows[0]?.value,
+                    })
+                  }
+                />
+              </div>
+            </>
+          )}
 
-        )}
+          {engine || crudeFirst || firstCandle || vwap || reversal ? null : (
+            <>
+              <SettingsHead>Risk</SettingsHead>
+              <div className="grid grid-cols-1 sm:grid-cols-2 sm:[&_label:nth-child(even)]:border-l">
+                <NumberField label="Stop %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
+                <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
+              </div>
+            </>
+          )}
+        </section>
 
-        {engine || crudeFirst ? null : (
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
-          <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
-        </div>
-        )}
+        {error ? <p className="mt-2 text-xs font-semibold text-down">{error}</p> : null}
 
-        {form.runMode === "live" ? (
-          <p className="mt-3 text-[11px] font-semibold text-amber-600">
-            {hedge || reversal
-              ? "NIFTY 15m VWAP hedge and NIFTY 15m VWAP reversal go LIVE automatically at 09:20 IST on session days. Saving this form or restarting t2s does not start LIVE."
-              : crudeFirst
-              ? "CRUDE OIL 5m first candle stays off until you press Start strategy. Saving this form or restarting t2s does not start LIVE and does not place an order."
-              : firstCandle
-              ? "NIFTY 5m first candle goes LIVE automatically at 09:00 IST on session days. Saving this form or restarting t2s does not start LIVE."
-              : niftyTest
-              ? "nifty test stays off until you press Start strategy. Orders are NIFTY futures. Saving this form does not place orders."
-              : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}
-          </p>
-        ) : null}
-
-        {error ? <p className="mt-3 text-sm font-semibold text-down">{error}</p> : null}
-
-        <div className="mt-5 flex gap-2">
-          <button type="button" onClick={onClose} className="h-10 flex-1 rounded-xl border border-[var(--border)] text-sm font-semibold">
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-[var(--border)] text-sm font-semibold">
             Cancel
           </button>
           <button
             type="button"
             disabled={busy}
             onClick={() => void submit()}
-            className="h-10 flex-1 rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60"
+            className="h-8 flex-1 rounded-md bg-brand-500 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy ? "Saving..." : algo ? "Save changes" : "Add strategy"}
+            {busy ? "Saving..." : algo ? "Save" : "Add strategy"}
           </button>
         </div>
       </div>
@@ -881,8 +814,8 @@ function ConditionRowFields({
   onRemove?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
         {onRemove ? (
           <button type="button" onClick={onRemove} className="text-[10px] font-bold uppercase text-slate-400">
@@ -890,7 +823,7 @@ function ConditionRowFields({
           </button>
         ) : null}
       </div>
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid gap-1.5 md:grid-cols-4">
         <select
           className={fieldClass}
           value={left}
@@ -928,7 +861,7 @@ function ConditionRowFields({
             onChange={(event) => onChange({ left, op, right, value: Number(event.target.value) })}
           />
         ) : (
-          <div className="flex h-10 items-center text-xs font-semibold text-slate-400">vs {SOURCES.find((row) => row.id === right)?.label}</div>
+          <div className="flex h-8 items-center text-xs font-semibold text-slate-400">vs {SOURCES.find((row) => row.id === right)?.label}</div>
         )}
       </div>
     </div>
@@ -977,13 +910,30 @@ function TypeCard({ active, title, text, onClick }: { active: boolean; title: st
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-xl border px-3 py-3 text-left",
+        "rounded-lg border px-2 py-1.5 text-left",
         active ? "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--bg)]",
       )}
     >
-      <div className="text-sm font-bold">{title}</div>
-      <div className="mt-1 text-[11px] text-slate-400">{text}</div>
+      <div className="text-xs font-bold">{title}</div>
+      <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-400">{text}</div>
     </button>
+  );
+}
+
+function SettingsHead({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-t border-[var(--border)] bg-[var(--bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 first:border-t-0">
+      {children}
+    </div>
+  );
+}
+
+function SettingsRow({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
+  return (
+    <label className="flex items-center gap-2 border-t border-[var(--border)] px-2.5 py-1.5" title={title}>
+      <span className="w-[5.5rem] shrink-0 text-xs text-slate-500">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </label>
   );
 }
 
@@ -999,9 +949,8 @@ function NumberField({
   step?: number;
 }) {
   return (
-    <label className="text-xs font-semibold text-slate-500">
-      {label}
+    <SettingsRow label={label}>
       <input className={fieldClass} type="number" step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
-    </label>
+    </SettingsRow>
   );
 }

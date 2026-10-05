@@ -1137,6 +1137,30 @@ export function requestMemberUpstoxToken() {
   }>("/member/broker/upstox/token", { method: "POST" });
 }
 
+export function requestMemberFyersToken() {
+  return request<{
+    ok: boolean;
+    asked?: boolean;
+    hasTradingToken?: boolean;
+    tokenHint?: string;
+    loginUrl?: string;
+    redirectUri?: string;
+    message?: string;
+  }>("/member/broker/fyers/token", { method: "POST" });
+}
+
+export function requestClientFyersToken(id: string) {
+  return request<{
+    ok: boolean;
+    asked?: boolean;
+    hasTradingToken?: boolean;
+    tokenHint?: string;
+    loginUrl?: string;
+    redirectUri?: string;
+    message?: string;
+  }>(`/clients/${encodeURIComponent(id)}/fyers/token`, { method: "POST" });
+}
+
 export function startWalletTopup(amount: number, channel: "gpay" | "phonepe") {
   return request<{ topup: WalletTopup; payments: PaymentPublic; links: UpiLinks | null }>("/member/wallet/topup", {
     method: "POST",
