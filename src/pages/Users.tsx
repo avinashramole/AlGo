@@ -137,32 +137,32 @@ export function Users() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">All clients</h1>
-          <p className="text-sm text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-base font-bold">All clients</h1>
+          <p className="hidden text-xs text-slate-400 sm:block">
             Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.{" "}
             <Link to="/settings/ips" className="font-semibold text-brand-500">
               IP management
             </Link>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => void load()}
             disabled={busy}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 text-xs font-semibold disabled:opacity-60"
           >
             <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
             Refresh
           </button>
           <button
             type="button"
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-brand-500 px-2.5 text-xs font-semibold text-white"
             onClick={() => setShowAdd(true)}
           >
-            <Plus size={16} />
+            <Plus size={14} />
             Add client
           </button>
         </div>
@@ -176,7 +176,7 @@ export function Users() {
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
         <input
-          className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-9 pr-3 text-sm"
+          className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] pl-9 pr-3 text-sm"
           placeholder="Search client, FYERS, DA02189, mobile..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -470,13 +470,13 @@ function AdminMobileRow({
 
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
-    <section className="card px-4 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 flex items-center gap-2 text-2xl font-extrabold">
-        <UsersIcon size={18} className="text-brand-500" />
+    <section className="card px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-0.5 flex items-center gap-1.5 text-base font-extrabold">
+        <UsersIcon size={14} className="text-brand-500" />
         {value}
       </div>
-      {hint ? <div className="mt-1 text-[11px] text-slate-400">{hint}</div> : null}
+      {hint ? <div className="mt-0.5 truncate text-[10px] text-slate-400">{hint}</div> : null}
     </section>
   );
 }

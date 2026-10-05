@@ -318,15 +318,15 @@ export function PositionsDesk() {
       <PortfolioSummary />
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <section className="card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Admin balance</div>
-          <div className={cn("mt-2 text-2xl font-bold", moneyClass(Number(desk.adminBalance) || 0))}>
+        <section className="card px-3 py-2">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Admin balance</div>
+          <div className={cn("mt-0.5 text-base font-bold", moneyClass(Number(desk.adminBalance) || 0))}>
             {rupee(Number(desk.adminBalance) || 0)}
           </div>
-          <p className="mt-1 text-xs text-slate-400">{desk.adminBrokerName || "Admin"} account</p>
+          <p className="text-[11px] text-slate-400">{desk.adminBrokerName || "Admin"} account</p>
         </section>
-        <section className="card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">User balances</div>
+        <section className="card px-3 py-2">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">User balances</div>
           {userBalanceRows.length ? (
             <ul className="mt-2 max-h-40 space-y-1.5 overflow-auto">
               {userBalanceRows.map((row) => (
@@ -394,10 +394,14 @@ function Chip({ label, on, onClick }: { label: string; on: boolean; onClick: () 
 
 function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone?: string }) {
   return (
-    <div className="card p-4">
-      <div className="text-slate-400">{icon}</div>
-      <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</div>
-      <div className={cn("mt-2 text-2xl font-bold", tone)}>{value}</div>
+    <div className="card px-3 py-2">
+      <div className="flex items-center gap-2">
+        <div className="text-slate-400">{icon}</div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
+          <div className={cn("truncate text-sm font-bold", tone)}>{value}</div>
+        </div>
+      </div>
     </div>
   );
 }

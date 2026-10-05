@@ -518,19 +518,19 @@ export function MemberPlans() {
       {desk.plans.length ? (
         <section className="grid gap-3 md:grid-cols-2">
           {desk.plans.map((row) => (
-            <article key={row.strategyId} className="card p-4">
-              <div className="text-[11px] font-extrabold uppercase text-slate-400">Enrolled plan</div>
-              <h2 className="mt-1 text-base font-extrabold">{row.strategyName}</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                {formatPlanTerm(row.term)} · started {formatIstDate(row.startedAt)} · ends {formatIstDate(row.endsAt)}
+            <article key={row.strategyId} className="card p-3">
+              <div className="text-[10px] font-extrabold uppercase text-slate-400">Enrolled plan</div>
+              <h2 className="mt-0.5 truncate text-sm font-extrabold">{row.strategyName}</h2>
+              <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                {formatPlanTerm(row.term)} · {formatIstDate(row.startedAt)} → {formatIstDate(row.endsAt)}
               </p>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <div className="text-[11px] uppercase text-slate-400">Realized</div>
+                  <div className="text-[10px] uppercase text-slate-400">Realized</div>
                   <div className={row.realizedPnl >= 0 ? "font-bold text-up" : "font-bold text-down"}>{formatInr(row.realizedPnl)}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase text-slate-400">MTM</div>
+                  <div className="text-[10px] uppercase text-slate-400">MTM</div>
                   <div className={row.unrealizedPnl >= 0 ? "font-bold text-up" : "font-bold text-down"}>{formatInr(row.unrealizedPnl)}</div>
                 </div>
               </div>

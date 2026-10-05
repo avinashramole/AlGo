@@ -37,10 +37,10 @@ export function UserHome() {
   const brokerName = (id?: string) => desk?.brokers.find((row) => row.id === id)?.name || id || "Paper";
 
   return (
-    <div className="space-y-4">
-      <section className="card p-6">
-        <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
-        <h1 className="mt-1 text-2xl font-extrabold">{user?.email || ""}</h1>
+    <div className="space-y-2.5">
+      <section className="card px-3 py-2">
+        <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
+        <h1 className="truncate text-sm font-extrabold">{user?.email || ""}</h1>
       </section>
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
@@ -66,41 +66,37 @@ export function UserHome() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <article className="card p-5">
-          <Wallet size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Plan report · MTM</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Enroll monthly, quarterly, or yearly. After admin confirms payment and you install your token, live copies use your account size.
+        <article className="card p-3">
+          <Wallet size={16} className="text-brand-500" />
+          <h2 className="mt-1.5 text-sm font-bold">Plan report · MTM</h2>
+          <p className="mt-0.5 text-xs leading-4 text-slate-500">
+            Enroll a term. After payment and token, copies use this account.
           </p>
-          <Link to="/plans" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+          <Link to="/plans" className="mt-2 inline-flex h-8 items-center rounded-md bg-brand-500 px-3 text-xs font-semibold text-white">
             Open my plan
           </Link>
         </article>
-        <article className="card p-5">
-          <Bell size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Updates</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Copied admin orders land here and in Alerts. The same order is sent from your selected broker.
-          </p>
+        <article className="card p-3">
+          <Bell size={16} className="text-brand-500" />
+          <h2 className="mt-1.5 text-sm font-bold">Updates</h2>
+          <p className="mt-0.5 text-xs leading-4 text-slate-500">Copied admin orders land here and in Alerts.</p>
           <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
-          <Link to="/notifications" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+          <Link to="/notifications" className="mt-2 inline-flex h-8 items-center rounded-md bg-brand-500 px-3 text-xs font-semibold text-white">
             Open alerts
           </Link>
         </article>
-        <article className="card p-5">
-          <UserRound size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Your profile</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Name, Gmail, mobile, broker, and static IP.</p>
-          <Link to="/profile" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
+        <article className="card p-3">
+          <UserRound size={16} className="text-brand-500" />
+          <h2 className="mt-1.5 text-sm font-bold">Your profile</h2>
+          <p className="mt-0.5 text-xs leading-4 text-slate-500">Name, Gmail, mobile, broker, and static IP.</p>
+          <Link to="/profile" className="mt-2 inline-flex h-8 items-center rounded-md bg-brand-500 px-3 text-xs font-semibold text-white">
             Open profile
           </Link>
         </article>
-        <article className="card p-5">
-          <Shield size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Admin desk</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Brokers, algos, live orders, and settings are only for admin users.
-          </p>
+        <article className="card p-3">
+          <Shield size={16} className="text-brand-500" />
+          <h2 className="mt-1.5 text-sm font-bold">Admin desk</h2>
+          <p className="mt-0.5 text-xs leading-4 text-slate-500">Brokers, algos, live orders, and settings are admin-only.</p>
         </article>
       </div>
     </div>
@@ -131,9 +127,9 @@ function memberBalance(desk: MemberDesk | null) {
 
 function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {
   return (
-    <div className="card p-4">
-      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
-      <div className={cn("mt-1 text-2xl font-bold", signed != null && (signed >= 0 ? "text-up" : "text-down"))}>{value}</div>
+    <div className="card px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase text-slate-400">{label}</div>
+      <div className={cn("mt-0.5 text-base font-bold", signed != null && (signed >= 0 ? "text-up" : "text-down"))}>{value}</div>
     </div>
   );
 }
