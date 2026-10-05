@@ -1083,7 +1083,7 @@ test("a member crude order opens that user's Kotak trade login and does not use 
     assert.equal(live.status, "PENDING");
     const login = calls.find((row) => row.url.includes("tradeApiLogin"));
     assert.equal(login.auth, "member-access-1452");
-    assert.equal(String(login.body).includes("+919876501234"), true);
+    assert.equal(String(login.body).includes("9876501234"), true);
     assert.equal(String(login.body).includes("YT2Vm"), true);
     assert.equal(String(login.body).includes("9000000099"), false);
     assert.equal(String(login.body).includes("GEZDGNBVGY3TQOJQ"), false);
@@ -1181,7 +1181,7 @@ test("a member Kotak refusal stays on that user's own key and does not send the 
     assert.equal(calls.length, 1);
     assert.match(calls[0].url, /tradeApiLogin/);
     assert.equal(calls[0].auth, "user-own-key-1452");
-    assert.equal(String(calls[0].body).includes("+919922980000"), true);
+    assert.equal(String(calls[0].body).includes("9922980000"), true);
     assert.equal(String(calls[0].body).includes("YT2Vm"), true);
     assert.equal(String(calls[0].body).includes("9000000099"), false);
     assert.equal(String(calls[0].body).includes("YIX14"), false);
@@ -1277,9 +1277,9 @@ test("kotakMobileNumber keeps the Users-list 10-digit number as +91 for Neo logi
   assert.equal(kotakMobileNumber("+91-9922980000"), "+919922980000");
   assert.equal(kotakMobileNumber("919922980000"), "+919922980000");
   assert.deepEqual(kotakMobileNumberCandidates("9922980000"), [
-    "+919922980000",
     "+91-9922980000",
     "9922980000",
+    "+919922980000",
     "919922980000",
   ]);
   assert.equal(firstKotakMobile("", "not-a-phone", "9922980000"), "9922980000");
@@ -1302,16 +1302,14 @@ test("Kotak trade login retries MobileNumber formats after Neo rejects +91", asy
     if (target.includes("tradeApiLogin")) {
       const sent = JSON.parse(options.body);
       mobiles.push(sent.mobileNumber);
-      if (sent.mobileNumber === "+919922980000") {
-        return {
-          ok: false,
-          status: 400,
-          text: async () => JSON.stringify({ error: [{ message: "Invalid field 'MobileNumber'; must be a valid mobile number" }] }),
-        };
-      }
-      if (sent.mobileNumber === "9922980000" || sent.mobileNumber === "+91-9922980000") {
+      if (sent.mobileNumber === "9922980000") {
         return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
       }
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: [{ message: "Invalid field 'MobileNumber'; must be a valid mobile number" }] }),
+      };
       return { ok: false, status: 400, text: async () => JSON.stringify({ message: "unexpected mobile" }) };
     }
     if (target.includes("tradeApiValidate")) {
@@ -1348,8 +1346,8 @@ test("Kotak trade login retries MobileNumber formats after Neo rejects +91", asy
       fetchImpl,
     );
     assert.equal(live.orderId, "k-mobile");
-    assert.deepEqual(mobiles[0], "+919922980000");
-    assert.ok(mobiles.includes("+91-9922980000") || mobiles.includes("9922980000"));
+    assert.deepEqual(mobiles[0], "+91-9922980000");
+    assert.ok(mobiles.includes("9922980000"));
     assert.equal(mobiles.includes(""), false);
   } finally {
     clearKotakTradeCache();
@@ -1360,6 +1358,59 @@ test("Kotak trade login retries MobileNumber formats after Neo rejects +91", asy
     if (saved.totp == null) delete process.env.T2S_KOTAK_TOTP_SECRET;
     else process.env.T2S_KOTAK_TOTP_SECRET = saved.totp;
   }
+});
+
+test("a Kotak copy with empty trade mobile uses the Users-list number", async () => {
+  clearKotakTradeCache();
+  const mobiles = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url).includes("tradeApiLogin")) {
+      mobiles.push(JSON.parse(options.body).mobileNumber);
+      if (JSON.parse(options.body).mobileNumber === "9922980000") {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
+      }
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: [{ message: "Invalid field 'MobileNumber'; must be a valid mobile number" }] }),
+      };
+    }
+    if (String(url).includes("tradeApiValidate")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: { token: "edit-token", sid: "edit-sid", baseUrl: "https://e22.kotaksecurities.com", hsServerId: "server-2" },
+          }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-profile" }) };
+  };
+  const live = await placeLiveBrokerOrder(
+    "kotak",
+    {
+      copyUserId: "u-new-kotak",
+      brokerSession: {
+        accessToken: "member-access-new",
+        apiKey: "member-consumer-new",
+        clientId: "NEWK1",
+        mobile: "",
+        profileMobile: "9922980000",
+        mpin: "654321",
+        totpSecret: "123456",
+      },
+      symbol: "NIFTY 22950 CE",
+      side: "BUY",
+      qty: 65,
+      price: 4.2,
+      type: "LIMIT",
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "k-profile");
+  assert.ok(mobiles.includes("9922980000"));
+  assert.equal(mobiles.includes(""), false);
 });
 
 test("kotakTotpCandidates sends a 6-digit code and generates from a secret", () => {
@@ -1448,7 +1499,7 @@ test("Kotak admin order calls tradeApiLogin even when a Neo sid and base URL are
     assert.equal(login.fin, "neotradeapi");
     assert.match(login.type, /application\/json/);
     assert.deepEqual(JSON.parse(login.body), {
-      mobileNumber: "+919876543210",
+      mobileNumber: "+91-9876543210",
       ucc: "YIX14",
       totp: "654321",
     });
@@ -1589,7 +1640,7 @@ test("Kotak admin order logs in and places on the session base URL", async () =>
     assert.equal(jData.tt, "B");
     const login = calls.find((row) => row.url.includes("tradeApiLogin"));
     assert.equal(login.auth, "kotak-consumer-key");
-    assert.equal(String(login.body).includes("+919000000000"), true);
+    assert.equal(String(login.body).includes("9000000000"), true);
     assert.equal(String(JSON.stringify(live)).includes("123456"), false);
     assert.equal(String(JSON.stringify(live)).includes("JBSWY3DPEHPK3PXP"), false);
   } finally {

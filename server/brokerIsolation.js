@@ -108,7 +108,9 @@ export function liveOrderSession(payload = {}, adminSession = null, { brokerName
       apiKey: String(override?.apiKey || account?.apiKey || "").trim(),
       clientId: String(override?.clientId || account?.clientId || "").trim(),
       sessionToken: String(override?.sessionToken || account?.sessionToken || "").trim(),
-      mobile: String(override?.mobile || account?.mobile || "").trim(),
+      mobile: String(override?.mobile || account?.mobile || override?.profileMobile || account?.profileMobile || "").trim(),
+      profileMobile: String(override?.profileMobile || account?.profileMobile || "").trim(),
+      copyUserId: String(payload.copyUserId || "").trim(),
       mpin: String(override?.mpin || account?.mpin || "").trim(),
       totpSecret: String(override?.totpSecret || account?.totpSecret || "").trim(),
     };
