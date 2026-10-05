@@ -8,7 +8,7 @@ import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { isAdminUser, pageTitleForPath } from "../../lib/roles";
 import { getMemberQuotes } from "../../api/client";
-import { cn, formatIstClock, formatMobile, hasDhanQuotes, headerBrokerLabel, isMcxSessionOpen, isNseSessionOpen, kotakAdminTape } from "../../lib/format";
+import { adminLiveTape, cn, formatIstClock, formatMobile, headerBrokerLabel, isMcxSessionOpen, isNseSessionOpen } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -79,15 +79,9 @@ export function Header() {
   const marketOpen = nseOpen || mcxOpen;
   const active = (data.brokers || []).find((item) => item.id === data.activeBrokerId) || (data.brokers || [])[0];
   const adminBrokerId = active?.id || data.activeBrokerId || "dhan";
-  const dhanQuotes = hasDhanQuotes(data);
-  const kotakTape = kotakAdminTape(data);
+  const tape = adminLiveTape(data);
   const feedLabel = admin
-    ? headerBrokerLabel({
-        brokerId: kotakTape ? "kotak" : adminBrokerId,
-        brokerName: kotakTape ? "KOTAK" : active?.name,
-        live: kotakTape ? Boolean(data.dhanFeed?.live) : adminBrokerId === "dhan" ? Boolean(data.dhanFeed?.live) : Boolean(active?.liveFeed || active?.status === "LIVE"),
-        hasQuotes: kotakTape ? true : adminBrokerId === "dhan" ? dhanQuotes : Boolean(active?.connected || active?.liveFeed),
-      })
+    ? headerBrokerLabel(tape)
     : headerBrokerLabel({
         brokerId: memberFeed?.brokerId,
         brokerName: memberFeed?.brokerName,
@@ -96,13 +90,9 @@ export function Header() {
       });
   const sessionLabel = nseOpen && mcxOpen ? "Open" : nseOpen ? "NSE Open" : mcxOpen ? "MCX Open" : "Closed";
   const sessionTitle = admin
-    ? `Selected broker ${feedLabel || adminBrokerId}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
+    ? `Admin live tape ${feedLabel || "DHAN"}. Default order broker ${active?.name || adminBrokerId}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
     : `Your selected broker ${feedLabel || memberFeed?.brokerId || ""}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`;
-  const tickAt = admin
-    ? kotakTape || adminBrokerId === "dhan"
-      ? data.dhanFeed?.lastTickAt
-      : null
-    : memberFeed?.lastTickAt;
+  const tickAt = admin ? tape.lastTickAt : memberFeed?.lastTickAt;
   const lastTick = tickAt
     ? new Date(tickAt).toLocaleTimeString("en-IN", {
         timeZone: "Asia/Kolkata",

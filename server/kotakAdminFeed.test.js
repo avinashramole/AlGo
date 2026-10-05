@@ -6,8 +6,11 @@ const { dhanOwnsAdminTape, pullKotakAdminQuotes } = await import("./kotakAdminFe
 test("a live Dhan websocket keeps the admin tape", () => {
   assert.equal(dhanOwnsAdminTape({ live: true, source: "websocket" }), true);
   assert.equal(dhanOwnsAdminTape({ live: true, source: "rest" }), true);
+  assert.equal(dhanOwnsAdminTape({ live: false, source: "websocket" }), true);
+  assert.equal(dhanOwnsAdminTape({ live: false, source: "rest" }), true);
   assert.equal(dhanOwnsAdminTape({ live: false, source: "idle" }), false);
   assert.equal(dhanOwnsAdminTape({ live: true, source: "kotak" }), false);
+  assert.equal(dhanOwnsAdminTape({ live: false, source: "idle" }, { dhanRunning: true }), true);
 });
 
 test("Kotak admin tape fills index prices from the consumer key and does not mark orders live", async () => {
@@ -59,4 +62,44 @@ test("an empty Kotak quote leaves the admin tape waiting", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.patch.source, "kotak");
   assert.equal(result.patch.live, false);
+});
+
+test("a Kotak fetch that started while idle does not overwrite Dhan after it goes live", async () => {
+  let feed = { live: false, source: "idle" };
+  let applied = 0;
+  const result = await pullKotakAdminQuotes({
+    key: "kotak-feed-key",
+    feed,
+    currentFeed: () => feed,
+    fetchQuotes: async () => {
+      feed = { live: true, source: "websocket" };
+      return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22421.95 }];
+    },
+    applyQuotes: () => {
+      applied += 1;
+    },
+  });
+  assert.equal(applied, 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "dhan-live");
+  assert.equal(result.patch, null);
+});
+
+test("an empty Kotak quote does not turn off a Dhan tape that connected during the fetch", async () => {
+  let feed = { live: false, source: "idle" };
+  const result = await pullKotakAdminQuotes({
+    key: "kotak-feed-key",
+    feed,
+    currentFeed: () => feed,
+    fetchQuotes: async () => {
+      feed = { live: true, source: "websocket" };
+      return [];
+    },
+    applyQuotes: () => {
+      throw new Error("should not apply");
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "dhan-live");
+  assert.equal(result.patch, null);
 });

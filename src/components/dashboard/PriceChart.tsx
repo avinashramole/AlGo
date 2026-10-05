@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getCandles } from "../../api/client";
-import { cn, formatQuote, hasDhanQuotes } from "../../lib/format";
+import { cn, formatQuote, hasDhanQuotes, kotakAdminTape } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { CandleChart } from "../charts/CandleChart";
@@ -24,6 +24,9 @@ export function PriceChart() {
   const ohlc = data.ohlc;
   const dhanLive = Boolean(data.dhanFeed?.live);
   const dhanQuotes = hasDhanQuotes(data);
+  const kotakTape = kotakAdminTape(data);
+  const liveTape = dhanQuotes || kotakTape;
+  const sourceLabel = kotakTape ? (dhanLive ? "KOTAK LIVE" : "KOTAK") : dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : "WAIT";
   const [tf, setTf] = useState<(typeof timeframes)[number]>("5m");
   const [candles, setCandles] = useState<Candle[]>([]);
 
@@ -55,9 +58,9 @@ export function PriceChart() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold">NIFTY 50 NSE</h2>
-            <span className={cn("flex items-center gap-1 text-[11px] font-semibold", dhanQuotes ? "text-up" : "text-slate-400")}>
-              <span className={cn("h-1.5 w-1.5 rounded-full", dhanQuotes ? "pulse-dot bg-up" : "bg-slate-400")} />
-              {dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : "WAIT"}
+            <span className={cn("flex items-center gap-1 text-[11px] font-semibold", liveTape ? "text-up" : "text-slate-400")}>
+              <span className={cn("h-1.5 w-1.5 rounded-full", liveTape ? "pulse-dot bg-up" : "bg-slate-400")} />
+              {sourceLabel}
             </span>
           </div>
           <div className="mt-1 flex items-end gap-3">

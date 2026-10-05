@@ -463,7 +463,6 @@ export function kotakLimitHeaderSets(creds = {}) {
 }
 
 async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_TRADE_HOSTS) {
-  const { ipv4Request } = await import("./ipv4.js");
   const body = new URLSearchParams({ jData: JSON.stringify(jData || {}) }).toString();
   const requestHeaders = headers || {
     Auth: creds.token,
@@ -475,7 +474,12 @@ async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_
   let last = null;
   for (const host of hosts) {
     try {
-      const res = await ipv4Request(`${host}${path}`, { method: "POST", headers: requestHeaders, body, timeoutMs: 8000 });
+      const res = await fetch(`${host}${path}`, {
+        method: "POST",
+        headers: requestHeaders,
+        body,
+        signal: AbortSignal.timeout(8000),
+      });
       const text = await res.text();
       let json = null;
       try {
