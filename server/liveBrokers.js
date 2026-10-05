@@ -1042,14 +1042,22 @@ function kotakOrderBody({ payload, nfo, qty, side, product }) {
   };
 }
 
+function kotakUsersMobile(session = {}) {
+  return (
+    String(session.profileMobile || "").trim() ||
+    (session.copyUserId ? String(getPublicUser(session.copyUserId)?.mobile || "").trim() : "") ||
+    String(session.mobile || "").trim()
+  );
+}
+
 function kotakDeskCreds(session = {}, lane = "admin") {
   const own = {
     clientId: String(session.clientId || "").trim(),
     apiKey: String(session.apiKey || "").trim(),
     accessToken: String(session.accessToken || "").trim(),
     sessionToken: String(session.sessionToken || "").trim(),
-    mobile: String(session.mobile || session.profileMobile || "").trim(),
-    profileMobile: String(session.profileMobile || "").trim(),
+    mobile: String(session.mobile || kotakUsersMobile(session) || "").trim(),
+    profileMobile: String(session.profileMobile || kotakUsersMobile(session) || "").trim(),
     copyUserId: String(session.copyUserId || "").trim(),
     mpin: String(session.mpin || "").trim(),
     totpSecret: String(session.totpSecret || "").trim(),
@@ -1130,7 +1138,14 @@ function kotakHostMiss(error) {
 
 function stampKotakPlaceError(error) {
   if (!error || typeof error !== "object") return;
-  const reason = String(error.message || "Kotak Neo did not accept this order.");
+  let reason = String(error.message || "Kotak Neo did not accept this order.");
+  if (isKotakMobileFieldError({ message: reason, body: error.body })) {
+    reason =
+      String(error.message || "").includes("Users mobile")
+        ? reason
+        : "Kotak Neo rejected the Users-list mobile. Paste the 10-digit number shown on Users — the mobile registered on this Kotak Neo TOTP.";
+    error.message = reason;
+  }
   error.live = { ...(error.live || {}), status: "REJECTED", reason, brokerId: "kotak" };
 }
 
@@ -1143,7 +1158,7 @@ export function kotakLoginAuthorization(creds = {}) {
 
 export function canKotakTradeLogin(creds = {}) {
   return Boolean(
-    String(creds.mobile || "").trim() &&
+    String(creds.mobile || creds.profileMobile || "").trim() &&
       String(creds.mpin || "").trim() &&
       String(creds.totpSecret || "").trim() &&
       String(creds.clientId || "").trim() &&
@@ -1151,13 +1166,13 @@ export function canKotakTradeLogin(creds = {}) {
   );
 }
 
-export async function openKotakTradeSession(creds, fetchImpl = fetch) {
+export async function openKotakTradeSession(creds, fetchImpl = fetch, lane = "admin") {
   const authHeader = kotakLoginAuthorization(creds);
   const key = `${creds.clientId}|${authHeader}`;
   const cached = kotakTradeCache.get(key);
   if (cached && cached.expires > Date.now() && cached.baseUrl && cached.tradeToken) return cached;
   const codes = kotakTotpCandidates(creds.totpSecret);
-  const profileMobile = creds.profileMobile || (creds.copyUserId ? getPublicUser(creds.copyUserId)?.mobile : "");
+  const profileMobile = creds.profileMobile || kotakUsersMobile(creds);
   const mobiles = kotakMobileNumberCandidates(profileMobile, creds.mobile);
   if (!mobiles.length) {
     throw fail("Kotak trade-login mobile must be a valid 10-digit Indian mobile number. Use the number shown on Users.");
@@ -1165,10 +1180,9 @@ export async function openKotakTradeSession(creds, fetchImpl = fetch) {
   const auths = [authHeader];
   const consumerKey = String(creds.apiKey || "").trim();
   if (consumerKey && consumerKey !== authHeader) auths.push(consumerKey);
-  const loginUrls = [
-    "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin",
-    "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/login",
-  ];
+  const classicLogin = "https://mis.kotaksecurities.com/login/1.0/tradeApiLogin";
+  const v6Login = "https://mis.kotaksecurities.com/login/1.0/login/v6/totp/login";
+  const loginUrls = lane === "member" ? [v6Login, classicLogin] : [classicLogin, v6Login];
   let login = null;
   let loginAuth = authHeader;
   let loginUrl = loginUrls[0];
@@ -1284,7 +1298,7 @@ async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, si
   const pastedTrade = Boolean(memberPair?.sid && memberPair?.auth);
   let trade = null;
   if (!pastedTrade && canKotakTradeLogin(creds)) {
-    trade = await openKotakTradeSession(creds, fetchImpl);
+    trade = await openKotakTradeSession(creds, fetchImpl, lane);
   } else if (creds.baseUrl && creds.tradeToken) {
     trade = {
       baseUrl: creds.baseUrl,

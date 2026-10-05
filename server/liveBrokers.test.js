@@ -1042,10 +1042,10 @@ test("a member crude order opens that user's Kotak trade login and does not use 
       body: options.body,
     });
     const target = String(url);
-    if (target.includes("tradeApiLogin")) {
+    if (target.includes("tradeApiLogin") || target.includes("/v6/totp/login")) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
     }
-    if (target.includes("tradeApiValidate")) {
+    if (target.includes("tradeApiValidate") || target.includes("/v6/totp/validate")) {
       return {
         ok: true,
         status: 200,
@@ -1081,7 +1081,7 @@ test("a member crude order opens that user's Kotak trade login and does not use 
     );
     assert.equal(live.orderId, "k-crude");
     assert.equal(live.status, "PENDING");
-    const login = calls.find((row) => row.url.includes("tradeApiLogin"));
+    const login = calls.find((row) => row.url.includes("tradeApiLogin") || row.url.includes("/v6/totp/login"));
     assert.equal(login.auth, "member-access-1452");
     assert.equal(String(login.body).includes("9876501234"), true);
     assert.equal(String(login.body).includes("YT2Vm"), true);
@@ -1137,7 +1137,7 @@ test("a member Kotak refusal stays on that user's own key and does not send the 
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url: String(url), auth: options.headers?.Authorization, body: options.body });
-    if (String(url).includes("tradeApiLogin")) {
+    if (String(url).includes("tradeApiLogin") || String(url).includes("/v6/totp/login")) {
       return {
         ok: false,
         status: 424,
@@ -1179,7 +1179,7 @@ test("a member Kotak refusal stays on that user's own key and does not send the 
       },
     );
     assert.equal(calls.length, 1);
-    assert.match(calls[0].url, /tradeApiLogin/);
+    assert.match(calls[0].url, /tradeApiLogin|v6\/totp\/login/);
     assert.equal(calls[0].auth, "user-own-key-1452");
     assert.equal(String(calls[0].body).includes("9922980000"), true);
     assert.equal(String(calls[0].body).includes("YT2Vm"), true);
@@ -1304,7 +1304,7 @@ test("Kotak trade login sends the Users-list 10-digit mobile first", async () =>
   const logins = [];
   const fetchImpl = async (url, options = {}) => {
     const target = String(url);
-    if (target.includes("tradeApiLogin")) {
+    if (target.includes("tradeApiLogin") || target.includes("/v6/totp/login")) {
       const sent = JSON.parse(options.body);
       logins.push({ mobile: kotakLoginMobile(sent), key: sent.mobileNumber ? "mobileNumber" : "MobileNumber", auth: options.headers?.Authorization });
       if (sent.mobileNumber === "+919922980000") {
@@ -1316,7 +1316,7 @@ test("Kotak trade login sends the Users-list 10-digit mobile first", async () =>
         text: async () => JSON.stringify({ error: [{ message: "Invalid field 'MobileNumber'; must be a valid mobile number" }] }),
       };
     }
-    if (target.includes("tradeApiValidate")) {
+    if (target.includes("tradeApiValidate") || target.includes("/v6/totp/validate")) {
       return {
         ok: true,
         status: 200,
@@ -1363,7 +1363,7 @@ test("Kotak trade login sends the Users-list 10-digit mobile first", async () =>
   }
 });
 
-test("a new Kotak copy retries Neo v6 TOTP login after tradeApiLogin rejects MobileNumber", async () => {
+test("a new Kotak copy logs in on Neo v6 TOTP with the Users +91 mobile", async () => {
   clearKotakTradeCache();
   const logins = [];
   const fetchImpl = async (url, options = {}) => {
@@ -1418,16 +1418,16 @@ test("a new Kotak copy retries Neo v6 TOTP login after tradeApiLogin rejects Mob
     fetchImpl,
   );
   assert.equal(live.orderId, "k-retry");
-  assert.match(logins[0].url, /tradeApiLogin/);
+  assert.match(logins[0].url, /v6\/totp\/login/);
   assert.equal(logins[0].mobile, "+919922980000");
-  assert.ok(logins.some((row) => row.url.includes("/v6/totp/login") && row.mobile === "+919922980000"));
+  assert.equal(logins.some((row) => row.url.includes("tradeApiLogin")), false);
 });
 
 test("a Kotak copy with empty trade mobile uses the Users-list number", async () => {
   clearKotakTradeCache();
   const mobiles = [];
   const fetchImpl = async (url, options = {}) => {
-    if (String(url).includes("tradeApiLogin")) {
+    if (String(url).includes("tradeApiLogin") || String(url).includes("/v6/totp/login")) {
       mobiles.push(kotakLoginMobile(options.body));
       if (JSON.parse(options.body).mobileNumber === "+919922980000") {
         return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
@@ -1438,7 +1438,7 @@ test("a Kotak copy with empty trade mobile uses the Users-list number", async ()
         text: async () => JSON.stringify({ error: [{ message: "Invalid field 'MobileNumber'; must be a valid mobile number" }] }),
       };
     }
-    if (String(url).includes("tradeApiValidate")) {
+    if (String(url).includes("tradeApiValidate") || String(url).includes("/v6/totp/validate")) {
       return {
         ok: true,
         status: 200,
