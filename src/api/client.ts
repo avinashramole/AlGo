@@ -95,6 +95,8 @@ export type DeskReport = {
   grossPnl: number;
   charges: number;
   netPnl: number;
+  brokerPnl?: boolean;
+  brokerPnlSource?: string;
   openPositions: number;
   ordersToday: number;
   filledToday: number;

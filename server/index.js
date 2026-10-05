@@ -684,7 +684,7 @@ app.get("/api/positions/desk", async (_req, res) => {
       }
     }
     desk.userBalances = (desk.clients || []).map((row) => ({ id: row.id, name: row.name, balance: row.balance }));
-    res.json(applyBrokerBooksToDesk(desk, Object.fromEntries(loaded)));
+    res.json(applyBrokerBooksToDesk(desk, Object.fromEntries(loaded), quoteSymbol));
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not load positions" });
   }

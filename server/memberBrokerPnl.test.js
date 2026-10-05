@@ -224,6 +224,50 @@ test("Kotak limits and positions are this user's account balance, MTM, and P&L",
   assert.equal(desk.report.netPnl, 159.5);
 });
 
+test("Kotak Neo nested, string, and lowercase position rows still show live MTM", () => {
+  const nested = kotakMasterBook({
+    data: {
+      stat: "Ok",
+      data: [
+        {
+          tSym: "NIFTY26O0622850CE",
+          flBuyQty: "65",
+          flSellQty: "0",
+          buyAmt: "786.50",
+          lp: "13.40",
+          urmtom: "84.5",
+          rlmtom: "0",
+          prod: "MIS",
+        },
+      ],
+    },
+  });
+  assert.equal(nested.source, "kotak");
+  assert.equal(nested.open.length, 1);
+  assert.equal(nested.open[0].symbol, "NIFTY26O0622850CE");
+  assert.equal(nested.open[0].avg, 12.1);
+  assert.equal(nested.open[0].ltp, 13.4);
+  assert.equal(nested.unrealizedPnl, 84.5);
+  assert.equal(nested.mtm, 84.5);
+  const asText = kotakMasterBook({
+    data: JSON.stringify([
+      { trdSym: "NIFTY26O0622850CE", netQty: "65", avgPrc: "12.10", ltp: "13.40", urMtom: "84.5", rlMtom: "0", prod: "MIS" },
+    ]),
+  });
+  assert.equal(asText.open[0].ltp, 13.4);
+  assert.equal(asText.open[0].avg, 12.1);
+  const desk = localDesk();
+  desk.positions = [{ id: "local-0", symbol: "NIFTY26O0622850CE", type: "BUY", qty: 65, avg: 0, ltp: 0, pnl: 0 }];
+  desk.report.date = "2026-10-05";
+  desk.report.daily = [{ date: "2026-10-05", pnl: 0, trades: 1 }];
+  applyBrokerPnl(desk, nested);
+  assert.equal(desk.positions[0].avg, 12.1);
+  assert.equal(desk.positions[0].ltp, 13.4);
+  assert.equal(desk.wallet.mtm, 84.5);
+  assert.equal(desk.report.netPnl, 84.5);
+  assert.equal(desk.report.daily.find((row) => row.date === "2026-10-05").pnl, 84.5);
+});
+
 test("Kotak balance logs in when the access token is the consumer key", () => {
   const saved = {
     brokerId: "kotak",

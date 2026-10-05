@@ -665,6 +665,49 @@ test("client MTM uses each user's broker book instead of the local copy loss", (
   assert.equal(desk.totalMtm, 60.75);
 });
 
+test("admin desk marks a 0 LTP client row from the live quote", () => {
+  const desk = applyBrokerBooksToDesk(
+    {
+      masterMtm: 0,
+      master: { mtm: 0 },
+      clients: [
+        {
+          id: "u-kotak",
+          kind: "client",
+          tradeMode: "real",
+          positions: [
+            {
+              id: "local-0",
+              symbol: "NIFTY26O0622850CE",
+              type: "BUY",
+              qty: 65,
+              buyQty: 65,
+              buyPrice: 12.1,
+              netQty: 65,
+              avg: 12.1,
+              ltp: 0,
+              mtm: 0,
+              realized: 0,
+              closed: false,
+            },
+          ],
+          mtm: 0,
+          realized: 0,
+          open: 1,
+        },
+      ],
+      clientMtm: 0,
+      totalMtm: 0,
+    },
+    {},
+    (symbol) => (String(symbol).includes("22850") ? 13.4 : 0),
+  );
+  const row = desk.clients[0].positions[0];
+  assert.equal(row.ltp, 13.4);
+  assert.equal(row.mtm, Number(((13.4 - 12.1) * 65).toFixed(2)));
+  assert.equal(desk.clients[0].mtm, row.mtm);
+});
+
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
   const row = asLedgerPosition({
     symbol: "NIFTY 23450 PE",

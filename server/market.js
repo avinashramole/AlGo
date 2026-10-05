@@ -1926,17 +1926,31 @@ export function quoteSymbol(symbol) {
 
 setLivePriceReader(quoteSymbol);
 
+export function optionContractFromSymbol(symbol) {
+  const raw = String(symbol || "")
+    .toUpperCase()
+    .replace(/,/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const compact = raw.match(
+    /^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\d{2}(?:[A-Z]{3}|[A-Z]\d{2}|\d{3}))(\d{4,6})(CE|PE)$/,
+  );
+  if (compact) return { index: compact[1], strike: Number(compact[2]), opt: compact[3] };
+  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
+  if (named) return { index: named[1], strike: Number(named[2]), opt: named[3] };
+  const loose = raw.match(/(\d{4,5})\s*(CE|PE)\b/);
+  if (loose) return { index: "", strike: Number(loose[1]), opt: loose[2] };
+  return null;
+}
+
 function liveLtpForSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
-  const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
-  const option = named || raw.match(/(\d{3,6})\s*(CE|PE)\b/);
+  const option = optionContractFromSymbol(raw);
   if (option) {
-    const strike = Number(named ? named[2] : option[1]);
-    const opt = named ? named[3] : option[2];
-    const rows = named ? chainForSymbol(named[1])?.rows || [] : state.optionChain || [];
-    const row = rows.find((item) => Number(item.strike) === strike);
+    const rows = option.index ? chainForSymbol(option.index)?.rows || [] : state.optionChain || [];
+    const row = rows.find((item) => Number(item.strike) === option.strike);
     if (row) {
-      const ltp = opt === "PE" ? Number(row.putLtp) : Number(row.callLtp);
+      const ltp = option.opt === "PE" ? Number(row.putLtp) : Number(row.callLtp);
       if (isSaneOptionLtp(ltp)) return round2(ltp);
     }
     return 0;

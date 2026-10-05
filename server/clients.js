@@ -434,12 +434,46 @@ function applyBrokerBookToLedger(ledger, brokerBook) {
   };
 }
 
-export function applyBrokerBooksToDesk(desk, booksByUserId = {}) {
+export function enrichOpenLtps(positions = [], quote) {
+  if (typeof quote !== "function") return positions;
+  return (positions || []).map((row) => {
+    if (!row || row.closed || Number(row.netQty || row.qty || 0) === 0) return row;
+    const quoted = Number(quote(row.symbol));
+    if (!(quoted > 0)) return row;
+    const avg = Number(row.buyPrice || row.avg || 0);
+    const qty = Math.abs(Number(row.netQty || row.qty || 0));
+    const type = String(row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+    const brokerMarked = Boolean(row.brokerBook) && Number.isFinite(Number(row.mtm));
+    const mtm = brokerMarked ? Number(row.mtm) : round2((quoted - avg) * qty * (type === "SELL" ? -1 : 1));
+    return { ...row, ltp: quoted, mtm };
+  });
+}
+
+function refreshLedgerMarks(client, quote) {
+  if (!client || typeof quote !== "function") return client;
+  const positions = enrichOpenLtps(client.positions, quote);
+  if (Number.isFinite(Number(client.brokerMtm))) return { ...client, positions };
+  const open = positions.filter((row) => !row.closed);
+  const unrealized = round2(open.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
+  const realized = round2(client.realized);
+  return {
+    ...client,
+    positions,
+    unrealized,
+    mtm: round2(realized + unrealized),
+    open: open.length,
+  };
+}
+
+export function applyBrokerBooksToDesk(desk, booksByUserId = {}, quote) {
   if (!desk) return desk;
   const clients = (desk.clients || []).map((client) => {
     const book = booksByUserId?.[client.id];
-    if (!book || !Number.isFinite(Number(book.mtm))) return client;
-    return applyBrokerBookToLedger(client, book);
+    const next =
+      book && Number.isFinite(Number(book.mtm)) && ((book.open || []).length || (book.closed || []).length || book.mtm)
+        ? applyBrokerBookToLedger(client, book)
+        : client;
+    return refreshLedgerMarks(next, quote);
   });
   const clientMtm = round2(clients.reduce((sum, row) => sum + Number(row.mtm || 0), 0));
   const masterMtm = Number(desk.masterMtm ?? desk.master?.mtm ?? 0);

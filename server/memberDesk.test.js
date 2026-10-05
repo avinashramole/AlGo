@@ -582,7 +582,56 @@ test("Kotak Neo complete moves a pending user copy to FILLED on the order book",
   assert.equal(row.status, "FILLED");
   assert.equal(row.price, 12.1);
   assert.equal(row.filledQty, 65);
+  assert.equal(desk.positions[0].symbol, "NIFTY26O0622850CE");
+  assert.equal(desk.positions[0].avg, 12.1);
   assert.equal(memberWorkingKotakCopies().some((item) => item.userId === member.id), false);
+});
+
+test("open member positions mark live MTM from the quote", () => {
+  const member = { id: "u-live-mtm", name: "Live Mtm", email: "livemtm@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY26O0622850CE", side: "BUY", qty: 65, price: 12.1, strategy: algo.name, brokerId: "kotak" },
+    live: { orderId: "k-live-mtm", status: "FILLED", price: 12.1 },
+  });
+  const desk = getMemberDesk({
+    user: member,
+    enrollments: [],
+    algos: [algo],
+    quote: (symbol) => (String(symbol).includes("22850") ? 13.4 : 0),
+    ownBookOnly: true,
+  });
+  assert.equal(desk.positions[0].ltp, 13.4);
+  assert.equal(desk.positions[0].pnl, Number(((13.4 - 12.1) * 65).toFixed(2)));
+  assert.equal(desk.wallet.mtm, desk.positions[0].pnl);
+  assert.equal(desk.report.unrealizedPnl, desk.positions[0].pnl);
+});
+
+test("a Kotak FILLED book stamps the missing buy price onto the open position", () => {
+  const member = { id: "u-kotak-avg", name: "Kotak Avg", email: "kotakavg@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "NEWK2",
+    apiKey: "member-consumer-avg",
+    accessToken: "member-access-avg",
+    mobile: "9922980000",
+    mpin: "654321",
+    totpSecret: "123456",
+  });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY26O0622850CE", side: "BUY", qty: 65, strategy: algo.name, brokerId: "kotak" },
+    live: { orderId: "k-zero-avg", status: "PENDING", reason: "Sent to Kotak Neo." },
+  });
+  applyMemberDhanOrderStatuses(member.id, [
+    { orderId: "k-zero-avg", orderStatus: "complete", filledQty: 65, averageTradedPrice: 12.1 },
+  ]);
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(desk.positions[0].avg, 12.1);
+  assert.equal(desk.positions[0].ltp, 12.1);
 });
 
 test("fills and broker refusals stay on the member book; expired tickets stay off", () => {

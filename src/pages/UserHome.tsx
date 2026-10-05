@@ -47,8 +47,8 @@ export function UserHome() {
 
       <div className="grid gap-3 md:grid-cols-4">
         <Stat label="Balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
-        <Stat label="MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
-        <Stat label="P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
+        <Stat label="Live MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
+        <Stat label="Daily P&L" value={formatInr(memberDailyPnl(desk))} signed={memberDailyPnl(desk)} />
         <Stat label="Net P&L" value={formatInr(report?.netPnl || 0)} signed={report?.netPnl} />
       </div>
       {desk?.brokerId === "kotak" && !Number.isFinite(Number(desk.wallet.brokerBalance)) ? (
@@ -127,6 +127,15 @@ function memberBalance(desk: MemberDesk | null) {
   const broker = Number(desk?.wallet.brokerBalance);
   if (Number.isFinite(broker)) return broker;
   return Number(desk?.wallet.balance) || 0;
+}
+
+function memberDailyPnl(desk: MemberDesk | null) {
+  const report = desk?.report;
+  if (!report) return 0;
+  if (report.brokerPnl) return Number(report.netPnl || 0);
+  const today = (report.daily || []).find((row) => row.date === report.date);
+  if (today) return Number(today.pnl || 0) + Number(today.unrealized || 0);
+  return Number(report.netPnl || 0);
 }
 
 function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {

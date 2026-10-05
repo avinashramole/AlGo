@@ -1322,6 +1322,27 @@ function brokerOrderReason(row) {
   return String(row?.omsErrorDescription || row?.rejectedReason || row?.reason || row?.errorMessage || "").trim();
 }
 
+function stampMemberPositionFill(desk, order, price) {
+  if (!(Number(price) > 0) || !desk) return;
+  const symbol = String(order?.symbol || "");
+  const strategy = String(order?.strategy || "");
+  const side = order?.side === "SELL" ? "SELL" : "BUY";
+  const qty = Number(order?.qty || 0);
+  const openedAt = String(order?.createdAt || "");
+  const row = (desk.positions || []).find((item) => {
+    const same =
+      item.symbol === symbol &&
+      String(item.strategy || "") === strategy &&
+      (item.type === side || item.side === side) &&
+      Number(item.qty) === qty;
+    const sameTime = !openedAt || !item.openedAt || String(item.openedAt) === openedAt;
+    return same && sameTime;
+  });
+  if (!row) return;
+  if (!(Number(row.avg) > 0)) row.avg = Number(price);
+  if (!(Number(row.ltp) > 0)) row.ltp = Number(price);
+}
+
 function dropUnfilledMemberPosition(desk, order) {
   if (!isTerminalMemberOrder(order?.status) || Number(order?.filledQty || 0) > 0) return;
   const symbol = String(order.symbol || "");
@@ -1490,6 +1511,7 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
       working.push(updated);
       continue;
     }
+    if (isExecutedMemberOrder(status) && nextPrice > 0) stampMemberPositionFill(desk, updated, nextPrice);
     if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
     if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
   }
@@ -1831,7 +1853,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   };
   const hasOwn = own.positions.length || own.orders.length || own.orderHistory.length || own.closedTrades.length;
   const book = hasOwn || ownBookOnly ? own : liveBookForPlans(liveBook, enrollments, brokerId);
-  if (!book.positions.length && typeof quote === "function") {
+  if (book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
   const report = buildReport({

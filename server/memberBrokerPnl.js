@@ -305,6 +305,65 @@ export function applyBrokerBookToReport(report, book) {
   };
 }
 
+function asMemberBrokerPosition(row = {}, index = 0) {
+  const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+  const qty = Math.abs(Number(row.qty) || 0);
+  const avg = Number(row.avg || row.entry || 0);
+  const ltp = Number(row.ltp || row.exit || avg || 0);
+  return {
+    id: String(row.id || `broker-open-${index}`),
+    symbol: String(row.symbol || ""),
+    type,
+    qty,
+    avg,
+    ltp,
+    pnl: round2(row.pnl),
+    product: row.product || "MIS",
+    strategy: String(row.strategy || ""),
+    brokerId: row.brokerId || "",
+    paper: false,
+    live: true,
+    brokerBook: true,
+  };
+}
+
+function asMemberBrokerTrade(row = {}, index = 0) {
+  return {
+    id: String(row.id || `broker-closed-${index}`),
+    symbol: String(row.symbol || ""),
+    side: String(row.side || row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+    type: String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+    qty: Math.abs(Number(row.qty) || 0),
+    entry: Number(row.entry || row.avg || 0),
+    exit: Number(row.exit || row.ltp || 0),
+    pnl: round2(row.pnl != null ? row.pnl : row.realized),
+    product: row.product || "MIS",
+    strategy: String(row.strategy || ""),
+    brokerId: row.brokerId || "",
+    paper: false,
+    live: true,
+    closedAt: row.closedAt || "",
+    status: "CLOSED",
+  };
+}
+
+function stampBrokerDaily(report, realized, unrealized) {
+  const net = round2(realized + unrealized);
+  const daily = Array.isArray(report.daily) ? report.daily.map((row) => ({ ...row })) : [];
+  const today = String(report.date || "").trim();
+  if (!today) return daily;
+  const idx = daily.findIndex((row) => row.date === today);
+  const next = {
+    date: today,
+    pnl: net,
+    trades: idx >= 0 ? Number(daily[idx].trades || 0) : 0,
+    unrealized,
+  };
+  if (idx >= 0) daily[idx] = { ...daily[idx], ...next };
+  else daily.push(next);
+  return daily;
+}
+
 export function applyBrokerPnl(desk, pnl) {
   if (!desk || !pnl) return desk;
   const realized = round2(pnl.realizedPnl);
@@ -320,7 +379,16 @@ export function applyBrokerPnl(desk, pnl) {
     netPnl: gross,
     brokerPnl: true,
     brokerPnlSource: pnl.source || "",
+    daily: stampBrokerDaily(report, realized, unrealized),
   };
+  if (Array.isArray(pnl.open) && (pnl.open.length || (pnl.closed || []).length)) {
+    const paper = (desk.positions || []).filter((row) => row?.paper || row?.brokerId === "paper");
+    desk.positions = [...paper, ...pnl.open.map(asMemberBrokerPosition)];
+    desk.report.openPositions = desk.positions.length;
+  }
+  if (Array.isArray(pnl.closed) && pnl.closed.length) {
+    desk.report.tradeBook = pnl.closed.map(asMemberBrokerTrade);
+  }
   const balance = round2(desk.wallet?.balance || 0);
   desk.wallet = {
     ...(desk.wallet || {}),
@@ -507,6 +575,27 @@ async function kotakTradePost(creds, path, jData, headers = null, hosts = KOTAK_
   throw last || new Error("Kotak trade request failed.");
 }
 
+async function fetchKotakMasterBook(creds) {
+  const sets = kotakLimitHeaderSets(creds);
+  if (!sets.length) {
+    return kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", {}));
+  }
+  let last = null;
+  for (const set of sets) {
+    try {
+      const hosts = set.headers.Auth ? KOTAK_TRADE_HOSTS : ["https://mis.kotaksecurities.com"];
+      const book = kotakMasterBook(
+        await kotakTradePost(creds, "/quick/user/positions", {}, set.headers, hosts),
+      );
+      if (book) return book;
+    } catch (error) {
+      last = error;
+    }
+  }
+  if (last) throw last;
+  return null;
+}
+
 async function withKotakTradeLogin(creds) {
   if (!kotakNeedsTradeLogin(creds)) return creds;
   try {
@@ -533,7 +622,7 @@ async function fetchBrokerPnl(userId) {
     return dhanMasterBook(await fetchMemberDhanPositions(creds.token, creds.clientId));
   }
   if (creds.brokerId === "kotak") {
-    return kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", {}));
+    return fetchKotakMasterBook(creds);
   }
   return upstoxMasterBook(await upstoxPositions(creds.token));
 }
@@ -630,19 +719,88 @@ export function kotakAvailableBalance(body) {
   return fallback;
 }
 
-function kotakPositionRows(raw) {
+function kotakRowValue(row, keys) {
+  if (!row || typeof row !== "object") return undefined;
+  const lower = Object.create(null);
+  for (const [key, value] of Object.entries(row)) {
+    lower[String(key).toLowerCase()] = value;
+  }
+  for (const key of keys) {
+    if (row[key] != null && row[key] !== "") return row[key];
+    const hit = lower[String(key).toLowerCase()];
+    if (hit != null && hit !== "") return hit;
+  }
+  return undefined;
+}
+
+function kotakLookField(row, keys) {
+  const n = finite(kotakRowValue(row, keys));
+  if (n != null) return n;
+  return kotakMoneyField(row, keys);
+}
+
+export function kotakPositionRows(raw) {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    try {
+      return kotakPositionRows(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }
   if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.data?.data)) return raw.data.data;
+  if (Array.isArray(raw?.data?.positions)) return raw.data.positions;
+  if (Array.isArray(raw?.positions)) return raw.positions;
   if (Array.isArray(raw?.data)) return raw.data;
+  if (typeof raw?.data === "string" || typeof raw?.data?.data === "string") {
+    return kotakPositionRows(raw.data?.data ?? raw.data);
+  }
+  if (
+    raw &&
+    typeof raw === "object" &&
+    (raw.trdSym ||
+      raw.tSym ||
+      raw.tsym ||
+      raw.tradingSymbol ||
+      raw.flBuyQty != null ||
+      raw.netQty != null ||
+      raw.tok)
+  ) {
+    return [raw];
+  }
   return null;
 }
 
 function kotakSignedQty(row) {
-  const net = finite(row.netQty ?? row.qty);
+  const net = kotakLookField(row, ["netQty", "qty", "netQuantity"]);
   if (net != null && net !== 0) return net;
-  const buy = Math.abs(Number(row.flBuyQty || row.buyQty || 0));
-  const sell = Math.abs(Number(row.flSellQty || row.sellQty || 0));
+  const buy =
+    Math.abs(Number(kotakRowValue(row, ["flBuyQty", "buyQty"]) || 0)) +
+    Math.abs(Number(kotakRowValue(row, ["cfBuyQty"]) || 0));
+  const sell =
+    Math.abs(Number(kotakRowValue(row, ["flSellQty", "sellQty"]) || 0)) +
+    Math.abs(Number(kotakRowValue(row, ["cfSellQty"]) || 0));
   if (!buy && !sell) return 0;
   return buy - sell;
+}
+
+function kotakAvgPrice(row, qty, side) {
+  const direct = kotakLookField(row, ["avgPrc", "avgPrice", "buyAvgPrc", "sellAvgPrc", "upldPrc"]);
+  if (direct != null && direct > 0) return direct;
+  const buyQty = Math.abs(Number(kotakRowValue(row, ["flBuyQty", "buyQty"]) || 0));
+  const sellQty = Math.abs(Number(kotakRowValue(row, ["flSellQty", "sellQty"]) || 0));
+  const buyAmt = kotakLookField(row, ["buyAmt", "buyAmount", "buyVal"]);
+  const sellAmt = kotakLookField(row, ["sellAmt", "sellAmount", "sellVal"]);
+  if (side === "SELL" && sellQty && sellAmt != null) return sellAmt / sellQty;
+  if (buyQty && buyAmt != null) return buyAmt / buyQty;
+  if (qty && buyAmt != null && side !== "SELL") return buyAmt / Math.abs(qty);
+  return direct || 0;
+}
+
+function kotakLastPrice(row, avg) {
+  const ltp = kotakLookField(row, ["ltp", "LTP", "lp", "lastPx", "lastPrice", "clsPrc", "close"]);
+  return ltp != null && ltp > 0 ? ltp : avg;
 }
 
 export function kotakMasterBook(raw) {
@@ -656,19 +814,38 @@ export function kotakMasterBook(raw) {
     if (!row || typeof row !== "object") continue;
     if (String(row.stat || "Ok").toLowerCase() === "not_ok") continue;
     const qty = kotakSignedQty(row);
-    const realizedLeg = firstFinite(row, ["rlMtom", "realizedMtom", "realisedMtom", "realizedGain", "realizedProfit"]) || 0;
-    const quotedUnreal = firstFinite(row, ["urMtom", "unrealizedMtom", "unRealizedMtom", "unrealizedGain", "unrealizedProfit"]);
-    const totalMtm = firstFinite(row, ["mTom", "mtom", "Mtom"]);
-    const unrealizedLeg = quotedUnreal != null ? quotedUnreal : qty && totalMtm != null ? totalMtm - realizedLeg : 0;
+    const realizedLeg =
+      kotakLookField(row, ["rlMtom", "rlmtom", "realizedMtom", "realisedMtom", "realizedGain", "realizedProfit", "rPnl"]) || 0;
+    const quotedUnreal = kotakLookField(row, [
+      "urMtom",
+      "urmtom",
+      "unrealizedMtom",
+      "unRealizedMtom",
+      "unrealizedGain",
+      "unrealizedProfit",
+      "uPnl",
+    ]);
+    const totalMtm = kotakLookField(row, ["mTom", "mtom", "Mtom", "mtm"]);
+    const side = qty < 0 ? "SELL" : "BUY";
+    const avg = kotakAvgPrice(row, qty, side);
+    const ltp = kotakLastPrice(row, avg);
+    const computedUnreal =
+      quotedUnreal != null
+        ? quotedUnreal
+        : qty && totalMtm != null
+          ? totalMtm - realizedLeg
+          : qty && avg
+            ? (ltp - avg) * qty
+            : 0;
+    const unrealizedLeg = computedUnreal;
     if (!qty && !realizedLeg && !unrealizedLeg) continue;
     realized += realizedLeg;
     unrealized += unrealizedLeg;
-    const symbol = String(row.trdSym || row.sym || row.tradingSymbol || "");
-    const side = qty < 0 ? "SELL" : "BUY";
-    const avg = Number(row.avgPrc || row.avgPrice || 0);
-    const ltp = Number(row.ltp || row.LTP || avg);
+    const symbol = String(kotakRowValue(row, ["trdSym", "tSym", "tsym", "trdSYm", "tradingSymbol", "sym", "trdSymbol"]) || "");
+    const product = String(kotakRowValue(row, ["prod", "product", "prd"]) || "MIS");
+    const token = kotakRowValue(row, ["tok", "token"]) || symbol || open.length + closed.length;
     const leg = {
-      id: `kotak-${row.tok || symbol || open.length + closed.length}-${row.prod || "MIS"}`,
+      id: `kotak-${token}-${product}`,
       symbol,
       side,
       type: side,
@@ -679,7 +856,7 @@ export function kotakMasterBook(raw) {
       exit: ltp,
       pnl: round2(realizedLeg + unrealizedLeg),
       realized: round2(realizedLeg),
-      product: row.prod || "MIS",
+      product,
       brokerId: "kotak",
       live: true,
       paper: false,
