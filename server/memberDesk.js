@@ -1305,7 +1305,7 @@ export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
   if (paper || !live) return "FILLED";
   const raw = String(status || live.status || "PENDING").toUpperCase();
   if (raw === "TRANSIT" || raw === "OPEN") return "PENDING";
-  if (raw === "TRADED") return "FILLED";
+  if (raw === "TRADED" || raw === "COMPLETE" || raw === "COMPLETED") return "FILLED";
   if (raw === "PART_TRADED") return "PARTIAL";
   if (raw === "REJECTED" || raw === "REJECT" || raw === "REJECTION") return "REJECTED";
   if (raw === "FAIL" || raw === "FAILURE") return "FAILED";
@@ -1342,6 +1342,31 @@ function dropUnfilledMemberPosition(desk, order) {
     removed = true;
     return false;
   });
+}
+
+export function memberWorkingKotakCopies() {
+  const out = [];
+  for (const userId of Object.keys(store)) {
+    if (!userId || userId === "admin") continue;
+    const desk = store[userId] || {};
+    const working = (Array.isArray(desk.orders) ? desk.orders : []).filter(
+      (row) => isWorkingMemberOrder(row?.status) && String(row.brokerId || "").toLowerCase() === "kotak" && !row.paper,
+    );
+    if (!working.length) continue;
+    const slot = brokerAccountForLiveCopy(userId, "kotak");
+    if (slot.leftoverToken) continue;
+    out.push({
+      userId,
+      token: String(slot.brokerToken || (desk.brokerId === "kotak" ? desk.brokerToken : "") || "").trim(),
+      clientId: String(slot.accountId || (desk.brokerId === "kotak" ? desk.accountId : "") || "").trim(),
+      apiKey: String(slot.brokerApiKey || desk.brokerApiKey || "").trim(),
+      sessionToken: String(slot.brokerSessionToken || desk.brokerSessionToken || "").trim(),
+      mobile: String(slot.brokerMobile || desk.brokerMobile || "").trim(),
+      mpin: String(slot.brokerMpin || desk.brokerMpin || "").trim(),
+      totpSecret: String(slot.brokerTotpSecret || desk.brokerTotpSecret || "").trim(),
+    });
+  }
+  return out;
 }
 
 export function memberWorkingDhanCopies() {

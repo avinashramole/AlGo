@@ -802,6 +802,41 @@ export async function attachMemberBrokerBalance(desk, userId, load = readMemberB
   return desk;
 }
 
+export async function syncMemberKotakOrders(userId = "") {
+  const { memberWorkingKotakCopies, applyMemberDhanOrderStatuses } = await import("./memberDesk.js");
+  const { refreshCopyOrdersFromBroker } = await import("./market.js");
+  const { kotakOrderRows, normalizeKotakBrokerOrder } = await import("./liveBrokers.js");
+  const wanted = String(userId || "").trim();
+  const targets = memberWorkingKotakCopies().filter((row) => !wanted || row.userId === wanted);
+  const updates = [];
+  for (const target of targets) {
+    try {
+      const creds = await withKotakTradeLogin({
+        brokerId: "kotak",
+        token: target.token,
+        accessToken: target.token,
+        apiKey: target.apiKey,
+        sessionToken: target.sessionToken,
+        clientId: target.clientId,
+        mobile: target.mobile,
+        mpin: target.mpin,
+        totpSecret: target.totpSecret,
+      });
+      if (!creds) continue;
+      const report = await kotakTradePost(creds, "/quick/user/orders", {});
+      const rows = kotakOrderRows(report).map(normalizeKotakBrokerOrder).filter((row) => row.orderId);
+      const changed = applyMemberDhanOrderStatuses(target.userId, rows);
+      if (changed.length) {
+        refreshCopyOrdersFromBroker(target.userId, changed);
+        updates.push(...changed);
+      }
+    } catch (error) {
+      console.log(`member Kotak order status ${target.userId}: ${error?.message || error}`);
+    }
+  }
+  return updates;
+}
+
 export async function attachMemberBrokerPnl(desk, userId, load = readMemberBrokerPnl) {
   if (!desk || !userId) return desk;
   try {

@@ -39,7 +39,15 @@ export async function sendMemberCopyOrder(payload = {}, fetchImpl = fetch) {
     }
     liveOrderSession(payload, null, { brokerName });
     const live = await placeLiveBrokerOrder(payload.brokerId, payload, fetchImpl);
-    return recordMemberCopyFill({ userId, payload, live });
+    const booked = recordMemberCopyFill({ userId, payload, live });
+    if (payload.brokerId === "kotak" && /PENDING|PARTIAL/i.test(String(live?.status || booked?.status || ""))) {
+      setTimeout(() => {
+        import("./memberBrokerPnl.js")
+          .then(({ syncMemberKotakOrders }) => syncMemberKotakOrders(userId))
+          .catch(() => {});
+      }, 1500);
+    }
+    return booked;
   } catch (error) {
     let wrapped = annotateMemberLiveAuthError(error, creds, { brokerName });
     if (payload.brokerId === "upstox" && (error?.status === 401 || /401|unauthorized|UDAPI1000/i.test(String(error?.message || "")))) {

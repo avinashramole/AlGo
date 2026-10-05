@@ -18,6 +18,9 @@ const {
   kotakMobileNumber,
   kotakMobileNumberCandidates,
   kotakOrderAmo,
+  mapKotakOrdSt,
+  normalizeKotakBrokerOrder,
+  pickKotakHistoryState,
   kotakTotpCandidates,
   nfoTradingSymbol,
   parseDeskFutureSymbol,
@@ -1758,4 +1761,82 @@ test("Kotak admin order logs in and places on the session base URL", async () =>
     if (saved.totp == null) delete process.env.T2S_KOTAK_TOTP_SECRET;
     else process.env.T2S_KOTAK_TOTP_SECRET = saved.totp;
   }
+});
+
+test("mapKotakOrdSt treats Neo complete as FILLED", () => {
+  assert.equal(mapKotakOrdSt("complete"), "FILLED");
+  assert.equal(mapKotakOrdSt("open"), "PENDING");
+  assert.equal(mapKotakOrdSt("rejected"), "REJECTED");
+  assert.deepEqual(
+    pickKotakHistoryState([
+      { nOrdNo: "k-22850", ordSt: "open", fldQty: 0, avgPrc: "0.00" },
+      { nOrdNo: "k-22850", ordSt: "complete", fldQty: 65, avgPrc: "12.10" },
+    ]),
+    { orderId: "k-22850", orderStatus: "FILLED", filledQty: 65, averageTradedPrice: 12.1, price: 12.1, reason: "" },
+  );
+  assert.equal(normalizeKotakBrokerOrder({ nOrdNo: "k-1", ordSt: "complete", avgPrc: "12.10", fldQty: 65 }).orderStatus, "FILLED");
+});
+
+test("a Kotak member fill is booked FILLED after Neo history says complete", async () => {
+  clearKotakTradeCache();
+  const fetchImpl = async (url) => {
+    const target = String(url);
+    if (target.includes("tradeApiLogin") || target.includes("/v6/totp/login")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
+    }
+    if (target.includes("tradeApiValidate") || target.includes("/v6/totp/validate")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: { token: "edit-token", sid: "edit-sid", baseUrl: "https://e22.kotaksecurities.com", hsServerId: "server-2" },
+          }),
+      };
+    }
+    if (target.includes("/quick/order/history")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            data: [
+              { nOrdNo: "k-22850", ordSt: "open", fldQty: 0, avgPrc: "0.00" },
+              { nOrdNo: "k-22850", ordSt: "complete", fldQty: 65, avgPrc: "12.10", trdSym: "NIFTY26O0622850CE" },
+            ],
+          }),
+      };
+    }
+    if (target.includes("/quick/order/rule/ms/place")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ nOrdNo: "k-22850" }) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({}) };
+  };
+  const live = await placeLiveBrokerOrder(
+    "kotak",
+    {
+      copyUserId: "u-new-kotak",
+      brokerSession: {
+        accessToken: "member-access-new",
+        apiKey: "member-consumer-new",
+        clientId: "NEWK1",
+        mobile: "9922980000",
+        profileMobile: "9922980000",
+        mpin: "654321",
+        totpSecret: "123456",
+      },
+      symbol: "NIFTY 22850 CE",
+      expiry: "2026-10-06",
+      side: "BUY",
+      qty: 65,
+      price: 12.1,
+      type: "LIMIT",
+    },
+    fetchImpl,
+  );
+  assert.equal(live.orderId, "k-22850");
+  assert.equal(live.status, "FILLED");
+  assert.equal(live.price, 12.1);
+  assert.equal(live.filledQty, 65);
+  assert.match(live.reason, /Filled on Kotak Neo/);
 });

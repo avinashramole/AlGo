@@ -1292,6 +1292,91 @@ function kotakPlaceUrls(trade) {
   return hosts.map((host) => `${host}/quick/order/rule/ms/place${query}`);
 }
 
+export function mapKotakOrdSt(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (/reject/.test(raw)) return "REJECTED";
+  if (/cancel|expired/.test(raw)) return "CANCELLED";
+  if (/complete|traded|filled/.test(raw) && !/pending|partial|part/.test(raw)) return "FILLED";
+  if (/part/.test(raw)) return "PARTIAL";
+  if (/open|pending|received|transit|trigger|queued/.test(raw)) return "PENDING";
+  return "";
+}
+
+export function kotakOrderRows(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data?.data)) return body.data.data;
+  if (Array.isArray(body?.data)) return body.data;
+  if (body?.nOrdNo || body?.ordSt) return [body];
+  return [];
+}
+
+export function normalizeKotakBrokerOrder(row = {}) {
+  const orderId = String(row.nOrdNo || row.orderId || row.nOrdNo || "").trim();
+  const orderStatus = mapKotakOrdSt(row.ordSt || row.stat || row.status || row.orderStatus);
+  const filledQty = Number(row.fldQty || row.filledQty || 0);
+  const price = Number(row.avgPrc || row.averageTradedPrice || row.tradedPrice || row.prc || 0);
+  const reason = String(row.rejRsn || row.ordUsrMsg || row.reason || "")
+    .replace(/^(-+|NA)$/i, "")
+    .trim();
+  return {
+    orderId,
+    orderStatus,
+    filledQty: Number.isFinite(filledQty) ? filledQty : 0,
+    averageTradedPrice: Number.isFinite(price) && price > 0 ? price : 0,
+    price: Number.isFinite(price) && price > 0 ? price : 0,
+    reason,
+  };
+}
+
+export function pickKotakHistoryState(rows) {
+  const mapped = (Array.isArray(rows) ? rows : []).map(normalizeKotakBrokerOrder).filter((row) => row.orderId);
+  const rank = { REJECTED: 4, FILLED: 3, CANCELLED: 3, PARTIAL: 2, PENDING: 1 };
+  return mapped.sort((left, right) => (rank[right.orderStatus] || 0) - (rank[left.orderStatus] || 0))[0] || null;
+}
+
+function kotakHistoryUrls(trade) {
+  const hosts = trade?.baseUrl ? [trade.baseUrl] : KOTAK_ORDER_HOSTS;
+  const query = trade?.serverId ? `?sId=${encodeURIComponent(trade.serverId)}` : "";
+  return hosts.map((host) => `${host}/quick/order/history${query}`);
+}
+
+async function readKotakPlacedOrder({ trade, orderId, fetchImpl, headers }) {
+  const body = new URLSearchParams({ jData: JSON.stringify({ nOrdNo: orderId }) }).toString();
+  let last = null;
+  for (const url of kotakHistoryUrls(trade)) {
+    try {
+      const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
+      const viewed = pickKotakHistoryState(kotakOrderRows(parsed));
+      if (viewed?.orderId) return viewed;
+    } catch (error) {
+      last = error;
+      if (!kotakHostMiss(error) || url === kotakHistoryUrls(trade).at(-1)) break;
+    }
+  }
+  return null;
+}
+
+function kotakLiveFromPlace({ orderId, tradingSymbol, amo, viewed }) {
+  const pending = {
+    orderId,
+    status: "PENDING",
+    brokerId: "kotak",
+    tradingSymbol,
+    reason: amo === "YES" ? "Sent to Kotak Neo as an after-market order." : "Sent to Kotak Neo.",
+  };
+  if (!viewed?.orderStatus || viewed.orderStatus === "PENDING") return pending;
+  return {
+    ...pending,
+    status: viewed.orderStatus,
+    filledQty: viewed.filledQty,
+    price: viewed.averageTradedPrice || viewed.price || 0,
+    reason:
+      viewed.reason ||
+      (viewed.orderStatus === "FILLED" ? "Filled on Kotak Neo." : viewed.orderStatus === "REJECTED" ? "Rejected on Kotak Neo." : pending.reason),
+  };
+}
+
 async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, side, product }) {
   const creds = kotakDeskCreds(session, lane);
   const memberPair = lane === "member" ? kotakMemberTradePair(creds) : null;
@@ -1338,13 +1423,13 @@ async function placeKotakOrder({ payload, session, fetchImpl, lane, nfo, qty, si
       const parsed = await kotakRequest(fetchImpl, url, { method: "POST", headers, body });
       const orderId = String(parsed.nOrdNo || parsed.data?.nOrdNo || parsed.orderId || "");
       if (!orderId) throw fail("Kotak Neo did not return an order number.");
-      return {
-        orderId,
-        status: "PENDING",
-        brokerId: "kotak",
-        tradingSymbol: jData.ts,
-        reason: jData.am === "YES" ? "Sent to Kotak Neo as an after-market order." : "Sent to Kotak Neo.",
-      };
+      let viewed = null;
+      try {
+        viewed = await readKotakPlacedOrder({ trade: trade || { baseUrl: new URL(url).origin, serverId: trade?.serverId }, orderId, fetchImpl, headers });
+      } catch {
+        viewed = null;
+      }
+      return kotakLiveFromPlace({ orderId, tradingSymbol: jData.ts, amo: jData.am, viewed });
     } catch (error) {
       last = error;
       if (!kotakHostMiss(error) || url === urls[urls.length - 1]) throw error;

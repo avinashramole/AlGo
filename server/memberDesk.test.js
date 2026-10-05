@@ -28,6 +28,7 @@ const {
   purgeMemberDesksExcept,
   applyMemberDhanOrderStatuses,
   memberWorkingDhanCopies,
+  memberWorkingKotakCopies,
   recordMemberCopyFill,
   saveClientSettings,
   saveMemberStaticIp,
@@ -549,6 +550,39 @@ test("broker order book replaces a pending copy with REJECTED and keeps the limi
   const alert = (desk.alerts || []).find((row) => row.symbol === "NIFTY 22650 CE");
   assert.equal(alert.status, "REJECTED");
   assert.match(alert.text, /Copied BUY 65 NIFTY 22650 CE · NIFTY 5m first candle · REJECTED · Insufficient funds/);
+});
+
+test("Kotak Neo complete moves a pending user copy to FILLED on the order book", () => {
+  const member = { id: "u-kotak-fill", name: "Kotak Fill", email: "kotakfill@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "kotak" });
+  installMemberBroker({
+    user: member,
+    brokerId: "kotak",
+    clientId: "NEWK1",
+    apiKey: "member-consumer-new",
+    accessToken: "member-access-new",
+    mobile: "9922980000",
+    mpin: "654321",
+    totpSecret: "123456",
+  });
+  const pending = recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY26O0622850CE", side: "BUY", qty: 65, price: 12.1, strategy: "NIFTY 5m first candle", brokerId: "kotak" },
+    live: { orderId: "k-22850", status: "PENDING", price: 12.1, reason: "Sent to Kotak Neo." },
+  });
+  assert.equal(pending.status, "PENDING");
+  assert.ok(memberWorkingKotakCopies().some((row) => row.userId === member.id && row.clientId === "NEWK1"));
+  const updates = applyMemberDhanOrderStatuses(member.id, [
+    { orderId: "k-22850", orderStatus: "complete", filledQty: 65, averageTradedPrice: 12.1 },
+  ]);
+  assert.equal(updates[0].status, "FILLED");
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(desk.orders.some((row) => row.id === "k-22850"), false);
+  const row = (desk.orderHistory || []).find((item) => item.id === "k-22850");
+  assert.equal(row.status, "FILLED");
+  assert.equal(row.price, 12.1);
+  assert.equal(row.filledQty, 65);
+  assert.equal(memberWorkingKotakCopies().some((item) => item.userId === member.id), false);
 });
 
 test("fills and broker refusals stay on the member book; expired tickets stay off", () => {
