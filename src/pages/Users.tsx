@@ -603,7 +603,7 @@ function AddClientModal({
   const [brokerId, setBrokerId] = useState("dhan");
   const [sizingKind, setSizingKind] = useState<SizingKind>("multiplier");
   const [sizingValue, setSizingValue] = useState("1");
-  const [tradeMode, setTradeMode] = useState<TradeMode>("paper");
+  const [tradeMode, setTradeMode] = useState<TradeMode>("real");
   const [subscriptionMode, setSubscriptionMode] = useState<NonNullable<ClientRow["subscriptionMode"]>>("copy");
   const [subscriptionUntil, setSubscriptionUntil] = useState(defaultUntil || defaultUntilDate());
   const [mappedStrategy, setMappedStrategy] = useState("");
@@ -741,6 +741,7 @@ function AddClientModal({
                   onChange={(event) => {
                     const next = event.target.value;
                     setBrokerId(next);
+                    setTradeMode(next === "paper" ? "paper" : "real");
                     const row = catalog.find((item) => item.id === next);
                     setSegments(row?.segments?.includes("All segments") ? ["All segments"] : row?.segments?.slice(0, 1) || ["All segments"]);
                     setStaticIp("");
@@ -769,8 +770,8 @@ function AddClientModal({
             </Field>
             <Field label="Order mode">
               <select className={inputClass} value={tradeMode} onChange={(event) => setTradeMode(event.target.value as TradeMode)}>
-                <option value="paper">Paper</option>
-                <option value="real">Real</option>
+                <option value="real">Real · live orders on this broker</option>
+                <option value="paper">Paper · virtual only</option>
               </select>
               <span className="font-normal text-[11px] text-slate-500">
                 Add broker credentials below before enabling real orders. Real mode does not start Dhan LIVE on the desk.
@@ -1114,6 +1115,8 @@ function EditModal({
     return { accountId: "", tokenHint: "", apiKeyHint: "", sessionHint: "", tradeMobileHint: "", tokenUpdatedAt: "" };
   };
   const [brokerId, setBrokerId] = useState(row.brokerId);
+  const [tradeMode, setTradeMode] = useState<TradeMode>(row.tradeMode === "real" ? "real" : "paper");
+  const [copy, setCopy] = useState(Boolean(row.copy));
   const [accountId, setAccountId] = useState(accountFor(row.brokerId).accountId || "");
   const [brokerApiKey, setBrokerApiKey] = useState("");
   const [brokerToken, setBrokerToken] = useState("");
@@ -1131,6 +1134,8 @@ function EditModal({
 
   useEffect(() => {
     setBrokerId(row.brokerId);
+    setTradeMode(row.tradeMode === "real" ? "real" : "paper");
+    setCopy(Boolean(row.copy));
     setAccountId(accountFor(row.brokerId, row).accountId || "");
     setBrokerToken("");
     setBrokerApiKey("");
@@ -1138,7 +1143,7 @@ function EditModal({
     setTradeMobile("");
     setTradeMpin("");
     setTradeTotp("");
-  }, [row.id, row.brokerId, row.accountId, row.tokenHint]);
+  }, [row.id, row.brokerId, row.accountId, row.tokenHint, row.tradeMode, row.copy]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1157,6 +1162,8 @@ function EditModal({
         telegramId,
         brokerId,
         accountId,
+        tradeMode: brokerId === "paper" ? "paper" : tradeMode,
+        copy,
         staticIp,
         group,
         ...(nextApiKey ? { brokerApiKey: nextApiKey } : {}),
@@ -1218,6 +1225,7 @@ function EditModal({
               onChange={(event) => {
                 const next = event.target.value;
                 setBrokerId(next);
+                setTradeMode(next === "paper" ? "paper" : "real");
                 const slot = accountFor(next);
                 setAccountId(slot.accountId || "");
                 setBrokerToken("");
@@ -1278,6 +1286,23 @@ function EditModal({
           ) : null}
 
           <SettingsHead>Desk</SettingsHead>
+          <Field label="Mode" compact>
+            <select
+              className={compactInputClass}
+              value={brokerId === "paper" ? "paper" : tradeMode}
+              disabled={brokerId === "paper"}
+              onChange={(event) => setTradeMode(event.target.value as TradeMode)}
+            >
+              <option value="real">REAL · live orders on this broker</option>
+              <option value="paper">PAPER · virtual only</option>
+            </select>
+          </Field>
+          <Field label="Copy" compact>
+            <select className={compactInputClass} value={copy ? "on" : "off"} onChange={(event) => setCopy(event.target.value === "on")}>
+              <option value="on">ON · copy admin fills to this user</option>
+              <option value="off">OFF</option>
+            </select>
+          </Field>
           <Field label="Static IP" compact>
             <input className={compactInputClass} value={staticIp} onChange={(event) => setStaticIp(event.target.value)} placeholder="Default" />
           </Field>
