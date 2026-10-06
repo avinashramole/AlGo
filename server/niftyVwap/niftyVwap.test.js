@@ -507,6 +507,22 @@ test("live adapter does not treat a duplicate queue as a new order", () => {
   assert.equal(result.duplicate, true);
 });
 
+test("live exit does not treat a duplicate queue as a new close", () => {
+  const live = LiveTradingAdapter({
+    queueLiveOrder: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }),
+  });
+  const result = live.exit({
+    symbol: "NIFTY 24500 CE",
+    qty: 65,
+    option: "CE",
+    strike: 24500,
+    brokerId: "dhan",
+    strategy: "NIFTY 5m first candle",
+  });
+  assert.equal(result.queued, false);
+  assert.equal(result.duplicate, true);
+});
+
 test("duplicate live queue does not mark the strategy as filled", () => {
   const algo = defaultNiftyVwapAlgo({ name: "Dup Queue" });
   const result = NiftyVwapStrategy.tick({
@@ -1489,6 +1505,56 @@ test("a target already resting at the broker is not sold a second time", () => {
   });
   assert.equal(hit.action, "exit-pending");
   assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 0);
+  assert.equal(book.positions.length, 1);
+});
+
+test("a pending market SELL on the book does not close the same position again", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Pending SELL" });
+  const book = bookAdapter();
+  NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 103.5)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 103.5,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  algo.vwapState.targetPrice = 145;
+  algo.vwapState.exitQueued = false;
+  book.positions[0].ltp = 145;
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(100, 103.5), bar(1, 145)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 145,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+    orders: [
+      {
+        strategy: algo.name,
+        side: "SELL",
+        status: "PENDING",
+        symbol: book.positions[0].symbol,
+        option: book.positions[0].option,
+        strike: book.positions[0].strike,
+      },
+    ],
+  });
+  assert.equal(hit.action, "exit-pending");
   assert.equal(book.exits.length, 0);
   assert.equal(book.positions.length, 1);
 });

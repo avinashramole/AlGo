@@ -39,6 +39,27 @@ function pendingBuys(orders = [], pending = [], algoName) {
   return [...live, ...book];
 }
 
+function pendingSells(orders = [], pending = [], algoName) {
+  const live = (pending || []).filter((row) => row.strategy === algoName && (row.side === "SELL" ? "SELL" : "BUY") === "SELL");
+  const book = (orders || []).filter(
+    (row) => row.strategy === algoName && row.side === "SELL" && isPendingStatus(row.status),
+  );
+  return [...live, ...book];
+}
+
+function sameHedgeContract(left = {}, right = {}) {
+  if (left.securityId && right.securityId && String(left.securityId) === String(right.securityId)) return true;
+  if (left.symbol && right.symbol && left.symbol === right.symbol) return true;
+  if (left.option && right.option && left.option === right.option && Number(left.strike) === Number(right.strike)) {
+    return true;
+  }
+  return false;
+}
+
+function pendingExitFor(orders, pending, algoName, position) {
+  return pendingSells(orders, pending, algoName).some((row) => sameHedgeContract(row, position || {}));
+}
+
 function totalLots(positions, lotSize) {
   return (positions || []).reduce((sum, row) => sum + lotsFromQty(row.qty, lotSize), 0);
 }
@@ -82,14 +103,17 @@ function startCycle(state, capital, accountProfitPct) {
 }
 
 export const NiftyVwapHedgeStrategy = {
-  emergencyExit({ algo, positions, adapter, orders = [] }) {
+  emergencyExit({ algo, positions, adapter, orders = [], pending = [] }) {
     const state = hedgeState(algo);
     state.phase = PHASE.EXITING;
     state.inFlight = true;
+    state.pendingRole = "exit";
     const open = owned(positions, algo.name);
     const results = [];
     for (const row of open) {
+      if (pendingExitFor(orders, pending, algo.name, row)) continue;
       const closed = adapter.exit(row);
+      if (closed?.duplicate || closed?.queued === false) continue;
       if (closed?.ok && Number.isFinite(Number(closed.pnl))) {
         state.realizedPnl = round2(state.realizedPnl + Number(closed.pnl));
       }
@@ -124,7 +148,10 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "feed-down" };
     }
 
-    if (state.inFlight && positions.length) {
+    const exitWorking =
+      state.pendingRole === "exit" || state.phase === PHASE.EXITING || pendingSells(orders, pending, algo.name).length > 0;
+
+    if (state.inFlight && positions.length && !exitWorking) {
       const newest = [...positions].reverse().find((row) => {
         if (state.pendingRole === "hedge") return (row.role || "") === "hedge" || row.option === (state.primarySide === "PE" ? "CE" : "PE");
         return (row.role || "") === "primary" || row.option === state.primarySide || !state.hedgeEntered;
@@ -150,7 +177,8 @@ export const NiftyVwapHedgeStrategy = {
     }
 
     if (state.inFlight && state.lastEntryAt && now - state.lastEntryAt > 120_000) {
-      const stillPending = pendingBuys(orders, pending, algo.name).length > 0;
+      const stillPending =
+        pendingBuys(orders, pending, algo.name).length > 0 || pendingSells(orders, pending, algo.name).length > 0;
       if (stillPending) {
         algo.lastSignal = "ORDER STATUS WAIT";
         return { action: "skip", reason: "order-status" };
@@ -166,7 +194,7 @@ export const NiftyVwapHedgeStrategy = {
 
     if (state.phase === PHASE.EXITING) {
       if (positions.length) {
-        return this.emergencyExit({ algo, positions: input.positions, adapter: input.adapter, orders });
+        return this.emergencyExit({ algo, positions: input.positions, adapter: input.adapter, orders, pending });
       }
       if (pendingBuys(orders, pending, algo.name).length) {
         algo.lastSignal = "EXIT PENDING";
@@ -193,7 +221,7 @@ export const NiftyVwapHedgeStrategy = {
 
     const pnl = cyclePnl(state, positions);
     if (positions.length && state.profitTarget > 0 && pnl >= state.profitTarget) {
-      return this.emergencyExit({ algo, positions: input.positions, adapter: input.adapter, orders });
+      return this.emergencyExit({ algo, positions: input.positions, adapter: input.adapter, orders, pending });
     }
 
     const primaryPos = positions.find((row) => (row.role || "") === "primary") ||
@@ -215,13 +243,20 @@ export const NiftyVwapHedgeStrategy = {
         }) || Number(primaryPos.ltp || primaryPos.avg);
       const dip = mark;
       if (mark >= state.primaryTargetPrice) {
-        if (input.targetResting) {
+        if (input.targetResting || state.pendingRole === "exit" || pendingExitFor(orders, pending, algo.name, primaryPos)) {
           algo.lastSignal = "EXIT PRIMARY AT BROKER";
           return { action: "exit-pending", reason: "primary-target" };
         }
         const closed = input.adapter.exit(primaryPos);
+        if (closed?.duplicate || closed?.queued === false) {
+          state.inFlight = true;
+          state.pendingRole = "exit";
+          algo.lastSignal = "EXIT PRIMARY AT BROKER";
+          return { action: "exit-pending", reason: "primary-target" };
+        }
         if (closed?.queued) {
           state.inFlight = true;
+          state.pendingRole = "exit";
           algo.lastSignal = `EXIT PRIMARY +40% QUEUED`;
           return { action: "exit-queued", reason: "primary-target" };
         }

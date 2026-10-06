@@ -63,7 +63,7 @@ export function lotsFromQty(qty, lotSize = 65) {
 
 export function isPendingStatus(status) {
   const raw = String(status || "").toUpperCase();
-  return raw === "PENDING" || raw === "TRANSIT" || raw === "PARTIAL";
+  return raw === "PENDING" || raw === "TRANSIT" || raw === "PARTIAL" || raw === "OPEN";
 }
 
 export function isMarginError(error) {

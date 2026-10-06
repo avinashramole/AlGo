@@ -63,8 +63,22 @@ function fillFromResult(result, fallbackPrice) {
   return price > 0 ? price : 0;
 }
 
+function pendingExitOnBook(orders = [], open, strategyName) {
+  return (orders || []).some((row) => {
+    if (row?.copyUserId) return false;
+    if (String(row.strategy || "") !== String(strategyName || "")) return false;
+    if (String(row.side || "").toUpperCase() !== "SELL") return false;
+    const status = String(row.status || "").toUpperCase();
+    if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
+    if (open?.securityId && row.securityId && String(open.securityId) === String(row.securityId)) return true;
+    if (open?.symbol && row.symbol && open.symbol === row.symbol) return true;
+    if (open?.option && row.option && open.option === row.option && Number(open.strike) === Number(row.strike)) return true;
+    return false;
+  });
+}
+
 export const NiftyVwapStrategy = {
-  manageOpen({ algo, config, signal, open, mark, now, minutesToClose, adapter, targetResting }) {
+  manageOpen({ algo, config, signal, open, mark, now, minutesToClose, adapter, targetResting, orders = [] }) {
     const state = runtimeState(algo);
     if (!(mark > 0) || !(state.fillPrice > 0)) return { action: "hold" };
     const live = liveExitPrice({
@@ -95,7 +109,10 @@ export const NiftyVwapStrategy = {
         state.trailActive = true;
       }
     }
-    if (state.exitQueued) return { action: "exit-pending" };
+    if (state.exitQueued || pendingExitOnBook(orders, open, algo.name)) {
+      algo.lastSignal = "EXIT PENDING";
+      return { action: "exit-pending" };
+    }
     const against = open.option === "PE" ? signal.againstPe : signal.againstCe;
     state.consecutiveAgainst = against;
     let reason = "";
@@ -112,6 +129,11 @@ export const NiftyVwapStrategy = {
     if (closed?.error) {
       TradeLogger.record("exit-failed", { reason: closed.error, message: closed.error });
       return { action: "exit-failed", reason: closed.error };
+    }
+    if (closed?.duplicate || closed?.queued === false) {
+      state.exitQueued = true;
+      algo.lastSignal = "EXIT PENDING";
+      return { action: "exit-pending", reason };
     }
     if (closed?.queued) {
       state.inFlight = true;
@@ -384,6 +406,7 @@ export const NiftyVwapStrategy = {
         minutesToClose,
         adapter: input.adapter,
         targetResting: input.targetResting === true,
+        orders: input.orders || [],
       });
     }
 

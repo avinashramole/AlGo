@@ -20,7 +20,7 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
         return squareOff(position.id);
       }
       if (typeof queueLiveOrder === "function") {
-        queueLiveOrder({
+        const queued = queueLiveOrder({
           symbol: position.symbol,
           side: "SELL",
           qty: position.qty,
@@ -36,7 +36,11 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
           brokerId: position.brokerId || "dhan",
           cancelArmedTarget: true,
         });
-        return { ok: true, queued: true };
+        if (queued && typeof queued === "object") {
+          const isQueued = queued.queued !== false && queued.duplicate !== true;
+          return { ok: true, status: queued.status || "PENDING", ...queued, queued: isQueued };
+        }
+        return { ok: true, queued: true, status: "PENDING" };
       }
       return { error: "Cannot square off live position" };
     },

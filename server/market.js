@@ -496,6 +496,9 @@ function liveOrderSide(row) {
 }
 
 function sameLiveContract(left, right) {
+  const leftId = String(left?.securityId || "").trim();
+  const rightId = String(right?.securityId || "").trim();
+  if (leftId && leftId !== "0" && rightId && rightId !== "0" && leftId === rightId) return true;
   if (left?.symbol && right?.symbol && left.symbol === right.symbol) return true;
   const a = PositionManager.niftyOptionLeg(left);
   const b = PositionManager.niftyOptionLeg(right);
@@ -513,6 +516,20 @@ function orderIsWorking(row) {
   const filled = Number(row?.filledQty) || 0;
   if (qty > 0 && filled >= qty) return false;
   return true;
+}
+
+function sameWorkingBookOrder(payload) {
+  const side = liveOrderSide(payload);
+  const brokerId = orderBrokerId(payload);
+  const copyUserId = String(payload?.copyUserId || "");
+  return (state.orders || []).some(
+    (row) =>
+      String(row?.copyUserId || "") === copyUserId &&
+      orderBrokerId(row) === brokerId &&
+      liveOrderSide(row) === side &&
+      orderIsWorking(row) &&
+      sameLiveContract(payload, row),
+  );
 }
 
 function strategyBuyUnresolved(strategyName) {
@@ -559,7 +576,7 @@ function enqueueLiveAlgoOrder(payload) {
     (row) =>
       sameCopy(row) && orderBrokerId(row) === brokerId && liveOrderSide(row) === side && sameLiveContract(payload, row),
   );
-  if (sameContractPending) {
+  if (sameContractPending || sameWorkingBookOrder(payload)) {
     return { ok: true, queued: false, status: "PENDING", duplicate: true };
   }
   const sameStrategyRole = pendingLiveAlgoOrders.some((row) => {
@@ -669,7 +686,11 @@ function targetSellResting(strategy, open) {
     armedTargetSells.delete(key);
   }
   const pending = pendingLiveAlgoOrders.some(
-    (row) => !row.copyUserId && row.role === "target" && strategyKey(row.strategy) === key,
+    (row) =>
+      !row.copyUserId &&
+      liveOrderSide(row) === "SELL" &&
+      strategyKey(row.strategy) === key &&
+      sameLiveContract(open || {}, row),
   );
   if (pending) return true;
   if (armed?.orderId && !armed.suppressed) {
@@ -680,7 +701,7 @@ function targetSellResting(strategy, open) {
   return (state.orders || []).some(
     (row) =>
       !row.copyUserId &&
-      row.role === "target" &&
+      liveOrderSide(row) === "SELL" &&
       strategyKey(row.strategy) === key &&
       orderIsWorking(row) &&
       sameLiveContract(open || {}, row),
@@ -1280,14 +1301,17 @@ function hedgeCapital(mode) {
   return funds > 0 ? funds : PAPER_STARTING_FUNDS;
 }
 
-function cancelPendingForStrategy(strategy) {
+function cancelPendingForStrategy(strategy, { buysOnly = false } = {}) {
   for (let i = pendingLiveAlgoOrders.length - 1; i >= 0; i -= 1) {
-    if (pendingLiveAlgoOrders[i].strategy === strategy) pendingLiveAlgoOrders.splice(i, 1);
+    const row = pendingLiveAlgoOrders[i];
+    if (row.strategy !== strategy) continue;
+    if (buysOnly && liveOrderSide(row) !== "BUY") continue;
+    pendingLiveAlgoOrders.splice(i, 1);
   }
   for (const row of state.orders || []) {
-    if (row.strategy === strategy && (row.status === "PENDING" || row.status === "PARTIAL")) {
-      cancelOrder(row.id);
-    }
+    if (row.strategy !== strategy || (row.status !== "PENDING" && row.status !== "PARTIAL")) continue;
+    if (buysOnly && liveOrderSide(row) !== "BUY") continue;
+    cancelOrder(row.id);
   }
   return { ok: true };
 }
@@ -1313,7 +1337,7 @@ function hedgeAdapter(mode, algo) {
       return base.exit(withName(position));
     },
     cancelPending({ strategy } = {}) {
-      return cancelPendingForStrategy(strategy || algo.name);
+      return cancelPendingForStrategy(strategy || algo.name, { buysOnly: true });
     },
   };
 }
@@ -2643,10 +2667,14 @@ function runLiveAlgos() {
       }
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || trade.kind !== "future" || !(trade.ltp > 0)) continue;
-      queueLiveAlgoOrder({
+      const queued = queueLiveAlgoOrder({
         ...algoOrderFields(algo, side, trade),
         brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
       });
+      if (!queued?.queued) {
+        algo.lastSignal = "WAIT ORDER";
+        continue;
+      }
       algo.lastLiveAt = now;
       algo.lastLiveSide = side;
       algo.lastSignal = side;
