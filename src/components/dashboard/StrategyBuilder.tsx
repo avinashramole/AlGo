@@ -223,12 +223,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-900/40 p-3 sm:items-center sm:p-4">
-      <div className={cn("card max-h-[92dvh] w-full overflow-y-auto p-3 sm:p-4", editing ? "max-w-xl" : "max-w-2xl")} data-edit-strategy={editing ? algo?.id || "open" : "new"}>
-        <div className="mb-3 flex items-start justify-between gap-2">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-900/40 p-2 sm:items-center sm:p-3">
+      <div
+        className={cn(
+          "card w-full overflow-y-auto p-3",
+          editing ? "max-h-[min(32rem,86dvh)] max-w-2xl sm:max-h-[min(28rem,78vh)]" : "max-h-[92dvh] max-w-2xl",
+        )}
+        data-edit-strategy={editing ? algo?.id || "open" : "new"}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-base font-bold">{title}</div>
-            <div className="line-clamp-2 text-[11px] text-slate-400">{preview}</div>
+            <div className="text-sm font-bold sm:text-base">{title}</div>
+            {editing ? null : <div className="line-clamp-2 text-[11px] text-slate-400">{preview}</div>}
           </div>
           <button type="button" onClick={onClose} className="icon-btn">
             <X size={16} />
@@ -294,7 +300,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        <label className="mt-2.5 block text-xs font-semibold text-slate-500">
+        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", editing && "sm:hidden")}>
           Strategy name
           <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
         </label>
@@ -312,11 +318,13 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
               onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
             />
+            {editing ? null : (
             <span className="mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
+            )}
           </label>
         ) : null}
 
-        {niftyTest ? (
+        {editing ? null : niftyTest ? (
           <div className="mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
           </div>
@@ -382,12 +390,18 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   </option>
                 ))}
               </select>
-              <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
+              {editing ? null : <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>}
             </label>
           </div>
         ) : null}
 
-        <div className="mt-2.5 grid gap-2 md:grid-cols-2">
+        <div className={cn("mt-2.5 grid gap-2", editing ? "sm:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-2")}>
+          {editing ? (
+          <label className="hidden text-xs font-semibold text-slate-500 sm:block">
+            Strategy name
+            <input className={fieldClass} value={form.name || ""} onChange={(event) => set({ name: event.target.value })} placeholder="My NIFTY VWAP" />
+          </label>
+          ) : null}
           {engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
@@ -433,6 +447,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 set({ lots: nextLots, lotSize, qty: nextLots * lotSize });
               }}
             />
+            {editing ? null : (
             <span className="mt-1 block font-medium text-slate-400">
               {hedge
                 ? "Primary 1 lot (65) · hedge 2 lots (130) · max 3 lots"
@@ -440,6 +455,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   ? `1 lot · Dhan qty ${lots} (size ${lotSize})`
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
+            )}
           </label>
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
@@ -481,7 +497,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 </option>
               ))}
             </select>
-            {form.runMode !== "live" ? (
+            {editing ? null : form.runMode !== "live" ? (
               <span className="mt-1 block font-medium text-slate-400">Paper uses live quotes. Fills are virtual — they never go to a broker.</span>
             ) : (
               <span className="mt-1 block font-medium text-slate-400">
@@ -563,10 +579,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {vwap ? (
           <div className="mt-2.5 space-y-2">
+            {editing ? null : (
             <p className="text-[11px] font-semibold text-slate-400">
               Close above / close below use the last completed 5m candle only. BUY CE when futures close above VWAP. BUY PE when futures close below VWAP. ATM option must also close above its own VWAP.
             </p>
-            <div className="grid gap-2 md:grid-cols-3">
+            )}
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <NumberField label="Initial stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
               <NumberField label="Trail activate %" value={form.trailingActivationPct || 10} step={1} onChange={(trailingActivationPct) => set({ trailingActivationPct })} />
@@ -577,10 +595,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : reversal ? (
           <div className="mt-2.5 space-y-2">
+            {editing ? null : (
             <p className="text-[11px] font-semibold text-slate-400">
               Entry only after the 15-minute NIFTY futures candle closes. OPEN below VWAP and CLOSE above VWAP buys weekly ATM CE. OPEN above VWAP and CLOSE below VWAP buys weekly ATM PE. Never monthly. Option stop 15% / target 30%. One position. Square-off before 15:30.
             </p>
-            <div className="grid gap-2 md:grid-cols-3">
+            )}
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <NumberField label="Stop %" value={form.initialSlPct || 15} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
@@ -588,10 +608,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : niftyTest ? (
           <div className="mt-2.5 space-y-2">
+            {editing ? null : (
             <p className="text-[11px] font-semibold text-slate-400">
               No first-candle check. While Nifty Test is started, every live Nifty future tick is checked. Current candle close above its open → BUY. Close below its open → SELL. Equal open is no trade.
             </p>
-            <div className="grid gap-2 md:grid-cols-3">
+            )}
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-500">
                 nifty test
                 <input
@@ -610,7 +632,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : firstCandle || crudeFirst ? (
           <div className="mt-2.5 space-y-2">
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-500">
                 Start LIVE (IST)
                 <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
@@ -647,15 +669,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                     </option>
                   ))}
                 </select>
-                <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>
+                {editing ? null : <span className="mt-1 block font-medium text-slate-400">{liveOptionHint(form, data)}</span>}
               </label>
               <NumberField label="Stop %" value={form.initialSlPct || 20} step={1} onChange={(initialSlPct) => set({ initialSlPct, slPct: initialSlPct })} />
               <NumberField label="Target %" value={form.targetPct || 40} step={1} onChange={(targetPct) => set({ targetPct })} />
               {crudeFirst ? null : (
               <>
-              <p className="text-[11px] font-semibold text-slate-400 md:col-span-2" data-trailing-sl="nifty-first-candle">
+              {editing ? null : (
+              <p className="text-[11px] font-semibold text-slate-400 lg:col-span-4" data-trailing-sl="nifty-first-candle">
                 Trailing SL: at this profit the stop moves to the buy price. Each further gain of the next percent lifts the stop by the shift percent. A pullback does not lower the stop.
               </p>
+              )}
               <NumberField
                 label="Trailing SL to buy price at %"
                 value={niftyFirstCandleTrail(form).activation}
@@ -690,11 +714,13 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             </div>
           </div>
         ) : hedge ? (
+          editing ? null : (
           <div className="mt-2.5 space-y-2">
             <p className="text-[11px] font-semibold text-slate-400">
               Completed 15-minute NIFTY futures candle only. Open below VWAP and close above buys 1 lot weekly ATM CE. Open above VWAP and close below buys 1 lot weekly ATM PE. Primary target is fill × 1.40. There is no stop on the primary. At fill × 0.80 buy 2 lots of the opposite ATM weekly option once. Exit every open leg when realized + unrealized − charges reaches 5% of cycle starting capital.
             </p>
           </div>
+          )
         ) : (
         <div className="mt-2.5 space-y-2">
           {String(form.symbol || algo?.symbol || "").toUpperCase() === "CRUDEOIL" || /crude/i.test(String(form.name || algo?.name || "")) ? (
@@ -710,7 +736,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
                 onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
               />
+              {editing ? null : (
               <span className="mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
+              )}
             </label>
           ) : null}
           <ConditionGroupEditor
@@ -745,9 +773,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               })
             }
           />
+          {editing ? null : (
           <p className="text-[11px] font-semibold text-slate-400">
             Add extra rows for multiple conditions. AND means every row must be true. OR means any one row can fire. Close above / close below use the last completed candle only.
           </p>
+          )}
         </div>
 
         )}
@@ -759,7 +789,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {form.runMode === "live" ? (
+        {form.runMode === "live" && !editing ? (
           <p className="mt-3 text-[11px] font-semibold text-amber-600">
             {hedge || reversal
               ? "NIFTY 15m VWAP hedge and NIFTY 15m VWAP reversal go LIVE automatically at 09:20 IST on session days. Saving this form or restarting t2s does not start LIVE."
