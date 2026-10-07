@@ -28,14 +28,21 @@ export function CandleChart({ candles, dark }: Props) {
     const parent = canvas.parentElement;
     if (!parent) return;
 
+    let lastW = -1;
+    let lastH = -1;
+    let frame = 0;
+
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
       const width = parent.clientWidth;
       const height = parent.clientHeight;
+      if (width < 8 || height < 8) return;
+      canvas.style.width = "100%";
+      canvas.style.height = "100%";
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      lastW = width;
+      lastH = height;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
@@ -107,9 +114,18 @@ export function CandleChart({ candles, dark }: Props) {
     };
 
     draw();
-    const observer = new ResizeObserver(draw);
+    const observer = new ResizeObserver(() => {
+      const width = parent.clientWidth;
+      const height = parent.clientHeight;
+      if (width === lastW && height === lastH) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(draw);
+    });
     observer.observe(parent);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [candles, theme]);
 
   return <canvas ref={canvasRef} className="h-full w-full" />;

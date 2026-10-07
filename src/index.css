@@ -304,6 +304,7 @@ main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(t
 }
 
 .chart-well {
+  overflow: hidden;
   border-radius: 10px;
   background: #0b1524;
   color: #dbe4f0;

@@ -60,8 +60,14 @@
       window.addEventListener(
         "error",
         function (event) {
+          var message = String((event && event.message) || "");
+          if (/ResizeObserver loop/i.test(message)) {
+            if (event.preventDefault) event.preventDefault();
+            return;
+          }
           var root = document.getElementById("root");
           if (!root) return;
+          if (!root.querySelector("#t2s-boot")) return;
           var host = String((location && location.hostname) || "");
           var live = host.indexOf("trade2smart") !== -1;
           var hint = live
@@ -69,7 +75,7 @@
             : "In Chrome type http://localhost:5173 and press Enter. Keep npm start open.";
           root.innerHTML =
             '<div id="t2s-boot"><h1>T2S failed to start</h1><p>' +
-            String((event && event.message) || "Script error") +
+            (message || "Script error") +
             "</p><p>" +
             hint +
             "</p></div>";
