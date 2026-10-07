@@ -2,11 +2,11 @@
 # Publish the TEST2 script dropdown to nginx.
 # Chrome reads /var/www/trade2smart. Restarting t2s alone does not change the page.
 # Run from anywhere:
-#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/cursor/test2-script-live-6826/deploy/update-website.sh -o /tmp/update-website.sh
+#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/update-website.sh -o /tmp/update-website.sh
 #   bash /tmp/update-website.sh
 set -euo pipefail
 
-BRANCH=${1:-cursor/test2-script-live-6826}
+BRANCH=${1:-main}
 WEBROOT=/var/www/trade2smart
 MARKER="Script · NIFTY BANKNIFTY SENSEX"
 RAW="https://raw.githubusercontent.com/avinashramole/AlGo/${BRANCH}"
