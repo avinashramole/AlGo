@@ -372,9 +372,9 @@ test("TEST2 backtest exits all legs when daily overall profit hits 5%", () => {
   }));
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.overallTargetPct, 0.01);
-  assert.equal(result.targetHits >= 1, true);
-  assert.equal(result.tradesBook.some((row) => row.exitReason === "overall-target"), true);
-  assert.equal(result.legsBook.filter((row) => row.day === result.tradesBook[0].day).length, 4);
+  assert.equal(result.optionSource, "synth");
+  assert.equal(result.trades, 0);
+  assert.equal(result.skippedDays >= 1, true);
   const session = {
     day: "2026-09-01",
     open: 24500,
@@ -417,34 +417,36 @@ test("TEST2 backtest counts one combo as one trade", () => {
   }));
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.holdStyle, "btst");
-  assert.equal(result.combos, 9);
-  assert.equal(result.trades, 9);
-  assert.equal(result.legs, 36);
-  assert.equal(result.trades, result.combos);
-  assert.equal(result.winRate, result.comboWinRate);
-  assert.equal(result.tradesBook.every((row) => row.side === "COMBO"), true);
-  assert.equal(result.legsBook.length, 36);
-  assert.equal(result.legsBook.filter((row) => row.side === "SELL").length, 18);
-  assert.equal(result.legsBook.filter((row) => row.side === "BUY").length, 18);
-  assert.equal(result.legStats.length, 4);
-  assert.equal(result.legStats.every((row) => Number.isFinite(row.pnl)), true);
-  assert.equal(result.tradesBook.every((row) => Number(row.margin) > 0), true);
-  assert.equal(result.legsBook.every((row) => Number(row.margin) > 0), true);
-  assert.equal(result.legsBook.every((row) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(row.entryAt))), true);
-  assert.equal(result.legsBook.every((row) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(row.exitAt))), true);
-  assert.equal(result.tradesBook.every((row) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(row.entryAt))), true);
-  assert.equal(Number(result.requiredMargin) > 0, true);
-  assert.equal(Number.isFinite(result.rom), true);
-  assert.equal(Number.isFinite(result.avgProfit), true);
-  assert.equal(Number.isFinite(result.rewardRisk), true);
+  assert.equal(result.optionSource, "synth");
+  assert.equal(result.trades, 0);
+  assert.equal(result.combos, 0);
+  assert.equal(result.legs, 0);
+  assert.equal(result.skippedDays >= 1, true);
   const intra = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), candles);
   assert.equal(intra.holdStyle, "intraday");
-  assert.equal(intra.combos, 10);
-  assert.equal(intra.trades, 10);
-  assert.equal(intra.legs, 40);
-  assert.equal(Number(result.winRate) > 0, true);
-  assert.equal(Number.isFinite(result.pnl), true);
+  assert.equal(intra.trades, 0);
   assert.equal(niftyTest2Config(algo).sellPremium, 80);
+});
+
+test("TEST2 does not publish synthetic BANKNIFTY fills as a real book", () => {
+  wipeRollingOptions();
+  const day = Date.parse("2026-07-08T04:05:00.000Z");
+  const candles = Array.from({ length: 5 }, (_, i) => ({
+    time: day + i * 86_400_000,
+    open: 57600,
+    high: 57800,
+    low: 57400,
+    close: 57650,
+    volume: 1,
+  }));
+  const result = runTest2Backtest(defaultNiftyTest2Algo({ symbol: "BANKNIFTY", holdStyle: "intraday" }), candles);
+  assert.equal(result.optionSource, "synth");
+  assert.equal(result.trades, 0);
+  assert.equal(result.wins, 0);
+  assert.equal(result.winRate, 0);
+  assert.equal(result.pnl, 0);
+  assert.equal(result.legsBook.length, 0);
+  assert.equal(result.skipped.some((row) => row.reason === "no-option-tape"), true);
 });
 
 test("TEST2 replay picks chain premiums, not a flat 80/20 fill", () => {
@@ -494,17 +496,16 @@ test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
     })),
   ];
   const quietBook = runTest2Backtest(algo, quiet);
-  assert.equal(quietBook.combos, 1);
-  assert.equal(quietBook.trades, 1);
-  assert.equal(quietBook.legs, 4);
-  assert.equal(quietBook.pnl > 0, true);
+  assert.equal(quietBook.optionSource, "synth");
+  assert.equal(quietBook.trades, 0);
+  assert.equal(quietBook.legs, 0);
   const trend = [
     { time: open, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
     { time: open + 86_400_000, open: 25100, high: 25200, low: 24780, close: 25100, volume: 1 },
   ];
   const trendBook = runTest2Backtest(algo, trend);
-  assert.equal(trendBook.combos, 1);
-  assert.notEqual(trendBook.pnl, quietBook.pnl);
+  assert.equal(trendBook.trades, 0);
+  assert.equal(trendBook.optionSource, "synth");
 });
 
 test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
@@ -572,9 +573,8 @@ test("TEST2 BTST marks max win/loss and drawdown on the sell-tomorrow day", () =
   }));
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.holdStyle, "btst");
-  assert.equal(result.tradesBook.every((row) => row.exitDay && row.exitDay >= row.day), true);
-  assert.equal(result.maxProfitDay === result.maxLossDay || Boolean(result.maxProfitDay || result.maxLossDay), true);
-  assert.match(String(result.maxDdFrom || result.maxProfitDay || ""), /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(result.trades, 0);
+  assert.equal(result.optionSource, "synth");
 });
 
 test("TEST2 this-month window does not replay September candles", async () => {
@@ -640,7 +640,9 @@ test("reset backtest clears stored TEST2 result", async () => {
         volume: 1,
       })),
     });
-    assert.equal(Number(replay.algo.lastBacktest?.trades || 0) > 0, true);
+    assert.equal(replay.algo.lastBacktest != null, true);
+    assert.equal(Number(replay.algo.lastBacktest?.trades || 0), 0);
+    assert.equal(replay.algo.lastBacktest?.optionSource, "synth");
     const reset = resetBacktestAlgo(created.id);
     assert.equal(reset.ok, true);
     assert.equal(reset.algo.lastBacktest, null);

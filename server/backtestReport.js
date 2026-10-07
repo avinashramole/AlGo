@@ -549,7 +549,11 @@ export function renderBacktestPdf(report) {
       (leg) =>
         `${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`,
     ),
-    report.summary.optionSource ? `Premiums ${report.summary.optionSource}` : "",
+    report.summary.optionSource === "stored"
+      ? "Premiums stored Dhan rolling option tape"
+      : report.summary.optionSource === "mixed"
+        ? `Premiums mixed - ${report.summary.storedTrades || 0} stored days, ${report.summary.skippedDays || 0} days skipped (no tape)`
+        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - ${report.summary.skippedDays || 0} days skipped - do not trust P&L or win rate`,
     `Generated ${report.generatedAt}`,
     "",
     "LEGS",

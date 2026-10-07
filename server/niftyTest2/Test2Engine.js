@@ -681,9 +681,12 @@ export function runTest2Backtest(algo, candles = []) {
       continue;
     }
     if (combo.source === "stored") pushCombo(storedTrades, legsBook, combo, overnight, config.symbol);
-    else pushCombo(synthTrades, legsBook, combo, overnight, config.symbol);
+    else {
+      pushCombo(synthTrades, [], combo, overnight, config.symbol);
+      skipped.push({ day: entry.day, reason: "no-option-tape" });
+    }
   }
-  const primary = storedTrades.length ? storedTrades : synthTrades;
+  const primary = storedTrades;
   const targetHits = primary.filter((row) => row.exitReason === "overall-target").length;
   const primarySource = storedTrades.length ? "stored" : "synth";
   const primaryLegs = legsBook.filter((row) => row.source === primarySource);

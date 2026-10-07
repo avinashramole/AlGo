@@ -165,6 +165,17 @@ test("TEST2 PDF and Excel print enter, square-off, premiums and hedge SL", () =>
   assert.match(zip, /BUY 1 weekly CE \+ PE premium &gt;= 20/);
 });
 
+test("TEST2 PDF warns when premiums are not from the option tape", () => {
+  const report = buildBacktestReport(
+    { id: "a16", name: "TEST2", kind: "nifty-test2", symbol: "BANKNIFTY", holdStyle: "intraday" },
+    { holdStyle: "intraday", optionSource: "synth", skippedDays: 64, trades: 0, tradesBook: [], legsBook: [] },
+  );
+  const pdf = renderBacktestPdf(report).toString("latin1");
+  assert.match(pdf, /NOT REAL OPTION PRICES/);
+  assert.match(pdf, /BANKNIFTY/);
+  assert.match(pdf, /64 days skipped/);
+});
+
 test("backtest report falls back to lastBacktest when the file is missing", () => {
   const algo = {
     id: "missing",
