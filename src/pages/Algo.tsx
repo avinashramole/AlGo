@@ -101,7 +101,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test2" as const,
       category: "TEST2 NIFTY PREMIUM STRANGLE",
-      config: `NIFTY · ${algo.startTimeIst || "09:35"}–${algo.endTimeIst || "15:15"} IST · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}% · complete square-off`,
+      config: `NIFTY BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || algo.startTimeIst || "09:35"} IST · NRML overnight · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
     };
   }
   if (isNiftyTest1Kind(algo)) {

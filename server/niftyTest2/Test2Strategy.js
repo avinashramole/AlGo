@@ -1,25 +1,28 @@
 import { exchangeSegmentFor } from "../optionChain.js";
 import { niftyTest2Config } from "../niftyVwap/config.js";
-import { sessionKeyIST } from "../niftyVwap/VwapSignalEngine.js";
+import { hmToMinutes, istWallTime, sessionKeyIST } from "../niftyVwap/VwapSignalEngine.js";
 import { TradeLogger } from "../niftyVwap/TradeLogger.js";
 import { inEntryWindow, pickCombo } from "./Test2Engine.js";
-
-function round2(value) {
-  return Number(Number(value).toFixed(2));
-}
 
 function test2State(algo) {
   if (!algo.test2State || typeof algo.test2State !== "object") algo.test2State = {};
   return algo.test2State;
 }
 
-function resetDay(state, day) {
+function rollSession(state, day, hasOpen) {
   if (state.sessionDate === day) return state;
+  const previous = String(state.sessionDate || "");
   state.sessionDate = day;
-  state.entered = false;
-  state.lockedDay = false;
   state.inFlight = false;
   state.dayPnl = 0;
+  if (hasOpen) {
+    if (!state.entryDate) state.entryDate = previous || "overnight";
+    state.entered = true;
+    return state;
+  }
+  state.entered = false;
+  state.lockedDay = false;
+  state.entryDate = "";
   state.legs = [];
   return state;
 }
@@ -44,22 +47,68 @@ function openLegs(positions = [], algoName) {
   return (positions || []).filter((row) => Number(row.qty) > 0 && (!row.strategy || row.strategy === algoName));
 }
 
-function markFor(leg, marks = {}) {
-  const key = `${leg.option}${leg.expiryKind === "monthly" ? "M" : "W"}`;
-  return Number(marks[key] || marks[`${leg.side}${leg.option}`] || marks[leg.option] || 0);
+function productOf(config) {
+  return String(config.product || "NRML").toUpperCase() === "MIS" ? "MIS" : "NRML";
+}
+
+function minutesOf(now) {
+  const wall = istWallTime(now);
+  return wall.hour * 60 + wall.minute;
+}
+
+function shouldSellTomorrow(state, config, today, now) {
+  const entryDate = String(state.entryDate || "");
+  if (!entryDate || entryDate === today) return false;
+  return minutesOf(now) >= hmToMinutes(config.exitTimeIst || config.startTimeIst || "09:35");
+}
+
+function closePayload(open, algo, config) {
+  const openSide = String(open.side || open.type || "BUY").toUpperCase();
+  return {
+    symbol: open.symbol,
+    side: openSide === "SELL" ? "BUY" : "SELL",
+    qty: open.qty || config.qty,
+    lots: config.lots,
+    lotSize: config.lotSize,
+    price: Number(open.ltp || open.avg || 0),
+    kind: "option",
+    option: open.option,
+    strike: open.strike,
+    expiry: open.expiry,
+    securityId: open.securityId || "",
+    product: productOf(config),
+    type: "MARKET",
+    strategy: algo.name,
+    exchangeSegment: exchangeSegmentFor("NIFTY"),
+  };
+}
+
+function closeOpens(opens, algo, config, adapter, orders) {
+  let sent = 0;
+  for (const open of opens) {
+    const payload = closePayload(open, algo, config);
+    if (pendingSame(orders, payload)) continue;
+    adapter.place?.(payload);
+    sent += 1;
+  }
+  return sent;
 }
 
 export const Test2Strategy = {
-  manageOpen({ algo, config, opens = [], marks = {}, minutesToClose, adapter, orders = [] }) {
+  manageOpen({ algo, config, opens = [], marks = {}, now, adapter, orders = [] }) {
     const state = test2State(algo);
+    const today = sessionKeyIST(now || Date.now());
     if (!opens.length) {
-      if (state.entered) {
+      if (state.entered || state.entryDate) {
+        state.entered = false;
+        state.lockedDay = false;
+        state.entryDate = "";
+        state.legs = [];
         algo.lastSignal = "FLAT";
         return { action: "flat" };
       }
       return { action: "hold" };
     }
-    const eod = config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes;
     let dayPnl = 0;
     for (const open of opens) {
       const fill = Number(open.avg || open.ltp || 0);
@@ -69,19 +118,19 @@ export const Test2Strategy = {
     }
     state.dayPnl = Number(dayPnl.toFixed(2));
     if (config.overallTarget > 0 && dayPnl >= config.overallTarget) {
-      adapter.squareOff?.({ strategy: algo.name, reason: "overall-target" });
+      closeOpens(opens, algo, config, adapter, orders);
       algo.lastSignal = `EXIT TARGET ₹${dayPnl.toFixed(0)}`;
       return { action: "exit", reason: "overall-target" };
     }
     if (config.overallSl > 0 && dayPnl <= -config.overallSl) {
-      adapter.squareOff?.({ strategy: algo.name, reason: "overall-sl" });
+      closeOpens(opens, algo, config, adapter, orders);
       algo.lastSignal = `EXIT SL ₹${dayPnl.toFixed(0)}`;
       return { action: "exit", reason: "overall-sl" };
     }
-    if (eod) {
-      adapter.squareOff?.({ strategy: algo.name, reason: "eod" });
-      algo.lastSignal = "EXIT EOD 15:15";
-      return { action: "exit", reason: "eod" };
+    if (shouldSellTomorrow(state, config, today, now || Date.now())) {
+      closeOpens(opens, algo, config, adapter, orders);
+      algo.lastSignal = `EXIT BTST ${config.exitTimeIst || "09:35"}`;
+      return { action: "exit", reason: "btst" };
     }
     for (const open of opens) {
       const side = String(open.side || open.type || "BUY").toUpperCase();
@@ -104,21 +153,21 @@ export const Test2Strategy = {
         strike: open.strike,
         expiry: open.expiry,
         securityId: open.securityId || "",
-        product: "MIS",
+        product: productOf(config),
         type: "MARKET",
         strategy: algo.name,
         exchangeSegment: exchangeSegmentFor("NIFTY"),
       });
       algo.lastSignal = `HEDGE SL ${open.option} ${open.strike} @ ${mark.toFixed(2)}`;
     }
-    algo.lastSignal = algo.lastSignal || `HOLD TEST2 ${opens.length} legs · ₹${dayPnl.toFixed(0)}`;
+    algo.lastSignal = algo.lastSignal || `HOLD BTST ${opens.length} legs · ₹${dayPnl.toFixed(0)}`;
     return { action: "hold", pnl: dayPnl };
   },
 
-  maybeEnter({ algo, config, combo, expiries = {}, marks = {}, adapter, orders = [] }) {
+  maybeEnter({ algo, config, combo, expiries = {}, marks = {}, now, adapter, orders = [] }) {
     const state = test2State(algo);
     if (state.entered || state.lockedDay || state.inFlight) {
-      algo.lastSignal = state.lockedDay ? "WAIT NEXT DAY" : "HOLD TEST2";
+      algo.lastSignal = state.lockedDay ? "HOLD BTST" : "HOLD TEST2";
       return { action: "skip", reason: state.lockedDay ? "locked" : "open" };
     }
     if (!combo?.legs?.length) {
@@ -142,7 +191,7 @@ export const Test2Strategy = {
         strike: leg.strike,
         expiry,
         securityId: "",
-        product: "MIS",
+        product: productOf(config),
         type: "MARKET",
         strategy: algo.name,
         exchangeSegment: exchangeSegmentFor("NIFTY"),
@@ -162,12 +211,14 @@ export const Test2Strategy = {
     }
     state.entered = true;
     state.inFlight = false;
+    state.entryDate = sessionKeyIST(now || Date.now());
     state.legs = placed;
     TradeLogger.record("test2-signal", {
       strategy: algo.name,
+      style: "btst",
       legs: placed.map((leg) => `${leg.side} ${leg.strike} ${leg.option}`),
     });
-    algo.lastSignal = placed.map((leg) => `${leg.side} ${leg.strike} ${leg.option}`).join(" · ");
+    algo.lastSignal = `BTST ${placed.map((leg) => `${leg.side} ${leg.strike} ${leg.option}`).join(" · ")}`;
     return { action: "entry", legs: placed };
   },
 
@@ -176,26 +227,25 @@ export const Test2Strategy = {
     if (!algo) return { action: "skip", reason: "no-algo" };
     const config = input.config || niftyTest2Config(algo);
     const now = Number(input.now) || Date.now();
-    const state = resetDay(test2State(algo), sessionKeyIST(now));
-    const minutesToClose = Number.isFinite(input.minutesToClose) ? input.minutesToClose : 0;
+    const opens = openLegs(input.positions, algo.name);
+    const state = rollSession(test2State(algo), sessionKeyIST(now), opens.length > 0);
     if (input.feedLive === false) {
       algo.lastSignal = "FEED DOWN";
       return { action: "feed-down" };
     }
-    const opens = openLegs(input.positions, algo.name);
     if (opens.length) {
       return this.manageOpen({
         algo,
         config,
         opens,
         marks: input.marks || {},
-        minutesToClose,
+        now,
         adapter: input.adapter,
         orders: input.orders || [],
       });
     }
     if (!inEntryWindow(now, config.startTimeIst, config.endTimeIst)) {
-      algo.lastSignal = now && !state.entered ? "WAIT 09:35" : "WAIT SESSION";
+      algo.lastSignal = !state.entered ? "WAIT 09:35" : "WAIT SESSION";
       return { action: "wait", reason: "session" };
     }
     const combo = pickCombo({
@@ -210,6 +260,7 @@ export const Test2Strategy = {
       combo,
       expiries: input.expiries || {},
       marks: input.marks || {},
+      now,
       adapter: input.adapter,
       orders: input.orders || [],
     });

@@ -153,7 +153,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       return `Nifty Test · NIFTY FUT · ${form.timeframe || "5m"} · live feed while started · current candle above open → BUY · below open → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
     }
     if (isNiftyTest2Kind(form) || test2) {
-      return `TEST2 · NIFTY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}%`;
+      return `TEST2 · NIFTY BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "09:35"} IST · NRML overnight · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}%`;
     }
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
@@ -217,6 +217,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               instrument: "option",
               side: "BOTH",
               timeframe: "5m",
+              product: "NRML",
+              holdOvernight: true,
+              intradayOnly: false,
+              eodSquareOffMinutes: 0,
             }
           : test1
           ? {
@@ -315,7 +319,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={test2}
             title="TEST2"
-            text="AlgoTest test2: at 09:35 IST sell 1 monthly NIFTY CE and PE with premium ≥80, buy 1 weekly CE and PE with premium ≥20. Hedge SL 20%. Complete square-off at 15:15 IST."
+            text="BTST, not intraday. At 09:35 IST sell 1 monthly NIFTY CE and PE with premium ≥80, buy 1 weekly CE and PE with premium ≥20. Hold NRML overnight. Sell tomorrow at 09:35 IST. Hedge SL 20%."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-test2"),
@@ -434,7 +438,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
         {test2 ? (
           <div className="desk-help mt-1 text-[11px] font-semibold text-slate-500">
-            NIFTY cash · 09:35 enter · 15:15 complete square-off · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE.
+            NIFTY BTST · buy today 09:35 · sell tomorrow 09:35 · NRML overnight · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Not MIS / not same-day square-off. Saving does not start LIVE.
           </div>
         ) : null}
 
@@ -770,8 +774,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               <input className={fieldClass} value={form.startTimeIst || "09:35"} onChange={(event) => set({ startTimeIst: event.target.value })} placeholder="09:35" />
             </label>
             <label className="text-xs font-semibold text-slate-500">
-              Square-off (IST)
+              Last entry (IST)
               <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Sell tomorrow (IST)
+              <input className={fieldClass} value={form.exitTimeIst || "09:35"} onChange={(event) => set({ exitTimeIst: event.target.value })} placeholder="09:35" />
             </label>
             <NumberField label="Overall SL ₹" value={form.overallSl ?? 30000} step={1000} onChange={(overallSl) => set({ overallSl })} />
             <NumberField label="Overall target ₹" value={form.overallTarget ?? 15000} step={1000} onChange={(overallTarget) => set({ overallTarget })} />
