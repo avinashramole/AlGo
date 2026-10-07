@@ -29,6 +29,7 @@ import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp 
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
+import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
 import { listPublicUsers } from "./auth.js";
 import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
@@ -1246,6 +1247,8 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
 function tickNiftyTest2Algo(algo, mode, feedLive) {
   const now = Date.now();
   const config = niftyTest2Config(algo);
+  const today = VwapSignalEngine.sessionKeyIST(now);
+  if (config.holdStyle === "intraday") dropPreviousIntradayBook(algo, today);
   const session = nseMarketSession();
   const positions = positionsForStrategyName(algo, mode);
   const open = positions.some((row) => Number(row.qty) > 0);
@@ -2471,7 +2474,7 @@ export function toggleAlgo(id, patch = {}) {
   if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   if (starting) {
     resetStrategyOrders(algo);
-    if (!isNiftyTest2Algo(algo)) dropPreviousIntradayBook(algo);
+    if (!isNiftyTest2Algo(algo) || niftyTest2Config(algo).holdStyle === "intraday") dropPreviousIntradayBook(algo);
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
@@ -2660,8 +2663,14 @@ export async function backtestAlgo(id, options = {}) {
       from: window.from,
       to: window.to,
       timeframe: "5m",
+      ranAt: new Date().toISOString(),
+      reportReady: true,
     };
-    algo.lastBacktest = result;
+    saveBacktestReport(algo, result);
+    const stored = { ...result };
+    delete stored.tradesBook;
+    stored.book = (result.book || result.tradesBook || []).slice(-80);
+    algo.lastBacktest = stored;
     algo.pnl = result.pnl;
     algo.winRate = result.winRate;
     if (algo.runMode === "backtest") {
@@ -2669,11 +2678,12 @@ export async function backtestAlgo(id, options = {}) {
       algo.status = "BACKTEST";
       algo.brokerId = "paper";
     }
+    persistAlgos();
     const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
     state.notifications.unshift(
-      `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%`,
+      `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}% · PDF/Excel ready`,
     );
-    return { ok: true, algo: clone(algo), backtest: result };
+    return { ok: true, algo: clone(algo), backtest: stored };
   }
   const hedge = isNiftyVwapHedgeAlgo(algo);
   const niftyVwap = isNiftyOptionEngineAlgo(algo) || hedge;
@@ -2727,7 +2737,13 @@ export async function backtestAlgo(id, options = {}) {
     optionHistory: options.optionHistory || undefined,
   };
   result.timeframe = usedTf;
-  algo.lastBacktest = result;
+  result.ranAt = result.ranAt || new Date().toISOString();
+  result.reportReady = true;
+  saveBacktestReport(algo, result);
+  const stored = { ...result };
+  delete stored.tradesBook;
+  stored.book = (result.book || result.tradesBook || []).slice(-80);
+  algo.lastBacktest = stored;
   algo.pnl = result.pnl;
   algo.winRate = result.winRate;
   if (algo.runMode === "backtest") {
@@ -2735,11 +2751,12 @@ export async function backtestAlgo(id, options = {}) {
     algo.status = "BACKTEST";
     algo.brokerId = "paper";
   }
+  persistAlgos();
   const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
   state.notifications.unshift(
-    `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${sample ? " · sample bars" : ""}`,
+    `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${sample ? " · sample bars" : ""} · PDF/Excel ready`,
   );
-  return { ok: true, algo: clone(algo), backtest: result };
+  return { ok: true, algo: clone(algo), backtest: stored };
 }
 
 export function resetBacktestAlgo(id) {
@@ -2748,6 +2765,7 @@ export function resetBacktestAlgo(id) {
   algo.lastBacktest = null;
   algo.pnl = 0;
   algo.winRate = 0;
+  clearBacktestReport(algo.id);
   persistAlgos();
   state.notifications.unshift(`Backtest ${algo.name} reset`);
   return { ok: true, algo: clone(algo) };

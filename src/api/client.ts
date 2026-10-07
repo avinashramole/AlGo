@@ -1489,6 +1489,36 @@ export function resetBacktestAlgo(id: string) {
   );
 }
 
+export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
+  let response: Response;
+  try {
+    response = await fetch(`${API}/algos/${id}/backtest/report?format=${format}`, {
+      headers: authHeaders(),
+    });
+  } catch {
+    throw new Error(apiDownMessage());
+  }
+  if (!response.ok) {
+    let message = "Run a backtest first to create the PDF and Excel report.";
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* binary or empty */
+    }
+    throw new Error(publicDeskError(message));
+  }
+  const blob = await response.blob();
+  const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
+  const filename = match?.[1] || `backtest.${format === "pdf" ? "pdf" : "xls"}`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function selectOptionChain(symbol: string, expiry?: string) {
   return request<{ snapshot: Snapshot }>(`/option-chain/select`, {
     method: "POST",

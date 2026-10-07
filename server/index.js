@@ -11,6 +11,7 @@ import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSav
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
+import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
@@ -1029,6 +1030,32 @@ app.post("/api/algos/:id/backtest/reset", (req, res) => {
     return;
   }
   res.json({ ...result, snapshot: snapshot() });
+});
+
+app.get("/api/algos/:id/backtest/report", (req, res) => {
+  const id = String(req.params.id || "");
+  const algo = getAlgo(id);
+  if (!algo) {
+    res.status(404).json({ error: "Strategy not found" });
+    return;
+  }
+  const report = loadBacktestReport(id, algo);
+  if (!report) {
+    res.status(404).json({ error: "Run a backtest first to create the PDF and Excel report." });
+    return;
+  }
+  const format = String(req.query.format || "pdf").toLowerCase();
+  if (format === "xlsx" || format === "xls" || format === "excel") {
+    const body = renderBacktestExcel(report);
+    res.setHeader("Content-Type", "application/vnd.ms-excel");
+    res.setHeader("Content-Disposition", `attachment; filename="${reportDownloadName(report, "xls")}"`);
+    res.send(body);
+    return;
+  }
+  const body = renderBacktestPdf(report);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${reportDownloadName(report, "pdf")}"`);
+  res.send(body);
 });
 
 app.post("/api/orders", async (req, res) => {

@@ -137,11 +137,18 @@ export const DEFAULT_NIFTY_TEST2_CONFIG = {
   overallTarget: 15000,
   maxTradesPerDay: 1,
   maxPositions: 4,
+  holdStyle: "btst",
   product: "NRML",
   holdOvernight: true,
   intradayOnly: false,
   eodSquareOffMinutes: 0,
 };
+
+export function test2HoldStyle(algo = {}) {
+  const raw = String(algo.holdStyle || "").trim().toLowerCase();
+  if (raw === "intraday" || raw === "mis") return "intraday";
+  return "btst";
+}
 
 export const DEFAULT_NIFTY_TEST1_CONFIG = {
   timeframe: "5m",
@@ -582,6 +589,8 @@ export function niftyTest2Config(algo = {}) {
   };
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_TEST2_CONFIG.lots)));
   const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_TEST2_CONFIG.lotSize)));
+  const holdStyle = test2HoldStyle(algo);
+  const btst = holdStyle === "btst";
   return {
     timeframe: "5m",
     barMinutes: 5,
@@ -600,10 +609,11 @@ export function niftyTest2Config(algo = {}) {
     overallTarget: Math.max(0, num(algo.overallTarget, DEFAULT_NIFTY_TEST2_CONFIG.overallTarget)),
     maxTradesPerDay: 1,
     maxPositions: 4,
-    product: "NRML",
-    holdOvernight: true,
-    intradayOnly: false,
-    eodSquareOffMinutes: 0,
+    holdStyle,
+    product: btst ? "NRML" : "MIS",
+    holdOvernight: btst,
+    intradayOnly: !btst,
+    eodSquareOffMinutes: btst ? 0 : 15,
   };
 }
 
@@ -968,10 +978,11 @@ export function defaultNiftyTest2Algo(patch = {}) {
     exitTimeIst: cfg.exitTimeIst,
     maxTradesPerDay: 1,
     maxPositions: 4,
-    product: "NRML",
-    holdOvernight: true,
-    intradayOnly: false,
-    eodSquareOffMinutes: 0,
+    holdStyle: cfg.holdStyle,
+    product: cfg.product,
+    holdOvernight: cfg.holdOvernight,
+    intradayOnly: cfg.intradayOnly,
+    eodSquareOffMinutes: cfg.eodSquareOffMinutes,
     indicator: "NIFTY_TEST2",
     runMode: ["live", "paper", "backtest"].includes(patch.runMode) ? patch.runMode : "live",
     brokerId: patch.runMode === "paper" || patch.runMode === "backtest" ? "paper" : "dhan",
@@ -995,10 +1006,11 @@ export function defaultNiftyTest2Algo(patch = {}) {
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
     exitTimeIst: cfg.exitTimeIst,
-    product: "NRML",
-    holdOvernight: true,
-    intradayOnly: false,
-    eodSquareOffMinutes: 0,
+    holdStyle: cfg.holdStyle,
+    product: cfg.product,
+    holdOvernight: cfg.holdOvernight,
+    intradayOnly: cfg.intradayOnly,
+    eodSquareOffMinutes: cfg.eodSquareOffMinutes,
     indicator: "NIFTY_TEST2",
     enabled: false,
   };

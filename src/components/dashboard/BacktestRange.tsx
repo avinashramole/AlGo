@@ -75,7 +75,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
           <div className="text-lg font-bold">Run backtest</div>
           <div className="text-xs text-slate-400">{name || "Strategy"} · pick years or dates</div>
           <div className="desk-help mt-1 text-[11px] leading-snug text-slate-500">
-            Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first download for the selected years happens once.
+            Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first download for the selected years happens once. Each finished backtest writes a PDF and Excel report on the strategy card.
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
