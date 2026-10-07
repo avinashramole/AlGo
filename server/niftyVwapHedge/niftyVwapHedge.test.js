@@ -22,7 +22,7 @@ function bar15(i, open, close, extras = {}) {
   };
 }
 
-function bookAdapter() {
+function bookAdapter(options = {}) {
   const positions = [];
   const places = [];
   const exits = [];
@@ -52,6 +52,7 @@ function bookAdapter() {
       },
       exit(position) {
         exits.push(position);
+        if (options.queueExits) return { ok: true, queued: true };
         const idx = positions.findIndex((row) => row.id === position.id);
         const pos = idx >= 0 ? positions[idx] : position;
         const pnl = Number((((pos.ltp || pos.avg) - pos.avg) * pos.qty).toFixed(2));
@@ -155,6 +156,29 @@ test("primary +40% closes the CE and returns to IDLE", () => {
   assert.equal(done.action, "exit-primary");
   assert.equal(book.positions.length, 0);
   assert.equal(hedgeState(algo).phase, PHASE.IDLE);
+});
+
+test("primary +40% queues one SELL and does not fire again while that order is pending", () => {
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge TGT Pending" });
+  const book = bookAdapter({ queueExits: true });
+  tick(algo, book);
+  book.positions[0].ltp = 140;
+  const first = tick(algo, book, { ceLtp: 140 });
+  assert.equal(first.action, "exit-queued");
+  assert.equal(book.exits.length, 1);
+  assert.equal(book.positions.length, 1);
+  const pendingSell = {
+    strategy: algo.name,
+    side: "SELL",
+    status: "PENDING",
+    symbol: book.positions[0].symbol,
+    option: book.positions[0].option,
+    strike: book.positions[0].strike,
+  };
+  const second = tick(algo, book, { ceLtp: 140, orders: [pendingSell] });
+  assert.equal(second.action, "exit-pending");
+  assert.equal(book.exits.length, 1);
+  assert.equal(book.positions.length, 1);
 });
 
 test("20% loss buys opposite 2 lots once and never doubles again", () => {

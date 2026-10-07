@@ -7,6 +7,7 @@ import {
   minLiveBars,
   queueLiveAlgoOrder,
   replaceDhanBook,
+  replaceDhanOrders,
 } from "./market.js";
 
 const BAR = 5 * 60 * 1000;
@@ -121,4 +122,39 @@ test("the same strategy does not queue a second NIFTY option while its lot is op
   const queued = drainPendingLiveAlgoOrders();
   assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), false);
   replaceDhanBook([]);
+});
+
+test("a pending SELL on the book blocks a second close of the same contract", () => {
+  replaceDhanBook([]);
+  replaceDhanOrders([
+    {
+      id: "exit-pending-1",
+      symbol: "NIFTY 23100 CE",
+      side: "SELL",
+      status: "PENDING",
+      qty: 65,
+      strategy: "test",
+      brokerId: "dhan",
+      option: "CE",
+      strike: 23100,
+      securityId: "sec-23100-ce",
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "test",
+    side: "SELL",
+    symbol: "NIFTY 23100 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23100,
+    kind: "option",
+    brokerId: "dhan",
+    securityId: "sec-23100-ce",
+  });
+  assert.equal(result.queued, false);
+  assert.equal(result.duplicate, true);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.some((row) => row.side === "SELL" && !row.copyUserId), false);
+  replaceDhanOrders([]);
 });
