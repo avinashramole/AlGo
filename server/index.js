@@ -93,6 +93,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnvFiles();
 
 attachProcessGuards();
+clearBacktestBusy();
 purgeStrategiesNotOnDesk();
 
 const app = express();
@@ -934,7 +935,9 @@ app.post("/api/algos/:id/broker", (req, res) => {
 
 app.post("/api/algos/:id/backtest", async (req, res) => {
   if (isBacktestBusy()) {
-    res.status(429).json({ error: "A backtest is already running. Wait for it to finish." });
+    res.status(429).json({
+      error: "A backtest is already running. Wait about a minute, or click Reset, then try again.",
+    });
     return;
   }
   extendRequestTimeout(req, 600_000);
@@ -1049,6 +1052,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
 });
 
 app.post("/api/algos/:id/backtest/reset", (req, res) => {
+  clearBacktestBusy();
   const result = resetBacktestAlgo(String(req.params.id || ""));
   if (result.error) {
     res.status(404).json({ error: result.error });

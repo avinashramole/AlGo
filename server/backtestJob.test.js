@@ -20,7 +20,7 @@ test("busy file is only live while a backtest is marked", () => {
 
 test("stale busy file does not block the next backtest", () => {
   markBacktestBusy();
-  const stamp = Date.now() - 400_000;
+  const stamp = Date.now() - 120_000;
   fs.utimesSync(process.env.T2S_BACKTEST_BUSY_FILE, stamp / 1000, stamp / 1000);
   assert.equal(isBacktestBusy(), false);
   clearBacktestBusy();
