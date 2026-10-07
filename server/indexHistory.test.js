@@ -16,7 +16,7 @@ const {
   storedIndexCoverage,
   wipeIndexHistory,
 } = await import("./indexHistory.js");
-const { pickBacktestTimeframe, backtestAlgo, createAlgo, deleteAlgo } = await import("./market.js");
+const { pickBacktestTimeframe, backtestAlgo, createAlgo, deleteAlgo, clampBacktestYears, resolveBacktestWindow } = await import("./market.js");
 
 const T0 = Date.parse("2026-08-21T03:45:00.000Z"); // 09:15 IST
 const MIN = 60 * 1000;
@@ -41,6 +41,25 @@ test("1 year backtest keeps the strategy timeframe instead of forcing 1H", () =>
   assert.equal(pickBacktestTimeframe("1H", 365), "1H");
   assert.equal(pickBacktestTimeframe("1m", 365), "5m");
   assert.equal(pickBacktestTimeframe("1m", 10), "1m");
+  assert.equal(pickBacktestTimeframe("5m", 3650), "5m");
+});
+
+test("backtest years input defaults to 10 and rejects more than 10 years", () => {
+  assert.equal(clampBacktestYears(), 10);
+  assert.equal(clampBacktestYears(3), 3);
+  assert.equal(clampBacktestYears(99), 10);
+  assert.equal(clampBacktestYears(0), 1);
+  const ten = resolveBacktestWindow({});
+  assert.equal(ten.years, 10);
+  assert.equal(ten.range, "years");
+  assert.equal(ten.error, undefined);
+  const one = resolveBacktestWindow({ range: "1y" });
+  assert.equal(one.years, 1);
+  assert.equal(one.range, "1y");
+  const three = resolveBacktestWindow({ years: 3 });
+  assert.equal(three.years, 3);
+  const tooLong = resolveBacktestWindow({ range: "custom", from: "2010-01-01", to: "2026-10-07" });
+  assert.match(String(tooLong.error || ""), /10 years/i);
 });
 
 test("stored 5m bars aggregate to 15m and a second backtest reuses disk", async () => {

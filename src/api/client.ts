@@ -253,7 +253,8 @@ export type Snapshot = {
       maxDrawdown?: number;
       sample?: boolean;
       source?: string;
-      range?: "1y" | "custom" | string;
+      range?: "1y" | "years" | "custom" | string;
+      years?: number;
       from?: string;
       to?: string;
       optionSource?: "stored" | "mixed" | "synth" | string;
@@ -1467,7 +1468,8 @@ export function deleteAlgo(id: string) {
 }
 
 export type BacktestOptions = {
-  range?: "1y" | "custom";
+  range?: "1y" | "years" | "custom";
+  years?: number;
   from?: string;
   to?: string;
 };

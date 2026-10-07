@@ -609,6 +609,11 @@ function AlgoCard({
         {algo.lastBacktest?.timeframe || algo.lastBacktest?.optionSource ? (
           <div className="mt-1 text-[11px] text-slate-500">
             {algo.lastBacktest.timeframe ? `Replay ${algo.lastBacktest.timeframe}` : ""}
+            {algo.lastBacktest.years
+              ? ` · last ${algo.lastBacktest.years} year${Number(algo.lastBacktest.years) === 1 ? "" : "s"}`
+              : algo.lastBacktest.from && algo.lastBacktest.to
+                ? ` · ${algo.lastBacktest.from} → ${algo.lastBacktest.to}`
+                : ""}
             {algo.lastBacktest.reused ? " · reused stored Dhan history" : ""}
             {algo.lastBacktest.optionSource
               ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${

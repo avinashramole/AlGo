@@ -108,7 +108,8 @@ export type AlgoStrategy = {
     maxDrawdown?: number;
     sample?: boolean;
     source?: string;
-    range?: "1y" | "custom" | string;
+    range?: "1y" | "years" | "custom" | string;
+    years?: number;
     from?: string;
     to?: string;
     optionSource?: "stored" | "mixed" | "synth" | string;
@@ -179,7 +180,7 @@ export const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
 
 export const RUN_MODES = [
   { id: "paper" as const, title: "Paper trading", text: "Uses the live Dhan feed. Fills stay virtual on Paper Trading — nothing is sent to Dhan." },
-  { id: "backtest" as const, title: "Backtest", text: "Replay last 1 year or custom dates. See P&L, win rate, and trade book." },
+  { id: "backtest" as const, title: "Backtest", text: "Replay the last 1–10 years or custom dates. See P&L, win rate, and trade book." },
   { id: "live" as const, title: "Live Dhan", text: "Start only when Dhan is LIVE. Real CE/PE or futures orders go to Dhan in NSE hours." },
 ];
 

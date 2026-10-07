@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/format";
 
+export const DEFAULT_BACKTEST_YEARS = 10;
+export const MAX_BACKTEST_YEARS = 10;
+
 export type BacktestRangePayload = {
-  range: "1y" | "custom";
+  range: "years" | "custom";
+  years?: number;
   from?: string;
   to?: string;
 };
@@ -15,9 +19,15 @@ function localYmd(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
-function yearAgoYmd() {
+function clampYears(value: number) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return DEFAULT_BACKTEST_YEARS;
+  return Math.max(1, Math.min(MAX_BACKTEST_YEARS, n));
+}
+
+function yearsAgoYmd(years = DEFAULT_BACKTEST_YEARS) {
   const date = new Date();
-  date.setFullYear(date.getFullYear() - 1);
+  date.setFullYear(date.getFullYear() - clampYears(years));
   return localYmd(date);
 }
 
@@ -32,18 +42,22 @@ type Props = {
 };
 
 export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun }: Props) {
-  const [range, setRange] = useState<"1y" | "custom">("1y");
-  const [from, setFrom] = useState(yearAgoYmd());
+  const [range, setRange] = useState<"years" | "custom">("years");
+  const [years, setYears] = useState(DEFAULT_BACKTEST_YEARS);
+  const [from, setFrom] = useState(yearsAgoYmd());
   const [to, setTo] = useState(localYmd());
 
   useEffect(() => {
     if (!open) return;
-    setRange("1y");
-    setFrom(yearAgoYmd());
+    setRange("years");
+    setYears(DEFAULT_BACKTEST_YEARS);
+    setFrom(yearsAgoYmd(DEFAULT_BACKTEST_YEARS));
     setTo(localYmd());
   }, [open]);
 
   if (!open || typeof document === "undefined") return null;
+
+  const yearsValue = clampYears(years);
 
   return createPortal(
     <div
@@ -59,23 +73,23 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
       >
         <div className="mb-4">
           <div className="text-lg font-bold">Run backtest</div>
-          <div className="text-xs text-slate-400">{name || "Strategy"} · pick a date range</div>
+          <div className="text-xs text-slate-400">{name || "Strategy"} · pick years or dates</div>
           <div className="desk-help mt-1 text-[11px] leading-snug text-slate-500">
-            Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first 1-year download happens once.
+            Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first download for the selected years happens once.
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setRange("1y")}
+            onClick={() => setRange("years")}
             className={cn(
               "rounded-xl border px-3 py-3 text-left",
-              range === "1y" ? "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--bg)]",
+              range === "years" ? "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--bg)]",
             )}
           >
-            <div className="text-sm font-bold">Last 1 year</div>
+            <div className="text-sm font-bold">Last years</div>
             <div className="mt-1 text-[11px] text-slate-400">
-              {yearAgoYmd()} → {localYmd()}
+              {yearsAgoYmd(yearsValue)} → {localYmd()}
             </div>
           </button>
           <button
@@ -90,7 +104,20 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
             <div className="mt-1 text-[11px] text-slate-400">Choose from and to</div>
           </button>
         </div>
-        {range === "custom" ? (
+        {range === "years" ? (
+          <label className="mt-3 block text-xs font-semibold text-slate-500">
+            Years
+            <input
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold"
+              type="number"
+              min={1}
+              max={MAX_BACKTEST_YEARS}
+              step={1}
+              value={years}
+              onChange={(event) => setYears(clampYears(Number(event.target.value)))}
+            />
+          </label>
+        ) : (
           <div className="mt-3 grid grid-cols-2 gap-2">
             <label className="text-xs font-semibold text-slate-500">
               From
@@ -114,7 +141,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
               />
             </label>
           </div>
-        ) : null}
+        )}
         {error ? <div className="mt-3 text-xs font-semibold text-down">{error}</div> : null}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold">
@@ -124,8 +151,9 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
             type="button"
             disabled={busy}
             onClick={() => {
-              setRange("1y");
-              setFrom(yearAgoYmd());
+              setRange("years");
+              setYears(DEFAULT_BACKTEST_YEARS);
+              setFrom(yearsAgoYmd(DEFAULT_BACKTEST_YEARS));
               setTo(localYmd());
               onReset?.();
             }}
@@ -136,7 +164,9 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
           <button
             type="button"
             disabled={busy || (range === "custom" && (!from || !to))}
-            onClick={() => onRun(range === "custom" ? { range: "custom", from, to } : { range: "1y" })}
+            onClick={() =>
+              onRun(range === "custom" ? { range: "custom", from, to } : { range: "years", years: yearsValue })
+            }
             className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60"
           >
             {busy ? "Testing..." : "Run backtest"}
@@ -157,28 +187,30 @@ type InlineProps = {
 };
 
 export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: InlineProps) {
-  const [range, setRange] = useState<"1y" | "custom">("1y");
-  const [from, setFrom] = useState(yearAgoYmd());
+  const [range, setRange] = useState<"years" | "custom">("years");
+  const [years, setYears] = useState(DEFAULT_BACKTEST_YEARS);
+  const [from, setFrom] = useState(yearsAgoYmd());
   const [to, setTo] = useState(localYmd());
+  const yearsValue = clampYears(years);
 
   return (
     <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
       <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
       <div className="mt-1 text-[11px] leading-snug text-slate-500">
-        Uses stored index and option history when this range is already downloaded. Replay stays off the API thread.
+        Type how many years to replay, up to 10. Uses stored history when this range is already downloaded.
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={() => setRange("1y")}
+          onClick={() => setRange("years")}
           className={cn(
             "rounded-lg border px-2 py-2 text-left",
-            range === "1y" ? "border-brand-500 bg-white dark:bg-[var(--card)]" : "border-[var(--border)] bg-[var(--bg)]",
+            range === "years" ? "border-brand-500 bg-white dark:bg-[var(--card)]" : "border-[var(--border)] bg-[var(--bg)]",
           )}
         >
-          <div className="text-xs font-bold">Last 1 year</div>
+          <div className="text-xs font-bold">Last years</div>
           <div className="mt-0.5 text-[10px] text-slate-400">
-            {yearAgoYmd()} → {localYmd()}
+            {yearsAgoYmd(yearsValue)} → {localYmd()}
           </div>
         </button>
         <button
@@ -193,7 +225,20 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
           <div className="mt-0.5 text-[10px] text-slate-400">Pick from and to</div>
         </button>
       </div>
-      {range === "custom" ? (
+      {range === "years" ? (
+        <label className="mt-2 block text-[10px] font-semibold uppercase text-slate-500">
+          Years
+          <input
+            className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
+            type="number"
+            min={1}
+            max={MAX_BACKTEST_YEARS}
+            step={1}
+            value={years}
+            onChange={(event) => setYears(clampYears(Number(event.target.value)))}
+          />
+        </label>
+      ) : (
         <div className="mt-2 grid grid-cols-2 gap-2">
           <label className="text-[10px] font-semibold uppercase text-slate-500">
             From
@@ -217,7 +262,7 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
             />
           </label>
         </div>
-      ) : null}
+      )}
       {error ? <div className="mt-2 text-xs font-semibold text-down">{error}</div> : null}
       <div className="mt-2 grid grid-cols-3 gap-2">
         <button type="button" onClick={onCancel} className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold">
@@ -227,8 +272,9 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
           type="button"
           disabled={busy}
           onClick={() => {
-            setRange("1y");
-            setFrom(yearAgoYmd());
+            setRange("years");
+            setYears(DEFAULT_BACKTEST_YEARS);
+            setFrom(yearsAgoYmd(DEFAULT_BACKTEST_YEARS));
             setTo(localYmd());
             onReset?.();
           }}
@@ -239,7 +285,7 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
         <button
           type="button"
           disabled={busy || (range === "custom" && (!from || !to))}
-          onClick={() => onRun(range === "custom" ? { range: "custom", from, to } : { range: "1y" })}
+          onClick={() => onRun(range === "custom" ? { range: "custom", from, to } : { range: "years", years: yearsValue })}
           className="h-9 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
         >
           {busy ? "Testing..." : "Run backtest"}
