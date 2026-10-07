@@ -45,10 +45,15 @@ export function Sidebar() {
   const visible = items.filter((item) => (admin ? !item.member : !item.admin));
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-[var(--border)] bg-[var(--card)] py-3 md:flex">
-      <NavLink to="/" end className="mb-3 flex items-center gap-2.5 px-3" title="Trade 2 Smart">
+    <aside className="desk-chrome fixed inset-y-0 left-0 z-30 hidden w-56 flex-col py-3 md:flex">
+      <NavLink to="/" end className="mb-4 flex items-center gap-2.5 px-3" title="Trade 2 Smart">
         <BrandMark variant="emblem" size="md" />
-        <span className="truncate text-sm font-extrabold tracking-tight">Trade 2 Smart</span>
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-extrabold tracking-tight text-white">Trade 2 Smart</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+            {admin ? "Admin desk" : "Member desk"}
+          </span>
+        </span>
       </NavLink>
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2">
         {visible.map((item) => (
@@ -59,14 +64,14 @@ export function Sidebar() {
             title={item.label}
             className={({ isActive }) =>
               cn(
-                "flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors",
+                "flex h-10 items-center gap-3 rounded-xl px-3 text-[13px] font-semibold transition-colors",
                 isActive
-                  ? "bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-blue-300"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200",
+                  ? "bg-white/10 text-white shadow-[inset_3px_0_0_#fd6b01]"
+                  : "text-white/55 hover:bg-white/5 hover:text-white",
               )
             }
           >
-            <item.icon size={18} className="shrink-0" />
+            <item.icon size={17} className="shrink-0" />
             <span className="truncate">{item.label}</span>
           </NavLink>
         ))}
@@ -75,15 +80,15 @@ export function Sidebar() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-semibold text-white/55 hover:bg-white/5 hover:text-white"
           title="Toggle theme"
         >
-          {theme === "light" ? <Sun size={18} className="shrink-0" /> : <Moon size={18} className="shrink-0" />}
+          {theme === "light" ? <Sun size={17} className="shrink-0" /> : <Moon size={17} className="shrink-0" />}
           <span>Theme</span>
         </button>
-        <div className="flex h-9 items-center gap-3 rounded-xl px-3 text-xs font-semibold text-slate-400">
-          <Activity size={14} className="shrink-0" />
-          <span>Desk</span>
+        <div className="flex h-9 items-center gap-3 rounded-xl px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">
+          <Activity size={13} className="shrink-0" />
+          <span>Live desk</span>
         </div>
       </div>
     </aside>

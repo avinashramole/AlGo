@@ -7,6 +7,7 @@ export function SentimentGauge() {
   const bullish = data.sentiment >= 55;
   return (
     <section className="card p-4">
+      <div className="desk-kicker">Tape</div>
       <div className="mb-1 text-sm font-bold">Market Sentiment</div>
       <Gauge score={data.sentiment} />
       <div className={`mt-1 text-center text-sm font-extrabold tracking-wide ${bullish ? "text-up" : "text-down"}`}>

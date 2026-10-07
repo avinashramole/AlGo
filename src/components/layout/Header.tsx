@@ -104,19 +104,21 @@ export function Header() {
   const showTick = Boolean(feedLabel && lastTick);
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 md:h-16 md:gap-4 md:px-5">
+    <header className="desk-header sticky top-0 z-20 flex h-14 min-w-0 items-center gap-2 px-3 md:h-16 md:gap-4 md:px-5">
       <Link to="/" className="shrink-0 md:hidden" title="Trade 2 Smart">
         <BrandMark variant="horizontal" size="sm" theme={theme} />
       </Link>
       <div className="min-w-[4.75rem] flex-1">
-        <h1 className="truncate text-sm font-extrabold tracking-tight md:text-base">{pageTitle}</h1>
-        {!admin ? <p className="hidden truncate text-[11px] font-semibold text-slate-400 md:block">Member portal</p> : null}
+        <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 md:block">
+          {admin ? "Institutional desk" : "Member portal"}
+        </p>
+        <h1 className="truncate text-sm font-extrabold tracking-tight md:text-[17px]">{pageTitle}</h1>
       </div>
       {admin ? (
         <div className="relative hidden min-w-0 max-w-md flex-1 lg:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
-            className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
+            className="h-10 w-full rounded-full border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
             placeholder="Search NIFTY, BANKNIFTY, Strategy, Order..."
           />
         </div>
@@ -158,7 +160,7 @@ export function Header() {
         </button>
         <div className="relative" ref={menuRef}>
           <button type="button" onClick={() => setOpen((value) => !value)} className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-slate-100 dark:hover:bg-slate-800" title="Profile">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-xs font-bold text-white">
               {(user?.name || "T").slice(0, 1).toUpperCase()}
             </div>
             <div className="hidden text-left lg:block">

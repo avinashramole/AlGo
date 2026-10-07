@@ -61,6 +61,7 @@ export function FuturesTape() {
   if (!rows.length) {
     return (
       <section className="card p-4">
+        <div className="desk-kicker">Futures</div>
         <div className="text-sm font-bold">Index futures</div>
         <p className="mt-2 text-xs text-slate-400">Loading this month’s index futures…</p>
       </section>
@@ -71,6 +72,7 @@ export function FuturesTape() {
     <section className="card p-3 md:overflow-x-auto md:p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
+          <div className="desk-kicker">Futures</div>
           <div className="text-sm font-bold">Index futures · current month</div>
           <p className="hidden text-xs text-slate-400 md:block">
             Front-month contract only. BUY/SELL is 1 lot MIS on Dhan when LIVE. The desk looks up the contract on the

@@ -57,7 +57,10 @@ export function PriceChart() {
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold">NIFTY 50 NSE</h2>
+            <div>
+              <div className="desk-kicker">Index</div>
+              <h2 className="text-sm font-bold">NIFTY 50 NSE</h2>
+            </div>
             <span className={cn("flex items-center gap-1 text-[11px] font-semibold", liveTape ? "text-up" : "text-slate-400")}>
               <span className={cn("h-1.5 w-1.5 rounded-full", liveTape ? "pulse-dot bg-up" : "bg-slate-400")} />
               {sourceLabel}

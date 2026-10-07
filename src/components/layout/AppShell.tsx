@@ -20,7 +20,7 @@ export function AppShell() {
       <Sidebar />
       <div className="flex h-[100dvh] flex-col pl-0 md:pl-56">
         <Header />
-        <main className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto p-2 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:p-3 md:pb-3">
+        <main className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto p-2.5 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:p-4 md:pb-4">
           <Outlet />
         </main>
       </div>

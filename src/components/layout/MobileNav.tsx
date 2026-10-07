@@ -70,7 +70,10 @@ export function MobileNav() {
           <button type="button" className="absolute inset-0 bg-slate-900/40" aria-label="Close menu" onClick={() => setMoreOpen(false)} />
           <div className="absolute inset-x-0 bottom-16 rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-lg">
             <div className="mb-2 flex items-center justify-between px-1">
-              <div className="text-sm font-bold">More</div>
+              <div>
+                <div className="desk-kicker">Desk</div>
+                <div className="text-sm font-bold">More</div>
+              </div>
               <button type="button" className="icon-btn" onClick={() => setMoreOpen(false)} aria-label="Close">
                 <X size={18} />
               </button>
@@ -103,7 +106,7 @@ export function MobileNav() {
           </div>
         </div>
       ) : null}
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(7,24,51,0.06)] md:hidden">
         <div className={admin ? "grid grid-cols-5" : "grid grid-cols-4"}>
           {visiblePrimary.map((item) => (
             <NavLink

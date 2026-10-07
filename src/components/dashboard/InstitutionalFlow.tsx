@@ -28,6 +28,7 @@ export function InstitutionalFlow() {
   const hasFeed = Boolean(data.fiiDii.fii.buy || data.fiiDii.fii.sell || data.fiiDii.dii.buy || data.fiiDii.dii.sell);
   return (
     <section className="card p-4">
+      <div className="desk-kicker">Flow</div>
       <div className="mb-3 text-sm font-bold">FII / DII Activity</div>
       {hasFeed ? (
         <>

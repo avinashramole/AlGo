@@ -47,9 +47,9 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
               }
             }}
             className={cn(
-              "card px-4 py-3",
-              selectable && "cursor-pointer",
-              selected && "ring-2 ring-brand-500",
+              "card px-4 py-3 transition-shadow",
+              selectable && "cursor-pointer hover:shadow-card",
+              selected && "ring-2 ring-navy-900",
             )}
           >
             <div className="flex items-start justify-between gap-3">

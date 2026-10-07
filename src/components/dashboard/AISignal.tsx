@@ -33,7 +33,7 @@ export function AISignal({ onReview }: Props) {
               cy="50"
               r="42"
               fill="none"
-              stroke="#2f54eb"
+              stroke="#071833"
               strokeWidth="10"
               strokeDasharray={dash}
               strokeDashoffset={offset}
