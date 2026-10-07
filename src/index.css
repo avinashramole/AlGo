@@ -99,3 +99,42 @@ body {
   color: var(--text);
 }
 
+main {
+  min-width: 0;
+  max-width: 100%;
+}
+
+main > * {
+  min-width: 0;
+}
+
+main :where(p, td, th, li, dd, h1, h2, h3, label, a) {
+  overflow-wrap: anywhere;
+}
+
+main img,
+main video,
+main canvas {
+  max-width: 100%;
+}
+
+main input,
+main select,
+main textarea {
+  max-width: 100%;
+}
+
+main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(table) {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 639px) {
+  main .card.p-6,
+  main section.card.p-5,
+  main article.card.p-5 {
+    padding: 1rem;
+  }
+}
+

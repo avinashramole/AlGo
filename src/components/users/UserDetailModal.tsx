@@ -60,9 +60,9 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
   const maxDaily = Math.max(1, ...(report?.daily || []).map((item) => Math.abs(item.pnl)));
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-2 sm:p-3 md:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
+      <div className="relative z-10 flex max-h-[92dvh] w-full min-w-0 max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <div>
             <div className="text-[11px] font-extrabold uppercase text-slate-400">User details</div>

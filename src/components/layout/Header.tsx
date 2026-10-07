@@ -104,11 +104,11 @@ export function Header() {
   const showTick = Boolean(feedLabel && lastTick);
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 md:h-16 md:gap-4 md:px-5">
+    <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 md:h-16 md:gap-4 md:px-5">
       <Link to="/" className="shrink-0 md:hidden" title="Trade 2 Smart">
-        <BrandMark variant="horizontal" size="md" theme={theme} />
+        <BrandMark variant="horizontal" size="sm" theme={theme} />
       </Link>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[4.75rem] flex-1">
         <h1 className="truncate text-sm font-extrabold tracking-tight md:text-base">{pageTitle}</h1>
         {!admin ? <p className="hidden truncate text-[11px] font-semibold text-slate-400 md:block">Member portal</p> : null}
       </div>
@@ -121,11 +121,11 @@ export function Header() {
           />
         </div>
       ) : null}
-      <div className="ml-auto flex min-w-0 items-center gap-1.5 md:gap-3">
+      <div className="ml-auto flex min-w-0 max-w-[58%] items-center gap-1.5 md:max-w-none md:gap-3">
         {admin ? <BrokerSwitch /> : null}
         <div
           className={cn(
-            "flex max-w-[28vw] shrink items-center gap-1.5 overflow-hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:max-w-[42vw] md:max-w-none md:gap-2 md:px-3 md:py-1.5 md:text-xs",
+            "flex min-w-0 max-w-[6.5rem] shrink items-center gap-1.5 overflow-hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:max-w-[9rem] md:max-w-none md:gap-2 md:px-3 md:py-1.5 md:text-xs",
             marketOpen
               ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
               : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",

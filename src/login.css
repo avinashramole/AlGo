@@ -461,6 +461,29 @@
   color: #cbd5e1;
 }
 
+@media (max-width: 480px) {
+  .t2s-login-main,
+  .t2s-benefits,
+  .t2s-legal {
+    width: min(1180px, calc(100% - 16px));
+  }
+
+  .t2s-login-card {
+    padding: 20px 16px 16px;
+  }
+
+  .t2s-login-avatar {
+    width: 112px;
+    height: 112px;
+    margin-bottom: 10px;
+  }
+
+  .t2s-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
 @media (min-width: 960px) {
   .t2s-login-main {
     grid-template-columns: minmax(0, 1.15fr) minmax(360px, 420px);
