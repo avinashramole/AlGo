@@ -192,7 +192,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
         const status = nextEnabled ? (previous.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
         pendingToggles.current.set(id, { enabled: nextEnabled, status });
-        snapshotGen.current += 1;
         patchAlgo(id, { enabled: nextEnabled, status });
         try {
           const result = await toggleAlgo(id, nextEnabled);

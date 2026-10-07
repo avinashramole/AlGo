@@ -7,7 +7,7 @@ import test from "node:test";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
-const { backtestAlgo, createAlgo, deleteAlgo, dropClientFromStrategies, listAlgos, setDhanFeed, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
+const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, dropClientFromStrategies, getAlgo, listAlgos, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
 const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
@@ -95,6 +95,59 @@ test("a started strategy stays LIVE after the saved file is reloaded", () => {
   } finally {
     deleteAlgo(created.id);
     setDhanFeed({ live: false });
+  }
+});
+
+test("starting or stopping a strategy does not stop the Dhan data feed", () => {
+  const tickAt = 1_700_000_000_000;
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: tickAt, error: null });
+  const stamp = Date.now();
+  const created = createAlgo({ name: `Feed Stay ${stamp}`, kind: "nifty-first-candle", runMode: "live" });
+  try {
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    let feed = snapshot().dhanFeed;
+    assert.equal(feed.live, true);
+    assert.equal(feed.source, "websocket");
+    assert.equal(feed.lastTickAt, tickAt);
+
+    const stopped = toggleAlgo(created.id, { enabled: false });
+    assert.equal(stopped.enabled, false);
+    feed = snapshot().dhanFeed;
+    assert.equal(feed.live, true);
+    assert.equal(feed.source, "websocket");
+    assert.equal(feed.lastTickAt, tickAt);
+    assert.equal(feed.error, null);
+  } finally {
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
+});
+
+test("a throwing live strategy tick still applies the next Dhan quote", () => {
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: Date.now() });
+  const stamp = Date.now();
+  const created = createAlgo({ name: `Feed Quote ${stamp}`, kind: "nifty-first-candle", runMode: "live" });
+  try {
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    const live = getAlgo(created.id);
+    live.vwapState = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("strategy tick must not kill the tape");
+        },
+      },
+    );
+    applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25111 }]);
+    const nifty = snapshot().indices.find((row) => row.symbol === "NIFTY 50");
+    assert.equal(nifty?.price, 25111);
+    assert.equal(snapshot().dhanFeed.live, true);
+    assert.equal(snapshot().dhanFeed.source, "websocket");
+  } finally {
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
   }
 });
 
