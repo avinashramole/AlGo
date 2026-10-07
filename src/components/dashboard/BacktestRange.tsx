@@ -46,20 +46,20 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center overflow-y-auto bg-slate-900/55 p-3 sm:items-center sm:p-4"
+      className="desk-overlay z-[200]"
       role="dialog"
       aria-modal="true"
       aria-label="Run backtest"
       onClick={onClose}
     >
       <div
-        className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:p-5"
+        className="desk-sheet desk-sheet-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4">
           <div className="text-lg font-bold">Run backtest</div>
           <div className="text-xs text-slate-400">{name || "Strategy"} · pick a date range</div>
-          <div className="mt-1 text-[11px] leading-snug text-slate-500">
+          <div className="desk-help mt-1 text-[11px] leading-snug text-slate-500">
             Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first 1-year download happens once.
           </div>
         </div>

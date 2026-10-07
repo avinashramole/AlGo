@@ -165,10 +165,10 @@ export function Brokers() {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="desk-page mx-auto max-w-5xl space-y-2">
       <div>
         <h1 className="text-xl font-bold">Brokers</h1>
-        <p className="text-sm text-slate-400">
+        <p className="desk-help text-sm text-slate-400">
           Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect more than one.
           Set default is the broker used for admin orders and the admin balance. The Dhan data feed can stay on without becoming that default. Connecting a broker does not start LIVE algos.
         </p>
@@ -189,7 +189,7 @@ export function Brokers() {
             {feed?.live ? `DHAN LIVE · ${feed.source}` : feed?.tokenHint ? "TOKEN SAVED" : "WAITING FOR TOKEN"}
           </span>
         </div>
-        <p className="mt-2 text-xs text-slate-400">
+        <p className="desk-help mt-2 text-xs text-slate-400">
           Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
           <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
           no password token API). A deploy or <b>systemctl restart</b> reconnects the saved access token and turns the
@@ -425,7 +425,7 @@ export function Brokers() {
                     autoComplete="off"
                   />
                 </label>
-                <p className="text-[11px] text-slate-500">
+                <p className="desk-help text-[11px] text-slate-500">
                   {feed?.tokenHint
                     ? `Saved ${feed.tokenHint}. The token stays after deploy. The data feed stays on until you click Stop data feed.`
                     : "No access token saved yet. Paste it here and save. Saving starts the data feed and keeps the token on screen."}
@@ -514,18 +514,18 @@ export function Brokers() {
           </section>
         ))}
       </div>
-      <p className="text-xs text-slate-400">
+      <p className="desk-help text-xs text-slate-400">
         Dhan uses DhanHQ <code>POST /v2/orders</code> while LIVE. Zerodha, Upstox, Fyers, Kotak Neo, and Angel Broking
         send real orders to that broker after you connect their token. A rejected broker API is shown as an error — the
         desk does not invent a fill. Restart does not start LIVE algos.
       </p>
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-900/40 p-3 sm:items-center sm:p-4">
-          <div className="card max-h-[92dvh] w-full max-w-md overflow-y-auto p-4 sm:p-5">
+        <div className="desk-overlay">
+          <div className="desk-sheet desk-sheet-sm card p-3">
             <div className="text-sm font-bold">
               {selected.id === "dhan" ? "Update Dhan access token" : `Connect ${selected.name} live`}
             </div>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="desk-help mt-1 text-xs text-slate-400">
               {selected.id === "dhan"
                 ? "Client ID is the live DhanHQ client id from this account. Login ID is only for PIN + TOTP."
                 : selected.help || "Paste the live API credentials from that broker. This does not start algos."}
@@ -601,7 +601,7 @@ export function Brokers() {
                     autoComplete="off"
                   />
                 </label>
-                <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                <p className="desk-help mt-2 text-[11px] leading-snug text-slate-500">
                   Admin orders call Kotak <b>tradeApiLogin</b> with this access token, mobile, client ID, and TOTP, then{" "}
                   <b>tradeApiValidate</b> with the MPIN, then place on the host Kotak returns.
                 </p>

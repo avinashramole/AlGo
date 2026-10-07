@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { BrokerInstallField } from "../../api/client";
 import { displayInstallValue } from "../../lib/formSecrets";
 
-const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
+const inputClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs";
 
 export function BrokerInstallFields({
   fields,
@@ -19,7 +19,7 @@ export function BrokerInstallFields({
 }) {
   const [focused, setFocused] = useState("");
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
       {fields.map((field) => {
         const typed = String(values[field.id] || "");
         const shown =

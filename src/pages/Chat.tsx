@@ -477,9 +477,9 @@ function BroadcastModal({
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
+    <div className="desk-overlay z-40">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
+      <div className="desk-sheet desk-sheet-sm relative z-10 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">{title}</h2>
           <button type="button" className="text-sm font-semibold text-slate-400" onClick={onClose}>

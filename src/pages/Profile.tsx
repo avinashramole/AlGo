@@ -36,9 +36,9 @@ export function Profile() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3">
+    <div className="desk-page mx-auto max-w-3xl space-y-2">
       <h1 className="text-xl font-bold">Profile</h1>
-      <section className="card p-4 sm:p-6">
+      <section className="card p-3">
         <div className="mb-5 flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-lg font-extrabold text-white">
             {(user?.name || "T").slice(0, 1).toUpperCase()}
@@ -58,21 +58,21 @@ export function Profile() {
       </section>
       <MemberAccountSetup />
       {isGmailMember(user) ? null : (
-        <section className="card p-5">
-          <div className="mb-3 text-sm font-bold">Edit profile</div>
-          <form onSubmit={onSave}>
-            <label className="mb-3 block text-sm font-semibold">
+        <section className="card p-3">
+          <div className="mb-2 text-sm font-bold">Edit profile</div>
+          <form onSubmit={onSave} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="block text-xs font-semibold">
               Name
-              <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+              <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={name} onChange={(event) => setName(event.target.value)} />
             </label>
-            <label className="mb-3 block text-sm font-semibold">
+            <label className="block text-xs font-semibold">
               Email
-              <input className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+              <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
             </label>
-            <label className="mb-3 block text-sm font-semibold">
+            <label className="block text-xs font-semibold">
               Mobile no
               <input
-                className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 font-normal"
+                className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal"
                 value={mobile}
                 inputMode="numeric"
                 maxLength={10}
@@ -80,8 +80,8 @@ export function Profile() {
                 placeholder="98xxxxxxxx"
               />
             </label>
-            {note ? <p className="mb-3 text-sm font-semibold text-slate-500">{note}</p> : null}
-            <button type="submit" disabled={busy} className="h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white disabled:opacity-60">
+            {note ? <p className="text-xs font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
+            <button type="submit" disabled={busy} className="h-8 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60 sm:col-span-3">
               {busy ? "Saving..." : "Save profile"}
             </button>
           </form>

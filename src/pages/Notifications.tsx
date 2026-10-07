@@ -15,7 +15,7 @@ function AdminNotifications() {
   const { data } = useMarket();
   const items = data.notifications || [];
   return (
-    <div className="mx-auto max-w-2xl space-y-3">
+    <div className="desk-page mx-auto max-w-2xl space-y-2">
       <h1 className="text-xl font-bold">Notifications</h1>
       {!items.length ? (
         <div className="card px-4 py-8 text-center text-sm text-slate-400">
@@ -53,9 +53,9 @@ function MemberNotifications() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-3">
+    <div className="desk-page mx-auto max-w-2xl space-y-2">
       <h1 className="text-xl font-bold">Alerts</h1>
-      <p className="text-sm text-slate-500">
+      <p className="desk-help text-sm text-slate-500">
         When Copy is on, each admin desk order is copied to your broker account and listed here. Alerts clear at 8:00 AM IST with the live book.
       </p>
       {!alerts.length ? (

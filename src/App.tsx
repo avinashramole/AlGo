@@ -20,9 +20,8 @@ const PositionsDesk = lazyPage(() => import("./pages/PositionsDesk"), "Positions
 const Reports = lazyPage(() => import("./pages/Reports"), "Reports");
 const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
-const Users = lazyPage(() => import("./pages/Users"), "Users");
+const UserIpManager = lazyPage(() => import("./pages/UserIpManager"), "UserIpManager");
 const Settings = lazyPage(() => import("./pages/Settings"), "Settings");
-const IpManagement = lazyPage(() => import("./pages/IpManagement"), "IpManagement");
 const Notifications = lazyPage(() => import("./pages/Notifications"), "Notifications");
 const Chat = lazyPage(() => import("./pages/Chat"), "Chat");
 
@@ -77,9 +76,9 @@ export default function App() {
           <Route path="portfolio" element={<Navigate to="/positions" replace />} />
           <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
           <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
-          <Route path="users" element={<AdminOnly><Users /></AdminOnly>} />
+          <Route path="users" element={<AdminOnly><UserIpManager /></AdminOnly>} />
           <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
-          <Route path="settings/ips" element={<AdminOnly><IpManagement /></AdminOnly>} />
+          <Route path="settings/ips" element={<Navigate to="/users?tab=ips" replace />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="chat" element={<AdminOnly><Chat /></AdminOnly>} />
           <Route path="*" element={<Navigate to="/" replace />} />

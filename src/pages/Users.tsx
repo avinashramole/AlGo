@@ -21,7 +21,7 @@ import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
 
-export function Users() {
+export function Users({ embedded = false }: { embedded?: boolean }) {
   const { user, applyUser } = useAuth();
   const seeded = peekClientList();
   const [clients, setClients] = useState<ClientRow[]>(seeded?.clients || []);
@@ -125,15 +125,14 @@ export function Users() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
+        {embedded ? null : (
         <div>
-          <h1 className="text-xl font-bold">All clients</h1>
-          <p className="text-sm text-slate-400">
-            Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.{" "}
-            <Link to="/settings/ips" className="font-semibold text-brand-500">
-              IP management
-            </Link>
+          <h1 className="text-xl font-bold">User & IP Manager</h1>
+          <p className="desk-help text-sm text-slate-400">
+            Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.
           </p>
         </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -668,17 +667,17 @@ function AddClientModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-3 md:items-center">
+    <div className="desk-overlay z-40">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+      <div className="desk-sheet desk-sheet-wide relative z-10 flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-3 py-2">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/15 text-brand-500">
               <UserPlus size={18} />
             </span>
             <div>
               <h2 className="text-base font-bold">Add client account</h2>
-              <p className="text-xs text-slate-400">Connect and configure a new trading account</p>
+              <p className="desk-help text-xs text-slate-400">Connect and configure a new trading account</p>
             </div>
           </div>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
@@ -686,11 +685,11 @@ function AddClientModal({
           </button>
         </div>
         <form onSubmit={(event) => void onSubmit(event)} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
-            <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
+          <div className="min-h-0 flex-1 space-y-2 overflow-hidden px-3 py-2">
+            <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5">
               <div>
                 <div className="text-sm font-semibold">Copy trading</div>
-                <div className="text-xs text-slate-400">
+                <div className="desk-help text-xs text-slate-400">
                   {copy
                     ? "ON · Admin orders copy from the saved token even when the client is logged off"
                     : "OFF · This client will not copy desk orders"}
@@ -698,7 +697,7 @@ function AddClientModal({
               </div>
               <CopySwitch on={copy} onChange={setCopy} />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
               <Field label="Client name">
                 <input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Ramesh Kumar" />
               </Field>
@@ -711,14 +710,14 @@ function AddClientModal({
                   onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
                   placeholder="9xxxxxxxxx"
                 />
-                <span className="font-normal text-[11px] text-slate-500">Client portal login number · initial password 1234</span>
+                <span className="desk-help font-normal text-[11px] text-slate-500">Client portal login number · initial password 1234</span>
               </Field>
               <Field label="Email">
                 <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="client@email.com" />
               </Field>
               <Field label="Client ID">
                 <input className={inputClass} value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Broker client ID" />
-                <span className="font-normal text-[11px] text-slate-500">Saved on this client and on their My plan page. Required with the access token.</span>
+                <span className="desk-help font-normal text-[11px] text-slate-500">Saved on this client and on their My plan page. Required with the access token.</span>
               </Field>
               <Field label="Broker">
                 <select
@@ -758,7 +757,7 @@ function AddClientModal({
                 <option value="paper">Paper</option>
                 <option value="real">Real</option>
               </select>
-              <span className="font-normal text-[11px] text-slate-500">
+              <span className="desk-help font-normal text-[11px] text-slate-500">
                 Add broker credentials below before enabling real orders. Real mode does not start Dhan LIVE on the desk.
               </span>
             </Field>
@@ -772,13 +771,13 @@ function AddClientModal({
                 <option value="strategy">Mapped strategies only</option>
                 <option value="both">Copy Master + strategies</option>
               </select>
-              <span className="font-normal text-[11px] text-slate-500">
+              <span className="desk-help font-normal text-[11px] text-slate-500">
                 Choose whether this client receives mapped strategy orders, manual Copy Master orders, or both.
               </span>
             </Field>
             <Field label="Subscription valid through">
               <input className={inputClass} type="date" value={subscriptionUntil} onChange={(event) => setSubscriptionUntil(event.target.value)} />
-              <span className="font-normal text-[11px] text-slate-500">
+              <span className="desk-help font-normal text-[11px] text-slate-500">
                 Copy execution automatically turns off after this date. New clients default to 30 days.
               </span>
             </Field>
@@ -807,7 +806,7 @@ function AddClientModal({
             </div>
             <Field label="Telegram Chat ID">
               <input className={inputClass} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="e.g. 123456789" />
-              <span className="font-normal text-[11px] text-slate-500">
+              <span className="desk-help font-normal text-[11px] text-slate-500">
                 Filled automatically after the client starts your bot, or enter it manually.
               </span>
             </Field>
@@ -820,10 +819,10 @@ function AddClientModal({
                   </option>
                 ))}
               </select>
-              <span className="font-normal text-[11px] text-slate-500">
+              <span className="desk-help font-normal text-[11px] text-slate-500">
                 IPs already assigned to another account on this broker are hidden. Add inventory on{" "}
-                <Link to="/settings/ips" className="font-semibold text-brand-500">
-                  IP management
+                <Link to="/users?tab=ips" className="font-semibold text-brand-500">
+                  User & IP Manager
                 </Link>
                 .
               </span>
@@ -871,19 +870,19 @@ function AddClientModal({
             />
             <Field label="Internal notes">
               <textarea
-                className="min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-sm"
+                className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
-                placeholder="Account notes, preferences or operational context"
+                placeholder="Account notes"
               />
             </Field>
             {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
           </div>
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
-            <button type="button" className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold" onClick={onClose}>
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-3 py-2">
+            <button type="button" className="h-8 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" disabled={busy} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
+            <button type="submit" disabled={busy} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white disabled:opacity-60">
               <Plus size={16} />
               {busy ? "Creating..." : "Create client"}
             </button>
@@ -1021,8 +1020,8 @@ function BrokerLoginFields({
     else if (id === "accessToken") onToken(value);
   };
   return (
-    <div className="rounded-xl border border-[var(--border)] p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{brokerName} login for this user</div>
+    <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-[var(--border)] p-2 lg:grid-cols-3">
+      <div className="col-span-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 lg:col-span-3">{brokerName} login</div>
       {rows.map((field) => (
         <Field key={field.id} label={field.label}>
           <input
@@ -1035,14 +1034,14 @@ function BrokerLoginFields({
           />
         </Field>
       ))}
-      <span className="font-normal text-[11px] text-slate-500">
+      <span className="desk-help col-span-2 font-normal text-[11px] text-slate-500 lg:col-span-3">
         Algo copies and this user's home use this login. The admin broker login is not saved on the user. This does not turn LIVE on.
       </span>
     </div>
   );
 }
 
-const inputClass = "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm";
+const inputClass = "h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs";
 
 function EditModal({
   row,
@@ -1143,13 +1142,13 @@ function EditModal({
 
   return (
     <Modal title={`Edit ${row.name}`} onClose={onClose}>
-      <form onSubmit={(event) => void onSubmit(event)} className="grid gap-3">
+      <form onSubmit={(event) => void onSubmit(event)} className="grid grid-cols-2 gap-1.5">
         <Field label="Name">
-          <input className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm" value={name} onChange={(event) => setName(event.target.value)} />
+          <input className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs" value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
         <Field label="Mobile no">
           <input
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs"
             value={mobile}
             inputMode="numeric"
             maxLength={10}
@@ -1162,7 +1161,7 @@ function EditModal({
         </Field>
         <Field label="Broker">
           <select
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs"
             value={brokerId}
             onChange={(event) => {
               const next = event.target.value;
@@ -1183,7 +1182,7 @@ function EditModal({
               </option>
             ))}
           </select>
-          <span className="font-normal text-[11px] text-slate-500">
+          <span className="desk-help font-normal text-[11px] text-slate-500">
             This user can keep a client ID and token on each broker. Selecting DHAN edits only the DHAN slot.
           </span>
         </Field>
@@ -1197,7 +1196,7 @@ function EditModal({
         ) : null}
         <Field label="Client ID">
           <input
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs"
             value={accountId}
             onChange={(event) => setAccountId(event.target.value)}
             placeholder={brokerId === "dhan" ? "Dhan client ID" : "Broker client ID"}
@@ -1227,7 +1226,7 @@ function EditModal({
           onTradeTotp={setTradeTotp}
         />
         {brokerId !== "paper" ? (
-          <span className="font-normal text-[11px] text-slate-500">
+          <span className="desk-help col-span-2 font-normal text-[11px] text-slate-500">
             {selectedAccount.tokenHint
               ? `Installed ${selectedAccount.tokenHint}${selectedAccount.tokenUpdatedAt ? ` · ${formatIst(selectedAccount.tokenUpdatedAt)}` : ""} on ${brokerId.toUpperCase()}. Paste a new token to replace it.`
               : `No ${brokerId.toUpperCase()} access token installed yet.`}{" "}
@@ -1246,10 +1245,10 @@ function EditModal({
           </datalist>
         </Field>
         {error ? <p className="text-xs font-semibold text-rose-500">{error}</p> : null}
-        <p className="text-[11px] text-slate-500">
+        <p className="desk-help col-span-2 text-[11px] text-slate-500">
           {formatMobile(mobile)} · Saving REAL or Copy does not start Dhan LIVE.
         </p>
-        <button type="submit" disabled={busy} className="h-10 rounded-xl bg-brand-500 text-sm font-semibold text-white">
+        <button type="submit" disabled={busy} className="col-span-2 h-8 rounded-lg bg-brand-500 text-xs font-semibold text-white">
           {busy ? "Saving..." : "Save"}
         </button>
       </form>
@@ -1318,10 +1317,10 @@ function GroupModal({
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-3 md:items-center">
+    <div className="desk-overlay z-40">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
+      <div className="desk-sheet desk-sheet-sm relative z-10 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl">
+        <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-bold">{title}</h2>
           <button type="button" className="text-slate-400" onClick={onClose}>
             <X size={16} />

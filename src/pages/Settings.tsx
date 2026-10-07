@@ -76,16 +76,16 @@ export function Settings() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-3">
+    <div className="desk-page mx-auto max-w-2xl space-y-2">
       <h1 className="text-xl font-bold">Settings</h1>
-      <Link to="/settings/ips" className="card flex items-center justify-between px-4 py-3">
+      <Link to="/users?tab=ips" className="card flex items-center justify-between px-3 py-2">
         <div>
-          <div className="text-sm font-semibold">IP management</div>
-          <div className="text-xs text-slate-400">Broker-wise static egress allocation and account control</div>
+          <div className="text-sm font-semibold">User & IP Manager</div>
+          <div className="desk-help text-xs text-slate-400">Clients, copy books, and static egress IPs</div>
         </div>
         <span className="text-sm font-semibold text-brand-500">Open →</span>
       </Link>
-      <Link to="/profile" className="card flex items-center justify-between px-4 py-3">
+      <Link to="/profile" className="card flex items-center justify-between px-3 py-2">
         <span className="text-sm font-semibold">User profile</span>
         <span className="text-sm font-semibold text-brand-500">Name, email, mobile →</span>
       </Link>
@@ -99,7 +99,7 @@ export function Settings() {
       </section>
       <section className="card p-4">
         <div className="text-sm font-bold">Gmail mail</div>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="desk-help mt-1 text-xs text-slate-400">
           After login, T2S emails the user a sign-in notice. Email login codes use this mailbox. Create an App Password in Google Account → Security → 2-Step Verification → App passwords.
         </p>
         <form onSubmit={onConnect} className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -124,7 +124,7 @@ export function Settings() {
       </section>
       <section className="card p-4">
         <div className="text-sm font-bold">GPay / PhonePe enrollments</div>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="desk-help mt-1 text-xs text-slate-400">
           Members pay this monthly amount — or 3× quarterly / 12× yearly — to your GPay or PhonePe mobile when they tap Enroll. Use the 10-digit number linked to those apps. Optional UPI ID example: 98xxxxxxxx@ybl (PhonePe) or 98xxxxxxxx@okicici (GPay). After a member taps I have paid, confirm the transfer here. Live copy starts only after you confirm.
         </p>
         <form
