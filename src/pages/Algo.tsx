@@ -523,10 +523,11 @@ function Test2ScriptBar({ algo }: { algo: AlgoStrategy }) {
 
   return (
     <div className="mt-2 grid w-full grid-cols-1 gap-2 sm:grid-cols-3" data-test2-card-scripts>
-      <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 sm:col-span-3">
-        Script · option
+      <label className="block text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300 sm:col-span-3">
+        Script · NIFTY BANKNIFTY SENSEX
         <select
-          className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-bold text-[var(--text)]"
+          data-test2-scripts="card"
+          className="mt-1 h-10 w-full rounded-lg border border-sky-500 bg-[var(--bg)] px-2 text-sm font-bold text-[var(--text)]"
           value={algo.symbol || "NIFTY"}
           disabled={saving}
           onChange={(event) => {
