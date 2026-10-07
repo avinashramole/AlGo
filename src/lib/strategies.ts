@@ -83,6 +83,7 @@ export type AlgoStrategy = {
   endTimeIst?: string;
   startTimeIst?: string;
   exitTimeIst?: string;
+  holdStyle?: "btst" | "intraday";
   holdOvernight?: boolean;
   product?: string;
   minBodyPct?: number;
@@ -122,6 +123,8 @@ export type AlgoStrategy = {
     optionHits?: number;
     reused?: boolean;
     optionHistory?: { overwritten?: string[]; days?: number; contracts?: number; source?: string; error?: string };
+    holdStyle?: "btst" | "intraday" | string;
+    reportReady?: boolean;
     book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
   };
   status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
@@ -704,6 +707,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       startTimeIst: "09:35",
       endTimeIst: "15:15",
       exitTimeIst: "09:35",
+      holdStyle: "btst",
       product: "NRML",
       holdOvernight: true,
       intradayOnly: false,

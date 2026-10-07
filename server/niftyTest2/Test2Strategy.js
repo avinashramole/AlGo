@@ -9,13 +9,13 @@ function test2State(algo) {
   return algo.test2State;
 }
 
-function rollSession(state, day, hasOpen) {
+function rollSession(state, day, hasOpen, holdOvernight) {
   if (state.sessionDate === day) return state;
   const previous = String(state.sessionDate || "");
   state.sessionDate = day;
   state.inFlight = false;
   state.dayPnl = 0;
-  if (hasOpen) {
+  if (hasOpen && holdOvernight) {
     if (!state.entryDate) state.entryDate = previous || "overnight";
     state.entered = true;
     return state;
@@ -57,9 +57,19 @@ function minutesOf(now) {
 }
 
 function shouldSellTomorrow(state, config, today, now) {
+  if (!config.holdOvernight) return false;
   const entryDate = String(state.entryDate || "");
   if (!entryDate || entryDate === today) return false;
   return minutesOf(now) >= hmToMinutes(config.exitTimeIst || config.startTimeIst || "09:35");
+}
+
+function shouldExitIntraday(config, now) {
+  if (config.holdOvernight) return false;
+  return minutesOf(now) >= hmToMinutes(config.endTimeIst || "15:15");
+}
+
+function styleLabel(config) {
+  return config.holdStyle === "intraday" ? "INTRADAY" : "BTST";
 }
 
 function closePayload(open, algo, config) {
@@ -127,6 +137,11 @@ export const Test2Strategy = {
       algo.lastSignal = `EXIT SL ₹${dayPnl.toFixed(0)}`;
       return { action: "exit", reason: "overall-sl" };
     }
+    if (shouldExitIntraday(config, now || Date.now())) {
+      closeOpens(opens, algo, config, adapter, orders);
+      algo.lastSignal = `EXIT EOD ${config.endTimeIst || "15:15"}`;
+      return { action: "exit", reason: "eod" };
+    }
     if (shouldSellTomorrow(state, config, today, now || Date.now())) {
       closeOpens(opens, algo, config, adapter, orders);
       algo.lastSignal = `EXIT BTST ${config.exitTimeIst || "09:35"}`;
@@ -160,14 +175,14 @@ export const Test2Strategy = {
       });
       algo.lastSignal = `HEDGE SL ${open.option} ${open.strike} @ ${mark.toFixed(2)}`;
     }
-    algo.lastSignal = algo.lastSignal || `HOLD BTST ${opens.length} legs · ₹${dayPnl.toFixed(0)}`;
+    algo.lastSignal = algo.lastSignal || `HOLD ${styleLabel(config)} ${opens.length} legs · ₹${dayPnl.toFixed(0)}`;
     return { action: "hold", pnl: dayPnl };
   },
 
   maybeEnter({ algo, config, combo, expiries = {}, marks = {}, now, adapter, orders = [] }) {
     const state = test2State(algo);
     if (state.entered || state.lockedDay || state.inFlight) {
-      algo.lastSignal = state.lockedDay ? "HOLD BTST" : "HOLD TEST2";
+      algo.lastSignal = state.lockedDay ? `HOLD ${styleLabel(config)}` : "HOLD TEST2";
       return { action: "skip", reason: state.lockedDay ? "locked" : "open" };
     }
     if (!combo?.legs?.length) {
@@ -215,10 +230,10 @@ export const Test2Strategy = {
     state.legs = placed;
     TradeLogger.record("test2-signal", {
       strategy: algo.name,
-      style: "btst",
+      style: config.holdStyle || "btst",
       legs: placed.map((leg) => `${leg.side} ${leg.strike} ${leg.option}`),
     });
-    algo.lastSignal = `BTST ${placed.map((leg) => `${leg.side} ${leg.strike} ${leg.option}`).join(" · ")}`;
+    algo.lastSignal = `${styleLabel(config)} ${placed.map((leg) => `${leg.side} ${leg.strike} ${leg.option}`).join(" · ")}`;
     return { action: "entry", legs: placed };
   },
 
@@ -228,7 +243,7 @@ export const Test2Strategy = {
     const config = input.config || niftyTest2Config(algo);
     const now = Number(input.now) || Date.now();
     const opens = openLegs(input.positions, algo.name);
-    const state = rollSession(test2State(algo), sessionKeyIST(now), opens.length > 0);
+    const state = rollSession(test2State(algo), sessionKeyIST(now), opens.length > 0, config.holdOvernight);
     if (input.feedLive === false) {
       algo.lastSignal = "FEED DOWN";
       return { action: "feed-down" };

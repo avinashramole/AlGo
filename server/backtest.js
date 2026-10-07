@@ -392,6 +392,7 @@ export function runBacktest(algo, candles = []) {
     winRate: trades.length ? Math.round((wins / trades.length) * 100) : 0,
     pnl: Number(equity.toFixed(2)),
     maxDrawdown: Number(maxDrawdown.toFixed(2)),
+    tradesBook: trades,
     book: trades.slice(-12),
   };
 }

@@ -174,10 +174,12 @@ export function runTest2Backtest(algo, candles = []) {
   let maxDrawdown = 0;
   let comboWins = 0;
   let combos = 0;
-  for (let i = 0; i < sessions.length - 1; i += 1) {
-    const hold = holdOvernight(sessions[i], sessions[i + 1]);
-    if (!hold) continue;
-    const combo = replayTest2Day(hold, config);
+  const overnight = config.holdStyle === "btst";
+  const last = overnight ? sessions.length - 1 : sessions.length;
+  for (let i = 0; i < last; i += 1) {
+    const session = overnight ? holdOvernight(sessions[i], sessions[i + 1]) : sessions[i];
+    if (!session) continue;
+    const combo = replayTest2Day(session, config);
     combos += 1;
     if (combo.pnl > 0) comboWins += 1;
     for (const leg of combo.legs) {
@@ -187,7 +189,7 @@ export function runTest2Backtest(algo, candles = []) {
         exit: leg.exit,
         qty: leg.qty,
         pnl: leg.pnl,
-        bars: 2,
+        bars: overnight ? 2 : 1,
         day: combo.day,
       });
     }
@@ -207,6 +209,8 @@ export function runTest2Backtest(algo, candles = []) {
     pnl: Number(equity.toFixed(2)),
     maxDrawdown: Number(maxDrawdown.toFixed(2)),
     optionSource: "synth",
+    holdStyle: config.holdStyle,
+    tradesBook: trades,
     book: trades.slice(-80),
   };
 }

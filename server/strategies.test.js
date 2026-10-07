@@ -203,6 +203,7 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(test2.startTimeIst, "09:35");
   assert.equal(test2.endTimeIst, "15:15");
   assert.equal(test2.exitTimeIst, "09:35");
+  assert.equal(test2.holdStyle, "btst");
   assert.equal(test2.intradayOnly, false);
   assert.equal(test2.product, "NRML");
   assert.equal(test2.sellPremium, 80);

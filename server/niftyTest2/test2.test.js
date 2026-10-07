@@ -15,8 +15,11 @@ test("TEST2 seed and name lock", () => {
   assert.equal(seeded.startTimeIst, "09:35");
   assert.equal(seeded.endTimeIst, "15:15");
   assert.equal(seeded.exitTimeIst, "09:35");
+  assert.equal(seeded.holdStyle, "btst");
   assert.equal(seeded.intradayOnly, false);
   assert.equal(seeded.product, "NRML");
+  assert.equal(niftyTest2Config({ holdStyle: "intraday" }).product, "MIS");
+  assert.equal(niftyTest2Config({ holdStyle: "intraday" }).holdOvernight, false);
   assert.equal(seeded.sellPremium, 80);
   assert.equal(seeded.hedgePremium, 20);
   assert.equal(isNiftyTest2Algo({ name: "TEST2" }), true);
@@ -128,6 +131,57 @@ test("TEST2 is BTST: holds past 15:15 and sells tomorrow", () => {
   );
 });
 
+test("TEST2 intraday squares off the same day at 15:15", () => {
+  const algo = defaultNiftyTest2Algo({ holdStyle: "intraday" });
+  assert.equal(niftyTest2Config(algo).product, "MIS");
+  const rows = buildSyntheticChain(24500, 50, 8);
+  const places = [];
+  Test2Strategy.tick({
+    algo,
+    now: T0935,
+    feedLive: true,
+    monthlyRows: rows,
+    weeklyRows: rows,
+    adapter: {
+      place: (payload) => {
+        places.push(payload);
+        return { queued: true, status: "PENDING" };
+      },
+    },
+    positions: [],
+    orders: [],
+  });
+  assert.equal(places.every((row) => row.product === "MIS"), true);
+  const closes = [];
+  const opens = [
+    { symbol: "NIFTY 24600 CE", side: "SELL", qty: 65, avg: 80, ltp: 78, option: "CE", strike: 24600 },
+    { symbol: "NIFTY 24400 PE", side: "SELL", qty: 65, avg: 80, ltp: 79, option: "PE", strike: 24400 },
+    { symbol: "NIFTY 24700 CE", side: "BUY", qty: 65, avg: 20, ltp: 21, option: "CE", strike: 24700 },
+    { symbol: "NIFTY 24300 PE", side: "BUY", qty: 65, avg: 20, ltp: 19, option: "PE", strike: 24300 },
+  ];
+  const midday = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-07T06:00:00.000Z"),
+    feedLive: true,
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: opens,
+    orders: [],
+  });
+  assert.equal(midday.action, "hold");
+  const eod = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-07T09:50:00.000Z"),
+    feedLive: true,
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: opens,
+    orders: [],
+  });
+  assert.equal(eod.action, "exit");
+  assert.equal(eod.reason, "eod");
+  assert.equal(closes.length, 4);
+  assert.equal(closes.every((row) => row.product === "MIS"), true);
+});
+
 test("TEST2 backtest walks each session day", () => {
   const algo = defaultNiftyTest2Algo();
   const day = Date.parse("2026-09-01T04:05:00.000Z");
@@ -140,8 +194,13 @@ test("TEST2 backtest walks each session day", () => {
     volume: 1,
   }));
   const result = runTest2Backtest(algo, candles);
+  assert.equal(result.holdStyle, "btst");
   assert.equal(result.combos, 9);
   assert.equal(result.trades, 36);
+  const intra = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), candles);
+  assert.equal(intra.holdStyle, "intraday");
+  assert.equal(intra.combos, 10);
+  assert.equal(intra.trades, 40);
   assert.equal(Number(result.winRate) > 0, true);
   assert.equal(Number.isFinite(result.pnl), true);
   assert.equal(niftyTest2Config(algo).sellPremium, 80);

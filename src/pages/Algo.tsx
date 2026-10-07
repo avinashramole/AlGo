@@ -1,6 +1,6 @@
-import { Activity, Pencil, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
+import { Activity, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { updateAlgo, type ClientRow } from "../api/client";
+import { downloadBacktestReport, updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { SignalFeed } from "../components/dashboard/SignalFeed";
@@ -101,7 +101,10 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test2" as const,
       category: "TEST2 NIFTY PREMIUM STRANGLE",
-      config: `NIFTY BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || algo.startTimeIst || "09:35"} IST · NRML overnight · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
+      config:
+        algo.holdStyle === "intraday"
+          ? `NIFTY INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`
+          : `NIFTY BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || algo.startTimeIst || "09:35"} IST · NRML overnight · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
@@ -332,7 +335,7 @@ export function Algo() {
                   orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
                   clientIds={knownClientIds}
                   positions={(data.positions || []).filter((row) => row.strategy === algo.name)}
-                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === "all"}
+                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
                   onEdit={() => {
@@ -349,6 +352,12 @@ export function Algo() {
                     setRangeError("");
                     void resetBacktest(algo.id)
                       .catch((err: unknown) => window.alert(catchDeskError(err, "Could not reset backtest")))
+                      .finally(() => setBusyId(""));
+                  }}
+                  onReport={(format) => {
+                    setBusyId(`report-${algo.id}`);
+                    void downloadBacktestReport(algo.id, format)
+                      .catch((err: unknown) => window.alert(catchDeskError(err, "Could not download backtest report")))
                       .finally(() => setBusyId(""));
                   }}
                   onCancelRange={() => {
@@ -497,6 +506,7 @@ function AlgoCard({
   onMap,
   onBacktest,
   onResetBacktest,
+  onReport,
   onCancelRange,
   onRunBacktest,
   onStart,
@@ -514,6 +524,7 @@ function AlgoCard({
   onMap: () => void;
   onBacktest: () => void;
   onResetBacktest: () => void;
+  onReport: (format: "pdf" | "xlsx") => void;
   onCancelRange: () => void;
   onRunBacktest: (payload: BacktestRangePayload) => void;
   onStart: () => void;
@@ -627,6 +638,8 @@ function AlgoCard({
             {algo.lastBacktest.optionHistory?.overwritten?.length
               ? ` · replaced ${algo.lastBacktest.optionHistory.overwritten.length} day${algo.lastBacktest.optionHistory.overwritten.length === 1 ? "" : "s"}`
               : ""}
+            {algo.lastBacktest.holdStyle ? ` · ${algo.lastBacktest.holdStyle === "intraday" ? "intraday MIS" : "BTST NRML"}` : ""}
+            {" · PDF + Excel ready"}
           </div>
         ) : null}
       </div>
@@ -647,6 +660,24 @@ function AlgoCard({
         >
           <RotateCcw size={12} />
           Reset
+        </button>
+        <button
+          type="button"
+          disabled={busy || !algo.lastBacktest}
+          onClick={() => onReport("pdf")}
+          className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-60"
+        >
+          <FileText size={12} />
+          PDF
+        </button>
+        <button
+          type="button"
+          disabled={busy || !algo.lastBacktest}
+          onClick={() => onReport("xlsx")}
+          className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-60"
+        >
+          <FileSpreadsheet size={12} />
+          Excel
         </button>
         <button type="button" onClick={onDelete} className="inline-flex h-9 items-center gap-1 rounded-full border border-rose-200 px-3 text-xs font-semibold text-down dark:border-rose-900">
           <Trash2 size={12} />

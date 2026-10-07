@@ -143,6 +143,16 @@ export function runNiftyVwapHedgeBacktest(algo, candles = []) {
     maxDrawdown: 0,
     optionSource: storedHits && synthHits ? "mixed" : storedHits ? "stored" : "synth",
     optionHits: storedHits,
+    tradesBook: trades.map((row) => ({
+      side: "BUY",
+      entry: Number(row.avg),
+      exit: Number(row.exit),
+      qty: row.qty,
+      pnl: row.pnl,
+      bars: 0,
+      reason: row.role || row.option,
+      symbol: row.symbol || row.option,
+    })),
     book: trades.slice(-12).map((row) => ({
       side: "BUY",
       entry: Number(row.avg),

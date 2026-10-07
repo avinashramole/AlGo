@@ -299,10 +299,16 @@ export function summarizeAlgo(algo) {
   if (isNiftyTest2Algo(algo)) {
     const start = algo.startTimeIst || "09:35";
     const exit = algo.exitTimeIst || start;
+    const end = algo.endTimeIst || "15:15";
     const sell = algo.sellPremium || 80;
     const hedge = algo.hedgePremium || 20;
     const sl = algo.hedgeSlPct || 20;
-    return `TEST2 · NIFTY BTST · buy today ${start} IST · sell tomorrow ${exit} IST · NRML overnight · SELL 1 monthly CE + PE premium ≥${sell} · BUY 1 weekly CE + PE premium ≥${hedge} · hedge SL ${sl}% · ${size}`;
+    const style = String(algo.holdStyle || "").toLowerCase() === "intraday" ? "intraday" : "btst";
+    const hold =
+      style === "intraday"
+        ? `NIFTY INTRADAY · enter ${start} IST · square-off ${end} IST · MIS same day`
+        : `NIFTY BTST · buy today ${start} IST · sell tomorrow ${exit} IST · NRML overnight`;
+    return `TEST2 · ${hold} · SELL 1 monthly CE + PE premium ≥${sell} · BUY 1 weekly CE + PE premium ≥${hedge} · hedge SL ${sl}% · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

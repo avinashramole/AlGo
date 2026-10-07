@@ -32,5 +32,6 @@ server/data/last-quotes.json
 server/data/nifty-option-history/
 server/data/index-history/
 server/data/backtest.busy
+server/data/backtests/
 *.zip
 deploy/__pycache__/
