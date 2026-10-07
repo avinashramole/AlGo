@@ -149,7 +149,6 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
           </button>
           <button
             type="button"
-            disabled={busy}
             onClick={() => {
               setRange("years");
               setYears(DEFAULT_BACKTEST_YEARS);
@@ -157,7 +156,8 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
               setTo(localYmd());
               onReset?.();
             }}
-            className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+            title="Clears a stuck backtest lock (same as rm -f /opt/t2s/server/data/backtest.busy)"
+            className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold"
           >
             Reset
           </button>
@@ -270,7 +270,6 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
         </button>
         <button
           type="button"
-          disabled={busy}
           onClick={() => {
             setRange("years");
             setYears(DEFAULT_BACKTEST_YEARS);
@@ -278,7 +277,8 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
             setTo(localYmd());
             onReset?.();
           }}
-          className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold disabled:opacity-60"
+          title="Clears a stuck backtest lock (same as rm -f /opt/t2s/server/data/backtest.busy)"
+          className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold"
         >
           Reset
         </button>

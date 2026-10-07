@@ -38,6 +38,25 @@ test("browser does not retry Run backtest after a gateway timeout", () => {
   assert.match(src, /retries:\s*1/);
 });
 
+test("Reset backtest deletes backtest.busy even while a run is marked busy", () => {
+  const index = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const client = fs.readFileSync(new URL("../src/api/client.ts", import.meta.url), "utf8");
+  const algo = fs.readFileSync(new URL("../src/pages/Algo.tsx", import.meta.url), "utf8");
+  const range = fs.readFileSync(new URL("../src/components/dashboard/BacktestRange.tsx", import.meta.url), "utf8");
+  assert.match(index, /app\.post\("\/api\/backtest\/unlock"/);
+  assert.match(index, /Click Reset backtest to clear the lock/);
+  assert.match(client, /\/backtest\/unlock/);
+  assert.match(algo, /Reset backtest/);
+  assert.match(algo, /rm -f \/opt\/t2s\/server\/data\/backtest\.busy/);
+  assert.doesNotMatch(algo, /disabled=\{busy\}\s*\n\s*onClick=\{onResetBacktest\}/);
+  assert.doesNotMatch(range, /disabled=\{busy\}\s*\n\s*onClick=\{\(\) => \{/);
+  markBacktestBusy();
+  assert.equal(isBacktestBusy(), true);
+  clearBacktestBusy();
+  assert.equal(isBacktestBusy(), false);
+  assert.equal(fs.existsSync(process.env.T2S_BACKTEST_BUSY_FILE), false);
+});
+
 test("indicator replay runs in a worker and returns a compact book", async () => {
   const T0 = Date.parse("2026-08-21T03:45:00.000Z");
   const candles = Array.from({ length: 80 }, (_, i) => {

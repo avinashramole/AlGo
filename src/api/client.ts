@@ -1512,6 +1512,14 @@ export function resetBacktestAlgo(id: string) {
   );
 }
 
+export function unlockBacktest() {
+  return request<{ ok?: boolean; unlocked?: boolean }>(
+    "/backtest/unlock",
+    { method: "POST", body: JSON.stringify({}) },
+    { retries: 1 },
+  );
+}
+
 export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
   let response: Response;
   try {
