@@ -1,4 +1,4 @@
-import { Activity, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { Activity, Pencil, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
@@ -16,6 +16,7 @@ import {
   niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyTest1Kind,
+  isNiftyTest2Kind,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
@@ -96,6 +97,13 @@ function kindMeta(algo: AlgoStrategy) {
       config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · daily LIVE 09:20 IST`,
     };
   }
+  if (isNiftyTest2Kind(algo)) {
+    return {
+      kind: "nifty-test2" as const,
+      category: "TEST2 NIFTY PREMIUM STRANGLE",
+      config: `NIFTY · ${algo.startTimeIst || "09:35"}–${algo.endTimeIst || "15:15"} IST · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}% · complete square-off`,
+    };
+  }
   if (isNiftyTest1Kind(algo)) {
     const body = Math.round((Number(algo.minBodyPct) || 0.9) * 100);
     const wick = Math.round((Number(algo.maxWickPct) || 0.1) * 100);
@@ -153,7 +161,7 @@ function kindMeta(algo: AlgoStrategy) {
 }
 
 export function Algo() {
-  const { data, toggle, setAll, removeAlgo, backtest, closePosition, refresh } = useMarket();
+  const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, closePosition, refresh } = useMarket();
   const [tab, setTab] = useState<DeskTab>("copy");
   const [filter, setFilter] = useState<Filter>("all");
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -191,6 +199,7 @@ export function Algo() {
       return isCrudeFirstCandleKind(algo) || (isNiftyTest1Kind(algo) && ["CRUDEOIL", "NATURALGAS", "COPPER"].includes(symbol));
     }
     if (isCrudeFirstCandleKind(algo)) return false;
+    if (isNiftyTest2Kind(algo)) return true;
     if (isNiftyTest1Kind(algo)) return !["CRUDEOIL", "NATURALGAS", "COPPER"].includes(String(algo.symbol || "").toUpperCase());
     return isNiftyFirstCandleKind(algo);
   }) as AlgoStrategy[];
@@ -323,7 +332,7 @@ export function Algo() {
                   orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
                   clientIds={knownClientIds}
                   positions={(data.positions || []).filter((row) => row.strategy === algo.name)}
-                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === "all"}
+                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
                   onEdit={() => {
@@ -334,6 +343,13 @@ export function Algo() {
                   onBacktest={() => {
                     setRangeError("");
                     setRangeId(algo.id);
+                  }}
+                  onResetBacktest={() => {
+                    setBusyId(`reset-${algo.id}`);
+                    setRangeError("");
+                    void resetBacktest(algo.id)
+                      .catch((err: unknown) => window.alert(catchDeskError(err, "Could not reset backtest")))
+                      .finally(() => setBusyId(""));
                   }}
                   onCancelRange={() => {
                     if (busyId) return;
@@ -383,6 +399,14 @@ export function Algo() {
           if (busyId) return;
           setRangeId("");
           setRangeError("");
+        }}
+        onReset={() => {
+          if (!rangeFor) return;
+          setBusyId(`reset-${rangeFor.id}`);
+          setRangeError("");
+          void resetBacktest(rangeFor.id)
+            .catch((err: unknown) => setRangeError(catchDeskError(err, "Could not reset backtest")))
+            .finally(() => setBusyId(""));
         }}
         onRun={(payload: BacktestRangePayload) => {
           if (!rangeFor) return;
@@ -472,6 +496,7 @@ function AlgoCard({
   onEdit,
   onMap,
   onBacktest,
+  onResetBacktest,
   onCancelRange,
   onRunBacktest,
   onStart,
@@ -488,6 +513,7 @@ function AlgoCard({
   onEdit: () => void;
   onMap: () => void;
   onBacktest: () => void;
+  onResetBacktest: () => void;
   onCancelRange: () => void;
   onRunBacktest: (payload: BacktestRangePayload) => void;
   onStart: () => void;
@@ -517,7 +543,7 @@ function AlgoCard({
       ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
         ? algo.lastSignal
         : "No signal"
-    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo)
+    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo)
       ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
   const status = statusLabel(algo);
@@ -608,6 +634,15 @@ function AlgoCard({
         <button type="button" onClick={onBacktest} className="h-9 rounded-full border border-[var(--border)] px-3 text-xs font-semibold">
           {busy && rangeOpen ? "Testing..." : "Backtest"}
         </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onResetBacktest}
+          className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-60"
+        >
+          <RotateCcw size={12} />
+          Reset
+        </button>
         <button type="button" onClick={onDelete} className="inline-flex h-9 items-center gap-1 rounded-full border border-rose-200 px-3 text-xs font-semibold text-down dark:border-rose-900">
           <Trash2 size={12} />
           Delete
@@ -616,7 +651,7 @@ function AlgoCard({
 
       {rangeOpen ? (
         <div className="mt-3">
-          <BacktestRangeInline busy={busy} error={rangeError} onCancel={onCancelRange} onRun={onRunBacktest} />
+          <BacktestRangeInline busy={busy} error={rangeError} onCancel={onCancelRange} onReset={onResetBacktest} onRun={onRunBacktest} />
         </div>
       ) : null}
 

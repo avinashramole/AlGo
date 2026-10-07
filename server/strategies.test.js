@@ -66,8 +66,8 @@ test("mappedClientIdsForMembers keeps only clients that still exist", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 3);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12,a13");
+  assert.equal(next.algos.length, 4);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12,a13,a14");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -78,9 +78,10 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a13"), false);
   assert.equal(next.algos.some((row) => row.name === "TEST1"), false);
   assert.deepEqual(next.removedIds, ["a13"]);
-  assert.equal(next.algos.length, 2);
+  assert.equal(next.algos.length, 3);
   assert.equal(next.algos.some((row) => row.id === "a10"), true);
   assert.equal(next.algos.some((row) => row.id === "a12"), true);
+  assert.equal(next.algos.some((row) => row.id === "a14"), true);
 });
 
 test("hydrate always shows NIFTY and CRUDE OIL even if they were deleted", () => {
@@ -91,6 +92,7 @@ test("hydrate always shows NIFTY and CRUDE OIL even if they were deleted", () =>
   assert.equal(nifty.name, "NIFTY");
   assert.equal(crude.name, "CRUDE OIL");
   assert.equal(next.algos.some((row) => row.id === "a13"), false);
+  assert.equal(next.algos.some((row) => row.id === "a14"), true);
   assert.deepEqual(next.removedIds, ["a13"]);
 });
 
@@ -144,6 +146,7 @@ test("hydrate drops retired strategies and records them as removed", () => {
   assert.equal(next.algos.some((row) => row.id === "a10"), true);
   assert.equal(next.algos.some((row) => row.id === "a12"), true);
   assert.equal(next.algos.some((row) => row.id === "a13"), true);
+  assert.equal(next.algos.some((row) => row.id === "a14"), true);
 });
 
 test("seed includes paused CRUDE OIL option strategies", () => {
@@ -192,6 +195,16 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(test1.startTimeIst, "09:30");
   assert.equal(test1.minBodyPct, 0.9);
   assert.equal(test1.maxWickPct, 0.1);
+  const test2 = seeded.find((row) => row.id === "a14");
+  assert.equal(test2.name, "TEST2");
+  assert.equal(test2.kind, "nifty-test2");
+  assert.equal(test2.enabled, false);
+  assert.equal(test2.status, "PAUSED");
+  assert.equal(test2.startTimeIst, "09:35");
+  assert.equal(test2.endTimeIst, "15:15");
+  assert.equal(test2.sellPremium, 80);
+  assert.equal(test2.hedgePremium, 20);
+  assert.equal(test2.hedgeSlPct, 20);
 });
 
 test("crude oil 5m name stays crude and does not become the nifty first candle", () => {

@@ -27,10 +27,11 @@ type Props = {
   busy?: boolean;
   error?: string;
   onClose: () => void;
+  onReset?: () => void;
   onRun: (payload: BacktestRangePayload) => void;
 };
 
-export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props) {
+export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun }: Props) {
   const [range, setRange] = useState<"1y" | "custom">("1y");
   const [from, setFrom] = useState(yearAgoYmd());
   const [to, setTo] = useState(localYmd());
@@ -121,6 +122,19 @@ export function BacktestRange({ open, name, busy, error, onClose, onRun }: Props
           </button>
           <button
             type="button"
+            disabled={busy}
+            onClick={() => {
+              setRange("1y");
+              setFrom(yearAgoYmd());
+              setTo(localYmd());
+              onReset?.();
+            }}
+            className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
             disabled={busy || (range === "custom" && (!from || !to))}
             onClick={() => onRun(range === "custom" ? { range: "custom", from, to } : { range: "1y" })}
             className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60"
@@ -138,10 +152,11 @@ type InlineProps = {
   busy?: boolean;
   error?: string;
   onCancel: () => void;
+  onReset?: () => void;
   onRun: (payload: BacktestRangePayload) => void;
 };
 
-export function BacktestRangeInline({ busy, error, onCancel, onRun }: InlineProps) {
+export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: InlineProps) {
   const [range, setRange] = useState<"1y" | "custom">("1y");
   const [from, setFrom] = useState(yearAgoYmd());
   const [to, setTo] = useState(localYmd());
@@ -204,9 +219,22 @@ export function BacktestRangeInline({ busy, error, onCancel, onRun }: InlineProp
         </div>
       ) : null}
       {error ? <div className="mt-2 text-xs font-semibold text-down">{error}</div> : null}
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid grid-cols-3 gap-2">
         <button type="button" onClick={onCancel} className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold">
           Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setRange("1y");
+            setFrom(yearAgoYmd());
+            setTo(localYmd());
+            onReset?.();
+          }}
+          className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold disabled:opacity-60"
+        >
+          Reset
         </button>
         <button
           type="button"

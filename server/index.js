@@ -60,6 +60,7 @@ import {
   armNiftyFirstCandleDailyLive,
   updateAlgo,
   backtestAlgo,
+  resetBacktestAlgo,
   pickBacktestTimeframe,
   resolveBacktestWindow,
   drainPendingLiveAlgoOrders,
@@ -1019,6 +1020,15 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     clearInterval(heartbeat);
     clearBacktestBusy();
   }
+});
+
+app.post("/api/algos/:id/backtest/reset", (req, res) => {
+  const result = resetBacktestAlgo(String(req.params.id || ""));
+  if (result.error) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  res.json({ ...result, snapshot: snapshot() });
 });
 
 app.post("/api/orders", async (req, res) => {
