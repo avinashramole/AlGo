@@ -46,7 +46,7 @@ export function AISignal({ onReview }: Props) {
           </div>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-4 gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {signal.metrics.map((item) => (
           <div key={item.label} className="rounded-lg bg-[var(--bg)] px-2 py-2 text-center">
             <div className="text-[10px] font-semibold text-slate-400">{item.label}</div>

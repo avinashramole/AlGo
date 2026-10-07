@@ -118,7 +118,7 @@ export function MobileNav() {
               end={item.to === "/"}
               className={({ isActive }) =>
                 cn(
-                  "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold",
+                  "flex min-h-12 max-w-full flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] font-semibold leading-tight",
                   isActive ? "text-brand-500" : "text-slate-400",
                 )
               }
@@ -132,7 +132,7 @@ export function MobileNav() {
               type="button"
               onClick={() => setMoreOpen((value) => !value)}
               className={cn(
-                "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold",
+                "flex min-h-12 max-w-full flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] font-semibold leading-tight",
                 moreOpen || moreActive ? "text-brand-500" : "text-slate-400",
               )}
             >

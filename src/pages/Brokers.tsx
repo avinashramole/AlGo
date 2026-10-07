@@ -520,8 +520,8 @@ export function Brokers() {
         desk does not invent a fill. Restart does not start LIVE algos.
       </p>
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="card w-full max-w-md p-5">
+        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-900/40 p-3 sm:items-center sm:p-4">
+          <div className="card max-h-[92dvh] w-full max-w-md overflow-y-auto p-4 sm:p-5">
             <div className="text-sm font-bold">
               {selected.id === "dhan" ? "Update Dhan access token" : `Connect ${selected.name} live`}
             </div>
