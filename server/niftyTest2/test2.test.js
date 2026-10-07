@@ -386,7 +386,17 @@ test("TEST2 backtest exits all legs when daily overall profit hits 5%", () => {
       { time: day + 5 * 60 * 1000, open: 24510, high: 24530, low: 24500, close: 24520 },
     ],
   };
-  const combo = replayTest2Day(session, niftyTest2Config(algo));
+  const longBars = Array.from({ length: 36 }, (_, i) => ({
+    time: day + i * 5 * 60 * 1000,
+    open: 24500,
+    high: 24520,
+    low: 24480,
+    close: 24510,
+  }));
+  const combo = replayTest2Day(
+    { ...session, bars: longBars, close: 24510 },
+    niftyTest2Config(algo),
+  );
   assert.equal(combo.exitReason, "overall-target");
   assert.equal(combo.legs.length, 4);
   assert.equal(combo.legs.every((leg) => Number(leg.exit) > 0), true);
@@ -447,6 +457,58 @@ test("TEST2 does not publish synthetic BANKNIFTY fills as a real book", () => {
   assert.equal(result.pnl, 0);
   assert.equal(result.legsBook.length, 0);
   assert.equal(result.skipped.some((row) => row.reason === "no-option-tape"), true);
+});
+
+test("TEST2 hedge SL does not fire from model theta at 09:35", () => {
+  const open = Date.parse("2026-07-08T04:05:00.000Z");
+  const bars = Array.from({ length: 69 }, (_, i) => ({
+    time: open + i * 5 * 60 * 1000,
+    open: 57600,
+    high: 57640,
+    low: 57560,
+    close: 57610,
+    volume: 1,
+  }));
+  const session = {
+    day: "2026-07-08",
+    open: 57600,
+    close: 57610,
+    high: 57640,
+    low: 57560,
+    bars,
+  };
+  const combo = replayTest2Day(session, niftyTest2Config(defaultNiftyTest2Algo({ holdStyle: "intraday", hedgeSlPct: 10 })));
+  const buys = combo.legs.filter((leg) => leg.side === "BUY");
+  assert.equal(buys.length, 2);
+  assert.equal(
+    buys.every((leg) => String(leg.exitAt).endsWith("15:15")),
+    true,
+  );
+  assert.equal(
+    buys.every((leg) => String(leg.exitAt) !== String(leg.entryAt)),
+    true,
+  );
+  assert.equal(
+    buys.every((leg) => Number(leg.exit) !== Number((leg.entry * 0.9).toFixed(2))),
+    true,
+  );
+});
+
+test("TEST2 hedge SL still fires later when spot kills the buy premium", () => {
+  const open = Date.parse("2026-07-08T04:05:00.000Z");
+  const bars = Array.from({ length: 12 }, (_, i) => ({
+    time: open + i * 5 * 60 * 1000,
+    open: i ? 56400 : 57600,
+    high: i ? 56500 : 57620,
+    low: i ? 56300 : 57580,
+    close: i ? 56400 : 57600,
+    volume: 1,
+  }));
+  const session = { day: "2026-07-08", open: 57600, close: 56400, high: 57620, low: 56300, bars };
+  const combo = replayTest2Day(session, niftyTest2Config(defaultNiftyTest2Algo({ holdStyle: "intraday", hedgeSlPct: 10 })));
+  const buyCe = combo.legs.find((leg) => leg.side === "BUY" && leg.option === "CE");
+  assert.equal(Number(buyCe.exit), Number((buyCe.entry * 0.9).toFixed(2)));
+  assert.notEqual(String(buyCe.exitAt), String(buyCe.entryAt));
 });
 
 test("TEST2 replay picks chain premiums, not a flat 80/20 fill", () => {

@@ -125,13 +125,25 @@ export function inEntryWindow(now, startTimeIst = "09:35", endTimeIst = "15:15")
   return minutes >= hmToMinutes(startTimeIst) && minutes < hmToMinutes(endTimeIst);
 }
 
-export function markPremium(entryPrem, movePct, side, kind = "sell") {
+export function markPremium(entryPrem, movePct, side, kind = "sell", elapsed = 1) {
   const prem = Math.max(0.5, Number(entryPrem) || 0);
   const move = Number(movePct) || 0;
   const dir = side === "PE" ? -1 : 1;
   const elastic = kind === "hedge" ? 7 : 5.5;
-  const theta = kind === "hedge" ? 0.18 : 0.07;
+  const thetaMax = kind === "hedge" ? 0.18 : 0.07;
+  const spent = Math.max(0, Math.min(1, Number(elapsed)));
+  const theta = thetaMax * spent;
   return Number(Math.max(0.5, prem * (1 - theta) * Math.max(0.05, 1 + dir * move * elastic)).toFixed(2));
+}
+
+function elapsedOf(time, startTimeIst = "09:35", endTimeIst = "15:15") {
+  const start = hmToMinutes(startTimeIst);
+  const end = hmToMinutes(endTimeIst);
+  const now = minutesOf(time);
+  if (!(end > start)) return 1;
+  if (!(now > start)) return 0;
+  if (now >= end) return 1;
+  return (now - start) / (end - start);
 }
 
 export function sessionDays(bars = [], startTimeIst = "09:35", endTimeIst = "15:15") {
@@ -165,18 +177,19 @@ export function sessionDays(bars = [], startTimeIst = "09:35", endTimeIst = "15:
   return sessions;
 }
 
-function hedgeStopMark(session, side, entryPrem, slPct) {
+function hedgeStopMark(session, side, entryPrem, slPct, startTimeIst = "09:35", endTimeIst = "15:15") {
   const sl = Number((entryPrem * (1 - slPct / 100)).toFixed(2));
   const entry = session.open;
-  for (const bar of session.bars) {
+  for (const bar of session.bars || []) {
     const spot = side === "CE" ? Number(bar.low || bar.close) : Number(bar.high || bar.close);
     if (!(spot > 0)) continue;
-    const mark = markPremium(entryPrem, (spot - entry) / entry, side, "hedge");
-    if (mark <= sl) return sl;
+    const move = (spot - entry) / entry;
+    const stopPx = markPremium(entryPrem, move, side, "hedge", 0);
+    if (stopPx <= sl) return sl;
   }
+  const last = (session.bars || [])[(session.bars || []).length - 1];
   const eodMove = (session.close - entry) / entry;
-  const eod = markPremium(entryPrem, eodMove, side, "hedge");
-  return eod <= sl ? sl : eod;
+  return markPremium(entryPrem, eodMove, side, "hedge", elapsedOf(last?.time, startTimeIst, endTimeIst));
 }
 
 function fallbackLegs(config) {
@@ -282,7 +295,7 @@ export function replayTest2Day(session, config, exitSession = null) {
         exit = tapedExit;
         usedStored += 1;
       } else if (leg.side === "BUY") {
-        exit = hedgeStopMark(session, leg.option, entry, config.hedgeSlPct);
+        exit = hedgeStopMark(session, leg.option, entry, config.hedgeSlPct, config.startTimeIst, config.endTimeIst);
       } else {
         exit = markPremium(entry, move, leg.option, "sell");
       }
@@ -376,7 +389,7 @@ function comboPnlFromMarks(legs, marks, qty, cost) {
   return round2(raw - Math.max(0, Number(cost) || 0));
 }
 
-function markLegAtBar(leg, bar, sessionOpen, rolling, symbol = "NIFTY") {
+function markLegAtBar(leg, bar, sessionOpen, rolling, symbol = "NIFTY", elapsed = 1) {
   if (rolling && Number(leg.strike) > 0) {
     const px = rollingPremiumAt({
       symbol,
@@ -390,14 +403,24 @@ function markLegAtBar(leg, bar, sessionOpen, rolling, symbol = "NIFTY") {
   }
   const spot = Number(bar.close || bar.open || sessionOpen);
   const move = sessionOpen > 0 ? (spot - sessionOpen) / sessionOpen : 0;
-  return markPremium(leg.entry, move, leg.option, leg.side === "BUY" ? "hedge" : "sell");
+  return markPremium(leg.entry, move, leg.option, leg.side === "BUY" ? "hedge" : "sell", elapsed);
 }
 
-function applyHedgeStop(leg, mark, config, locked) {
+function stopMarkAtBar(leg, bar, sessionOpen) {
+  const spot =
+    leg.option === "CE"
+      ? Number(bar.low || bar.close || sessionOpen)
+      : Number(bar.high || bar.close || sessionOpen);
+  const move = sessionOpen > 0 ? (spot - sessionOpen) / sessionOpen : 0;
+  return markPremium(leg.entry, move, leg.option, leg.side === "BUY" ? "hedge" : "sell", 0);
+}
+
+function applyHedgeStop(leg, mark, config, locked, stopPx) {
   if (locked.has(leg.key)) return locked.get(leg.key);
   if (String(leg.side || "").toUpperCase() !== "BUY") return mark;
   const sl = Number((Number(leg.entry) * (1 - (Number(config.hedgeSlPct) || 20) / 100)).toFixed(2));
-  if (mark <= sl) {
+  const check = Number(stopPx != null ? stopPx : mark);
+  if (check <= sl) {
     locked.set(leg.key, sl);
     return sl;
   }
@@ -416,9 +439,12 @@ function walkDailyLimits(legs, { session, config, qty, cost, margin, rolling }) 
   for (const bar of bars) {
     const marks = {};
     const t = Number(bar.time) || 0;
+    const elapsed = elapsedOf(t, config.startTimeIst, config.endTimeIst);
     for (const leg of legs) {
       const wasLocked = locked.has(leg.key);
-      marks[leg.key] = applyHedgeStop(leg, markLegAtBar(leg, bar, session.open, rolling, rootOf(config)), config, locked);
+      const mark = markLegAtBar(leg, bar, session.open, rolling, rootOf(config), elapsed);
+      const stopPx = rolling ? mark : stopMarkAtBar(leg, bar, session.open);
+      marks[leg.key] = applyHedgeStop(leg, mark, config, locked, stopPx);
       if (!wasLocked && locked.has(leg.key) && t > 0) exitTimes[leg.key] = t;
     }
     const mtm = comboPnlFromMarks(legs, marks, qty, cost);
