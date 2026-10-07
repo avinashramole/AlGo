@@ -9,7 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
-import { downloadRollingOptionRange, rollingCoverage } from "./dhanRollingOption.js";
+import { downloadRollingOptionRange, rollingContract, rollingCoverage, ROLLING_BACKTEST_DEADLINE_MS } from "./dhanRollingOption.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
@@ -36,7 +36,7 @@ import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
-import { isNiftyTest2Algo } from "./niftyVwap/config.js";
+import { isNiftyTest2Algo, niftyTest2Config } from "./niftyVwap/config.js";
 import {
   addChat,
   assignAlgoBroker,
@@ -986,11 +986,20 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     const hist = optionBacktestWindow(algo, window);
     let optionHistory;
     if (isNiftyTest2Algo(algo)) {
-      const coverage = rollingCoverage("NIFTY", window.from, window.to);
-      if (isDhanLive() && coverage !== "stored") {
+      const symbol = niftyTest2Config(algo).symbol || algo.symbol || "NIFTY";
+      const contract = rollingContract(symbol);
+      if (!isDhanLive()) {
+        await ensureDhanLiveFromSavedToken();
+      }
+      const coverage = rollingCoverage(symbol, window.from, window.to);
+      if (!contract) {
+        optionHistory = { source: coverage, reused: coverage === "stored", days: 0, error: "rolling-not-supported" };
+      } else if (!isDhanLive()) {
+        optionHistory = { source: coverage, reused: false, days: 0, error: "dhan-not-live" };
+      } else if (coverage !== "stored") {
         try {
           optionHistory = await downloadRollingOptionRange({
-            symbol: "NIFTY",
+            symbol,
             from: window.from,
             to: window.to,
             overwrite: false,
@@ -998,13 +1007,16 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             delayMs: 40,
             interval: 15,
             maxDays: Math.min(366, Math.max(2, Number(window.days) || 366)),
-            deadlineMs: 150_000,
+            deadlineMs: ROLLING_BACKTEST_DEADLINE_MS,
+            securityId: contract.securityId,
+            exchangeSegment: contract.exchangeSegment,
+            instrument: contract.instrument,
           });
         } catch (error) {
-          optionHistory = { error: error.message || "rolling-option-failed" };
+          optionHistory = { error: error.message || "rolling-option-failed", source: coverage, days: 0 };
         }
       } else {
-        optionHistory = { source: coverage, reused: coverage === "stored", days: 0 };
+        optionHistory = { source: coverage, reused: true, days: 0 };
       }
     } else {
       const optionCoverage = hist.option ? optionHistoryCoverage(hist.symbol || algo.symbol, hist.from, hist.to) : "synth";
