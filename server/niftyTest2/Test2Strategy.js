@@ -60,7 +60,7 @@ function shouldSellTomorrow(state, config, today, now) {
   if (!config.holdOvernight) return false;
   const entryDate = String(state.entryDate || "");
   if (!entryDate || entryDate === today || entryDate === "overnight") return false;
-  return minutesOf(now) >= hmToMinutes(config.exitTimeIst || config.startTimeIst || "09:35");
+  return minutesOf(now) >= hmToMinutes(config.exitTimeIst || "15:15");
 }
 
 function shouldExitIntraday(config, now) {
@@ -210,7 +210,7 @@ export const Test2Strategy = {
     }
     if (shouldSellTomorrow(state, config, today, now || Date.now())) {
       closeOpens(opens, algo, config, adapter, orders);
-      algo.lastSignal = `EXIT BTST ${config.exitTimeIst || "09:35"}`;
+      algo.lastSignal = `EXIT BTST ${config.exitTimeIst || "15:15"}`;
       return { action: "exit", reason: "btst" };
     }
     for (const open of opens) {

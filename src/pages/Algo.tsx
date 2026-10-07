@@ -104,7 +104,7 @@ function kindMeta(algo: AlgoStrategy) {
       config:
         algo.holdStyle === "intraday"
           ? `NIFTY INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`
-          : `NIFTY BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || algo.startTimeIst || "09:35"} IST · NRML overnight · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
+          : `NIFTY BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
     };
   }
   if (isNiftyTest1Kind(algo)) {

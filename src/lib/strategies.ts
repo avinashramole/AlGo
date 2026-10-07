@@ -792,7 +792,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       overallTargetPct: 5,
       startTimeIst: "09:35",
       endTimeIst: "15:15",
-      exitTimeIst: "09:35",
+      exitTimeIst: "15:15",
       holdStyle: "btst",
       product: "NRML",
       holdOvernight: true,
