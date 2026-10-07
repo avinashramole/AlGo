@@ -67,7 +67,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             : isCrudeFirstCandleKind(algo)
               ? "crude-first-candle"
               : isNiftyFirstCandleKind(algo)
-              ? "nifty-first-candle"
+                ? "nifty-first-candle"
+              : isNiftyTest2Kind(algo)
+                ? "nifty-test2"
               : isNiftyTest1Kind(algo)
                 ? "nifty-test1"
               : isNiftyTestKind(algo)
@@ -442,76 +444,10 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         {test2 ? (
-          <div className="mt-2.5 space-y-1.5">
-            <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              Choose the script, then change SELL and BUY hedge to monthly or weekly CE+PE. Saving does not start LIVE.
-            </div>
-            <label className="block text-xs font-semibold text-slate-500">
-              Script · option
-              <select
-                data-test2-scripts
-                className={fieldClass}
-                value={form.symbol || "NIFTY"}
-                onChange={(event) => {
-                  const row = TEST2_SCRIPTS.find((item) => item.id === event.target.value) || TEST2_SCRIPTS[0];
-                  const mcx = row.session === "mcx";
-                  set({
-                    symbol: row.id,
-                    lotSize: row.lot,
-                    qty: (form.lots || 1) * row.lot,
-                    endTimeIst: mcx ? "23:15" : form.endTimeIst || "15:15",
-                    sellExpiryKind: mcx ? "monthly" : form.sellExpiryKind || "monthly",
-                    hedgeExpiryKind: mcx ? "monthly" : form.hedgeExpiryKind || "weekly",
-                    instrument: "option",
-                    side: "BOTH",
-                  });
-                }}
-              >
-                {TEST2_SCRIPTS.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.label} · CE/PE
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              <label className="text-xs font-semibold text-slate-500">
-                SELL option
-                <select
-                  data-test2-sell-option
-                  className={fieldClass}
-                  value={form.sellExpiryKind || "monthly"}
-                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
-                  onChange={(event) => set({ sellExpiryKind: event.target.value === "weekly" ? "weekly" : "monthly" })}
-                >
-                  <option value="monthly">Monthly CE + PE</option>
-                  <option value="weekly">Weekly CE + PE</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                BUY hedge option
-                <select
-                  data-test2-hedge-option
-                  className={fieldClass}
-                  value={form.hedgeExpiryKind || "weekly"}
-                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
-                  onChange={(event) => set({ hedgeExpiryKind: event.target.value === "monthly" ? "monthly" : "weekly" })}
-                >
-                  <option value="weekly">Weekly CE + PE</option>
-                  <option value="monthly">Monthly CE + PE</option>
-                </select>
-              </label>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <NumberField label="SELL premium ≥" value={form.sellPremium ?? 80} step={5} onChange={(sellPremium) => set({ sellPremium })} />
-              <NumberField label="BUY premium ≥" value={form.hedgePremium ?? 20} step={1} onChange={(hedgePremium) => set({ hedgePremium })} />
-              <NumberField label="Hedge SL %" value={form.hedgeSlPct ?? 20} step={1} onChange={(hedgeSlPct) => set({ hedgeSlPct })} />
-            </div>
-            <div className="desk-help text-[11px] font-semibold text-slate-500">
-              {form.holdStyle === "intraday"
-                ? `${form.symbol || "NIFTY"} INTRADAY · enter ${form.startTimeIst || "09:35"} · square-off ${form.endTimeIst || "15:15"} · MIS same day · SELL 1 ${form.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE + PE · BUY 1 ${form.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE + PE.`
-                : `${form.symbol || "NIFTY"} BTST · buy today ${form.startTimeIst || "09:35"} · sell tomorrow ${form.exitTimeIst || "15:15"} · NRML overnight · SELL 1 ${form.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE + PE · BUY 1 ${form.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE + PE.`}
-            </div>
+          <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+            <NumberField label="SELL premium ≥" value={form.sellPremium ?? 80} step={5} onChange={(sellPremium) => set({ sellPremium })} />
+            <NumberField label="BUY premium ≥" value={form.hedgePremium ?? 20} step={1} onChange={(hedgePremium) => set({ hedgePremium })} />
+            <NumberField label="Hedge SL %" value={form.hedgeSlPct ?? 20} step={1} onChange={(hedgeSlPct) => set({ hedgeSlPct })} />
           </div>
         ) : null}
 
@@ -644,7 +580,36 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             />
           </label>
           ) : null}
-          {engine ? null : (
+          {test2 ? (
+          <label className="text-xs font-semibold text-slate-500">
+            Script
+            <select
+              data-test2-scripts
+              className={fieldClass}
+              value={form.symbol || "NIFTY"}
+              onChange={(event) => {
+                const row = TEST2_SCRIPTS.find((item) => item.id === event.target.value) || TEST2_SCRIPTS[0];
+                const mcx = row.session === "mcx";
+                set({
+                  symbol: row.id,
+                  lotSize: row.lot,
+                  qty: (form.lots || 1) * row.lot,
+                  endTimeIst: mcx ? "23:15" : form.endTimeIst || "15:15",
+                  sellExpiryKind: mcx ? "monthly" : form.sellExpiryKind || "monthly",
+                  hedgeExpiryKind: mcx ? "monthly" : form.hedgeExpiryKind || "weekly",
+                  instrument: "option",
+                  side: "BOTH",
+                });
+              }}
+            >
+              {TEST2_SCRIPTS.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.label} · CE/PE
+                </option>
+              ))}
+            </select>
+          </label>
+          ) : engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select
@@ -842,6 +807,62 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : test2 ? (
           <div className="mt-2.5 space-y-2">
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
+              <label className="text-xs font-semibold text-slate-500 lg:col-span-1">
+                Script
+                <select
+                  data-test2-scripts-main
+                  className={fieldClass}
+                  value={form.symbol || "NIFTY"}
+                  onChange={(event) => {
+                    const row = TEST2_SCRIPTS.find((item) => item.id === event.target.value) || TEST2_SCRIPTS[0];
+                    const mcx = row.session === "mcx";
+                    set({
+                      symbol: row.id,
+                      lotSize: row.lot,
+                      qty: (form.lots || 1) * row.lot,
+                      endTimeIst: mcx ? "23:15" : form.endTimeIst || "15:15",
+                      sellExpiryKind: mcx ? "monthly" : form.sellExpiryKind || "monthly",
+                      hedgeExpiryKind: mcx ? "monthly" : form.hedgeExpiryKind || "weekly",
+                      instrument: "option",
+                      side: "BOTH",
+                    });
+                  }}
+                >
+                  {TEST2_SCRIPTS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label} · CE/PE
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                SELL option
+                <select
+                  data-test2-sell-option
+                  className={fieldClass}
+                  value={form.sellExpiryKind || "monthly"}
+                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
+                  onChange={(event) => set({ sellExpiryKind: event.target.value === "weekly" ? "weekly" : "monthly" })}
+                >
+                  <option value="monthly">Monthly CE + PE</option>
+                  <option value="weekly">Weekly CE + PE</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                BUY hedge option
+                <select
+                  data-test2-hedge-option
+                  className={fieldClass}
+                  value={form.hedgeExpiryKind || "weekly"}
+                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
+                  onChange={(event) => set({ hedgeExpiryKind: event.target.value === "monthly" ? "monthly" : "weekly" })}
+                >
+                  <option value="weekly">Weekly CE + PE</option>
+                  <option value="monthly">Monthly CE + PE</option>
+                </select>
+              </label>
+            </div>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
