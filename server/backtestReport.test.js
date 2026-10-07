@@ -82,8 +82,12 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /Required margin/);
   assert.match(pdf.toString("latin1"), /LEGS/);
   assert.match(pdf.toString("latin1"), /Margin/);
+  assert.match(pdf.toString("latin1"), /MediaBox \[0 0 792 612\]/);
+  assert.match(pdf.toString("latin1"), /landscape/);
   assert.match(pdf.toString("latin1"), /Entry time/);
   assert.match(pdf.toString("latin1"), /Exit time/);
+  assert.match(pdf.toString("latin1"), /Symbol/);
+  assert.match(pdf.toString("latin1"), /ROM %/);
   assert.match(pdf.toString("latin1"), /2026-09-01 09:35/);
   assert.match(pdf.toString("latin1"), /2026-09-02 09:35/);
   assert.match(xml, /Entry time/);

@@ -271,9 +271,50 @@ function pdfEscape(text) {
   return String(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
+function col(value, width, right = false) {
+  const text = String(value ?? "");
+  return right ? text.slice(-width).padStart(width, " ") : text.slice(0, width).padEnd(width, " ");
+}
+
+function pdfFillRow(row) {
+  return [
+    col(row.n, 3, true),
+    col(row.day, 10),
+    col(row.side, 5),
+    col(row.option, 3),
+    col(row.strike || "", 6, true),
+    col(row.symbol, 14),
+    col(row.entryAt, 16),
+    col(row.exitAt, 16),
+    col(money(row.entry), 8, true),
+    col(money(row.exit), 8, true),
+    col(row.qty, 4, true),
+    col(money(row.pnl), 9, true),
+    col(money(row.margin), 10, true),
+    col(Number(row.rom || 0).toFixed(2), 6, true),
+  ].join(" ");
+}
+
+const PDF_FILL_HEADER = [
+  col("#", 3, true),
+  col("Day", 10),
+  col("Side", 5),
+  col("Opt", 3),
+  col("Strike", 6, true),
+  col("Symbol", 14),
+  col("Entry time", 16),
+  col("Exit time", 16),
+  col("Entry", 8, true),
+  col("Exit", 8, true),
+  col("Qty", 4, true),
+  col("P&L", 9, true),
+  col("Margin", 10, true),
+  col("ROM %", 6, true),
+].join(" ");
+
 export function renderBacktestPdf(report) {
   const lines = [
-    `T2S backtest report`,
+    `T2S backtest report  (landscape)`,
     `${report.strategy.name} · ${report.summary.holdStyle || report.strategy.kind || "strategy"}`,
     `Product ${report.strategy.product || "—"} · ${report.strategy.symbol} · ${report.summary.timeframe || ""}`,
     `Start date ${report.summary.from || "—"} · End date ${report.summary.to || "—"}`,
@@ -305,35 +346,23 @@ export function renderBacktestPdf(report) {
     report.strategy.summary,
     "",
     "LEGS",
-    "#  Day         Side  Opt  Strike  Entry time        Exit time         Entry     Exit    Qty      P&L     Margin",
+    PDF_FILL_HEADER,
   ].filter((line, index, all) => line || all[index - 1]);
   const fillRows = report.legs?.length ? report.legs : [];
-  for (const row of fillRows) {
-    const n = String(row.n).padStart(3, " ");
-    const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
-    const side = String(row.side || "").padEnd(5, " ").slice(0, 5);
-    const option = String(row.option || "").padEnd(3, " ").slice(0, 3);
-    const strike = String(row.strike || "").padStart(6, " ").slice(-6);
-    const inAt = String(row.entryAt || "").padEnd(16, " ").slice(0, 16);
-    const outAt = String(row.exitAt || "").padEnd(16, " ").slice(0, 16);
-    lines.push(
-      `${n} ${day} ${side} ${option} ${strike} ${inAt} ${outAt} ${money(row.entry).padStart(8)} ${money(row.exit).padStart(8)} ${String(row.qty).padStart(4)} ${money(row.pnl).padStart(8)} ${money(row.margin).padStart(9)}`,
-    );
-  }
+  for (const row of fillRows) lines.push(pdfFillRow(row));
   if (!fillRows.length) lines.push("No legs in this replay.");
-  lines.push("", "COMBOS", "#  Day         Entry time        Exit time              P&L     Margin     ROM %");
-  for (const row of report.trades || []) {
-    const n = String(row.n).padStart(3, " ");
-    const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
-    const inAt = String(row.entryAt || "").padEnd(16, " ").slice(0, 16);
-    const outAt = String(row.exitAt || "").padEnd(16, " ").slice(0, 16);
-    lines.push(
-      `${n} ${day} ${inAt} ${outAt} ${money(row.pnl).padStart(10)} ${money(row.margin).padStart(10)} ${Number(row.rom || 0).toFixed(2).padStart(7)}`,
-    );
-  }
+  lines.push("", "COMBOS", PDF_FILL_HEADER);
+  for (const row of report.trades || []) lines.push(pdfFillRow(row));
   if (!(report.trades || []).length) lines.push("No combos in this replay.");
 
-  const perPage = 46;
+  const pageW = 792;
+  const pageH = 612;
+  const marginX = 24;
+  const marginY = 24;
+  const fontSize = 8;
+  const leading = 10;
+  const startY = pageH - marginY - 6;
+  const perPage = Math.max(20, Math.floor((startY - marginY) / leading));
   const pages = [];
   for (let i = 0; i < lines.length; i += perPage) pages.push(lines.slice(i, i + perPage));
   const objects = ["", "<< /Type /Catalog /Pages 2 0 R >>"];
@@ -341,8 +370,17 @@ export function renderBacktestPdf(report) {
   objects.push(`<< /Type /Pages /Count ${pages.length} /Kids [${kids}] >>`);
   for (let i = 0; i < pages.length; i += 1) {
     const contentId = 4 + i * 2;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >> >>`);
-    const stream = ["BT", "/F1 9 Tf", "36 760 Td", "12 TL", ...pages[i].map((line) => `(${pdfEscape(line)}) Tj T*`), "ET"].join("\n");
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >> >>`,
+    );
+    const stream = [
+      "BT",
+      `/F1 ${fontSize} Tf`,
+      `${marginX} ${startY} Td`,
+      `${leading} TL`,
+      ...pages[i].map((line) => `(${pdfEscape(line)}) Tj T*`),
+      "ET",
+    ].join("\n");
     objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
   }
   let pdf = "%PDF-1.4\n";
