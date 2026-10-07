@@ -60,8 +60,8 @@ function indianNumber(value) {
   return `${sign}${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function inr(value) {
-  return `₹${indianNumber(value)}`;
+function pdfInr(value) {
+  return `Rs. ${indianNumber(value)}`;
 }
 
 function mapTradeRows(rows = []) {
@@ -104,6 +104,7 @@ function legRows(result = {}) {
 function pdfSafe(text) {
   return String(text ?? "")
     .replace(/[·•]/g, " - ")
+    .replace(/₹/g, "Rs. ")
     .replace(/≥/g, ">=")
     .replace(/≤/g, "<=")
     .replace(/→/g, "->")
@@ -467,30 +468,8 @@ function pdfEscape(text) {
   return String(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function pdfRupeeGlyph() {
-  const body = `600 0 0 0 600 750 d1
-22 w 1 J 1 j
-50 650 m 430 650 l S
-50 705 m 390 705 l S
-95 40 m 95 615 l S
-95 615 260 635 340 530 c 340 410 230 380 95 380 l S
-250 380 m 450 40 l S`;
-  return `<< /Length ${Buffer.byteLength(body)} >>\nstream\n${body}\nendstream`;
-}
-
-function pdfLineOps(line, fontSize) {
-  const parts = String(line).split("₹");
-  const ops = [];
-  parts.forEach((part, i) => {
-    if (i) {
-      ops.push(`/FR ${fontSize} Tf`);
-      ops.push("(R) Tj");
-      ops.push(`/F1 ${fontSize} Tf`);
-    }
-    if (part) ops.push(`(${pdfEscape(part)}) Tj`);
-  });
-  ops.push("T*");
-  return ops;
+function pdfLineOps(line) {
+  return [`(${pdfEscape(line)}) Tj`, "T*"];
 }
 
 function col(value, width, right = false) {
@@ -508,11 +487,11 @@ function pdfFillRow(row) {
     col(row.symbol, 14),
     col(row.entryAt, 16),
     col(row.exitAt, 16),
-    col(inr(row.entry), 12, true),
-    col(inr(row.exit), 12, true),
+    col(pdfInr(row.entry), 16, true),
+    col(pdfInr(row.exit), 16, true),
     col(row.qty, 4, true),
-    col(inr(row.pnl), 13, true),
-    col(inr(row.margin), 14, true),
+    col(pdfInr(row.pnl), 16, true),
+    col(pdfInr(row.margin), 16, true),
     col(Number(row.rom || 0).toFixed(2), 6, true),
   ].join(" ");
 }
@@ -526,43 +505,43 @@ const PDF_FILL_HEADER = [
   col("Symbol", 14),
   col("Entry time", 16),
   col("Exit time", 16),
-  col("Entry ₹", 12, true),
-  col("Exit ₹", 12, true),
+  col("Entry Rs.", 16, true),
+  col("Exit Rs.", 16, true),
   col("Qty", 4, true),
-  col("P&L ₹", 13, true),
-  col("Margin ₹", 14, true),
+  col("P&L Rs.", 16, true),
+  col("Margin Rs.", 16, true),
   col("ROM %", 6, true),
 ].join(" ");
 
 export function renderBacktestPdf(report) {
   const lines = [
     `T2S backtest report  (landscape)`,
-    `${report.strategy.name} - ${report.summary.holdStyle || report.strategy.kind || "strategy"} - Currency Indian Rupee (INR)`,
+    `${report.strategy.name} - ${report.summary.holdStyle || report.strategy.kind || "strategy"} - Currency Indian Rupee (Rs.)`,
     `Product ${report.strategy.product || "-"} - ${report.strategy.symbol} - ${report.summary.timeframe || ""}`,
     ...(report.strategy.rules?.lines || []),
     `Start date ${report.summary.from || "-"} - End date ${report.summary.to || "-"}`,
     `Range ${report.summary.years ? `last ${report.summary.years} year(s)` : report.summary.months ? `last ${report.summary.months} month(s)` : report.summary.range || `${report.summary.from} to ${report.summary.to}`}`,
-    `P&L ${inr(report.summary.pnl)} - Trades ${report.summary.trades} - Win rate ${report.summary.winRate}%`,
-    `Wins ${report.summary.wins} - Losses ${report.summary.losses} - Drawdown ${inr(report.summary.maxDrawdown)}`,
+    `P&L ${pdfInr(report.summary.pnl)} - Trades ${report.summary.trades} - Win rate ${report.summary.winRate}%`,
+    `Wins ${report.summary.wins} - Losses ${report.summary.losses} - Drawdown ${pdfInr(report.summary.maxDrawdown)}`,
     report.summary.combos ? `Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}` : "",
     report.summary.avgProfit || report.summary.rewardRisk
-      ? `Avg/trade ${inr(report.summary.avgProfit)} - Avg win ${inr(report.summary.avgWin)} - Avg loss ${inr(report.summary.avgLoss)}`
+      ? `Avg/trade ${pdfInr(report.summary.avgProfit)} - Avg win ${pdfInr(report.summary.avgWin)} - Avg loss ${pdfInr(report.summary.avgLoss)}`
       : "",
     report.summary.returnDd || report.summary.rewardRisk
-      ? `Return/DD ${report.summary.returnDd} - R:R ${report.summary.rewardRisk} - Expectancy ${inr(report.summary.expectancy)}`
+      ? `Return/DD ${report.summary.returnDd} - R:R ${report.summary.rewardRisk} - Expectancy ${pdfInr(report.summary.expectancy)}`
       : "",
     report.summary.maxWinStreak || report.summary.maxLoseStreak
       ? `Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L - Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`
       : "",
     report.summary.requiredMargin || report.summary.avgMargin
-      ? `Required margin ${inr(report.summary.requiredMargin)} max - avg ${inr(report.summary.avgMargin)} - ROM ${report.summary.rom || 0}%`
+      ? `Required margin ${pdfInr(report.summary.requiredMargin)} max - avg ${pdfInr(report.summary.avgMargin)} - ROM ${report.summary.rom || 0}%`
       : "",
     report.summary.overallTargetPct || report.summary.targetHits
       ? `Overall profit ${report.summary.overallTargetPct || 5}% of margin - ${report.summary.targetHits || 0} target exits (all 4 legs)`
       : "",
     ...(Array.isArray(report.legStats) ? report.legStats : []).map(
       (leg) =>
-        `${leg.label || "Leg"} P&L ${inr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${inr(leg.avgProfit)}`,
+        `${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`,
     ),
     report.summary.optionSource ? `Premiums ${report.summary.optionSource}` : "",
     `Generated ${report.generatedAt}`,
@@ -589,26 +568,24 @@ export function renderBacktestPdf(report) {
   const perPage = Math.max(20, Math.floor((startY - marginY) / leading));
   const pages = [];
   for (let i = 0; i < lines.length; i += perPage) pages.push(lines.slice(i, i + perPage));
-  const firstPage = 5;
+  const firstPage = 3;
   const kids = pages.map((_, i) => `${firstPage + i * 2} 0 R`).join(" ");
   const objects = [
     "",
     "<< /Type /Catalog /Pages 2 0 R >>",
     `<< /Type /Pages /Count ${pages.length} /Kids [${kids}] >>`,
-    "<< /Type /Font /Subtype /Type3 /Name /FR /FontBBox [0 0 600 750] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /rupee 4 0 R >> /Encoding << /Type /Encoding /Differences [82 /rupee] >> /FirstChar 82 /LastChar 82 /Widths [600] >>",
-    pdfRupeeGlyph(),
   ];
   for (let i = 0; i < pages.length; i += 1) {
     const contentId = firstPage + i * 2 + 1;
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> /FR 3 0 R >> >> >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >> >>`,
     );
     const stream = [
       "BT",
       `/F1 ${fontSize} Tf`,
       `${marginX} ${startY} Td`,
       `${leading} TL`,
-      ...pages[i].flatMap((line) => pdfLineOps(line, fontSize)),
+      ...pages[i].flatMap((line) => pdfLineOps(line)),
       "ET",
     ].join("\n");
     objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
