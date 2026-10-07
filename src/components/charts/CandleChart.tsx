@@ -34,11 +34,13 @@ export function CandleChart({ candles, dark }: Props) {
 
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
-      const width = parent.clientWidth;
-      const height = parent.clientHeight;
+      const box = parent.getBoundingClientRect();
+      const width = Math.max(0, Math.floor(box.width));
+      const height = Math.max(0, Math.floor(box.height));
       if (width < 8 || height < 8) return;
-      canvas.style.width = "100%";
-      canvas.style.height = "100%";
+      canvas.style.display = "block";
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       lastW = width;
@@ -128,5 +130,5 @@ export function CandleChart({ candles, dark }: Props) {
     };
   }, [candles, theme]);
 
-  return <canvas ref={canvasRef} className="h-full w-full" />;
+  return <canvas ref={canvasRef} className="block max-h-full max-w-full" />;
 }
