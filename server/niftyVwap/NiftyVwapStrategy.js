@@ -264,7 +264,6 @@ export const NiftyVwapStrategy = {
     const result = adapter.place(payload);
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       state.inFlight = false;
-      state.lastEntryBarTime = 0;
       PositionManager.clearOpen(state);
       TradeLogger.record("rejected", { message: result?.error || "broker-rejected", strategy: algo.name });
       algo.lastSignal = "REJECTED";
@@ -431,9 +430,11 @@ export const NiftyVwapStrategy = {
       if ((rejected || previousDay) && !state.inFlight) {
         state.buyPhase = "";
         state.inFlight = false;
-        state.lastEntryBarTime = 0;
-        state.lastEntryAt = 0;
-        state.sentSignalBarTime = 0;
+        if (previousDay) {
+          state.lastEntryBarTime = 0;
+          state.lastEntryAt = 0;
+          state.sentSignalBarTime = 0;
+        }
         if (previousDay || !state.fillPrice) PositionManager.clearOpen(state);
       } else {
         algo.lastSignal = "WAIT ORDER";

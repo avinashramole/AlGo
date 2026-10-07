@@ -470,6 +470,82 @@ test("broker order rejection does not open a position", () => {
   assert.equal(algo.lastSignal, "REJECTED");
 });
 
+test("a failed buy does not send the same candle again", () => {
+  const algo = defaultNiftyVwapAlgo({ name: "Reject Same Bar" });
+  const places = [];
+  const input = {
+    algo,
+    now: T0 + 6 * BAR,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars: risingFutures(6),
+    ceBars: optionAboveVwap(6, "CE"),
+    peBars: optionAboveVwap(6, "PE"),
+    ceLtp: 140,
+    peLtp: 90,
+    spot: 24600,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    adapter: {
+      place(payload) {
+        places.push(payload);
+        return { status: "REJECTED", error: "DH-906" };
+      },
+      exit() {
+        return {};
+      },
+    },
+  };
+  assert.equal(NiftyVwapStrategy.tick(input).action, "rejected");
+  const again = NiftyVwapStrategy.tick(input);
+  assert.equal(again.action, "skip");
+  assert.equal(again.reason, "duplicate-bar");
+  assert.equal(places.length, 1);
+});
+
+test("a rejected first-candle buy stays locked on that bar and can fire on the next bar", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Reject then next bar" });
+  const places = [];
+  const adapter = {
+    place(payload) {
+      places.push(payload);
+      return { queued: true, status: "PENDING" };
+    },
+    exit() {
+      return { ok: true };
+    },
+  };
+  const tickAt = (n, orders = []) => {
+    const time = T0_0900 + n * BAR;
+    return NiftyVwapStrategy.tick({
+      algo,
+      now: time + BAR,
+      feedLive: true,
+      minutesToClose: 360,
+      futuresBars: [{ time, open: 24500, high: 24580, low: 24490, close: 24540 + n, volume: 1000 }],
+      ceBars: [{ time, open: 100, high: 140, low: 98, close: 120 + n, volume: 500 }],
+      peBars: [firstBar(110, 96)],
+      ceLtp: 120,
+      peLtp: 96,
+      spot: 24540,
+      step: 50,
+      expiry: "2026-08-27",
+      positions: [],
+      orders,
+      adapter,
+    });
+  };
+  assert.equal(tickAt(0).action, "queued");
+  algo.vwapState.inFlight = false;
+  const same = tickAt(0, [{ id: "rej-1", strategy: algo.name, side: "BUY", status: "REJECTED", filledQty: 0 }]);
+  assert.ok(same.action === "skip" || same.reason === "duplicate-bar");
+  assert.equal(places.length, 1);
+  const next = tickAt(1, [{ id: "rej-1", strategy: algo.name, side: "BUY", status: "REJECTED", filledQty: 0 }]);
+  assert.equal(next.action, "queued");
+  assert.equal(places.length, 2);
+});
+
 test("new algos start paused — LIVE is not auto-enabled", () => {
   const algo = defaultNiftyVwapAlgo();
   assert.equal(algo.enabled, false);
