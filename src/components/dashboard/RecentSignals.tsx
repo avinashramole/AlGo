@@ -8,7 +8,7 @@ export function RecentSignals() {
     <section className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="desk-kicker">Book</div>
+          <div className="desk-kicker">Signals</div>
           <div className="text-sm font-bold">Recent Signals</div>
         </div>
         <Link to="/algo" className="text-[11px] font-semibold text-brand-500">
