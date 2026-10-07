@@ -34,7 +34,7 @@ test("backtest report builds PDF and Excel from the trade book", () => {
       { day: "2026-09-01", side: "COMBO", symbol: "NIFTY 4-leg", entry: 160, exit: 140, qty: 65, pnl: 1220, margin: 108000, rom: 1.13, bars: 2 },
     ],
     legsBook: [
-      { day: "2026-09-01", side: "SELL", option: "CE", strike: 24800, entry: 80, exit: 70, qty: 65, pnl: 650, bars: 2, key: "sellCe" },
+      { day: "2026-09-01", side: "SELL", option: "CE", strike: 24800, entry: 80, exit: 70, qty: 65, pnl: 650, margin: 108000, bars: 2, key: "sellCe" },
       { day: "2026-09-01", side: "SELL", option: "PE", strike: 24200, entry: 80, exit: 90, qty: 65, pnl: -650, bars: 2, key: "sellPe" },
       { day: "2026-09-01", side: "BUY", option: "CE", strike: 24700, entry: 20, exit: 18, qty: 65, pnl: -130, bars: 2, key: "buyCe" },
       { day: "2026-09-01", side: "BUY", option: "PE", strike: 24300, entry: 20, exit: 40, qty: 65, pnl: 1300, bars: 2, key: "buyPe" },
@@ -67,6 +67,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(xml, /Required margin/);
   assert.match(xml, /108000/);
   assert.match(pdf.toString("latin1"), /Required margin/);
+  assert.match(pdf.toString("latin1"), /LEGS/);
+  assert.match(pdf.toString("latin1"), /Margin/);
+  assert.equal(saved.legs[0].margin, 108000);
   assert.equal(reportDownloadName(loaded, "pdf"), "TEST2-btst-backtest-2026-10-07.pdf");
   clearBacktestReport("a14");
   assert.equal(loadBacktestReport("a14", { lastBacktest: null }), null);

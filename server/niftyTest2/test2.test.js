@@ -233,6 +233,7 @@ test("TEST2 backtest counts one combo as one trade", () => {
   assert.equal(result.legStats.length, 4);
   assert.equal(result.legStats.every((row) => Number.isFinite(row.pnl)), true);
   assert.equal(result.tradesBook.every((row) => Number(row.margin) > 0), true);
+  assert.equal(result.legsBook.every((row) => Number(row.margin) > 0), true);
   assert.equal(Number(result.requiredMargin) > 0, true);
   assert.equal(Number.isFinite(result.rom), true);
   assert.equal(Number.isFinite(result.avgProfit), true);

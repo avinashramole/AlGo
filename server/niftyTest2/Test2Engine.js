@@ -396,6 +396,7 @@ function pushCombo(trades, legsBook, combo, overnight) {
       bars: overnight ? 2 : 1,
       day: combo.day,
       exitDay: combo.exitDay || combo.day,
+      margin: Number(combo.margin) || 0,
       source: combo.source,
     });
   }
