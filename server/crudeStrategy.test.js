@@ -330,6 +330,25 @@ test("getCandles keeps NIFTY and CRUDEOIL live bars separate", () => {
   }
 });
 
+test("getCandles 1D groups live bars by IST session day", () => {
+  setLiveCandles(
+    [
+      { time: Date.parse("2026-04-06T04:00:00Z"), open: 24500, high: 24520, low: 24480, close: 24510, volume: 2 },
+      { time: Date.parse("2026-04-06T05:00:00Z"), open: 24510, high: 24540, low: 24500, close: 24530, volume: 3 },
+      { time: Date.parse("2026-04-07T04:00:00Z"), open: 24530, high: 24580, low: 24520, close: 24560, volume: 4 },
+    ],
+    "NIFTY",
+  );
+  const days = getCandles("1D", "NIFTY");
+  assert.equal(days.length, 2);
+  assert.equal(days[0].open, 24500);
+  assert.equal(days[0].high, 24540);
+  assert.equal(days[0].low, 24480);
+  assert.equal(days[0].close, 24530);
+  assert.equal(days[0].volume, 5);
+  assert.equal(days[1].close, 24560);
+});
+
 test("seed catalog hydrates the crude first-candle strategy onto a NIFTY-only desk", () => {
   const catalog = seedAlgos();
   const saved = catalog.filter((row) => row.id === "a10");

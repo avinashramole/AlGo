@@ -4057,6 +4057,34 @@ export function applyLiveQuotes(quotes) {
   runDeskAlgosSafely();
 }
 
+function aggregateDailyIst(rows) {
+  const out = [];
+  let day = "";
+  let bar = null;
+  for (const row of rows) {
+    const key = new Date(row.time).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    if (key !== day) {
+      if (bar) out.push(bar);
+      day = key;
+      bar = {
+        time: row.time,
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volume: Number(row.volume) || 0,
+      };
+    } else {
+      bar.high = Math.max(bar.high, row.high);
+      bar.low = Math.min(bar.low, row.low);
+      bar.close = row.close;
+      bar.volume += Number(row.volume) || 0;
+    }
+  }
+  if (bar) out.push(bar);
+  return out;
+}
+
 export function getCandles(tf = "5m", symbol = "NIFTY") {
   const key = candleSymbol(symbol);
   const liveRows =
@@ -4066,7 +4094,10 @@ export function getCandles(tf = "5m", symbol = "NIFTY") {
         : liveCandleCache.get("NIFTY") || []
       : liveCandleCache.get(key) || [];
   if (!liveRows.length) return [];
-  const minutes = tf === "1m" ? 1 : tf === "5m" ? 5 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  const unit = String(tf || "5m");
+  if (unit === "1D" || unit === "1d" || unit === "D") return clone(aggregateDailyIst(liveRows));
+  const minutes =
+    unit === "1m" ? 1 : unit === "3m" ? 3 : unit === "5m" ? 5 : unit === "10m" ? 10 : unit === "15m" ? 15 : unit === "30m" ? 30 : unit === "1H" || unit === "1h" ? 60 : 5;
   if (minutes <= 1) return clone(liveRows);
   return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
 }

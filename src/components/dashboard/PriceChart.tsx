@@ -1,43 +1,58 @@
 import {
+  ArrowUpRight,
   Crosshair,
   Expand,
+  FlipVertical,
+  GripHorizontal,
+  Layers,
+  Magnet,
   Minus,
+  MoveRight,
   Ruler,
   Spline,
   Square,
   Trash2,
   Type,
+  Undo2,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getCandles } from "../../api/client";
 import { cn, formatQuote, hasDhanQuotes, kotakAdminTape } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
+import { CandleChart } from "../charts/CandleChart";
+import type { Candle } from "../../lib/chartData";
 import {
-  CandleChart,
+  CHART_TYPES,
+  DEFAULT_INDICATORS,
+  STUDY_GROUPS,
+  toolHint,
   type ChartDrawing,
   type ChartIndicators,
   type ChartTool,
-} from "../charts/CandleChart";
-import type { Candle } from "../../lib/chartData";
+  type ChartType,
+} from "../../lib/chartStudies";
 
-const timeframes = ["1m", "5m", "15m", "1H", "1D"] as const;
+const timeframes = ["1m", "3m", "5m", "15m", "30m", "1H", "1D"] as const;
 
 const tools: { id: ChartTool; Icon: typeof Crosshair; title: string }[] = [
   { id: "crosshair", Icon: Crosshair, title: "Crosshair" },
   { id: "hline", Icon: Minus, title: "Horizontal line" },
+  { id: "vline", Icon: FlipVertical, title: "Vertical line" },
   { id: "trend", Icon: Spline, title: "Trend line" },
+  { id: "ray", Icon: MoveRight, title: "Ray" },
+  { id: "fib", Icon: Layers, title: "Fibonacci" },
   { id: "rect", Icon: Square, title: "Rectangle" },
+  { id: "channel", Icon: GripHorizontal, title: "Parallel channel" },
+  { id: "arrow", Icon: ArrowUpRight, title: "Arrow" },
   { id: "text", Icon: Type, title: "Text" },
   { id: "measure", Icon: Ruler, title: "Measure" },
 ];
 
-const indicatorDefs: { id: keyof ChartIndicators; label: string; color: string }[] = [
-  { id: "ema9", label: "EMA 9", color: "#fd6b01" },
-  { id: "ema21", label: "EMA 21", color: "#60a5fa" },
-  { id: "sma20", label: "SMA 20", color: "#eab308" },
-  { id: "vwap", label: "VWAP", color: "#c084fc" },
-];
+const studyColor = Object.fromEntries(STUDY_GROUPS.flatMap((group) => group.items.map((item) => [item.id, item.color]))) as Record<
+  keyof ChartIndicators,
+  string
+>;
 
 export function PriceChart() {
   const { data } = useMarket();
@@ -48,16 +63,14 @@ export function PriceChart() {
   const liveTape = dhanQuotes || kotakTape;
   const sourceLabel = kotakTape ? (dhanLive ? "KOTAK LIVE" : "KOTAK") : dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : "WAIT";
   const [tf, setTf] = useState<(typeof timeframes)[number]>("5m");
+  const [chartType, setChartType] = useState<ChartType>("candle");
   const [candles, setCandles] = useState<Candle[]>([]);
   const [tool, setTool] = useState<ChartTool>("crosshair");
   const [drawings, setDrawings] = useState<ChartDrawing[]>([]);
   const [expanded, setExpanded] = useState(false);
-  const [indicators, setIndicators] = useState<ChartIndicators>({
-    ema9: true,
-    ema21: true,
-    sma20: false,
-    vwap: true,
-  });
+  const [studiesOpen, setStudiesOpen] = useState(false);
+  const [magnet, setMagnet] = useState(true);
+  const [indicators, setIndicators] = useState<ChartIndicators>(DEFAULT_INDICATORS);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,31 +100,30 @@ export function PriceChart() {
     setIndicators((current) => ({ ...current, [id]: !current[id] }));
   };
 
+  const activeStudies = useMemo(
+    () => STUDY_GROUPS.flatMap((group) => group.items).filter((item) => indicators[item.id]),
+    [indicators],
+  );
+
   const renderChart = () => (
     <CandleChart
       candles={candles}
       dark
       tool={tool}
+      chartType={chartType}
+      magnet={magnet}
       indicators={indicators}
       drawings={drawings}
       onDrawingsChange={setDrawings}
     />
   );
 
-  const toolHint =
-    tool === "crosshair"
-      ? candles.length
-        ? "Hover for OHLC · live Dhan bars"
-        : "Waiting for live Dhan candles"
-      : tool === "hline" || tool === "text"
-        ? "Click the live chart to place"
-        : "Click twice on the live chart";
-
-  const toolbox = (vertical: boolean) => (
+  const toolbox = (kind: "mobile" | "desk" | "overlay") => (
     <div
       className={cn(
-        "gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1",
-        vertical ? "hidden h-[220px] flex-col sm:flex sm:h-[320px]" : "flex flex-row sm:hidden",
+        kind === "mobile" && "chart-toolbox chart-toolbox-horiz flex sm:hidden",
+        kind === "desk" && "chart-toolbox chart-toolbox-vert hidden sm:flex",
+        kind === "overlay" && "chart-toolbox chart-toolbox-vert flex",
       )}
     >
       {tools.map(({ id, Icon, title }) => (
@@ -121,43 +133,104 @@ export function PriceChart() {
           title={title}
           aria-pressed={tool === id}
           onClick={() => setTool(id)}
-          className={cn("icon-btn h-8 w-8", tool === id && "icon-btn-on")}
+          className={cn("icon-btn h-7 w-7 shrink-0", tool === id && "icon-btn-on")}
         >
-          <Icon size={14} />
+          <Icon size={13} />
         </button>
       ))}
+      <button
+        type="button"
+        title="Magnet to OHLC"
+        aria-pressed={magnet}
+        onClick={() => setMagnet((value) => !value)}
+        className={cn("icon-btn h-7 w-7 shrink-0", magnet && "icon-btn-on")}
+      >
+        <Magnet size={13} />
+      </button>
+      <button
+        type="button"
+        title="Undo drawing"
+        disabled={!drawings.length}
+        onClick={() => setDrawings((rows) => rows.slice(0, -1))}
+        className="icon-btn h-7 w-7 shrink-0 disabled:opacity-40"
+      >
+        <Undo2 size={13} />
+      </button>
       <button
         type="button"
         title="Clear drawings"
         disabled={!drawings.length}
         onClick={() => setDrawings([])}
-        className="icon-btn h-8 w-8 disabled:opacity-40"
+        className="icon-btn h-7 w-7 shrink-0 disabled:opacity-40"
       >
-        <Trash2 size={14} />
+        <Trash2 size={13} />
       </button>
+    </div>
+  );
+
+  const studiesMenu = (
+    <div className="relative">
+      <button
+        type="button"
+        className={cn("desk-chip", studiesOpen && "desk-chip-on")}
+        aria-expanded={studiesOpen}
+        onClick={() => setStudiesOpen((open) => !open)}
+      >
+        Studies
+      </button>
+      {studiesOpen ? (
+        <div className="chart-study-menu">
+          {STUDY_GROUPS.map((group) => (
+            <div key={group.title}>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{group.title}</div>
+              <div className="mb-2 grid grid-cols-2 gap-1">
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={indicators[item.id]}
+                    onClick={() => toggleIndicator(item.id)}
+                    className={cn("chart-study-item", indicators[item.id] && "chart-study-item-on")}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 
   const indicatorBar = (
     <div className="flex flex-wrap items-center gap-1.5">
-      {indicatorDefs.map((item) => (
+      {studiesMenu}
+      {CHART_TYPES.map((item) => (
         <button
           key={item.id}
           type="button"
-          aria-pressed={indicators[item.id]}
-          onClick={() => toggleIndicator(item.id)}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide",
-            indicators[item.id]
-              ? "border-transparent bg-[#0b1524] text-white"
-              : "border-[var(--border)] bg-[var(--card)] text-slate-400",
-          )}
+          aria-pressed={chartType === item.id}
+          onClick={() => setChartType(item.id)}
+          className={cn("desk-chip", chartType === item.id && "desk-chip-on")}
         >
-          <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />
           {item.label}
         </button>
       ))}
-      <span className="text-[10px] font-medium text-slate-400">{toolHint}</span>
+      {activeStudies.slice(0, 8).map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed
+          onClick={() => toggleIndicator(item.id)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-[#0b1524] px-2 py-0.5 text-[10px] font-bold text-white"
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: studyColor[item.id] }} />
+          {item.label}
+        </button>
+      ))}
+      <span className="text-[10px] font-medium text-slate-400">{toolHint(tool, candles.length > 0)}</span>
     </div>
   );
 
@@ -201,10 +274,12 @@ export function PriceChart() {
         </div>
       </div>
       <div className="mb-2">{indicatorBar}</div>
-      {toolbox(false)}
+      {toolbox("mobile")}
       <div className="mt-2 flex gap-2">
-        {toolbox(true)}
-        <div className="chart-well min-w-0 flex-1">{renderChart()}</div>
+        {toolbox("desk")}
+        <div className="chart-well min-w-0 flex-1" onClick={() => studiesOpen && setStudiesOpen(false)}>
+          {renderChart()}
+        </div>
       </div>
       {expanded ? (
         <div className="desk-overlay z-[80]" onClick={() => setExpanded(false)}>
@@ -215,7 +290,9 @@ export function PriceChart() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="desk-kicker">Live chart</div>
-                <h3 className="text-sm font-bold">NIFTY 50 · {tf}</h3>
+                <h3 className="text-sm font-bold">
+                  NIFTY 50 · {tf} · {chartType}
+                </h3>
               </div>
               <button type="button" className="icon-btn" title="Close" onClick={() => setExpanded(false)}>
                 <X size={15} />
@@ -223,29 +300,7 @@ export function PriceChart() {
             </div>
             {indicatorBar}
             <div className="flex gap-2">
-              <div className="hidden h-[min(56vh,420px)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1 sm:flex">
-                {tools.map(({ id, Icon, title }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    title={title}
-                    aria-pressed={tool === id}
-                    onClick={() => setTool(id)}
-                    className={cn("icon-btn h-8 w-8", tool === id && "icon-btn-on")}
-                  >
-                    <Icon size={14} />
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  title="Clear drawings"
-                  disabled={!drawings.length}
-                  onClick={() => setDrawings([])}
-                  className="icon-btn h-8 w-8 disabled:opacity-40"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              {toolbox("overlay")}
               <div className="chart-well chart-well-expand min-w-0 flex-1">{renderChart()}</div>
             </div>
           </div>
