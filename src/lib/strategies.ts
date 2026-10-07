@@ -162,7 +162,11 @@ export type AlgoStrategy = {
     synthTrades?: number;
     synthWinRate?: number;
     skippedDays?: number;
-    book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
+    requiredMargin?: number;
+    avgMargin?: number;
+    maxMargin?: number;
+    rom?: number;
+    book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number; margin?: number; rom?: number }>;
     legBook?: Array<{ side: string; option?: string; strike?: number; entry: number; exit: number; qty: number; pnl: number; day?: string }>;
     legStats?: Array<{
       key?: string;

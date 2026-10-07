@@ -40,6 +40,9 @@ function mapTradeRows(rows = []) {
     exit: Number(row.exit || 0),
     qty: Number(row.qty || 0),
     pnl: Number(row.pnl || 0),
+    margin: Number(row.margin || 0),
+    rom: Number(row.rom || 0),
+    netCredit: Number(row.netCredit || 0),
     bars: Number(row.bars || 0),
     key: cell(row.key || ""),
   }));
@@ -108,6 +111,10 @@ export function buildBacktestReport(algo = {}, result = {}) {
       source: cell(result.source || ""),
       optionSource: cell(result.optionSource || ""),
       holdStyle,
+      requiredMargin: Number(result.requiredMargin || result.maxMargin || 0),
+      avgMargin: Number(result.avgMargin || 0),
+      maxMargin: Number(result.maxMargin || 0),
+      rom: Number(result.rom || 0),
     },
     trades,
     legs: legRows(result),
@@ -190,6 +197,9 @@ export function renderBacktestExcel(report) {
     ["Max trades in DD", report.summary.maxTradesInDd],
     ["Lot", report.summary.lotNote],
     ["Cost / combo", money(report.summary.costPerCombo)],
+    ["Required margin (max)", money(report.summary.requiredMargin)],
+    ["Avg required margin", money(report.summary.avgMargin)],
+    ["Return on margin %", report.summary.rom],
     ...(Array.isArray(report.legStats) ? report.legStats : []).flatMap((leg) => [
       [`${leg.label || "Leg"} P&L`, money(leg.pnl)],
       [`${leg.label || "Leg"} trades`, leg.trades],
@@ -205,9 +215,9 @@ export function renderBacktestExcel(report) {
   ]
     .map(([label, value]) => `<Row>${excelCell(label)}${excelCell(value)}</Row>`)
     .join("");
-  const tradeHeader = `<Row>${["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry", "Exit", "Qty", "P&L", "Bars"].map((h) => excelCell(h)).join("")}</Row>`;
+  const tradeHeader = `<Row>${["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"].map((h) => excelCell(h)).join("")}</Row>`;
   const rowXml = (row) =>
-    `<Row>${excelCell(row.n, "Number")}${excelCell(row.day)}${excelCell(row.side)}${excelCell(row.option)}${excelCell(row.strike, "Number")}${excelCell(row.symbol)}${excelCell(row.entry, "Number")}${excelCell(row.exit, "Number")}${excelCell(row.qty, "Number")}${excelCell(row.pnl, "Number")}${excelCell(row.bars, "Number")}</Row>`;
+    `<Row>${excelCell(row.n, "Number")}${excelCell(row.day)}${excelCell(row.side)}${excelCell(row.option)}${excelCell(row.strike, "Number")}${excelCell(row.symbol)}${excelCell(row.entry, "Number")}${excelCell(row.exit, "Number")}${excelCell(row.qty, "Number")}${excelCell(row.pnl, "Number")}${excelCell(row.margin, "Number")}${excelCell(row.rom, "Number")}${excelCell(row.netCredit, "Number")}${excelCell(row.bars, "Number")}</Row>`;
   const tradeBody = (report.trades || []).map(rowXml).join("");
   const legs = report.legs?.length ? report.legs : report.trades || [];
   const legBody = legs.map(rowXml).join("");
@@ -243,6 +253,9 @@ export function renderBacktestPdf(report) {
     report.summary.maxWinStreak || report.summary.maxLoseStreak
       ? `Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L · Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`
       : "",
+    report.summary.requiredMargin || report.summary.avgMargin
+      ? `Required margin Rs ${money(report.summary.requiredMargin)} max · avg Rs ${money(report.summary.avgMargin)} · ROM ${report.summary.rom || 0}%`
+      : "",
     ...(Array.isArray(report.legStats) ? report.legStats : []).map(
       (leg) =>
         `${leg.label || "Leg"} P&L Rs ${money(leg.pnl)} · ${leg.trades || 0} fills · WR ${leg.winRate || 0}% · avg ${money(leg.avgProfit)}`,
@@ -251,9 +264,19 @@ export function renderBacktestPdf(report) {
     `Generated ${report.generatedAt}`,
     report.strategy.summary,
     "",
-    "#  Day         Side  Opt   Strike   Entry     Exit      Qty      P&L",
+    "COMBOS",
+    "#  Day         P&L        Margin     ROM %",
   ].filter((line, index, all) => line || all[index - 1]);
-  const fillRows = report.legs?.length ? report.legs : report.trades;
+  for (const row of report.trades || []) {
+    const n = String(row.n).padStart(3, " ");
+    const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
+    lines.push(
+      `${n} ${day} ${money(row.pnl).padStart(10)} ${money(row.margin).padStart(10)} ${Number(row.rom || 0).toFixed(2).padStart(7)}`,
+    );
+  }
+  if (!(report.trades || []).length) lines.push("No combos in this replay.");
+  lines.push("", "LEGS", "#  Day         Side  Opt   Strike   Entry     Exit      Qty      P&L");
+  const fillRows = report.legs?.length ? report.legs : [];
   for (const row of fillRows) {
     const n = String(row.n).padStart(3, " ");
     const day = String(row.day || "").padEnd(11, " ").slice(0, 11);

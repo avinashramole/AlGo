@@ -4,10 +4,23 @@ import { buildSyntheticChain } from "../optionChain.js";
 import { defaultNiftyTest2Algo, isNiftyTest2Algo, niftyTest2Config } from "../niftyVwap/config.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 import { writeRollingDay, wipeRollingOptions } from "../dhanRollingOption.js";
-import { niftyLotOn, pickCombo, replayTest2Day, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
+import { comboRequiredMargin, niftyLotOn, pickCombo, replayTest2Day, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
 import { Test2Strategy } from "./Test2Strategy.js";
 
 const T0935 = Date.parse("2026-10-07T04:05:00.000Z");
+
+test("TEST2 required margin is higher for BTST than intraday", () => {
+  const legs = [
+    { side: "SELL", entry: 80 },
+    { side: "SELL", entry: 80 },
+    { side: "BUY", entry: 20 },
+    { side: "BUY", entry: 20 },
+  ];
+  const btst = comboRequiredMargin({ legs, qty: 65, spot: 24500, holdStyle: "btst" });
+  const intra = comboRequiredMargin({ legs, qty: 65, spot: 24500, holdStyle: "intraday" });
+  assert.equal(btst > intra, true);
+  assert.equal(btst > 100000, true);
+});
 
 test("TEST2 seed and name lock", () => {
   const seeded = seedAlgos().find((row) => row.id === "a14");
@@ -219,6 +232,9 @@ test("TEST2 backtest counts one combo as one trade", () => {
   assert.equal(result.legsBook.filter((row) => row.side === "BUY").length, 18);
   assert.equal(result.legStats.length, 4);
   assert.equal(result.legStats.every((row) => Number.isFinite(row.pnl)), true);
+  assert.equal(result.tradesBook.every((row) => Number(row.margin) > 0), true);
+  assert.equal(Number(result.requiredMargin) > 0, true);
+  assert.equal(Number.isFinite(result.rom), true);
   assert.equal(Number.isFinite(result.avgProfit), true);
   assert.equal(Number.isFinite(result.rewardRisk), true);
   const intra = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), candles);
