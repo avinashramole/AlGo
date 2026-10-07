@@ -9,7 +9,7 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
-import { downloadRollingOptionRange, rollingContract, rollingCoverage, ROLLING_BACKTEST_DEADLINE_MS } from "./dhanRollingOption.js";
+import { completeRollingDays, downloadRollingOptionRange, dropEmptyRollingDays, rollingContract, rollingCoverage, ROLLING_BACKTEST_DEADLINE_MS } from "./dhanRollingOption.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
@@ -991,12 +991,14 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
       if (!isDhanLive()) {
         await ensureDhanLiveFromSavedToken();
       }
+      const droppedEmpty = dropEmptyRollingDays(symbol);
       const coverage = rollingCoverage(symbol, window.from, window.to);
+      const completeBefore = completeRollingDays(symbol, window.from, window.to);
       if (!contract) {
         optionHistory = { source: coverage, reused: coverage === "stored", days: 0, error: "rolling-not-supported" };
       } else if (!isDhanLive()) {
-        optionHistory = { source: coverage, reused: false, days: 0, error: "dhan-not-live" };
-      } else if (coverage !== "stored") {
+        optionHistory = { source: coverage, reused: false, days: 0, droppedEmpty, error: "dhan-not-live" };
+      } else if (coverage !== "stored" || completeBefore === 0) {
         try {
           optionHistory = await downloadRollingOptionRange({
             symbol,
@@ -1012,11 +1014,19 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             exchangeSegment: contract.exchangeSegment,
             instrument: contract.instrument,
           });
+          optionHistory.droppedEmpty = droppedEmpty;
+          optionHistory.completeDays = completeRollingDays(symbol, window.from, window.to);
         } catch (error) {
-          optionHistory = { error: error.message || "rolling-option-failed", source: coverage, days: 0 };
+          optionHistory = {
+            error: error.message || "rolling-option-failed",
+            source: coverage,
+            days: 0,
+            droppedEmpty,
+            completeDays: completeRollingDays(symbol, window.from, window.to),
+          };
         }
       } else {
-        optionHistory = { source: coverage, reused: true, days: 0 };
+        optionHistory = { source: coverage, reused: true, days: 0, completeDays: completeBefore };
       }
     } else {
       const optionCoverage = hist.option ? optionHistoryCoverage(hist.symbol || algo.symbol, hist.from, hist.to) : "synth";

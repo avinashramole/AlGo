@@ -9,7 +9,7 @@ set -euo pipefail
 BRANCH=${1:-main}
 WEBROOT=/var/www/trade2smart
 UI_MARKER="Script · NIFTY BANKNIFTY SENSEX"
-RESULT_MARKER="Connect Dhan and run Backtest again"
+RESULT_MARKER="Connect Dhan LIVE"
 ENGINE_MARKER="storedTrades.length ? storedTrades : synthTrades"
 RAW="https://raw.githubusercontent.com/avinashramole/AlGo/${BRANCH}"
 HOME_DIR=/opt/t2s

@@ -156,7 +156,30 @@ export function rollingDayStatus(symbol, ymd) {
 export function needsRollingFetch(symbol, ymd) {
   if (isWeekendYmd(ymd)) return false;
   const status = rollingDayStatus(symbol, ymd);
-  return status === "missing" || status === "partial";
+  return status === "missing" || status === "partial" || status === "empty";
+}
+
+export function dropEmptyRollingDays(symbol = "NIFTY") {
+  const root = String(symbol || "NIFTY").toUpperCase();
+  let dropped = 0;
+  let names = [];
+  try {
+    names = fs.readdirSync(symbolDir(root)).filter((name) => name.endsWith(".json"));
+  } catch {
+    names = [];
+  }
+  for (const name of names) {
+    const ymd = name.replace(/\.json$/, "");
+    if (rollingDayStatus(root, ymd) !== "empty") continue;
+    try {
+      fs.rmSync(dayFile(root, ymd), { force: true });
+    } catch {
+      /* missing is fine */
+    }
+    memory.delete(`${root}|${ymd}`);
+    dropped += 1;
+  }
+  return dropped;
 }
 
 export function preloadRollingDays(symbol, ymds = []) {
@@ -173,23 +196,46 @@ export function rollingCoverage(symbol, from, to) {
   let stored = 0;
   for (const ymd of weekdays) {
     const status = rollingDayStatus(symbol, ymd);
-    if (status === "complete" || status === "empty") stored += 1;
+    if (status === "complete") stored += 1;
   }
   if (!stored) return "synth";
   if (stored >= weekdays.length) return "stored";
   return "mixed";
 }
 
+export function completeRollingDays(symbol, from, to) {
+  return listYmds(from, to).filter((ymd) => !isWeekendYmd(ymd) && rollingDayStatus(symbol, ymd) === "complete").length;
+}
+
 export function parseRollingPayload(payload, option = "CE") {
   const side = option === "PE" || option === "PUT" ? "pe" : "ce";
-  const pack = payload?.data?.[side] || payload?.[side] || payload?.data || payload;
+  const alt = side === "pe" ? ["pe", "PE", "put", "PUT"] : ["ce", "CE", "call", "CALL"];
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+  let pack = null;
+  for (const key of alt) {
+    if (data?.[key] && typeof data[key] === "object") {
+      pack = data[key];
+      break;
+    }
+  }
+  pack = pack || payload?.[side] || payload?.data || payload;
   if (!pack || typeof pack !== "object") return [];
-  const times = Array.isArray(pack.timestamp) ? pack.timestamp : [];
-  const closes = Array.isArray(pack.close) ? pack.close : [];
+  const times = Array.isArray(pack.timestamp)
+    ? pack.timestamp
+    : Array.isArray(pack.timestamps)
+      ? pack.timestamps
+      : Array.isArray(pack.time)
+        ? pack.time
+        : [];
+  const closes = Array.isArray(pack.close) ? pack.close : Array.isArray(pack.ltp) ? pack.ltp : [];
   const highs = Array.isArray(pack.high) ? pack.high : [];
   const lows = Array.isArray(pack.low) ? pack.low : [];
-  const strikes = Array.isArray(pack.strike) ? pack.strike : [];
-  const spots = Array.isArray(pack.spot) ? pack.spot : [];
+  const strikes = Array.isArray(pack.strike)
+    ? pack.strike
+    : Array.isArray(pack.strikePrice)
+      ? pack.strikePrice
+      : [];
+  const spots = Array.isArray(pack.spot) ? pack.spot : Array.isArray(pack.spotPrice) ? pack.spotPrice : [];
   const bars = [];
   for (let i = 0; i < times.length; i += 1) {
     const t = Number(times[i]) > 1e12 ? Number(times[i]) : Number(times[i]) * 1000;
