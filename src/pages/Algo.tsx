@@ -164,7 +164,7 @@ function kindMeta(algo: AlgoStrategy) {
 }
 
 export function Algo() {
-  const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, closePosition, refresh } = useMarket();
+  const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, unlockBacktest, closePosition, refresh } = useMarket();
   const [tab, setTab] = useState<DeskTab>("copy");
   const [filter, setFilter] = useState<Filter>("all");
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -284,6 +284,20 @@ export function Algo() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
+                onClick={() => {
+                  setRangeError("");
+                  void unlockBacktest().catch((err: unknown) =>
+                    window.alert(catchDeskError(err, "Could not reset backtest")),
+                  );
+                }}
+                title="Clears a stuck backtest lock (same as rm -f /opt/t2s/server/data/backtest.busy)"
+                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[var(--border)] px-4 text-sm font-semibold"
+              >
+                <RotateCcw size={16} />
+                Reset backtest
+              </button>
+              <button
+                type="button"
                 disabled={busyId === "all" || !canStartAll}
                 onClick={() => void startOrStopAll(true)}
                 className="btn-go h-10 rounded-lg px-4 text-sm font-semibold disabled:opacity-60"
@@ -361,7 +375,6 @@ export function Algo() {
                       .finally(() => setBusyId(""));
                   }}
                   onCancelRange={() => {
-                    if (busyId) return;
                     setRangeId("");
                     setRangeError("");
                   }}
@@ -405,7 +418,6 @@ export function Algo() {
         busy={Boolean(rangeFor && busyId === rangeFor.id)}
         error={rangeError}
         onClose={() => {
-          if (busyId) return;
           setRangeId("");
           setRangeError("");
         }}
@@ -719,9 +731,9 @@ function AlgoCard({
         </button>
         <button
           type="button"
-          disabled={busy}
           onClick={onResetBacktest}
-          className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-60"
+          title="Clears a stuck backtest lock (same as rm -f /opt/t2s/server/data/backtest.busy)"
+          className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold"
         >
           <RotateCcw size={12} />
           Reset

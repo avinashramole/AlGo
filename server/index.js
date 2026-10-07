@@ -936,7 +936,7 @@ app.post("/api/algos/:id/broker", (req, res) => {
 app.post("/api/algos/:id/backtest", async (req, res) => {
   if (isBacktestBusy()) {
     res.status(429).json({
-      error: "A backtest is already running. Wait about a minute, or click Reset, then try again.",
+      error: "A backtest is already running. Click Reset backtest to clear the lock, then try again.",
     });
     return;
   }
@@ -1049,6 +1049,11 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     clearInterval(heartbeat);
     clearBacktestBusy();
   }
+});
+
+app.post("/api/backtest/unlock", (_req, res) => {
+  clearBacktestBusy();
+  res.json({ ok: true, unlocked: true });
 });
 
 app.post("/api/algos/:id/backtest/reset", (req, res) => {
