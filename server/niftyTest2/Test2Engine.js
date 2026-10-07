@@ -257,6 +257,12 @@ export function replayTest2Day(session, config, exitSession = null) {
     });
   }
   const pnl = round2(legs.reduce((sum, row) => sum + row.pnl, 0) - cost);
+  const margin = comboRequiredMargin({
+    legs,
+    qty,
+    spot: session.open,
+    holdStyle: config.holdStyle,
+  });
   return {
     day: session.day,
     exitDay: (exitSession || session).day,
@@ -265,8 +271,24 @@ export function replayTest2Day(session, config, exitSession = null) {
     qty,
     usedStored,
     cost,
+    margin,
     source: rolling ? "stored" : "synth",
   };
+}
+
+/** Estimated funds blocked for one TEST2 combo. Not live exchange SPAN. */
+export function comboRequiredMargin({ legs = [], qty, spot, holdStyle } = {}) {
+  const units = Math.max(1, Number(qty) || 1);
+  const index = Math.max(0, Number(spot) || 0);
+  const hedgeDebit = (Array.isArray(legs) ? legs : [])
+    .filter((leg) => String(leg.side || "").toUpperCase() === "BUY")
+    .reduce((sum, leg) => sum + Math.max(0, Number(leg.entry) || 0) * units, 0);
+  const shorts = (Array.isArray(legs) ? legs : []).filter((leg) => String(leg.side || "").toUpperCase() === "SELL").length;
+  const spanPct = String(holdStyle || "").toLowerCase() === "intraday" ? 0.025 : 0.04;
+  const oneSide = index * units * spanPct;
+  const extraShorts = Math.max(0, shorts - 1);
+  const spanBlock = oneSide * (1 + extraShorts * 0.7);
+  return round2(hedgeDebit + spanBlock);
 }
 
 function holdOvernight(entry, exit) {
@@ -354,6 +376,9 @@ function pushCombo(trades, legsBook, combo, overnight) {
     bars: overnight ? 2 : 1,
     day: combo.day,
     exitDay: combo.exitDay || combo.day,
+    margin: Number(combo.margin) || 0,
+    netCredit: round2(netCredit * combo.qty),
+    rom: combo.margin ? Number(((combo.pnl / combo.margin) * 100).toFixed(2)) : 0,
     source: combo.source,
   });
   for (const leg of combo.legs) {
@@ -491,6 +516,7 @@ export function runTest2Backtest(algo, candles = []) {
   const wins = pnls.filter((value) => value > 0).length;
   const stats = comboStats(primary, equityWalk.equity, equityWalk.maxDrawdown);
   const legStats = summarizeLegs(primaryLegs);
+  const margins = primary.map((row) => Number(row.margin) || 0).filter((value) => value > 0);
   const storedWins = storedTrades.filter((row) => row.pnl > 0).length;
   const synthWins = synthTrades.filter((row) => row.pnl > 0).length;
   const optionSource = storedTrades.length
@@ -525,6 +551,12 @@ export function runTest2Backtest(algo, candles = []) {
     synthWinRate: synthTrades.length ? Number(((synthWins / synthTrades.length) * 100).toFixed(1)) : 0,
     skippedDays: skipped.length,
     skipped,
+    avgMargin: margins.length ? round2(margins.reduce((sum, value) => sum + value, 0) / margins.length) : 0,
+    maxMargin: margins.length ? round2(Math.max(...margins)) : 0,
+    requiredMargin: margins.length ? round2(Math.max(...margins)) : 0,
+    rom: margins.length
+      ? Number(((equityWalk.equity / (margins.reduce((sum, value) => sum + value, 0) / margins.length)) * 100).toFixed(2))
+      : 0,
     tradesBook: primary,
     legsBook: primaryLegs,
     legStats,
@@ -544,4 +576,5 @@ export const Test2Engine = {
   sessionDays,
   replayTest2Day,
   runTest2Backtest,
+  comboRequiredMargin,
 };

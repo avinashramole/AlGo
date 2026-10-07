@@ -692,6 +692,16 @@ function AlgoCard({
             hint={algo.lastBacktest.maxTradesInDd ? `Max ${algo.lastBacktest.maxTradesInDd} combos in one DD` : "Max consecutive win / lose"}
           />
           <Metric label="Expectancy" value={formatInr(Number(algo.lastBacktest.expectancy || 0))} hint="₹ per combo (same as avg / trade)" />
+          <Metric
+            label="Required margin"
+            value={formatInr(Number(algo.lastBacktest.requiredMargin || algo.lastBacktest.maxMargin || 0))}
+            hint={`Peak combo block · avg ${formatInr(Number(algo.lastBacktest.avgMargin || 0))} · estimate, not live SPAN`}
+          />
+          <Metric
+            label="Return on margin"
+            value={`${formatNumber(Number(algo.lastBacktest.rom || 0), 2)}%`}
+            hint="Overall P&L ÷ avg required margin"
+          />
         </div>
       ) : null}
       {isNiftyTest2Kind(algo) && algo.lastBacktest?.legStats?.length ? (
