@@ -199,19 +199,19 @@ export function Brokers() {
   }, [defaultBroker, frontBroker]);
 
   return (
-    <div className="desk-page mx-auto max-w-5xl space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="desk-page brokers-desk mx-auto max-w-5xl space-y-3 md:max-w-6xl md:space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Brokers</h1>
+          <h1 className="text-xl font-bold md:text-2xl">Brokers</h1>
           <p className="desk-help text-sm text-slate-400">
             Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect more than one.
             Set default is the broker used for admin orders and the admin balance. The Dhan data feed can stay on without becoming that default. Connecting a broker does not start LIVE algos.
           </p>
         </div>
-        <label className="flex min-w-[12rem] items-center gap-2 text-xs font-semibold">
+        <label className="flex min-w-[14rem] items-center gap-2 text-sm font-semibold">
           Other brokers
           <select
-            className="h-9 min-w-[10rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold"
+            className="h-10 min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold md:h-11"
             value=""
             onChange={(event) => {
               if (event.target.value) pickBroker(event.target.value);
@@ -229,24 +229,24 @@ export function Brokers() {
           </select>
         </label>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Front / default" value={frontLabel} />
         <Stat label="Connected" value={String(connectedCount)} />
         <Stat label="Dhan funds" value={dhan?.liveFeed ? `₹${formatNumber(actualFunds, 0)}` : paper ? fundsCaption(paper) : "—"} />
       </div>
       {viewed ? (
-        <section className="card p-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
+        <section className="card p-3 md:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-extrabold text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-extrabold text-white md:h-12 md:w-12 md:text-sm"
                 style={{ background: viewed.color }}
               >
                 {viewed.name.slice(0, 2).toUpperCase()}
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-bold">{viewed.name}</div>
+                  <div className="font-bold md:text-lg">{viewed.name}</div>
                   {viewed.main ? (
                     <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-extrabold text-up dark:bg-emerald-950/40">
                       MAIN
@@ -263,7 +263,7 @@ export function Brokers() {
                     </span>
                   ) : null}
                 </div>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-400 md:text-sm">
                   {viewed.vendor} · {viewed.segments.join(", ")} · {viewed.mode}
                   {viewed.keyHint ? ` · ${viewed.keyHint}` : ""}
                 </div>
@@ -312,20 +312,20 @@ export function Brokers() {
           ) : null}
 
           {showOtherBook ? (
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-3 md:mt-4">
               {viewed.connected ? (
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-xs md:gap-3">
                   <Mini label="Client" value={viewed.clientId || "—"} />
                   <Mini label="Funds" value={fundsCaption(viewed)} />
                   <Mini label="Margin" value={`₹${formatNumber(viewed.marginUsed, 0)}`} />
                 </div>
               ) : null}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 md:gap-3">
                 {viewed.connected && !viewed.active ? (
                   <button
                     type="button"
                     onClick={() => void activate(viewed.id)}
-                    className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white"
+                    className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white md:h-11"
                   >
                     Set default
                   </button>
@@ -334,7 +334,7 @@ export function Brokers() {
                   <button
                     type="button"
                     onClick={() => void disconnect(viewed.id)}
-                    className="h-9 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold"
+                    className="h-10 rounded-lg border border-[var(--border)] px-5 text-sm font-semibold md:h-11"
                   >
                     Disconnect
                   </button>
@@ -343,7 +343,7 @@ export function Brokers() {
                   <button
                     type="button"
                     onClick={() => openForm(viewed)}
-                    className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white"
+                    className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white md:h-11"
                   >
                     {viewed.connected ? "Update token" : "Connect live"}
                   </button>
@@ -521,11 +521,11 @@ function DhanSettings({
   onStartFeed: () => void;
 }) {
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-3 space-y-3 md:mt-4 md:space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-bold">Dhan live feed</div>
+        <div className="text-sm font-bold md:text-base">Dhan live feed</div>
         <span
-          className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
+          className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold md:px-2 md:py-1 md:text-xs ${
             feed?.live ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-slate-100 text-slate-500"
           }`}
         >
@@ -544,7 +544,7 @@ function DhanSettings({
         limit, not an expired token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the{" "}
         <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
       </p>
-      <div className="grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 md:gap-3">
         <Mini label="Token" value={feed?.tokenHint || "not set"} />
         <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
         <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
@@ -568,7 +568,7 @@ function DhanSettings({
         />
       </div>
       {feed?.ipCheck ? (
-        <div className="grid gap-2 text-xs sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 md:gap-3">
           <Mini label="Dhan sees" value={feed.ipCheck.detectedIP || "—"} />
           <Mini label="Saved primary" value={feed.ipCheck.primaryIP || "—"} />
           <Mini label="Saved secondary" value={feed.ipCheck.secondaryIP && feed.ipCheck.secondaryIP !== "NA" ? feed.ipCheck.secondaryIP : "—"} />
@@ -599,45 +599,45 @@ function DhanSettings({
           , then check VPS logs for <code>Dhan token auto-renew</code>.
         </div>
       ) : null}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="block text-xs font-semibold">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm font-semibold">
           Client ID
           <input
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm md:h-11 md:text-base"
             value={dhanClientId}
             onChange={(event) => setDhanClientId(event.target.value)}
             placeholder={savedDhanClientId || "Dhan client ID"}
             autoComplete="off"
           />
         </label>
-        <label className="block text-xs font-semibold">
+        <label className="block text-sm font-semibold">
           PIN
           <input
             type="password"
             inputMode="numeric"
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm md:h-11 md:text-base"
             value={dhanPin}
             onChange={(event) => setDhanPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
             placeholder="4–6 digit PIN"
             autoComplete="off"
           />
         </label>
-        <label className="block text-xs font-semibold">
+        <label className="block text-sm font-semibold">
           TOTP secret
           <input
             type="password"
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm md:h-11 md:text-base"
             value={dhanTotp}
             onChange={(event) => setDhanTotp(event.target.value)}
             placeholder="Setup TOTP secret"
             autoComplete="off"
           />
         </label>
-        <label className="block text-xs font-semibold">
+        <label className="block text-sm font-semibold">
           Access token
           <input
             type="password"
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm md:h-11 md:text-base"
             value={dhanTokenFocused ? dhanToken : displaySavedSecret(dhanToken, feed?.tokenHint || "")}
             onFocus={() => setDhanTokenFocused(true)}
             onBlur={() => setDhanTokenFocused(false)}
@@ -647,10 +647,10 @@ function DhanSettings({
           />
         </label>
       </div>
-      {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
-      <div className="flex flex-wrap gap-2">
+      {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-down">{error}</div> : null}
+      <div className="flex flex-wrap gap-2 md:gap-3">
         {!broker.active ? (
-          <button type="button" onClick={onActivate} className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white">
+          <button type="button" onClick={onActivate} className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white md:h-11">
             Set default
           </button>
         ) : null}
@@ -658,7 +658,7 @@ function DhanSettings({
           type="button"
           disabled={busy}
           onClick={onGenerate}
-          className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
+          className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white disabled:opacity-60 md:h-11"
         >
           {busy ? "Working..." : "Save PIN + TOTP"}
         </button>
@@ -666,7 +666,7 @@ function DhanSettings({
           type="button"
           disabled={busy}
           onClick={onReset}
-          className="h-9 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold disabled:opacity-60"
+          className="h-10 rounded-lg border border-[var(--border)] px-5 text-sm font-semibold disabled:opacity-60 md:h-11"
         >
           Reset token
         </button>
@@ -674,7 +674,7 @@ function DhanSettings({
           type="button"
           disabled={busy}
           onClick={onSaveToken}
-          className="h-9 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60"
+          className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white disabled:opacity-60 md:h-11"
         >
           {busy ? "Saving..." : "Save token"}
         </button>
@@ -683,7 +683,7 @@ function DhanSettings({
             type="button"
             disabled={busy}
             onClick={onStopFeed}
-            className="h-9 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold"
+            className="h-10 rounded-lg border border-[var(--border)] px-5 text-sm font-semibold md:h-11"
           >
             Stop data feed
           </button>
@@ -692,7 +692,7 @@ function DhanSettings({
             type="button"
             disabled={busy || !feed?.tokenHint}
             onClick={onStartFeed}
-            className="h-9 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold disabled:opacity-60"
+            className="h-10 rounded-lg border border-[var(--border)] px-5 text-sm font-semibold disabled:opacity-60 md:h-11"
           >
             Start data feed
           </button>
@@ -704,18 +704,18 @@ function DhanSettings({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card p-3">
-      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
-      <div className="mt-1 truncate text-sm font-bold">{value}</div>
+    <div className="card p-3 md:px-5 md:py-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:text-xs">{label}</div>
+      <div className="mt-1 truncate text-sm font-bold md:mt-1.5 md:text-xl">{value}</div>
     </div>
   );
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-[var(--bg)] px-2 py-2">
-      <div className="text-[10px] uppercase text-slate-400">{label}</div>
-      <div className="mt-0.5 truncate font-semibold">{value}</div>
+    <div className="rounded-lg bg-[var(--bg)] px-2 py-2 md:px-3 md:py-3">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400 md:text-xs">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-semibold md:mt-1 md:text-base">{value}</div>
     </div>
   );
 }
