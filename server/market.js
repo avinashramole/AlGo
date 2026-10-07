@@ -37,6 +37,8 @@ import {
   isNiftyFirstCandleAlgo,
   isNiftyOptionEngineAlgo,
   isNiftyTestAlgo,
+  isNiftyTest1Algo,
+  niftyTest1Config,
   isNiftyVwapReversalAlgo,
   LiveTradingAdapter,
   NiftyVwapStrategy,
@@ -62,6 +64,7 @@ import {
   hedgePreviewTrade,
   hedgeReversalFromBars,
 } from "./niftyVwapHedge/index.js";
+import { Test1Strategy } from "./niftyTest1/index.js";
 import {
   applyHedgeDailyLive,
   applyFirstCandleDailyLive,
@@ -951,7 +954,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
   const algo = (state.algos || []).find(
-    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyVwapHedgeAlgo(item)),
+    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyTest1Algo(item) || isNiftyVwapHedgeAlgo(item)),
   );
   if (!algo) return;
   rememberOrderStrategy(
@@ -1076,7 +1079,7 @@ let lastNiftyVwapFeed = true;
 function noteNiftyVwapFeed(feedLive) {
   if (feedLive && lastNiftyVwapFeed === false) {
     for (const algo of state.algos || []) {
-      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) && algo.enabled) noteFeedReconnect(algo);
+      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo)) && algo.enabled) noteFeedReconnect(algo);
     }
   }
   lastNiftyVwapFeed = Boolean(feedLive);
@@ -1112,7 +1115,7 @@ function dropPreviousIntradayBook(algo, today = VwapSignalEngine.sessionKeyIST(D
 }
 
 function beginStrategyRecord(algo) {
-  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
+  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo)) {
     const vs = runtimeState(algo);
     PositionManager.clearOpen(vs);
     vs.lastEntryBarTime = 0;
@@ -1127,6 +1130,96 @@ function beginStrategyRecord(algo) {
     hs.inFlight = false;
     hs.pendingRole = "";
   }
+}
+
+function tickNiftyTest1Algo(algo, mode, feedLive) {
+  const now = Date.now();
+  const today = VwapSignalEngine.sessionKeyIST(now);
+  dropPreviousIntradayBook(algo, today);
+  const config = niftyTest1Config(algo);
+  const vs = runtimeState(algo);
+  if (vs.sessionDate && vs.sessionDate !== today) {
+    resetSession(vs, today);
+    persistAlgos();
+  }
+  const session = nseMarketSession();
+  const positions = positionsForNiftyVwap(algo, mode);
+  const open = PositionManager.openFor(positions, algo.name, vs);
+  if (mode === "live" && !session.open && !open) return;
+  const und = getUnderlying("NIFTY");
+  const pack = chainForSymbol("NIFTY");
+  const expiry = nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries("NIFTY")[0] || "";
+  const lastFut = (getCandles("5m") || [])[ (getCandles("5m") || []).length - 1 ];
+  const spot = Number(getChainSpot("NIFTY")) || Number(lastFut?.close) || 0;
+  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, 0);
+  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  if (vs.ceStrike !== ceStrike) {
+    vs.ceBars = [];
+    vs.ceStrike = ceStrike;
+  }
+  if (vs.peStrike !== peStrike) {
+    vs.peBars = [];
+    vs.peStrike = peStrike;
+  }
+  const ceLtp = optionPremium("NIFTY", ceStrike, "CE");
+  const peLtp = optionPremium("NIFTY", peStrike, "PE");
+  const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, 5, { sessionOpenMinutes: 9 * 60 + 15 }) || 0;
+  vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
+  vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
+  const ceSecurityId = optionLegId(ceStrike, "CE", "NIFTY");
+  const peSecurityId = optionLegId(peStrike, "PE", "NIFTY");
+  let targetResting = false;
+  if (open && mode === "live") {
+    const chainMark = (open.option || "") === "PE" ? peLtp : ceLtp;
+    const live = liveExitPrice({
+      chain: chainMark,
+      tick: open.ltp,
+      avg: open.avg || vs.fillPrice,
+      ticked: open.ticked === true,
+    });
+    targetResting = armLiveTarget({
+      algo,
+      open,
+      target: vs.targetPrice,
+      mark: live || chainMark || open.ltp,
+      mode,
+    });
+  }
+  const adapter =
+    mode === "live"
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) =>
+            queueLiveAlgoOrder({
+              ...payload,
+              strategy: realStrategyName(payload.strategy) || algo.name,
+              brokerId: algo.brokerId || "dhan",
+            }),
+          squareOff,
+        })
+      : PaperTradingAdapter({ placeOrder, squareOff });
+  const beforeBar = Number(vs.lastEntryBarTime || 0);
+  Test1Strategy.tick({
+    algo,
+    config,
+    now,
+    feedLive: Boolean(feedLive),
+    minutesToClose: session.open ? minutesUntilIst(15 * 60 + 30, new Date(now)) : 0,
+    ceBars: vs.ceBars,
+    peBars: vs.peBars,
+    spot,
+    step: und.step,
+    expiry,
+    ceLtp,
+    peLtp,
+    ceSecurityId,
+    peSecurityId,
+    positions,
+    orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
+    adapter,
+    targetResting,
+  });
+  if (Number(vs.lastEntryBarTime || 0) !== beforeBar) persistAlgos();
 }
 
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
@@ -1534,7 +1627,7 @@ function resolveCrudeFirstCandleTrade(algo) {
 export function resolveAlgoTrade(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return resolveHedgeAlgoTrade(algo);
   if (isCrudeFirstCandleAlgo(algo)) return resolveCrudeFirstCandleTrade(algo);
-  if (isNiftyOptionEngineAlgo(algo)) {
+  if (isNiftyTest1Algo(algo) || isNiftyOptionEngineAlgo(algo)) {
     const symbol = "NIFTY";
     const und = getUnderlying(symbol);
     const pack = chainForSymbol(symbol);
@@ -1553,6 +1646,7 @@ export function resolveAlgoTrade(algo) {
     const weeklyCard =
       isNiftyVwapReversalAlgo(algo) ||
       isNiftyVwapHedgeAlgo(algo) ||
+      isNiftyTest1Algo(algo) ||
       (isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly");
     const expiry = weeklyCard
       ? nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
@@ -2597,6 +2691,10 @@ function runPaperAlgos() {
       tickNiftyVwapHedgeAlgo(algo, "paper", feedLive);
       continue;
     }
+    if (isNiftyTest1Algo(algo)) {
+      tickNiftyTest1Algo(algo, "paper", feedLive);
+      continue;
+    }
     if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
       tickNiftyVwapAlgo(algo, "paper", feedLive);
       continue;
@@ -2664,6 +2762,10 @@ function runLiveAlgos() {
     if (!algo.enabled || algo.runMode !== "live") continue;
     if (isNiftyVwapHedgeAlgo(algo)) {
       tickNiftyVwapHedgeAlgo(algo, "live", feedLive);
+      continue;
+    }
+    if (isNiftyTest1Algo(algo)) {
+      tickNiftyTest1Algo(algo, "live", feedLive);
       continue;
     }
     if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {

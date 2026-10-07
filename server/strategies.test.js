@@ -66,8 +66,8 @@ test("mappedClientIdsForMembers keeps only clients that still exist", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 2);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12");
+  assert.equal(next.algos.length, 3);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12,a13");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -78,7 +78,8 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a12"), false);
   assert.equal(next.algos.some((row) => row.name === "CRUDE OIL 5m first candle"), false);
   assert.deepEqual(next.removedIds, ["a12"]);
-  assert.equal(next.algos.length, 1);
+  assert.equal(next.algos.length, 2);
+  assert.equal(next.algos.some((row) => row.id === "a13"), true);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
@@ -130,6 +131,7 @@ test("hydrate drops retired strategies and records them as removed", () => {
   }
   assert.equal(next.algos.some((row) => row.id === "a10"), true);
   assert.equal(next.algos.some((row) => row.id === "a12"), true);
+  assert.equal(next.algos.some((row) => row.id === "a13"), true);
 });
 
 test("seed includes paused CRUDE OIL option strategies", () => {
@@ -168,6 +170,16 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(crudeFirst.endTimeIst, "23:15");
   assert.equal(crudeFirst.maxTradesPerDay, 5);
   assert.notEqual(crudeFirst.kind, firstCandle.kind);
+  const test1 = seeded.find((row) => row.id === "a13");
+  assert.equal(test1.name, "TEST1");
+  assert.equal(test1.kind, "nifty-test1");
+  assert.equal(test1.enabled, false);
+  assert.equal(test1.status, "PAUSED");
+  assert.equal(test1.timeframe, "5m");
+  assert.equal(test1.strikeOffset, 0);
+  assert.equal(test1.startTimeIst, "09:30");
+  assert.equal(test1.minBodyPct, 0.9);
+  assert.equal(test1.maxWickPct, 0.1);
 });
 
 test("crude oil 5m name stays crude and does not become the nifty first candle", () => {

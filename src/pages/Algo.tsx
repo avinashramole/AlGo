@@ -15,6 +15,7 @@ import {
   isNiftyFirstCandleKind,
   niftyFirstCandleTrail,
   isNiftyTestKind,
+  isNiftyTest1Kind,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
@@ -66,6 +67,15 @@ function kindMeta(algo: AlgoStrategy) {
       kind: "nifty-vwap-reversal" as const,
       category: "SYSTEMATIC NIFTY 15M",
       config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · daily LIVE 09:20 IST`,
+    };
+  }
+  if (isNiftyTest1Kind(algo)) {
+    const body = Math.round((Number(algo.minBodyPct) || 0.9) * 100);
+    const wick = Math.round((Number(algo.maxWickPct) || 0.1) * 100);
+    return {
+      kind: "nifty-test1" as const,
+      category: "TEST1 NIFTY ATM 5M",
+      config: `ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · one order per 5m`,
     };
   }
   if (isNiftyTestKind(algo)) {
@@ -151,7 +161,7 @@ export function Algo() {
     if (filter === "all") return true;
     if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL" || isCrudeFirstCandleKind(algo);
     if (isCrudeFirstCandleKind(algo)) return false;
-    return isNiftyFirstCandleKind(algo);
+    return isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo);
   }) as AlgoStrategy[];
 
   const openAdd = () => {
@@ -476,7 +486,7 @@ function AlgoCard({
       ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
         ? algo.lastSignal
         : "No signal"
-    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo)
+    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo)
       ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
   const status = statusLabel(algo);
