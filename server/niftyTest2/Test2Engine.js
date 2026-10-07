@@ -1,4 +1,5 @@
-import { isWeeklyOptionExpiry } from "../optionChain.js";
+import { buildSyntheticChain, isWeeklyOptionExpiry } from "../optionChain.js";
+import { optionLtpAt } from "../niftyOptionHistory.js";
 import { hmToMinutes, istWallTime } from "../niftyVwap/VwapSignalEngine.js";
 import { niftyTest2Config } from "../niftyVwap/config.js";
 
@@ -18,6 +19,26 @@ function dayKey(time) {
 function minutesOf(time) {
   const wall = istWallTime(time);
   return wall.hour * 60 + wall.minute;
+}
+
+function round2(value) {
+  return Number((Number(value) || 0).toFixed(2));
+}
+
+function storedPremium(time, strike, option) {
+  if (!(Number(time) > 0) || !(Number(strike) > 0)) return null;
+  const px = optionLtpAt({ symbol: "NIFTY", time: Number(time), strike: Number(strike), side: option });
+  return Number(px) > 0 ? Number(px) : null;
+}
+
+/** NSE NIFTY option lot on a session day (one lot per combo). */
+export function niftyLotOn(ymd = "") {
+  const day = String(ymd || "").slice(0, 10);
+  if (day >= "2024-10-31") return 65;
+  if (day >= "2024-07-25") return 25;
+  if (day >= "2021-10-29") return 50;
+  if (day >= "2015-01-01") return 75;
+  return 50;
 }
 
 export function strikeByMinPremium(rows = [], option = "CE", minPremium = 80) {
@@ -130,23 +151,62 @@ function hedgeStopMark(session, side, entryPrem, slPct) {
   return eod <= sl ? sl : eod;
 }
 
-export function replayTest2Day(session, config) {
-  const qty = config.qty;
-  const sell = config.sellPremium;
-  const hedge = config.hedgePremium;
-  const move = (session.close - session.open) / session.open;
-  const sellCeExit = markPremium(sell, move, "CE", "sell");
-  const sellPeExit = markPremium(sell, move, "PE", "sell");
-  const buyCeExit = hedgeStopMark(session, "CE", hedge, config.hedgeSlPct);
-  const buyPeExit = hedgeStopMark(session, "PE", hedge, config.hedgeSlPct);
-  const legs = [
-    { side: "SELL", option: "CE", entry: sell, exit: sellCeExit, qty, pnl: Number(((sell - sellCeExit) * qty).toFixed(2)) },
-    { side: "SELL", option: "PE", entry: sell, exit: sellPeExit, qty, pnl: Number(((sell - sellPeExit) * qty).toFixed(2)) },
-    { side: "BUY", option: "CE", entry: hedge, exit: buyCeExit, qty, pnl: Number(((buyCeExit - hedge) * qty).toFixed(2)) },
-    { side: "BUY", option: "PE", entry: hedge, exit: buyPeExit, qty, pnl: Number(((buyPeExit - hedge) * qty).toFixed(2)) },
+function fallbackLegs(config) {
+  const sell = Number(config.sellPremium) || 80;
+  const hedge = Number(config.hedgePremium) || 20;
+  return [
+    { key: "sellCe", side: "SELL", option: "CE", strike: 0, premium: sell },
+    { key: "sellPe", side: "SELL", option: "PE", strike: 0, premium: sell },
+    { key: "buyCe", side: "BUY", option: "CE", strike: 0, premium: hedge },
+    { key: "buyPe", side: "BUY", option: "PE", strike: 0, premium: hedge },
   ];
-  const pnl = Number(legs.reduce((sum, row) => sum + row.pnl, 0).toFixed(2));
-  return { day: session.day, pnl, legs };
+}
+
+export function replayTest2Day(session, config) {
+  const lots = Math.max(1, Math.round(Number(config.lots) || 1));
+  const qty = lots * niftyLotOn(session.day);
+  const rows = buildSyntheticChain(session.open, 50, 16);
+  const picked = pickCombo({
+    monthlyRows: rows,
+    weeklyRows: rows,
+    sellPremium: config.sellPremium,
+    hedgePremium: config.hedgePremium,
+  });
+  const template = picked?.legs?.length === 4 ? picked.legs : fallbackLegs(config);
+  const entryTime = Number(session.bars?.[0]?.time || 0);
+  const exitTime = Number(session.bars?.[session.bars.length - 1]?.time || 0);
+  const move = (session.close - session.open) / session.open;
+  let usedStored = 0;
+  const legs = template.map((leg) => {
+    const synthEntry = Number(leg.premium);
+    const fromTape = storedPremium(entryTime, leg.strike, leg.option);
+    const entry = fromTape ?? synthEntry;
+    if (fromTape != null) usedStored += 1;
+    const tapedExit = storedPremium(exitTime, leg.strike, leg.option);
+    let exit;
+    if (tapedExit != null) {
+      exit = tapedExit;
+      usedStored += 1;
+    } else if (leg.side === "BUY") {
+      exit = hedgeStopMark(session, leg.option, entry, config.hedgeSlPct);
+    } else {
+      exit = markPremium(entry, move, leg.option, "sell");
+    }
+    const pnl =
+      leg.side === "SELL" ? round2((entry - exit) * qty) : round2((exit - entry) * qty);
+    return {
+      key: leg.key,
+      side: leg.side,
+      option: leg.option,
+      strike: Number(leg.strike) || 0,
+      entry,
+      exit,
+      qty,
+      pnl,
+    };
+  });
+  const pnl = round2(legs.reduce((sum, row) => sum + row.pnl, 0));
+  return { day: session.day, pnl, legs, qty, usedStored };
 }
 
 function holdOvernight(entry, exit) {
@@ -165,26 +225,91 @@ function holdOvernight(entry, exit) {
   };
 }
 
+function comboStats(pnls, equity, maxDrawdown) {
+  const n = pnls.length;
+  const winPnls = pnls.filter((value) => value > 0);
+  const lossPnls = pnls.filter((value) => value < 0);
+  const avgProfit = n ? equity / n : 0;
+  const avgWin = winPnls.length ? winPnls.reduce((sum, value) => sum + value, 0) / winPnls.length : 0;
+  const avgLoss = lossPnls.length ? lossPnls.reduce((sum, value) => sum + value, 0) / lossPnls.length : 0;
+  const maxProfit = n ? Math.max(...pnls) : 0;
+  const maxLoss = n ? Math.min(...pnls) : 0;
+  const rewardRisk = avgLoss ? Math.abs(avgWin / avgLoss) : 0;
+  const returnDd = maxDrawdown < 0 ? equity / Math.abs(maxDrawdown) : 0;
+  let winStreak = 0;
+  let loseStreak = 0;
+  let maxWinStreak = 0;
+  let maxLoseStreak = 0;
+  for (const value of pnls) {
+    if (value > 0) {
+      winStreak += 1;
+      loseStreak = 0;
+      maxWinStreak = Math.max(maxWinStreak, winStreak);
+    } else if (value < 0) {
+      loseStreak += 1;
+      winStreak = 0;
+      maxLoseStreak = Math.max(maxLoseStreak, loseStreak);
+    } else {
+      winStreak = 0;
+      loseStreak = 0;
+    }
+  }
+  return {
+    avgProfit: round2(avgProfit),
+    avgWin: round2(avgWin),
+    avgLoss: round2(avgLoss),
+    maxProfit: round2(maxProfit),
+    maxLoss: round2(maxLoss),
+    maxWinStreak,
+    maxLoseStreak,
+    expectancy: round2(avgProfit),
+    rewardRisk: Number(rewardRisk.toFixed(2)),
+    returnDd: Number(returnDd.toFixed(2)),
+  };
+}
+
 export function runTest2Backtest(algo, candles = []) {
   const config = niftyTest2Config(algo);
   const sessions = sessionDays(candles, config.startTimeIst, config.endTimeIst);
   const trades = [];
+  const legsBook = [];
+  const pnls = [];
   let equity = 0;
   let peak = 0;
   let maxDrawdown = 0;
-  let comboWins = 0;
-  let combos = 0;
+  let maxDdFrom = "";
+  let maxDdTo = "";
+  let inDrawdown = false;
+  let ddStart = "";
+  let ddTrades = 0;
+  let maxTradesInDd = 0;
+  let storedMarks = 0;
+  let totalMarks = 0;
   const overnight = config.holdStyle === "btst";
   const last = overnight ? sessions.length - 1 : sessions.length;
   for (let i = 0; i < last; i += 1) {
     const session = overnight ? holdOvernight(sessions[i], sessions[i + 1]) : sessions[i];
     if (!session) continue;
     const combo = replayTest2Day(session, config);
-    combos += 1;
-    if (combo.pnl > 0) comboWins += 1;
+    if (!combo) continue;
+    storedMarks += Number(combo.usedStored) || 0;
+    totalMarks += combo.legs.length * 2;
+    const netCredit = round2(combo.legs.reduce((sum, leg) => sum + (leg.side === "SELL" ? leg.entry : -leg.entry), 0));
+    const netExit = round2(combo.legs.reduce((sum, leg) => sum + (leg.side === "SELL" ? leg.exit : -leg.exit), 0));
+    trades.push({
+      side: "COMBO",
+      symbol: "NIFTY 4-leg",
+      entry: netCredit,
+      exit: netExit,
+      qty: combo.qty,
+      pnl: combo.pnl,
+      bars: overnight ? 2 : 1,
+      day: combo.day,
+    });
     for (const leg of combo.legs) {
-      trades.push({
+      legsBook.push({
         side: `${leg.side} ${leg.option}`,
+        symbol: leg.strike ? `NIFTY ${leg.strike} ${leg.option}` : `${leg.side} ${leg.option}`,
         entry: leg.entry,
         exit: leg.exit,
         qty: leg.qty,
@@ -193,29 +318,60 @@ export function runTest2Backtest(algo, candles = []) {
         day: combo.day,
       });
     }
+    pnls.push(combo.pnl);
     equity += combo.pnl;
-    peak = Math.max(peak, equity);
-    maxDrawdown = Math.min(maxDrawdown, equity - peak);
+    if (equity >= peak) {
+      peak = equity;
+      if (inDrawdown) maxTradesInDd = Math.max(maxTradesInDd, ddTrades);
+      inDrawdown = false;
+      ddTrades = 0;
+    } else {
+      if (!inDrawdown) {
+        inDrawdown = true;
+        ddStart = combo.day;
+        ddTrades = 1;
+      } else {
+        ddTrades += 1;
+      }
+      const draw = equity - peak;
+      if (draw <= maxDrawdown) {
+        maxDrawdown = draw;
+        maxDdFrom = ddStart;
+        maxDdTo = combo.day;
+        maxTradesInDd = Math.max(maxTradesInDd, ddTrades);
+      }
+    }
   }
-  const wins = trades.filter((row) => row.pnl > 0).length;
+  if (inDrawdown) maxTradesInDd = Math.max(maxTradesInDd, ddTrades);
+  const wins = pnls.filter((value) => value > 0).length;
+  const stats = comboStats(pnls, equity, maxDrawdown);
+  const optionSource = !storedMarks ? "synth" : storedMarks >= totalMarks ? "stored" : "mixed";
   return {
     trades: trades.length,
-    combos,
-    comboWins,
+    combos: trades.length,
+    comboWins: wins,
     wins,
     losses: trades.length - wins,
     winRate: trades.length ? Number(((wins / trades.length) * 100).toFixed(1)) : 0,
-    comboWinRate: combos ? Number(((comboWins / combos) * 100).toFixed(1)) : 0,
-    pnl: Number(equity.toFixed(2)),
-    maxDrawdown: Number(maxDrawdown.toFixed(2)),
-    optionSource: "synth",
+    comboWinRate: trades.length ? Number(((wins / trades.length) * 100).toFixed(1)) : 0,
+    pnl: round2(equity),
+    maxDrawdown: round2(maxDrawdown),
+    maxDdFrom,
+    maxDdTo,
+    maxTradesInDd,
+    legs: legsBook.length,
+    optionSource,
     holdStyle: config.holdStyle,
+    lotNote: "historical NIFTY lot 75→50→25→65",
     tradesBook: trades,
+    legsBook,
     book: trades.slice(-80),
+    ...stats,
   };
 }
 
 export const Test2Engine = {
+  niftyLotOn,
   strikeByMinPremium,
   pickCombo,
   monthlyExpiry,

@@ -658,6 +658,7 @@ export function AlgoScreen() {
               Backtest {backtestRangeLabel(algo.lastBacktest)}
               {backtestRangeLabel(algo.lastBacktest) ? " · " : ""}
               {algo.lastBacktest.trades} trades · WR {algo.lastBacktest.winRate}% · {formatInr(algo.lastBacktest.pnl || 0)}
+              {algo.lastBacktest.avgProfit != null ? ` · avg ${formatInr(algo.lastBacktest.avgProfit)}` : ""}
               {algo.lastBacktest.sample ? " · sample" : ""}
             </Text>
           ) : null}

@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildSyntheticChain } from "../optionChain.js";
 import { defaultNiftyTest2Algo, isNiftyTest2Algo, niftyTest2Config } from "../niftyVwap/config.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
-import { pickCombo, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
+import { niftyLotOn, pickCombo, replayTest2Day, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
 import { Test2Strategy } from "./Test2Strategy.js";
 
 const T0935 = Date.parse("2026-10-07T04:05:00.000Z");
@@ -182,7 +182,19 @@ test("TEST2 intraday squares off the same day at 15:15", () => {
   assert.equal(closes.every((row) => row.product === "MIS"), true);
 });
 
-test("TEST2 backtest walks each session day", () => {
+test("NIFTY lot follows the NSE schedule", () => {
+  assert.equal(niftyLotOn("2014-12-31"), 50);
+  assert.equal(niftyLotOn("2015-01-01"), 75);
+  assert.equal(niftyLotOn("2021-10-28"), 75);
+  assert.equal(niftyLotOn("2021-10-29"), 50);
+  assert.equal(niftyLotOn("2024-07-24"), 50);
+  assert.equal(niftyLotOn("2024-07-25"), 25);
+  assert.equal(niftyLotOn("2024-10-30"), 25);
+  assert.equal(niftyLotOn("2024-10-31"), 65);
+  assert.equal(niftyLotOn("2026-09-01"), 65);
+});
+
+test("TEST2 backtest counts one combo as one trade", () => {
   const algo = defaultNiftyTest2Algo();
   const day = Date.parse("2026-09-01T04:05:00.000Z");
   const candles = Array.from({ length: 10 }, (_, i) => ({
@@ -196,14 +208,42 @@ test("TEST2 backtest walks each session day", () => {
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.holdStyle, "btst");
   assert.equal(result.combos, 9);
-  assert.equal(result.trades, 36);
+  assert.equal(result.trades, 9);
+  assert.equal(result.legs, 36);
+  assert.equal(result.trades, result.combos);
+  assert.equal(result.winRate, result.comboWinRate);
+  assert.equal(result.tradesBook.every((row) => row.side === "COMBO"), true);
+  assert.equal(Number.isFinite(result.avgProfit), true);
+  assert.equal(Number.isFinite(result.rewardRisk), true);
   const intra = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), candles);
   assert.equal(intra.holdStyle, "intraday");
   assert.equal(intra.combos, 10);
-  assert.equal(intra.trades, 40);
+  assert.equal(intra.trades, 10);
+  assert.equal(intra.legs, 40);
   assert.equal(Number(result.winRate) > 0, true);
   assert.equal(Number.isFinite(result.pnl), true);
   assert.equal(niftyTest2Config(algo).sellPremium, 80);
+});
+
+test("TEST2 replay picks chain premiums, not a flat 80/20 fill", () => {
+  const session = {
+    day: "2026-09-01",
+    open: 24500,
+    close: 24540,
+    high: 24580,
+    low: 24420,
+    bars: [{ time: Date.parse("2026-09-01T04:05:00.000Z"), open: 24500, high: 24580, low: 24420, close: 24540 }],
+  };
+  const combo = replayTest2Day(session, niftyTest2Config(defaultNiftyTest2Algo()));
+  assert.equal(combo.legs.length, 4);
+  assert.equal(combo.qty, 65);
+  assert.equal(combo.legs[0].entry >= 80, true);
+  assert.equal(combo.legs[2].entry >= 20, true);
+  assert.notEqual(combo.legs[0].entry, 80);
+  const oldLot = replayTest2Day({ ...session, day: "2021-10-20", open: 17500, close: 17540 }, niftyTest2Config(defaultNiftyTest2Algo()));
+  assert.equal(oldLot.qty, 75);
+  const midLot = replayTest2Day({ ...session, day: "2024-08-01" }, niftyTest2Config(defaultNiftyTest2Algo()));
+  assert.equal(midLot.qty, 25);
 });
 
 test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
@@ -229,7 +269,8 @@ test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
   ];
   const quietBook = runTest2Backtest(algo, quiet);
   assert.equal(quietBook.combos, 1);
-  assert.equal(quietBook.trades, 4);
+  assert.equal(quietBook.trades, 1);
+  assert.equal(quietBook.legs, 4);
   assert.equal(quietBook.pnl > 0, true);
   const trend = [
     { time: open, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
