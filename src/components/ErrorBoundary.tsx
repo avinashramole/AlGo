@@ -5,7 +5,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { message:
   state = { message: "" };
 
   static getDerivedStateFromError(error: Error) {
-    return { message: error.message || "The desk failed to load." };
+    const message = error.message || "The desk failed to load.";
+    if (/ResizeObserver loop/i.test(message)) return { message: "" };
+    return { message };
   }
 
   render() {
