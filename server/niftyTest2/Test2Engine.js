@@ -26,6 +26,13 @@ function round2(value) {
   return Number((Number(value) || 0).toFixed(2));
 }
 
+export function istStamp(ms) {
+  const t = Number(ms);
+  if (!(t > 0)) return "";
+  const wall = istWallTime(t);
+  return `${wall.year}-${pad2(wall.month)}-${pad2(wall.day)} ${pad2(wall.hour)}:${pad2(wall.minute)}`;
+}
+
 function storedPremium(time, strike, option) {
   if (!(Number(time) > 0) || !(Number(strike) > 0)) return null;
   const px = optionLtpAt({ symbol: "NIFTY", time: Number(time), strike: Number(strike), side: option });
@@ -274,7 +281,7 @@ export function replayTest2Day(session, config, exitSession = null) {
     margin,
     rolling: Boolean(rolling),
   });
-  if (hit) {
+  if (hit?.reason === "overall-target" || hit?.reason === "overall-sl") {
     for (const leg of legs) {
       const mark = Number(hit.marks[leg.key]);
       if (!(mark > 0)) continue;
@@ -284,6 +291,13 @@ export function replayTest2Day(session, config, exitSession = null) {
     pnl = hit.pnl;
     exitReason = hit.reason;
     if (hit.exitDay) exitDay = hit.exitDay;
+  }
+  const closedAt = Number(hit?.reason ? hit.exitTime : exitTime) || Number(exitTime) || 0;
+  for (const leg of legs) {
+    leg.entryTime = Number(entryTime) || 0;
+    leg.exitTime = Number(hit?.exitTimes?.[leg.key] || closedAt);
+    leg.entryAt = istStamp(leg.entryTime);
+    leg.exitAt = istStamp(leg.exitTime);
   }
   return {
     day: session.day,
@@ -296,6 +310,10 @@ export function replayTest2Day(session, config, exitSession = null) {
     margin,
     target: limits.target,
     exitReason,
+    entryTime: Number(entryTime) || 0,
+    exitTime: closedAt,
+    entryAt: istStamp(entryTime),
+    exitAt: istStamp(closedAt),
     source: rolling ? "stored" : "synth",
   };
 }
@@ -351,26 +369,33 @@ function applyHedgeStop(leg, mark, config, locked) {
 
 function walkDailyLimits(legs, { session, config, qty, cost, margin, rolling }) {
   const limits = dailyOverallLimits({ config, margin });
-  if (!(limits.target > 0) && !(limits.sl > 0)) return null;
   const bars = (session.bars || []).map((bar) => ({
     ...bar,
     ymd: dayKey(bar.time) || session.day,
   }));
   const locked = new Map();
+  const exitTimes = {};
+  let last = { marks: {}, exitDay: session.day, exitTime: 0, pnl: 0, exitTimes };
   for (const bar of bars) {
     const marks = {};
+    const t = Number(bar.time) || 0;
     for (const leg of legs) {
+      const wasLocked = locked.has(leg.key);
       marks[leg.key] = applyHedgeStop(leg, markLegAtBar(leg, bar, session.open, rolling), config, locked);
+      if (!wasLocked && locked.has(leg.key) && t > 0) exitTimes[leg.key] = t;
     }
     const mtm = comboPnlFromMarks(legs, marks, qty, cost);
+    last = { marks, exitDay: bar.ymd, exitTime: t, pnl: mtm, exitTimes };
     if (limits.target > 0 && mtm >= limits.target) {
-      return { marks, reason: "overall-target", pnl: mtm, exitDay: bar.ymd, target: limits.target };
+      for (const leg of legs) if (!exitTimes[leg.key]) exitTimes[leg.key] = t;
+      return { ...last, reason: "overall-target", target: limits.target };
     }
     if (limits.sl > 0 && mtm <= -limits.sl) {
-      return { marks, reason: "overall-sl", pnl: mtm, exitDay: bar.ymd, sl: limits.sl };
+      for (const leg of legs) if (!exitTimes[leg.key]) exitTimes[leg.key] = t;
+      return { ...last, reason: "overall-sl", sl: limits.sl };
     }
   }
-  return null;
+  return last.exitTime || Object.keys(exitTimes).length ? { ...last, reason: null } : null;
 }
 
 /** Estimated funds blocked for one TEST2 combo. Not live exchange SPAN. */
@@ -478,6 +503,10 @@ function pushCombo(trades, legsBook, combo, overnight) {
     rom: combo.margin ? Number(((combo.pnl / combo.margin) * 100).toFixed(2)) : 0,
     exitReason: combo.exitReason || "",
     target: Number(combo.target) || 0,
+    entryTime: Number(combo.entryTime) || 0,
+    exitTime: Number(combo.exitTime) || 0,
+    entryAt: combo.entryAt || istStamp(combo.entryTime),
+    exitAt: combo.exitAt || istStamp(combo.exitTime),
     source: combo.source,
   });
   for (const leg of combo.legs) {
@@ -496,6 +525,10 @@ function pushCombo(trades, legsBook, combo, overnight) {
       day: combo.day,
       exitDay: combo.exitDay || combo.day,
       margin: Number(combo.margin) || 0,
+      entryTime: Number(leg.entryTime || combo.entryTime) || 0,
+      exitTime: Number(leg.exitTime || combo.exitTime) || 0,
+      entryAt: leg.entryAt || combo.entryAt || istStamp(leg.entryTime || combo.entryTime),
+      exitAt: leg.exitAt || combo.exitAt || istStamp(leg.exitTime || combo.exitTime),
       source: combo.source,
     });
   }
@@ -682,4 +715,5 @@ export const Test2Engine = {
   runTest2Backtest,
   comboRequiredMargin,
   dailyOverallLimits,
+  istStamp,
 };
