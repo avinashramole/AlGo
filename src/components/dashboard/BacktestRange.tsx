@@ -4,19 +4,35 @@ import { cn } from "../../lib/format";
 
 export const DEFAULT_BACKTEST_YEARS = 10;
 export const MAX_BACKTEST_YEARS = 10;
+export const MONTH_PRESETS = [1, 3, 6] as const;
+export const YEAR_PRESETS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+export type BacktestRangeKind = "month" | "months" | "years" | "custom";
 
 export type BacktestRangePayload = {
-  range: "years" | "custom";
+  range: BacktestRangeKind;
+  months?: number;
   years?: number;
   from?: string;
   to?: string;
 };
 
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
 function localYmd(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+export function monthStartYmd(date = new Date()) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-01`;
+}
+
+export function defaultMonthWindow(date = new Date()) {
+  const to = localYmd(date);
+  const from = monthStartYmd(date);
+  return { from, to };
 }
 
 function clampYears(value: number) {
@@ -25,10 +41,179 @@ function clampYears(value: number) {
   return Math.max(1, Math.min(MAX_BACKTEST_YEARS, n));
 }
 
-function yearsAgoYmd(years = DEFAULT_BACKTEST_YEARS) {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - clampYears(years));
-  return localYmd(date);
+function clampMonths(value: number) {
+  const n = Math.round(Number(value));
+  if (MONTH_PRESETS.includes(n as (typeof MONTH_PRESETS)[number])) return n;
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(12, n));
+}
+
+function shiftMonthsYmd(months: number, date = new Date()) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() - clampMonths(months));
+  return localYmd(next);
+}
+
+function yearsAgoYmd(years = DEFAULT_BACKTEST_YEARS, date = new Date()) {
+  const next = new Date(date);
+  next.setFullYear(next.getFullYear() - clampYears(years));
+  return localYmd(next);
+}
+
+function windowFor(kind: BacktestRangeKind, months: number, years: number, from: string, to: string) {
+  const today = localYmd();
+  if (kind === "custom") return { from, to };
+  if (kind === "months") return { from: shiftMonthsYmd(months), to: today };
+  if (kind === "years") return { from: yearsAgoYmd(years), to: today };
+  return defaultMonthWindow();
+}
+
+function payloadFor(kind: BacktestRangeKind, months: number, years: number, from: string, to: string): BacktestRangePayload {
+  const span = windowFor(kind, months, years, from, to);
+  if (kind === "custom") return { range: "custom", from: span.from, to: span.to };
+  if (kind === "months") return { range: "months", months: clampMonths(months), from: span.from, to: span.to };
+  if (kind === "years") return { range: "years", years: clampYears(years), from: span.from, to: span.to };
+  return { range: "month", from: span.from, to: span.to };
+}
+
+type PeriodState = {
+  kind: BacktestRangeKind;
+  months: number;
+  years: number;
+  from: string;
+  to: string;
+};
+
+function thisMonthState(): PeriodState {
+  const { from, to } = defaultMonthWindow();
+  return { kind: "month", months: 1, years: 1, from, to };
+}
+
+function Chip({
+  label,
+  on,
+  onClick,
+  compact,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border font-semibold",
+        compact ? "px-2 py-1 text-[10px]" : "px-2.5 py-1.5 text-xs",
+        on ? "border-brand-500 bg-brand-500 text-white" : "border-[var(--border)] bg-[var(--bg)] text-[var(--text)]",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PeriodFields({
+  compact,
+  kind,
+  months,
+  years,
+  from,
+  to,
+  onKind,
+  onMonths,
+  onYears,
+  onFrom,
+  onTo,
+}: {
+  compact?: boolean;
+  kind: BacktestRangeKind;
+  months: number;
+  years: number;
+  from: string;
+  to: string;
+  onKind: (kind: BacktestRangeKind) => void;
+  onMonths: (months: number) => void;
+  onYears: (years: number) => void;
+  onFrom: (from: string) => void;
+  onTo: (to: string) => void;
+}) {
+  const span = windowFor(kind, months, years, from, to);
+  return (
+    <div>
+      <div className={cn("flex flex-wrap", compact ? "gap-1" : "gap-1.5")}>
+        <Chip compact={compact} label="This month" on={kind === "month"} onClick={() => onKind("month")} />
+        {MONTH_PRESETS.map((value) => (
+          <Chip
+            key={`m${value}`}
+            compact={compact}
+            label={value === 1 ? "1 month" : `${value} months`}
+            on={kind === "months" && months === value}
+            onClick={() => {
+              onMonths(value);
+              onKind("months");
+            }}
+          />
+        ))}
+        <Chip compact={compact} label="Custom" on={kind === "custom"} onClick={() => onKind("custom")} />
+      </div>
+      <div className={cn("mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500", compact ? "" : "mt-3")}>
+        Years
+      </div>
+      <div className={cn("mt-1 flex flex-wrap", compact ? "gap-1" : "gap-1.5")}>
+        {YEAR_PRESETS.map((value) => (
+          <Chip
+            key={`y${value}`}
+            compact={compact}
+            label={`${value}y`}
+            on={kind === "years" && years === value}
+            onClick={() => {
+              onYears(value);
+              onKind("years");
+            }}
+          />
+        ))}
+      </div>
+      {kind === "custom" ? (
+        <div className={cn("grid grid-cols-2 gap-2", compact ? "mt-2" : "mt-3")}>
+          <label className={cn("font-semibold text-slate-500", compact ? "text-[10px] uppercase" : "text-xs")}>
+            From
+            <input
+              className={cn(
+                "mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 font-semibold",
+                compact ? "h-9 bg-[var(--card)] px-2 text-xs" : "h-10 text-sm",
+              )}
+              type="date"
+              value={from}
+              max={to}
+              onChange={(event) => onFrom(event.target.value)}
+            />
+          </label>
+          <label className={cn("font-semibold text-slate-500", compact ? "text-[10px] uppercase" : "text-xs")}>
+            To
+            <input
+              className={cn(
+                "mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 font-semibold",
+                compact ? "h-9 bg-[var(--card)] px-2 text-xs" : "h-10 text-sm",
+              )}
+              type="date"
+              value={to}
+              min={from}
+              max={localYmd()}
+              onChange={(event) => onTo(event.target.value)}
+            />
+          </label>
+        </div>
+      ) : (
+        <div className={cn("text-slate-400", compact ? "mt-2 text-[10px]" : "mt-3 text-[11px]")}>
+          {span.from} → {span.to}
+          {kind === "month" ? " · current month" : kind === "months" ? ` · last ${months} month${months === 1 ? "" : "s"}` : ` · last ${years} year${years === 1 ? "" : "s"}`}
+        </div>
+      )}
+    </div>
+  );
 }
 
 type Props = {
@@ -42,22 +227,14 @@ type Props = {
 };
 
 export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun }: Props) {
-  const [range, setRange] = useState<"years" | "custom">("years");
-  const [years, setYears] = useState(DEFAULT_BACKTEST_YEARS);
-  const [from, setFrom] = useState(yearsAgoYmd());
-  const [to, setTo] = useState(localYmd());
+  const [state, setState] = useState<PeriodState>(thisMonthState);
 
   useEffect(() => {
     if (!open) return;
-    setRange("years");
-    setYears(DEFAULT_BACKTEST_YEARS);
-    setFrom(yearsAgoYmd(DEFAULT_BACKTEST_YEARS));
-    setTo(localYmd());
+    setState(thisMonthState());
   }, [open]);
 
   if (!open || typeof document === "undefined") return null;
-
-  const yearsValue = clampYears(years);
 
   return createPortal(
     <div
@@ -71,77 +248,25 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
         className="desk-sheet desk-sheet-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="text-lg font-bold">Run backtest</div>
-          <div className="text-xs text-slate-400">{name || "Strategy"} · pick years or dates</div>
+          <div className="text-xs text-slate-400">{name || "Strategy"} · this month, then 1 / 3 / 6 months or years</div>
           <div className="desk-help mt-1 text-[11px] leading-snug text-slate-500">
-            Replay uses the strategy timeframe and runs off the API thread so quotes stay up. Stored Dhan history is reused; a first download for the selected years happens once. Each finished backtest writes a PDF and Excel report on the strategy card.
+            Default is this calendar month through today so a first run stays short. Stored Dhan history is reused. Each finished backtest writes a PDF and Excel report.
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setRange("years")}
-            className={cn(
-              "rounded-xl border px-3 py-3 text-left",
-              range === "years" ? "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--bg)]",
-            )}
-          >
-            <div className="text-sm font-bold">Last years</div>
-            <div className="mt-1 text-[11px] text-slate-400">
-              {yearsAgoYmd(yearsValue)} → {localYmd()}
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRange("custom")}
-            className={cn(
-              "rounded-xl border px-3 py-3 text-left",
-              range === "custom" ? "border-brand-500 bg-brand-50/80 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--bg)]",
-            )}
-          >
-            <div className="text-sm font-bold">Custom dates</div>
-            <div className="mt-1 text-[11px] text-slate-400">Choose from and to</div>
-          </button>
-        </div>
-        {range === "years" ? (
-          <label className="mt-3 block text-xs font-semibold text-slate-500">
-            Years
-            <input
-              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold"
-              type="number"
-              min={1}
-              max={MAX_BACKTEST_YEARS}
-              step={1}
-              value={years}
-              onChange={(event) => setYears(clampYears(Number(event.target.value)))}
-            />
-          </label>
-        ) : (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <label className="text-xs font-semibold text-slate-500">
-              From
-              <input
-                className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold"
-                type="date"
-                value={from}
-                max={to}
-                onChange={(event) => setFrom(event.target.value)}
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              To
-              <input
-                className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold"
-                type="date"
-                value={to}
-                min={from}
-                max={localYmd()}
-                onChange={(event) => setTo(event.target.value)}
-              />
-            </label>
-          </div>
-        )}
+        <PeriodFields
+          kind={state.kind}
+          months={state.months}
+          years={state.years}
+          from={state.from}
+          to={state.to}
+          onKind={(kind) => setState((current) => ({ ...current, kind, ...(kind === "month" ? defaultMonthWindow() : {}) }))}
+          onMonths={(months) => setState((current) => ({ ...current, months, kind: "months" }))}
+          onYears={(years) => setState((current) => ({ ...current, years, kind: "years" }))}
+          onFrom={(from) => setState((current) => ({ ...current, kind: "custom", from }))}
+          onTo={(to) => setState((current) => ({ ...current, kind: "custom", to }))}
+        />
         {error ? <div className="mt-3 text-xs font-semibold text-down">{error}</div> : null}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold">
@@ -150,10 +275,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
           <button
             type="button"
             onClick={() => {
-              setRange("years");
-              setYears(DEFAULT_BACKTEST_YEARS);
-              setFrom(yearsAgoYmd(DEFAULT_BACKTEST_YEARS));
-              setTo(localYmd());
+              setState(thisMonthState());
               onReset?.();
             }}
             title="Clears a stuck backtest lock (same as rm -f /opt/t2s/server/data/backtest.busy)"
@@ -163,10 +285,8 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
           </button>
           <button
             type="button"
-            disabled={busy || (range === "custom" && (!from || !to))}
-            onClick={() =>
-              onRun(range === "custom" ? { range: "custom", from, to } : { range: "years", years: yearsValue })
-            }
+            disabled={busy || (state.kind === "custom" && (!state.from || !state.to))}
+            onClick={() => onRun(payloadFor(state.kind, state.months, state.years, state.from, state.to))}
             className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60"
           >
             {busy ? "Testing..." : "Run backtest"}
@@ -187,82 +307,29 @@ type InlineProps = {
 };
 
 export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: InlineProps) {
-  const [range, setRange] = useState<"years" | "custom">("years");
-  const [years, setYears] = useState(DEFAULT_BACKTEST_YEARS);
-  const [from, setFrom] = useState(yearsAgoYmd());
-  const [to, setTo] = useState(localYmd());
-  const yearsValue = clampYears(years);
+  const [state, setState] = useState<PeriodState>(thisMonthState);
 
   return (
     <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
       <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
       <div className="mt-1 text-[11px] leading-snug text-slate-500">
-        Type how many years to replay, up to 10. Uses stored history when this range is already downloaded.
+        Default is this month ({monthStartYmd()} → {localYmd()}). Then 1 / 3 / 6 months, or pick years.
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => setRange("years")}
-          className={cn(
-            "rounded-lg border px-2 py-2 text-left",
-            range === "years" ? "border-brand-500 bg-white dark:bg-[var(--card)]" : "border-[var(--border)] bg-[var(--bg)]",
-          )}
-        >
-          <div className="text-xs font-bold">Last years</div>
-          <div className="mt-0.5 text-[10px] text-slate-400">
-            {yearsAgoYmd(yearsValue)} → {localYmd()}
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={() => setRange("custom")}
-          className={cn(
-            "rounded-lg border px-2 py-2 text-left",
-            range === "custom" ? "border-brand-500 bg-white dark:bg-[var(--card)]" : "border-[var(--border)] bg-[var(--bg)]",
-          )}
-        >
-          <div className="text-xs font-bold">Custom dates</div>
-          <div className="mt-0.5 text-[10px] text-slate-400">Pick from and to</div>
-        </button>
+      <div className="mt-2">
+        <PeriodFields
+          compact
+          kind={state.kind}
+          months={state.months}
+          years={state.years}
+          from={state.from}
+          to={state.to}
+          onKind={(kind) => setState((current) => ({ ...current, kind, ...(kind === "month" ? defaultMonthWindow() : {}) }))}
+          onMonths={(months) => setState((current) => ({ ...current, months, kind: "months" }))}
+          onYears={(years) => setState((current) => ({ ...current, years, kind: "years" }))}
+          onFrom={(from) => setState((current) => ({ ...current, kind: "custom", from }))}
+          onTo={(to) => setState((current) => ({ ...current, kind: "custom", to }))}
+        />
       </div>
-      {range === "years" ? (
-        <label className="mt-2 block text-[10px] font-semibold uppercase text-slate-500">
-          Years
-          <input
-            className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
-            type="number"
-            min={1}
-            max={MAX_BACKTEST_YEARS}
-            step={1}
-            value={years}
-            onChange={(event) => setYears(clampYears(Number(event.target.value)))}
-          />
-        </label>
-      ) : (
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <label className="text-[10px] font-semibold uppercase text-slate-500">
-            From
-            <input
-              className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
-              type="date"
-              value={from}
-              max={to}
-              onChange={(event) => setFrom(event.target.value)}
-            />
-          </label>
-          <label className="text-[10px] font-semibold uppercase text-slate-500">
-            To
-            <input
-              className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-semibold"
-              type="date"
-              value={to}
-              min={from}
-              max={localYmd()}
-              onChange={(event) => setTo(event.target.value)}
-            />
-          </label>
-        </div>
-      )}
       {error ? <div className="mt-2 text-xs font-semibold text-down">{error}</div> : null}
       <div className="mt-2 grid grid-cols-3 gap-2">
         <button type="button" onClick={onCancel} className="h-9 rounded-lg border border-[var(--border)] text-xs font-semibold">
@@ -271,10 +338,7 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
         <button
           type="button"
           onClick={() => {
-            setRange("years");
-            setYears(DEFAULT_BACKTEST_YEARS);
-            setFrom(yearsAgoYmd(DEFAULT_BACKTEST_YEARS));
-            setTo(localYmd());
+            setState(thisMonthState());
             onReset?.();
           }}
           title="Clears a stuck backtest lock (same as rm -f /opt/t2s/server/data/backtest.busy)"
@@ -284,8 +348,8 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
         </button>
         <button
           type="button"
-          disabled={busy || (range === "custom" && (!from || !to))}
-          onClick={() => onRun(range === "custom" ? { range: "custom", from, to } : { range: "years", years: yearsValue })}
+          disabled={busy || (state.kind === "custom" && (!state.from || !state.to))}
+          onClick={() => onRun(payloadFor(state.kind, state.months, state.years, state.from, state.to))}
           className="h-9 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60"
         >
           {busy ? "Testing..." : "Run backtest"}

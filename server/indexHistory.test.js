@@ -16,7 +16,18 @@ const {
   storedIndexCoverage,
   wipeIndexHistory,
 } = await import("./indexHistory.js");
-const { pickBacktestTimeframe, backtestAlgo, createAlgo, deleteAlgo, clampBacktestYears, resolveBacktestWindow } = await import("./market.js");
+const {
+  pickBacktestTimeframe,
+  backtestAlgo,
+  createAlgo,
+  deleteAlgo,
+  clampBacktestYears,
+  clampBacktestMonths,
+  resolveBacktestWindow,
+  monthStartYmd,
+  ymdIST,
+  backtestWindowLabel,
+} = await import("./market.js");
 
 const T0 = Date.parse("2026-08-21T03:45:00.000Z"); // 09:15 IST
 const MIN = 60 * 1000;
@@ -49,7 +60,7 @@ test("backtest years input defaults to 10 and rejects more than 10 years", () =>
   assert.equal(clampBacktestYears(3), 3);
   assert.equal(clampBacktestYears(99), 10);
   assert.equal(clampBacktestYears(0), 1);
-  const ten = resolveBacktestWindow({});
+  const ten = resolveBacktestWindow({ range: "years" });
   assert.equal(ten.years, 10);
   assert.equal(ten.range, "years");
   assert.equal(ten.error, undefined);
@@ -60,6 +71,25 @@ test("backtest years input defaults to 10 and rejects more than 10 years", () =>
   assert.equal(three.years, 3);
   const tooLong = resolveBacktestWindow({ range: "custom", from: "2010-01-01", to: "2026-10-07" });
   assert.match(String(tooLong.error || ""), /10 years/i);
+});
+
+test("backtest default window is this calendar month through today", () => {
+  const today = ymdIST();
+  const month = resolveBacktestWindow({});
+  assert.equal(month.range, "month");
+  assert.equal(month.from, monthStartYmd(today));
+  assert.equal(month.to, today);
+  assert.equal(month.years, undefined);
+  assert.equal(month.error, undefined);
+  assert.match(backtestWindowLabel(month), /this month/);
+  const threeMonths = resolveBacktestWindow({ range: "months", months: 3 });
+  assert.equal(threeMonths.range, "months");
+  assert.equal(threeMonths.months, 3);
+  assert.equal(clampBacktestMonths(6), 6);
+  assert.equal(clampBacktestMonths(99), 12);
+  const oneDay = resolveBacktestWindow({ range: "custom", from: today, to: today });
+  assert.equal(oneDay.error, undefined);
+  assert.equal(oneDay.days, 1);
 });
 
 test("stored 5m bars aggregate to 15m and a second backtest reuses disk", async () => {

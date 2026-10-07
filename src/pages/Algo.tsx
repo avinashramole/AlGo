@@ -682,9 +682,13 @@ function AlgoCard({
             {algo.lastBacktest.timeframe ? `Replay ${algo.lastBacktest.timeframe}` : ""}
             {algo.lastBacktest.years
               ? ` · last ${algo.lastBacktest.years} year${Number(algo.lastBacktest.years) === 1 ? "" : "s"}`
-              : algo.lastBacktest.from && algo.lastBacktest.to
-                ? ` · ${algo.lastBacktest.from} → ${algo.lastBacktest.to}`
-                : ""}
+              : algo.lastBacktest.months
+                ? ` · last ${algo.lastBacktest.months} month${Number(algo.lastBacktest.months) === 1 ? "" : "s"}`
+                : algo.lastBacktest.range === "month"
+                  ? ` · this month ${algo.lastBacktest.from || ""} → ${algo.lastBacktest.to || ""}`.trim()
+                  : algo.lastBacktest.from && algo.lastBacktest.to
+                    ? ` · ${algo.lastBacktest.from} → ${algo.lastBacktest.to}`
+                    : ""}
             {algo.lastBacktest.reused || algo.lastBacktest.optionHistory?.reused
               ? " · reused stored Dhan rolling days"
               : ""}

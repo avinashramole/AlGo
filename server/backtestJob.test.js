@@ -57,6 +57,16 @@ test("Reset backtest deletes backtest.busy even while a run is marked busy", () 
   assert.equal(fs.existsSync(process.env.T2S_BACKTEST_BUSY_FILE), false);
 });
 
+test("backtest picker defaults to this month and lists month then year presets", () => {
+  const range = fs.readFileSync(new URL("../src/components/dashboard/BacktestRange.tsx", import.meta.url), "utf8");
+  assert.match(range, /This month/);
+  assert.match(range, /MONTH_PRESETS = \[1, 3, 6\]/);
+  assert.match(range, /YEAR_PRESETS = \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10\]/);
+  assert.match(range, /kind: "month"/);
+  assert.match(range, /defaultMonthWindow/);
+  assert.match(range, /1 \/ 3 \/ 6 months/);
+});
+
 test("indicator replay runs in a worker and returns a compact book", async () => {
   const T0 = Date.parse("2026-08-21T03:45:00.000Z");
   const candles = Array.from({ length: 80 }, (_, i) => {

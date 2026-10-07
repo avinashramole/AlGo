@@ -997,7 +997,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             fetchRolling: fetchDhanRollingOption,
             delayMs: 40,
             interval: 15,
-            maxDays: 366,
+            maxDays: Math.min(366, Math.max(2, Number(window.days) || 366)),
             deadlineMs: 150_000,
           });
         } catch (error) {

@@ -163,7 +163,8 @@ function blankDraft(): Draft {
 type RangeDraft = {
   id: string;
   name: string;
-  range: "years" | "custom";
+  range: "month" | "months" | "years" | "custom";
+  months: number;
   years: number;
   from: string;
   to: string;
@@ -171,6 +172,7 @@ type RangeDraft = {
 
 const DEFAULT_BACKTEST_YEARS = 10;
 const MAX_BACKTEST_YEARS = 10;
+const MONTH_PRESETS = [1, 3, 6] as const;
 
 function localYmd(date = new Date()) {
   const y = date.getFullYear();
@@ -179,10 +181,21 @@ function localYmd(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
+function monthStartYmd(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 function clampYears(value: number) {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return DEFAULT_BACKTEST_YEARS;
   return Math.max(1, Math.min(MAX_BACKTEST_YEARS, n));
+}
+
+function clampMonths(value: number) {
+  const n = Math.round(Number(value));
+  if (n === 1 || n === 3 || n === 6) return n;
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(12, n));
 }
 
 function yearsAgoYmd(years = DEFAULT_BACKTEST_YEARS) {
@@ -191,8 +204,19 @@ function yearsAgoYmd(years = DEFAULT_BACKTEST_YEARS) {
   return localYmd(date);
 }
 
-function backtestRangeLabel(row?: { range?: string; years?: number; from?: string; to?: string }) {
+function monthsAgoYmd(months: number) {
+  const date = new Date();
+  date.setMonth(date.getMonth() - clampMonths(months));
+  return localYmd(date);
+}
+
+function backtestRangeLabel(row?: { range?: string; months?: number; years?: number; from?: string; to?: string }) {
   if (!row) return "";
+  if (row.range === "month") return row.from && row.to ? `This month ${row.from} → ${row.to}` : "This month";
+  if (row.range === "months") {
+    const months = clampMonths(Number(row.months) || 1);
+    return row.from && row.to ? `${months}M ${row.from} → ${row.to}` : `Last ${months} month${months === 1 ? "" : "s"}`;
+  }
   const years = clampYears(Number(row.years) || (row.range === "1y" ? 1 : DEFAULT_BACKTEST_YEARS));
   if (row.from && row.to) return `${row.range === "custom" ? "Custom" : `${years}Y`} ${row.from} → ${row.to}`;
   return row.range === "custom" ? "" : `Last ${years} year${years === 1 ? "" : "s"}`;
@@ -560,8 +584,12 @@ export function AlgoScreen() {
       try {
         if (rangeDraft.range === "custom") {
           await backtest(rangeDraft.id, { range: "custom", from: rangeDraft.from, to: rangeDraft.to });
+        } else if (rangeDraft.range === "months") {
+          await backtest(rangeDraft.id, { range: "months", months: clampMonths(rangeDraft.months), from: rangeDraft.from, to: rangeDraft.to });
+        } else if (rangeDraft.range === "month") {
+          await backtest(rangeDraft.id, { range: "month", from: rangeDraft.from, to: rangeDraft.to });
         } else {
-          await backtest(rangeDraft.id, { range: "years", years: clampYears(rangeDraft.years) });
+          await backtest(rangeDraft.id, { range: "years", years: clampYears(rangeDraft.years), from: rangeDraft.from, to: rangeDraft.to });
         }
         setRangeDraft(null);
       } catch (err) {
@@ -573,27 +601,49 @@ export function AlgoScreen() {
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Run backtest</Text>
-        <Text style={styles.muted}>{rangeDraft.name} · last 1–10 years or custom dates</Text>
+        <Text style={styles.muted}>{rangeDraft.name} · this month, 1 / 3 / 6 months, or years</Text>
         <View style={styles.chips}>
-          <Chip label="Last years" on={rangeDraft.range === "years"} onPress={() => setRangeDraft({ ...rangeDraft, range: "years" })} />
-          <Chip label="Custom dates" on={rangeDraft.range === "custom"} onPress={() => setRangeDraft({ ...rangeDraft, range: "custom" })} />
+          <Chip
+            label="This month"
+            on={rangeDraft.range === "month"}
+            onPress={() => setRangeDraft({ ...rangeDraft, range: "month", from: monthStartYmd(), to: localYmd() })}
+          />
+          {MONTH_PRESETS.map((months) => (
+            <Chip
+              key={`m${months}`}
+              label={months === 1 ? "1 month" : `${months} months`}
+              on={rangeDraft.range === "months" && rangeDraft.months === months}
+              onPress={() =>
+                setRangeDraft({ ...rangeDraft, range: "months", months, from: monthsAgoYmd(months), to: localYmd() })
+              }
+            />
+          ))}
+          <Chip label="Years" on={rangeDraft.range === "years"} onPress={() => setRangeDraft({ ...rangeDraft, range: "years", from: yearsAgoYmd(rangeDraft.years), to: localYmd() })} />
+          <Chip label="Custom" on={rangeDraft.range === "custom"} onPress={() => setRangeDraft({ ...rangeDraft, range: "custom" })} />
         </View>
         {rangeDraft.range === "custom" ? (
           <>
             <Field label="From (YYYY-MM-DD)" value={rangeDraft.from} onChange={(from) => setRangeDraft({ ...rangeDraft, from })} />
             <Field label="To (YYYY-MM-DD)" value={rangeDraft.to} onChange={(to) => setRangeDraft({ ...rangeDraft, to })} />
           </>
-        ) : (
+        ) : rangeDraft.range === "years" ? (
           <>
             <Field
               label="Years"
               value={String(rangeDraft.years)}
-              onChange={(value) => setRangeDraft({ ...rangeDraft, years: clampYears(Number(value)) })}
+              onChange={(value) => {
+                const years = clampYears(Number(value));
+                setRangeDraft({ ...rangeDraft, years, from: yearsAgoYmd(years), to: localYmd() });
+              }}
             />
             <Text style={styles.muted}>
               From {yearsAgoYmd(rangeDraft.years)} to {localYmd()}
             </Text>
           </>
+        ) : (
+          <Text style={styles.muted}>
+            From {rangeDraft.from} to {rangeDraft.to}
+          </Text>
         )}
         <Pressable style={styles.cta} onPress={() => void run()} disabled={rangeBusy}>
           <Text style={styles.ctaText}>{rangeBusy ? "Testing..." : "Run backtest"}</Text>
@@ -765,9 +815,10 @@ export function AlgoScreen() {
                 setRangeDraft({
                   id: algo.id,
                   name: algo.name,
-                  range: "years",
-                  years: DEFAULT_BACKTEST_YEARS,
-                  from: yearsAgoYmd(),
+                  range: "month",
+                  months: 1,
+                  years: 1,
+                  from: monthStartYmd(),
                   to: localYmd(),
                 })
               }

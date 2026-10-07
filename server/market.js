@@ -280,44 +280,92 @@ export function shiftYmdYears(ymd, years) {
   return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
 }
 
-export function resolveBacktestWindow(options = {}) {
-  const today = ymdIST();
-  const rangeRaw = String(options.range || "").toLowerCase();
-  const years = clampBacktestYears(options.years ?? (rangeRaw === "1y" || rangeRaw === "year" ? 1 : MAX_BACKTEST_YEARS));
-  const custom =
-    rangeRaw === "custom" ||
-    ((options.from || options.to) && rangeRaw !== "1y" && rangeRaw !== "year" && rangeRaw !== "years");
-  let from;
-  let to;
-  let range;
-  if (custom) {
-    from = String(options.from || "").slice(0, 10);
-    to = String(options.to || today).slice(0, 10);
-    range = "custom";
-    if (!isYmd(from) || !isYmd(to)) {
-      return { error: "Custom backtest needs from and to dates (YYYY-MM-DD)" };
-    }
-  } else {
-    to = today;
-    from = shiftYmdYears(today, years);
-    range = years === 1 ? "1y" : "years";
+export function shiftYmdMonths(ymd, months) {
+  const [year, month, day] = String(ymd).split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1 - Number(months || 0), day));
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+}
+
+export function monthStartYmd(ymd = ymdIST()) {
+  return `${String(ymd).slice(0, 7)}-01`;
+}
+
+export function clampBacktestMonths(value) {
+  const n = Math.round(Number(value));
+  if (n === 1 || n === 3 || n === 6) return n;
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(12, n));
+}
+
+export function backtestWindowLabel(window = {}) {
+  const range = String(window.range || "");
+  if (range === "month" || range === "this-month" || range === "this_month") {
+    return window.from && window.to ? `this month ${window.from} → ${window.to}` : "this month";
   }
+  if (range === "months") {
+    const n = Number(window.months) || 1;
+    return `last ${n} month${n === 1 ? "" : "s"}`;
+  }
+  if (range === "custom" && window.from && window.to) return `${window.from} → ${window.to}`;
+  if (window.years) return `last ${window.years} year${Number(window.years) === 1 ? "" : "s"}`;
+  if (window.from && window.to) return `${window.from} → ${window.to}`;
+  return "this month";
+}
+
+function finishBacktestWindow({ from, to, range, years, months }) {
   const fromMs = Date.parse(`${from}T09:15:00+05:30`);
   const toMs = Date.parse(`${to}T15:30:00+05:30`);
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
     return { error: "Invalid backtest dates" };
   }
-  if (fromMs >= toMs) {
+  if (fromMs > toMs) {
     return { error: "From date must be before to date" };
   }
-  const days = Math.round((toMs - fromMs) / 86_400_000) + 1;
+  const days = Math.max(1, Math.round((toMs - fromMs) / 86_400_000) + 1);
   if (days > MAX_BACKTEST_YEARS * 366 + 2) {
     return { error: `Date range cannot be longer than ${MAX_BACKTEST_YEARS} years` };
   }
-  if (days < 2) {
-    return { error: "Pick at least two calendar days" };
+  return { from, to, range, years, months, days, fromMs, toMs };
+}
+
+export function resolveBacktestWindow(options = {}) {
+  const today = ymdIST();
+  const rangeRaw = String(options.range || "").toLowerCase();
+  const hasFromTo = isYmd(options.from) && isYmd(options.to || today);
+  const hasYears = options.years != null && options.years !== "";
+  const hasMonths = options.months != null && options.months !== "";
+  const named =
+    rangeRaw === "1y" ||
+    rangeRaw === "year" ||
+    rangeRaw === "years" ||
+    rangeRaw === "month" ||
+    rangeRaw === "this-month" ||
+    rangeRaw === "this_month" ||
+    rangeRaw === "months" ||
+    rangeRaw === "custom";
+  if (rangeRaw === "custom" || (hasFromTo && !named && !hasYears && !hasMonths)) {
+    const from = String(options.from || "").slice(0, 10);
+    const to = String(options.to || today).slice(0, 10);
+    if (!isYmd(from) || !isYmd(to)) {
+      return { error: "Custom backtest needs from and to dates (YYYY-MM-DD)" };
+    }
+    return finishBacktestWindow({ from, to, range: "custom" });
   }
-  return { from, to, range, years: custom ? undefined : years, days, fromMs, toMs };
+  if (rangeRaw === "months" || (hasMonths && rangeRaw !== "years" && rangeRaw !== "1y" && rangeRaw !== "year")) {
+    const months = clampBacktestMonths(options.months);
+    const from = hasFromTo ? String(options.from).slice(0, 10) : shiftYmdMonths(today, months);
+    const to = hasFromTo ? String(options.to || today).slice(0, 10) : today;
+    return finishBacktestWindow({ from, to, range: "months", months });
+  }
+  if (rangeRaw === "1y" || rangeRaw === "year" || rangeRaw === "years" || hasYears) {
+    const years = clampBacktestYears(options.years ?? (rangeRaw === "1y" || rangeRaw === "year" ? 1 : MAX_BACKTEST_YEARS));
+    const from = hasFromTo ? String(options.from).slice(0, 10) : shiftYmdYears(today, years);
+    const to = hasFromTo ? String(options.to || today).slice(0, 10) : today;
+    return finishBacktestWindow({ from, to, range: years === 1 ? "1y" : "years", years });
+  }
+  const from = hasFromTo ? String(options.from).slice(0, 10) : monthStartYmd(today);
+  const to = hasFromTo ? String(options.to || today).slice(0, 10) : today;
+  return finishBacktestWindow({ from, to, range: "month" });
 }
 
 export function pickBacktestTimeframe(requested, days) {
@@ -2660,6 +2708,7 @@ export async function backtestAlgo(id, options = {}) {
       reused: Boolean(options.reused),
       range: window.range,
       years: window.years,
+      months: window.months,
       from: window.from,
       to: window.to,
       timeframe: "5m",
@@ -2682,7 +2731,7 @@ export async function backtestAlgo(id, options = {}) {
       algo.brokerId = "paper";
     }
     persistAlgos();
-    const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
+    const rangeLabel = backtestWindowLabel(window);
     state.notifications.unshift(
       `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${
         result.storedTrades ? ` · ${result.storedTrades} Dhan rolling days` : ""
@@ -2736,6 +2785,7 @@ export async function backtestAlgo(id, options = {}) {
     reused: Boolean(options.reused),
     range: window.range,
     years: window.years,
+    months: window.months,
     from: niftyVwap ? vwapFrom : window.from,
     to: window.to,
     truncated: niftyVwap && window.from !== vwapFrom ? `${cfg.timeframe} replay last ${cfg.barMinutes >= 15 ? 60 : 25} days` : "",
@@ -2757,7 +2807,7 @@ export async function backtestAlgo(id, options = {}) {
     algo.brokerId = "paper";
   }
   persistAlgos();
-  const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
+  const rangeLabel = backtestWindowLabel(window);
   state.notifications.unshift(
     `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${sample ? " · sample bars" : ""} · PDF/Excel ready`,
   );
