@@ -1016,6 +1016,9 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
           });
           optionHistory.droppedEmpty = droppedEmpty;
           optionHistory.completeDays = completeRollingDays(symbol, window.from, window.to);
+          if (!optionHistory.days && optionHistory.lastError && !optionHistory.error) {
+            optionHistory.error = optionHistory.lastError;
+          }
         } catch (error) {
           optionHistory = {
             error: error.message || "rolling-option-failed",
