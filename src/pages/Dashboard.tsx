@@ -1,13 +1,10 @@
 import { useState } from "react";
-import { ActiveAlgos } from "../components/dashboard/ActiveAlgos";
 import { AISignal } from "../components/dashboard/AISignal";
 import { InstitutionalFlow } from "../components/dashboard/InstitutionalFlow";
 import { MarketDNA } from "../components/dashboard/MarketDNA";
 import { OptionChain } from "../components/dashboard/OptionChain";
-import { Positions } from "../components/dashboard/Positions";
 import { PriceChart } from "../components/dashboard/PriceChart";
 import { RecentSignals } from "../components/dashboard/RecentSignals";
-import { RegisteredUsersCard } from "../components/dashboard/RegisteredUsersCard";
 import { SentimentGauge } from "../components/dashboard/SentimentGauge";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { FuturesTape } from "../components/dashboard/FuturesTape";
@@ -32,14 +29,7 @@ export function Dashboard() {
         <InstitutionalFlow />
         <OptionChain />
       </div>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <ActiveAlgos />
-        <Positions />
-        <div className="space-y-3">
-          <RegisteredUsersCard />
-          <RecentSignals />
-        </div>
-      </div>
+      <RecentSignals />
       <TradeModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
     </div>
   );
