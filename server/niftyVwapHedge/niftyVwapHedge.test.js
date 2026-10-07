@@ -213,6 +213,30 @@ test("combined +5% of starting capital exits every position", () => {
   assert.equal(hedgeState(algo).phase, PHASE.IDLE);
 });
 
+test("a rejected primary does not send the same 15m signal again", () => {
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge Reject Once" });
+  const places = [];
+  const adapter = {
+    place(payload) {
+      places.push(payload);
+      return { status: "REJECTED", error: "DH-906" };
+    },
+    exit() {
+      return {};
+    },
+    cancelPending() {
+      return { ok: true };
+    },
+  };
+  const book = { positions: [], places, adapter };
+  const first = tick(algo, book);
+  assert.equal(first.action, "rejected");
+  assert.equal(places.length, 1);
+  const again = tick(algo, book);
+  assert.equal(again.reason, "duplicate-bar");
+  assert.equal(places.length, 1);
+});
+
 test("duplicate 15m bar does not open a second primary", () => {
   const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge Dup" });
   const book = bookAdapter();

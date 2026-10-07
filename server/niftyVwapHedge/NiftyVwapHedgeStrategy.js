@@ -271,7 +271,7 @@ export const NiftyVwapHedgeStrategy = {
         resetHedgeCycle(state);
         return { action: "exit-primary", reason: "primary-target" };
       }
-      if (!state.hedgeEntered && !hedgePos && dip <= state.hedgeTriggerPrice && !state.inFlight) {
+      if (!state.hedgeEntered && !state.hedgeAttempted && !hedgePos && dip <= state.hedgeTriggerPrice && !state.inFlight) {
         if (totalLots(positions, config.lotSize) + config.hedgeLots > config.maxTotalLots) {
           algo.lastSignal = "MAX 3 LOTS";
           return { action: "skip", reason: "max-lots" };
@@ -415,10 +415,11 @@ export const NiftyVwapHedgeStrategy = {
       locked: Number(state.primaryStrike) > 0 ? { strike: Number(state.primaryStrike), option } : undefined,
     });
     if (!pick.strike) return { action: "wait", reason: "no-atm" };
-    if (state.hedgeEntered) return { action: "skip", reason: "hedge-once" };
+    if (state.hedgeEntered || state.hedgeAttempted) return { action: "skip", reason: "hedge-once" };
     state.inFlight = true;
     state.lastEntryAt = now;
     state.pendingRole = "hedge";
+    state.hedgeAttempted = true;
     const result = input.adapter.place({
       symbol: pick.symbol,
       side: "BUY",

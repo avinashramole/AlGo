@@ -949,7 +949,6 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
     if (isNiftyVwapHedgeAlgo(algo)) noteHedgeBrokerRejection(algo);
     else noteBrokerRejection(algo);
     algo.lastSignal = next.lastSignal;
-    if (!isNiftyVwapHedgeAlgo(algo) && !isCrudeFirstCandleAlgo(algo)) runtimeState(algo).lastEntryBarTime = 0;
     if (isFirstCandleAlgo(algo) && payload.side !== "SELL") dropCountedEntry(algo, live?.orderId);
     return;
   }
@@ -2667,6 +2666,11 @@ function runLiveAlgos() {
       }
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || trade.kind !== "future" || !(trade.ltp > 0)) continue;
+      const signalBar = Number(niftyFuturePreviewBar(algo?.timeframe || "5m", now)?.time || 0);
+      if (signalBar && Number(algo.lastSignalBarTime) === signalBar) {
+        algo.lastSignal = "WAIT NEXT";
+        continue;
+      }
       const queued = queueLiveAlgoOrder({
         ...algoOrderFields(algo, side, trade),
         brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
@@ -2675,6 +2679,7 @@ function runLiveAlgos() {
         algo.lastSignal = "WAIT ORDER";
         continue;
       }
+      if (signalBar) algo.lastSignalBarTime = signalBar;
       algo.lastLiveAt = now;
       algo.lastLiveSide = side;
       algo.lastSignal = side;
@@ -2685,6 +2690,11 @@ function runLiveAlgos() {
     const decision = liveIndicatorSide(algo, pack.candles, now);
     if (!decision.side) {
       algo.lastSignal = decision.lastSignal;
+      continue;
+    }
+    const signalBar = Number(pack.candles?.[pack.candles.length - 1]?.time) || 0;
+    if (signalBar && Number(algo.lastSignalBarTime) === signalBar) {
+      algo.lastSignal = "WAIT NEXT";
       continue;
     }
     const side = decision.side;
@@ -2714,6 +2724,7 @@ function runLiveAlgos() {
       algo.lastSignal = "";
       continue;
     }
+    if (signalBar) algo.lastSignalBarTime = signalBar;
     algo.lastLiveAt = now;
     algo.lastLiveSide = side;
     algo.lastSignal = side;

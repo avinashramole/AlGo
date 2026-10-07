@@ -17,6 +17,7 @@ export function emptyHedgeState() {
     primaryTargetPrice: 0,
     hedgeTriggerPrice: 0,
     hedgeEntered: false,
+    hedgeAttempted: false,
     hedgeSide: "",
     hedgeStrike: 0,
     hedgeEntryPrice: 0,
