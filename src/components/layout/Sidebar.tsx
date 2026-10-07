@@ -2,9 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Bell,
-  BookOpen,
   Building2,
-  ClipboardList,
   Cpu,
   FileText,
   Home,
@@ -31,8 +29,6 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/notifications", label: "Alerts", icon: Bell, member: true },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/algo", label: "Algo", icon: Cpu, admin: true },
-  { to: "/orders", label: "Orders", icon: ClipboardList, admin: true },
-  { to: "/positions", label: "Position", icon: BookOpen, admin: true },
   { to: "/reports", label: "Reports", icon: FileText, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },

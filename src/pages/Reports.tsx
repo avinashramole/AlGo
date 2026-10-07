@@ -1,10 +1,9 @@
-import { Link } from "react-router-dom";
 import { SideBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { cn, formatInr, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 
-export function Reports() {
+export function Reports({ embedded = false }: { embedded?: boolean }) {
   const { data } = useMarket();
   const report = data.report;
   const maxDaily = Math.max(1, ...(report?.daily || []).map((row) => Math.abs(row.pnl)));
@@ -47,19 +46,15 @@ export function Reports() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
+        {embedded ? null : (
         <div>
-          <h1 className="text-xl font-bold">Report</h1>
+          <h1 className="text-xl font-bold">Reports</h1>
           <p className="text-sm text-slate-400">
             {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))}
           </p>
         </div>
+        )}
         <div className="flex items-center gap-3">
-          <Link to="/orders" className="text-sm font-semibold text-brand-500">
-            Order book
-          </Link>
-          <Link to="/positions" className="text-sm font-semibold text-brand-500">
-            Position
-          </Link>
           <button type="button" onClick={download} className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
             Download CSV
           </button>

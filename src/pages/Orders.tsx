@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
@@ -7,7 +6,7 @@ import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyN
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "FAILED", "CANCELLED"] as const;
 
-export function Orders() {
+export function Orders({ embedded = false }: { embedded?: boolean }) {
   const { data, cancel } = useMarket();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("ALL");
   const [busy, setBusy] = useState("");
@@ -35,23 +34,16 @@ export function Orders() {
 
   return (
     <div className="space-y-3">
+      {embedded ? null : (
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Order Book</h1>
+          <h1 className="text-xl font-bold">Reports</h1>
           <p className="text-sm text-slate-400">
             {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))} Price is the Dhan average fill, not the LTP at send.
           </p>
         </div>
-        <div className="flex gap-2 text-sm font-semibold">
-          <Link to="/positions" className="text-brand-500">
-            Position
-          </Link>
-          <span className="text-slate-300">·</span>
-          <Link to="/reports" className="text-brand-500">
-            Report
-          </Link>
-        </div>
       </div>
+      )}
       <div className="grid gap-3 md:grid-cols-4">
         <Stat label="Orders" value={String(orders.length)} />
         <Stat label="Pending" value={String(counts.PENDING + counts.PARTIAL)} />

@@ -142,7 +142,7 @@ function asClosedLiveLedgerPosition(row: {
   };
 }
 
-export function PositionsDesk() {
+export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
   const { data, refresh, closePosition } = useMarket();
   const [desk, setDesk] = useState<PositionsDeskSnapshot>(emptyDesk);
   const [mode, setMode] = useState<ModeFilter>("all");
@@ -280,10 +280,12 @@ export function PositionsDesk() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
+        {embedded ? null : (
         <div>
-          <h1 className="text-xl font-bold">Position</h1>
+          <h1 className="text-xl font-bold">Reports</h1>
           <p className="text-sm text-slate-400">Portfolio, master book, and a live ledger for every client</p>
         </div>
+        )}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <ChipGroup>
             <Chip label="All modes" on={mode === "all"} onClick={() => setMode("all")} />
