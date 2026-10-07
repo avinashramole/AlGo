@@ -10,8 +10,6 @@ export const adminNav = [
   { to: "/", label: "Home" },
   { to: "/options", label: "Option Chain" },
   { to: "/algo", label: "Algo" },
-  { to: "/orders", label: "Orders" },
-  { to: "/positions", label: "Position" },
   { to: "/reports", label: "Reports" },
   { to: "/brokers", label: "Brokers" },
   { to: "/analytics", label: "Analytics" },
@@ -37,7 +35,9 @@ const extraTitles = [
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algo" },
-  { to: "/portfolio", label: "Position" },
+  { to: "/orders", label: "Reports" },
+  { to: "/positions", label: "Reports" },
+  { to: "/portfolio", label: "Reports" },
   { to: "/settings/ips", label: "User & IP Manager" },
 ] as const;
 

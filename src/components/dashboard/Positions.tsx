@@ -28,7 +28,7 @@ export function Positions() {
   return (
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <Link to="/positions" className="text-sm font-bold hover:text-brand-500">
+        <Link to="/reports?tab=positions" className="text-sm font-bold hover:text-brand-500">
           Position
         </Link>
         <select

@@ -15,9 +15,7 @@ const Profile = lazyPage(() => import("./pages/Profile"), "Profile");
 const MemberPlans = lazyPage(() => import("./pages/MemberPlans"), "MemberPlans");
 const Options = lazyPage(() => import("./pages/Options"), "Options");
 const Algo = lazyPage(() => import("./pages/Algo"), "Algo");
-const Orders = lazyPage(() => import("./pages/Orders"), "Orders");
-const PositionsDesk = lazyPage(() => import("./pages/PositionsDesk"), "PositionsDesk");
-const Reports = lazyPage(() => import("./pages/Reports"), "Reports");
+const ReportsHub = lazyPage(() => import("./pages/ReportsHub"), "ReportsHub");
 const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
 const UserIpManager = lazyPage(() => import("./pages/UserIpManager"), "UserIpManager");
@@ -70,10 +68,10 @@ export default function App() {
           <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
           <Route path="signals" element={<Navigate to="/algo" replace />} />
           <Route path="algo" element={<AdminOnly><Algo /></AdminOnly>} />
-          <Route path="orders" element={<AdminOnly><Orders /></AdminOnly>} />
-          <Route path="positions" element={<AdminOnly><PositionsDesk /></AdminOnly>} />
-          <Route path="reports" element={<AdminOnly><Reports /></AdminOnly>} />
-          <Route path="portfolio" element={<Navigate to="/positions" replace />} />
+          <Route path="orders" element={<Navigate to="/reports?tab=orders" replace />} />
+          <Route path="positions" element={<Navigate to="/reports?tab=positions" replace />} />
+          <Route path="reports" element={<AdminOnly><ReportsHub /></AdminOnly>} />
+          <Route path="portfolio" element={<Navigate to="/reports?tab=positions" replace />} />
           <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
           <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
           <Route path="users" element={<AdminOnly><UserIpManager /></AdminOnly>} />

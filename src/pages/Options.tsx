@@ -78,7 +78,7 @@ export function Options() {
             sessionOpen ? (
             <>
               BUY/SELL goes to Dhan. Confirm in the{" "}
-              <Link to="/orders" className="underline">
+              <Link to="/reports?tab=orders" className="underline">
                 order book
               </Link>{" "}
               and the Dhan app.
@@ -86,7 +86,7 @@ export function Options() {
             ) : (
             <>
               {sessionHours} is closed. Last Dhan quotes stay on the chain. BUY/SELL is sent to Dhan as an after-market order for next open. Confirm in the{" "}
-              <Link to="/orders" className="underline">
+              <Link to="/reports?tab=orders" className="underline">
                 order book
               </Link>{" "}
               and the Dhan app AMO tab.
