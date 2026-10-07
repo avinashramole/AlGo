@@ -170,8 +170,31 @@ export type AlgoStrategy = {
     overallTargetPct?: number;
     overallTarget?: number;
     targetHits?: number;
-    book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number; margin?: number; rom?: number; exitReason?: string }>;
-    legBook?: Array<{ side: string; option?: string; strike?: number; entry: number; exit: number; qty: number; pnl: number; day?: string }>;
+    book?: Array<{
+      side: string;
+      entry: number;
+      exit: number;
+      qty: number;
+      pnl: number;
+      bars: number;
+      margin?: number;
+      rom?: number;
+      exitReason?: string;
+      entryAt?: string;
+      exitAt?: string;
+    }>;
+    legBook?: Array<{
+      side: string;
+      option?: string;
+      strike?: number;
+      entry: number;
+      exit: number;
+      qty: number;
+      pnl: number;
+      day?: string;
+      entryAt?: string;
+      exitAt?: string;
+    }>;
     legStats?: Array<{
       key?: string;
       label?: string;

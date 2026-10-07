@@ -31,13 +31,26 @@ test("backtest report builds PDF and Excel from the trade book", () => {
     avgMargin: 108000,
     rom: 1.13,
     tradesBook: [
-      { day: "2026-09-01", side: "COMBO", symbol: "NIFTY 4-leg", entry: 160, exit: 140, qty: 65, pnl: 1220, margin: 108000, rom: 1.13, bars: 2 },
+      {
+        day: "2026-09-01",
+        side: "COMBO",
+        symbol: "NIFTY 4-leg",
+        entry: 160,
+        exit: 140,
+        qty: 65,
+        pnl: 1220,
+        margin: 108000,
+        rom: 1.13,
+        bars: 2,
+        entryAt: "2026-09-01 09:35",
+        exitAt: "2026-09-02 09:35",
+      },
     ],
     legsBook: [
-      { day: "2026-09-01", side: "SELL", option: "CE", strike: 24800, entry: 80, exit: 70, qty: 65, pnl: 650, margin: 108000, bars: 2, key: "sellCe" },
-      { day: "2026-09-01", side: "SELL", option: "PE", strike: 24200, entry: 80, exit: 90, qty: 65, pnl: -650, bars: 2, key: "sellPe" },
-      { day: "2026-09-01", side: "BUY", option: "CE", strike: 24700, entry: 20, exit: 18, qty: 65, pnl: -130, bars: 2, key: "buyCe" },
-      { day: "2026-09-01", side: "BUY", option: "PE", strike: 24300, entry: 20, exit: 40, qty: 65, pnl: 1300, bars: 2, key: "buyPe" },
+      { day: "2026-09-01", side: "SELL", option: "CE", strike: 24800, entry: 80, exit: 70, qty: 65, pnl: 650, margin: 108000, bars: 2, key: "sellCe", entryAt: "2026-09-01 09:35", exitAt: "2026-09-02 09:35" },
+      { day: "2026-09-01", side: "SELL", option: "PE", strike: 24200, entry: 80, exit: 90, qty: 65, pnl: -650, bars: 2, key: "sellPe", entryAt: "2026-09-01 09:35", exitAt: "2026-09-02 09:35" },
+      { day: "2026-09-01", side: "BUY", option: "CE", strike: 24700, entry: 20, exit: 18, qty: 65, pnl: -130, bars: 2, key: "buyCe", entryAt: "2026-09-01 09:35", exitAt: "2026-09-02 09:35" },
+      { day: "2026-09-01", side: "BUY", option: "PE", strike: 24300, entry: 20, exit: 40, qty: 65, pnl: 1300, bars: 2, key: "buyPe", entryAt: "2026-09-01 09:35", exitAt: "2026-09-02 09:35" },
     ],
     legStats: [
       { key: "sellCe", label: "SELL CE", side: "SELL", option: "CE", trades: 1, wins: 1, winRate: 100, pnl: 650, avgProfit: 650 },
@@ -69,6 +82,15 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /Required margin/);
   assert.match(pdf.toString("latin1"), /LEGS/);
   assert.match(pdf.toString("latin1"), /Margin/);
+  assert.match(pdf.toString("latin1"), /Entry time/);
+  assert.match(pdf.toString("latin1"), /Exit time/);
+  assert.match(pdf.toString("latin1"), /2026-09-01 09:35/);
+  assert.match(pdf.toString("latin1"), /2026-09-02 09:35/);
+  assert.match(xml, /Entry time/);
+  assert.match(xml, /Exit time/);
+  assert.match(xml, /2026-09-01 09:35/);
+  assert.equal(saved.legs[0].entryAt, "2026-09-01 09:35");
+  assert.equal(saved.legs[0].exitAt, "2026-09-02 09:35");
   assert.equal(saved.legs[0].margin, 108000);
   assert.equal(saved.summary.from, "2016-10-07");
   assert.equal(saved.summary.to, "2026-10-07");

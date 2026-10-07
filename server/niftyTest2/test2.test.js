@@ -304,6 +304,9 @@ test("TEST2 backtest counts one combo as one trade", () => {
   assert.equal(result.legStats.every((row) => Number.isFinite(row.pnl)), true);
   assert.equal(result.tradesBook.every((row) => Number(row.margin) > 0), true);
   assert.equal(result.legsBook.every((row) => Number(row.margin) > 0), true);
+  assert.equal(result.legsBook.every((row) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(row.entryAt))), true);
+  assert.equal(result.legsBook.every((row) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(row.exitAt))), true);
+  assert.equal(result.tradesBook.every((row) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(row.entryAt))), true);
   assert.equal(Number(result.requiredMargin) > 0, true);
   assert.equal(Number.isFinite(result.rom), true);
   assert.equal(Number.isFinite(result.avgProfit), true);
@@ -330,6 +333,10 @@ test("TEST2 replay picks chain premiums, not a flat 80/20 fill", () => {
   const combo = replayTest2Day(session, niftyTest2Config(defaultNiftyTest2Algo()));
   assert.equal(combo.legs.length, 4);
   assert.equal(combo.qty, 65);
+  assert.match(String(combo.entryAt), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.match(String(combo.exitAt), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.equal(combo.legs.every((leg) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(leg.entryAt))), true);
+  assert.equal(combo.legs.every((leg) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(leg.exitAt))), true);
   assert.equal(combo.legs[0].entry >= 80, true);
   assert.equal(combo.legs[2].entry >= 20, true);
   assert.notEqual(combo.legs[0].entry, 80);
