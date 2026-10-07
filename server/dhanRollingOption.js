@@ -441,6 +441,7 @@ export async function downloadRollingOptionRange({
   let truncated = false;
   const wrote = new Set();
   const labels = wingLabels(wings);
+  let lastError = "";
   for (const chunk of chunkDateRange(start, end)) {
     const need = listYmds(chunk.from, chunk.to).filter((ymd) => (overwrite ? !isWeekendYmd(ymd) : needsRollingFetch(root, ymd)));
     if (!need.length) continue;
@@ -464,7 +465,7 @@ export async function downloadRollingOptionRange({
           try {
             payload = await fetchRolling({
               expiryFlag,
-              expiryCode: 0,
+              expiryCode: 1,
               strike,
               option,
               from: chunk.from,
@@ -474,8 +475,9 @@ export async function downloadRollingOptionRange({
               exchangeSegment: segment,
               instrument: inst,
             });
-          } catch {
+          } catch (error) {
             skipped += 1;
+            lastError = error?.message || String(error || "rolling-option-failed");
           }
           calls += 1;
           if (payload) okCalls += 1;
@@ -514,5 +516,6 @@ export async function downloadRollingOptionRange({
     reused: calls === 0,
     source: wrote.size ? "dhan-rolling" : reusedDays ? "stored" : "none",
     securityId: id,
+    lastError,
   };
 }

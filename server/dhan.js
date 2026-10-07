@@ -1619,7 +1619,7 @@ function intradayInterval(timeframe) {
 
 export async function fetchDhanRollingOption({
   expiryFlag = "WEEK",
-  expiryCode = 0,
+  expiryCode = 1,
   strike = "ATM",
   option = "CE",
   from,
@@ -1633,6 +1633,7 @@ export async function fetchDhanRollingOption({
   const fromDate = dateOnly(from);
   const toDate = dateOnly(to);
   if (!fromDate || !toDate) return null;
+  const code = Number(expiryCode);
   return dhanPost(
     "/charts/rollingoption",
     accessToken,
@@ -1640,10 +1641,10 @@ export async function fetchDhanRollingOption({
     {
       exchangeSegment: String(exchangeSegment || "NSE_FNO"),
       interval: Number(interval) || 15,
-      securityId: Number(securityId) || 13,
+      securityId: String(Number(securityId) || 13),
       instrument: String(instrument || "OPTIDX"),
       expiryFlag: String(expiryFlag || "WEEK").toUpperCase() === "MONTH" ? "MONTH" : "WEEK",
-      expiryCode: Number.isFinite(Number(expiryCode)) ? Number(expiryCode) : 0,
+      expiryCode: code >= 1 && code <= 3 ? code : 1,
       strike: String(strike || "ATM"),
       drvOptionType: option === "PE" || option === "PUT" ? "PUT" : "CALL",
       requiredData: ["open", "high", "low", "close", "volume", "strike", "spot", "oi"],

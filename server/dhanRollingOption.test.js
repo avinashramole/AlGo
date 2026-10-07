@@ -241,6 +241,7 @@ test("BANKNIFTY rolling download uses security id 25 and keeps weekly tape when 
   });
   assert.equal(result.securityId, 25);
   assert.equal(seen.every((row) => row.securityId === 25), true);
+  assert.equal(seen.every((row) => row.expiryCode === 1), true);
   assert.equal(result.days, 1);
   assert.equal(rollingDayStatus("BANKNIFTY", "2026-09-01"), "partial");
   assert.equal(rollingCoverage("BANKNIFTY", "2026-09-01", "2026-09-01"), "synth");
