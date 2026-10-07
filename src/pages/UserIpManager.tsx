@@ -1,11 +1,20 @@
 import { useSearchParams } from "react-router-dom";
+import { MemberEnrollments } from "../components/users/MemberEnrollments";
 import { cn } from "../lib/format";
 import { IpManagement } from "./IpManagement";
 import { Users } from "./Users";
 
+type ManagerTab = "users" | "ips" | "enrollments";
+
+function tabFromParams(value: string | null): ManagerTab {
+  if (value === "ips") return "ips";
+  if (value === "enrollments") return "enrollments";
+  return "users";
+}
+
 export function UserIpManager() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "ips" ? "ips" : "users";
+  const tab = tabFromParams(params.get("tab"));
 
   return (
     <div className="space-y-2">
@@ -26,9 +35,16 @@ export function UserIpManager() {
           >
             IPs
           </button>
+          <button
+            type="button"
+            onClick={() => setParams({ tab: "enrollments" }, { replace: true })}
+            className={cn(tab === "enrollments" ? "bg-navy-900 text-white" : "text-slate-400")}
+          >
+            Enrollments
+          </button>
         </div>
       </div>
-      {tab === "ips" ? <IpManagement embedded /> : <Users embedded />}
+      {tab === "ips" ? <IpManagement embedded /> : tab === "enrollments" ? <MemberEnrollments /> : <Users embedded />}
     </div>
   );
 }
