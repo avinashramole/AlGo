@@ -597,10 +597,10 @@ function AlgoCard({
         <Metric label="Total orders" value={String(filledOrders.length)} hint={filledOrders.length ? "Filled at the broker" : "No filled orders"} />
         <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
         <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />
-        <Metric label="P&L" value={formatInr(bookPnl)} tone={moneyClass(bookPnl)} />
-        <Metric label="Trades" value={String(trades)} />
-        <Metric label="Win rate" value={`${formatNumber(winRate, 1)}%`} />
-        <Metric label="Drawdown" value={rupee(drawdown)} tone={moneyClass(-Math.abs(drawdown))} />
+        <Metric label="Backtest P&L" value={formatInr(bookPnl)} tone={moneyClass(bookPnl)} hint={algo.lastBacktest ? "Replay book, not live MTM" : "Run Backtest to fill this"} />
+        <Metric label="Backtest trades" value={String(trades)} hint={algo.lastBacktest?.combos ? `${algo.lastBacktest.combos} session days · 4 legs each` : "Last replay fills"} />
+        <Metric label="Backtest win rate" value={`${formatNumber(winRate, 1)}%`} hint={algo.lastBacktest?.comboWinRate != null ? `${formatNumber(Number(algo.lastBacktest.comboWinRate), 1)}% of days` : "Winning legs / all legs"} />
+        <Metric label="Backtest drawdown" value={rupee(drawdown)} tone={moneyClass(-Math.abs(drawdown))} hint="Peak-to-trough of the replay equity" />
       </div>
 
       <div className="mt-4 text-xs text-slate-400">
@@ -621,7 +621,7 @@ function AlgoCard({
                     ? "stored Dhan history"
                     : algo.lastBacktest.optionSource === "mixed"
                       ? "stored Dhan history + synth gaps"
-                      : "synthesized from index"
+                      : "synthesized from NIFTY (not AlgoTest tape)"
                 }`
               : ""}
             {algo.lastBacktest.optionHistory?.overwritten?.length

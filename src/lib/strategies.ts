@@ -101,6 +101,9 @@ export type AlgoStrategy = {
     timeframe?: string;
     bars?: number;
     trades?: number;
+    combos?: number;
+    comboWins?: number;
+    comboWinRate?: number;
     wins?: number;
     losses?: number;
     winRate?: number;
