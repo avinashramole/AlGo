@@ -9,7 +9,6 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
-import { completeRollingDays, downloadRollingOptionRange, dropEmptyRollingDays, rollingContract, rollingCoverage, ROLLING_BACKTEST_DEADLINE_MS } from "./dhanRollingOption.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
@@ -987,20 +986,27 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     let optionHistory;
     if (isNiftyTest2Algo(algo)) {
       const symbol = niftyTest2Config(algo).symbol || algo.symbol || "NIFTY";
-      const contract = rollingContract(symbol);
+      const rolling = await import("./dhanRollingOption.js").catch((error) => ({ loadError: error?.message || "rolling-module-failed" }));
+      const contract = typeof rolling.rollingContract === "function" ? rolling.rollingContract(symbol) : { symbol, securityId: 13, exchangeSegment: "NSE_FNO", instrument: "OPTIDX" };
       if (!isDhanLive()) {
         await ensureDhanLiveFromSavedToken();
       }
-      const droppedEmpty = dropEmptyRollingDays(symbol);
-      const coverage = rollingCoverage(symbol, window.from, window.to);
-      const completeBefore = completeRollingDays(symbol, window.from, window.to);
-      if (!contract) {
+      const droppedEmpty = typeof rolling.dropEmptyRollingDays === "function" ? rolling.dropEmptyRollingDays(symbol) : 0;
+      const coverage = typeof rolling.rollingCoverage === "function" ? rolling.rollingCoverage(symbol, window.from, window.to) : "synth";
+      const completeBefore = typeof rolling.completeRollingDays === "function" ? rolling.completeRollingDays(symbol, window.from, window.to) : 0;
+      const deadlineMs = Number(rolling.ROLLING_BACKTEST_DEADLINE_MS) || 480_000;
+      const downloadRange = typeof rolling.downloadRollingOptionRange === "function" ? rolling.downloadRollingOptionRange : null;
+      if (rolling.loadError) {
+        optionHistory = { source: "synth", reused: false, days: 0, error: rolling.loadError };
+      } else if (!contract) {
         optionHistory = { source: coverage, reused: coverage === "stored", days: 0, error: "rolling-not-supported" };
+      } else if (!downloadRange) {
+        optionHistory = { source: coverage, reused: false, days: 0, error: "rolling-download-missing" };
       } else if (!isDhanLive()) {
         optionHistory = { source: coverage, reused: false, days: 0, droppedEmpty, error: "dhan-not-live" };
       } else if (coverage !== "stored" || completeBefore === 0) {
         try {
-          optionHistory = await downloadRollingOptionRange({
+          optionHistory = await downloadRange({
             symbol,
             from: window.from,
             to: window.to,
@@ -1009,13 +1015,13 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             delayMs: 40,
             interval: 15,
             maxDays: Math.min(366, Math.max(2, Number(window.days) || 366)),
-            deadlineMs: ROLLING_BACKTEST_DEADLINE_MS,
+            deadlineMs,
             securityId: contract.securityId,
             exchangeSegment: contract.exchangeSegment,
             instrument: contract.instrument,
           });
           optionHistory.droppedEmpty = droppedEmpty;
-          optionHistory.completeDays = completeRollingDays(symbol, window.from, window.to);
+          optionHistory.completeDays = typeof rolling.completeRollingDays === "function" ? rolling.completeRollingDays(symbol, window.from, window.to) : 0;
           if (!optionHistory.days && optionHistory.lastError && !optionHistory.error) {
             optionHistory.error = optionHistory.lastError;
           }
@@ -1025,7 +1031,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             source: coverage,
             days: 0,
             droppedEmpty,
-            completeDays: completeRollingDays(symbol, window.from, window.to),
+            completeDays: typeof rolling.completeRollingDays === "function" ? rolling.completeRollingDays(symbol, window.from, window.to) : 0,
           };
         }
       } else {
