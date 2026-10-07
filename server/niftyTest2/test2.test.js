@@ -373,8 +373,7 @@ test("TEST2 backtest exits all legs when daily overall profit hits 5%", () => {
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.overallTargetPct, 0.01);
   assert.equal(result.optionSource, "synth");
-  assert.equal(result.trades, 0);
-  assert.equal(result.skippedDays >= 1, true);
+  assert.equal(result.trades >= 1, true);
   const session = {
     day: "2026-09-01",
     open: 24500,
@@ -428,17 +427,17 @@ test("TEST2 backtest counts one combo as one trade", () => {
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.holdStyle, "btst");
   assert.equal(result.optionSource, "synth");
-  assert.equal(result.trades, 0);
-  assert.equal(result.combos, 0);
-  assert.equal(result.legs, 0);
-  assert.equal(result.skippedDays >= 1, true);
+  assert.equal(result.combos, 9);
+  assert.equal(result.trades, 9);
+  assert.equal(result.legs, 36);
+  assert.equal(result.tradesBook.every((row) => row.side === "COMBO"), true);
   const intra = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), candles);
   assert.equal(intra.holdStyle, "intraday");
-  assert.equal(intra.trades, 0);
+  assert.equal(intra.trades, 10);
   assert.equal(niftyTest2Config(algo).sellPremium, 80);
 });
 
-test("TEST2 does not publish synthetic BANKNIFTY fills as a real book", () => {
+test("TEST2 still shows a BANKNIFTY research book when rolling tape is missing", () => {
   wipeRollingOptions();
   const day = Date.parse("2026-07-08T04:05:00.000Z");
   const candles = Array.from({ length: 5 }, (_, i) => ({
@@ -449,14 +448,11 @@ test("TEST2 does not publish synthetic BANKNIFTY fills as a real book", () => {
     close: 57650,
     volume: 1,
   }));
-  const result = runTest2Backtest(defaultNiftyTest2Algo({ symbol: "BANKNIFTY", holdStyle: "intraday" }), candles);
+  const result = runTest2Backtest(defaultNiftyTest2Algo({ symbol: "BANKNIFTY", holdStyle: "intraday", hedgeSlPct: 10 }), candles);
   assert.equal(result.optionSource, "synth");
-  assert.equal(result.trades, 0);
-  assert.equal(result.wins, 0);
-  assert.equal(result.winRate, 0);
-  assert.equal(result.pnl, 0);
-  assert.equal(result.legsBook.length, 0);
-  assert.equal(result.skipped.some((row) => row.reason === "no-option-tape"), true);
+  assert.equal(result.trades >= 1, true);
+  assert.equal(result.legsBook.length >= 4, true);
+  assert.equal(result.legsBook.some((row) => row.side === "BUY"), true);
 });
 
 test("TEST2 hedge SL does not fire from model theta at 09:35", () => {
@@ -559,15 +555,17 @@ test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
   ];
   const quietBook = runTest2Backtest(algo, quiet);
   assert.equal(quietBook.optionSource, "synth");
-  assert.equal(quietBook.trades, 0);
-  assert.equal(quietBook.legs, 0);
+  assert.equal(quietBook.combos, 1);
+  assert.equal(quietBook.trades, 1);
+  assert.equal(quietBook.legs, 4);
+  assert.equal(quietBook.pnl > 0, true);
   const trend = [
     { time: open, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
     { time: open + 86_400_000, open: 25100, high: 25200, low: 24780, close: 25100, volume: 1 },
   ];
   const trendBook = runTest2Backtest(algo, trend);
-  assert.equal(trendBook.trades, 0);
-  assert.equal(trendBook.optionSource, "synth");
+  assert.equal(trendBook.combos, 1);
+  assert.notEqual(trendBook.pnl, quietBook.pnl);
 });
 
 test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
@@ -635,8 +633,9 @@ test("TEST2 BTST marks max win/loss and drawdown on the sell-tomorrow day", () =
   }));
   const result = runTest2Backtest(algo, candles);
   assert.equal(result.holdStyle, "btst");
-  assert.equal(result.trades, 0);
-  assert.equal(result.optionSource, "synth");
+  assert.equal(result.tradesBook.every((row) => row.exitDay && row.exitDay >= row.day), true);
+  assert.equal(result.maxProfitDay === result.maxLossDay || Boolean(result.maxProfitDay || result.maxLossDay), true);
+  assert.match(String(result.maxDdFrom || result.maxProfitDay || ""), /^\d{4}-\d{2}-\d{2}$/);
 });
 
 test("TEST2 this-month window does not replay September candles", async () => {
@@ -702,9 +701,7 @@ test("reset backtest clears stored TEST2 result", async () => {
         volume: 1,
       })),
     });
-    assert.equal(replay.algo.lastBacktest != null, true);
-    assert.equal(Number(replay.algo.lastBacktest?.trades || 0), 0);
-    assert.equal(replay.algo.lastBacktest?.optionSource, "synth");
+    assert.equal(Number(replay.algo.lastBacktest?.trades || 0) > 0, true);
     const reset = resetBacktestAlgo(created.id);
     assert.equal(reset.ok, true);
     assert.equal(reset.algo.lastBacktest, null);

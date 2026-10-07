@@ -2763,7 +2763,11 @@ export async function backtestAlgo(id, options = {}) {
     const rangeLabel = backtestWindowLabel(window);
     state.notifications.unshift(
       `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${
-        result.storedTrades ? ` · ${result.storedTrades} Dhan rolling days` : ""
+        result.storedTrades
+          ? ` · ${result.storedTrades} Dhan rolling days`
+          : result.optionSource === "synth"
+            ? " · research model (no option tape)"
+            : ""
       }${result.skippedDays ? ` · skipped ${result.skippedDays}` : ""} · PDF/Excel ready`,
     );
     return { ok: true, algo: clone(algo), backtest: stored };

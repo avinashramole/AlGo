@@ -748,7 +748,13 @@ function AlgoCard({
         />
       </div>
 
-      {isNiftyTest2Kind(algo) && algo.lastBacktest?.avgProfit != null ? (
+      {isNiftyTest2Kind(algo) && algo.lastBacktest && algo.lastBacktest.optionSource !== "stored" ? (
+        <div className="mt-3 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-test2-synth-banner>
+          No Dhan rolling option tape for {algo.symbol || "this script"}. This backtest still shows a research book from index candles.
+          {Number(algo.lastBacktest.trades || 0) ? ` ${algo.lastBacktest.trades} combos · P&L ${formatInr(Number(algo.lastBacktest.pnl || 0))}.` : " 0 combos."} Not live BANKNIFTY/NIFTY option prints.
+        </div>
+      ) : null}
+      {isNiftyTest2Kind(algo) && algo.lastBacktest ? (
         <div className="metric-well mt-3 grid-cols-2 sm:grid-cols-4">
           <Metric label="Avg / trade" value={formatInr(Number(algo.lastBacktest.avgProfit || 0))} tone={moneyClass(Number(algo.lastBacktest.avgProfit || 0))} hint="After ₹80 combo cost" />
           <Metric label="Avg win" value={formatInr(Number(algo.lastBacktest.avgWin || 0))} tone="text-up" hint="Winning combos only" />
@@ -857,7 +863,7 @@ function AlgoCard({
               <div className="mt-1 text-[11px] leading-snug text-slate-500">
                 {algo.lastBacktest.storedTrades
                   ? `Trusted book: ${algo.lastBacktest.storedTrades} stored Dhan days. Already-downloaded days are reused from disk — only missing weekdays are fetched.`
-                  : "Dhan not connected or no rolling days stored — this win % is a futures model, not live proof. Connect Dhan and run Backtest again."}
+                  : "No Dhan rolling tape — the numbers above are a research model from the index, not live option prints. Connect Dhan and run Backtest again for a trusted book."}
                 {algo.lastBacktest.optionHistory?.truncated ? " Download hit the time cap — run Backtest again to fill more days." : ""}
               </div>
             ) : null}
