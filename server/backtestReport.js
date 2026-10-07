@@ -101,9 +101,55 @@ function legRows(result = {}) {
   return [];
 }
 
+function pdfSafe(text) {
+  return String(text ?? "")
+    .replace(/[·•]/g, " - ")
+    .replace(/≥/g, ">=")
+    .replace(/≤/g, "<=")
+    .replace(/→/g, "->")
+    .replace(/×/g, "x")
+    .replace(/[–—]/g, "-");
+}
+
+function test2Rules(algo = {}, result = {}) {
+  const kind = String(algo.kind || result.kind || "");
+  if (!kind.includes("test2") && !/^TEST2$/i.test(String(algo.name || ""))) return null;
+  const style = result.holdStyle || test2HoldStyle(algo);
+  const enterIst = cell(algo.startTimeIst || "09:35");
+  const endIst = cell(algo.endTimeIst || "15:15");
+  const exitIst = cell(algo.exitTimeIst && algo.exitTimeIst !== "09:35" ? algo.exitTimeIst : "15:15");
+  const squareOffIst = style === "intraday" ? endIst : exitIst;
+  const sellPremium = Number(algo.sellPremium || result.sellPremium || 80);
+  const hedgePremium = Number(algo.hedgePremium || result.hedgePremium || 20);
+  const hedgeSlPct = Number(algo.hedgeSlPct || result.hedgeSlPct || 20);
+  const overallTargetPct = Number(result.overallTargetPct || algo.overallTargetPct || 5);
+  const hold =
+    style === "intraday"
+      ? `NIFTY INTRADAY - enter ${enterIst} IST - square-off ${squareOffIst} IST - MIS same day`
+      : `NIFTY BTST - buy today ${enterIst} IST - sell tomorrow ${squareOffIst} IST - NRML overnight`;
+  return {
+    holdStyle: style,
+    product: style === "intraday" ? "MIS" : "NRML",
+    enterIst,
+    squareOffIst,
+    sellPremium,
+    hedgePremium,
+    hedgeSlPct,
+    overallTargetPct,
+    lines: [
+      `TEST2 - ${hold}`,
+      `SELL 1 monthly CE + PE premium >= ${sellPremium}`,
+      `BUY 1 weekly CE + PE premium >= ${hedgePremium}`,
+      `Hedge SL ${hedgeSlPct}% of buy premium`,
+      `Overall profit +${overallTargetPct}% of required margin exits all 4 legs`,
+    ],
+  };
+}
+
 export function buildBacktestReport(algo = {}, result = {}) {
   const trades = tradeRows(result);
   const holdStyle = result.holdStyle || (String(algo.kind || "").includes("test2") ? test2HoldStyle(algo) : "");
+  const rules = test2Rules(algo, { ...result, holdStyle });
   return {
     generatedAt: result.ranAt || new Date().toISOString(),
     strategy: {
@@ -114,6 +160,7 @@ export function buildBacktestReport(algo = {}, result = {}) {
       holdStyle,
       product: holdStyle === "intraday" ? "MIS" : holdStyle === "btst" ? "NRML" : cell(algo.product || ""),
       summary: cell(algo.summary || ""),
+      rules,
     },
     summary: {
       pnl: Number(result.pnl || 0),
@@ -351,6 +398,17 @@ export function renderBacktestExcel(report) {
     ["Style", report.summary.holdStyle || "—"],
     ["Product", report.strategy.product || "—"],
     ["Symbol", report.strategy.symbol],
+    ...(report.strategy.rules
+      ? [
+          ["Enter IST", report.strategy.rules.enterIst],
+          [report.strategy.rules.holdStyle === "intraday" ? "Square-off IST" : "Sell tomorrow IST", report.strategy.rules.squareOffIst],
+          ["SELL monthly CE+PE premium >=", report.strategy.rules.sellPremium],
+          ["BUY weekly CE+PE premium >=", report.strategy.rules.hedgePremium],
+          ["Hedge SL %", report.strategy.rules.hedgeSlPct],
+          ["Overall profit %", report.strategy.rules.overallTargetPct],
+          ...(report.strategy.rules.lines || []).map((line, i) => [`Rule ${i + 1}`, line]),
+        ]
+      : []),
     ["Start date", report.summary.from],
     ["End date", report.summary.to],
     ["Range", report.summary.years ? `Last ${report.summary.years} year(s)` : report.summary.months ? `Last ${report.summary.months} month(s)` : report.summary.range || ""],
@@ -479,44 +537,46 @@ const PDF_FILL_HEADER = [
 export function renderBacktestPdf(report) {
   const lines = [
     `T2S backtest report  (landscape)`,
-    `${report.strategy.name} · ${report.summary.holdStyle || report.strategy.kind || "strategy"} · Currency Indian Rupee (INR)`,
-    `Product ${report.strategy.product || "—"} · ${report.strategy.symbol} · ${report.summary.timeframe || ""}`,
-    `Start date ${report.summary.from || "—"} · End date ${report.summary.to || "—"}`,
+    `${report.strategy.name} - ${report.summary.holdStyle || report.strategy.kind || "strategy"} - Currency Indian Rupee (INR)`,
+    `Product ${report.strategy.product || "-"} - ${report.strategy.symbol} - ${report.summary.timeframe || ""}`,
+    ...(report.strategy.rules?.lines || []),
+    `Start date ${report.summary.from || "-"} - End date ${report.summary.to || "-"}`,
     `Range ${report.summary.years ? `last ${report.summary.years} year(s)` : report.summary.months ? `last ${report.summary.months} month(s)` : report.summary.range || `${report.summary.from} to ${report.summary.to}`}`,
-    `P&L ${inr(report.summary.pnl)} · Trades ${report.summary.trades} · Win rate ${report.summary.winRate}%`,
-    `Wins ${report.summary.wins} · Losses ${report.summary.losses} · Drawdown ${inr(report.summary.maxDrawdown)}`,
-    report.summary.combos ? `Combos ${report.summary.combos} · Combo win rate ${report.summary.comboWinRate}% · Legs ${report.summary.legs || ""}` : "",
+    `P&L ${inr(report.summary.pnl)} - Trades ${report.summary.trades} - Win rate ${report.summary.winRate}%`,
+    `Wins ${report.summary.wins} - Losses ${report.summary.losses} - Drawdown ${inr(report.summary.maxDrawdown)}`,
+    report.summary.combos ? `Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}` : "",
     report.summary.avgProfit || report.summary.rewardRisk
-      ? `Avg/trade ${inr(report.summary.avgProfit)} · Avg win ${inr(report.summary.avgWin)} · Avg loss ${inr(report.summary.avgLoss)}`
+      ? `Avg/trade ${inr(report.summary.avgProfit)} - Avg win ${inr(report.summary.avgWin)} - Avg loss ${inr(report.summary.avgLoss)}`
       : "",
     report.summary.returnDd || report.summary.rewardRisk
-      ? `Return/DD ${report.summary.returnDd} · R:R ${report.summary.rewardRisk} · Expectancy ${inr(report.summary.expectancy)}`
+      ? `Return/DD ${report.summary.returnDd} - R:R ${report.summary.rewardRisk} - Expectancy ${inr(report.summary.expectancy)}`
       : "",
     report.summary.maxWinStreak || report.summary.maxLoseStreak
-      ? `Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L · Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`
+      ? `Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L - Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`
       : "",
     report.summary.requiredMargin || report.summary.avgMargin
-      ? `Required margin ${inr(report.summary.requiredMargin)} max · avg ${inr(report.summary.avgMargin)} · ROM ${report.summary.rom || 0}%`
+      ? `Required margin ${inr(report.summary.requiredMargin)} max - avg ${inr(report.summary.avgMargin)} - ROM ${report.summary.rom || 0}%`
       : "",
     report.summary.overallTargetPct || report.summary.targetHits
-      ? `Overall profit ${report.summary.overallTargetPct || 5}% of margin · ${report.summary.targetHits || 0} target exits (all 4 legs)`
+      ? `Overall profit ${report.summary.overallTargetPct || 5}% of margin - ${report.summary.targetHits || 0} target exits (all 4 legs)`
       : "",
     ...(Array.isArray(report.legStats) ? report.legStats : []).map(
       (leg) =>
-        `${leg.label || "Leg"} P&L ${inr(leg.pnl)} · ${leg.trades || 0} fills · WR ${leg.winRate || 0}% · avg ${inr(leg.avgProfit)}`,
+        `${leg.label || "Leg"} P&L ${inr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${inr(leg.avgProfit)}`,
     ),
     report.summary.optionSource ? `Premiums ${report.summary.optionSource}` : "",
     `Generated ${report.generatedAt}`,
-    report.strategy.summary,
     "",
     "LEGS",
     PDF_FILL_HEADER,
-  ].filter((line, index, all) => line || all[index - 1]);
+  ]
+    .filter((line, index, all) => line || all[index - 1])
+    .map((line) => pdfSafe(line));
   const fillRows = report.legs?.length ? report.legs : [];
-  for (const row of fillRows) lines.push(pdfFillRow(row));
+  for (const row of fillRows) lines.push(pdfSafe(pdfFillRow(row)));
   if (!fillRows.length) lines.push("No legs in this replay.");
   lines.push("", "COMBOS", PDF_FILL_HEADER);
-  for (const row of report.trades || []) lines.push(pdfFillRow(row));
+  for (const row of report.trades || []) lines.push(pdfSafe(pdfFillRow(row)));
   if (!(report.trades || []).length) lines.push("No combos in this replay.");
 
   const pageW = 842;
