@@ -113,6 +113,55 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.equal(loadBacktestReport("a14", { lastBacktest: null }), null);
 });
 
+test("TEST2 PDF and Excel print enter, square-off, premiums and hedge SL", () => {
+  const algo = {
+    id: "a15",
+    name: "TEST2",
+    kind: "nifty-test2",
+    symbol: "NIFTY",
+    holdStyle: "intraday",
+    startTimeIst: "09:31",
+    endTimeIst: "15:00",
+    sellPremium: 200,
+    hedgePremium: 20,
+    hedgeSlPct: 20,
+    overallTargetPct: 5,
+    summary: "TEST2 · NIFTY INTRADAY · enter 09:31 IST · square-off 15:00 IST · MIS same day · SELL 1 monthly CE + PE premium ≥200 · BUY 1 weekly CE + PE premium ≥20 · hedge SL 20%",
+  };
+  const report = buildBacktestReport(algo, {
+    holdStyle: "intraday",
+    overallTargetPct: 5,
+    from: "2025-10-01",
+    to: "2026-10-01",
+    tradesBook: [],
+    legsBook: [],
+  });
+  assert.equal(report.strategy.rules.enterIst, "09:31");
+  assert.equal(report.strategy.rules.squareOffIst, "15:00");
+  assert.equal(report.strategy.rules.sellPremium, 200);
+  assert.equal(report.strategy.rules.hedgePremium, 20);
+  assert.equal(report.strategy.rules.hedgeSlPct, 20);
+  assert.equal(report.strategy.product, "MIS");
+  const pdf = renderBacktestPdf(report).toString("latin1");
+  assert.match(pdf, /enter 09:31 IST/);
+  assert.match(pdf, /square-off 15:00 IST/);
+  assert.match(pdf, /MIS same day/);
+  assert.match(pdf, /premium >= 200/);
+  assert.match(pdf, /premium >= 20/);
+  assert.match(pdf, /Hedge SL 20%/);
+  assert.equal(pdf.includes("·"), false);
+  assert.equal(pdf.includes("≥"), false);
+  const zip = renderBacktestExcel(report).toString("latin1");
+  assert.match(zip, /Enter IST/);
+  assert.match(zip, /09:31/);
+  assert.match(zip, /Square-off IST/);
+  assert.match(zip, /15:00/);
+  assert.match(zip, /Hedge SL %/);
+  assert.match(zip, /Hedge SL 20% of buy premium/);
+  assert.match(zip, /SELL 1 monthly CE \+ PE premium &gt;= 200/);
+  assert.match(zip, /BUY 1 weekly CE \+ PE premium &gt;= 20/);
+});
+
 test("backtest report falls back to lastBacktest when the file is missing", () => {
   const algo = {
     id: "missing",
