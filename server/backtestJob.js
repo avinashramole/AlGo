@@ -9,7 +9,7 @@ export function backtestBusyFile() {
   return process.env.T2S_BACKTEST_BUSY_FILE || path.join(__dirname, "data", "backtest.busy");
 }
 
-export const BACKTEST_BUSY_MS = 300_000;
+export const BACKTEST_BUSY_MS = 90_000;
 
 export function markBacktestBusy() {
   try {
