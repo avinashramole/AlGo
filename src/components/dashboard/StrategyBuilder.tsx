@@ -158,7 +158,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         style === "intraday"
           ? `NIFTY INTRADAY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · MIS same day`
           : `NIFTY BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "09:35"} IST · NRML overnight`;
-      return `TEST2 · ${hold} · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}%`;
+      return `TEST2 · ${hold} · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}% · overall +${form.overallTargetPct ?? 5}% exits all`;
     }
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
@@ -817,7 +817,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 </label>
               )}
               <NumberField label="Overall SL ₹" value={form.overallSl ?? 30000} step={1000} onChange={(overallSl) => set({ overallSl })} />
-              <NumberField label="Overall target ₹" value={form.overallTarget ?? 15000} step={1000} onChange={(overallTarget) => set({ overallTarget })} />
+              <NumberField label="Overall profit %" value={form.overallTargetPct ?? 5} step={0.5} onChange={(overallTargetPct) => set({ overallTargetPct, overallTarget: 0 })} />
             </div>
           </div>
         ) : niftyTest ? (

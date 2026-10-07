@@ -116,6 +116,9 @@ export function buildBacktestReport(algo = {}, result = {}) {
       avgMargin: Number(result.avgMargin || 0),
       maxMargin: Number(result.maxMargin || 0),
       rom: Number(result.rom || 0),
+      overallTargetPct: Number(result.overallTargetPct || 0),
+      overallTarget: Number(result.overallTarget || 0),
+      targetHits: Number(result.targetHits || 0),
     },
     trades,
     legs: legRows(result),
@@ -201,6 +204,8 @@ export function renderBacktestExcel(report) {
     ["Required margin (max)", money(report.summary.requiredMargin)],
     ["Avg required margin", money(report.summary.avgMargin)],
     ["Return on margin %", report.summary.rom],
+    ["Overall profit %", report.summary.overallTargetPct || 5],
+    ["Overall target exits", report.summary.targetHits],
     ...(Array.isArray(report.legStats) ? report.legStats : []).flatMap((leg) => [
       [`${leg.label || "Leg"} P&L`, money(leg.pnl)],
       [`${leg.label || "Leg"} trades`, leg.trades],
@@ -257,6 +262,9 @@ export function renderBacktestPdf(report) {
       : "",
     report.summary.requiredMargin || report.summary.avgMargin
       ? `Required margin Rs ${money(report.summary.requiredMargin)} max · avg Rs ${money(report.summary.avgMargin)} · ROM ${report.summary.rom || 0}%`
+      : "",
+    report.summary.overallTargetPct || report.summary.targetHits
+      ? `Overall profit ${report.summary.overallTargetPct || 5}% of margin · ${report.summary.targetHits || 0} target exits (all 4 legs)`
       : "",
     ...(Array.isArray(report.legStats) ? report.legStats : []).map(
       (leg) =>

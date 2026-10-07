@@ -308,7 +308,8 @@ export function summarizeAlgo(algo) {
       style === "intraday"
         ? `NIFTY INTRADAY · enter ${start} IST · square-off ${end} IST · MIS same day`
         : `NIFTY BTST · buy today ${start} IST · sell tomorrow ${exit} IST · NRML overnight`;
-    return `TEST2 · ${hold} · SELL 1 monthly CE + PE premium ≥${sell} · BUY 1 weekly CE + PE premium ≥${hedge} · hedge SL ${sl}% · ${size}`;
+    const overall = Number(algo.overallTargetPct) > 0 ? Number(algo.overallTargetPct) : 5;
+    return `TEST2 · ${hold} · SELL 1 monthly CE + PE premium ≥${sell} · BUY 1 weekly CE + PE premium ≥${hedge} · hedge SL ${sl}% · overall +${overall}% of required margin exits all legs · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

@@ -704,6 +704,15 @@ function AlgoCard({
             hint={`Peak combo block · avg ${formatInr(Number(algo.lastBacktest.avgMargin || 0))} · estimate, not live SPAN`}
           />
           <Metric
+            label="Overall profit"
+            value={`${formatNumber(Number(algo.lastBacktest.overallTargetPct || 5), 1)}%`}
+            hint={
+              Number(algo.lastBacktest.targetHits || 0)
+                ? `${algo.lastBacktest.targetHits} combo${Number(algo.lastBacktest.targetHits) === 1 ? "" : "s"} hit daily target · exited all 4 legs`
+                : "Daily 5% of required margin exits all legs"
+            }
+          />
+          <Metric
             label="Return on margin"
             value={`${formatNumber(Number(algo.lastBacktest.rom || 0), 2)}%`}
             hint="Overall P&L ÷ avg required margin"
