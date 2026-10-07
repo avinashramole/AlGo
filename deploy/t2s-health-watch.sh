@@ -21,7 +21,12 @@ if systemctl is-active t2s-login >/dev/null 2>&1; then
   fi
 fi
 
-systemctl is-active t2s >/dev/null 2>&1 || exit 0
+if ! systemctl is-active t2s >/dev/null 2>&1; then
+  echo "t2s is not active — starting API on :4000. LIVE not turned on."
+  systemctl reset-failed t2s || true
+  systemctl start t2s || true
+  exit 0
+fi
 for _try in 1 2 3 4; do
   code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:4000/api/health || echo 000)
   if [ "$code" = "200" ]; then
