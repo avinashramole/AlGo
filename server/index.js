@@ -992,10 +992,10 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             to: window.to,
             overwrite: false,
             fetchRolling: fetchDhanRollingOption,
-            delayMs: 80,
+            delayMs: 40,
             interval: 15,
             maxDays: 366,
-            deadlineMs: 420_000,
+            deadlineMs: 150_000,
           });
         } catch (error) {
           optionHistory = { error: error.message || "rolling-option-failed" };

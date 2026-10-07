@@ -1,6 +1,6 @@
 import { buildSyntheticChain, isWeeklyOptionExpiry } from "../optionChain.js";
 import { optionLtpAt } from "../niftyOptionHistory.js";
-import { rollingChainAt, rollingPath, rollingPremiumAt } from "../dhanRollingOption.js";
+import { preloadRollingDays, rollingChainAt, rollingPath, rollingPremiumAt } from "../dhanRollingOption.js";
 import { hmToMinutes, istWallTime } from "../niftyVwap/VwapSignalEngine.js";
 import { niftyTest2Config } from "../niftyVwap/config.js";
 
@@ -398,6 +398,10 @@ function walkEquity(pnls) {
 export function runTest2Backtest(algo, candles = []) {
   const config = niftyTest2Config(algo);
   const sessions = sessionDays(candles, config.startTimeIst, config.endTimeIst);
+  preloadRollingDays(
+    "NIFTY",
+    sessions.map((row) => row.day),
+  );
   const storedTrades = [];
   const synthTrades = [];
   const legsBook = [];
