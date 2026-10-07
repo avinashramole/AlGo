@@ -64,6 +64,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.equal(saved.summary.holdStyle, "btst");
   assert.equal(saved.summary.avgProfit, -60.25);
   assert.match(renderBacktestPdf(saved).toString("latin1"), /Avg\/trade/);
+  assert.match(renderBacktestPdf(saved).toString("latin1"), /Indian Rupee/);
+  assert.match(renderBacktestPdf(saved).toString("latin1"), /INR/);
+  assert.equal(renderBacktestPdf(saved).toString("latin1").includes(" Rs "), false);
   const loaded = loadBacktestReport("a14", algo);
   assert.equal(loaded.summary.trades, 1);
   const pdf = renderBacktestPdf(loaded);
@@ -82,6 +85,8 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(zip, /2026-09-01 09:35/);
   assert.match(zip, /108000/);
   assert.match(zip, /Required margin/);
+  assert.match(zip, /Indian Rupee/);
+  assert.match(zip, /INR/);
   assert.match(pdf.toString("latin1"), /Required margin/);
   assert.match(pdf.toString("latin1"), /LEGS/);
   assert.match(pdf.toString("latin1"), /Margin/);
