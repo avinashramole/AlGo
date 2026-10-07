@@ -26,6 +26,8 @@ import {
   isNiftyVwapHedgeKind,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
+  NIFTY_FIRST_CANDLE_NAME,
+  CRUDE_FIRST_CANDLE_NAME,
   niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyTest1Kind,
@@ -216,6 +218,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ? {
               ...form,
               id: algo?.id,
+              name: CRUDE_FIRST_CANDLE_NAME,
               kind: "crude-first-candle",
               strategyType: "CRUDE_FIRST_CANDLE_5M",
               indicator: "CRUDE_FIRST_CANDLE",
@@ -233,6 +236,15 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               sellOp: undefined,
               sellRight: undefined,
               sellValue: undefined,
+            }
+          : firstCandle
+          ? {
+              ...form,
+              id: algo?.id,
+              name: NIFTY_FIRST_CANDLE_NAME,
+              kind: "nifty-first-candle",
+              strategyType: "NIFTY_FIRST_CANDLE_5M",
+              indicator: "NIFTY_FIRST_CANDLE",
             }
           : { ...form, id: algo?.id },
       );
@@ -266,13 +278,13 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
           <TypeCard
             active={crudeFirst}
-            title="CRUDE OIL 5m first candle"
+            title="CRUDE OIL"
             text="Checks every completed 5m Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
                 ...next,
-                name: form.name || "CRUDE OIL 5m first candle",
+                name: CRUDE_FIRST_CANDLE_NAME,
                 runMode: form.runMode || "live",
                 brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
                 lots: form.lots || 1,
@@ -301,12 +313,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           />
           <TypeCard
             active={kind === "nifty-first-candle"}
-            title="NIFTY 5m first candle"
+            title="NIFTY"
             text="Every 5m NIFTY FUT candle, up to 5 trades a day. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
-                name: form.name || "NIFTY 5m first candle",
+                name: NIFTY_FIRST_CANDLE_NAME,
                 runMode: form.runMode || "live",
                 brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
                 lots: form.lots || 1,
@@ -340,7 +352,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", editing && "sm:hidden")}>
           Strategy name
-          <input className={fieldClass} value={test1 ? "TEST1" : form.name || ""} onChange={(event) => set({ name: test1 ? "TEST1" : event.target.value })} readOnly={test1} placeholder="My NIFTY VWAP" />
+          <input
+            className={fieldClass}
+            value={test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+            onChange={(event) =>
+              set({
+                name: test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : event.target.value,
+              })
+            }
+            readOnly={test1 || firstCandle || crudeFirst}
+            placeholder="My NIFTY VWAP"
+          />
         </label>
 
         {crudeFirst ? (
@@ -468,7 +490,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           {editing ? (
           <label className="hidden text-xs font-semibold text-slate-500 sm:block">
             Strategy name
-            <input className={fieldClass} value={test1 ? "TEST1" : form.name || ""} onChange={(event) => set({ name: test1 ? "TEST1" : event.target.value })} readOnly={test1} placeholder="My NIFTY VWAP" />
+            <input
+              className={fieldClass}
+              value={test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+              onChange={(event) =>
+                set({
+                  name: test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : event.target.value,
+                })
+              }
+              readOnly={test1 || firstCandle || crudeFirst}
+              placeholder="My NIFTY VWAP"
+            />
           </label>
           ) : null}
           {engine ? null : (
@@ -865,9 +897,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             {hedge || reversal
               ? "NIFTY 15m VWAP hedge and NIFTY 15m VWAP reversal go LIVE automatically at 09:20 IST on session days. Saving this form or restarting t2s does not start LIVE."
               : crudeFirst
-              ? "CRUDE OIL 5m first candle stays off until you press Start strategy. Saving this form or restarting t2s does not start LIVE and does not place an order."
+              ? "CRUDE OIL stays off until you press Start strategy. Saving this form or restarting t2s does not start LIVE and does not place an order."
               : firstCandle
-              ? "NIFTY 5m first candle goes LIVE automatically at 09:00 IST on session days. Saving this form or restarting t2s does not start LIVE."
+              ? "NIFTY goes LIVE automatically at 09:00 IST on session days. Saving this form or restarting t2s does not start LIVE."
               : niftyTest
               ? "nifty test stays off until you press Start strategy. Orders are NIFTY futures. Saving this form does not place orders."
               : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}

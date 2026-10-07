@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyLiveQuotes,
+  createAlgo,
   crudeFuturePreviewBar,
   crudeFutureSignalBars,
   formatLiveFuturePreview,
@@ -11,6 +12,8 @@ import {
   setCrudeFutureChartCandles,
   setLiveCandles,
   setNiftyFutureChartCandles,
+  snapshot,
+  tickMarket,
 } from "./market.js";
 
 const OPEN_0915 = Date.parse("2026-09-29T03:45:00.000Z");
@@ -254,4 +257,40 @@ test("changing the strategy to 15m builds 15-minute candles from 09:00", () => {
   assert.equal(bars[1].open, 114);
   assert.equal(bars[1].close, 118);
   setNiftyFutureChartCandles([]);
+});
+
+test("paused NIFTY and CRUDE OIL always show future candle green or red", () => {
+  const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
+  const now = open0900 + FIVE + 60_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    setNiftyFutureChartCandles([
+      { time: open0900, open: 22600, high: 22680, low: 22590, close: 22670, volume: 20 },
+    ]);
+    setCrudeFutureChartCandles([
+      { time: open0900, open: 6120, high: 6130, low: 6090, close: 6100, volume: 20 },
+    ]);
+    const desk = snapshot();
+    if (!desk.algos.some((row) => row.kind === "nifty-first-candle")) {
+      createAlgo({ name: "NIFTY", kind: "nifty-first-candle", runMode: "live" });
+    }
+    if (!desk.algos.some((row) => row.kind === "crude-first-candle")) {
+      createAlgo({ name: "CRUDE OIL", kind: "crude-first-candle", runMode: "live" });
+    }
+    tickMarket();
+    const after = snapshot();
+    const nifty = after.algos.find((row) => row.kind === "nifty-first-candle");
+    const crude = after.algos.find((row) => row.kind === "crude-first-candle");
+    assert.equal(nifty.name, "NIFTY");
+    assert.equal(crude.name, "CRUDE OIL");
+    assert.equal(nifty.futureColor, "green");
+    assert.equal(crude.futureColor, "red");
+    assert.match(String(nifty.lastSignal || ""), /NIFTY FUT GREEN/);
+    assert.match(String(crude.lastSignal || ""), /CRUDE FUT RED/);
+  } finally {
+    Date.now = realNow;
+    setNiftyFutureChartCandles([]);
+    setCrudeFutureChartCandles([]);
+  }
 });

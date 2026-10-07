@@ -220,16 +220,35 @@ export function strategyForPlacedOrder(payload = {}, algos = []) {
   return canonicalStrategyName(realStrategyName(payload.strategy), algos);
 }
 
+const STRATEGY_NAME_ALIASES = {
+  "nifty 5m first candle": "NIFTY",
+  "nifty 5 m first candle": "NIFTY",
+  nifty: "NIFTY",
+  "crude oil 5m first candle": "CRUDE OIL",
+  "crude oil 5 m first candle": "CRUDE OIL",
+  "crude oil": "CRUDE OIL",
+  crudeoil: "CRUDE OIL",
+};
+
+function aliasedStrategyName(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return STRATEGY_NAME_ALIASES[raw.toLowerCase()] || raw;
+}
+
 export function canonicalStrategyName(value, algos = []) {
   const raw = realStrategyName(value);
   if (!raw) return "";
   const compact = hyphenName(raw).toLowerCase();
+  const aliased = aliasedStrategyName(raw);
   const match = (algos || []).find((algo) => {
     const name = String(algo.name || "").trim();
     if (!name) return false;
     return (
       name === raw ||
+      name === aliased ||
       hyphenName(name).toLowerCase() === compact ||
+      hyphenName(name).toLowerCase() === hyphenName(aliased).toLowerCase() ||
       String(algo.id || "") === raw
     );
   });

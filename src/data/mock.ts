@@ -185,7 +185,7 @@ export const optionChain: OptionRow[] = [
 export const initialAlgos: Algo[] = [
   {
     id: "a10",
-    name: "NIFTY 5m first candle",
+    name: "NIFTY",
     tag: "5m first",
     kind: "nifty-first-candle",
     symbol: "NIFTY",
@@ -204,7 +204,7 @@ export const initialAlgos: Algo[] = [
     trailingActivationPct: 20,
     trailingEveryPct: 10,
     trailingShiftPct: 5,
-    summary: "NIFTY 5m first candle · ATM options · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL 20% / TGT 40% · trailing SL +20% to buy, then +5% every +10% · daily LIVE 09:00 IST",
+    summary: "NIFTY · ATM options · Nifty green + CE green → BUY CE · Nifty red + PE green → BUY PE · SL 20% / TGT 40% · trailing SL +20% to buy, then +5% every +10% · daily LIVE 09:00 IST",
     dailyLiveIst: "09:00",
     status: "PAUSED",
     pnl: 0,
@@ -215,7 +215,7 @@ export const initialAlgos: Algo[] = [
   },
   {
     id: "a12",
-    name: "CRUDE OIL 5m first candle",
+    name: "CRUDE OIL",
     tag: "crude 5m",
     kind: "crude-first-candle",
     symbol: "CRUDEOIL",
