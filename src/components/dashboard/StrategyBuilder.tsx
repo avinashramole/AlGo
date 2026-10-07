@@ -61,9 +61,9 @@ function Test2ScriptSelect({
   onPick: (symbol: string) => void;
 }) {
   return (
-    <label className="block text-xs font-semibold text-slate-500">
+    <label className="block text-xs font-bold text-sky-700 dark:text-sky-300">
       {TEST2_SCRIPT_LABEL}
-      <select data-test2-scripts={mark} className={fieldClass} value={value || "NIFTY"} onChange={(event) => onPick(event.target.value)}>
+      <select data-test2-scripts={mark} className={`${fieldClass} border-sky-500`} value={value || "NIFTY"} onChange={(event) => onPick(event.target.value)}>
         <option value="NIFTY">NIFTY · CE/PE</option>
         <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
         <option value="FINNIFTY">FINNIFTY · CE/PE</option>
