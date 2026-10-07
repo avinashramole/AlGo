@@ -7,7 +7,7 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
         ...payload,
         brokerId: payload.brokerId || "dhan",
         type: "MARKET",
-        product: "MIS",
+        product: payload.product || "MIS",
       });
       if (queued && typeof queued === "object") {
         const isQueued = queued.queued !== false && queued.duplicate !== true;
@@ -30,7 +30,7 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
           securityId: position.securityId,
           exchangeSegment: position.exchangeSegment,
           kind: "option",
-          product: "MIS",
+          product: position.product || "MIS",
           type: "MARKET",
           strategy: position.strategy,
           brokerId: position.brokerId || "dhan",

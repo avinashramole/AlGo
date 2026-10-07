@@ -149,6 +149,22 @@ export function replayTest2Day(session, config) {
   return { day: session.day, pnl, legs };
 }
 
+function holdOvernight(entry, exit) {
+  if (!entry || !exit) return null;
+  const sellBars = (exit.bars || []).slice(0, 1);
+  const sell = sellBars[0];
+  const sellHigh = Number(sell?.high || exit.open || exit.close);
+  const sellLow = Number(sell?.low || exit.open || exit.close);
+  return {
+    day: entry.day,
+    open: entry.open,
+    close: exit.open || exit.close,
+    high: Math.max(entry.high, sellHigh),
+    low: Math.min(entry.low, sellLow),
+    bars: [...(entry.bars || []), ...sellBars],
+  };
+}
+
 export function runTest2Backtest(algo, candles = []) {
   const config = niftyTest2Config(algo);
   const sessions = sessionDays(candles, config.startTimeIst, config.endTimeIst);
@@ -157,8 +173,12 @@ export function runTest2Backtest(algo, candles = []) {
   let peak = 0;
   let maxDrawdown = 0;
   let comboWins = 0;
-  for (const session of sessions) {
-    const combo = replayTest2Day(session, config);
+  let combos = 0;
+  for (let i = 0; i < sessions.length - 1; i += 1) {
+    const hold = holdOvernight(sessions[i], sessions[i + 1]);
+    if (!hold) continue;
+    const combo = replayTest2Day(hold, config);
+    combos += 1;
     if (combo.pnl > 0) comboWins += 1;
     for (const leg of combo.legs) {
       trades.push({
@@ -167,7 +187,7 @@ export function runTest2Backtest(algo, candles = []) {
         exit: leg.exit,
         qty: leg.qty,
         pnl: leg.pnl,
-        bars: 1,
+        bars: 2,
         day: combo.day,
       });
     }
@@ -178,12 +198,12 @@ export function runTest2Backtest(algo, candles = []) {
   const wins = trades.filter((row) => row.pnl > 0).length;
   return {
     trades: trades.length,
-    combos: sessions.length,
+    combos,
     comboWins,
     wins,
     losses: trades.length - wins,
     winRate: trades.length ? Number(((wins / trades.length) * 100).toFixed(1)) : 0,
-    comboWinRate: sessions.length ? Number(((comboWins / sessions.length) * 100).toFixed(1)) : 0,
+    comboWinRate: combos ? Number(((comboWins / combos) * 100).toFixed(1)) : 0,
     pnl: Number(equity.toFixed(2)),
     maxDrawdown: Number(maxDrawdown.toFixed(2)),
     optionSource: "synth",

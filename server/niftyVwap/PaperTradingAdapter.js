@@ -6,7 +6,7 @@ export function PaperTradingAdapter({ placeOrder, squareOff } = {}) {
         ...payload,
         brokerId: "paper",
         type: "MARKET",
-        product: "MIS",
+        product: payload.product || "MIS",
       });
     },
     exit(position) {

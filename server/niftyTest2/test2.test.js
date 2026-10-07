@@ -14,6 +14,9 @@ test("TEST2 seed and name lock", () => {
   assert.equal(seeded.kind, "nifty-test2");
   assert.equal(seeded.startTimeIst, "09:35");
   assert.equal(seeded.endTimeIst, "15:15");
+  assert.equal(seeded.exitTimeIst, "09:35");
+  assert.equal(seeded.intradayOnly, false);
+  assert.equal(seeded.product, "NRML");
   assert.equal(seeded.sellPremium, 80);
   assert.equal(seeded.hedgePremium, 20);
   assert.equal(isNiftyTest2Algo({ name: "TEST2" }), true);
@@ -57,6 +60,7 @@ test("TEST2 enters four legs after 09:35 and does not retry a reject", () => {
   });
   assert.equal(first.action, "entry");
   assert.equal(places.length, 4);
+  assert.equal(places.every((row) => row.product === "NRML"), true);
   assert.deepEqual(
     places.map((row) => `${row.side} ${row.option}`),
     ["SELL CE", "SELL PE", "BUY CE", "BUY PE"],
@@ -76,6 +80,54 @@ test("TEST2 enters four legs after 09:35 and does not retry a reject", () => {
   assert.equal(places.length, 4);
 });
 
+test("TEST2 is BTST: holds past 15:15 and sells tomorrow", () => {
+  const algo = defaultNiftyTest2Algo();
+  const rows = buildSyntheticChain(24500, 50, 8);
+  const opens = [
+    { symbol: "NIFTY 24600 CE", side: "SELL", qty: 65, avg: 80, ltp: 78, option: "CE", strike: 24600 },
+    { symbol: "NIFTY 24400 PE", side: "SELL", qty: 65, avg: 80, ltp: 79, option: "PE", strike: 24400 },
+    { symbol: "NIFTY 24700 CE", side: "BUY", qty: 65, avg: 20, ltp: 21, option: "CE", strike: 24700 },
+    { symbol: "NIFTY 24300 PE", side: "BUY", qty: 65, avg: 20, ltp: 19, option: "PE", strike: 24300 },
+  ];
+  Test2Strategy.tick({
+    algo,
+    now: T0935,
+    feedLive: true,
+    monthlyRows: rows,
+    weeklyRows: rows,
+    adapter: { place: () => ({ queued: true, status: "PENDING" }) },
+    positions: [],
+    orders: [],
+  });
+  const closes = [];
+  const sameDay = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-07T09:50:00.000Z"),
+    feedLive: true,
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: opens,
+    orders: [],
+  });
+  assert.equal(sameDay.action, "hold");
+  assert.equal(closes.length, 0);
+  const nextMorning = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-08T04:05:00.000Z"),
+    feedLive: true,
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: opens,
+    orders: [],
+  });
+  assert.equal(nextMorning.action, "exit");
+  assert.equal(nextMorning.reason, "btst");
+  assert.equal(closes.length, 4);
+  assert.equal(closes.every((row) => row.product === "NRML"), true);
+  assert.deepEqual(
+    closes.map((row) => `${row.side} ${row.option}`),
+    ["BUY CE", "BUY PE", "SELL CE", "SELL PE"],
+  );
+});
+
 test("TEST2 backtest walks each session day", () => {
   const algo = defaultNiftyTest2Algo();
   const day = Date.parse("2026-09-01T04:05:00.000Z");
@@ -88,8 +140,8 @@ test("TEST2 backtest walks each session day", () => {
     volume: 1,
   }));
   const result = runTest2Backtest(algo, candles);
-  assert.equal(result.combos, 10);
-  assert.equal(result.trades, 40);
+  assert.equal(result.combos, 9);
+  assert.equal(result.trades, 36);
   assert.equal(Number(result.winRate) > 0, true);
   assert.equal(Number.isFinite(result.pnl), true);
   assert.equal(niftyTest2Config(algo).sellPremium, 80);
@@ -98,21 +150,31 @@ test("TEST2 backtest walks each session day", () => {
 test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
   const algo = defaultNiftyTest2Algo();
   const open = Date.parse("2026-09-01T04:05:00.000Z");
-  const quiet = Array.from({ length: 12 }, (_, i) => ({
-    time: open + i * 5 * 60 * 1000,
-    open: 24500,
-    high: 24520,
-    low: 24480,
-    close: 24505,
-    volume: 1,
-  }));
+  const quiet = [
+    ...Array.from({ length: 12 }, (_, i) => ({
+      time: open + i * 5 * 60 * 1000,
+      open: 24500,
+      high: 24520,
+      low: 24480,
+      close: 24505,
+      volume: 1,
+    })),
+    ...Array.from({ length: 12 }, (_, i) => ({
+      time: open + 86_400_000 + i * 5 * 60 * 1000,
+      open: 24510,
+      high: 24530,
+      low: 24490,
+      close: 24515,
+      volume: 1,
+    })),
+  ];
   const quietBook = runTest2Backtest(algo, quiet);
   assert.equal(quietBook.combos, 1);
   assert.equal(quietBook.trades, 4);
   assert.equal(quietBook.pnl > 0, true);
   const trend = [
     { time: open, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
-    { time: open + 5 * 60 * 60 * 1000, open: 24800, high: 25200, low: 24780, close: 25100, volume: 1 },
+    { time: open + 86_400_000, open: 25100, high: 25200, low: 24780, close: 25100, volume: 1 },
   ];
   const trendBook = runTest2Backtest(algo, trend);
   assert.equal(trendBook.combos, 1);

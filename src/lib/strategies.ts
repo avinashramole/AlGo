@@ -82,6 +82,9 @@ export type AlgoStrategy = {
   entryEvaluationIst?: string;
   endTimeIst?: string;
   startTimeIst?: string;
+  exitTimeIst?: string;
+  holdOvernight?: boolean;
+  product?: string;
   minBodyPct?: number;
   maxWickPct?: number;
   targetMultiple?: number;
@@ -700,6 +703,11 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       overallTarget: 15000,
       startTimeIst: "09:35",
       endTimeIst: "15:15",
+      exitTimeIst: "09:35",
+      product: "NRML",
+      holdOvernight: true,
+      intradayOnly: false,
+      eodSquareOffMinutes: 0,
       maxTradesPerDay: 1,
       maxPositions: 4,
       indicator: "NIFTY_TEST2",

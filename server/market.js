@@ -1245,12 +1245,11 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
 
 function tickNiftyTest2Algo(algo, mode, feedLive) {
   const now = Date.now();
-  const today = VwapSignalEngine.sessionKeyIST(now);
-  dropPreviousIntradayBook(algo, today);
   const config = niftyTest2Config(algo);
   const session = nseMarketSession();
   const positions = positionsForStrategyName(algo, mode);
   const open = positions.some((row) => Number(row.qty) > 0);
+  const before = JSON.stringify(algo.test2State || {});
   if (mode === "live" && !session.open && !open) return;
   const pack = chainForSymbol("NIFTY");
   const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries("NIFTY", 12);
@@ -1282,6 +1281,7 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,
   });
+  if (JSON.stringify(algo.test2State || {}) !== before) persistAlgos();
 }
 
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
@@ -2471,7 +2471,7 @@ export function toggleAlgo(id, patch = {}) {
   if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   if (starting) {
     resetStrategyOrders(algo);
-    dropPreviousIntradayBook(algo);
+    if (!isNiftyTest2Algo(algo)) dropPreviousIntradayBook(algo);
     algo.lastPaperAt = 0;
     algo.lastLiveAt = 0;
     algo.lastLiveSide = "";
