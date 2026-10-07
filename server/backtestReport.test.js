@@ -19,6 +19,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
     losses: 1,
     winRate: 50,
     maxDrawdown: -120.5,
+    avgProfit: -60.25,
+    rewardRisk: 1.39,
+    returnDd: 3.62,
     timeframe: "5m",
     years: 10,
     from: "2016-10-07",
@@ -32,6 +35,8 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   const saved = saveBacktestReport(algo, result);
   assert.equal(saved.trades.length, 2);
   assert.equal(saved.summary.holdStyle, "btst");
+  assert.equal(saved.summary.avgProfit, -60.25);
+  assert.match(renderBacktestPdf(saved).toString("latin1"), /Avg\/trade/);
   const loaded = loadBacktestReport("a14", algo);
   assert.equal(loaded.summary.trades, 2);
   const pdf = renderBacktestPdf(loaded);

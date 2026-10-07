@@ -152,6 +152,7 @@ export type Snapshot = {
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: {
       trades?: number;
+      combos?: number;
       winRate?: number;
       pnl?: number;
       sample?: boolean;
@@ -160,6 +161,8 @@ export type Snapshot = {
       range?: string;
       from?: string;
       to?: string;
+      avgProfit?: number;
+      holdStyle?: string;
     };
     status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
     pnl: number;
