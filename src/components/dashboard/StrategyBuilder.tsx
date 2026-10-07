@@ -157,7 +157,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
       const tf = form.timeframe || "5m";
-      return `CRUDE OIL ${tf} · monthly ATM · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
+      return `CRUDE OIL ${tf} · monthly ATM · every completed ${tf} until a signal · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -267,7 +267,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={crudeFirst}
             title="CRUDE OIL 5m first candle"
-            text="Same preview-candle buy as Nifty 5m. Crude future green + ATM CE green → BUY CE. Crude future red + ATM PE green → BUY PE. MCX. Paused until Start."
+            text="Checks every completed 5m Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
@@ -719,11 +719,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
               </label>
               <label className="text-xs font-semibold text-slate-500">
-                First candle start (IST)
+                {crudeFirst ? "Start check (IST)" : "First candle start (IST)"}
                 <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
               </label>
               <label className="text-xs font-semibold text-slate-500">
-                Entry evaluation (IST)
+                {crudeFirst ? "First 5m close, then every 5m" : "Entry evaluation (IST)"}
                 <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
               </label>
               <label className="text-xs font-semibold text-slate-500">

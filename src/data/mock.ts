@@ -233,7 +233,7 @@ export const initialAlgos: Algo[] = [
     expiryKind: "monthly",
     endTimeIst: "23:15",
     maxTradesPerDay: 5,
-    summary: "CRUDE OIL 5m first candle · preview crude future green + ATM CE green → BUY CE · crude future red + ATM PE green → BUY PE · paused until Start",
+    summary: "CRUDE OIL every 5m candle until a signal · crude future green + ATM CE green → BUY CE · crude future red + ATM PE green → BUY PE · paused until Start",
     status: "PAUSED",
     pnl: 0,
     winRate: 0,

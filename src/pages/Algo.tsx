@@ -90,8 +90,8 @@ function kindMeta(algo: AlgoStrategy) {
     const maxTrades = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
     return {
       kind: "crude-first-candle" as const,
-      category: `CRUDE OIL FIRST ${(algo.timeframe || "5m").toUpperCase()}`,
-      config: `CRUDE FUT · ${algo.timeframe || "5m"} · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
+      category: `CRUDE OIL EVERY ${(algo.timeframe || "5m").toUpperCase()}`,
+      config: `CRUDE FUT · every ${algo.timeframe || "5m"} candle until a signal · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
