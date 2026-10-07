@@ -552,8 +552,8 @@ export function renderBacktestPdf(report) {
     report.summary.optionSource === "stored"
       ? "Premiums stored Dhan rolling option tape"
       : report.summary.optionSource === "mixed"
-        ? `Premiums mixed - ${report.summary.storedTrades || 0} stored days, ${report.summary.skippedDays || 0} days skipped (no tape)`
-        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - ${report.summary.skippedDays || 0} days skipped - do not trust P&L or win rate`,
+        ? `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days in this book; remaining days used the research model`
+        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - research book from index candles - do not treat P&L or win rate as live proof`,
     `Generated ${report.generatedAt}`,
     "",
     "LEGS",
