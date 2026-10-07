@@ -199,10 +199,10 @@ export function Brokers() {
   }, [defaultBroker, frontBroker]);
 
   return (
-    <div className="desk-page mx-auto max-w-5xl space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="desk-page flex h-full min-h-0 flex-col gap-2 md:overflow-hidden">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold">Brokers</h1>
+          <h1 className="text-lg font-bold">Brokers</h1>
           <p className="desk-help text-sm text-slate-400">
             Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect more than one.
             Set default is the broker used for admin orders and the admin balance. The Dhan data feed can stay on without becoming that default. Connecting a broker does not start LIVE algos.
@@ -229,14 +229,14 @@ export function Brokers() {
           </select>
         </label>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-2 sm:grid-cols-3">
         <Stat label="Front / default" value={frontLabel} />
         <Stat label="Connected" value={String(connectedCount)} />
         <Stat label="Dhan funds" value={dhan?.liveFeed ? `₹${formatNumber(actualFunds, 0)}` : paper ? fundsCaption(paper) : "—"} />
       </div>
       {viewed ? (
-        <section className="card p-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
+        <section className="card flex min-h-0 flex-1 flex-col p-3 md:overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
             <div className="flex items-center gap-3">
               <div
                 className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-extrabold text-white"
@@ -312,7 +312,7 @@ export function Brokers() {
           ) : null}
 
           {showOtherBook ? (
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 min-h-0 flex-1 space-y-2">
               {viewed.connected ? (
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <Mini label="Client" value={viewed.clientId || "—"} />
@@ -353,7 +353,7 @@ export function Brokers() {
           ) : null}
         </section>
       ) : null}
-      <p className="desk-help text-xs text-slate-400">
+      <p className="desk-help shrink-0 text-xs text-slate-400">
         Dhan uses DhanHQ <code>POST /v2/orders</code> while LIVE. Zerodha, Upstox, Fyers, Kotak Neo, and Angel Broking
         send real orders to that broker after you connect their token. A rejected broker API is shown as an error — the
         desk does not invent a fill. Restart does not start LIVE algos.
@@ -521,7 +521,8 @@ function DhanSettings({
   onStartFeed: () => void;
 }) {
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-2 grid min-h-0 flex-1 gap-3 overflow-hidden lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,22rem)]">
+      <div className="min-h-0 min-w-0 space-y-2 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-bold">Dhan live feed</div>
         <span
@@ -544,7 +545,7 @@ function DhanSettings({
         limit, not an expired token. Setup TOTP on web.dhan.co → My Profile → Access DhanHQ APIs. Paste the{" "}
         <b>secret key</b> from the QR, not the 6-digit code that changes every 30 seconds.
       </p>
-      <div className="grid gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <Mini label="Token" value={feed?.tokenHint || "not set"} />
         <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
         <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
@@ -568,7 +569,7 @@ function DhanSettings({
         />
       </div>
       {feed?.ipCheck ? (
-        <div className="grid gap-2 text-xs sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
           <Mini label="Dhan sees" value={feed.ipCheck.detectedIP || "—"} />
           <Mini label="Saved primary" value={feed.ipCheck.primaryIP || "—"} />
           <Mini label="Saved secondary" value={feed.ipCheck.secondaryIP && feed.ipCheck.secondaryIP !== "NA" ? feed.ipCheck.secondaryIP : "—"} />
@@ -599,11 +600,13 @@ function DhanSettings({
           , then check VPS logs for <code>Dhan token auto-renew</code>.
         </div>
       ) : null}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      </div>
+      <div className="min-w-0 space-y-2">
+      <div className="grid grid-cols-2 gap-2">
         <label className="block text-xs font-semibold">
           Client ID
           <input
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
             value={dhanClientId}
             onChange={(event) => setDhanClientId(event.target.value)}
             placeholder={savedDhanClientId || "Dhan client ID"}
@@ -615,29 +618,29 @@ function DhanSettings({
           <input
             type="password"
             inputMode="numeric"
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
             value={dhanPin}
             onChange={(event) => setDhanPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
             placeholder="4–6 digit PIN"
             autoComplete="off"
           />
         </label>
-        <label className="block text-xs font-semibold">
+        <label className="col-span-2 block text-xs font-semibold">
           TOTP secret
           <input
             type="password"
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
             value={dhanTotp}
             onChange={(event) => setDhanTotp(event.target.value)}
             placeholder="Setup TOTP secret"
             autoComplete="off"
           />
         </label>
-        <label className="block text-xs font-semibold">
+        <label className="col-span-2 block text-xs font-semibold">
           Access token
           <input
             type="password"
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
+            className="mt-1 h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
             value={dhanTokenFocused ? dhanToken : displaySavedSecret(dhanToken, feed?.tokenHint || "")}
             onFocus={() => setDhanTokenFocused(true)}
             onBlur={() => setDhanTokenFocused(false)}
@@ -698,15 +701,16 @@ function DhanSettings({
           </button>
         )}
       </div>
+      </div>
     </div>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card p-3">
-      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
-      <div className="mt-1 truncate text-sm font-bold">{value}</div>
+    <div className="card px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase text-slate-400">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-bold">{value}</div>
     </div>
   );
 }
