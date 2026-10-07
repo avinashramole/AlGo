@@ -367,7 +367,7 @@ export function CandleChart({
       }
 
       const pad = { top: 16, right: 64, bottom: 22, left: 8 };
-      const showVol = indicators?.volume !== false;
+      const showVol = Boolean(indicators?.volume);
       const oscH = oscillators.length ? Math.max(36, Math.min(54, height * 0.14)) : 0;
       const volumeH = showVol ? Math.max(28, height * 0.12) : 0;
       const gaps = (showVol ? 8 : 0) + (oscillators.length ? 6 : 0);

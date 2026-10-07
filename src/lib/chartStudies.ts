@@ -50,14 +50,14 @@ export type ChartIndicators = {
 };
 
 export const DEFAULT_INDICATORS: ChartIndicators = {
-  ema9: true,
-  ema21: true,
+  ema9: false,
+  ema21: false,
   ema50: false,
   sma20: false,
   sma50: false,
   sma200: false,
   wma20: false,
-  vwap: true,
+  vwap: false,
   bb: false,
   supertrend: false,
   psar: false,
@@ -70,7 +70,7 @@ export const DEFAULT_INDICATORS: ChartIndicators = {
   cci: false,
   willr: false,
   obv: false,
-  volume: true,
+  volume: false,
 };
 
 export const CHART_TYPES: { id: ChartType; label: string }[] = [
