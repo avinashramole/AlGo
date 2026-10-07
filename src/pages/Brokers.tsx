@@ -353,7 +353,7 @@ export function Brokers() {
           ) : null}
         </section>
       ) : null}
-      <p className="desk-help text-xs text-slate-400">
+      <p className="desk-help shrink-0 text-xs text-slate-400">
         Dhan uses DhanHQ <code>POST /v2/orders</code> while LIVE. Zerodha, Upstox, Fyers, Kotak Neo, and Angel Broking
         send real orders to that broker after you connect their token. A rejected broker API is shown as an error — the
         desk does not invent a fill. Restart does not start LIVE algos.
@@ -697,6 +697,7 @@ function DhanSettings({
             Start data feed
           </button>
         )}
+      </div>
       </div>
     </div>
   );

@@ -266,6 +266,11 @@ main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(t
   margin-right: auto;
 }
 
+main > .desk-page {
+  max-width: none;
+  width: 100%;
+}
+
 .desk-page h1 {
   font-size: 1.125rem;
   line-height: 1.3;
