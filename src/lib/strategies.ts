@@ -484,12 +484,18 @@ export function isNiftyTest1Kind(algo?: { kind?: string; strategyType?: string; 
   );
 }
 
-export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
+export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; tag?: string }) {
+  const name = String(algo?.name || "").trim().toUpperCase();
+  const tag = String(algo?.tag || "").trim().toUpperCase();
   return (
     algo?.kind === "nifty-test2" ||
     algo?.strategyType === "NIFTY_TEST2" ||
     algo?.indicator === "NIFTY_TEST2" ||
-    String(algo?.name || "").trim().toUpperCase() === "TEST2"
+    name === "TEST2" ||
+    name.startsWith("TEST2 ") ||
+    name.startsWith("TEST2·") ||
+    name.startsWith("TEST2 ·") ||
+    tag === "TEST2"
   );
 }
 

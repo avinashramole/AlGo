@@ -9,7 +9,6 @@ import {
   SOURCES,
   STRATEGY_SYMBOLS,
   TEST1_SCRIPTS,
-  TEST2_SCRIPTS,
   TIMEFRAMES,
   defaultConditions,
   emptyStrategy,
@@ -49,6 +48,34 @@ type Props = {
 };
 
 const fieldClass = "mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold";
+
+const TEST2_SCRIPT_LABEL = "Script · NIFTY BANKNIFTY SENSEX";
+
+function Test2ScriptSelect({
+  value,
+  mark,
+  onPick,
+}: {
+  value?: string;
+  mark: string;
+  onPick: (symbol: string) => void;
+}) {
+  return (
+    <label className="block text-xs font-semibold text-slate-500">
+      {TEST2_SCRIPT_LABEL}
+      <select data-test2-scripts={mark} className={fieldClass} value={value || "NIFTY"} onChange={(event) => onPick(event.target.value)}>
+        <option value="NIFTY">NIFTY · CE/PE</option>
+        <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
+        <option value="FINNIFTY">FINNIFTY · CE/PE</option>
+        <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
+        <option value="SENSEX">SENSEX · CE/PE</option>
+        <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
+        <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
+        <option value="COPPER">COPPER · CE/PE</option>
+      </select>
+    </label>
+  );
+}
 
 export function StrategyBuilder({ open, algo, onClose }: Props) {
   const { data, saveAlgo } = useMarket();
@@ -314,6 +341,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         className="desk-sheet card p-3"
         data-edit-strategy={editing ? algo?.id || "open" : "new"}
         data-test2-edit={test2 ? "true" : "false"}
+        data-ui={test2 ? "test2-script-v3" : undefined}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -325,21 +353,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </button>
         </div>
 
-        {test2 ? (
-          <label className="block text-xs font-semibold text-slate-500">
-            Script · option
-            <select data-test2-scripts-top className={fieldClass} value={form.symbol || "NIFTY"} onChange={(event) => pickTest2Script(event.target.value)}>
-              <option value="NIFTY">NIFTY · CE/PE</option>
-              <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
-              <option value="FINNIFTY">FINNIFTY · CE/PE</option>
-              <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
-              <option value="SENSEX">SENSEX · CE/PE</option>
-              <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
-              <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
-              <option value="COPPER">COPPER · CE/PE</option>
-            </select>
-          </label>
-        ) : null}
+        {test2 ? <Test2ScriptSelect value={form.symbol} mark="top" onPick={pickTest2Script} /> : null}
 
         {editing ? null : (
         <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
@@ -476,24 +490,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {test2 ? (
           <div className="mt-2.5 space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-500">
-              Script · option
-              <select
-                data-test2-scripts
-                className={fieldClass}
-                value={form.symbol || "NIFTY"}
-                onChange={(event) => pickTest2Script(event.target.value)}
-              >
-                <option value="NIFTY">NIFTY · CE/PE</option>
-                <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
-                <option value="FINNIFTY">FINNIFTY · CE/PE</option>
-                <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
-                <option value="SENSEX">SENSEX · CE/PE</option>
-                <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
-                <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
-                <option value="COPPER">COPPER · CE/PE</option>
-              </select>
-            </label>
+            <Test2ScriptSelect value={form.symbol} mark="premiums" onPick={pickTest2Script} />
             <div className="grid grid-cols-2 gap-1.5">
               <label className="text-xs font-semibold text-slate-500">
                 SELL option
@@ -658,19 +655,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
           ) : null}
           {test2 ? (
-          <label className="text-xs font-semibold text-slate-500">
-            Script · option
-            <select data-test2-scripts-row className={fieldClass} value={form.symbol || "NIFTY"} onChange={(event) => pickTest2Script(event.target.value)}>
-              <option value="NIFTY">NIFTY · CE/PE</option>
-              <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
-              <option value="FINNIFTY">FINNIFTY · CE/PE</option>
-              <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
-              <option value="SENSEX">SENSEX · CE/PE</option>
-              <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
-              <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
-              <option value="COPPER">COPPER · CE/PE</option>
-            </select>
-          </label>
+          <Test2ScriptSelect value={form.symbol} mark="name-slot" onPick={pickTest2Script} />
           ) : engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
@@ -869,44 +854,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : test2 ? (
           <div className="mt-2.5 space-y-2">
-            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
-              <label className="text-xs font-semibold text-slate-500 lg:col-span-1">
-                Script · option
-                <select data-test2-scripts-main className={fieldClass} value={form.symbol || "NIFTY"} onChange={(event) => pickTest2Script(event.target.value)}>
-                  {TEST2_SCRIPTS.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {row.label} · CE/PE
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                SELL option
-                <select
-                  data-test2-sell-option
-                  className={fieldClass}
-                  value={form.sellExpiryKind || "monthly"}
-                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
-                  onChange={(event) => set({ sellExpiryKind: event.target.value === "weekly" ? "weekly" : "monthly" })}
-                >
-                  <option value="monthly">Monthly CE + PE</option>
-                  <option value="weekly">Weekly CE + PE</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                BUY hedge option
-                <select
-                  data-test2-hedge-option
-                  className={fieldClass}
-                  value={form.hedgeExpiryKind || "weekly"}
-                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
-                  onChange={(event) => set({ hedgeExpiryKind: event.target.value === "monthly" ? "monthly" : "weekly" })}
-                >
-                  <option value="weekly">Weekly CE + PE</option>
-                  <option value="monthly">Monthly CE + PE</option>
-                </select>
-              </label>
-            </div>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
