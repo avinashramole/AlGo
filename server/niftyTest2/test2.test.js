@@ -28,7 +28,8 @@ test("TEST2 seed and name lock", () => {
   assert.equal(seeded.kind, "nifty-test2");
   assert.equal(seeded.startTimeIst, "09:35");
   assert.equal(seeded.endTimeIst, "15:15");
-  assert.equal(seeded.exitTimeIst, "09:35");
+  assert.equal(seeded.exitTimeIst, "15:15");
+  assert.equal(niftyTest2Config({ exitTimeIst: "09:35" }).exitTimeIst, "15:15");
   assert.equal(seeded.holdStyle, "btst");
   assert.equal(seeded.intradayOnly, false);
   assert.equal(seeded.product, "NRML");
@@ -99,7 +100,7 @@ test("TEST2 enters four legs after 09:35 and does not retry a reject", () => {
   assert.equal(places.length, 4);
 });
 
-test("TEST2 is BTST: holds past 15:15 and sells tomorrow", () => {
+test("TEST2 is BTST: holds past same-day 15:15 and sells tomorrow at 15:15", () => {
   const algo = defaultNiftyTest2Algo();
   const rows = buildSyntheticChain(24500, 50, 8);
   const opens = [
@@ -137,8 +138,18 @@ test("TEST2 is BTST: holds past 15:15 and sells tomorrow", () => {
     positions: opens,
     orders: [],
   });
-  assert.equal(nextMorning.action, "exit");
-  assert.equal(nextMorning.reason, "btst");
+  assert.equal(nextMorning.action, "hold");
+  assert.equal(closes.length, 0);
+  const nextClose = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-08T09:45:00.000Z"),
+    feedLive: true,
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: opens,
+    orders: [],
+  });
+  assert.equal(nextClose.action, "exit");
+  assert.equal(nextClose.reason, "btst");
   assert.equal(closes.length, 4);
   assert.equal(closes.every((row) => row.product === "NRML"), true);
   assert.deepEqual(

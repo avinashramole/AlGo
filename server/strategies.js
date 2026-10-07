@@ -298,7 +298,7 @@ export function summarizeAlgo(algo) {
   }
   if (isNiftyTest2Algo(algo)) {
     const start = algo.startTimeIst || "09:35";
-    const exit = algo.exitTimeIst || start;
+    const exit = algo.exitTimeIst && algo.exitTimeIst !== "09:35" ? algo.exitTimeIst : "15:15";
     const end = algo.endTimeIst || "15:15";
     const sell = algo.sellPremium || 80;
     const hedge = algo.hedgePremium || 20;

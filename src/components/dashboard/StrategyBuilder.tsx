@@ -157,7 +157,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const hold =
         style === "intraday"
           ? `NIFTY INTRADAY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · MIS same day`
-          : `NIFTY BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "09:35"} IST · NRML overnight`;
+          : `NIFTY BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "15:15"} IST · NRML overnight`;
       return `TEST2 · ${hold} · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}% · overall +${form.overallTargetPct ?? 5}% exits all`;
     }
     if (isNiftyTest1Kind(form) || test1) {
@@ -446,7 +446,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <div className="desk-help mt-1 text-[11px] font-semibold text-slate-500">
             {form.holdStyle === "intraday"
               ? "NIFTY INTRADAY · enter 09:35 · square-off 15:15 · MIS same day · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE."
-              : "NIFTY BTST · buy today 09:35 · sell tomorrow 09:35 · NRML overnight · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE."}
+              : "NIFTY BTST · buy today 09:35 · sell tomorrow 15:15 · NRML overnight · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE."}
           </div>
         ) : null}
 
@@ -813,7 +813,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               {form.holdStyle === "intraday" ? null : (
                 <label className="text-xs font-semibold text-slate-500">
                   Sell tomorrow (IST)
-                  <input className={fieldClass} value={form.exitTimeIst || "09:35"} onChange={(event) => set({ exitTimeIst: event.target.value })} placeholder="09:35" />
+                  <input className={fieldClass} value={form.exitTimeIst || "15:15"} onChange={(event) => set({ exitTimeIst: event.target.value })} placeholder="15:15" />
                 </label>
               )}
               <NumberField label="Overall SL ₹" value={form.overallSl ?? 30000} step={1000} onChange={(overallSl) => set({ overallSl })} />

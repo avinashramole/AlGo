@@ -197,7 +197,8 @@ function rollingExitForLeg(leg, entry, config, session, exitSession) {
       if (bar.low <= sl) return sl;
     }
   }
-  const exitTime = Number((exitSession || session).bars?.[0]?.time || session.bars?.[session.bars.length - 1]?.time || 0);
+  const exitBars = (exitSession || session).bars || [];
+  const exitTime = Number(exitBars[exitBars.length - 1]?.time || session.bars?.[session.bars.length - 1]?.time || 0);
   const exitYmd = (exitSession || session).day;
   const mark =
     rollingPremiumAt({ symbol: "NIFTY", ymd: exitYmd, time: exitTime, strike: leg.strike, option: leg.option, kind }) ??
@@ -222,7 +223,9 @@ export function replayTest2Day(session, config, exitSession = null) {
   if (rolling && !picked) return { day: session.day, skip: true, reason: "no-combo", source: "stored" };
   const template = picked?.legs?.length === 4 ? picked.legs : fallbackLegs(config);
   const entryTime = Number(session.bars?.[0]?.time || 0);
-  const exitTime = Number((exitSession || session).bars?.[(exitSession ? 0 : (session.bars?.length || 1) - 1)]?.time || 0);
+  const holdBars = session.bars || [];
+  const exitBars = (exitSession || session).bars || [];
+  const exitTime = Number(exitBars[exitBars.length - 1]?.time || holdBars[holdBars.length - 1]?.time || 0);
   const move = ((exitSession || session).close - session.open) / session.open;
   let usedStored = 0;
   const legs = [];
@@ -413,18 +416,22 @@ export function comboRequiredMargin({ legs = [], qty, spot, holdStyle } = {}) {
   return round2(hedgeDebit + spanBlock);
 }
 
-function holdOvernight(entry, exit) {
+function holdOvernight(entry, exit, exitTimeIst = "15:15") {
   if (!entry || !exit) return null;
-  const sellBars = (exit.bars || []).slice(0, 1);
-  const sell = sellBars[0];
-  const sellHigh = Number(sell?.high || exit.open || exit.close);
-  const sellLow = Number(sell?.low || exit.open || exit.close);
+  const cutoff = hmToMinutes(exitTimeIst || "15:15");
+  const untilExit = (exit.bars || []).filter((bar) => minutesOf(bar.time) <= cutoff);
+  const sellBars = untilExit.length ? untilExit : (exit.bars || []).slice(0, 1);
+  const sell = sellBars[sellBars.length - 1];
+  const highs = sellBars.map((bar) => Number(bar.high || bar.close || 0)).filter((value) => value > 0);
+  const lows = sellBars.map((bar) => Number(bar.low || bar.close || 0)).filter((value) => value > 0);
+  const sellHigh = highs.length ? Math.max(...highs) : Number(exit.high || exit.close || entry.high);
+  const sellLow = lows.length ? Math.min(...lows) : Number(exit.low || exit.open || entry.low);
   return {
     day: entry.day,
     open: entry.open,
-    close: exit.open || exit.close,
+    close: Number(sell?.close || exit.close || exit.open),
     high: Math.max(entry.high, sellHigh),
-    low: Math.min(entry.low, sellLow),
+    low: Math.min(entry.low, sellLow || entry.low),
     bars: [...(entry.bars || []), ...sellBars],
   };
 }
@@ -631,7 +638,7 @@ export function runTest2Backtest(algo, candles = []) {
     const entry = sessions[i];
     const exit = overnight ? sessions[i + 1] : null;
     if (!entry) continue;
-    const hold = overnight ? holdOvernight(entry, sessions[i + 1]) : entry;
+    const hold = overnight ? holdOvernight(entry, sessions[i + 1], config.exitTimeIst) : entry;
     if (!hold) continue;
     const combo = replayTest2Day(hold, config, exit);
     if (!combo || combo.skip) {
