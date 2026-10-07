@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   chunkDateRange,
   downloadRollingOptionRange,
+  isWeekendYmd,
   parseRollingPayload,
   rollingChainAt,
   rollingCoverage,
+  rollingDayStatus,
   rollingPremiumAt,
   wingLabels,
   wipeRollingOptions,
@@ -110,5 +112,46 @@ test("downloadRollingOptionRange writes merged weekly and monthly days", async (
     },
   });
   assert.equal(reused.reused, true);
+  assert.equal(reused.calls, 0);
+  wipeRollingOptions();
+});
+
+test("weekends do not force a re-download and stored chunks are skipped", async () => {
+  wipeRollingOptions();
+  assert.equal(isWeekendYmd("2026-09-05"), true);
+  assert.equal(isWeekendYmd("2026-09-01"), false);
+  const t = Date.parse("2026-09-01T04:05:00.000Z");
+  writeRollingDay("NIFTY", "2026-09-01", {
+    weekly: { slots: [{ t, spot: 24500, rows: [{ s: 24700, ce: 22, pe: 21 }] }] },
+    monthly: { slots: [{ t, spot: 24500, rows: [{ s: 24600, ce: 88, pe: 90 }] }] },
+  });
+  writeRollingDay("NIFTY", "2026-09-02", {
+    weekly: { slots: [{ t, spot: 24500, rows: [{ s: 24700, ce: 22, pe: 21 }] }] },
+    monthly: { slots: [{ t, spot: 24500, rows: [{ s: 24600, ce: 88, pe: 90 }] }] },
+  });
+  writeRollingDay("NIFTY", "2026-09-03", {
+    weekly: { slots: [{ t, spot: 24500, rows: [{ s: 24700, ce: 22, pe: 21 }] }] },
+    monthly: { slots: [{ t, spot: 24500, rows: [{ s: 24600, ce: 88, pe: 90 }] }] },
+  });
+  writeRollingDay("NIFTY", "2026-09-04", {
+    weekly: { slots: [{ t, spot: 24500, rows: [{ s: 24700, ce: 22, pe: 21 }] }] },
+    monthly: { slots: [{ t, spot: 24500, rows: [{ s: 24600, ce: 88, pe: 90 }] }] },
+  });
+  assert.equal(rollingDayStatus("NIFTY", "2026-09-01"), "complete");
+  assert.equal(rollingCoverage("NIFTY", "2026-09-01", "2026-09-06"), "stored");
+  let calls = 0;
+  const reused = await downloadRollingOptionRange({
+    from: "2026-09-01",
+    to: "2026-09-06",
+    delayMs: 0,
+    wings: 1,
+    fetchRolling: async () => {
+      calls += 1;
+      throw new Error("should not fetch stored weekdays");
+    },
+  });
+  assert.equal(calls, 0);
+  assert.equal(reused.reused, true);
+  assert.equal(reused.reusedDays >= 4, true);
   wipeRollingOptions();
 });

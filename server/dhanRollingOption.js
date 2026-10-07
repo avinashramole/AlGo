@@ -110,6 +110,7 @@ export function writeRollingDay(symbol, ymd, payload) {
     symbol: String(symbol || "NIFTY").toUpperCase(),
     ymd,
     source: payload.source || "dhan-rolling",
+    empty: Boolean(payload.empty),
     updatedAt: payload.updatedAt || new Date().toISOString(),
     weekly: payload.weekly || { slots: [] },
     monthly: payload.monthly || { slots: [] },
@@ -120,15 +121,48 @@ export function writeRollingDay(symbol, ymd, payload) {
   return next;
 }
 
+export function isWeekendYmd(ymd) {
+  if (!isYmd(ymd)) return false;
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(
+    new Date(`${ymd}T12:00:00+05:30`),
+  );
+  return weekday === "Sat" || weekday === "Sun";
+}
+
+export function rollingDayStatus(symbol, ymd) {
+  const day = loadRollingDay(symbol, ymd);
+  if (!day) return "missing";
+  if (day.empty) return "empty";
+  const weekly = day.weekly?.slots?.length || 0;
+  const monthly = day.monthly?.slots?.length || 0;
+  if (weekly && monthly) return "complete";
+  return "partial";
+}
+
+export function needsRollingFetch(symbol, ymd) {
+  if (isWeekendYmd(ymd)) return false;
+  const status = rollingDayStatus(symbol, ymd);
+  return status === "missing" || status === "partial";
+}
+
+export function preloadRollingDays(symbol, ymds = []) {
+  let loaded = 0;
+  for (const ymd of ymds) {
+    if (loadRollingDay(symbol, ymd)) loaded += 1;
+  }
+  return loaded;
+}
+
 export function rollingCoverage(symbol, from, to) {
-  const days = listYmds(from, to);
-  if (!days.length) return "synth";
+  const weekdays = listYmds(from, to).filter((ymd) => !isWeekendYmd(ymd));
+  if (!weekdays.length) return "synth";
   let stored = 0;
-  for (const ymd of days) {
-    if (hasRollingDay(symbol, ymd)) stored += 1;
+  for (const ymd of weekdays) {
+    const status = rollingDayStatus(symbol, ymd);
+    if (status === "complete" || status === "empty") stored += 1;
   }
   if (!stored) return "synth";
-  if (stored >= days.length) return "stored";
+  if (stored >= weekdays.length) return "stored";
   return "mixed";
 }
 
@@ -286,21 +320,22 @@ export async function downloadRollingOptionRange({
   to,
   overwrite = false,
   fetchRolling,
-  delayMs = 80,
+  delayMs = 40,
   wings = ROLLING_WINGS,
   interval = 15,
   maxDays = ROLLING_MAX_DAYS,
-  deadlineMs = 420_000,
+  deadlineMs = 150_000,
 } = {}) {
   const root = String(symbol || "NIFTY").toUpperCase();
   if (!isYmd(from) || !isYmd(to) || typeof fetchRolling !== "function") {
-    return { symbol: root, from, to, days: 0, calls: 0, skipped: 0, truncated: false, source: "none" };
+    return { symbol: root, from, to, days: 0, calls: 0, skipped: 0, truncated: false, reused: false, source: "none" };
   }
   const all = listYmds(from, to);
   const wanted = all.length > maxDays ? all.slice(-maxDays) : all;
   const start = wanted[0];
   const end = wanted[wanted.length - 1];
-  const missing = overwrite ? wanted : wanted.filter((ymd) => !hasRollingDay(root, ymd));
+  const missing = overwrite ? wanted.filter((ymd) => !isWeekendYmd(ymd)) : wanted.filter((ymd) => needsRollingFetch(root, ymd));
+  const reusedDays = wanted.filter((ymd) => !isWeekendYmd(ymd) && !needsRollingFetch(root, ymd)).length;
   if (!missing.length) {
     return {
       symbol: root,
@@ -311,30 +346,34 @@ export async function downloadRollingOptionRange({
       skipped: 0,
       truncated: false,
       reused: true,
+      reusedDays,
       source: "stored",
     };
   }
-  const fetchFrom = missing[0];
-  const fetchTo = missing[missing.length - 1];
   const started = Date.now();
   let calls = 0;
   let skipped = 0;
   let written = 0;
+  let stubs = 0;
   let truncated = false;
   const labels = wingLabels(wings);
-  for (const chunk of chunkDateRange(fetchFrom, fetchTo)) {
+  for (const chunk of chunkDateRange(start, end)) {
+    const need = listYmds(chunk.from, chunk.to).filter((ymd) => (overwrite ? !isWeekendYmd(ymd) : needsRollingFetch(root, ymd)));
+    if (!need.length) continue;
     if (Date.now() - started > deadlineMs) {
       truncated = true;
       break;
     }
     const weeklyBars = [];
     const monthlyBars = [];
-    for (const expiryFlag of ["WEEK", "MONTH"]) {
+    let chunkDone = true;
+    expiryLoop: for (const expiryFlag of ["WEEK", "MONTH"]) {
       for (const option of ["CE", "PE"]) {
         for (const strike of labels) {
           if (Date.now() - started > deadlineMs) {
             truncated = true;
-            break;
+            chunkDone = false;
+            break expiryLoop;
           }
           let payload = null;
           try {
@@ -363,12 +402,24 @@ export async function downloadRollingOptionRange({
     const monthlyDays = mergeBarsIntoDays(monthlyBars);
     const ymds = new Set([...weeklyDays.keys(), ...monthlyDays.keys()]);
     for (const ymd of ymds) {
-      if (!overwrite && hasRollingDay(root, ymd)) continue;
+      if (!overwrite && !needsRollingFetch(root, ymd)) continue;
       const weekly = weeklyDays.get(ymd) || { slots: [] };
       const monthly = monthlyDays.get(ymd) || { slots: [] };
-      if (!weekly.slots.length && !monthly.slots.length) continue;
+      if (!weekly.slots.length || !monthly.slots.length) continue;
       writeRollingDay(root, ymd, { weekly, monthly, source: "dhan-rolling" });
       written += 1;
+    }
+    if (chunkDone) {
+      for (const ymd of need) {
+        if (!needsRollingFetch(root, ymd)) continue;
+        writeRollingDay(root, ymd, {
+          empty: true,
+          weekly: { slots: [] },
+          monthly: { slots: [] },
+          source: "dhan-rolling-empty",
+        });
+        stubs += 1;
+      }
     }
   }
   return {
@@ -378,7 +429,10 @@ export async function downloadRollingOptionRange({
     days: written,
     calls,
     skipped,
+    stubs,
+    reusedDays,
     truncated,
-    source: written ? "dhan-rolling" : "none",
+    reused: calls === 0,
+    source: written ? "dhan-rolling" : reusedDays ? "stored" : "none",
   };
 }

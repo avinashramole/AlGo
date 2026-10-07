@@ -673,7 +673,15 @@ function AlgoCard({
               : algo.lastBacktest.from && algo.lastBacktest.to
                 ? ` · ${algo.lastBacktest.from} → ${algo.lastBacktest.to}`
                 : ""}
-            {algo.lastBacktest.reused ? " · reused stored Dhan history" : ""}
+            {algo.lastBacktest.reused || algo.lastBacktest.optionHistory?.reused
+              ? " · reused stored Dhan rolling days"
+              : ""}
+            {algo.lastBacktest.optionHistory?.reusedDays
+              ? ` · ${algo.lastBacktest.optionHistory.reusedDays} days from disk`
+              : ""}
+            {algo.lastBacktest.optionHistory?.days
+              ? ` · downloaded ${algo.lastBacktest.optionHistory.days} new day${Number(algo.lastBacktest.optionHistory.days) === 1 ? "" : "s"}`
+              : ""}
             {algo.lastBacktest.optionSource
               ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${
                   algo.lastBacktest.optionSource === "stored"
@@ -692,7 +700,7 @@ function AlgoCard({
             {isNiftyTest2Kind(algo) ? (
               <div className="mt-1 text-[11px] leading-snug text-slate-500">
                 {algo.lastBacktest.storedTrades
-                  ? `Trusted book: ${algo.lastBacktest.storedTrades} days from Dhan /charts/rollingoption (weekly+monthly ATM±10). Win % is those days only after costs.`
+                  ? `Trusted book: ${algo.lastBacktest.storedTrades} stored Dhan days. Already-downloaded days are reused from disk — only missing weekdays are fetched.`
                   : "Dhan not connected or no rolling days stored — this win % is a futures model, not live proof. Connect Dhan and run Backtest again."}
                 {algo.lastBacktest.optionHistory?.truncated ? " Download hit the time cap — run Backtest again to fill more days." : ""}
               </div>
