@@ -2672,7 +2672,7 @@ export function listAlgos() {
   return (state.algos || []).map((row) => clone(row));
 }
 
-function usableCandles(rows, fromMs, toMs) {
+function usableCandles(rows, fromMs, toMs, { padBeforeMs = 86_400_000, padAfterMs = 86_400_000 } = {}) {
   return (Array.isArray(rows) ? rows : [])
     .map((row) => ({
       time: Number(row.time),
@@ -2687,8 +2687,8 @@ function usableCandles(rows, fromMs, toMs) {
         Number.isFinite(row.time) &&
         Number.isFinite(row.close) &&
         row.close > 0 &&
-        row.time >= fromMs - 86_400_000 &&
-        row.time <= toMs + 86_400_000,
+        row.time >= fromMs - (Number(padBeforeMs) || 0) &&
+        row.time <= toMs + (Number(padAfterMs) || 0),
     )
     .sort((a, b) => a.time - b.time);
 }
@@ -2699,8 +2699,11 @@ export async function backtestAlgo(id, options = {}) {
   const window = resolveBacktestWindow(options);
   if (window.error) return { error: window.error };
   if (isNiftyTest2Algo(algo)) {
-    const candles = usableCandles(options.candles, window.fromMs, window.toMs);
-    const replay = runTest2Backtest(algo, candles.length >= 8 ? candles : options.candles || []);
+    const candles = usableCandles(options.candles, window.fromMs, window.toMs, {
+      padBeforeMs: 0,
+      padAfterMs: 86_400_000,
+    });
+    const replay = runTest2Backtest(algo, candles);
     const result = {
       ...replay,
       sample: candles.length < 8,

@@ -259,6 +259,7 @@ export function replayTest2Day(session, config, exitSession = null) {
   const pnl = round2(legs.reduce((sum, row) => sum + row.pnl, 0) - cost);
   return {
     day: session.day,
+    exitDay: (exitSession || session).day,
     pnl,
     legs,
     qty,
@@ -284,15 +285,26 @@ function holdOvernight(entry, exit) {
   };
 }
 
-function comboStats(pnls, equity, maxDrawdown) {
+function markDay(row) {
+  return String(row?.exitDay || row?.day || "");
+}
+
+function comboStats(trades, equity, maxDrawdown) {
+  const pnls = trades.map((row) => Number(row.pnl) || 0);
   const n = pnls.length;
   const winPnls = pnls.filter((value) => value > 0);
   const lossPnls = pnls.filter((value) => value < 0);
   const avgProfit = n ? equity / n : 0;
   const avgWin = winPnls.length ? winPnls.reduce((sum, value) => sum + value, 0) / winPnls.length : 0;
   const avgLoss = lossPnls.length ? lossPnls.reduce((sum, value) => sum + value, 0) / lossPnls.length : 0;
-  const maxProfit = n ? Math.max(...pnls) : 0;
-  const maxLoss = n ? Math.min(...pnls) : 0;
+  let best = trades[0];
+  let worst = trades[0];
+  for (const row of trades) {
+    if (Number(row.pnl) > Number(best?.pnl ?? Number.NEGATIVE_INFINITY)) best = row;
+    if (Number(row.pnl) < Number(worst?.pnl ?? Number.POSITIVE_INFINITY)) worst = row;
+  }
+  const maxProfit = n ? Number(best.pnl) || 0 : 0;
+  const maxLoss = n ? Number(worst.pnl) || 0 : 0;
   const rewardRisk = avgLoss ? Math.abs(avgWin / avgLoss) : 0;
   const returnDd = maxDrawdown < 0 ? equity / Math.abs(maxDrawdown) : 0;
   let winStreak = 0;
@@ -319,6 +331,8 @@ function comboStats(pnls, equity, maxDrawdown) {
     avgLoss: round2(avgLoss),
     maxProfit: round2(maxProfit),
     maxLoss: round2(maxLoss),
+    maxProfitDay: n ? markDay(best) : "",
+    maxLossDay: n ? markDay(worst) : "",
     maxWinStreak,
     maxLoseStreak,
     expectancy: round2(avgProfit),
@@ -339,6 +353,7 @@ function pushCombo(trades, legsBook, combo, overnight) {
     pnl: combo.pnl,
     bars: overnight ? 2 : 1,
     day: combo.day,
+    exitDay: combo.exitDay || combo.day,
     source: combo.source,
   });
   for (const leg of combo.legs) {
@@ -351,6 +366,7 @@ function pushCombo(trades, legsBook, combo, overnight) {
       pnl: leg.pnl,
       bars: overnight ? 2 : 1,
       day: combo.day,
+      exitDay: combo.exitDay || combo.day,
     });
   }
 }
@@ -367,7 +383,7 @@ function walkEquity(pnls) {
   let maxTradesInDd = 0;
   pnls.forEach((value, index) => {
     equity += value.pnl;
-    const day = value.day || "";
+    const day = markDay(value);
     if (equity >= peak) {
       peak = equity;
       if (inDrawdown) maxTradesInDd = Math.max(maxTradesInDd, ddTrades);
@@ -426,7 +442,7 @@ export function runTest2Backtest(algo, candles = []) {
   const equityWalk = walkEquity(primary);
   const pnls = primary.map((row) => row.pnl);
   const wins = pnls.filter((value) => value > 0).length;
-  const stats = comboStats(pnls, equityWalk.equity, equityWalk.maxDrawdown);
+  const stats = comboStats(primary, equityWalk.equity, equityWalk.maxDrawdown);
   const storedWins = storedTrades.filter((row) => row.pnl > 0).length;
   const synthWins = synthTrades.filter((row) => row.pnl > 0).length;
   const optionSource = storedTrades.length

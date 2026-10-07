@@ -650,7 +650,16 @@ function AlgoCard({
               : "Winning fills / all fills"
           }
         />
-        <Metric label="Backtest drawdown" value={rupee(drawdown)} tone={moneyClass(-Math.abs(drawdown))} hint="Peak-to-trough of the replay equity" />
+        <Metric
+          label="Backtest drawdown"
+          value={rupee(drawdown)}
+          tone={moneyClass(-Math.abs(drawdown))}
+          hint={
+            algo.lastBacktest?.maxDdFrom && algo.lastBacktest?.maxDdTo
+              ? `Worst DD ${algo.lastBacktest.maxDdFrom} → ${algo.lastBacktest.maxDdTo}`
+              : "Peak-to-trough of the replay equity"
+          }
+        />
       </div>
 
       {isNiftyTest2Kind(algo) && algo.lastBacktest?.avgProfit != null ? (
@@ -661,9 +670,21 @@ function AlgoCard({
           <Metric
             label="Max win / loss"
             value={`${formatInr(Number(algo.lastBacktest.maxProfit || 0))} / ${formatInr(Number(algo.lastBacktest.maxLoss || 0))}`}
-            hint={algo.lastBacktest.maxDdFrom && algo.lastBacktest.maxDdTo ? `Max DD ${algo.lastBacktest.maxDdFrom} → ${algo.lastBacktest.maxDdTo}` : "Single combo extremes"}
+            hint={
+              algo.lastBacktest.maxProfitDay || algo.lastBacktest.maxLossDay
+                ? `Win ${algo.lastBacktest.maxProfitDay || "—"} · Loss ${algo.lastBacktest.maxLossDay || "—"}`
+                : "Single combo extremes"
+            }
           />
-          <Metric label="Return / DD" value={formatNumber(Number(algo.lastBacktest.returnDd || 0), 2)} hint="Overall P&L ÷ |max drawdown|" />
+          <Metric
+            label="Return / DD"
+            value={formatNumber(Number(algo.lastBacktest.returnDd || 0), 2)}
+            hint={
+              algo.lastBacktest.maxDdFrom && algo.lastBacktest.maxDdTo
+                ? `Max DD ${algo.lastBacktest.maxDdFrom} → ${algo.lastBacktest.maxDdTo}`
+                : "Overall P&L ÷ |max drawdown|"
+            }
+          />
           <Metric label="Reward : Risk" value={formatNumber(Number(algo.lastBacktest.rewardRisk || 0), 2)} hint="|Avg win| ÷ |avg loss|" />
           <Metric
             label="Streaks"
