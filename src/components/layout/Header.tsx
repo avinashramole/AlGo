@@ -141,7 +141,7 @@ export function Header() {
           {showTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
         {admin ? (
-          <Link to="/users" className="icon-btn hidden md:flex" title="Users">
+          <Link to="/users" className="icon-btn hidden md:flex" title="User & IP Manager">
             <Users size={17} />
           </Link>
         ) : null}

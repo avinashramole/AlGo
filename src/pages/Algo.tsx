@@ -711,7 +711,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
             })}
             {!clients.length ? (
               <p className="py-6 text-center text-sm text-slate-400">
-                {loaded ? "No clients yet. Add one on All clients first." : "Loading clients…"}
+                {loaded ? "No clients yet. Add one on User & IP Manager first." : "Loading clients…"}
               </p>
             ) : null}
           </div>

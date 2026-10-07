@@ -15,8 +15,7 @@ export const adminNav = [
   { to: "/reports", label: "Reports" },
   { to: "/brokers", label: "Brokers" },
   { to: "/analytics", label: "Analytics" },
-  { to: "/users", label: "Users" },
-  { to: "/settings/ips", label: "IP management" },
+  { to: "/users", label: "User & IP Manager" },
   { to: "/chat", label: "Messages" },
   { to: "/profile", label: "Profile" },
   { to: "/settings", label: "Settings" },
@@ -39,6 +38,7 @@ const extraTitles = [
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algo" },
   { to: "/portfolio", label: "Position" },
+  { to: "/settings/ips", label: "User & IP Manager" },
 ] as const;
 
 function normalizePath(path: string) {

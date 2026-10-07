@@ -21,7 +21,7 @@ import { cn, formatIst, formatMobile, formatNumber } from "../lib/format";
 type SizingKind = ClientRow["sizingKind"];
 type TradeMode = ClientRow["tradeMode"];
 
-export function Users() {
+export function Users({ embedded = false }: { embedded?: boolean }) {
   const { user, applyUser } = useAuth();
   const seeded = peekClientList();
   const [clients, setClients] = useState<ClientRow[]>(seeded?.clients || []);
@@ -125,15 +125,14 @@ export function Users() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
+        {embedded ? null : (
         <div>
-          <h1 className="text-xl font-bold">All clients</h1>
-          <p className="text-sm text-slate-400">
-            Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.{" "}
-            <Link to="/settings/ips" className="font-semibold text-brand-500">
-              IP management
-            </Link>
+          <h1 className="text-xl font-bold">User & IP Manager</h1>
+          <p className="desk-help text-sm text-slate-400">
+            Member books, copy size, and WhatsApp / Telegram. REAL / LIVE here is this client only — it does not start Dhan LIVE on the desk.
           </p>
         </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -822,8 +821,8 @@ function AddClientModal({
               </select>
               <span className="desk-help font-normal text-[11px] text-slate-500">
                 IPs already assigned to another account on this broker are hidden. Add inventory on{" "}
-                <Link to="/settings/ips" className="font-semibold text-brand-500">
-                  IP management
+                <Link to="/users?tab=ips" className="font-semibold text-brand-500">
+                  User & IP Manager
                 </Link>
                 .
               </span>

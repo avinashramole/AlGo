@@ -98,7 +98,7 @@ function BrokerMark({ name, color }: { name: string; color?: string }) {
   );
 }
 
-export function IpManagement() {
+export function IpManagement({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<IpManagementSnapshot>(emptySnap);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [family, setFamily] = useState<FamilyFilter>("ipv4");
@@ -173,10 +173,12 @@ export function IpManagement() {
   return (
     <div className="desk-page mx-auto max-w-[1400px] space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        {embedded ? null : (
         <div>
-          <h1 className="text-xl font-bold">IP management</h1>
+          <h1 className="text-xl font-bold">User & IP Manager</h1>
           <p className="desk-help text-sm text-slate-400">Broker-wise static egress allocation and account control</p>
         </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs font-bold">
             {(["ipv4", "ipv6"] as const).map((item) => (
@@ -414,7 +416,7 @@ function AccountAssignmentsTable({
             ) : (
               <tr>
                 <td className="px-4 py-8 text-center text-sm text-slate-500" colSpan={6}>
-                  No member accounts yet. New clients on All clients appear here with Server default until you assign a static IP.
+                  No member accounts yet. New clients on User & IP Manager appear here with Server default until you assign a static IP.
                 </td>
               </tr>
             )}
