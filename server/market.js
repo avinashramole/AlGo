@@ -28,7 +28,7 @@ import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSp
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { listPublicUsers } from "./auth.js";
-import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, strikeOffsetLabel } from "./strategies.js";
+import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
@@ -87,12 +87,32 @@ import { fileURLToPath } from "node:url";
 const algoStore = loadAlgoStore();
 let removedAlgoIds = [...(algoStore.removedIds || [])];
 
-function persistAlgos() {
+function persistAlgosNow() {
   try {
     saveAlgoStore(clone(state.algos || []), [...removedAlgoIds]);
   } catch (error) {
     console.log(`Could not save strategies: ${error.message || error}`);
   }
+}
+
+let persistAlgosTimer = null;
+
+function persistAlgos() {
+  if (underNodeTest()) {
+    persistAlgosNow();
+    return;
+  }
+  if (persistAlgosTimer) return;
+  persistAlgosTimer = setImmediate(() => {
+    persistAlgosTimer = null;
+    try {
+      saveAlgoStoreAsync(clone(state.algos || []), [...removedAlgoIds]).catch((error) => {
+        console.log(`Could not save strategies: ${error.message || error}`);
+      });
+    } catch (error) {
+      console.log(`Could not save strategies: ${error.message || error}`);
+    }
+  });
 }
 
 function clone(value) {
@@ -1710,7 +1730,12 @@ export function adminQuoteFeed() {
 const LAST_QUOTES_FILE = process.env.T2S_QUOTE_CACHE || path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "last-quotes.json");
 
 function underNodeTest() {
-  return process.execArgv.includes("--test") || process.argv.includes("--test") || process.env.NODE_TEST === "1";
+  return (
+    process.execArgv.includes("--test") ||
+    process.argv.includes("--test") ||
+    process.env.NODE_TEST === "1" ||
+    Boolean(process.env.NODE_TEST_CONTEXT)
+  );
 }
 
 export function indexFamilyHasTape(family) {
@@ -1929,13 +1954,21 @@ function skipLiveAlgoTicks() {
   return /^(1|true|yes)$/i.test(String(process.env.T2S_SKIP_LIVE_ALGOS || ""));
 }
 
-export function tickMarket() {
-  if (tickBusy) return;
-  tickBusy = true;
+function runDeskAlgosSafely() {
   try {
     if (dhanTapeReady() && !skipLiveAlgoTicks()) runLiveAlgos();
     runPaperAlgos();
     markPaperToMarket();
+  } catch (error) {
+    console.error(`Desk algo tick failed: ${error.message || error}`);
+  }
+}
+
+export function tickMarket() {
+  if (tickBusy) return;
+  tickBusy = true;
+  try {
+    runDeskAlgosSafely();
   } catch (error) {
     console.error(`tickMarket failed: ${error.message || error}`);
   } finally {
@@ -4020,10 +4053,8 @@ export function applyLiveQuotes(quotes) {
     return row;
   });
 
-  runPaperAlgos();
-  runLiveAlgos();
-  markPaperToMarket();
   schedulePersistLastQuotes();
+  runDeskAlgosSafely();
 }
 
 export function getCandles(tf = "5m", symbol = "NIFTY") {

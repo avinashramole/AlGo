@@ -448,7 +448,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
         const status = nextEnabled ? (previous.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
         pendingToggles.current.set(id, { enabled: nextEnabled, status });
-        snapshotGen.current += 1;
         patchAlgo(id, { enabled: nextEnabled, status });
         try {
           const result = await toggleAlgo(id, nextEnabled);
@@ -470,7 +469,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         if (enabled && !dataRef.current.dhanFeed?.live) {
           throw new Error("Start live needs Dhan LIVE — real CE/PE and futures orders only.");
         }
-        snapshotGen.current += 1;
         for (const row of rows) {
           const status = enabled ? (row.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
           pendingToggles.current.set(row.id, { enabled, status });

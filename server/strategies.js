@@ -932,4 +932,9 @@ export function saveAlgoStore(algos = [], removedIds = []) {
   fs.writeFileSync(ALGOS_FILE, `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) })}\n`);
 }
 
+export function saveAlgoStoreAsync(algos = [], removedIds = []) {
+  const payload = `${JSON.stringify({ algos: algos || [], removedIds: uniqueIds(removedIds) })}\n`;
+  return fs.promises.mkdir(path.dirname(ALGOS_FILE), { recursive: true }).then(() => fs.promises.writeFile(ALGOS_FILE, payload));
+}
+
 export const STRATEGY_META = { SYMBOLS, INDICATORS, PATTERNS, TIMEFRAMES, OPERATORS, SOURCES, OP_LABEL, SRC_LABEL };

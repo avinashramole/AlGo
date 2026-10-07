@@ -1227,7 +1227,11 @@ function startSocket() {
     pendingQuotes = [];
     if (!quotes.length) return;
     noteFamilyTicks(quotes);
-    applyLiveQuotes(quotes);
+    try {
+      applyLiveQuotes(quotes);
+    } catch (error) {
+      console.error(`applyLiveQuotes failed: ${error.message || error}`);
+    }
     setDhanFeed({
       live: true,
       source: "websocket",

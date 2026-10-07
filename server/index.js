@@ -644,7 +644,11 @@ app.get("/api/snapshot", (_req, res) => {
 });
 
 app.get("/api/feed", (_req, res) => {
-  res.json(deskFeed());
+  try {
+    res.json(deskFeed());
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load feed" });
+  }
 });
 
 app.get("/api/mtm", (_req, res) => {
