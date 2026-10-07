@@ -8,6 +8,8 @@ export const CRUDE_FIRST_CANDLE_KIND = "crude-first-candle";
 export const CRUDE_FIRST_CANDLE_TYPE = "CRUDE_FIRST_CANDLE_5M";
 export const NIFTY_TEST_KIND = "nifty-test";
 export const NIFTY_TEST_TYPE = "NIFTY_TEST";
+export const NIFTY_TEST1_KIND = "nifty-test1";
+export const NIFTY_TEST1_TYPE = "NIFTY_TEST1";
 
 export const DEFAULT_NIFTY_VWAP_CONFIG = {
   timeframe: "5m",
@@ -101,6 +103,26 @@ export const DEFAULT_NIFTY_TEST_CONFIG = {
   endTimeIst: "15:15",
 };
 
+export const DEFAULT_NIFTY_TEST1_CONFIG = {
+  timeframe: "5m",
+  barMinutes: 5,
+  symbol: "NIFTY",
+  lots: 1,
+  lotSize: 65,
+  signalMode: "test1-atm-green",
+  startTimeIst: "09:30",
+  endTimeIst: "15:15",
+  minBodyPct: 0.9,
+  maxWickPct: 0.1,
+  targetMultiple: 1,
+  targetSource: "body",
+  strikeOffset: 0,
+  expiryKind: "weekly",
+  maxPositions: 1,
+  intradayOnly: true,
+  eodSquareOffMinutes: 15,
+};
+
 export function parseIstHm(value, fallback = "09:00") {
   const raw = String(value || "").trim();
   const match = raw.match(/^(\d{1,2}):(\d{2})$/);
@@ -182,6 +204,13 @@ export function isFirstCandleAlgo(algo = {}) {
 
 export function isNiftyTestAlgo(algo = {}) {
   return algo.kind === NIFTY_TEST_KIND || algo.strategyType === NIFTY_TEST_TYPE || algo.indicator === "NIFTY_TEST";
+}
+
+export function isNiftyTest1Algo(algo = {}) {
+  if (algo.kind === NIFTY_TEST1_KIND || algo.strategyType === NIFTY_TEST1_TYPE || algo.indicator === "NIFTY_TEST1") {
+    return true;
+  }
+  return String(algo.name || "").trim().toUpperCase() === "TEST1";
 }
 
 export function isNiftyOptionEngineAlgo(algo = {}) {
@@ -378,7 +407,43 @@ export function crudeFirstCandleConfig(algo = {}) {
   };
 }
 
+export function niftyTest1Config(algo = {}) {
+  const num = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_TEST1_CONFIG.lots)));
+  const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_TEST1_CONFIG.lotSize)));
+  const minBodyPct = Math.min(0.99, Math.max(0.5, num(algo.minBodyPct, DEFAULT_NIFTY_TEST1_CONFIG.minBodyPct)));
+  const maxWickPct = Math.min(0.5, Math.max(0.01, num(algo.maxWickPct, DEFAULT_NIFTY_TEST1_CONFIG.maxWickPct)));
+  const targetMultiple = Math.min(5, Math.max(0.1, num(algo.targetMultiple, DEFAULT_NIFTY_TEST1_CONFIG.targetMultiple)));
+  const targetSource = String(algo.targetSource || DEFAULT_NIFTY_TEST1_CONFIG.targetSource) === "range" ? "range" : "body";
+  return {
+    timeframe: "5m",
+    barMinutes: 5,
+    symbol: "NIFTY",
+    lots,
+    lotSize,
+    qty: lots * lotSize,
+    signalMode: "test1-atm-green",
+    startTimeIst: parseIstHm(algo.startTimeIst, DEFAULT_NIFTY_TEST1_CONFIG.startTimeIst),
+    endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_TEST1_CONFIG.endTimeIst),
+    minBodyPct,
+    maxWickPct,
+    targetMultiple,
+    targetSource,
+    strikeOffset: 0,
+    expiryKind: "weekly",
+    maxPositions: 1,
+    intradayOnly: algo.intradayOnly !== false,
+    eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, DEFAULT_NIFTY_TEST1_CONFIG.eodSquareOffMinutes))),
+    useTrail: false,
+    useVwapExit: false,
+  };
+}
+
 export function optionEngineConfig(algo = {}) {
+  if (isNiftyTest1Algo(algo)) return niftyTest1Config(algo);
   if (isCrudeFirstCandleAlgo(algo)) return crudeFirstCandleConfig(algo);
   if (isNiftyVwapReversalAlgo(algo)) return niftyVwapReversalConfig(algo);
   if (isNiftyFirstCandleAlgo(algo)) return niftyFirstCandleConfig(algo);
@@ -646,6 +711,63 @@ export function defaultNiftyTestAlgo(patch = {}) {
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
     indicator: "NIFTY_TEST",
+    enabled: false,
+  };
+}
+
+export function defaultNiftyTest1Algo(patch = {}) {
+  const cfg = niftyTest1Config(patch);
+  return {
+    name: "TEST1",
+    kind: NIFTY_TEST1_KIND,
+    strategyType: NIFTY_TEST1_TYPE,
+    tag: "TEST1",
+    symbol: "NIFTY",
+    instrument: "option",
+    optionType: "CE",
+    strikeOffset: 0,
+    side: "BUY",
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    timeframe: "5m",
+    slPct: 0,
+    targetPct: 0,
+    minBodyPct: cfg.minBodyPct,
+    maxWickPct: cfg.maxWickPct,
+    targetMultiple: cfg.targetMultiple,
+    targetSource: cfg.targetSource,
+    startTimeIst: cfg.startTimeIst,
+    endTimeIst: cfg.endTimeIst,
+    expiryKind: "weekly",
+    maxPositions: 1,
+    intradayOnly: true,
+    eodSquareOffMinutes: cfg.eodSquareOffMinutes,
+    indicator: "NIFTY_TEST1",
+    runMode: ["live", "paper", "backtest"].includes(patch.runMode) ? patch.runMode : "live",
+    brokerId: patch.runMode === "paper" || patch.runMode === "backtest" ? "paper" : "dhan",
+    enabled: false,
+    status: patch.runMode === "backtest" ? "BACKTEST" : "PAUSED",
+    ...patch,
+    name: "TEST1",
+    kind: NIFTY_TEST1_KIND,
+    strategyType: NIFTY_TEST1_TYPE,
+    symbol: "NIFTY",
+    instrument: "option",
+    strikeOffset: 0,
+    side: "BUY",
+    lots: cfg.lots,
+    lotSize: cfg.lotSize,
+    qty: cfg.qty,
+    timeframe: "5m",
+    minBodyPct: cfg.minBodyPct,
+    maxWickPct: cfg.maxWickPct,
+    targetMultiple: cfg.targetMultiple,
+    targetSource: cfg.targetSource,
+    startTimeIst: cfg.startTimeIst,
+    endTimeIst: cfg.endTimeIst,
+    expiryKind: "weekly",
+    indicator: "NIFTY_TEST1",
     enabled: false,
   };
 }

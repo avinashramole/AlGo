@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test" | "nifty-test1";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -82,6 +82,10 @@ export type AlgoStrategy = {
   entryEvaluationIst?: string;
   endTimeIst?: string;
   startTimeIst?: string;
+  minBodyPct?: number;
+  maxWickPct?: number;
+  targetMultiple?: number;
+  targetSource?: "body" | "range";
   expiryKind?: "weekly" | "monthly";
   maxTradesPerDay?: number;
   mappingScope?: "master" | "clients" | "both";
@@ -334,9 +338,18 @@ export function isNiftyTestKind(algo?: { kind?: string; strategyType?: string; i
   return algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
 }
 
+export function isNiftyTest1Kind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
+  return (
+    algo?.kind === "nifty-test1" ||
+    algo?.strategyType === "NIFTY_TEST1" ||
+    algo?.indicator === "NIFTY_TEST1" ||
+    String(algo?.name || "").trim().toUpperCase() === "TEST1"
+  );
+}
+
 export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
   if (!algo) return false;
-  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo)) return false;
+  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo)) return false;
   if (isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyTestKind(algo)) return true;
   const kind = String(algo.kind || "");
   return kind === "indicator" || kind === "price-action" || kind === "";
@@ -369,6 +382,7 @@ export function contractLabel(algo: {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
+  if (isNiftyTest1Kind(algo)) return "NIFTY ATM CE/PE";
   if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyFirstCandleKind(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
@@ -606,6 +620,38 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       ...groupsFromFlat(defaultConditions("indicator", "VWAP", "ORB")),
       runMode: "live",
       dailyLiveIst: "09:20",
+      brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "nifty-test1") {
+    return {
+      name: "TEST1",
+      kind: "nifty-test1",
+      tag: "TEST1",
+      strategyType: "NIFTY_TEST1",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "5m",
+      minBodyPct: 0.9,
+      maxWickPct: 0.1,
+      targetMultiple: 1,
+      targetSource: "body",
+      startTimeIst: "09:30",
+      endTimeIst: "15:15",
+      expiryKind: "weekly",
+      maxPositions: 1,
+      intradayOnly: true,
+      eodSquareOffMinutes: 15,
+      indicator: "NIFTY_TEST1",
+      runMode: "live",
       brokerId: "dhan",
       enabled: false,
       status: "PAUSED",
