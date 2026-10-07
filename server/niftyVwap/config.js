@@ -4,8 +4,11 @@ export const NIFTY_VWAP_REVERSAL_KIND = "nifty-vwap-reversal";
 export const NIFTY_VWAP_REVERSAL_TYPE = "NIFTY_VWAP_REVERSAL_15M";
 export const NIFTY_FIRST_CANDLE_KIND = "nifty-first-candle";
 export const NIFTY_FIRST_CANDLE_TYPE = "NIFTY_FIRST_CANDLE_5M";
+export const NIFTY_FIRST_CANDLE_NAME = "NIFTY";
 export const CRUDE_FIRST_CANDLE_KIND = "crude-first-candle";
 export const CRUDE_FIRST_CANDLE_TYPE = "CRUDE_FIRST_CANDLE_5M";
+export const CRUDE_FIRST_CANDLE_NAME = "CRUDE OIL";
+export const ALWAYS_ON_FIRST_CANDLE_IDS = ["a10", "a12"];
 export const NIFTY_TEST_KIND = "nifty-test";
 export const NIFTY_TEST_TYPE = "NIFTY_TEST";
 export const NIFTY_TEST1_KIND = "nifty-test1";
@@ -209,12 +212,76 @@ export function isNiftyVwapReversalAlgo(algo = {}) {
   );
 }
 
+export function isNiftyFirstCandleName(name = "") {
+  const text = String(name || "").trim();
+  if (!text || /crude/i.test(text)) return false;
+  if (/^nifty$/i.test(text)) return true;
+  return /nifty/i.test(text) && /first\s*candle/i.test(text);
+}
+
+export function isCrudeFirstCandleName(name = "", symbol = "") {
+  const text = String(name || "").trim();
+  const root = String(symbol || "").toUpperCase();
+  if (/^crude\s*oil$/i.test(text) || /^crudeoil$/i.test(text)) return true;
+  const mentionsCrude = /crude/i.test(text) || root === "CRUDEOIL";
+  if (!mentionsCrude || !/first\s*candle/i.test(text)) return false;
+  if (/(?:^|[^0-9])15\s*m/i.test(text)) return false;
+  return true;
+}
+
+function isOfficialNiftyFirstCandleName(name = "") {
+  const text = String(name || "").trim();
+  if (!text) return true;
+  if (/^nifty$/i.test(text)) return true;
+  return /nifty/i.test(text) && /5\s*m/i.test(text) && /first\s*candle/i.test(text) && !/crude/i.test(text);
+}
+
+function isOfficialCrudeFirstCandleName(name = "") {
+  const text = String(name || "").trim();
+  if (!text) return true;
+  if (/^crude\s*oil$/i.test(text) || /^crudeoil$/i.test(text)) return true;
+  return /crude/i.test(text) && /5\s*m/i.test(text) && /first\s*candle/i.test(text);
+}
+
+export function lockedNiftyFirstCandleName(name = "") {
+  const text = String(name || "").trim();
+  if (isOfficialNiftyFirstCandleName(text)) return NIFTY_FIRST_CANDLE_NAME;
+  return text;
+}
+
+export function lockedCrudeFirstCandleName(name = "") {
+  const text = String(name || "").trim();
+  if (isOfficialCrudeFirstCandleName(text)) return CRUDE_FIRST_CANDLE_NAME;
+  return text;
+}
+
+export function firstCandleNameAliases(name = "") {
+  const text = String(name || "").trim().toLowerCase();
+  if (!text) return [];
+  const aliases = new Set([text]);
+  if (isNiftyFirstCandleName(name) || text === "nifty") {
+    aliases.add("nifty");
+    aliases.add("nifty 5m first candle");
+    aliases.add("nifty 5 m first candle");
+  }
+  if (isCrudeFirstCandleName(name) || text === "crude oil" || text === "crudeoil") {
+    aliases.add("crude oil");
+    aliases.add("crudeoil");
+    aliases.add("crude oil 5m first candle");
+    aliases.add("crude oil 5 m first candle");
+  }
+  return [...aliases];
+}
+
 export function isNiftyFirstCandleAlgo(algo = {}) {
-  return (
+  if (
     algo.kind === NIFTY_FIRST_CANDLE_KIND ||
     algo.strategyType === NIFTY_FIRST_CANDLE_TYPE ||
     algo.indicator === "NIFTY_FIRST_CANDLE"
-  );
+  ) {
+    return true;
+  }
+  return isNiftyFirstCandleName(algo.name) && !isCrudeFirstCandleName(algo.name, algo.symbol);
 }
 
 export function isCrudeFirstCandleAlgo(algo = {}) {
@@ -225,12 +292,7 @@ export function isCrudeFirstCandleAlgo(algo = {}) {
   ) {
     return true;
   }
-  const name = String(algo.name || "");
-  const symbol = String(algo.symbol || "").toUpperCase();
-  const mentionsCrude = /crude/i.test(name) || symbol === "CRUDEOIL";
-  if (!mentionsCrude || !/first\s*candle/i.test(name)) return false;
-  if (/(?:^|[^0-9])15\s*m/i.test(name)) return false;
-  return true;
+  return isCrudeFirstCandleName(algo.name, algo.symbol);
 }
 
 export function isFirstCandleAlgo(algo = {}) {
@@ -579,7 +641,7 @@ export function defaultNiftyVwapReversalAlgo(patch = {}) {
 export function defaultNiftyFirstCandleAlgo(patch = {}) {
   const cfg = niftyFirstCandleConfig(patch);
   return {
-    name: patch.name || "NIFTY 5m first candle",
+    name: lockedNiftyFirstCandleName(patch.name),
     kind: NIFTY_FIRST_CANDLE_KIND,
     strategyType: NIFTY_FIRST_CANDLE_TYPE,
     tag: "5m first",
@@ -643,6 +705,7 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
     trailingEveryPct: cfg.trailingEveryPct,
     trailingShiftPct: cfg.trailingShiftPct,
     trailingStepPct: cfg.trailingShiftPct,
+    name: lockedNiftyFirstCandleName(patch.name),
     enabled: false,
   };
 }
@@ -650,7 +713,7 @@ export function defaultNiftyFirstCandleAlgo(patch = {}) {
 export function defaultCrudeFirstCandleAlgo(patch = {}) {
   const cfg = crudeFirstCandleConfig(patch);
   return {
-    name: patch.name || "CRUDE OIL 5m first candle",
+    name: lockedCrudeFirstCandleName(patch.name),
     kind: CRUDE_FIRST_CANDLE_KIND,
     strategyType: CRUDE_FIRST_CANDLE_TYPE,
     tag: "crude 5m",
@@ -699,6 +762,7 @@ export function defaultCrudeFirstCandleAlgo(patch = {}) {
     eodSquareOffMinutes: cfg.eodSquareOffMinutes,
     endTimeIst: cfg.endTimeIst,
     indicator: "CRUDE_FIRST_CANDLE",
+    name: lockedCrudeFirstCandleName(patch.name),
     enabled: false,
   };
 }

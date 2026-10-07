@@ -8,9 +8,17 @@ import { exchangeSegmentFor } from "./optionChain.js";
 
 let pendingCopySends = [];
 
+function strategyLabel(name) {
+  const text = String(name || "").trim().toLowerCase();
+  if (!text) return "";
+  if (isNiftyFirstCandleName(text)) return "nifty";
+  if (isCrudeFirstCandleName(text)) return "crude oil";
+  return text;
+}
+
 function sameStrategy(left, right) {
-  const a = String(left || "").trim().toLowerCase();
-  const b = String(right || "").trim().toLowerCase();
+  const a = strategyLabel(left);
+  const b = strategyLabel(right);
   return Boolean(a && b && a === b);
 }
 
@@ -21,12 +29,15 @@ function subscriptionOpen(until) {
 }
 
 function isNiftyFirstCandleName(name) {
-  const text = String(name || "");
-  return /nifty/i.test(text) && /first\s*candle/i.test(text) && !/crude/i.test(text);
+  const text = String(name || "").trim();
+  if (!text || /crude/i.test(text)) return false;
+  if (/^nifty$/i.test(text)) return true;
+  return /nifty/i.test(text) && /first\s*candle/i.test(text);
 }
 
 function isCrudeFirstCandleName(name) {
-  const text = String(name || "");
+  const text = String(name || "").trim();
+  if (/^crude\s*oil$/i.test(text) || /^crudeoil$/i.test(text)) return true;
   if (!/crude/i.test(text) || !/first\s*candle/i.test(text)) return false;
   if (/(?:^|[^0-9])15\s*m/i.test(text)) return false;
   return true;

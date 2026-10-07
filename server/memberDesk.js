@@ -11,6 +11,7 @@ import { LIVE_BROKER_CATALOG, kotakMobileNumber, liveBrokerSession } from "./liv
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
+import { firstCandleNameAliases } from "./niftyVwap/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1115,6 +1116,7 @@ function strategySets(algos = []) {
     const name = String(row?.name || "").trim().toLowerCase();
     if (id) ids.add(id);
     if (name) names.add(name);
+    for (const alias of firstCandleNameAliases(row?.name)) names.add(alias);
   }
   return { ids, names };
 }
@@ -1566,9 +1568,17 @@ function placeMemberOrder(desk, order) {
   desk.orderHistory = desk.orderHistory.filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
 }
 
+function strategyLabel(name) {
+  const text = String(name || "").trim().toLowerCase();
+  if (!text) return "";
+  if (text === "nifty" || (/nifty/.test(text) && /first\s*candle/.test(text) && !/crude/.test(text))) return "nifty";
+  if (text === "crude oil" || text === "crudeoil" || (/crude/.test(text) && /first\s*candle/.test(text))) return "crude oil";
+  return text;
+}
+
 function sameStrategy(left, right) {
-  const a = String(left || "").trim().toLowerCase();
-  const b = String(right || "").trim().toLowerCase();
+  const a = strategyLabel(left);
+  const b = strategyLabel(right);
   return Boolean(a && b && a === b);
 }
 
@@ -1576,10 +1586,10 @@ function liveBookForPlans(liveBook, enrollments = [], brokerId = "paper") {
   const names = new Set(
     (enrollments || [])
       .filter((row) => enrollmentActive(row))
-      .map((row) => String(row.strategyName || "").trim().toLowerCase())
+      .map((row) => strategyLabel(row.strategyName))
       .filter(Boolean),
   );
-  const match = (row) => names.has(String(row?.strategy || "").trim().toLowerCase()) && rowOnBroker(row, brokerId);
+  const match = (row) => names.has(strategyLabel(row?.strategy)) && rowOnBroker(row, brokerId);
   if (!liveBook || !names.size) return { positions: [], orders: [], orderHistory: [], closedTrades: [] };
   return {
     positions: (liveBook.positions || []).filter(match),

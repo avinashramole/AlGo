@@ -73,13 +73,25 @@ test("hydrate first boot seeds the paused catalog", () => {
 
 test("hydrate does not resurrect a deleted catalog strategy after deploy", () => {
   const catalog = seedAlgos();
-  const saved = catalog.filter((row) => row.id !== "a12");
-  const next = hydrateAlgos({ algos: saved, removedIds: ["a12"] }, catalog);
-  assert.equal(next.algos.some((row) => row.id === "a12"), false);
-  assert.equal(next.algos.some((row) => row.name === "CRUDE OIL 5m first candle"), false);
-  assert.deepEqual(next.removedIds, ["a12"]);
+  const saved = catalog.filter((row) => row.id !== "a13");
+  const next = hydrateAlgos({ algos: saved, removedIds: ["a13"] }, catalog);
+  assert.equal(next.algos.some((row) => row.id === "a13"), false);
+  assert.equal(next.algos.some((row) => row.name === "TEST1"), false);
+  assert.deepEqual(next.removedIds, ["a13"]);
   assert.equal(next.algos.length, 2);
-  assert.equal(next.algos.some((row) => row.id === "a13"), true);
+  assert.equal(next.algos.some((row) => row.id === "a10"), true);
+  assert.equal(next.algos.some((row) => row.id === "a12"), true);
+});
+
+test("hydrate always shows NIFTY and CRUDE OIL even if they were deleted", () => {
+  const catalog = seedAlgos();
+  const next = hydrateAlgos({ algos: [], removedIds: ["a10", "a12", "a13"] }, catalog);
+  const nifty = next.algos.find((row) => row.id === "a10");
+  const crude = next.algos.find((row) => row.id === "a12");
+  assert.equal(nifty.name, "NIFTY");
+  assert.equal(crude.name, "CRUDE OIL");
+  assert.equal(next.algos.some((row) => row.id === "a13"), false);
+  assert.deepEqual(next.removedIds, ["a13"]);
 });
 
 test("hydrate still adds a new catalog strategy that was never deleted", () => {
@@ -145,7 +157,7 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(crude.filter((row) => row.kind === "indicator").length, 0);
   assert.equal(seeded.some((row) => row.kind === "nifty-vwap" || row.kind === "nifty-test" || row.kind === "indicator"), false);
   const firstCandle = seeded.find((row) => row.id === "a10");
-  assert.equal(firstCandle.name, "NIFTY 5m first candle");
+  assert.equal(firstCandle.name, "NIFTY");
   assert.equal(firstCandle.kind, "nifty-first-candle");
   assert.equal(firstCandle.enabled, false);
   assert.equal(firstCandle.status, "PAUSED");
@@ -159,7 +171,7 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(firstCandle.maxTradesPerDay, 5);
   assert.equal(firstCandle.strikeOffset, 0);
   const crudeFirst = seeded.find((row) => row.id === "a12");
-  assert.equal(crudeFirst.name, "CRUDE OIL 5m first candle");
+  assert.equal(crudeFirst.name, "CRUDE OIL");
   assert.equal(crudeFirst.kind, "crude-first-candle");
   assert.equal(crudeFirst.symbol, "CRUDEOIL");
   assert.equal(crudeFirst.enabled, false);
@@ -198,8 +210,15 @@ test("crude oil 5m name stays crude and does not become the nifty first candle",
   assert.doesNotMatch(row.summary, /close above|price action/i);
   const nifty = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "indicator" });
   assert.equal(nifty.kind, "nifty-first-candle");
+  assert.equal(nifty.name, "NIFTY");
   assert.equal(nifty.symbol, "NIFTY");
   assert.equal(nifty.endTimeIst, "15:15");
+  const shortCrude = normalizeAlgo({ name: "CRUDE OIL", kind: "indicator" });
+  assert.equal(shortCrude.kind, "crude-first-candle");
+  assert.equal(shortCrude.name, "CRUDE OIL");
+  const shortNifty = normalizeAlgo({ name: "NIFTY", kind: "indicator" });
+  assert.equal(shortNifty.kind, "nifty-first-candle");
+  assert.equal(shortNifty.name, "NIFTY");
 });
 
 test("crude oil 5m saved as price action drops indicator conditions and stays paused", () => {

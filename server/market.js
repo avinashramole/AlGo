@@ -37,6 +37,8 @@ import {
   isCrudeFirstCandleAlgo,
   isFirstCandleAlgo,
   isNiftyFirstCandleAlgo,
+  isNiftyFirstCandleName,
+  firstCandleNameAliases,
   isNiftyOptionEngineAlgo,
   isNiftyTestAlgo,
   isNiftyTest1Algo,
@@ -797,7 +799,7 @@ function sameBookOrder(payload = {}) {
 function liveCopyAlgo(stamped = {}) {
   const name = String(stamped?.strategy || "");
   const exact = (state.algos || []).find((row) => String(row.name || "") === name) || {};
-  const niftyFirst = isNiftyFirstCandleAlgo(exact) || (/nifty/i.test(name) && /first\s*candle/i.test(name) && !/crude/i.test(name));
+  const niftyFirst = isNiftyFirstCandleAlgo(exact) || isNiftyFirstCandleName(name);
   if (!niftyFirst || String(exact.mappingScope || "") === "master") return exact;
   const also = new Set();
   for (const row of state.algos || []) {
@@ -1247,7 +1249,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const open = PositionManager.openFor(positions, algo.name, vs);
   const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
   const showLivePreview = () => {
-    if (!isFirstCandleAlgo(algo) || !feedLive) return;
+    if (!isFirstCandleAlgo(algo)) return;
     const closed = signalBars(config.timeframe || "5m", Date.now(), barSession);
     const preview = closed[closed.length - 1] || null;
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
@@ -1968,6 +1970,7 @@ function strategySets(algos = []) {
     const name = String(row?.name || "").trim().toLowerCase();
     if (id) ids.add(id);
     if (name) names.add(name);
+    for (const alias of firstCandleNameAliases(row?.name)) names.add(alias);
   }
   return { ids, names };
 }
@@ -2045,6 +2048,7 @@ function skipLiveAlgoTicks() {
 function runDeskAlgosSafely() {
   try {
     if (dhanTapeReady() && !skipLiveAlgoTicks()) runLiveAlgos();
+    stampDeskFirstCandleColors();
     runPaperAlgos();
     markPaperToMarket();
   } catch (error) {
@@ -3776,9 +3780,25 @@ function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = ni
   const minutes = futureBarMinutes(timeframe);
   const closed = signalBars(timeframe, now, session);
   const preview = closed[closed.length - 1] || null;
+  const color = VwapSignalEngine.firstBarColor(preview);
+  if (color) algo.futureColor = color;
   const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
   const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
   algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
+  if (color && !/\b(?:GREEN|RED|DOJI)\b/i.test(String(algo.lastSignal || ""))) {
+    algo.lastSignal = `${root} ${color.toUpperCase()}`;
+  }
+}
+
+function stampDeskFirstCandleColors() {
+  for (const algo of state.algos || []) {
+    if (!isFirstCandleAlgo(algo)) continue;
+    const crude = isCrudeFirstCandleAlgo(algo);
+    const config = optionEngineConfig(algo);
+    const barSession = firstCandleBarSession(config, crude);
+    const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
+    stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now(), {}, signalBars, barSession);
+  }
 }
 
 export function setLiveCandles(candles, symbol = "NIFTY", instrument = "") {

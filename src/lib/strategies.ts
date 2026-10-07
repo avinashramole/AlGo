@@ -118,6 +118,7 @@ export type AlgoStrategy = {
   enabled: boolean;
   brokerId?: string;
   lastSignal?: string;
+  futureColor?: "green" | "red" | "doji" | "";
   trade?: {
     kind?: "future" | "option";
     symbol?: string;
@@ -249,12 +250,35 @@ export function isNiftyVwapHedgeKind(algo?: { kind?: string; strategyType?: stri
   );
 }
 
-export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string }) {
-  return (
+export const NIFTY_FIRST_CANDLE_NAME = "NIFTY";
+export const CRUDE_FIRST_CANDLE_NAME = "CRUDE OIL";
+
+export function isNiftyFirstCandleName(name?: string) {
+  const text = String(name || "").trim();
+  if (!text || /crude/i.test(text)) return false;
+  if (/^nifty$/i.test(text)) return true;
+  return /nifty/i.test(text) && /first\s*candle/i.test(text);
+}
+
+export function isCrudeFirstCandleName(name?: string, symbol?: string) {
+  const text = String(name || "").trim();
+  const root = String(symbol || "").toUpperCase();
+  if (/^crude\s*oil$/i.test(text) || /^crudeoil$/i.test(text)) return true;
+  const mentionsCrude = /crude/i.test(text) || root === "CRUDEOIL";
+  if (!mentionsCrude || !/first\s*candle/i.test(text)) return false;
+  if (/(?:^|[^0-9])15\s*m/i.test(text)) return false;
+  return true;
+}
+
+export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
+  if (
     algo?.kind === "nifty-first-candle" ||
     algo?.strategyType === "NIFTY_FIRST_CANDLE_5M" ||
     algo?.indicator === "NIFTY_FIRST_CANDLE"
-  );
+  ) {
+    return true;
+  }
+  return isNiftyFirstCandleName(algo?.name) && !isCrudeFirstCandleName(algo?.name, algo?.symbol);
 }
 
 export function firstCandleMinutes(timeframe?: string) {
@@ -310,12 +334,7 @@ export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: st
   ) {
     return true;
   }
-  const name = String(algo?.name || "");
-  const symbol = String(algo?.symbol || "").toUpperCase();
-  const mentionsCrude = /crude/i.test(name) || symbol === "CRUDEOIL";
-  if (!mentionsCrude || !/first\s*candle/i.test(name)) return false;
-  if (/(?:^|[^0-9])15\s*m/i.test(name)) return false;
-  return true;
+  return isCrudeFirstCandleName(algo?.name, algo?.symbol);
 }
 
 const CRUDE_INDICATOR_KEYS = [
@@ -710,7 +729,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   }
   if (kind === "crude-first-candle") {
     return {
-      name: "CRUDE OIL 5m first candle",
+      name: "CRUDE OIL",
       kind: "crude-first-candle",
       tag: "crude 5m",
       strategyType: "CRUDE_FIRST_CANDLE_5M",
@@ -753,7 +772,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   }
   if (kind === "nifty-first-candle") {
     return {
-      name: "NIFTY 5m first candle",
+      name: "NIFTY",
       kind: "nifty-first-candle",
       tag: "5m first",
       strategyType: "NIFTY_FIRST_CANDLE_5M",

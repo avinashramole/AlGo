@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyTest1Algo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyTestAlgo, isNiftyTest1Algo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTest1Config, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, CRUDE_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_KIND, NIFTY_TEST_KIND, NIFTY_TEST1_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyTest1Algo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyFirstCandleName, isNiftyTestAlgo, isNiftyTest1Algo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, lockedCrudeFirstCandleName, lockedNiftyFirstCandleName, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTest1Config, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, ALWAYS_ON_FIRST_CANDLE_IDS, CRUDE_FIRST_CANDLE_KIND, CRUDE_FIRST_CANDLE_NAME, NIFTY_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_NAME, NIFTY_TEST_KIND, NIFTY_TEST1_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -592,7 +592,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       ...existing,
       ...defaultCrudeFirstCandleAlgo({
         ...merged,
-        name: String(input.name || existing.name || "").trim() || "CRUDE OIL 5m first candle",
+        name: lockedCrudeFirstCandleName(input.name || existing.name),
         runMode,
         lots: cfg.lots,
         lotSize: cfg.lotSize,
@@ -660,7 +660,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const keepFirstCandle =
     (isNiftyFirstCandleAlgo(merged) ||
       isNiftyFirstCandleAlgo(existing) ||
-      (/5m first candle/i.test(firstCandleName) && !/crude/i.test(firstCandleName))) &&
+      isNiftyFirstCandleName(firstCandleName)) &&
     !switchingAwayFromFirstCandle;
   if (keepFirstCandle) {
     const cfg = niftyFirstCandleConfig(merged);
@@ -674,7 +674,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       ...existing,
       ...defaultNiftyFirstCandleAlgo({
         ...merged,
-        name: String(input.name || existing.name || "").trim() || "NIFTY 5m first candle",
+        name: lockedNiftyFirstCandleName(input.name || existing.name),
         runMode,
         lots: cfg.lots,
         lotSize: cfg.lotSize,
@@ -909,14 +909,14 @@ export function seedAlgos() {
   return [
     normalizeAlgo(
       defaultNiftyFirstCandleAlgo({
-        name: "NIFTY 5m first candle",
+        name: NIFTY_FIRST_CANDLE_NAME,
         runMode: "live",
       }),
       { id: "a10", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
     normalizeAlgo(
       defaultCrudeFirstCandleAlgo({
-        name: "CRUDE OIL 5m first candle",
+        name: CRUDE_FIRST_CANDLE_NAME,
         runMode: "live",
       }),
       { id: "a12", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
@@ -959,7 +959,8 @@ function readAlgoFile() {
 }
 
 export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
-  const removedIds = uniqueIds(stored.removedIds);
+  const pinned = new Set(ALWAYS_ON_FIRST_CANDLE_IDS);
+  const removedIds = uniqueIds(stored.removedIds).filter((id) => !pinned.has(id));
   const removed = new Set(removedIds);
   const hasSaved = Array.isArray(stored.algos);
   const algos = [];

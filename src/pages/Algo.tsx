@@ -42,8 +42,35 @@ function moneyClass(value: number) {
 
 function orderActivity(signal: string | undefined, fallback: string) {
   const text = String(signal || "").trim();
+  if (/\b(?:GREEN|RED)\b/i.test(text)) return text;
   if (!text || /^hold\b/i.test(text)) return fallback;
   return text;
+}
+
+function futureCandleColor(algo: AlgoStrategy) {
+  const stored = String(algo.futureColor || "").toLowerCase();
+  if (stored === "green" || stored === "red" || stored === "doji") return stored;
+  const text = String(algo.lastSignal || "");
+  if (/\bFUT GREEN\b/i.test(text) || /\b(?:NIFTY|CRUDE) FUT GREEN\b/i.test(text)) return "green";
+  if (/\bFUT RED\b/i.test(text) || /\b(?:NIFTY|CRUDE) FUT RED\b/i.test(text)) return "red";
+  if (/\bDOJI\b/i.test(text)) return "doji";
+  return "";
+}
+
+function FutureCandleChip({ algo }: { algo: AlgoStrategy }) {
+  const color = futureCandleColor(algo);
+  const label = color === "green" ? "FUT GREEN" : color === "red" ? "FUT RED" : color === "doji" ? "FUT DOJI" : "FUT —";
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",
+        color === "green" ? "bg-emerald-500/15 text-up" : color === "red" ? "bg-rose-500/15 text-down" : "bg-[var(--card-muted)] text-slate-500",
+      )}
+      data-future-candle={color || "none"}
+    >
+      {label}
+    </span>
+  );
 }
 
 function statusLabel(algo: AlgoStrategy) {
@@ -506,6 +533,7 @@ function AlgoCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-base font-bold">{algo.name}</h2>
+              {isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <FutureCandleChip algo={algo} /> : null}
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",

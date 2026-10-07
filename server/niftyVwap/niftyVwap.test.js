@@ -657,7 +657,8 @@ test("normalizeAlgo keeps NIFTY VWAP paused and never auto-enables LIVE", () => 
 test("seed does not include NIFTY VWAP ATM or 15m reversal algos", () => {
   const seeded = seedAlgos();
   assert.equal(seeded.some((row) => isNiftyVwapAlgo(row) || isNiftyVwapReversalAlgo(row)), false);
-  assert.equal(seeded.find((row) => row.id === "a10").name, "NIFTY 5m first candle");
+  assert.equal(seeded.find((row) => row.id === "a10").name, "NIFTY");
+  assert.equal(seeded.find((row) => row.id === "a12").name, "CRUDE OIL");
   assert.equal(seeded.find((row) => row.id === "a10").enabled, false);
 });
 
@@ -2272,6 +2273,10 @@ test("normalizeAlgo rematerializes first candle even if kind was saved as indica
 test("crude oil preview candle uses the same buy and leaves the nifty strategy unchanged", () => {
   const nifty = defaultNiftyFirstCandleAlgo({ name: "NIFTY 5m first candle" });
   const crude = defaultCrudeFirstCandleAlgo({ name: "CRUDE OIL 5m first candle", enabled: true });
+  assert.equal(nifty.name, "NIFTY");
+  assert.equal(crude.name, "CRUDE OIL");
+  assert.equal(isNiftyFirstCandleAlgo({ name: "NIFTY" }), true);
+  assert.equal(isCrudeFirstCandleAlgo({ name: "CRUDE OIL" }), true);
   assert.equal(isNiftyFirstCandleAlgo(nifty), true);
   assert.equal(isCrudeFirstCandleAlgo(nifty), false);
   assert.equal(isNiftyOptionEngineAlgo(nifty), true);

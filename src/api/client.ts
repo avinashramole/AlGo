@@ -268,6 +268,7 @@ export type Snapshot = {
     enabled: boolean;
     brokerId?: string;
     lastSignal?: string;
+    futureColor?: "green" | "red" | "doji" | "";
     trade?: {
       kind?: "future" | "option";
       symbol?: string;
