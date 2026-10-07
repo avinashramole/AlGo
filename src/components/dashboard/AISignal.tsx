@@ -14,6 +14,7 @@ export function AISignal({ onReview }: Props) {
 
   return (
     <section className="card flex h-full flex-col p-4">
+      <div className="desk-kicker">Execution</div>
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">AI Signal</div>
       <div className="mt-2 flex items-start justify-between gap-3">
         <div>
@@ -62,7 +63,7 @@ export function AISignal({ onReview }: Props) {
         type="button"
         onClick={onReview}
         disabled={!live}
-        className="mt-auto h-11 w-full rounded-xl bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+        className="btn-go mt-auto h-11 w-full rounded-lg text-sm font-semibold disabled:opacity-60"
       >
         {live ? "Review Trade" : "Waiting for live signal"}
       </button>

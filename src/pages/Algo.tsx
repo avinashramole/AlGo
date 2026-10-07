@@ -205,8 +205,8 @@ export function Algo() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      <div className="desk-tabs">
         <TabChip label="Copy Algos" on={tab === "copy"} onClick={() => setTab("copy")} />
         <TabChip label="TradingView Integration" on={tab === "tradingview"} onClick={() => setTab("tradingview")} />
       </div>
@@ -222,15 +222,18 @@ export function Algo() {
         <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
+              <div className="desk-kicker">Strategy blotter</div>
               <h1 className="text-xl font-bold">Algo</h1>
-              <p className="text-sm text-slate-400">Signals, strategies, and live control in one workspace</p>
+              <p className="text-sm text-slate-400">
+                {deskAlgos.filter((row) => row.enabled).length} live · {deskAlgos.length} strategies
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={busyId === "all" || !canStartAll}
                 onClick={() => void startOrStopAll(true)}
-                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+                className="btn-go h-10 rounded-lg px-4 text-sm font-semibold disabled:opacity-60"
               >
                 Start all
               </button>
@@ -238,11 +241,11 @@ export function Algo() {
                 type="button"
                 disabled={busyId === "all" || !canStopAll}
                 onClick={() => void startOrStopAll(false)}
-                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+                className="btn-halt h-10 rounded-lg px-4 text-sm font-semibold disabled:opacity-60"
               >
                 Stop all
               </button>
-              <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
+              <button type="button" onClick={openAdd} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white">
                 <Plus size={16} />
                 Add strategy
               </button>
@@ -480,49 +483,52 @@ function AlgoCard({
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card flex w-full flex-col p-4" data-strategy-card={algo.id}>
+    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--bg)] text-slate-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--card-muted)] text-slate-400">
             <Activity size={16} />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold">{algo.name}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-base font-bold">{algo.name}</h2>
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",
+                  status === "LIVE" ? "status-live" : status === "PAPER" ? "status-paper" : "status-stop",
+                )}
+              >
+                {status}
+              </span>
+              <span className="rounded bg-[var(--card-muted)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                {positionLabel}
+              </span>
+            </div>
             {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
-            <div className="mt-2 text-sm text-slate-400">{meta.config}</div>
+            <div className="desk-help mt-2 text-sm text-slate-400">{meta.config}</div>
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
               </div>
             ) : null}
-            <div className="mt-1 text-[11px] text-slate-500">{contract}</div>
+            <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
             ) : null}
           </div>
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold",
-            status === "LIVE"
-              ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
-              : status === "PAPER"
-                ? "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
-                : "bg-[var(--bg)] text-slate-400",
-          )}
-        >
-          {status}
-        </span>
+        <div className="text-right">
+          <div className="desk-kicker">Live MTM</div>
+          <div className={cn("px text-xl font-extrabold leading-none", moneyClass(liveMtm))}>{rupee(liveMtm)}</div>
+        </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="metric-well mt-4 grid-cols-2 sm:grid-cols-4">
         <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />
         <Metric label="Total orders" value={String(filledOrders.length)} hint={filledOrders.length ? "Filled at the broker" : "No filled orders"} />
         <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
         <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric label="P&L" value={formatInr(bookPnl)} tone={moneyClass(bookPnl)} />
         <Metric label="Trades" value={String(trades)} />
         <Metric label="Win rate" value={`${formatNumber(winRate, 1)}%`} />
@@ -582,7 +588,7 @@ function AlgoCard({
             Exit position
           </button>
           {algo.runMode === "backtest" ? (
-            <button type="button" disabled className="h-10 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500 dark:bg-slate-800">
+            <button type="button" disabled className="h-10 rounded-lg bg-slate-200 px-4 text-sm font-semibold text-slate-500 dark:bg-slate-800">
               Research only
             </button>
           ) : (
@@ -590,7 +596,7 @@ function AlgoCard({
               type="button"
               disabled={busy}
               onClick={onStart}
-              className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              className={cn("h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60", algo.enabled ? "btn-halt" : "btn-go")}
             >
               {algo.enabled ? "Stop strategy" : "Start strategy"}
             </button>
@@ -735,10 +741,7 @@ function TabChip({ label, on, onClick }: { label: string; on: boolean; onClick: 
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "h-9 rounded-full px-3 text-xs font-semibold",
-        on ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950" : "border border-[var(--border)] bg-[var(--card)] text-slate-500",
-      )}
+      className={cn(on ? "bg-navy-900 text-white" : "text-slate-400")}
     >
       {label}
     </button>
@@ -749,7 +752,7 @@ function Metric({ label, value, hint, tone }: { label: string; value: string; hi
   return (
     <div>
       <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</div>
-      <div className={cn("mt-1 text-sm font-bold", tone)}>{value}</div>
+      <div className={cn("px mt-1 text-sm font-bold", tone)}>{value}</div>
       {hint ? <div className="text-[10px] text-slate-500">{hint}</div> : null}
     </div>
   );

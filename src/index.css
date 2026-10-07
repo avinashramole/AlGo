@@ -274,6 +274,87 @@ main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(t
   padding: 0.75rem;
 }
 
+.px {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.tape-strip {
+  display: flex;
+  min-width: max-content;
+  gap: 0;
+}
+
+.tape-cell {
+  min-width: 9.5rem;
+  padding: 0.65rem 0.9rem;
+  border-right: 1px solid var(--border);
+}
+
+.tape-cell:last-child {
+  border-right: 0;
+}
+
+.metric-well {
+  display: grid;
+  gap: 0.65rem;
+  border-radius: 10px;
+  background: var(--card-muted);
+  padding: 0.7rem 0.75rem;
+}
+
+.chart-well {
+  border-radius: 10px;
+  background: #0b1524;
+  color: #dbe4f0;
+}
+
+.btn-go {
+  background: #0f9d58;
+  color: #fff;
+}
+
+.btn-go:hover {
+  background: #0b8a4c;
+}
+
+.btn-halt {
+  background: #d93025;
+  color: #fff;
+}
+
+.btn-halt:hover {
+  background: #c5221a;
+}
+
+.status-live {
+  background: rgba(15, 157, 88, 0.14);
+  color: #0f9d58;
+}
+
+.status-paper {
+  background: rgba(29, 78, 216, 0.12);
+  color: #1d4ed8;
+}
+
+.status-stop {
+  background: var(--card-muted);
+  color: var(--muted);
+}
+
+.blotter-card {
+  overflow: hidden;
+  border-left: 3px solid #1d4ed8;
+}
+
+.blotter-card[data-live="true"] {
+  border-left-color: #0f9d58;
+}
+
+.dark .chart-well {
+  background: #071018;
+}
+
 @media (max-width: 639px) {
   .desk-overlay {
     padding: 0.35rem;

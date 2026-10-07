@@ -22,7 +22,7 @@ export function ActiveAlgos() {
       </div>
       <div className="space-y-2">
         {sortDeskAlgos(data.algos.filter((algo) => !isRetiredDeskStrategy(algo))).map((algo) => (
-          <div key={algo.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2.5">
+          <div key={algo.id} className="flex items-center gap-3 rounded-lg bg-[var(--card-muted)] px-3 py-2.5">
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold">{algo.name}</span>

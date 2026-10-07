@@ -11,12 +11,12 @@ export function CandleChart({ candles, dark }: Props) {
 
   const theme = useMemo(
     () => ({
-      up: "#12b76a",
-      down: "#f04438",
-      grid: dark ? "rgba(148,163,184,0.12)" : "rgba(148,163,184,0.28)",
-      axis: dark ? "#94a3b8" : "#64748b",
-      volumeUp: "rgba(18,183,106,0.28)",
-      volumeDown: "rgba(240,68,56,0.28)",
+      up: "#26a69a",
+      down: "#ef5350",
+      grid: dark ? "rgba(148,163,184,0.10)" : "rgba(148,163,184,0.22)",
+      axis: dark ? "#8aa0b8" : "#64748b",
+      volumeUp: "rgba(38,166,154,0.28)",
+      volumeDown: "rgba(239,83,80,0.28)",
     }),
     [dark],
   );
