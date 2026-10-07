@@ -265,11 +265,27 @@ function isYmd(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
+export const MAX_BACKTEST_YEARS = 10;
+
+export function clampBacktestYears(value) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return MAX_BACKTEST_YEARS;
+  return Math.max(1, Math.min(MAX_BACKTEST_YEARS, n));
+}
+
+export function shiftYmdYears(ymd, years) {
+  const [year, month, day] = String(ymd).split("-").map(Number);
+  const next = new Date(Date.UTC(year - Number(years || 0), month - 1, day));
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+}
+
 export function resolveBacktestWindow(options = {}) {
   const today = ymdIST();
   const rangeRaw = String(options.range || "").toLowerCase();
+  const years = clampBacktestYears(options.years ?? (rangeRaw === "1y" || rangeRaw === "year" ? 1 : MAX_BACKTEST_YEARS));
   const custom =
-    rangeRaw === "custom" || ((options.from || options.to) && rangeRaw !== "1y" && rangeRaw !== "year");
+    rangeRaw === "custom" ||
+    ((options.from || options.to) && rangeRaw !== "1y" && rangeRaw !== "year" && rangeRaw !== "years");
   let from;
   let to;
   let range;
@@ -282,8 +298,8 @@ export function resolveBacktestWindow(options = {}) {
     }
   } else {
     to = today;
-    from = shiftYmd(today, -365);
-    range = "1y";
+    from = shiftYmdYears(today, years);
+    range = years === 1 ? "1y" : "years";
   }
   const fromMs = Date.parse(`${from}T09:15:00+05:30`);
   const toMs = Date.parse(`${to}T15:30:00+05:30`);
@@ -294,13 +310,13 @@ export function resolveBacktestWindow(options = {}) {
     return { error: "From date must be before to date" };
   }
   const days = Math.round((toMs - fromMs) / 86_400_000) + 1;
-  if (days > 800) {
-    return { error: "Date range cannot be longer than 800 days" };
+  if (days > MAX_BACKTEST_YEARS * 366 + 2) {
+    return { error: `Date range cannot be longer than ${MAX_BACKTEST_YEARS} years` };
   }
   if (days < 2) {
     return { error: "Pick at least two calendar days" };
   }
-  return { from, to, range, days, fromMs, toMs };
+  return { from, to, range, years: custom ? undefined : years, days, fromMs, toMs };
 }
 
 export function pickBacktestTimeframe(requested, days) {
@@ -2640,6 +2656,7 @@ export async function backtestAlgo(id, options = {}) {
       source: options.candleSource || (candles.length >= 8 ? "dhan" : "sample"),
       reused: Boolean(options.reused),
       range: window.range,
+      years: window.years,
       from: window.from,
       to: window.to,
       timeframe: "5m",
@@ -2652,7 +2669,7 @@ export async function backtestAlgo(id, options = {}) {
       algo.status = "BACKTEST";
       algo.brokerId = "paper";
     }
-    const rangeLabel = window.range === "1y" ? "last 1 year" : `${window.from} → ${window.to}`;
+    const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
     state.notifications.unshift(
       `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%`,
     );
@@ -2703,6 +2720,7 @@ export async function backtestAlgo(id, options = {}) {
     source: options.candleSource || source,
     reused: Boolean(options.reused),
     range: window.range,
+    years: window.years,
     from: niftyVwap ? vwapFrom : window.from,
     to: window.to,
     truncated: niftyVwap && window.from !== vwapFrom ? `${cfg.timeframe} replay last ${cfg.barMinutes >= 15 ? 60 : 25} days` : "",
@@ -2717,7 +2735,7 @@ export async function backtestAlgo(id, options = {}) {
     algo.status = "BACKTEST";
     algo.brokerId = "paper";
   }
-  const rangeLabel = window.range === "1y" ? "last 1 year" : `${window.from} → ${window.to}`;
+  const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
   state.notifications.unshift(
     `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${sample ? " · sample bars" : ""}`,
   );

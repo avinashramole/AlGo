@@ -934,7 +934,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     res.status(429).json({ error: "A backtest is already running. Wait for it to finish." });
     return;
   }
-  extendRequestTimeout(req, 180_000);
+  extendRequestTimeout(req, 600_000);
   markBacktestBusy();
   const heartbeat = setInterval(() => markBacktestBusy(), 20_000);
   if (typeof heartbeat.unref === "function") heartbeat.unref();

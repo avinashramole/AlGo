@@ -163,10 +163,14 @@ function blankDraft(): Draft {
 type RangeDraft = {
   id: string;
   name: string;
-  range: "1y" | "custom";
+  range: "years" | "custom";
+  years: number;
   from: string;
   to: string;
 };
+
+const DEFAULT_BACKTEST_YEARS = 10;
+const MAX_BACKTEST_YEARS = 10;
 
 function localYmd(date = new Date()) {
   const y = date.getFullYear();
@@ -175,16 +179,23 @@ function localYmd(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
-function yearAgoYmd() {
+function clampYears(value: number) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return DEFAULT_BACKTEST_YEARS;
+  return Math.max(1, Math.min(MAX_BACKTEST_YEARS, n));
+}
+
+function yearsAgoYmd(years = DEFAULT_BACKTEST_YEARS) {
   const date = new Date();
-  date.setFullYear(date.getFullYear() - 1);
+  date.setFullYear(date.getFullYear() - clampYears(years));
   return localYmd(date);
 }
 
-function backtestRangeLabel(row?: { range?: string; from?: string; to?: string }) {
+function backtestRangeLabel(row?: { range?: string; years?: number; from?: string; to?: string }) {
   if (!row) return "";
-  if (row.from && row.to) return `${row.range === "1y" ? "1Y" : "Custom"} ${row.from} → ${row.to}`;
-  return row.range === "1y" ? "Last 1 year" : "";
+  const years = clampYears(Number(row.years) || (row.range === "1y" ? 1 : DEFAULT_BACKTEST_YEARS));
+  if (row.from && row.to) return `${row.range === "custom" ? "Custom" : `${years}Y`} ${row.from} → ${row.to}`;
+  return row.range === "custom" ? "" : `Last ${years} year${years === 1 ? "" : "s"}`;
 }
 
 export function AlgoScreen() {
@@ -550,7 +561,7 @@ export function AlgoScreen() {
         if (rangeDraft.range === "custom") {
           await backtest(rangeDraft.id, { range: "custom", from: rangeDraft.from, to: rangeDraft.to });
         } else {
-          await backtest(rangeDraft.id, { range: "1y" });
+          await backtest(rangeDraft.id, { range: "years", years: clampYears(rangeDraft.years) });
         }
         setRangeDraft(null);
       } catch (err) {
@@ -562,9 +573,9 @@ export function AlgoScreen() {
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Run backtest</Text>
-        <Text style={styles.muted}>{rangeDraft.name} · last 1 year or custom dates</Text>
+        <Text style={styles.muted}>{rangeDraft.name} · last 1–10 years or custom dates</Text>
         <View style={styles.chips}>
-          <Chip label="Last 1 year" on={rangeDraft.range === "1y"} onPress={() => setRangeDraft({ ...rangeDraft, range: "1y" })} />
+          <Chip label="Last years" on={rangeDraft.range === "years"} onPress={() => setRangeDraft({ ...rangeDraft, range: "years" })} />
           <Chip label="Custom dates" on={rangeDraft.range === "custom"} onPress={() => setRangeDraft({ ...rangeDraft, range: "custom" })} />
         </View>
         {rangeDraft.range === "custom" ? (
@@ -573,9 +584,16 @@ export function AlgoScreen() {
             <Field label="To (YYYY-MM-DD)" value={rangeDraft.to} onChange={(to) => setRangeDraft({ ...rangeDraft, to })} />
           </>
         ) : (
-          <Text style={styles.muted}>
-            From {yearAgoYmd()} to {localYmd()}
-          </Text>
+          <>
+            <Field
+              label="Years"
+              value={String(rangeDraft.years)}
+              onChange={(value) => setRangeDraft({ ...rangeDraft, years: clampYears(Number(value)) })}
+            />
+            <Text style={styles.muted}>
+              From {yearsAgoYmd(rangeDraft.years)} to {localYmd()}
+            </Text>
+          </>
         )}
         <Pressable style={styles.cta} onPress={() => void run()} disabled={rangeBusy}>
           <Text style={styles.ctaText}>{rangeBusy ? "Testing..." : "Run backtest"}</Text>
@@ -746,8 +764,9 @@ export function AlgoScreen() {
                 setRangeDraft({
                   id: algo.id,
                   name: algo.name,
-                  range: "1y",
-                  from: yearAgoYmd(),
+                  range: "years",
+                  years: DEFAULT_BACKTEST_YEARS,
+                  from: yearsAgoYmd(),
                   to: localYmd(),
                 })
               }

@@ -674,7 +674,8 @@ export function deleteAlgo(id: string) {
 }
 
 export type BacktestOptions = {
-  range?: "1y" | "custom";
+  range?: "1y" | "years" | "custom";
+  years?: number;
   from?: string;
   to?: string;
 };
