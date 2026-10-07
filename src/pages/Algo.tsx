@@ -620,6 +620,12 @@ function AlgoCard({
         <Metric label="Total orders" value={String(filledOrders.length)} hint={filledOrders.length ? "Filled at the broker" : "No filled orders"} />
         <Metric label="Mapped clients" value={String(mapped)} hint={mapped ? "Eligible copy accounts" : "No accounts"} />
         <Metric label="Position" value={positionLabel} hint={positions.length ? `${positions.length} open` : "No exposure"} />
+        {algo.lastBacktest?.from || algo.lastBacktest?.to ? (
+          <>
+            <Metric label="Start date" value={algo.lastBacktest.from || "—"} hint="Backtest from" />
+            <Metric label="End date" value={algo.lastBacktest.to || "—"} hint="Backtest to" />
+          </>
+        ) : null}
         <Metric
           label="Backtest P&L"
           value={formatInr(bookPnl)}
@@ -724,15 +730,16 @@ function AlgoCard({
         {algo.lastBacktest?.timeframe || algo.lastBacktest?.optionSource ? (
           <div className="mt-1 text-[11px] text-slate-500">
             {algo.lastBacktest.timeframe ? `Replay ${algo.lastBacktest.timeframe}` : ""}
+            {algo.lastBacktest.from || algo.lastBacktest.to
+              ? ` · ${algo.lastBacktest.from || "—"} → ${algo.lastBacktest.to || "—"}`
+              : ""}
             {algo.lastBacktest.years
               ? ` · last ${algo.lastBacktest.years} year${Number(algo.lastBacktest.years) === 1 ? "" : "s"}`
               : algo.lastBacktest.months
                 ? ` · last ${algo.lastBacktest.months} month${Number(algo.lastBacktest.months) === 1 ? "" : "s"}`
                 : algo.lastBacktest.range === "month"
-                  ? ` · this month ${algo.lastBacktest.from || ""} → ${algo.lastBacktest.to || ""}`.trim()
-                  : algo.lastBacktest.from && algo.lastBacktest.to
-                    ? ` · ${algo.lastBacktest.from} → ${algo.lastBacktest.to}`
-                    : ""}
+                  ? " · this month"
+                  : ""}
             {algo.lastBacktest.reused || algo.lastBacktest.optionHistory?.reused
               ? " · reused stored Dhan rolling days"
               : ""}

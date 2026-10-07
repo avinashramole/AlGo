@@ -47,6 +47,8 @@ test("Reset backtest deletes backtest.busy even while a run is marked busy", () 
   assert.match(index, /Click Reset backtest to clear the lock/);
   assert.match(client, /\/backtest\/unlock/);
   assert.match(algo, /Reset backtest/);
+  assert.match(algo, /Start date/);
+  assert.match(algo, /End date/);
   assert.match(algo, /rm -f \/opt\/t2s\/server\/data\/backtest\.busy/);
   assert.doesNotMatch(algo, /disabled=\{busy\}\s*\n\s*onClick=\{onResetBacktest\}/);
   assert.doesNotMatch(range, /disabled=\{busy\}\s*\n\s*onClick=\{\(\) => \{/);

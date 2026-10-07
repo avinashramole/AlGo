@@ -70,6 +70,12 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /LEGS/);
   assert.match(pdf.toString("latin1"), /Margin/);
   assert.equal(saved.legs[0].margin, 108000);
+  assert.equal(saved.summary.from, "2016-10-07");
+  assert.equal(saved.summary.to, "2026-10-07");
+  assert.match(pdf.toString("latin1"), /Start date 2016-10-07/);
+  assert.match(pdf.toString("latin1"), /End date 2026-10-07/);
+  assert.match(xml, /Start date/);
+  assert.match(xml, /End date/);
   assert.equal(reportDownloadName(loaded, "pdf"), "TEST2-btst-backtest-2026-10-07.pdf");
   clearBacktestReport("a14");
   assert.equal(loadBacktestReport("a14", { lastBacktest: null }), null);
