@@ -313,6 +313,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       <div
         className="desk-sheet card p-3"
         data-edit-strategy={editing ? algo?.id || "open" : "new"}
+        data-test2-edit={test2 ? "true" : "false"}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -323,6 +324,22 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             <X size={16} />
           </button>
         </div>
+
+        {test2 ? (
+          <label className="block text-xs font-semibold text-slate-500">
+            Script · option
+            <select data-test2-scripts-top className={fieldClass} value={form.symbol || "NIFTY"} onChange={(event) => pickTest2Script(event.target.value)}>
+              <option value="NIFTY">NIFTY · CE/PE</option>
+              <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
+              <option value="FINNIFTY">FINNIFTY · CE/PE</option>
+              <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
+              <option value="SENSEX">SENSEX · CE/PE</option>
+              <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
+              <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
+              <option value="COPPER">COPPER · CE/PE</option>
+            </select>
+          </label>
+        ) : null}
 
         {editing ? null : (
         <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
@@ -417,7 +434,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", editing && "sm:hidden")}>
+        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2) && "sm:hidden", test2 && "hidden")}>
           Strategy name
           <input
             className={fieldClass}
@@ -467,11 +484,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 value={form.symbol || "NIFTY"}
                 onChange={(event) => pickTest2Script(event.target.value)}
               >
-                {TEST1_SCRIPTS.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.label} · CE/PE
-                  </option>
-                ))}
+                <option value="NIFTY">NIFTY · CE/PE</option>
+                <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
+                <option value="FINNIFTY">FINNIFTY · CE/PE</option>
+                <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
+                <option value="SENSEX">SENSEX · CE/PE</option>
+                <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
+                <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
+                <option value="COPPER">COPPER · CE/PE</option>
               </select>
             </label>
             <div className="grid grid-cols-2 gap-1.5">
@@ -615,26 +635,24 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         <div className="mt-1.5 grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-          {editing ? (
+          {editing && !test2 ? (
           <label className="hidden text-xs font-semibold text-slate-500 sm:block">
             Strategy name
             <input
               className={fieldClass}
-              value={test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+              value={test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
               onChange={(event) =>
                 set({
-                  name: test2
-                    ? "TEST2"
-                    : test1
-                      ? "TEST1"
-                      : firstCandle
-                        ? NIFTY_FIRST_CANDLE_NAME
-                        : crudeFirst
-                          ? CRUDE_FIRST_CANDLE_NAME
-                          : event.target.value,
+                  name: test1
+                    ? "TEST1"
+                    : firstCandle
+                      ? NIFTY_FIRST_CANDLE_NAME
+                      : crudeFirst
+                        ? CRUDE_FIRST_CANDLE_NAME
+                        : event.target.value,
                 })
               }
-              readOnly={test2 || test1 || firstCandle || crudeFirst}
+              readOnly={test1 || firstCandle || crudeFirst}
               placeholder="My NIFTY VWAP"
             />
           </label>
@@ -643,11 +661,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <label className="text-xs font-semibold text-slate-500">
             Script · option
             <select data-test2-scripts-row className={fieldClass} value={form.symbol || "NIFTY"} onChange={(event) => pickTest2Script(event.target.value)}>
-              {TEST2_SCRIPTS.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.label} · CE/PE
-                </option>
-              ))}
+              <option value="NIFTY">NIFTY · CE/PE</option>
+              <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
+              <option value="FINNIFTY">FINNIFTY · CE/PE</option>
+              <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
+              <option value="SENSEX">SENSEX · CE/PE</option>
+              <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
+              <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
+              <option value="COPPER">COPPER · CE/PE</option>
             </select>
           </label>
           ) : engine ? null : (

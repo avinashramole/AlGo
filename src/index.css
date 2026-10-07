@@ -231,6 +231,10 @@ main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(t
   box-shadow: 0 24px 64px rgba(7, 24, 51, 0.28);
 }
 
+.desk-sheet[data-test2-edit="true"] {
+  overflow-y: auto;
+}
+
 .desk-sheet-wide {
   width: min(56rem, 100%);
 }
