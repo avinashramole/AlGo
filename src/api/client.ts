@@ -253,14 +253,26 @@ export type Snapshot = {
       maxDrawdown?: number;
       sample?: boolean;
       source?: string;
-      range?: "1y" | "years" | "custom" | string;
+      range?: "1y" | "month" | "months" | "years" | "custom" | string;
       years?: number;
+      months?: number;
       from?: string;
       to?: string;
       optionSource?: "stored" | "mixed" | "synth" | string;
       optionHits?: number;
       reused?: boolean;
-      optionHistory?: { overwritten?: string[]; days?: number; contracts?: number; source?: string; error?: string };
+      optionHistory?: {
+        overwritten?: string[];
+        days?: number;
+        contracts?: number;
+        source?: string;
+        error?: string;
+        reused?: boolean;
+        reusedDays?: number;
+        truncated?: boolean;
+        calls?: number;
+        stubs?: number;
+      };
       holdStyle?: "btst" | "intraday" | string;
       combos?: number;
       comboWinRate?: number;
