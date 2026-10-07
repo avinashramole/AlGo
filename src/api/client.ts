@@ -279,6 +279,11 @@ export type Snapshot = {
       maxDdTo?: string;
       maxTradesInDd?: number;
       lotNote?: string;
+      costPerCombo?: number;
+      storedTrades?: number;
+      storedWinRate?: number;
+      storedPnl?: number;
+      skippedDays?: number;
       book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
     };
     status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";

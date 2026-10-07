@@ -1617,6 +1617,41 @@ function intradayInterval(timeframe) {
   return null;
 }
 
+export async function fetchDhanRollingOption({
+  expiryFlag = "WEEK",
+  expiryCode = 0,
+  strike = "ATM",
+  option = "CE",
+  from,
+  to,
+  interval = 15,
+  securityId = 13,
+} = {}) {
+  if (!accessToken) return null;
+  const fromDate = dateOnly(from);
+  const toDate = dateOnly(to);
+  if (!fromDate || !toDate) return null;
+  return dhanPost(
+    "/charts/rollingoption",
+    accessToken,
+    clientId,
+    {
+      exchangeSegment: "NSE_FNO",
+      interval: Number(interval) || 15,
+      securityId: Number(securityId) || 13,
+      instrument: "OPTIDX",
+      expiryFlag: String(expiryFlag || "WEEK").toUpperCase() === "MONTH" ? "MONTH" : "WEEK",
+      expiryCode: Number.isFinite(Number(expiryCode)) ? Number(expiryCode) : 0,
+      strike: String(strike || "ATM"),
+      drvOptionType: option === "PE" || option === "PUT" ? "PUT" : "CALL",
+      requiredData: ["open", "high", "low", "close", "volume", "strike", "spot", "oi"],
+      fromDate,
+      toDate,
+    },
+    { timeoutMs: 30_000, attempts: 2 },
+  );
+}
+
 export async function fetchDhanSecurityHistory({
   securityId,
   exchangeSegment = "NSE_FNO",

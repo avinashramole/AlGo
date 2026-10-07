@@ -7,8 +7,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
+import { downloadRollingOptionRange, rollingCoverage } from "./dhanRollingOption.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
@@ -35,6 +36,7 @@ import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
+import { isNiftyTest2Algo } from "./niftyVwap/config.js";
 import {
   addChat,
   assignAlgoBroker,
@@ -980,26 +982,49 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     }
     const hist = optionBacktestWindow(algo, window);
     let optionHistory;
-    const optionCoverage = hist.option ? optionHistoryCoverage(hist.symbol || algo.symbol, hist.from, hist.to) : "synth";
-    if (hist.option && candles.length >= 40 && optionCoverage !== "stored") {
-      if (isDhanLive()) {
+    if (isNiftyTest2Algo(algo)) {
+      const coverage = rollingCoverage("NIFTY", window.from, window.to);
+      if (isDhanLive() && coverage !== "stored") {
         try {
-          optionHistory = await downloadOptionHistoryRange({
-            symbol: hist.symbol || algo.symbol,
-            from: hist.from,
-            to: hist.to,
-            candles,
+          optionHistory = await downloadRollingOptionRange({
+            symbol: "NIFTY",
+            from: window.from,
+            to: window.to,
             overwrite: false,
-            fetchBars: fetchDhanSecurityHistory,
-            lookupId: lookupOptionSecurityId,
-            delayMs: 40,
+            fetchRolling: fetchDhanRollingOption,
+            delayMs: 80,
+            interval: 15,
+            maxDays: 366,
+            deadlineMs: 420_000,
           });
         } catch (error) {
-          optionHistory = { error: error.message || "option-history-failed" };
+          optionHistory = { error: error.message || "rolling-option-failed" };
         }
+      } else {
+        optionHistory = { source: coverage, reused: coverage === "stored", days: 0 };
       }
-    } else if (hist.option && optionCoverage === "stored") {
-      optionHistory = { source: "stored", reused: true, days: 0, overwritten: [] };
+    } else {
+      const optionCoverage = hist.option ? optionHistoryCoverage(hist.symbol || algo.symbol, hist.from, hist.to) : "synth";
+      if (hist.option && candles.length >= 40 && optionCoverage !== "stored") {
+        if (isDhanLive()) {
+          try {
+            optionHistory = await downloadOptionHistoryRange({
+              symbol: hist.symbol || algo.symbol,
+              from: hist.from,
+              to: hist.to,
+              candles,
+              overwrite: false,
+              fetchBars: fetchDhanSecurityHistory,
+              lookupId: lookupOptionSecurityId,
+              delayMs: 40,
+            });
+          } catch (error) {
+            optionHistory = { error: error.message || "option-history-failed" };
+          }
+        }
+      } else if (hist.option && optionCoverage === "stored") {
+        optionHistory = { source: "stored", reused: true, days: 0, overwritten: [] };
+      }
     }
     const result = await backtestAlgo(id, {
       range: window.range,

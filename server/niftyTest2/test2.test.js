@@ -3,6 +3,7 @@ import test from "node:test";
 import { buildSyntheticChain } from "../optionChain.js";
 import { defaultNiftyTest2Algo, isNiftyTest2Algo, niftyTest2Config } from "../niftyVwap/config.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
+import { writeRollingDay, wipeRollingOptions } from "../dhanRollingOption.js";
 import { niftyLotOn, pickCombo, replayTest2Day, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
 import { Test2Strategy } from "./Test2Strategy.js";
 
@@ -279,6 +280,58 @@ test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
   const trendBook = runTest2Backtest(algo, trend);
   assert.equal(trendBook.combos, 1);
   assert.notEqual(trendBook.pnl, quietBook.pnl);
+});
+
+test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
+  wipeRollingOptions();
+  const open = Date.parse("2026-09-01T04:05:00.000Z");
+  const next = open + 86_400_000;
+  writeRollingDay("NIFTY", "2026-09-01", {
+    weekly: {
+      slots: [
+        { t: open, spot: 24500, rows: [{ s: 24700, ce: 24, pe: 23, ceL: 20, peL: 19 }] },
+        { t: next, spot: 24540, rows: [{ s: 24700, ce: 21, pe: 20, ceL: 18, peL: 17 }] },
+      ],
+    },
+    monthly: {
+      slots: [
+        { t: open, spot: 24500, rows: [{ s: 24600, ce: 90, pe: 88, ceL: 80, peL: 79 }] },
+        { t: next, spot: 24540, rows: [{ s: 24600, ce: 82, pe: 84, ceL: 78, peL: 80 }] },
+      ],
+    },
+  });
+  const session = {
+    day: "2026-09-01",
+    open: 24500,
+    close: 24540,
+    high: 24580,
+    low: 24420,
+    bars: [{ time: open, open: 24500, high: 24580, low: 24420, close: 24540 }],
+  };
+  const exit = {
+    day: "2026-09-02",
+    open: 24540,
+    close: 24550,
+    high: 24580,
+    low: 24510,
+    bars: [{ time: next, open: 24540, high: 24580, low: 24510, close: 24550 }],
+  };
+  const combo = replayTest2Day(session, niftyTest2Config(defaultNiftyTest2Algo()), exit);
+  assert.equal(combo.source, "stored");
+  assert.equal(combo.skip, undefined);
+  assert.equal(combo.legs[0].entry, 90);
+  assert.equal(Number(combo.cost), 80);
+  writeRollingDay("NIFTY", "2026-09-03", {
+    weekly: { slots: [{ t: open + 2 * 86_400_000, spot: 24500, rows: [{ s: 24700, ce: 24, pe: 23 }] }] },
+    monthly: { slots: [] },
+  });
+  const incomplete = replayTest2Day(
+    { ...session, day: "2026-09-03", bars: [{ time: open + 2 * 86_400_000, open: 24500, high: 24510, low: 24490, close: 24500 }] },
+    niftyTest2Config(defaultNiftyTest2Algo()),
+  );
+  assert.equal(incomplete.skip, true);
+  assert.equal(incomplete.reason, "incomplete-chain");
+  wipeRollingOptions();
 });
 
 test("reset backtest clears stored TEST2 result", async () => {

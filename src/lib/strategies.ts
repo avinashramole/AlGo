@@ -140,6 +140,14 @@ export type AlgoStrategy = {
     maxDdTo?: string;
     maxTradesInDd?: number;
     lotNote?: string;
+    costPerCombo?: number;
+    storedTrades?: number;
+    storedWins?: number;
+    storedWinRate?: number;
+    storedPnl?: number;
+    synthTrades?: number;
+    synthWinRate?: number;
+    skippedDays?: number;
     book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
   };
   status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
