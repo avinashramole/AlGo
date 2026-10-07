@@ -40,7 +40,7 @@ export function UserIpManager() {
             onClick={() => setParams({ tab: "enrollments" }, { replace: true })}
             className={cn(tab === "enrollments" ? "bg-navy-900 text-white" : "text-slate-400")}
           >
-            Enrollments
+            Member enrollments
           </button>
         </div>
       </div>
