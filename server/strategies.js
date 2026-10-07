@@ -433,8 +433,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "nifty-first-candle" ||
     input.kind === "crude-first-candle" ||
     input.kind === "nifty-test" ||
-    input.kind === "nifty-test1" ||
-    input.kind === "nifty-test2";
+    input.kind === "nifty-test1";
   const keepTest2 = (isNiftyTest2Algo(merged) || isNiftyTest2Algo(existing)) && !switchingAwayFromTest2;
   if (keepTest2) {
     const cfg = niftyTest2Config(merged);

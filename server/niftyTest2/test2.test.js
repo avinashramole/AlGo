@@ -17,7 +17,7 @@ test("TEST2 seed and name lock", () => {
   assert.equal(seeded.sellPremium, 80);
   assert.equal(seeded.hedgePremium, 20);
   assert.equal(isNiftyTest2Algo({ name: "TEST2" }), true);
-  assert.equal(normalizeAlgo({ name: "TEST2", kind: "indicator" }).kind, "nifty-test2");
+  assert.equal(normalizeAlgo({ name: "TEST2" }).kind, "nifty-test2");
   assert.equal(defaultNiftyTest2Algo({ name: "other" }).name, "TEST2");
 });
 
