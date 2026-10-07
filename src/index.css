@@ -304,10 +304,19 @@ main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(t
 }
 
 .chart-well {
+  height: 220px;
+  max-height: 220px;
   overflow: hidden;
   border-radius: 10px;
   background: #0b1524;
   color: #dbe4f0;
+}
+
+@media (min-width: 640px) {
+  .chart-well {
+    height: 320px;
+    max-height: 320px;
+  }
 }
 
 .btn-go {

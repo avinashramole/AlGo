@@ -51,7 +51,7 @@ export function PriceChart() {
   const tools = [Crosshair, Minus, Spline, Square, Type, PenLine, Ruler];
 
   return (
-    <section className="card flex min-h-0 flex-col p-3 sm:min-h-[430px] sm:p-4">
+    <section className="card flex flex-col p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -89,15 +89,15 @@ export function PriceChart() {
           </button>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 gap-2">
-        <div className="hidden flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1 sm:flex">
+      <div className="flex gap-2">
+        <div className="hidden h-[220px] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1 sm:flex sm:h-[320px]">
           {tools.map((Icon, i) => (
             <button key={i} type="button" className="icon-btn h-8 w-8">
               <Icon size={14} />
             </button>
           ))}
         </div>
-        <div className="chart-well min-h-[220px] min-w-0 flex-1 p-1 sm:min-h-[320px]">
+        <div className="chart-well min-w-0 flex-1">
           <CandleChart candles={candles} dark />
         </div>
       </div>
