@@ -62,7 +62,7 @@ export function PriceChart() {
   const kotakTape = kotakAdminTape(data);
   const liveTape = dhanQuotes || kotakTape;
   const sourceLabel = kotakTape ? (dhanLive ? "KOTAK LIVE" : "KOTAK") : dhanQuotes ? (dhanLive ? "DHAN LIVE" : "DHAN") : "WAIT";
-  const [tf, setTf] = useState<(typeof timeframes)[number]>("5m");
+  const [tf, setTf] = useState<(typeof timeframes)[number]>("15m");
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [candles, setCandles] = useState<Candle[]>([]);
   const [tool, setTool] = useState<ChartTool>("crosshair");
