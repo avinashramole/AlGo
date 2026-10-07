@@ -334,8 +334,8 @@ export const VwapSignalEngine = {
       futuresOpen: lastFut ? Number(lastFut.open) : 0,
       futuresVwap: reversal.vwap,
       bias: fullCe ? "CE" : fullPe ? "PE" : "",
-      buyCe: fullCe && window.inNewCandle,
-      buyPe: fullPe && window.inNewCandle,
+      buyCe: fullCe,
+      buyPe: fullPe,
       previewFilled: fullCe || fullPe,
       inNewCandle: window.inNewCandle,
       missedOpen: window.missedOpen,
@@ -381,8 +381,8 @@ export const VwapSignalEngine = {
     const niftyColor = firstBarColor(preview);
     const ceColor = firstBarColor(sameTime(ceAll, preview?.time));
     const peColor = firstBarColor(sameTime(peAll, preview?.time));
-    const buyCe = onCurrentOpen && !waitingEval && niftyColor === "green" && ceColor === "green";
-    const buyPe = onCurrentOpen && !waitingEval && niftyColor === "red" && peColor === "green";
+    const buyCe = Boolean(preview) && !waitingEval && niftyColor === "green" && ceColor === "green";
+    const buyPe = Boolean(preview) && !waitingEval && niftyColor === "red" && peColor === "green";
     const shownWall = preview ? istWallTime(preview.time) : null;
     const shownMin = shownWall ? shownWall.hour * 60 + shownWall.minute : -1;
     return {
