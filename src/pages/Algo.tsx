@@ -751,12 +751,14 @@ function AlgoCard({
       {isNiftyTest2Kind(algo) && algo.lastBacktest && algo.lastBacktest.optionSource !== "stored" ? (
         <div className="mt-3 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-test2-synth-banner>
           {algo.lastBacktest.optionHistory?.error === "dhan-not-live"
-            ? `Dhan is not connected, so no rolling option tape for ${algo.symbol || "this script"} was downloaded. Open Brokers, connect Dhan, then run Backtest again.`
+            ? `Dhan is not connected, so no rolling option tape for ${algo.symbol || "this script"} was downloaded. Open Brokers, connect Dhan LIVE, then run Backtest again.`
             : algo.lastBacktest.optionHistory?.truncated
               ? `Dhan rolling download hit the time cap after ${algo.lastBacktest.optionHistory.days || 0} new day${Number(algo.lastBacktest.optionHistory.days) === 1 ? "" : "s"}. Run Backtest again to keep filling the tape.`
               : algo.lastBacktest.optionHistory?.error
-                ? `Dhan rolling download failed (${algo.lastBacktest.optionHistory.error}). Connect Dhan and run Backtest again.`
-                : `No Dhan rolling option tape for ${algo.symbol || "this script"} yet. Connect Dhan and run Backtest again to download it.`}
+                ? `Dhan rolling download failed (${algo.lastBacktest.optionHistory.error}). Connect Dhan LIVE and run Backtest again.`
+                : algo.lastBacktest.optionHistory?.source === "none"
+                  ? `Dhan is connected but /charts/rollingoption returned no NIFTY bars. Check Dhan Data API access, then run Backtest again.`
+                  : `No stored Dhan rolling days for ${algo.symbol || "this script"} (${Number(algo.lastBacktest.optionHistory?.completeDays || 0)} complete). Connect Dhan LIVE and run Backtest again — empty stub days are now retried.`}
           {Number(algo.lastBacktest.trades || 0)
             ? ` Meanwhile this card shows a research book: ${algo.lastBacktest.trades} combos · P&L ${formatInr(Number(algo.lastBacktest.pnl || 0))}.`
             : " 0 combos."}{" "}

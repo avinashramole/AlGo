@@ -137,6 +137,8 @@ export type AlgoStrategy = {
       truncated?: boolean;
       calls?: number;
       stubs?: number;
+      completeDays?: number;
+      droppedEmpty?: number;
     };
     holdStyle?: "btst" | "intraday" | string;
     reportReady?: boolean;

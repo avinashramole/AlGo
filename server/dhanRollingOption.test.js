@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   chunkDateRange,
   downloadRollingOptionRange,
+  dropEmptyRollingDays,
   isWeekendYmd,
+  needsRollingFetch,
   parseRollingPayload,
   rollingChainAt,
   rollingContract,
@@ -32,6 +34,22 @@ test("rolling helpers chunk dates and label wings", () => {
   assert.equal(wingLabels(2).includes("ATM-2"), true);
 });
 
+test("empty rolling stubs are not treated as stored tape", () => {
+  wipeRollingOptions();
+  writeRollingDay("NIFTY", "2026-09-01", {
+    empty: true,
+    weekly: { slots: [] },
+    monthly: { slots: [] },
+    source: "dhan-rolling-empty",
+  });
+  assert.equal(rollingDayStatus("NIFTY", "2026-09-01"), "empty");
+  assert.equal(needsRollingFetch("NIFTY", "2026-09-01"), true);
+  assert.equal(rollingCoverage("NIFTY", "2026-09-01", "2026-09-01"), "synth");
+  assert.equal(dropEmptyRollingDays("NIFTY"), 1);
+  assert.equal(rollingDayStatus("NIFTY", "2026-09-01"), "missing");
+  wipeRollingOptions();
+});
+
 test("parseRollingPayload reads CE bars", () => {
   const bars = parseRollingPayload(
     {
@@ -51,6 +69,21 @@ test("parseRollingPayload reads CE bars", () => {
   assert.equal(bars.length, 2);
   assert.equal(bars[0].strike, 24600);
   assert.equal(bars[0].c, 82.5);
+  const alias = parseRollingPayload(
+    {
+      data: {
+        CALL: {
+          timestamp: [1_725_500_100],
+          close: [80],
+          strikePrice: [24600],
+          spotPrice: [24500],
+        },
+      },
+    },
+    "CE",
+  );
+  assert.equal(alias[0].strike, 24600);
+  assert.equal(alias[0].c, 80);
 });
 
 test("rolling chain lookup and coverage", () => {
