@@ -28,9 +28,12 @@ export function Positions() {
   return (
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <Link to="/reports?tab=positions" className="text-sm font-bold hover:text-brand-500">
-          Position
-        </Link>
+        <div>
+          <div className="desk-kicker">Book</div>
+          <Link to="/reports?tab=positions" className="text-sm font-bold hover:text-brand-500">
+            Position
+          </Link>
+        </div>
         <select
           className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] font-semibold"
           value={filter}

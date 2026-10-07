@@ -12,14 +12,12 @@ import { useEffect, useState } from "react";
 import { getCandles } from "../../api/client";
 import { cn, formatQuote, hasDhanQuotes, kotakAdminTape } from "../../lib/format";
 import { useMarket } from "../../context/MarketContext";
-import { useTheme } from "../../context/ThemeContext";
 import { CandleChart } from "../charts/CandleChart";
 import type { Candle } from "../../lib/chartData";
 
 const timeframes = ["1m", "5m", "15m", "1H", "1D"] as const;
 
 export function PriceChart() {
-  const { theme } = useTheme();
   const { data } = useMarket();
   const ohlc = data.ohlc;
   const dhanLive = Boolean(data.dhanFeed?.live);
@@ -58,7 +56,7 @@ export function PriceChart() {
         <div>
           <div className="flex items-center gap-2">
             <div>
-              <div className="desk-kicker">Index</div>
+              <div className="desk-kicker">Chart</div>
               <h2 className="text-sm font-bold">NIFTY 50 NSE</h2>
             </div>
             <span className={cn("flex items-center gap-1 text-[11px] font-semibold", liveTape ? "text-up" : "text-slate-400")}>
@@ -67,22 +65,20 @@ export function PriceChart() {
             </span>
           </div>
           <div className="mt-1 flex flex-wrap items-end gap-x-3 gap-y-1">
-            <div className="text-2xl font-extrabold leading-none">{formatQuote(ohlc.close)}</div>
+            <div className="px text-2xl font-extrabold leading-none">{formatQuote(ohlc.close)}</div>
             <div className="mb-0.5 min-w-0 text-xs font-medium text-slate-500">
               O {formatQuote(ohlc.open)} H {formatQuote(ohlc.high)} L {formatQuote(ohlc.low)} C {formatQuote(ohlc.close)}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-[var(--border)] bg-[var(--bg)] p-0.5">
+          <div className="desk-tabs">
             {timeframes.map((item) => (
               <button
                 key={item}
                 type="button"
                 onClick={() => setTf(item)}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                  tf === item ? "bg-[var(--card)] text-brand-500 shadow-sm" : "text-slate-400"
-                }`}
+                className={tf === item ? "bg-navy-900 text-white" : "text-slate-400"}
               >
                 {item}
               </button>
@@ -101,8 +97,8 @@ export function PriceChart() {
             </button>
           ))}
         </div>
-        <div className="min-h-[220px] min-w-0 flex-1 sm:min-h-[320px]">
-          <CandleChart candles={candles} dark={theme === "dark"} />
+        <div className="chart-well min-h-[220px] min-w-0 flex-1 p-1 sm:min-h-[320px]">
+          <CandleChart candles={candles} dark />
         </div>
       </div>
     </section>

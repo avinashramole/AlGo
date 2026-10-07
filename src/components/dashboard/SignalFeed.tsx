@@ -6,21 +6,21 @@ export function SignalFeed() {
   return (
     <section className="card p-4">
       <div className="mb-3">
+        <div className="desk-kicker">Live book</div>
         <div className="text-sm font-bold">Signals</div>
-        <p className="text-xs text-slate-400">AI and strategy alerts across indices and options</p>
       </div>
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {!data.signals.length ? (
           <div className="px-2 py-6 text-center text-sm text-slate-400">
             No live signals yet. Start an algo or wait for a Dhan / paper fill.
           </div>
         ) : null}
         {data.signals.map((signal) => (
-          <article key={signal.id} className="flex items-center gap-4 rounded-xl border border-[var(--border)] p-3">
+          <article key={signal.id} className="flex items-center gap-4 rounded-lg bg-[var(--card-muted)] px-3 py-2.5">
             <span
               className={cn(
-                "w-14 rounded-lg py-2 text-center text-xs font-extrabold",
-                signal.action === "BUY" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-rose-50 text-down dark:bg-rose-950/40",
+                "w-14 rounded py-1.5 text-center text-xs font-extrabold",
+                signal.action === "BUY" ? "status-live" : "bg-rose-50 text-down dark:bg-rose-950/40",
               )}
             >
               {signal.action}
