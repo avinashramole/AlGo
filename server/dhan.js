@@ -1589,8 +1589,11 @@ const CHART_UNDERLYINGS = {
   BANKNIFTY: { securityId: "25", exchangeSegment: "IDX_I", instrument: "INDEX" },
   "BANK NIFTY": { securityId: "25", exchangeSegment: "IDX_I", instrument: "INDEX" },
   FINNIFTY: { securityId: "27", exchangeSegment: "IDX_I", instrument: "INDEX" },
+  MIDCPNIFTY: { securityId: "442", exchangeSegment: "IDX_I", instrument: "INDEX" },
   SENSEX: { securityId: "51", exchangeSegment: "IDX_I", instrument: "INDEX" },
   CRUDEOIL: { securityId: "565899", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
+  NATURALGAS: { securityId: "0", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
+  COPPER: { securityId: "0", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
 };
 
 function chartInstrument(symbol) {
@@ -1744,6 +1747,9 @@ function contractRoot(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/\s+/g, "");
   if (!raw) return "";
   if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
+  if (raw.includes("NATURALGAS") || raw.includes("NATGAS")) return "NATURALGAS";
+  if (raw.includes("COPPER")) return "COPPER";
+  if (raw.includes("MIDCPNIFTY")) return "MIDCPNIFTY";
   if (raw.includes("BANKNIFTY")) return "BANKNIFTY";
   if (raw.includes("FINNIFTY")) return "FINNIFTY";
   if (raw.includes("SENSEX")) return "SENSEX";

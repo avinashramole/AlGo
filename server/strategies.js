@@ -16,8 +16,11 @@ const SYMBOLS = [
   { id: "NIFTY", lot: 65 },
   { id: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", lot: 60 },
+  { id: "MIDCPNIFTY", lot: 50 },
   { id: "SENSEX", lot: 20 },
   { id: "CRUDEOIL", lot: 100 },
+  { id: "NATURALGAS", lot: 1250 },
+  { id: "COPPER", lot: 2500 },
 ];
 
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
@@ -255,7 +258,7 @@ export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
-  if (isNiftyTest1Algo(algo)) return "NIFTY ATM CE/PE";
+  if (isNiftyTest1Algo(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
   if (isCrudeFirstCandleAlgo(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyFirstCandleAlgo(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
@@ -290,7 +293,7 @@ export function summarizeAlgo(algo) {
     const body = Math.round((Number(algo.minBodyPct) || 0.9) * 100);
     const wick = Math.round((Number(algo.maxWickPct) || 0.1) * 100);
     const start = algo.startTimeIst || "09:30";
-    return `TEST1 · NIFTY 5m ATM CE/PE only · after ${start} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL signal low · ${size}`;
+    return `TEST1 · ${algo.symbol || "NIFTY"} 5m ATM CE/PE only · after ${start} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL signal low · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

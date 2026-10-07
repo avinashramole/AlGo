@@ -103,6 +103,17 @@ export const DEFAULT_NIFTY_TEST_CONFIG = {
   endTimeIst: "15:15",
 };
 
+export const TEST1_SCRIPTS = [
+  { id: "NIFTY", label: "NIFTY", lot: 65, step: 50, expiryKind: "weekly", session: "nse", endTimeIst: "15:15" },
+  { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30, step: 100, expiryKind: "monthly", session: "nse", endTimeIst: "15:15" },
+  { id: "FINNIFTY", label: "FINNIFTY", lot: 60, step: 50, expiryKind: "monthly", session: "nse", endTimeIst: "15:15" },
+  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", lot: 50, step: 25, expiryKind: "monthly", session: "nse", endTimeIst: "15:15" },
+  { id: "SENSEX", label: "SENSEX", lot: 20, step: 100, expiryKind: "weekly", session: "nse", endTimeIst: "15:15" },
+  { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100, step: 50, expiryKind: "monthly", session: "mcx", endTimeIst: "23:15" },
+  { id: "NATURALGAS", label: "NATURAL GAS", lot: 1250, step: 5, expiryKind: "monthly", session: "mcx", endTimeIst: "23:15" },
+  { id: "COPPER", label: "COPPER", lot: 2500, step: 5, expiryKind: "monthly", session: "mcx", endTimeIst: "23:15" },
+];
+
 export const DEFAULT_NIFTY_TEST1_CONFIG = {
   timeframe: "5m",
   barMinutes: 5,
@@ -122,6 +133,30 @@ export const DEFAULT_NIFTY_TEST1_CONFIG = {
   intradayOnly: true,
   eodSquareOffMinutes: 15,
 };
+
+export function test1Script(symbol) {
+  const raw = String(symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  const id = raw.includes("MIDCPNIFTY")
+    ? "MIDCPNIFTY"
+    : raw.includes("BANKNIFTY")
+      ? "BANKNIFTY"
+      : raw.includes("FINNIFTY")
+        ? "FINNIFTY"
+        : raw.includes("SENSEX")
+          ? "SENSEX"
+          : raw.includes("CRUDEOIL")
+            ? "CRUDEOIL"
+            : raw.includes("NATURALGAS") || raw.includes("NATGAS")
+              ? "NATURALGAS"
+              : raw.includes("COPPER")
+                ? "COPPER"
+                : raw.includes("NIFTY")
+                  ? "NIFTY"
+                  : "";
+  return TEST1_SCRIPTS.find((row) => row.id === id) || TEST1_SCRIPTS[0];
+}
 
 export function parseIstHm(value, fallback = "09:00") {
   const raw = String(value || "").trim();
@@ -412,8 +447,9 @@ export function niftyTest1Config(algo = {}) {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   };
+  const script = test1Script(algo.symbol);
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_TEST1_CONFIG.lots)));
-  const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_TEST1_CONFIG.lotSize)));
+  const lotSize = script.lot;
   const minBodyPct = Math.min(0.99, Math.max(0.5, num(algo.minBodyPct, DEFAULT_NIFTY_TEST1_CONFIG.minBodyPct)));
   const maxWickPct = Math.min(0.5, Math.max(0.01, num(algo.maxWickPct, DEFAULT_NIFTY_TEST1_CONFIG.maxWickPct)));
   const targetMultiple = Math.min(5, Math.max(0.1, num(algo.targetMultiple, DEFAULT_NIFTY_TEST1_CONFIG.targetMultiple)));
@@ -421,19 +457,21 @@ export function niftyTest1Config(algo = {}) {
   return {
     timeframe: "5m",
     barMinutes: 5,
-    symbol: "NIFTY",
+    symbol: script.id,
     lots,
     lotSize,
     qty: lots * lotSize,
     signalMode: "test1-atm-green",
     startTimeIst: parseIstHm(algo.startTimeIst, DEFAULT_NIFTY_TEST1_CONFIG.startTimeIst),
-    endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_TEST1_CONFIG.endTimeIst),
+    endTimeIst: parseIstHm(algo.endTimeIst, script.endTimeIst),
     minBodyPct,
     maxWickPct,
     targetMultiple,
     targetSource,
     strikeOffset: 0,
-    expiryKind: "weekly",
+    expiryKind: script.expiryKind,
+    session: script.session,
+    step: script.step,
     maxPositions: 1,
     intradayOnly: algo.intradayOnly !== false,
     eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, DEFAULT_NIFTY_TEST1_CONFIG.eodSquareOffMinutes))),
@@ -722,7 +760,7 @@ export function defaultNiftyTest1Algo(patch = {}) {
     kind: NIFTY_TEST1_KIND,
     strategyType: NIFTY_TEST1_TYPE,
     tag: "TEST1",
-    symbol: "NIFTY",
+    symbol: cfg.symbol,
     instrument: "option",
     optionType: "CE",
     strikeOffset: 0,
@@ -739,7 +777,7 @@ export function defaultNiftyTest1Algo(patch = {}) {
     targetSource: cfg.targetSource,
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
-    expiryKind: "weekly",
+    expiryKind: cfg.expiryKind,
     maxPositions: 1,
     intradayOnly: true,
     eodSquareOffMinutes: cfg.eodSquareOffMinutes,
@@ -752,7 +790,7 @@ export function defaultNiftyTest1Algo(patch = {}) {
     name: "TEST1",
     kind: NIFTY_TEST1_KIND,
     strategyType: NIFTY_TEST1_TYPE,
-    symbol: "NIFTY",
+    symbol: cfg.symbol,
     instrument: "option",
     strikeOffset: 0,
     side: "BUY",
@@ -766,7 +804,7 @@ export function defaultNiftyTest1Algo(patch = {}) {
     targetSource: cfg.targetSource,
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
-    expiryKind: "weekly",
+    expiryKind: cfg.expiryKind,
     indicator: "NIFTY_TEST1",
     enabled: false,
   };

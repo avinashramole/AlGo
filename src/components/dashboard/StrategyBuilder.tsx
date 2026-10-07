@@ -8,6 +8,7 @@ import {
   PATTERNS,
   SOURCES,
   STRATEGY_SYMBOLS,
+  TEST1_SCRIPTS,
   TIMEFRAMES,
   defaultConditions,
   emptyStrategy,
@@ -150,7 +151,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
       const wick = Math.round((Number(form.maxWickPct) || 0.1) * 100);
-      return `TEST1 · NIFTY 5m ATM CE/PE · after ${form.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT ${form.targetMultiple || 1}× signal ${form.targetSource === "range" ? "range" : "body"} from fill · SL candle low`;
+      return `TEST1 · ${form.symbol || "NIFTY"} 5m ATM CE/PE · after ${form.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT ${form.targetMultiple || 1}× signal ${form.targetSource === "range" ? "range" : "body"} from fill · SL candle low`;
     }
     if (crudeFirst) {
       const requested = Number(form.maxTradesPerDay);
@@ -205,7 +206,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               kind: "nifty-test1",
               strategyType: "NIFTY_TEST1",
               indicator: "NIFTY_TEST1",
-              symbol: "NIFTY",
+              symbol: form.symbol || "NIFTY",
               instrument: "option",
               strikeOffset: 0,
               side: "BUY",
@@ -284,7 +285,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={test1}
             title="TEST1"
-            text="After 09:30 IST, buy current ATM NIFTY CE or PE when the 5m option candle is green with body ≈90% and wicks ≈10%. Target is 100% of that body from the fill. SL is the signal candle low. One order per candle."
+            text="Pick an NSE index or MCX script. After 09:30 IST, buy that script's current ATM CE or PE when the 5m option candle is green with body ≈90% and wicks ≈10%. Target is 100% of that body from the fill. SL is the signal candle low. One order per candle."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-test1"),
@@ -360,8 +361,52 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         {test1 ? (
-          <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-            TEST1 is locked to the current weekly ATM NIFTY CE or PE. After 09:30 IST, a completed 5m green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
+          <div className="mt-2.5 space-y-1.5">
+            <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
+              TEST1 buys only the current ATM CE or PE of the selected script. After 09:30 IST, a completed 5m green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-500">Script · ATM option</div>
+              <div
+                data-test1-scripts
+                className="mt-1 max-h-36 overflow-y-auto overscroll-contain rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1.5"
+              >
+                <div className="grid grid-cols-2 gap-1.5">
+                  {TEST1_SCRIPTS.map((row) => {
+                    const active = (form.symbol || "NIFTY") === row.id;
+                    return (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() =>
+                          set({
+                            symbol: row.id,
+                            lotSize: row.lot,
+                            qty: (form.lots || 1) * row.lot,
+                            expiryKind: row.expiryKind,
+                            endTimeIst: row.session === "mcx" ? "23:15" : "15:15",
+                            instrument: "option",
+                            strikeOffset: 0,
+                            side: "BUY",
+                          })
+                        }
+                        className={cn(
+                          "flex h-11 flex-col items-start justify-center rounded-md border px-2 text-left",
+                          active
+                            ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950"
+                            : "border-[var(--border)] bg-[var(--card)]",
+                        )}
+                      >
+                        <span className="text-[11px] font-bold leading-none">{row.label}</span>
+                        <span className={cn("mt-1 text-[10px] font-semibold leading-none", active ? "opacity-80" : "text-slate-400")}>
+                          ATM CE/PE · {row.group}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         ) : niftyTest ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">

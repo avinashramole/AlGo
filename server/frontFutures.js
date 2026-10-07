@@ -13,8 +13,11 @@ const UNDERLYINGS = [
   { parent: "NIFTY 50", root: "NIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 65, indexId: 13, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
   { parent: "BANKNIFTY", root: "BANKNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 30, indexId: 25, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
   { parent: "FINNIFTY", root: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 60, indexId: 27, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
+  { parent: "MIDCPNIFTY", root: "MIDCPNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 50, indexId: 442, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
   { parent: "SENSEX", root: "SENSEX", exchange: "BSE", segment: "BSE_FNO", lot: 20, indexId: 51, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
   { parent: "CRUDEOIL", root: "CRUDEOIL", exchange: "MCX", segment: "MCX_COMM", lot: 100, indexId: 565899, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
+  { parent: "NATURALGAS", root: "NATURALGAS", exchange: "MCX", segment: "MCX_COMM", lot: 1250, indexId: 0, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
+  { parent: "COPPER", root: "COPPER", exchange: "MCX", segment: "MCX_COMM", lot: 2500, indexId: 0, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
 ];
 
 const FALLBACK = [
@@ -69,11 +72,14 @@ function pickFront(rows) {
 
 export function optionRoot(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, " ");
+  if (raw.includes("MIDCPNIFTY") || raw.includes("MIDCAPNIFTY")) return "MIDCPNIFTY";
   if (raw.includes("BANKNIFTY") || raw.includes("BANK NIFTY")) return "BANKNIFTY";
   if (raw.includes("FINNIFTY")) return "FINNIFTY";
   if (raw.includes("SENSEX")) return "SENSEX";
   if (raw.includes("CRUDEOILM")) return "CRUDEOILM";
   if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
+  if (raw.includes("NATURALGAS") || raw.includes("NATURAL GAS") || raw.includes("NATGAS")) return "NATURALGAS";
+  if (raw.includes("COPPER")) return "COPPER";
   if (raw.includes("NIFTY")) return "NIFTY";
   return raw.trim().split(/\s+/)[0] || "";
 }
@@ -81,7 +87,7 @@ export function optionRoot(symbol) {
 export function parseOptionContract(symbol) {
   const clean = String(symbol || "").replace(/,/g, "").toUpperCase();
   const match = clean.match(
-    /\b(BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NIFTY)\b(?:[\s-]+[A-Z0-9]+)*[\s-]+(\d{3,6})[\s-]*(CE|PE)\b/,
+    /\b(MIDCPNIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NATURALGAS|COPPER|NIFTY)\b(?:[\s-]+[A-Z0-9]+)*[\s-]+(\d{3,6})[\s-]*(CE|PE)\b/,
   );
   if (!match) return null;
   return { root: match[1], strike: Number(match[2]), option: match[3] };

@@ -74,8 +74,8 @@ function kindMeta(algo: AlgoStrategy) {
     const wick = Math.round((Number(algo.maxWickPct) || 0.1) * 100);
     return {
       kind: "nifty-test1" as const,
-      category: "TEST1 NIFTY ATM 5M",
-      config: `ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · one order per 5m`,
+      category: `TEST1 ${algo.symbol || "NIFTY"} ATM 5M`,
+      config: `${algo.symbol || "NIFTY"} ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · one order per 5m`,
     };
   }
   if (isNiftyTestKind(algo)) {
@@ -159,9 +159,13 @@ export function Algo() {
 
   const rows = sortDeskAlgos(deskAlgos).filter((algo) => {
     if (filter === "all") return true;
-    if (filter === "crudeoil") return String(algo.symbol || "").toUpperCase() === "CRUDEOIL" || isCrudeFirstCandleKind(algo);
+    if (filter === "crudeoil") {
+      const symbol = String(algo.symbol || "").toUpperCase();
+      return isCrudeFirstCandleKind(algo) || (isNiftyTest1Kind(algo) && ["CRUDEOIL", "NATURALGAS", "COPPER"].includes(symbol));
+    }
     if (isCrudeFirstCandleKind(algo)) return false;
-    return isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo);
+    if (isNiftyTest1Kind(algo)) return !["CRUDEOIL", "NATURALGAS", "COPPER"].includes(String(algo.symbol || "").toUpperCase());
+    return isNiftyFirstCandleKind(algo);
   }) as AlgoStrategy[];
 
   const openAdd = () => {

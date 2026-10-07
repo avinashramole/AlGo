@@ -2,22 +2,36 @@ export const UNDERLYINGS = [
   { id: "NIFTY", label: "NIFTY", indexSymbol: "NIFTY 50", step: 50, scrip: 13, segment: "IDX_I", lot: 65, expiryWeekday: "Tue", weekly: true },
   { id: "BANKNIFTY", label: "BANKNIFTY", indexSymbol: "BANKNIFTY", step: 100, scrip: 25, segment: "IDX_I", lot: 30, expiryWeekday: "Tue", weekly: false },
   { id: "FINNIFTY", label: "FINNIFTY", indexSymbol: "FINNIFTY", step: 50, scrip: 27, segment: "IDX_I", lot: 60, expiryWeekday: "Tue", weekly: false },
+  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", indexSymbol: "MIDCPNIFTY", step: 25, scrip: 442, segment: "IDX_I", lot: 50, expiryWeekday: "Tue", weekly: false },
   { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 20, expiryWeekday: "Thu", weekly: true },
   { id: "CRUDEOIL", label: "CRUDE OIL", indexSymbol: "CRUDEOIL", step: 50, scrip: 565899, segment: "MCX_COMM", lot: 100, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
+  { id: "NATURALGAS", label: "NATURAL GAS", indexSymbol: "NATURALGAS", step: 5, scrip: 0, segment: "MCX_COMM", lot: 1250, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
+  { id: "COPPER", label: "COPPER", indexSymbol: "COPPER", step: 5, scrip: 0, segment: "MCX_COMM", lot: 2500, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
 ];
 
+export function underlyingIdFromSymbol(symbol) {
+  const raw = String(symbol || "").toUpperCase();
+  if (/MIDCPNIFTY|MIDCAPNIFTY/.test(raw)) return "MIDCPNIFTY";
+  if (/BANKNIFTY|BANK NIFTY/.test(raw)) return "BANKNIFTY";
+  if (raw.includes("FINNIFTY")) return "FINNIFTY";
+  if (raw.includes("SENSEX")) return "SENSEX";
+  if (/CRUDEOIL|CRUDE OIL/.test(raw)) return "CRUDEOIL";
+  if (/NATURALGAS|NATURAL GAS|NATGAS/.test(raw)) return "NATURALGAS";
+  if (raw.includes("COPPER")) return "COPPER";
+  if (raw.includes("NIFTY")) return "NIFTY";
+  const compact = raw.replace(/\s+/g, "");
+  return UNDERLYINGS.some((row) => row.id === compact) ? compact : "NIFTY";
+}
+
 export function exchangeSegmentFor(symbol) {
-  const upper = String(symbol || "").toUpperCase();
-  if (upper.includes("CRUDEOIL")) return "MCX_COMM";
-  if (upper.includes("SENSEX")) return "BSE_FNO";
+  const id = underlyingIdFromSymbol(symbol);
+  if (id === "SENSEX") return "BSE_FNO";
+  if (getUnderlying(id).segment === "MCX_COMM") return "MCX_COMM";
   return "NSE_FNO";
 }
 
 export function isMcxSymbol(symbol) {
-  return String(symbol || "")
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .includes("CRUDEOIL");
+  return getUnderlying(underlyingIdFromSymbol(symbol)).segment === "MCX_COMM";
 }
 
 export function getUnderlying(id) {
@@ -30,7 +44,7 @@ export function dhanOrderQuantity(payload = {}) {
   const segment = String(payload.exchangeSegment || exchangeSegmentFor(payload.symbol) || "");
   const mcx = segment === "MCX_COMM" || isMcxSymbol(payload.symbol);
   if (!mcx) return qty;
-  const lotSize = Math.max(1, Math.round(Number(payload.lotSize) || getUnderlying("CRUDEOIL").lot || 100));
+  const lotSize = Math.max(1, Math.round(Number(payload.lotSize) || getUnderlying(underlyingIdFromSymbol(payload.symbol)).lot || 100));
   const lots = Math.max(0, Math.round(Number(payload.lots) || 0));
   if (qty >= lotSize) return Math.max(1, Math.round(qty / lotSize));
   if (lots > 0) return lots;

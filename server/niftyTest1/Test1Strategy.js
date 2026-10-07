@@ -139,7 +139,7 @@ export const Test1Strategy = {
       spot,
       step,
       option,
-      symbol: "NIFTY",
+      symbol: config.symbol || "NIFTY",
       strikeOffset: 0,
     });
     if (!pick.strike) {
