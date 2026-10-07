@@ -2765,9 +2765,13 @@ export async function backtestAlgo(id, options = {}) {
       `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${
         result.storedTrades
           ? ` · ${result.storedTrades} Dhan rolling days`
-          : result.optionSource === "synth"
-            ? " · research model (no option tape)"
-            : ""
+          : result.optionHistory?.error === "dhan-not-live"
+            ? " · Dhan not connected — rolling tape not downloaded"
+            : result.optionHistory?.truncated
+              ? ` · rolling download paused after ${result.optionHistory.days || 0} days — run again`
+              : result.optionSource === "synth"
+                ? " · research model (no option tape)"
+                : ""
       }${result.skippedDays ? ` · skipped ${result.skippedDays}` : ""} · PDF/Excel ready`,
     );
     return { ok: true, algo: clone(algo), backtest: stored };

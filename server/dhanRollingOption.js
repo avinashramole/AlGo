@@ -8,6 +8,20 @@ const NIFTY_ID = 13;
 export const ROLLING_MAX_DAYS = 366;
 export const ROLLING_CHUNK_DAYS = 30;
 export const ROLLING_WINGS = 10;
+export const ROLLING_BACKTEST_DEADLINE_MS = 480_000;
+
+const ROLLING_CONTRACTS = {
+  NIFTY: { symbol: "NIFTY", securityId: 13, exchangeSegment: "NSE_FNO", instrument: "OPTIDX" },
+  BANKNIFTY: { symbol: "BANKNIFTY", securityId: 25, exchangeSegment: "NSE_FNO", instrument: "OPTIDX" },
+  FINNIFTY: { symbol: "FINNIFTY", securityId: 27, exchangeSegment: "NSE_FNO", instrument: "OPTIDX" },
+  MIDCPNIFTY: { symbol: "MIDCPNIFTY", securityId: 442, exchangeSegment: "NSE_FNO", instrument: "OPTIDX" },
+  SENSEX: { symbol: "SENSEX", securityId: 51, exchangeSegment: "BSE_FNO", instrument: "OPTIDX" },
+};
+
+export function rollingContract(symbol = "NIFTY") {
+  const root = String(symbol || "NIFTY").toUpperCase();
+  return ROLLING_CONTRACTS[root] || null;
+}
 
 function pad2(value) {
   return String(value).padStart(2, "0");
@@ -314,6 +328,23 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function persistFetchedDays(root, weeklyBars, monthlyBars, overwrite = false) {
+  const weeklyDays = mergeBarsIntoDays(weeklyBars);
+  const monthlyDays = mergeBarsIntoDays(monthlyBars);
+  const ymds = new Set([...weeklyDays.keys(), ...monthlyDays.keys()]);
+  const wrote = [];
+  for (const ymd of ymds) {
+    const existing = loadRollingDay(root, ymd);
+    if (!overwrite && existing && rollingDayStatus(root, ymd) === "complete") continue;
+    const weekly = weeklyDays.get(ymd)?.slots?.length ? weeklyDays.get(ymd) : existing?.weekly || { slots: [] };
+    const monthly = monthlyDays.get(ymd)?.slots?.length ? monthlyDays.get(ymd) : existing?.monthly || { slots: [] };
+    if (!weekly.slots.length && !monthly.slots.length) continue;
+    writeRollingDay(root, ymd, { weekly, monthly, empty: false, source: "dhan-rolling" });
+    wrote.push(ymd);
+  }
+  return wrote;
+}
+
 export async function downloadRollingOptionRange({
   symbol = "NIFTY",
   from,
@@ -325,8 +356,15 @@ export async function downloadRollingOptionRange({
   interval = 15,
   maxDays = ROLLING_MAX_DAYS,
   deadlineMs = 150_000,
+  securityId,
+  exchangeSegment,
+  instrument,
 } = {}) {
   const root = String(symbol || "NIFTY").toUpperCase();
+  const contract = rollingContract(root);
+  const id = Number(securityId || contract?.securityId || NIFTY_ID);
+  const segment = String(exchangeSegment || contract?.exchangeSegment || "NSE_FNO");
+  const inst = String(instrument || contract?.instrument || "OPTIDX");
   if (!isYmd(from) || !isYmd(to) || typeof fetchRolling !== "function") {
     return { symbol: root, from, to, days: 0, calls: 0, skipped: 0, truncated: false, reused: false, source: "none" };
   }
@@ -353,9 +391,9 @@ export async function downloadRollingOptionRange({
   const started = Date.now();
   let calls = 0;
   let skipped = 0;
-  let written = 0;
   let stubs = 0;
   let truncated = false;
+  const wrote = new Set();
   const labels = wingLabels(wings);
   for (const chunk of chunkDateRange(start, end)) {
     const need = listYmds(chunk.from, chunk.to).filter((ymd) => (overwrite ? !isWeekendYmd(ymd) : needsRollingFetch(root, ymd)));
@@ -367,6 +405,7 @@ export async function downloadRollingOptionRange({
     const weeklyBars = [];
     const monthlyBars = [];
     let chunkDone = true;
+    let okCalls = 0;
     expiryLoop: for (const expiryFlag of ["WEEK", "MONTH"]) {
       for (const option of ["CE", "PE"]) {
         for (const strike of labels) {
@@ -385,33 +424,27 @@ export async function downloadRollingOptionRange({
               from: chunk.from,
               to: chunk.toExclusive,
               interval,
-              securityId: NIFTY_ID,
+              securityId: id,
+              exchangeSegment: segment,
+              instrument: inst,
             });
           } catch {
             skipped += 1;
           }
           calls += 1;
+          if (payload) okCalls += 1;
           const bars = parseRollingPayload(payload, option);
           if (expiryFlag === "MONTH") monthlyBars.push(...bars);
           else weeklyBars.push(...bars);
           if (delayMs > 0) await sleep(delayMs);
         }
       }
+      for (const ymd of persistFetchedDays(root, weeklyBars, monthlyBars, overwrite)) wrote.add(ymd);
     }
-    const weeklyDays = mergeBarsIntoDays(weeklyBars);
-    const monthlyDays = mergeBarsIntoDays(monthlyBars);
-    const ymds = new Set([...weeklyDays.keys(), ...monthlyDays.keys()]);
-    for (const ymd of ymds) {
-      if (!overwrite && !needsRollingFetch(root, ymd)) continue;
-      const weekly = weeklyDays.get(ymd) || { slots: [] };
-      const monthly = monthlyDays.get(ymd) || { slots: [] };
-      if (!weekly.slots.length || !monthly.slots.length) continue;
-      writeRollingDay(root, ymd, { weekly, monthly, source: "dhan-rolling" });
-      written += 1;
-    }
-    if (chunkDone) {
+    if (chunkDone && okCalls > 0) {
       for (const ymd of need) {
         if (!needsRollingFetch(root, ymd)) continue;
+        if (loadRollingDay(root, ymd)) continue;
         writeRollingDay(root, ymd, {
           empty: true,
           weekly: { slots: [] },
@@ -426,13 +459,14 @@ export async function downloadRollingOptionRange({
     symbol: root,
     from: start,
     to: end,
-    days: written,
+    days: wrote.size,
     calls,
     skipped,
     stubs,
     reusedDays,
     truncated,
     reused: calls === 0,
-    source: written ? "dhan-rolling" : reusedDays ? "stored" : "none",
+    source: wrote.size ? "dhan-rolling" : reusedDays ? "stored" : "none",
+    securityId: id,
   };
 }

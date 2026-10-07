@@ -6,6 +6,7 @@ import {
   isWeekendYmd,
   parseRollingPayload,
   rollingChainAt,
+  rollingContract,
   rollingCoverage,
   rollingDayStatus,
   rollingPremiumAt,
@@ -13,6 +14,13 @@ import {
   wipeRollingOptions,
   writeRollingDay,
 } from "./dhanRollingOption.js";
+
+test("rollingContract maps index scripts to Dhan rolling ids", () => {
+  assert.equal(rollingContract("NIFTY")?.securityId, 13);
+  assert.equal(rollingContract("BANKNIFTY")?.securityId, 25);
+  assert.equal(rollingContract("SENSEX")?.exchangeSegment, "BSE_FNO");
+  assert.equal(rollingContract("CRUDEOIL"), null);
+});
 
 test("rolling helpers chunk dates and label wings", () => {
   const chunks = chunkDateRange("2024-01-01", "2024-02-10", 30);
@@ -153,5 +161,55 @@ test("weekends do not force a re-download and stored chunks are skipped", async 
   assert.equal(calls, 0);
   assert.equal(reused.reused, true);
   assert.equal(reused.reusedDays >= 4, true);
+  wipeRollingOptions();
+});
+
+test("failed Dhan rolling calls do not stub empty days as stored", async () => {
+  wipeRollingOptions();
+  const result = await downloadRollingOptionRange({
+    from: "2026-09-01",
+    to: "2026-09-01",
+    delayMs: 0,
+    wings: 1,
+    fetchRolling: async () => null,
+  });
+  assert.equal(result.days, 0);
+  assert.equal(result.source, "none");
+  assert.equal(rollingCoverage("NIFTY", "2026-09-01", "2026-09-01"), "synth");
+  wipeRollingOptions();
+});
+
+test("BANKNIFTY rolling download uses security id 25 and keeps weekly tape when monthly is late", async () => {
+  wipeRollingOptions();
+  const t = Math.floor(Date.parse("2026-09-01T04:05:00.000Z") / 1000);
+  const seen = [];
+  const result = await downloadRollingOptionRange({
+    symbol: "BANKNIFTY",
+    from: "2026-09-01",
+    to: "2026-09-01",
+    delayMs: 0,
+    wings: 1,
+    fetchRolling: async (args) => {
+      seen.push(args);
+      if (args.expiryFlag === "MONTH") return null;
+      return {
+        data: {
+          ce: {
+            timestamp: [t],
+            close: [24],
+            high: [25],
+            low: [23],
+            strike: [57600],
+            spot: [57650],
+          },
+        },
+      };
+    },
+  });
+  assert.equal(result.securityId, 25);
+  assert.equal(seen.every((row) => row.securityId === 25), true);
+  assert.equal(result.days, 1);
+  assert.equal(rollingDayStatus("BANKNIFTY", "2026-09-01"), "partial");
+  assert.equal(rollingCoverage("BANKNIFTY", "2026-09-01", "2026-09-01"), "synth");
   wipeRollingOptions();
 });

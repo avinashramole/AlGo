@@ -37,6 +37,9 @@ if [ -d .git ]; then
     src/lib/strategies.ts \
     src/index.css \
     server/niftyTest2/Test2Engine.js \
+    server/dhanRollingOption.js \
+    server/dhan.js \
+    server/index.js \
     server/market.js \
     server/backtestReport.js \
     deploy/publish-web.js 2>/dev/null || true
@@ -55,6 +58,9 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw src/pages/Algo.tsx
   pull_raw src/lib/strategies.ts
   pull_raw server/niftyTest2/Test2Engine.js
+  pull_raw server/dhanRollingOption.js
+  pull_raw server/dhan.js
+  pull_raw server/index.js
   pull_raw server/market.js
   pull_raw server/backtestReport.js
 fi
@@ -69,6 +75,10 @@ if ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx"; then
 fi
 if ! grep -q "$ENGINE_MARKER" "$HOME_DIR/server/niftyTest2/Test2Engine.js"; then
   echo "FAIL: $HOME_DIR still has the old TEST2 engine (no research book)."
+  exit 1
+fi
+if ! grep -q "ROLLING_BACKTEST_DEADLINE_MS" "$HOME_DIR/server/dhanRollingOption.js" || ! grep -q "dhan-not-live" "$HOME_DIR/server/index.js"; then
+  echo "FAIL: $HOME_DIR still has the old TEST2 rolling download."
   exit 1
 fi
 
@@ -97,6 +107,9 @@ if [ "$HOME_DIR" != /opt/t2s ] && [ -d /opt/t2s ]; then
   mkdir -p /opt/t2s/dist
   /bin/cp -af "$HOME_DIR/dist/." /opt/t2s/dist/
   /bin/cp -af "$HOME_DIR/server/niftyTest2/Test2Engine.js" /opt/t2s/server/niftyTest2/Test2Engine.js
+  /bin/cp -af "$HOME_DIR/server/dhanRollingOption.js" /opt/t2s/server/dhanRollingOption.js
+  /bin/cp -af "$HOME_DIR/server/dhan.js" /opt/t2s/server/dhan.js
+  /bin/cp -af "$HOME_DIR/server/index.js" /opt/t2s/server/index.js
   /bin/cp -af "$HOME_DIR/server/market.js" /opt/t2s/server/market.js
   /bin/cp -af "$HOME_DIR/server/backtestReport.js" /opt/t2s/server/backtestReport.js
 fi

@@ -1626,6 +1626,8 @@ export async function fetchDhanRollingOption({
   to,
   interval = 15,
   securityId = 13,
+  exchangeSegment = "NSE_FNO",
+  instrument = "OPTIDX",
 } = {}) {
   if (!accessToken) return null;
   const fromDate = dateOnly(from);
@@ -1636,10 +1638,10 @@ export async function fetchDhanRollingOption({
     accessToken,
     clientId,
     {
-      exchangeSegment: "NSE_FNO",
+      exchangeSegment: String(exchangeSegment || "NSE_FNO"),
       interval: Number(interval) || 15,
       securityId: Number(securityId) || 13,
-      instrument: "OPTIDX",
+      instrument: String(instrument || "OPTIDX"),
       expiryFlag: String(expiryFlag || "WEEK").toUpperCase() === "MONTH" ? "MONTH" : "WEEK",
       expiryCode: Number.isFinite(Number(expiryCode)) ? Number(expiryCode) : 0,
       strike: String(strike || "ATM"),
