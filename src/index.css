@@ -158,6 +158,18 @@ main table tbody tr:hover {
   color: var(--text);
 }
 
+.icon-btn-on,
+.icon-btn[aria-pressed="true"] {
+  background: #0b1f3a;
+  color: #fff;
+}
+
+.icon-btn-on:hover,
+.icon-btn[aria-pressed="true"]:hover {
+  background: #123056;
+  color: #fff;
+}
+
 main {
   min-width: 0;
   max-width: 100%;
@@ -317,6 +329,11 @@ main :where(.card, [class*="overflow-x-auto"], [class*="overflow-hidden"]):has(t
     height: 320px;
     max-height: 320px;
   }
+}
+
+.chart-well-expand {
+  height: min(56vh, 420px);
+  max-height: min(56vh, 420px);
 }
 
 .btn-go {
