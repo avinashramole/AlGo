@@ -189,13 +189,149 @@ function xmlEscape(value) {
     .replace(/"/g, "&quot;");
 }
 
-function excelCell(value, type = "String") {
-  if (type === "Number") {
-    const n = Number(value);
-    return `<Cell ss:Type="Number">${Number.isFinite(n) ? n : 0}</Cell>`;
+function crc32(data) {
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i += 1) {
+    crc ^= buf[i];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
   }
-  return `<Cell ss:Type="String">${xmlEscape(value)}</Cell>`;
+  return (crc ^ 0xffffffff) >>> 0;
 }
+
+function zipStore(files = []) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.name, "utf8");
+    const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(String(file.data), "utf8");
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    const localFull = Buffer.concat([local, name, data]);
+    locals.push(localFull);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(Buffer.concat([central, name]));
+    offset += localFull.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+}
+
+function colLetter(index) {
+  let n = Number(index) + 1;
+  let out = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+function xlsxCell(value, ref) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<c r="${ref}"><v>${value}</v></c>`;
+  }
+  return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(value ?? "")}</t></is></c>`;
+}
+
+function xlsxSheet(rows = []) {
+  const body = rows
+    .map((row, r) => {
+      const cells = (Array.isArray(row) ? row : []).map((value, c) => xlsxCell(value, `${colLetter(c)}${r + 1}`)).join("");
+      return `<row r="${r + 1}">${cells}</row>`;
+    })
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+}
+
+function xlsxWorkbook(names = []) {
+  const sheets = names
+    .map((name, i) => `<sheet name="${xmlEscape(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets}</sheets></workbook>`;
+}
+
+function xlsxRels(count) {
+  const rels = Array.from({ length: count }, (_, i) => {
+    return `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`;
+  }).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
+}
+
+function buildXlsx(sheets = []) {
+  const names = sheets.map((sheet) => String(sheet.name || "Sheet").slice(0, 31));
+  const files = [
+    {
+      name: "[Content_Types].xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}
+</Types>`,
+    },
+    {
+      name: "_rels/.rels",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    },
+    { name: "xl/workbook.xml", data: xlsxWorkbook(names) },
+    { name: "xl/_rels/workbook.xml.rels", data: xlsxRels(names.length) },
+    ...sheets.map((sheet, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: xlsxSheet(sheet.rows || []) })),
+  ];
+  return zipStore(files);
+}
+
+function fillTableRow(row) {
+  return [
+    Number(row.n) || 0,
+    row.day || "",
+    row.side || "",
+    row.option || "",
+    Number(row.strike) || 0,
+    row.symbol || "",
+    row.entryAt || "",
+    row.exitAt || "",
+    Number(row.entry) || 0,
+    Number(row.exit) || 0,
+    Number(row.qty) || 0,
+    Number(row.pnl) || 0,
+    Number(row.margin) || 0,
+    Number(row.rom) || 0,
+    Number(row.netCredit) || 0,
+    Number(row.bars) || 0,
+  ];
+}
+
+const FILL_HEADER = ["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry time", "Exit time", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"];
 
 export function renderBacktestExcel(report) {
   const summaryRows = [
@@ -207,64 +343,54 @@ export function renderBacktestExcel(report) {
     ["End date", report.summary.to],
     ["Range", report.summary.years ? `Last ${report.summary.years} year(s)` : report.summary.months ? `Last ${report.summary.months} month(s)` : report.summary.range || ""],
     ["Timeframe", report.summary.timeframe],
-    ["P&L", money(report.summary.pnl)],
-    ["Trades", report.summary.trades],
-    ["Wins", report.summary.wins],
-    ["Losses", report.summary.losses],
-    ["Win rate %", report.summary.winRate],
-    ["Combos", report.summary.combos],
-    ["Combo win rate %", report.summary.comboWinRate],
-    ["Legs", report.summary.legs],
-    ["Drawdown", money(report.summary.maxDrawdown)],
-    ["Avg profit / trade", money(report.summary.avgProfit)],
-    ["Avg win", money(report.summary.avgWin)],
-    ["Avg loss", money(report.summary.avgLoss)],
-    ["Max profit", money(report.summary.maxProfit)],
-    ["Max loss", money(report.summary.maxLoss)],
-    ["Return / Max DD", report.summary.returnDd],
-    ["Reward : Risk", report.summary.rewardRisk],
-    ["Expectancy", money(report.summary.expectancy)],
-    ["Max win streak", report.summary.maxWinStreak],
-    ["Max lose streak", report.summary.maxLoseStreak],
+    ["P&L", Number(report.summary.pnl) || 0],
+    ["Trades", Number(report.summary.trades) || 0],
+    ["Wins", Number(report.summary.wins) || 0],
+    ["Losses", Number(report.summary.losses) || 0],
+    ["Win rate %", Number(report.summary.winRate) || 0],
+    ["Combos", Number(report.summary.combos) || 0],
+    ["Combo win rate %", Number(report.summary.comboWinRate) || 0],
+    ["Legs", Number(report.summary.legs) || 0],
+    ["Drawdown", Number(report.summary.maxDrawdown) || 0],
+    ["Avg profit / trade", Number(report.summary.avgProfit) || 0],
+    ["Avg win", Number(report.summary.avgWin) || 0],
+    ["Avg loss", Number(report.summary.avgLoss) || 0],
+    ["Max profit", Number(report.summary.maxProfit) || 0],
+    ["Max loss", Number(report.summary.maxLoss) || 0],
+    ["Return / Max DD", Number(report.summary.returnDd) || 0],
+    ["Reward : Risk", Number(report.summary.rewardRisk) || 0],
+    ["Expectancy", Number(report.summary.expectancy) || 0],
+    ["Max win streak", Number(report.summary.maxWinStreak) || 0],
+    ["Max lose streak", Number(report.summary.maxLoseStreak) || 0],
     ["Max DD from", report.summary.maxDdFrom],
     ["Max DD to", report.summary.maxDdTo],
-    ["Max trades in DD", report.summary.maxTradesInDd],
+    ["Max trades in DD", Number(report.summary.maxTradesInDd) || 0],
     ["Lot", report.summary.lotNote],
-    ["Cost / combo", money(report.summary.costPerCombo)],
-    ["Required margin (max)", money(report.summary.requiredMargin)],
-    ["Avg required margin", money(report.summary.avgMargin)],
-    ["Return on margin %", report.summary.rom],
-    ["Overall profit %", report.summary.overallTargetPct || 5],
-    ["Overall target exits", report.summary.targetHits],
+    ["Cost / combo", Number(report.summary.costPerCombo) || 0],
+    ["Required margin (max)", Number(report.summary.requiredMargin) || 0],
+    ["Avg required margin", Number(report.summary.avgMargin) || 0],
+    ["Return on margin %", Number(report.summary.rom) || 0],
+    ["Overall profit %", Number(report.summary.overallTargetPct) || 5],
+    ["Overall target exits", Number(report.summary.targetHits) || 0],
     ...(Array.isArray(report.legStats) ? report.legStats : []).flatMap((leg) => [
-      [`${leg.label || "Leg"} P&L`, money(leg.pnl)],
-      [`${leg.label || "Leg"} trades`, leg.trades],
-      [`${leg.label || "Leg"} win rate %`, leg.winRate],
-      [`${leg.label || "Leg"} avg`, money(leg.avgProfit)],
+      [`${leg.label || "Leg"} P&L`, Number(leg.pnl) || 0],
+      [`${leg.label || "Leg"} trades`, Number(leg.trades) || 0],
+      [`${leg.label || "Leg"} win rate %`, Number(leg.winRate) || 0],
+      [`${leg.label || "Leg"} avg`, Number(leg.avgProfit) || 0],
     ]),
-    ["Stored trades", report.summary.storedTrades],
-    ["Stored win rate %", report.summary.storedWinRate],
-    ["Skipped days", report.summary.skippedDays],
+    ["Stored trades", Number(report.summary.storedTrades) || 0],
+    ["Stored win rate %", Number(report.summary.storedWinRate) || 0],
+    ["Skipped days", Number(report.summary.skippedDays) || 0],
     ["Option source", report.summary.optionSource],
     ["Generated", report.generatedAt],
     ["Summary", report.strategy.summary],
-  ]
-    .map(([label, value]) => `<Row>${excelCell(label)}${excelCell(value)}</Row>`)
-    .join("");
-  const tradeHeader = `<Row>${["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry time", "Exit time", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"].map((h) => excelCell(h)).join("")}</Row>`;
-  const rowXml = (row) =>
-    `<Row>${excelCell(row.n, "Number")}${excelCell(row.day)}${excelCell(row.side)}${excelCell(row.option)}${excelCell(row.strike, "Number")}${excelCell(row.symbol)}${excelCell(row.entryAt)}${excelCell(row.exitAt)}${excelCell(row.entry, "Number")}${excelCell(row.exit, "Number")}${excelCell(row.qty, "Number")}${excelCell(row.pnl, "Number")}${excelCell(row.margin, "Number")}${excelCell(row.rom, "Number")}${excelCell(row.netCredit, "Number")}${excelCell(row.bars, "Number")}</Row>`;
-  const tradeBody = (report.trades || []).map(rowXml).join("");
-  const legs = report.legs?.length ? report.legs : report.trades || [];
-  const legBody = legs.map(rowXml).join("");
-  const xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-<Worksheet ss:Name="Summary"><Table>${summaryRows}</Table></Worksheet>
-<Worksheet ss:Name="Combos"><Table>${tradeHeader}${tradeBody}</Table></Worksheet>
-<Worksheet ss:Name="Legs"><Table>${tradeHeader}${legBody}</Table></Worksheet>
-</Workbook>`;
-  return Buffer.from(xml, "utf8");
+  ];
+  const fills = report.legs?.length ? report.legs : report.trades || [];
+  return buildXlsx([
+    { name: "Summary", rows: summaryRows },
+    { name: "Combos", rows: [FILL_HEADER, ...(report.trades || []).map(fillTableRow)] },
+    { name: "Legs", rows: [FILL_HEADER, ...fills.map(fillTableRow)] },
+  ]);
 }
 
 function pdfEscape(text) {
@@ -355,8 +481,8 @@ export function renderBacktestPdf(report) {
   for (const row of report.trades || []) lines.push(pdfFillRow(row));
   if (!(report.trades || []).length) lines.push("No combos in this replay.");
 
-  const pageW = 792;
-  const pageH = 612;
+  const pageW = 842;
+  const pageH = 595;
   const marginX = 24;
   const marginY = 24;
   const fontSize = 8;
@@ -399,5 +525,5 @@ export function renderBacktestPdf(report) {
 export function reportDownloadName(report, format) {
   const stamp = String(report.generatedAt || "").slice(0, 10) || "backtest";
   const style = report.summary.holdStyle ? `-${report.summary.holdStyle}` : "";
-  return `${safeName(report.strategy.name)}${style}-backtest-${stamp}.${format === "pdf" ? "pdf" : "xls"}`;
+  return `${safeName(report.strategy.name)}${style}-backtest-${stamp}.${format === "pdf" ? "pdf" : "xlsx"}`;
 }
