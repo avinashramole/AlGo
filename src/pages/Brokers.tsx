@@ -698,7 +698,6 @@ function DhanSettings({
           </button>
         )}
       </div>
-      </div>
     </div>
   );
 }
