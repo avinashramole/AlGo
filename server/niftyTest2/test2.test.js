@@ -334,6 +334,66 @@ test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
   wipeRollingOptions();
 });
 
+test("TEST2 BTST marks max win/loss and drawdown on the sell-tomorrow day", () => {
+  const algo = defaultNiftyTest2Algo({ holdStyle: "btst" });
+  const start = Date.parse("2026-09-28T03:45:00.000Z");
+  const candles = Array.from({ length: 5 }, (_, i) => ({
+    time: start + i * 86_400_000,
+    open: 24500,
+    high: 24600,
+    low: 24400,
+    close: 24500 + (i === 0 ? 80 : i === 3 ? -90 : 10),
+    volume: 1,
+  }));
+  const result = runTest2Backtest(algo, candles);
+  assert.equal(result.holdStyle, "btst");
+  assert.equal(result.tradesBook.every((row) => row.exitDay && row.exitDay >= row.day), true);
+  assert.equal(result.maxProfitDay === result.maxLossDay || Boolean(result.maxProfitDay || result.maxLossDay), true);
+  assert.match(String(result.maxDdFrom || result.maxProfitDay || ""), /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test("TEST2 this-month window does not replay September candles", async () => {
+  const { backtestAlgo, createAlgo, deleteAlgo } = await import("../market.js");
+  const created = createAlgo({
+    name: "TEST2-window",
+    kind: "nifty-test2",
+    runMode: "backtest",
+  });
+  try {
+    const sep = Date.parse("2026-09-28T03:45:00.000Z");
+    const oct = Date.parse("2026-10-01T03:45:00.000Z");
+    const candles = [
+      ...Array.from({ length: 3 }, (_, i) => ({
+        time: sep + i * 86_400_000,
+        open: 24500,
+        high: 24600,
+        low: 24400,
+        close: 24600,
+        volume: 1,
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        time: oct + i * 86_400_000,
+        open: 24500,
+        high: 24600,
+        low: 24400,
+        close: 24420,
+        volume: 1,
+      })),
+    ];
+    const replay = await backtestAlgo(created.id, {
+      range: "custom",
+      from: "2026-10-01",
+      to: "2026-10-07",
+      candles,
+    });
+    const book = replay.backtest?.book || replay.algo.lastBacktest?.book || [];
+    assert.equal(book.some((row) => String(row.day || "").startsWith("2026-09")), false);
+    assert.equal(String(replay.algo.lastBacktest?.from || ""), "2026-10-01");
+  } finally {
+    deleteAlgo(created.id);
+  }
+});
+
 test("reset backtest clears stored TEST2 result", async () => {
   const { backtestAlgo, createAlgo, deleteAlgo, resetBacktestAlgo } = await import("../market.js");
   const created = createAlgo({
@@ -343,6 +403,9 @@ test("reset backtest clears stored TEST2 result", async () => {
   });
   try {
     const replay = await backtestAlgo(created.id, {
+      range: "custom",
+      from: "2026-09-01",
+      to: "2026-09-10",
       candles: Array.from({ length: 10 }, (_, i) => ({
         time: Date.parse("2026-09-01T04:05:00.000Z") + i * 86_400_000,
         open: 24500,

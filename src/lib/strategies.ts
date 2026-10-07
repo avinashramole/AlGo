@@ -142,6 +142,8 @@ export type AlgoStrategy = {
     avgLoss?: number;
     maxProfit?: number;
     maxLoss?: number;
+    maxProfitDay?: string;
+    maxLossDay?: string;
     maxWinStreak?: number;
     maxLoseStreak?: number;
     expectancy?: number;
