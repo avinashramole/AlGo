@@ -93,6 +93,8 @@ export type AlgoStrategy = {
   sellPremium?: number;
   hedgePremium?: number;
   hedgeSlPct?: number;
+  sellExpiryKind?: "weekly" | "monthly";
+  hedgeExpiryKind?: "weekly" | "monthly";
   overallSl?: number;
   overallTarget?: number;
   overallTargetPct?: number;
@@ -253,6 +255,8 @@ export const TEST1_SCRIPTS = [
   { id: "NATURALGAS", label: "NATURAL GAS", lot: 1250, group: "MCX", session: "mcx" as const, expiryKind: "monthly" as const },
   { id: "COPPER", label: "COPPER", lot: 2500, group: "MCX", session: "mcx" as const, expiryKind: "monthly" as const },
 ];
+
+export const TEST2_SCRIPTS = TEST1_SCRIPTS;
 
 export const INDICATORS = [
   { id: "VWAP", label: "VWAP" },
@@ -520,12 +524,18 @@ export function contractLabel(algo: {
   optionType?: string;
   strikeOffset?: number;
   timeframe?: string;
+  sellExpiryKind?: "weekly" | "monthly";
+  hedgeExpiryKind?: "weekly" | "monthly";
 }) {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
   if (isNiftyTest1Kind(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
-  if (isNiftyTest2Kind(algo)) return "NIFTY monthly SELL + weekly BUY";
+  if (isNiftyTest2Kind(algo)) {
+    const sell = algo.sellExpiryKind === "weekly" ? "weekly" : "monthly";
+    const hedge = algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
+    return `${algo.symbol || "NIFTY"} ${sell} SELL + ${hedge} BUY`;
+  }
   if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyFirstCandleKind(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";
@@ -787,6 +797,8 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       sellPremium: 80,
       hedgePremium: 20,
       hedgeSlPct: 20,
+      sellExpiryKind: "monthly",
+      hedgeExpiryKind: "weekly",
       overallSl: 30000,
       overallTarget: 0,
       overallTargetPct: 5,

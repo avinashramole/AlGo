@@ -259,7 +259,11 @@ export function contractLabel(algo) {
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
   if (isNiftyTest1Algo(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
-  if (isNiftyTest2Algo(algo)) return "NIFTY monthly SELL + weekly BUY premium";
+  if (isNiftyTest2Algo(algo)) {
+    const sell = algo.sellExpiryKind === "weekly" ? "weekly" : "monthly";
+    const hedge = algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
+    return `${algo.symbol || "NIFTY"} ${sell} SELL + ${hedge} BUY premium`;
+  }
   if (isCrudeFirstCandleAlgo(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyFirstCandleAlgo(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyVwapAlgo(algo)) return "NIFTY ATM CE/PE";
@@ -303,13 +307,16 @@ export function summarizeAlgo(algo) {
     const sell = algo.sellPremium || 80;
     const hedge = algo.hedgePremium || 20;
     const sl = algo.hedgeSlPct || 20;
+    const root = algo.symbol || "NIFTY";
+    const sellOpt = algo.sellExpiryKind === "weekly" ? "weekly" : "monthly";
+    const hedgeOpt = algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
     const style = String(algo.holdStyle || "").toLowerCase() === "intraday" ? "intraday" : "btst";
     const hold =
       style === "intraday"
-        ? `NIFTY INTRADAY · enter ${start} IST · square-off ${end} IST · MIS same day`
-        : `NIFTY BTST · buy today ${start} IST · sell tomorrow ${exit} IST · NRML overnight`;
+        ? `${root} INTRADAY · enter ${start} IST · square-off ${end} IST · MIS same day`
+        : `${root} BTST · buy today ${start} IST · sell tomorrow ${exit} IST · NRML overnight`;
     const overall = Number(algo.overallTargetPct) > 0 ? Number(algo.overallTargetPct) : 5;
-    return `TEST2 · ${hold} · SELL 1 monthly CE + PE premium ≥${sell} · BUY 1 weekly CE + PE premium ≥${hedge} · hedge SL ${sl}% · overall +${overall}% of required margin exits all legs · ${size}`;
+    return `TEST2 · ${hold} · SELL 1 ${sellOpt} CE + PE premium ≥${sell} · BUY 1 ${hedgeOpt} CE + PE premium ≥${hedge} · hedge SL ${sl}% · overall +${overall}% of required margin exits all legs · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

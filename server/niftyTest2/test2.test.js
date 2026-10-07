@@ -44,6 +44,57 @@ test("TEST2 seed and name lock", () => {
   assert.equal(defaultNiftyTest2Algo({ name: "other" }).name, "TEST2");
 });
 
+test("TEST2 script and option expiry follow TEST1-style choice", () => {
+  const bank = niftyTest2Config({ symbol: "BANKNIFTY", lots: 1, sellExpiryKind: "weekly", hedgeExpiryKind: "monthly" });
+  assert.equal(bank.symbol, "BANKNIFTY");
+  assert.equal(bank.lotSize, 30);
+  assert.equal(bank.qty, 30);
+  assert.equal(bank.sellExpiryKind, "weekly");
+  assert.equal(bank.hedgeExpiryKind, "monthly");
+  assert.equal(bank.session, "nse");
+  const crude = niftyTest2Config({ symbol: "CRUDEOIL", sellExpiryKind: "weekly", hedgeExpiryKind: "weekly" });
+  assert.equal(crude.symbol, "CRUDEOIL");
+  assert.equal(crude.lotSize, 100);
+  assert.equal(crude.sellExpiryKind, "monthly");
+  assert.equal(crude.hedgeExpiryKind, "monthly");
+  assert.equal(crude.session, "mcx");
+  assert.equal(crude.endTimeIst, "23:15");
+  const saved = defaultNiftyTest2Algo({ symbol: "FINNIFTY" });
+  assert.equal(saved.symbol, "FINNIFTY");
+  assert.equal(saved.lotSize, 60);
+  assert.equal(saved.sellExpiryKind, "monthly");
+  assert.equal(saved.hedgeExpiryKind, "weekly");
+  const rows = buildSyntheticChain(50000, 100, 8);
+  const combo = pickCombo({
+    monthlyRows: rows,
+    weeklyRows: rows,
+    sellPremium: 80,
+    hedgePremium: 20,
+    sellExpiryKind: "weekly",
+    hedgeExpiryKind: "monthly",
+  });
+  assert.equal(combo.legs[0].expiryKind, "weekly");
+  assert.equal(combo.legs[2].expiryKind, "monthly");
+  const book = { places: [] };
+  Test2Strategy.maybeEnter({
+    algo: defaultNiftyTest2Algo({ symbol: "BANKNIFTY" }),
+    config: bank,
+    combo,
+    expiries: { monthly: "2026-10-27", weekly: "2026-10-13" },
+    marks: {},
+    now: T0935,
+    adapter: {
+      place(payload) {
+        book.places.push(payload);
+        return { ok: true };
+      },
+    },
+    orders: [],
+  });
+  assert.equal(book.places[0].symbol.startsWith("BANKNIFTY "), true);
+  assert.equal(book.places[0].exchangeSegment !== "MCX_COMM", true);
+});
+
 test("premium >= picks the cheapest qualifying strike", () => {
   const rows = buildSyntheticChain(24500, 50, 8);
   const sellCe = strikeByMinPremium(rows, "CE", 80);
@@ -54,7 +105,9 @@ test("premium >= picks the cheapest qualifying strike", () => {
   assert.equal(combo.legs.length, 4);
   assert.equal(combo.legs[0].side, "SELL");
   assert.equal(combo.legs[0].option, "CE");
+  assert.equal(combo.legs[0].expiryKind, "monthly");
   assert.equal(combo.legs[2].side, "BUY");
+  assert.equal(combo.legs[2].expiryKind, "weekly");
 });
 
 test("TEST2 enters four legs after 09:35 and does not retry a reject", () => {

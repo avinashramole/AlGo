@@ -1314,15 +1314,17 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
   const config = niftyTest2Config(algo);
   const today = VwapSignalEngine.sessionKeyIST(now);
   if (config.holdStyle === "intraday") dropPreviousIntradayBook(algo, today);
-  const session = nseMarketSession();
+  const root = config.symbol || "NIFTY";
+  const mcx = config.session === "mcx" || isMcxSymbol(root);
+  const session = mcx ? mcxMarketSession() : nseMarketSession();
   const positions = positionsForStrategyName(algo, mode);
   const open = positions.some((row) => Number(row.qty) > 0);
   const before = JSON.stringify(algo.test2State || {});
   if (mode === "live" && !session.open && !open) return;
-  const pack = chainForSymbol("NIFTY");
-  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries("NIFTY", 12);
-  const weekly = nearestWeeklyExpiry(listed, "NIFTY") || listed[0] || "";
-  const monthly = listed.find((date) => !isWeeklyOptionExpiry(date, "NIFTY")) || listed[listed.length - 1] || weekly;
+  const pack = chainForSymbol(root);
+  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(root, 12);
+  const weekly = nearestWeeklyExpiry(listed, root) || listed[0] || "";
+  const monthly = listed.find((date) => !isWeeklyOptionExpiry(date, root)) || listed[listed.length - 1] || weekly;
   const rows = pack?.rows || [];
   const adapter =
     mode === "live"
@@ -1336,18 +1338,21 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
           squareOff,
         })
       : PaperTradingAdapter({ placeOrder, squareOff });
-  const lastFut = niftyFutureChartCandles[niftyFutureChartCandles.length - 1] || niftyFutureMinuteBars[niftyFutureMinuteBars.length - 1];
-  const spot = Number(lastFut?.close || pack?.meta?.spot || pack?.meta?.underlyingLtp || 0);
+  const lastFut =
+    (getCandles("5m", root) || [])[(getCandles("5m", root) || []).length - 1] ||
+    niftyFutureChartCandles[niftyFutureChartCandles.length - 1] ||
+    niftyFutureMinuteBars[niftyFutureMinuteBars.length - 1];
+  const spot = Number(getChainSpot(root) || lastFut?.close || pack?.meta?.spot || pack?.meta?.underlyingLtp || 0);
   Test2Strategy.tick({
     algo,
     config,
     now,
     feedLive: Boolean(feedLive),
-    minutesToClose: session.open ? minutesUntilIst(15 * 60 + 30, new Date(now)) : 0,
+    minutesToClose: session.open ? minutesUntilIst(mcx ? 23 * 60 + 30 : 15 * 60 + 30, new Date(now)) : 0,
     monthlyRows: rows,
     weeklyRows: rows,
     expiries: { monthly, weekly },
-    marks: optionMarksFromChain(rows, spot),
+    marks: optionMarksFromChain(rows, spot, root),
     positions,
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,

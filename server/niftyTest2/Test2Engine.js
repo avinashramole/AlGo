@@ -33,10 +33,19 @@ export function istStamp(ms) {
   return `${wall.year}-${pad2(wall.month)}-${pad2(wall.day)} ${pad2(wall.hour)}:${pad2(wall.minute)}`;
 }
 
-function storedPremium(time, strike, option) {
+function rootOf(config = {}) {
+  return String(config.symbol || "NIFTY").toUpperCase() || "NIFTY";
+}
+
+function storedPremium(time, strike, option, symbol = "NIFTY") {
   if (!(Number(time) > 0) || !(Number(strike) > 0)) return null;
-  const px = optionLtpAt({ symbol: "NIFTY", time: Number(time), strike: Number(strike), side: option });
+  const px = optionLtpAt({ symbol, time: Number(time), strike: Number(strike), side: option });
   return Number(px) > 0 ? Number(px) : null;
+}
+
+function lotOn(config, ymd = "") {
+  if (rootOf(config) === "NIFTY") return niftyLotOn(ymd);
+  return Math.max(1, Math.round(Number(config.lotSize) || 65));
 }
 
 /** NSE NIFTY option lot on a session day (one lot per combo). */
@@ -84,18 +93,29 @@ export function weeklyExpiry(dates = [], symbol = "NIFTY") {
   return weekly[0] || list[0] || "";
 }
 
-export function pickCombo({ monthlyRows = [], weeklyRows = [], sellPremium = 80, hedgePremium = 20 } = {}) {
-  const sellCe = strikeByMinPremium(monthlyRows, "CE", sellPremium);
-  const sellPe = strikeByMinPremium(monthlyRows, "PE", sellPremium);
-  const buyCe = strikeByMinPremium(weeklyRows, "CE", hedgePremium);
-  const buyPe = strikeByMinPremium(weeklyRows, "PE", hedgePremium);
+export function pickCombo({
+  monthlyRows = [],
+  weeklyRows = [],
+  sellPremium = 80,
+  hedgePremium = 20,
+  sellExpiryKind = "monthly",
+  hedgeExpiryKind = "weekly",
+} = {}) {
+  const sellKind = String(sellExpiryKind || "").toLowerCase() === "weekly" ? "weekly" : "monthly";
+  const hedgeKind = String(hedgeExpiryKind || "").toLowerCase() === "monthly" ? "monthly" : "weekly";
+  const sellRows = sellKind === "weekly" ? weeklyRows : monthlyRows;
+  const hedgeRows = hedgeKind === "weekly" ? weeklyRows : monthlyRows;
+  const sellCe = strikeByMinPremium(sellRows, "CE", sellPremium);
+  const sellPe = strikeByMinPremium(sellRows, "PE", sellPremium);
+  const buyCe = strikeByMinPremium(hedgeRows, "CE", hedgePremium);
+  const buyPe = strikeByMinPremium(hedgeRows, "PE", hedgePremium);
   if (!sellCe || !sellPe || !buyCe || !buyPe) return null;
   return {
     legs: [
-      { key: "sellCe", side: "SELL", option: "CE", expiryKind: "monthly", ...sellCe },
-      { key: "sellPe", side: "SELL", option: "PE", expiryKind: "monthly", ...sellPe },
-      { key: "buyCe", side: "BUY", option: "CE", expiryKind: "weekly", ...buyCe },
-      { key: "buyPe", side: "BUY", option: "PE", expiryKind: "weekly", ...buyPe },
+      { key: "sellCe", side: "SELL", option: "CE", expiryKind: sellKind, ...sellCe },
+      { key: "sellPe", side: "SELL", option: "PE", expiryKind: sellKind, ...sellPe },
+      { key: "buyCe", side: "BUY", option: "CE", expiryKind: hedgeKind, ...buyCe },
+      { key: "buyPe", side: "BUY", option: "PE", expiryKind: hedgeKind, ...buyPe },
     ],
   };
 }
@@ -174,21 +194,33 @@ function rollingKind(leg) {
   return leg.expiryKind === "monthly" ? "monthly" : "weekly";
 }
 
-function storedEntryChain(session) {
+function storedEntryChain(session, config = {}) {
   const time = Number(session.bars?.[0]?.time || 0);
-  const weekly = rollingChainAt({ symbol: "NIFTY", ymd: session.day, time, kind: "weekly" });
-  const monthly = rollingChainAt({ symbol: "NIFTY", ymd: session.day, time, kind: "monthly" });
-  if (weekly?.length && monthly?.length) return { weekly, monthly, source: "stored" };
-  if (weekly?.length || monthly?.length) return { incomplete: true };
+  const symbol = rootOf(config);
+  const needWeekly = config.sellExpiryKind === "weekly" || config.hedgeExpiryKind === "weekly";
+  const needMonthly = config.sellExpiryKind !== "weekly" || config.hedgeExpiryKind === "monthly";
+  const weekly = rollingChainAt({ symbol, ymd: session.day, time, kind: "weekly" });
+  const monthly = rollingChainAt({ symbol, ymd: session.day, time, kind: "monthly" });
+  if (needWeekly && needMonthly) {
+    if (weekly?.length && monthly?.length) return { weekly, monthly, source: "stored" };
+    if (weekly?.length || monthly?.length) return { incomplete: true };
+    return null;
+  }
+  if (needWeekly) {
+    if (weekly?.length) return { weekly, monthly: weekly, source: "stored" };
+    return null;
+  }
+  if (monthly?.length) return { monthly, weekly: monthly, source: "stored" };
   return null;
 }
 
 function rollingExitForLeg(leg, entry, config, session, exitSession) {
   const kind = rollingKind(leg);
+  const symbol = rootOf(config);
   const path = [
-    ...rollingPath({ symbol: "NIFTY", ymd: session.day, strike: leg.strike, option: leg.option, kind }),
+    ...rollingPath({ symbol, ymd: session.day, strike: leg.strike, option: leg.option, kind }),
     ...(exitSession && exitSession.day !== session.day
-      ? rollingPath({ symbol: "NIFTY", ymd: exitSession.day, strike: leg.strike, option: leg.option, kind })
+      ? rollingPath({ symbol, ymd: exitSession.day, strike: leg.strike, option: leg.option, kind })
       : []),
   ];
   if (leg.side === "BUY") {
@@ -201,7 +233,7 @@ function rollingExitForLeg(leg, entry, config, session, exitSession) {
   const exitTime = Number(exitBars[exitBars.length - 1]?.time || session.bars?.[session.bars.length - 1]?.time || 0);
   const exitYmd = (exitSession || session).day;
   const mark =
-    rollingPremiumAt({ symbol: "NIFTY", ymd: exitYmd, time: exitTime, strike: leg.strike, option: leg.option, kind }) ??
+    rollingPremiumAt({ symbol, ymd: exitYmd, time: exitTime, strike: leg.strike, option: leg.option, kind }) ??
     path[path.length - 1]?.close ??
     null;
   return mark;
@@ -209,9 +241,9 @@ function rollingExitForLeg(leg, entry, config, session, exitSession) {
 
 export function replayTest2Day(session, config, exitSession = null) {
   const lots = Math.max(1, Math.round(Number(config.lots) || 1));
-  const qty = lots * niftyLotOn(session.day);
+  const qty = lots * lotOn(config, session.day);
   const cost = Math.max(0, Number(config.costPerCombo) || 0);
-  const rolling = storedEntryChain(session);
+  const rolling = storedEntryChain(session, config);
   if (rolling?.incomplete) return { day: session.day, skip: true, reason: "incomplete-chain", source: "stored" };
   const synthRows = buildSyntheticChain(session.open, 50, 16);
   const picked = pickCombo({
@@ -219,6 +251,8 @@ export function replayTest2Day(session, config, exitSession = null) {
     weeklyRows: rolling?.weekly || synthRows,
     sellPremium: config.sellPremium,
     hedgePremium: config.hedgePremium,
+    sellExpiryKind: config.sellExpiryKind,
+    hedgeExpiryKind: config.hedgeExpiryKind,
   });
   if (rolling && !picked) return { day: session.day, skip: true, reason: "no-combo", source: "stored" };
   const template = picked?.legs?.length === 4 ? picked.legs : fallbackLegs(config);
@@ -234,7 +268,7 @@ export function replayTest2Day(session, config, exitSession = null) {
     const fromTape =
       rolling
         ? Number(leg.premium)
-        : storedPremium(entryTime, leg.strike, leg.option);
+        : storedPremium(entryTime, leg.strike, leg.option, rootOf(config));
     const entry = fromTape ?? synthEntry;
     if (fromTape != null) usedStored += 1;
     let exit = null;
@@ -342,10 +376,10 @@ function comboPnlFromMarks(legs, marks, qty, cost) {
   return round2(raw - Math.max(0, Number(cost) || 0));
 }
 
-function markLegAtBar(leg, bar, sessionOpen, rolling) {
+function markLegAtBar(leg, bar, sessionOpen, rolling, symbol = "NIFTY") {
   if (rolling && Number(leg.strike) > 0) {
     const px = rollingPremiumAt({
-      symbol: "NIFTY",
+      symbol,
       ymd: bar.ymd,
       time: bar.time,
       strike: leg.strike,
@@ -384,7 +418,7 @@ function walkDailyLimits(legs, { session, config, qty, cost, margin, rolling }) 
     const t = Number(bar.time) || 0;
     for (const leg of legs) {
       const wasLocked = locked.has(leg.key);
-      marks[leg.key] = applyHedgeStop(leg, markLegAtBar(leg, bar, session.open, rolling), config, locked);
+      marks[leg.key] = applyHedgeStop(leg, markLegAtBar(leg, bar, session.open, rolling, rootOf(config)), config, locked);
       if (!wasLocked && locked.has(leg.key) && t > 0) exitTimes[leg.key] = t;
     }
     const mtm = comboPnlFromMarks(legs, marks, qty, cost);
@@ -492,12 +526,13 @@ function comboStats(trades, equity, maxDrawdown) {
   };
 }
 
-function pushCombo(trades, legsBook, combo, overnight) {
+function pushCombo(trades, legsBook, combo, overnight, symbol = "NIFTY") {
+  const root = String(symbol || "NIFTY").toUpperCase() || "NIFTY";
   const netCredit = round2(combo.legs.reduce((sum, leg) => sum + (leg.side === "SELL" ? leg.entry : -leg.entry), 0));
   const netExit = round2(combo.legs.reduce((sum, leg) => sum + (leg.side === "SELL" ? leg.exit : -leg.exit), 0));
   trades.push({
     side: "COMBO",
-    symbol: "NIFTY 4-leg",
+    symbol: `${root} 4-leg`,
     entry: netCredit,
     exit: netExit,
     qty: combo.qty,
@@ -523,7 +558,7 @@ function pushCombo(trades, legsBook, combo, overnight) {
       option: leg.option,
       expiryKind: leg.expiryKind || "",
       strike: Number(leg.strike) || 0,
-      symbol: leg.strike ? `NIFTY ${leg.strike} ${leg.option}` : `${leg.side} ${leg.option}`,
+      symbol: leg.strike ? `${root} ${leg.strike} ${leg.option}` : `${leg.side} ${leg.option}`,
       entry: Number(leg.entry) || 0,
       exit: Number(leg.exit) || 0,
       qty: combo.qty,
@@ -625,7 +660,7 @@ export function runTest2Backtest(algo, candles = []) {
   const config = niftyTest2Config(algo);
   const sessions = sessionDays(candles, config.startTimeIst, config.endTimeIst);
   preloadRollingDays(
-    "NIFTY",
+    config.symbol || "NIFTY",
     sessions.map((row) => row.day),
   );
   const storedTrades = [];
@@ -645,8 +680,8 @@ export function runTest2Backtest(algo, candles = []) {
       skipped.push({ day: entry.day, reason: combo?.reason || "skip" });
       continue;
     }
-    if (combo.source === "stored") pushCombo(storedTrades, legsBook, combo, overnight);
-    else pushCombo(synthTrades, legsBook, combo, overnight);
+    if (combo.source === "stored") pushCombo(storedTrades, legsBook, combo, overnight, config.symbol);
+    else pushCombo(synthTrades, legsBook, combo, overnight, config.symbol);
   }
   const primary = storedTrades.length ? storedTrades : synthTrades;
   const targetHits = primary.filter((row) => row.exitReason === "overall-target").length;
@@ -681,7 +716,7 @@ export function runTest2Backtest(algo, candles = []) {
     legs: legsBook.length,
     optionSource,
     holdStyle: config.holdStyle,
-    lotNote: "historical NIFTY lot 75→50→25→65",
+    lotNote: rootOf(config) === "NIFTY" ? "historical NIFTY lot 75→50→25→65" : `${rootOf(config)} lot ${config.lotSize}`,
     costPerCombo: config.costPerCombo,
     overallTargetPct: Number(config.overallTargetPct) || 0,
     overallTarget: Number(config.overallTarget) || 0,

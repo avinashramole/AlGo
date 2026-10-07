@@ -89,7 +89,7 @@ function closePayload(open, algo, config) {
     product: productOf(config),
     type: "MARKET",
     strategy: algo.name,
-    exchangeSegment: exchangeSegmentFor("NIFTY"),
+    exchangeSegment: exchangeSegmentFor(config.symbol || open.symbol || "NIFTY"),
   };
 }
 
@@ -104,9 +104,9 @@ function fillOf(open, state) {
   return Number(match?.premium || match?.price || open.ltp || 0);
 }
 
-function markOf(open, marks = {}, fill = 0) {
+function markOf(open, marks = {}, fill = 0, root = "NIFTY") {
   const symbol = String(open.symbol || "");
-  const built = open.strike && open.option ? `NIFTY ${open.strike} ${open.option}` : "";
+  const built = open.strike && open.option ? `${root} ${open.strike} ${open.option}` : "";
   const fromMarks = Number(marks[symbol] || (built && marks[built]) || 0);
   if (fromMarks > 0) return fromMarks;
   const ltp = Number(open.ltp || 0);
@@ -114,25 +114,27 @@ function markOf(open, marks = {}, fill = 0) {
   return Number(fill) || 0;
 }
 
-export function optionMarksFromChain(rows = [], spot = 0) {
+export function optionMarksFromChain(rows = [], spot = 0, symbol = "NIFTY") {
+  const root = String(symbol || "NIFTY").toUpperCase() || "NIFTY";
   const marks = {};
   if (Number(spot) > 0) {
     marks.spot = Number(spot);
-    marks.NIFTY = Number(spot);
+    marks[root] = Number(spot);
+    marks.underlying = Number(spot);
   }
   for (const row of Array.isArray(rows) ? rows : []) {
     const strike = Number(row?.strike);
     if (!(strike > 0)) continue;
     const ce = Number(row.callLtp || row.ce || 0);
     const pe = Number(row.putLtp || row.pe || 0);
-    if (ce > 0) marks[`NIFTY ${strike} CE`] = ce;
-    if (pe > 0) marks[`NIFTY ${strike} PE`] = pe;
+    if (ce > 0) marks[`${root} ${strike} CE`] = ce;
+    if (pe > 0) marks[`${root} ${strike} PE`] = pe;
   }
   return marks;
 }
 
-function spotFromOpens(opens = [], marks = {}) {
-  const direct = Number(marks.spot || marks.NIFTY || marks.underlying || 0);
+function spotFromOpens(opens = [], marks = {}, root = "NIFTY") {
+  const direct = Number(marks.spot || marks[root] || marks.NIFTY || marks.underlying || 0);
   if (direct > 0) return direct;
   const strikes = (opens || []).map((row) => Number(row.strike)).filter((value) => value > 0);
   if (strikes.length) return strikes.reduce((sum, value) => sum + value, 0) / strikes.length;
@@ -170,7 +172,7 @@ export const Test2Strategy = {
     const legs = [];
     for (const open of opens) {
       const fill = fillOf(open, state);
-      const mark = markOf(open, marks, fill);
+      const mark = markOf(open, marks, fill, config.symbol || "NIFTY");
       const dir = String(open.side || open.type || "BUY").toUpperCase() === "SELL" ? -1 : 1;
       if (fill > 0 && mark > 0) dayPnl += (mark - fill) * Number(open.qty || config.qty) * dir;
       legs.push({
@@ -184,7 +186,7 @@ export const Test2Strategy = {
     const margin = comboRequiredMargin({
       legs,
       qty,
-      spot: spotFromOpens(opens, marks),
+      spot: spotFromOpens(opens, marks, config.symbol || "NIFTY"),
       holdStyle: config.holdStyle,
     });
     const limits = dailyOverallLimits({ config, margin });
@@ -217,7 +219,7 @@ export const Test2Strategy = {
       const side = String(open.side || open.type || "BUY").toUpperCase();
       if (side !== "BUY") continue;
       const fill = fillOf(open, state);
-      const mark = markOf(open, marks, fill);
+      const mark = markOf(open, marks, fill, config.symbol || "NIFTY");
       if (!(fill > 0) || !(mark > 0)) continue;
       const sl = fill * (1 - config.hedgeSlPct / 100);
       if (mark > sl) continue;
@@ -237,7 +239,7 @@ export const Test2Strategy = {
         product: productOf(config),
         type: "MARKET",
         strategy: algo.name,
-        exchangeSegment: exchangeSegmentFor("NIFTY"),
+        exchangeSegment: exchangeSegmentFor(config.symbol || open.symbol || "NIFTY"),
       });
       algo.lastSignal = `HEDGE SL ${open.option} ${open.strike} @ ${mark.toFixed(2)}`;
     }
@@ -260,8 +262,9 @@ export const Test2Strategy = {
     const placed = [];
     for (const leg of combo.legs) {
       const expiry = leg.expiryKind === "monthly" ? expiries.monthly : expiries.weekly;
+      const root = String(config.symbol || "NIFTY").toUpperCase();
       const payload = {
-        symbol: `NIFTY ${leg.strike} ${leg.option}`,
+        symbol: `${root} ${leg.strike} ${leg.option}`,
         side: leg.side,
         qty: config.qty,
         lots: config.lots,
@@ -275,7 +278,7 @@ export const Test2Strategy = {
         product: productOf(config),
         type: "MARKET",
         strategy: algo.name,
-        exchangeSegment: exchangeSegmentFor("NIFTY"),
+        exchangeSegment: exchangeSegmentFor(root),
       };
       if (pendingSame(orders, payload)) {
         algo.lastSignal = "WAIT ORDER";
@@ -334,6 +337,8 @@ export const Test2Strategy = {
       weeklyRows: input.weeklyRows || input.monthlyRows || [],
       sellPremium: config.sellPremium,
       hedgePremium: config.hedgePremium,
+      sellExpiryKind: config.sellExpiryKind,
+      hedgeExpiryKind: config.hedgeExpiryKind,
     });
     return this.maybeEnter({
       algo,
