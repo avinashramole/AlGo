@@ -2,7 +2,7 @@ import { exchangeSegmentFor } from "../optionChain.js";
 import { niftyTest2Config } from "../niftyVwap/config.js";
 import { hmToMinutes, istWallTime, sessionKeyIST } from "../niftyVwap/VwapSignalEngine.js";
 import { TradeLogger } from "../niftyVwap/TradeLogger.js";
-import { inEntryWindow, pickCombo } from "./Test2Engine.js";
+import { comboRequiredMargin, dailyOverallLimits, inEntryWindow, pickCombo } from "./Test2Engine.js";
 
 function test2State(algo) {
   if (!algo.test2State || typeof algo.test2State !== "object") algo.test2State = {};
@@ -93,6 +93,25 @@ function closePayload(open, algo, config) {
   };
 }
 
+function fillOf(open, state) {
+  const avg = Number(open.avg || open.price || open.entry || 0);
+  if (avg > 0) return avg;
+  const match = (state.legs || []).find(
+    (leg) =>
+      (leg.option && open.option && leg.option === open.option && Number(leg.strike) === Number(open.strike)) ||
+      sameContract(leg, open),
+  );
+  return Number(match?.premium || match?.price || open.ltp || 0);
+}
+
+function spotFromOpens(opens = [], marks = {}) {
+  const direct = Number(marks.spot || marks.NIFTY || marks.underlying || 0);
+  if (direct > 0) return direct;
+  const strikes = (opens || []).map((row) => Number(row.strike)).filter((value) => value > 0);
+  if (strikes.length) return strikes.reduce((sum, value) => sum + value, 0) / strikes.length;
+  return 0;
+}
+
 function closeOpens(opens, algo, config, adapter, orders) {
   let sent = 0;
   for (const open of opens) {
@@ -120,22 +139,42 @@ export const Test2Strategy = {
       return { action: "hold" };
     }
     let dayPnl = 0;
+    const qty = Number(opens[0]?.qty || config.qty);
+    const legs = [];
     for (const open of opens) {
-      const fill = Number(open.avg || open.ltp || 0);
-      const mark = Number(open.ltp || fill);
+      const fill = fillOf(open, state);
+      const mark = Number(marks[open.symbol] || open.ltp || fill);
       const dir = String(open.side || open.type || "BUY").toUpperCase() === "SELL" ? -1 : 1;
       if (fill > 0 && mark > 0) dayPnl += (mark - fill) * Number(open.qty || config.qty) * dir;
+      legs.push({
+        side: open.side || open.type,
+        entry: fill,
+        option: open.option,
+        strike: open.strike,
+      });
     }
     state.dayPnl = Number(dayPnl.toFixed(2));
-    if (config.overallTarget > 0 && dayPnl >= config.overallTarget) {
+    const margin = comboRequiredMargin({
+      legs,
+      qty,
+      spot: spotFromOpens(opens, marks),
+      holdStyle: config.holdStyle,
+    });
+    const limits = dailyOverallLimits({ config, margin });
+    state.dayTarget = limits.target;
+    state.requiredMargin = margin;
+    if (limits.target > 0 && dayPnl >= limits.target) {
       closeOpens(opens, algo, config, adapter, orders);
-      algo.lastSignal = `EXIT TARGET ₹${dayPnl.toFixed(0)}`;
-      return { action: "exit", reason: "overall-target" };
+      const pct = Number(config.overallTargetPct) || 0;
+      algo.lastSignal = pct
+        ? `EXIT TARGET ${pct}% ₹${dayPnl.toFixed(0)}`
+        : `EXIT TARGET ₹${dayPnl.toFixed(0)}`;
+      return { action: "exit", reason: "overall-target", pnl: dayPnl, target: limits.target };
     }
-    if (config.overallSl > 0 && dayPnl <= -config.overallSl) {
+    if (limits.sl > 0 && dayPnl <= -limits.sl) {
       closeOpens(opens, algo, config, adapter, orders);
       algo.lastSignal = `EXIT SL ₹${dayPnl.toFixed(0)}`;
-      return { action: "exit", reason: "overall-sl" };
+      return { action: "exit", reason: "overall-sl", pnl: dayPnl };
     }
     if (shouldExitIntraday(config, now || Date.now())) {
       closeOpens(opens, algo, config, adapter, orders);

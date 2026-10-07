@@ -256,24 +256,121 @@ export function replayTest2Day(session, config, exitSession = null) {
       pnl: round2(raw),
     });
   }
-  const pnl = round2(legs.reduce((sum, row) => sum + row.pnl, 0) - cost);
+  let pnl = round2(legs.reduce((sum, row) => sum + row.pnl, 0) - cost);
   const margin = comboRequiredMargin({
     legs,
     qty,
     spot: session.open,
     holdStyle: config.holdStyle,
   });
+  const limits = dailyOverallLimits({ config, margin });
+  let exitReason = exitSession && exitSession.day !== session.day ? "btst" : "eod";
+  let exitDay = (exitSession || session).day;
+  const hit = walkDailyLimits(legs, {
+    session,
+    config,
+    qty,
+    cost,
+    margin,
+    rolling: Boolean(rolling),
+  });
+  if (hit) {
+    for (const leg of legs) {
+      const mark = Number(hit.marks[leg.key]);
+      if (!(mark > 0)) continue;
+      leg.exit = mark;
+      leg.pnl = round2(leg.side === "SELL" ? (leg.entry - mark) * qty : (mark - leg.entry) * qty);
+    }
+    pnl = hit.pnl;
+    exitReason = hit.reason;
+    if (hit.exitDay) exitDay = hit.exitDay;
+  }
   return {
     day: session.day,
-    exitDay: (exitSession || session).day,
+    exitDay,
     pnl,
     legs,
     qty,
     usedStored,
     cost,
     margin,
+    target: limits.target,
+    exitReason,
     source: rolling ? "stored" : "synth",
   };
+}
+
+/** Daily overall profit target in rupees. Default 5% of required margin. */
+export function dailyOverallLimits({ config = {}, margin = 0 } = {}) {
+  const block = Math.max(0, Number(margin) || 0);
+  const pct = Math.max(0, Number(config.overallTargetPct) || 0);
+  const rupee = Math.max(0, Number(config.overallTarget) || 0);
+  const fromPct = pct > 0 && block > 0 ? round2(block * (pct / 100)) : 0;
+  const target = fromPct > 0 && rupee > 0 ? Math.min(fromPct, rupee) : fromPct || rupee;
+  const sl = Math.max(0, Number(config.overallSl) || 0);
+  return { target, sl, margin: block, pct };
+}
+
+function comboPnlFromMarks(legs, marks, qty, cost) {
+  let raw = 0;
+  for (const leg of legs || []) {
+    const mark = Number(marks?.[leg.key]);
+    if (!(mark > 0)) continue;
+    raw += leg.side === "SELL" ? (leg.entry - mark) * qty : (mark - leg.entry) * qty;
+  }
+  return round2(raw - Math.max(0, Number(cost) || 0));
+}
+
+function markLegAtBar(leg, bar, sessionOpen, rolling) {
+  if (rolling && Number(leg.strike) > 0) {
+    const px = rollingPremiumAt({
+      symbol: "NIFTY",
+      ymd: bar.ymd,
+      time: bar.time,
+      strike: leg.strike,
+      option: leg.option,
+      kind: rollingKind(leg),
+    });
+    if (Number(px) > 0) return Number(px);
+  }
+  const spot = Number(bar.close || bar.open || sessionOpen);
+  const move = sessionOpen > 0 ? (spot - sessionOpen) / sessionOpen : 0;
+  return markPremium(leg.entry, move, leg.option, leg.side === "BUY" ? "hedge" : "sell");
+}
+
+function applyHedgeStop(leg, mark, config, locked) {
+  if (locked.has(leg.key)) return locked.get(leg.key);
+  if (String(leg.side || "").toUpperCase() !== "BUY") return mark;
+  const sl = Number((Number(leg.entry) * (1 - (Number(config.hedgeSlPct) || 20) / 100)).toFixed(2));
+  if (mark <= sl) {
+    locked.set(leg.key, sl);
+    return sl;
+  }
+  return mark;
+}
+
+function walkDailyLimits(legs, { session, config, qty, cost, margin, rolling }) {
+  const limits = dailyOverallLimits({ config, margin });
+  if (!(limits.target > 0) && !(limits.sl > 0)) return null;
+  const bars = (session.bars || []).map((bar) => ({
+    ...bar,
+    ymd: dayKey(bar.time) || session.day,
+  }));
+  const locked = new Map();
+  for (const bar of bars) {
+    const marks = {};
+    for (const leg of legs) {
+      marks[leg.key] = applyHedgeStop(leg, markLegAtBar(leg, bar, session.open, rolling), config, locked);
+    }
+    const mtm = comboPnlFromMarks(legs, marks, qty, cost);
+    if (limits.target > 0 && mtm >= limits.target) {
+      return { marks, reason: "overall-target", pnl: mtm, exitDay: bar.ymd, target: limits.target };
+    }
+    if (limits.sl > 0 && mtm <= -limits.sl) {
+      return { marks, reason: "overall-sl", pnl: mtm, exitDay: bar.ymd, sl: limits.sl };
+    }
+  }
+  return null;
 }
 
 /** Estimated funds blocked for one TEST2 combo. Not live exchange SPAN. */
@@ -379,6 +476,8 @@ function pushCombo(trades, legsBook, combo, overnight) {
     margin: Number(combo.margin) || 0,
     netCredit: round2(netCredit * combo.qty),
     rom: combo.margin ? Number(((combo.pnl / combo.margin) * 100).toFixed(2)) : 0,
+    exitReason: combo.exitReason || "",
+    target: Number(combo.target) || 0,
     source: combo.source,
   });
   for (const leg of combo.legs) {
@@ -510,6 +609,7 @@ export function runTest2Backtest(algo, candles = []) {
     else pushCombo(synthTrades, legsBook, combo, overnight);
   }
   const primary = storedTrades.length ? storedTrades : synthTrades;
+  const targetHits = primary.filter((row) => row.exitReason === "overall-target").length;
   const primarySource = storedTrades.length ? "stored" : "synth";
   const primaryLegs = legsBook.filter((row) => row.source === primarySource);
   const equityWalk = walkEquity(primary);
@@ -543,6 +643,9 @@ export function runTest2Backtest(algo, candles = []) {
     holdStyle: config.holdStyle,
     lotNote: "historical NIFTY lot 75→50→25→65",
     costPerCombo: config.costPerCombo,
+    overallTargetPct: Number(config.overallTargetPct) || 0,
+    overallTarget: Number(config.overallTarget) || 0,
+    targetHits,
     storedTrades: storedTrades.length,
     storedWins,
     storedWinRate: storedTrades.length ? Number(((storedWins / storedTrades.length) * 100).toFixed(1)) : 0,
@@ -578,4 +681,5 @@ export const Test2Engine = {
   replayTest2Day,
   runTest2Backtest,
   comboRequiredMargin,
+  dailyOverallLimits,
 };

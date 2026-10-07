@@ -1319,6 +1319,8 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
           squareOff,
         })
       : PaperTradingAdapter({ placeOrder, squareOff });
+  const lastFut = niftyFutureChartCandles[niftyFutureChartCandles.length - 1] || niftyFutureMinuteBars[niftyFutureMinuteBars.length - 1];
+  const spot = Number(lastFut?.close || pack?.meta?.spot || pack?.meta?.underlyingLtp || 0);
   Test2Strategy.tick({
     algo,
     config,
@@ -1328,6 +1330,7 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
     monthlyRows: rows,
     weeklyRows: rows,
     expiries: { monthly, weekly },
+    marks: spot > 0 ? { spot, NIFTY: spot } : {},
     positions,
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,

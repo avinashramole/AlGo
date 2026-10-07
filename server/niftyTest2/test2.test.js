@@ -4,7 +4,7 @@ import { buildSyntheticChain } from "../optionChain.js";
 import { defaultNiftyTest2Algo, isNiftyTest2Algo, niftyTest2Config } from "../niftyVwap/config.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 import { writeRollingDay, wipeRollingOptions } from "../dhanRollingOption.js";
-import { comboRequiredMargin, niftyLotOn, pickCombo, replayTest2Day, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
+import { comboRequiredMargin, dailyOverallLimits, niftyLotOn, pickCombo, replayTest2Day, runTest2Backtest, strikeByMinPremium } from "./Test2Engine.js";
 import { Test2Strategy } from "./Test2Strategy.js";
 
 const T0935 = Date.parse("2026-10-07T04:05:00.000Z");
@@ -36,6 +36,8 @@ test("TEST2 seed and name lock", () => {
   assert.equal(niftyTest2Config({ holdStyle: "intraday" }).holdOvernight, false);
   assert.equal(seeded.sellPremium, 80);
   assert.equal(seeded.hedgePremium, 20);
+  assert.equal(seeded.overallTargetPct, 5);
+  assert.equal(niftyTest2Config(defaultNiftyTest2Algo()).overallTargetPct, 5);
   assert.equal(isNiftyTest2Algo({ name: "TEST2" }), true);
   assert.equal(normalizeAlgo({ name: "TEST2" }).kind, "nifty-test2");
   assert.equal(defaultNiftyTest2Algo({ name: "other" }).name, "TEST2");
@@ -194,6 +196,74 @@ test("TEST2 intraday squares off the same day at 15:15", () => {
   assert.equal(eod.reason, "eod");
   assert.equal(closes.length, 4);
   assert.equal(closes.every((row) => row.product === "MIS"), true);
+});
+
+test("TEST2 overall profit 5% of margin exits all four live legs", () => {
+  const algo = defaultNiftyTest2Algo();
+  const cfg = niftyTest2Config(algo);
+  assert.equal(cfg.overallTargetPct, 5);
+  const opens = [
+    { symbol: "NIFTY 24600 CE", side: "SELL", qty: 65, avg: 80, ltp: 20, option: "CE", strike: 24600 },
+    { symbol: "NIFTY 24400 PE", side: "SELL", qty: 65, avg: 80, ltp: 20, option: "PE", strike: 24400 },
+    { symbol: "NIFTY 24700 CE", side: "BUY", qty: 65, avg: 20, ltp: 20, option: "CE", strike: 24700 },
+    { symbol: "NIFTY 24300 PE", side: "BUY", qty: 65, avg: 20, ltp: 20, option: "PE", strike: 24300 },
+  ];
+  const margin = comboRequiredMargin({
+    legs: opens.map((row) => ({ side: row.side, entry: row.avg })),
+    qty: 65,
+    spot: 24500,
+    holdStyle: "btst",
+  });
+  const limits = dailyOverallLimits({ config: cfg, margin });
+  assert.equal(limits.target > 5000, true);
+  assert.equal(limits.target < 8000, true);
+  const closes = [];
+  const hit = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-07T06:00:00.000Z"),
+    feedLive: true,
+    marks: { spot: 24500, NIFTY: 24500 },
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: opens,
+    orders: [],
+  });
+  assert.equal(hit.action, "exit");
+  assert.equal(hit.reason, "overall-target");
+  assert.equal(closes.length, 4);
+  assert.equal(closes.every((row) => row.strategy === "TEST2"), true);
+});
+
+test("TEST2 backtest exits all legs when daily overall profit hits 5%", () => {
+  const algo = defaultNiftyTest2Algo({ overallTargetPct: 0.01, overallTarget: 0, overallSl: 0 });
+  const day = Date.parse("2026-09-01T04:05:00.000Z");
+  const candles = Array.from({ length: 3 }, (_, i) => ({
+    time: day + i * 86_400_000,
+    open: 24500,
+    high: 24520,
+    low: 24480,
+    close: 24510,
+    volume: 1,
+  }));
+  const result = runTest2Backtest(algo, candles);
+  assert.equal(result.overallTargetPct, 0.01);
+  assert.equal(result.targetHits >= 1, true);
+  assert.equal(result.tradesBook.some((row) => row.exitReason === "overall-target"), true);
+  assert.equal(result.legsBook.filter((row) => row.day === result.tradesBook[0].day).length, 4);
+  const session = {
+    day: "2026-09-01",
+    open: 24500,
+    close: 24510,
+    high: 24520,
+    low: 24480,
+    bars: [
+      { time: day, open: 24500, high: 24520, low: 24480, close: 24510 },
+      { time: day + 5 * 60 * 1000, open: 24510, high: 24530, low: 24500, close: 24520 },
+    ],
+  };
+  const combo = replayTest2Day(session, niftyTest2Config(algo));
+  assert.equal(combo.exitReason, "overall-target");
+  assert.equal(combo.legs.length, 4);
+  assert.equal(combo.legs.every((leg) => Number(leg.exit) > 0), true);
 });
 
 test("NIFTY lot follows the NSE schedule", () => {
