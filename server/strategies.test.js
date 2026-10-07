@@ -194,7 +194,7 @@ test("crude oil 5m name stays crude and does not become the nifty first candle",
   assert.equal(row.buyConditions, undefined);
   assert.equal(row.buyOp, undefined);
   assert.equal(row.pattern, undefined);
-  assert.match(row.summary, /preview/i);
+  assert.match(row.summary, /every 5m|until a signal/i);
   assert.doesNotMatch(row.summary, /close above|price action/i);
   const nifty = normalizeAlgo({ name: "NIFTY 5m first candle", kind: "indicator" });
   assert.equal(nifty.kind, "nifty-first-candle");
@@ -262,7 +262,7 @@ test("spaced crude first candle name is not stored as an indicator", () => {
   assert.equal(row.status, "PAUSED");
   assert.equal(row.buyOp, undefined);
   assert.equal(row.pattern, undefined);
-  assert.match(row.summary, /preview/i);
+  assert.match(row.summary, /every 5m|until a signal/i);
   assert.doesNotMatch(row.summary, /Indicator|close above/i);
   const vwap = normalizeAlgo(
     { name: "CRUDE OIL VWAP ATM", kind: "indicator", symbol: "CRUDEOIL", indicator: "VWAP" },

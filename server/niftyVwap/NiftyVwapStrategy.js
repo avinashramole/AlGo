@@ -337,6 +337,8 @@ export const NiftyVwapStrategy = {
               firstBarStartIst: config.firstBarStartIst || "09:00",
               entryEvaluationIst: config.entryEvaluationIst || "09:05",
               endTimeIst: config.endTimeIst || "15:15",
+              scanUntilSignal: String(config.symbol || "").toUpperCase() === "CRUDEOIL",
+              afterBarTime: Math.max(Number(state.lastEntryBarTime || 0), Number(state.sentSignalBarTime || 0)),
             })
           : VwapSignalEngine.evaluate({
               futuresBars: input.futuresBars || [],

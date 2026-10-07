@@ -1772,6 +1772,51 @@ test("matched first-candle still sends after the next 5m window has already open
   assert.match(algo.lastSignal, /BUY 22700 CE/);
 });
 
+test("crude keeps checking every 5m candle until a signal is found", () => {
+  const laterDoji = { time: T0_0900 + BAR, open: 6120, high: 6122, low: 6118, close: 6120, volume: 100 };
+  const laterCe = { time: T0_0900 + BAR, open: 90, high: 91, low: 88, close: 89, volume: 50 };
+  const now = T0_0900 + 2 * BAR;
+  const latestOnly = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(6100, 6120), laterDoji],
+    ceBars: [firstBar(80, 90), laterCe],
+    peBars: [firstBar(70, 60)],
+    now,
+    endTimeIst: "23:15",
+  });
+  assert.equal(latestOnly.buyCe, false);
+  const scan = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(6100, 6120), laterDoji],
+    ceBars: [firstBar(80, 90), laterCe],
+    peBars: [firstBar(70, 60)],
+    now,
+    endTimeIst: "23:15",
+    scanUntilSignal: true,
+  });
+  assert.equal(scan.buyCe, true);
+  assert.equal(scan.barTime, T0_0900);
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE every 5m" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120), laterDoji],
+    ceBars: [firstBar(80, 90), laterCe],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].symbol, "CRUDEOIL 6100 CE");
+});
+
 test("matched crude first-candle still sends one order after the next 5m window", () => {
   const now = T0_0900 + 2 * BAR + 30_000;
   const signal = VwapSignalEngine.evaluateFirstCandle({
@@ -2387,8 +2432,8 @@ test("crude max trades input is kept, and one signal places one order", () => {
   algo.vwapState.inFlight = false;
   for (let n = 0; n < 4; n += 1) {
     const again = NiftyVwapStrategy.tick({ ...input, positions: book.positions });
-    assert.equal(again.action, "skip");
-    assert.equal(again.reason, "duplicate-bar");
+    assert.notEqual(again.action, "entry");
+    assert.ok(again.reason === "duplicate-bar" || again.action === "wait");
   }
   assert.equal(book.places.length, 1);
 

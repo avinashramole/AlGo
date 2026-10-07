@@ -355,6 +355,8 @@ export const VwapSignalEngine = {
     firstBarStartIst = "09:00",
     entryEvaluationIst = "09:05",
     endTimeIst = "15:15",
+    scanUntilSignal = false,
+    afterBarTime = 0,
   } = {}) {
     const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 5);
     const width = barMinutes * 60 * 1000;
@@ -374,15 +376,30 @@ export const VwapSignalEngine = {
       return mins >= sessionOpenMinutes && mins < endMin;
     };
     const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
+    const score = (bar) => {
+      if (!bar) {
+        return { bar: null, niftyColor: "", ceColor: "", peColor: "", buyCe: false, buyPe: false };
+      }
+      const niftyColor = firstBarColor(bar);
+      const ceColor = firstBarColor(sameTime(ceAll, bar.time));
+      const peColor = firstBarColor(sameTime(peAll, bar.time));
+      const buyCe = !waitingEval && niftyColor === "green" && ceColor === "green";
+      const buyPe = !waitingEval && niftyColor === "red" && peColor === "green";
+      return { bar, niftyColor, ceColor, peColor, buyCe, buyPe };
+    };
     const completed = futAll.filter(inWindow);
-    const preview = completed[completed.length - 1] || null;
+    const unused = completed.filter((bar) => Number(bar.time) > Number(afterBarTime || 0));
+    const scored = (scanUntilSignal ? unused : completed).map(score);
+    const matched = scanUntilSignal ? scored.find((row) => row.buyCe || row.buyPe) : null;
+    const pick = matched || score((scanUntilSignal ? unused : completed)[(scanUntilSignal ? unused : completed).length - 1] || null);
+    const preview = pick.bar;
     const openedAt = preview ? Number(preview.time) + width : 0;
     const onCurrentOpen = Boolean(preview && Number(now) >= openedAt && Number(now) < openedAt + width);
-    const niftyColor = firstBarColor(preview);
-    const ceColor = firstBarColor(sameTime(ceAll, preview?.time));
-    const peColor = firstBarColor(sameTime(peAll, preview?.time));
-    const buyCe = Boolean(preview) && !waitingEval && niftyColor === "green" && ceColor === "green";
-    const buyPe = Boolean(preview) && !waitingEval && niftyColor === "red" && peColor === "green";
+    const niftyColor = pick.niftyColor;
+    const ceColor = pick.ceColor;
+    const peColor = pick.peColor;
+    const buyCe = Boolean(preview) && pick.buyCe;
+    const buyPe = Boolean(preview) && pick.buyPe;
     const shownWall = preview ? istWallTime(preview.time) : null;
     const shownMin = shownWall ? shownWall.hour * 60 + shownWall.minute : -1;
     return {
