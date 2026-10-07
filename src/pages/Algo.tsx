@@ -657,16 +657,16 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-3 md:items-center">
+    <div className="desk-overlay z-40">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-base font-bold">Map clients to strategy</h2>
+      <div className="desk-sheet relative z-10 flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
+        <div className="flex items-center justify-between px-3 py-2">
+          <h2 className="text-sm font-bold">Map clients to strategy</h2>
           <button type="button" className="text-slate-400" onClick={onClose} aria-label="Close">
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 pb-4">
+        <div className="min-h-0 flex-1 space-y-2 overflow-hidden px-3 pb-3">
           <div className="flex items-center gap-3 rounded-xl bg-[var(--bg)] px-4 py-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--card)] text-slate-400">
               <Users size={16} />
@@ -688,13 +688,13 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
               <option value="clients">Selected clients only</option>
             </select>
           </label>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {clients.map((row) => {
               const checked = picked.includes(row.id);
               return (
                 <label
                   key={row.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5"
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggleId(row.id)} />
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
@@ -717,11 +717,11 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
           </div>
           {error ? <p className="text-xs font-semibold text-down">{error}</p> : null}
         </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          <button type="button" onClick={onClose} className="h-10 rounded-xl px-4 text-sm font-semibold">
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-3 py-2">
+          <button type="button" onClick={onClose} className="h-8 rounded-lg px-3 text-xs font-semibold">
             Cancel
           </button>
-          <button type="button" disabled={busy} onClick={() => void save()} className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
+          <button type="button" disabled={busy} onClick={() => void save()} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white disabled:opacity-60">
             {busy ? "Saving..." : "Save mapping"}
           </button>
         </div>

@@ -171,11 +171,11 @@ export function IpManagement() {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-4">
+    <div className="desk-page mx-auto max-w-[1400px] space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-bold">IP management</h1>
-          <p className="text-sm text-slate-400">Broker-wise static egress allocation and account control</p>
+          <p className="desk-help text-sm text-slate-400">Broker-wise static egress allocation and account control</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs font-bold">
@@ -708,10 +708,10 @@ function ManageModal({
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-3 md:items-center">
+    <div className="desk-overlay z-40">
       <button type="button" className="absolute inset-0" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
-        <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="desk-sheet desk-sheet-sm relative z-10 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl">
+        <div className="mb-2 flex items-start justify-between gap-3">
           <div className="text-sm font-bold">{title}</div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
             <X size={16} />
