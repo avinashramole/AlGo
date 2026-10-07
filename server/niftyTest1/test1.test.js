@@ -66,6 +66,18 @@ test("TEST1 name and ATM-only config stay locked", () => {
   assert.equal(cfg.maxWickPct, 0.1);
   assert.equal(cfg.qty, 130);
   assert.equal(cfg.startTimeIst, "09:30");
+  assert.equal(cfg.symbol, "NIFTY");
+  const crude = niftyTest1Config({ symbol: "CRUDEOIL", lots: 1 });
+  assert.equal(crude.symbol, "CRUDEOIL");
+  assert.equal(crude.lotSize, 100);
+  assert.equal(crude.qty, 100);
+  assert.equal(crude.expiryKind, "monthly");
+  assert.equal(crude.session, "mcx");
+  assert.equal(niftyTest1Config({ symbol: "NATURALGAS" }).lotSize, 1250);
+  assert.equal(niftyTest1Config({ symbol: "COPPER" }).lotSize, 2500);
+  assert.equal(niftyTest1Config({ symbol: "BANKNIFTY" }).lotSize, 30);
+  assert.equal(niftyTest1Config({ symbol: "MIDCPNIFTY" }).step, 25);
+  assert.equal(defaultNiftyTest1Algo({ symbol: "CRUDEOIL" }).symbol, "CRUDEOIL");
 });
 
 test("seed catalog includes paused TEST1", () => {
@@ -301,4 +313,31 @@ test("TEST1 exits at target from the actual fill", () => {
   });
   assert.equal(tgt.action, "exit");
   assert.equal(tgt.reason, "target");
+});
+
+test("TEST1 buys ATM Crude Oil when that script is selected", () => {
+  const ce = bar(100, 109, { high: 110, low: 100, time: T0930 });
+  const algo = defaultNiftyTest1Algo({ symbol: "CRUDEOIL", enabled: true });
+  const book = bookAdapter();
+  const tick = Test1Strategy.tick({
+    algo,
+    now: T0930 + BAR,
+    feedLive: true,
+    minutesToClose: 300,
+    ceBars: [ce],
+    peBars: [bar(80, 78, { high: 81, low: 77, time: T0930 })],
+    ceLtp: 109,
+    peLtp: 78,
+    spot: 6124,
+    step: 50,
+    expiry: "2026-08-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].strike, 6100);
+  assert.equal(book.places[0].symbol, "CRUDEOIL 6100 CE");
+  assert.equal(book.places[0].lotSize, 100);
+  assert.equal(book.places[0].qty, 100);
 });

@@ -214,6 +214,7 @@ const UPSTOX_INDEX_KEYS = {
   NIFTY: "NSE_INDEX|Nifty 50",
   BANKNIFTY: "NSE_INDEX|Nifty Bank",
   FINNIFTY: "NSE_INDEX|Nifty Fin Service",
+  MIDCPNIFTY: "NSE_INDEX|Nifty Midcap Select",
   SENSEX: "BSE_INDEX|SENSEX",
 };
 
@@ -290,7 +291,7 @@ function inferExpiryYear(monthIndex, day) {
   return year;
 }
 
-const DESK_OPTION_ROOTS = "CRUDEOIL|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|NIFTY";
+const DESK_OPTION_ROOTS = "NATURALGAS|COPPER|CRUDEOIL|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|NIFTY";
 const DESK_OPTION_SIDES = "CE|PE|CALL|PUT";
 
 function optionSide(token) {
@@ -302,7 +303,7 @@ function optionSide(token) {
 
 function rootFromDeskSymbol(symbol) {
   const compact = String(symbol || "").toUpperCase().replace(/[^A-Z]/g, "");
-  const known = ["CRUDEOILM", "CRUDEOIL", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "NIFTY"];
+  const known = ["CRUDEOILM", "NATURALGAS", "COPPER", "CRUDEOIL", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "NIFTY"];
   return known.find((root) => compact.startsWith(root)) || "";
 }
 

@@ -135,8 +135,22 @@ export const STRATEGY_SYMBOLS = [
   { id: "NIFTY", lot: 65 },
   { id: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", lot: 60 },
+  { id: "MIDCPNIFTY", lot: 50 },
   { id: "SENSEX", lot: 20 },
   { id: "CRUDEOIL", lot: 100 },
+  { id: "NATURALGAS", lot: 1250 },
+  { id: "COPPER", lot: 2500 },
+];
+
+export const TEST1_SCRIPTS = [
+  { id: "NIFTY", label: "NIFTY", lot: 65, group: "NSE index", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30, group: "NSE index", session: "nse" as const, expiryKind: "monthly" as const },
+  { id: "FINNIFTY", label: "FINNIFTY", lot: 60, group: "NSE index", session: "nse" as const, expiryKind: "monthly" as const },
+  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", lot: 50, group: "NSE index", session: "nse" as const, expiryKind: "monthly" as const },
+  { id: "SENSEX", label: "SENSEX", lot: 20, group: "Index", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100, group: "MCX", session: "mcx" as const, expiryKind: "monthly" as const },
+  { id: "NATURALGAS", label: "NATURAL GAS", lot: 1250, group: "MCX", session: "mcx" as const, expiryKind: "monthly" as const },
+  { id: "COPPER", label: "COPPER", lot: 2500, group: "MCX", session: "mcx" as const, expiryKind: "monthly" as const },
 ];
 
 export const INDICATORS = [
@@ -382,7 +396,7 @@ export function contractLabel(algo: {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
-  if (isNiftyTest1Kind(algo)) return "NIFTY ATM CE/PE";
+  if (isNiftyTest1Kind(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
   if (isCrudeFirstCandleKind(algo)) return `CRUDE OIL ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyFirstCandleKind(algo)) return `NIFTY ATM CE/PE first ${algo.timeframe || "5m"}`;
   if (isNiftyOptionEngineKind(algo)) return "NIFTY ATM CE/PE";

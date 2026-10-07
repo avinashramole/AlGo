@@ -12,7 +12,9 @@ import {
   dropExpired,
   exchangeSegmentFor,
   getUnderlying,
+  isMcxSymbol,
   nearestWeeklyExpiry,
+  underlyingIdFromSymbol,
   normalizeExpiry,
   isWeeklyOptionExpiry,
   upcomingExpiries,
@@ -221,30 +223,20 @@ export function mcxMarketSession(date = new Date()) {
 }
 
 export function isCrudeSymbol(symbol) {
-  return String(symbol || "")
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .includes("CRUDEOIL");
+  return underlyingIdFromSymbol(symbol) === "CRUDEOIL";
 }
 
 export function candleSymbol(symbol) {
-  const raw = String(symbol || "NIFTY")
-    .toUpperCase()
-    .replace(/\s+/g, "");
-  if (raw.includes("CRUDEOIL")) return "CRUDEOIL";
-  if (raw.includes("BANKNIFTY")) return "BANKNIFTY";
-  if (raw.includes("FINNIFTY")) return "FINNIFTY";
-  if (raw.includes("SENSEX")) return "SENSEX";
-  return "NIFTY";
+  return underlyingIdFromSymbol(symbol);
 }
 
 function sessionOpenForAlgo(algo) {
-  return isCrudeSymbol(algo?.symbol) ? mcxMarketSession().open : nseMarketSession().open;
+  return isMcxSymbol(algo?.symbol) ? mcxMarketSession().open : nseMarketSession().open;
 }
 
 export function liveSessionOpenForOrder(payload = {}, date = new Date()) {
   const segment = String(payload.exchangeSegment || exchangeSegmentFor(payload.symbol) || "");
-  if (segment === "MCX_COMM" || isCrudeSymbol(payload.symbol)) return mcxMarketSession(date).open;
+  if (segment === "MCX_COMM" || isMcxSymbol(payload.symbol)) return mcxMarketSession(date).open;
   return nseMarketSession(date).open;
 }
 
@@ -1142,16 +1134,24 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
     resetSession(vs, today);
     persistAlgos();
   }
-  const session = nseMarketSession();
+  const root = config.symbol || "NIFTY";
+  const mcx = config.session === "mcx" || isMcxSymbol(root);
+  const session = mcx ? mcxMarketSession() : nseMarketSession();
   const positions = positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   if (mode === "live" && !session.open && !open) return;
-  const und = getUnderlying("NIFTY");
-  const pack = chainForSymbol("NIFTY");
-  const expiry = nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries("NIFTY")[0] || "";
-  const lastFut = (getCandles("5m") || [])[ (getCandles("5m") || []).length - 1 ];
-  const spot = Number(getChainSpot("NIFTY")) || Number(lastFut?.close) || 0;
-  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, 0);
+  const und = getUnderlying(root);
+  const pack = chainForSymbol(root);
+  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(root, 12);
+  const expiry = mcx
+    ? pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
+    : config.expiryKind === "weekly"
+      ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || ""
+      : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
+  const lastFut = (getCandles("5m", root) || [])[(getCandles("5m", root) || []).length - 1];
+  const spot = Number(getChainSpot(root)) || Number(lastFut?.close) || 0;
+  const step = Number(config.step || und.step) || 50;
+  const selected = OptionStrikeSelector.strikeForOffset(spot, step, 0);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
   const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
   if (vs.ceStrike !== ceStrike) {
@@ -1162,13 +1162,13 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
     vs.peBars = [];
     vs.peStrike = peStrike;
   }
-  const ceLtp = optionPremium("NIFTY", ceStrike, "CE");
-  const peLtp = optionPremium("NIFTY", peStrike, "PE");
-  const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, 5, { sessionOpenMinutes: 9 * 60 + 15 }) || 0;
+  const ceLtp = optionPremium(root, ceStrike, "CE");
+  const peLtp = optionPremium(root, peStrike, "PE");
+  const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, 5, { sessionOpenMinutes: mcx ? 9 * 60 : 9 * 60 + 15 }) || 0;
   vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
-  const ceSecurityId = optionLegId(ceStrike, "CE", "NIFTY");
-  const peSecurityId = optionLegId(peStrike, "PE", "NIFTY");
+  const ceSecurityId = optionLegId(ceStrike, "CE", root);
+  const peSecurityId = optionLegId(peStrike, "PE", root);
   let targetResting = false;
   if (open && mode === "live") {
     const chainMark = (open.option || "") === "PE" ? peLtp : ceLtp;
@@ -1204,7 +1204,7 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
     config,
     now,
     feedLive: Boolean(feedLive),
-    minutesToClose: session.open ? minutesUntilIst(15 * 60 + 30, new Date(now)) : 0,
+    minutesToClose: session.open ? minutesUntilIst(mcx ? 23 * 60 + 30 : 15 * 60 + 30, new Date(now)) : 0,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
     spot,
@@ -1628,7 +1628,7 @@ export function resolveAlgoTrade(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return resolveHedgeAlgoTrade(algo);
   if (isCrudeFirstCandleAlgo(algo)) return resolveCrudeFirstCandleTrade(algo);
   if (isNiftyTest1Algo(algo) || isNiftyOptionEngineAlgo(algo)) {
-    const symbol = "NIFTY";
+    const symbol = isNiftyTest1Algo(algo) ? niftyTest1Config(algo).symbol : "NIFTY";
     const und = getUnderlying(symbol);
     const pack = chainForSymbol(symbol);
     const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
@@ -1646,10 +1646,10 @@ export function resolveAlgoTrade(algo) {
     const weeklyCard =
       isNiftyVwapReversalAlgo(algo) ||
       isNiftyVwapHedgeAlgo(algo) ||
-      isNiftyTest1Algo(algo) ||
+      (isNiftyTest1Algo(algo) && String(algo.expiryKind || niftyTest1Config(algo).expiryKind) === "weekly") ||
       (isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly");
     const expiry = weeklyCard
-      ? nearestWeeklyExpiry(niftyListedExpiries(pack), "NIFTY") || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
+      ? nearestWeeklyExpiry(dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(symbol, 12), symbol) || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
       : pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
     const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
     const ceLtp = Number(row?.callLtp);

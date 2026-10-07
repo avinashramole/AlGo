@@ -70,8 +70,13 @@ test("CRUDEOIL is a market card underlying on MCX", () => {
 
 test("CRUDE OIL is listed next to index underlyings for the option chain", () => {
   const ids = UNDERLYINGS.map((row) => row.id);
-  assert.deepEqual(ids.slice(-1), ["CRUDEOIL"]);
+  assert.deepEqual(ids, ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL", "NATURALGAS", "COPPER"]);
   assert.equal(UNDERLYINGS.find((row) => row.id === "CRUDEOIL").label, "CRUDE OIL");
+  assert.equal(UNDERLYINGS.find((row) => row.id === "NATURALGAS").label, "NATURAL GAS");
+  assert.equal(UNDERLYINGS.find((row) => row.id === "COPPER").segment, "MCX_COMM");
+  assert.equal(exchangeSegmentFor("NATURALGAS 250 CE"), "MCX_COMM");
+  assert.equal(exchangeSegmentFor("COPPER 850 CE"), "MCX_COMM");
+  assert.equal(exchangeSegmentFor("MIDCPNIFTY 13000 CE"), "NSE_FNO");
 });
 
 test("Dhan MCX quantity is lots, not barrel lot-size", () => {

@@ -91,7 +91,7 @@ function isFirstCandleAlgo(algo = {}) {
 export function looksLikeNiftyOption(row = {}) {
   if (row.option === "CE" || row.option === "PE") {
     const symbol = String(row.symbol || "");
-    return !/BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|CRUDEOIL/i.test(symbol);
+    return !/BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|CRUDEOIL|NATURALGAS|COPPER/i.test(symbol);
   }
   const text = `${row.symbol || ""} ${row.tradingSymbol || ""}`;
   return /NIFTY/i.test(text) && /(CE|PE)/i.test(text) && !/BANKNIFTY|FINNIFTY|MIDCPNIFTY/i.test(text);
@@ -122,7 +122,7 @@ function contractKey(row = {}) {
   if (parsed?.root && parsed.strike && parsed.option) return `${parsed.root}|${parsed.strike}|${parsed.option}`;
   const option = String(row.option || "").toUpperCase() === "PUT" ? "PE" : String(row.option || "").toUpperCase() === "CALL" ? "CE" : String(row.option || "").toUpperCase();
   const strike = Number(row.strike);
-  const root = raw.toUpperCase().match(/\b(BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NIFTY)\b/);
+  const root = raw.toUpperCase().match(/\b(MIDCPNIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NATURALGAS|COPPER|NIFTY)\b/);
   if ((option === "CE" || option === "PE") && strike > 0 && root) return `${root[1]}|${strike}|${option}`;
   return "";
 }
