@@ -312,11 +312,6 @@ export const NiftyVwapHedgeStrategy = {
       algo.lastSignal = "WAIT 15m CLOSE";
       return { action: "wait", reason: "forming-bar" };
     }
-    if (now > closedAt + barMs) {
-      const was = reversal.buyPe ? " (was PE)" : reversal.buyCe ? " (was CE)" : "";
-      algo.lastSignal = `SKIP OLD 15m ${formatHedgeLevels(reversal) || `${reversal.open.toFixed(2)} / ${reversal.close.toFixed(2)}`}${was}`;
-      return { action: "wait", reason: "missed-close" };
-    }
     if (!reversal.buyCe && !reversal.buyPe) {
       algo.lastSignal = signal.reason;
       return { action: "wait", reason: "no-reversal" };

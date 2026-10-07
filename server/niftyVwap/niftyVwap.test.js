@@ -784,12 +784,12 @@ test("15m reversal ignores the forming preview candle and buys only at the next 
   assert.equal(window.missedOpen, false);
 });
 
-test("15m reversal does not chase after the next candle has already closed", () => {
+test("15m reversal still sends when the last completed bar is the matched reversal", () => {
   const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
   const late = T0 + 3 * BAR15;
   const signal = VwapSignalEngine.evaluateReversal({ futuresBars, now: late, barMs: BAR15 });
   assert.equal(signal.previewFilled, true);
-  assert.equal(signal.buyCe, false);
+  assert.equal(signal.buyCe, true);
   assert.equal(signal.missedOpen, true);
   const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Missed Open" });
   const book = bookAdapter();
@@ -807,9 +807,9 @@ test("15m reversal does not chase after the next candle has already closed", () 
     positions: book.positions,
     adapter: book.adapter,
   });
-  assert.equal(tick.action, "wait");
-  assert.equal(tick.reason, "missed-open");
-  assert.equal(book.places.length, 0);
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].side, "BUY");
 });
 
 test("15m IST slots start at 09:15 / 09:30, not clock minutes divisible by 15", () => {
@@ -1734,6 +1734,42 @@ test("preview candle is checked when the current candle opens, not from the curr
   assert.equal(laterOnly.futuresOpen, 24500);
   assert.equal(laterOnly.futuresClose, 24570);
   assert.equal(laterOnly.onCurrentOpen, true);
+});
+
+test("matched first-candle still sends after the next 5m window has already opened", () => {
+  const now = T0_0900 + 2 * BAR + 30_000;
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(22663, 22680)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    now,
+  });
+  assert.equal(signal.buyCe, true);
+  assert.equal(signal.onCurrentOpen, false);
+  assert.equal(signal.niftyColor, "green");
+  assert.equal(signal.ceColor, "green");
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Late CE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22663, 22680)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 22680,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "CE");
+  assert.equal(book.places[0].side, "BUY");
+  assert.match(algo.lastSignal, /BUY 22700 CE/);
 });
 
 test("preview candle open and close buy CE when the next candle opens", () => {
