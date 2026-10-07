@@ -934,7 +934,7 @@ function prospectiveBrokerLogin(desk = {}, patch = {}) {
 
 const BROKER_KEY_REQUIRED = {
   zerodha: "Paste the Zerodha API key.",
-  fyers: "Paste the Fyers app ID.",
+  fyers: "Paste the Fyers App ID and the long access token from setAccessToken.",
   kotak: "Paste the Kotak Neo consumer key.",
   angelone: "Paste the Angel SmartAPI key.",
 };

@@ -938,7 +938,7 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
     id: "accessToken",
     label: brokerId === "kotak" ? "Neo access token" : "Access token",
     secret: true,
-    placeholder: brokerId === "kotak" ? "Access token from the Neo app" : "Paste this client's access token",
+    placeholder: brokerId === "kotak" ? "Access token from the Neo app" : brokerId === "fyers" ? "Long token from setAccessToken, starts with eyJ" : "Paste this client's access token",
   });
   if (brokerId === "kotak") {
     extra.push(

@@ -7,6 +7,7 @@ import {
   frontMonthFutCode,
   pickCrudeSearchHit,
   quotesFromAngelPayload,
+  fyersQuoteError,
   quotesFromFyersPayload,
   quotesFromKotakPayload,
   quotesFromUpstoxPayload,
@@ -189,6 +190,11 @@ test("Kotak crude is requested on MCX after the index quotes", async () => {
   assert.equal(crude.kind, "future");
   assert.equal(JSON.stringify(quotes).includes("YT2Vm"), false);
   assert.equal(JSON.stringify(quotes).includes("trade-token-1452"), false);
+});
+
+test("Fyers quote error is the broker message", () => {
+  assert.equal(fyersQuoteError({ s: "error", code: -15, message: "Please provide valid token" }), "Please provide valid token");
+  assert.equal(fyersQuoteError({ s: "ok", d: [] }), "");
 });
 
 test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async () => {
