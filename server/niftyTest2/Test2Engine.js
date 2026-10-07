@@ -6,6 +6,20 @@ function ltpOf(row, option) {
   return option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function dayKey(time) {
+  const wall = istWallTime(time);
+  return `${wall.year}-${pad2(wall.month)}-${pad2(wall.day)}`;
+}
+
+function minutesOf(time) {
+  const wall = istWallTime(time);
+  return wall.hour * 60 + wall.minute;
+}
+
 export function strikeByMinPremium(rows = [], option = "CE", minPremium = 80) {
   const floor = Math.max(0.05, Number(minPremium) || 0);
   const listed = (Array.isArray(rows) ? rows : []).filter((row) => Number(row?.strike) > 0 && ltpOf(row, option) > 0);
@@ -58,67 +72,121 @@ export function pickCombo({ monthlyRows = [], weeklyRows = [], sellPremium = 80,
 }
 
 export function inEntryWindow(now, startTimeIst = "09:35", endTimeIst = "15:15") {
-  const wall = istWallTime(now);
-  const minutes = wall.hour * 60 + wall.minute;
+  const minutes = minutesOf(now);
   return minutes >= hmToMinutes(startTimeIst) && minutes < hmToMinutes(endTimeIst);
+}
+
+export function markPremium(entryPrem, movePct, side, kind = "sell") {
+  const prem = Math.max(0.5, Number(entryPrem) || 0);
+  const move = Number(movePct) || 0;
+  const dir = side === "PE" ? -1 : 1;
+  const elastic = kind === "hedge" ? 7 : 5.5;
+  const theta = kind === "hedge" ? 0.18 : 0.07;
+  return Number(Math.max(0.5, prem * (1 - theta) * Math.max(0.05, 1 + dir * move * elastic)).toFixed(2));
+}
+
+export function sessionDays(bars = [], startTimeIst = "09:35", endTimeIst = "15:15") {
+  const start = hmToMinutes(startTimeIst);
+  const end = hmToMinutes(endTimeIst);
+  const groups = new Map();
+  for (const bar of Array.isArray(bars) ? bars : []) {
+    const time = Number(bar?.time);
+    const close = Number(bar?.close);
+    if (!(time > 0) || !(close > 0)) continue;
+    const day = dayKey(time);
+    if (!groups.has(day)) groups.set(day, []);
+    groups.get(day).push(bar);
+  }
+  const sessions = [];
+  for (const [day, rows] of groups) {
+    rows.sort((a, b) => Number(a.time) - Number(b.time));
+    const inWindow = rows.filter((row) => {
+      const minutes = minutesOf(row.time);
+      return minutes >= start && minutes <= end;
+    });
+    const used = inWindow.length ? inWindow : rows;
+    const open = Number(used[0].open || used[0].close);
+    const last = used[used.length - 1];
+    const close = Number(last.close || last.open);
+    const high = Math.max(...used.map((row) => Number(row.high || row.close || 0)));
+    const low = Math.min(...used.map((row) => Number(row.low || row.close || open)));
+    if (!(open > 0) || !(close > 0)) continue;
+    sessions.push({ day, open, close, high, low, bars: used });
+  }
+  return sessions;
+}
+
+function hedgeStopMark(session, side, entryPrem, slPct) {
+  const sl = Number((entryPrem * (1 - slPct / 100)).toFixed(2));
+  const entry = session.open;
+  for (const bar of session.bars) {
+    const spot = side === "CE" ? Number(bar.low || bar.close) : Number(bar.high || bar.close);
+    if (!(spot > 0)) continue;
+    const mark = markPremium(entryPrem, (spot - entry) / entry, side, "hedge");
+    if (mark <= sl) return sl;
+  }
+  const eodMove = (session.close - entry) / entry;
+  const eod = markPremium(entryPrem, eodMove, side, "hedge");
+  return eod <= sl ? sl : eod;
+}
+
+export function replayTest2Day(session, config) {
+  const qty = config.qty;
+  const sell = config.sellPremium;
+  const hedge = config.hedgePremium;
+  const move = (session.close - session.open) / session.open;
+  const sellCeExit = markPremium(sell, move, "CE", "sell");
+  const sellPeExit = markPremium(sell, move, "PE", "sell");
+  const buyCeExit = hedgeStopMark(session, "CE", hedge, config.hedgeSlPct);
+  const buyPeExit = hedgeStopMark(session, "PE", hedge, config.hedgeSlPct);
+  const legs = [
+    { side: "SELL", option: "CE", entry: sell, exit: sellCeExit, qty, pnl: Number(((sell - sellCeExit) * qty).toFixed(2)) },
+    { side: "SELL", option: "PE", entry: sell, exit: sellPeExit, qty, pnl: Number(((sell - sellPeExit) * qty).toFixed(2)) },
+    { side: "BUY", option: "CE", entry: hedge, exit: buyCeExit, qty, pnl: Number(((buyCeExit - hedge) * qty).toFixed(2)) },
+    { side: "BUY", option: "PE", entry: hedge, exit: buyPeExit, qty, pnl: Number(((buyPeExit - hedge) * qty).toFixed(2)) },
+  ];
+  const pnl = Number(legs.reduce((sum, row) => sum + row.pnl, 0).toFixed(2));
+  return { day: session.day, pnl, legs };
 }
 
 export function runTest2Backtest(algo, candles = []) {
   const config = niftyTest2Config(algo);
-  const qty = config.qty;
-  const bars = (Array.isArray(candles) ? candles : []).filter((row) => Number(row?.close) > 0 && Number(row?.time) > 0);
+  const sessions = sessionDays(candles, config.startTimeIst, config.endTimeIst);
   const trades = [];
   let equity = 0;
   let peak = 0;
   let maxDrawdown = 0;
-  const seen = new Set();
-  for (const bar of bars) {
-    const wall = istWallTime(bar.time);
-    const minutes = wall.hour * 60 + wall.minute;
-    const day = `${wall.year}-${String(wall.month).padStart(2, "0")}-${String(wall.day).padStart(2, "0")}`;
-    if (seen.has(day) || minutes < hmToMinutes(config.startTimeIst)) continue;
-    seen.add(day);
-    const open = Number(bar.open || bar.close);
-    const close = Number(bar.close);
-    const high = Number(bar.high || close);
-    const low = Number(bar.low || close);
-    if (!(open > 0) || !(close > 0)) continue;
-    const sellCredit = config.sellPremium * 2;
-    const hedgeDebit = config.hedgePremium * 2;
-    const move = (close - open) / open;
-    const sellCeExit = Math.max(0.5, config.sellPremium * (1 - move * 8));
-    const sellPeExit = Math.max(0.5, config.sellPremium * (1 + move * 8));
-    const hedgeHit = high / open - 1 > 0.004 || 1 - low / open > 0.004;
-    const buyCeExit = hedgeHit && move > 0 ? config.hedgePremium * (1 - config.hedgeSlPct / 100) : Math.max(0.5, config.hedgePremium * (1 + move * 6));
-    const buyPeExit = hedgeHit && move < 0 ? config.hedgePremium * (1 - config.hedgeSlPct / 100) : Math.max(0.5, config.hedgePremium * (1 - move * 6));
-    const pnl = Number(
-      (
-        (config.sellPremium - sellCeExit) * qty +
-        (config.sellPremium - sellPeExit) * qty +
-        (buyCeExit - config.hedgePremium) * qty +
-        (buyPeExit - config.hedgePremium) * qty
-      ).toFixed(2),
-    );
-    trades.push({
-      side: "BOTH",
-      entry: Number((sellCredit - hedgeDebit).toFixed(2)),
-      exit: Number((sellCeExit + sellPeExit - buyCeExit - buyPeExit).toFixed(2)),
-      qty,
-      pnl,
-      bars: 1,
-    });
-    equity += pnl;
+  let comboWins = 0;
+  for (const session of sessions) {
+    const combo = replayTest2Day(session, config);
+    if (combo.pnl > 0) comboWins += 1;
+    for (const leg of combo.legs) {
+      trades.push({
+        side: `${leg.side} ${leg.option}`,
+        entry: leg.entry,
+        exit: leg.exit,
+        qty: leg.qty,
+        pnl: leg.pnl,
+        bars: 1,
+        day: combo.day,
+      });
+    }
+    equity += combo.pnl;
     peak = Math.max(peak, equity);
     maxDrawdown = Math.min(maxDrawdown, equity - peak);
   }
   const wins = trades.filter((row) => row.pnl > 0).length;
   return {
     trades: trades.length,
+    combos: sessions.length,
+    comboWins,
     wins,
     losses: trades.length - wins,
     winRate: trades.length ? Number(((wins / trades.length) * 100).toFixed(1)) : 0,
+    comboWinRate: sessions.length ? Number(((comboWins / sessions.length) * 100).toFixed(1)) : 0,
     pnl: Number(equity.toFixed(2)),
     maxDrawdown: Number(maxDrawdown.toFixed(2)),
+    optionSource: "synth",
     book: trades.slice(-80),
   };
 }
@@ -129,5 +197,8 @@ export const Test2Engine = {
   monthlyExpiry,
   weeklyExpiry,
   inEntryWindow,
+  markPremium,
+  sessionDays,
+  replayTest2Day,
   runTest2Backtest,
 };

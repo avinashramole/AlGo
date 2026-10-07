@@ -88,9 +88,35 @@ test("TEST2 backtest walks each session day", () => {
     volume: 1,
   }));
   const result = runTest2Backtest(algo, candles);
-  assert.equal(result.trades, 10);
+  assert.equal(result.combos, 10);
+  assert.equal(result.trades, 40);
+  assert.equal(Number(result.winRate) > 0, true);
   assert.equal(Number.isFinite(result.pnl), true);
   assert.equal(niftyTest2Config(algo).sellPremium, 80);
+});
+
+test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
+  const algo = defaultNiftyTest2Algo();
+  const open = Date.parse("2026-09-01T04:05:00.000Z");
+  const quiet = Array.from({ length: 12 }, (_, i) => ({
+    time: open + i * 5 * 60 * 1000,
+    open: 24500,
+    high: 24520,
+    low: 24480,
+    close: 24505,
+    volume: 1,
+  }));
+  const quietBook = runTest2Backtest(algo, quiet);
+  assert.equal(quietBook.combos, 1);
+  assert.equal(quietBook.trades, 4);
+  assert.equal(quietBook.pnl > 0, true);
+  const trend = [
+    { time: open, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
+    { time: open + 5 * 60 * 60 * 1000, open: 24800, high: 25200, low: 24780, close: 25100, volume: 1 },
+  ];
+  const trendBook = runTest2Backtest(algo, trend);
+  assert.equal(trendBook.combos, 1);
+  assert.notEqual(trendBook.pnl, quietBook.pnl);
 });
 
 test("reset backtest clears stored TEST2 result", async () => {
