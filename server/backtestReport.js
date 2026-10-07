@@ -123,23 +123,29 @@ function test2Rules(algo = {}, result = {}) {
   const hedgePremium = Number(algo.hedgePremium || result.hedgePremium || 20);
   const hedgeSlPct = Number(algo.hedgeSlPct || result.hedgeSlPct || 20);
   const overallTargetPct = Number(result.overallTargetPct || algo.overallTargetPct || 5);
+  const symbol = cell(algo.symbol || "NIFTY");
+  const sellOpt = algo.sellExpiryKind === "weekly" ? "weekly" : "monthly";
+  const hedgeOpt = algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
   const hold =
     style === "intraday"
-      ? `NIFTY INTRADAY - enter ${enterIst} IST - square-off ${squareOffIst} IST - MIS same day`
-      : `NIFTY BTST - buy today ${enterIst} IST - sell tomorrow ${squareOffIst} IST - NRML overnight`;
+      ? `${symbol} INTRADAY - enter ${enterIst} IST - square-off ${squareOffIst} IST - MIS same day`
+      : `${symbol} BTST - buy today ${enterIst} IST - sell tomorrow ${squareOffIst} IST - NRML overnight`;
   return {
     holdStyle: style,
     product: style === "intraday" ? "MIS" : "NRML",
     enterIst,
     squareOffIst,
+    symbol,
+    sellExpiryKind: sellOpt,
+    hedgeExpiryKind: hedgeOpt,
     sellPremium,
     hedgePremium,
     hedgeSlPct,
     overallTargetPct,
     lines: [
       `TEST2 - ${hold}`,
-      `SELL 1 monthly CE + PE premium >= ${sellPremium}`,
-      `BUY 1 weekly CE + PE premium >= ${hedgePremium}`,
+      `SELL 1 ${sellOpt} CE + PE premium >= ${sellPremium}`,
+      `BUY 1 ${hedgeOpt} CE + PE premium >= ${hedgePremium}`,
       `Hedge SL ${hedgeSlPct}% of buy premium`,
       `Overall profit +${overallTargetPct}% of required margin exits all 4 legs`,
     ],

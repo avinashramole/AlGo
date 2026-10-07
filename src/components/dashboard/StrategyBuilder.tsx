@@ -9,6 +9,7 @@ import {
   SOURCES,
   STRATEGY_SYMBOLS,
   TEST1_SCRIPTS,
+  TEST2_SCRIPTS,
   TIMEFRAMES,
   defaultConditions,
   emptyStrategy,
@@ -154,11 +155,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     }
     if (isNiftyTest2Kind(form) || test2) {
       const style = form.holdStyle === "intraday" ? "intraday" : "btst";
+      const root = form.symbol || "NIFTY";
+      const sellOpt = form.sellExpiryKind === "weekly" ? "weekly" : "monthly";
+      const hedgeOpt = form.hedgeExpiryKind === "monthly" ? "monthly" : "weekly";
       const hold =
         style === "intraday"
-          ? `NIFTY INTRADAY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · MIS same day`
-          : `NIFTY BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "15:15"} IST · NRML overnight`;
-      return `TEST2 · ${hold} · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}% · overall +${form.overallTargetPct ?? 5}% exits all`;
+          ? `${root} INTRADAY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · MIS same day`
+          : `${root} BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "15:15"} IST · NRML overnight`;
+      return `TEST2 · ${hold} · SELL ${sellOpt} CE+PE premium ≥${form.sellPremium || 80} · BUY ${hedgeOpt} CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}% · overall +${form.overallTargetPct ?? 5}% exits all`;
     }
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
@@ -218,10 +222,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               kind: "nifty-test2",
               strategyType: "NIFTY_TEST2",
               indicator: "NIFTY_TEST2",
-              symbol: "NIFTY",
+              symbol: form.symbol || "NIFTY",
               instrument: "option",
               side: "BOTH",
               timeframe: "5m",
+              sellExpiryKind: form.sellExpiryKind === "weekly" ? "weekly" : "monthly",
+              hedgeExpiryKind: form.hedgeExpiryKind === "monthly" ? "monthly" : "weekly",
               holdStyle: form.holdStyle === "intraday" ? "intraday" : "btst",
               product: form.holdStyle === "intraday" ? "MIS" : "NRML",
               holdOvernight: form.holdStyle !== "intraday",
@@ -325,7 +331,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={test2}
             title="TEST2"
-            text="NIFTY premium strangle. Choose Intraday (MIS same-day square-off) or BTST (NRML buy today, sell tomorrow). Sell monthly CE+PE ≥80, buy weekly CE+PE ≥20. Hedge SL 20%."
+            text="Pick an NSE index or MCX script, then choose monthly or weekly options. Intraday (MIS same-day) or BTST (NRML overnight). Sell CE+PE ≥ premium, buy hedge CE+PE ≥ premium. Hedge SL 20%."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-test2"),
@@ -436,17 +442,76 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : null}
 
         {test2 ? (
-          <div className="mt-2.5 grid grid-cols-3 gap-1.5">
-            <NumberField label="SELL premium ≥" value={form.sellPremium ?? 80} step={5} onChange={(sellPremium) => set({ sellPremium })} />
-            <NumberField label="BUY premium ≥" value={form.hedgePremium ?? 20} step={1} onChange={(hedgePremium) => set({ hedgePremium })} />
-            <NumberField label="Hedge SL %" value={form.hedgeSlPct ?? 20} step={1} onChange={(hedgeSlPct) => set({ hedgeSlPct })} />
-          </div>
-        ) : null}
-        {test2 ? (
-          <div className="desk-help mt-1 text-[11px] font-semibold text-slate-500">
-            {form.holdStyle === "intraday"
-              ? "NIFTY INTRADAY · enter 09:35 · square-off 15:15 · MIS same day · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE."
-              : "NIFTY BTST · buy today 09:35 · sell tomorrow 15:15 · NRML overnight · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE."}
+          <div className="mt-2.5 space-y-1.5">
+            <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
+              Choose the script, then change SELL and BUY hedge to monthly or weekly CE+PE. Saving does not start LIVE.
+            </div>
+            <label className="block text-xs font-semibold text-slate-500">
+              Script · option
+              <select
+                data-test2-scripts
+                className={fieldClass}
+                value={form.symbol || "NIFTY"}
+                onChange={(event) => {
+                  const row = TEST2_SCRIPTS.find((item) => item.id === event.target.value) || TEST2_SCRIPTS[0];
+                  const mcx = row.session === "mcx";
+                  set({
+                    symbol: row.id,
+                    lotSize: row.lot,
+                    qty: (form.lots || 1) * row.lot,
+                    endTimeIst: mcx ? "23:15" : form.endTimeIst || "15:15",
+                    sellExpiryKind: mcx ? "monthly" : form.sellExpiryKind || "monthly",
+                    hedgeExpiryKind: mcx ? "monthly" : form.hedgeExpiryKind || "weekly",
+                    instrument: "option",
+                    side: "BOTH",
+                  });
+                }}
+              >
+                {TEST2_SCRIPTS.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label} · CE/PE
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <label className="text-xs font-semibold text-slate-500">
+                SELL option
+                <select
+                  data-test2-sell-option
+                  className={fieldClass}
+                  value={form.sellExpiryKind || "monthly"}
+                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
+                  onChange={(event) => set({ sellExpiryKind: event.target.value === "weekly" ? "weekly" : "monthly" })}
+                >
+                  <option value="monthly">Monthly CE + PE</option>
+                  <option value="weekly">Weekly CE + PE</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                BUY hedge option
+                <select
+                  data-test2-hedge-option
+                  className={fieldClass}
+                  value={form.hedgeExpiryKind || "weekly"}
+                  disabled={(TEST2_SCRIPTS.find((row) => row.id === form.symbol) || TEST2_SCRIPTS[0]).session === "mcx"}
+                  onChange={(event) => set({ hedgeExpiryKind: event.target.value === "monthly" ? "monthly" : "weekly" })}
+                >
+                  <option value="weekly">Weekly CE + PE</option>
+                  <option value="monthly">Monthly CE + PE</option>
+                </select>
+              </label>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <NumberField label="SELL premium ≥" value={form.sellPremium ?? 80} step={5} onChange={(sellPremium) => set({ sellPremium })} />
+              <NumberField label="BUY premium ≥" value={form.hedgePremium ?? 20} step={1} onChange={(hedgePremium) => set({ hedgePremium })} />
+              <NumberField label="Hedge SL %" value={form.hedgeSlPct ?? 20} step={1} onChange={(hedgeSlPct) => set({ hedgeSlPct })} />
+            </div>
+            <div className="desk-help text-[11px] font-semibold text-slate-500">
+              {form.holdStyle === "intraday"
+                ? `${form.symbol || "NIFTY"} INTRADAY · enter ${form.startTimeIst || "09:35"} · square-off ${form.endTimeIst || "15:15"} · MIS same day · SELL 1 ${form.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE + PE · BUY 1 ${form.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE + PE.`
+                : `${form.symbol || "NIFTY"} BTST · buy today ${form.startTimeIst || "09:35"} · sell tomorrow ${form.exitTimeIst || "15:15"} · NRML overnight · SELL 1 ${form.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE + PE · BUY 1 ${form.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE + PE.`}
+            </div>
           </div>
         ) : null}
 

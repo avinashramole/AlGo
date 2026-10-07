@@ -133,6 +133,8 @@ export const DEFAULT_NIFTY_TEST2_CONFIG = {
   sellPremium: 80,
   hedgePremium: 20,
   hedgeSlPct: 20,
+  sellExpiryKind: "monthly",
+  hedgeExpiryKind: "weekly",
   overallSl: 30000,
   overallTarget: 0,
   overallTargetPct: 5,
@@ -172,6 +174,13 @@ export const DEFAULT_NIFTY_TEST1_CONFIG = {
   eodSquareOffMinutes: 15,
 };
 
+export function optionExpiryKind(value, fallback = "monthly") {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "weekly") return "weekly";
+  if (raw === "monthly") return "monthly";
+  return fallback === "weekly" ? "weekly" : "monthly";
+}
+
 export function test1Script(symbol) {
   const raw = String(symbol || "")
     .toUpperCase()
@@ -195,6 +204,9 @@ export function test1Script(symbol) {
                   : "";
   return TEST1_SCRIPTS.find((row) => row.id === id) || TEST1_SCRIPTS[0];
 }
+
+export const TEST2_SCRIPTS = TEST1_SCRIPTS;
+export const test2Script = test1Script;
 
 export function parseIstHm(value, fallback = "09:00") {
   const raw = String(value || "").trim();
@@ -589,20 +601,24 @@ export function niftyTest2Config(algo = {}) {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
   };
+  const script = test2Script(algo.symbol);
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_TEST2_CONFIG.lots)));
-  const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_TEST2_CONFIG.lotSize)));
+  const lotSize = script.lot;
   const holdStyle = test2HoldStyle(algo);
   const btst = holdStyle === "btst";
+  const mcx = script.session === "mcx";
+  const sellExpiryKind = mcx ? "monthly" : optionExpiryKind(algo.sellExpiryKind, "monthly");
+  const hedgeExpiryKind = mcx ? "monthly" : optionExpiryKind(algo.hedgeExpiryKind, "weekly");
   return {
     timeframe: "5m",
     barMinutes: 5,
-    symbol: "NIFTY",
+    symbol: script.id,
     lots,
     lotSize,
     qty: lots * lotSize,
     signalMode: "test2-premium-strangle",
     startTimeIst: parseIstHm(algo.startTimeIst, DEFAULT_NIFTY_TEST2_CONFIG.startTimeIst),
-    endTimeIst: parseIstHm(algo.endTimeIst, DEFAULT_NIFTY_TEST2_CONFIG.endTimeIst),
+    endTimeIst: parseIstHm(algo.endTimeIst, mcx ? script.endTimeIst : DEFAULT_NIFTY_TEST2_CONFIG.endTimeIst),
     exitTimeIst: parseIstHm(
       String(algo.exitTimeIst || "") === "09:35" ? DEFAULT_NIFTY_TEST2_CONFIG.exitTimeIst : algo.exitTimeIst,
       DEFAULT_NIFTY_TEST2_CONFIG.exitTimeIst,
@@ -621,6 +637,10 @@ export function niftyTest2Config(algo = {}) {
     holdOvernight: btst,
     intradayOnly: !btst,
     eodSquareOffMinutes: btst ? 0 : 15,
+    sellExpiryKind,
+    hedgeExpiryKind,
+    session: script.session,
+    step: script.step,
   };
 }
 
@@ -964,7 +984,7 @@ export function defaultNiftyTest2Algo(patch = {}) {
     kind: NIFTY_TEST2_KIND,
     strategyType: NIFTY_TEST2_TYPE,
     tag: "TEST2",
-    symbol: "NIFTY",
+    symbol: cfg.symbol,
     instrument: "option",
     optionType: "CE",
     strikeOffset: 0,
@@ -982,6 +1002,8 @@ export function defaultNiftyTest2Algo(patch = {}) {
     overallTarget: cfg.overallTarget,
     overallTargetPct: cfg.overallTargetPct,
     costPerCombo: cfg.costPerCombo,
+    sellExpiryKind: cfg.sellExpiryKind,
+    hedgeExpiryKind: cfg.hedgeExpiryKind,
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
     exitTimeIst: cfg.exitTimeIst,
@@ -1001,7 +1023,7 @@ export function defaultNiftyTest2Algo(patch = {}) {
     name: NIFTY_TEST2_NAME,
     kind: NIFTY_TEST2_KIND,
     strategyType: NIFTY_TEST2_TYPE,
-    symbol: "NIFTY",
+    symbol: cfg.symbol,
     instrument: "option",
     lots: cfg.lots,
     lotSize: cfg.lotSize,
@@ -1014,6 +1036,8 @@ export function defaultNiftyTest2Algo(patch = {}) {
     overallTarget: cfg.overallTarget,
     overallTargetPct: cfg.overallTargetPct,
     costPerCombo: cfg.costPerCombo,
+    sellExpiryKind: cfg.sellExpiryKind,
+    hedgeExpiryKind: cfg.hedgeExpiryKind,
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
     exitTimeIst: cfg.exitTimeIst,

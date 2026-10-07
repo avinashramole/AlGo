@@ -100,11 +100,11 @@ function kindMeta(algo: AlgoStrategy) {
   if (isNiftyTest2Kind(algo)) {
     return {
       kind: "nifty-test2" as const,
-      category: "TEST2 NIFTY PREMIUM STRANGLE",
+      category: `TEST2 ${algo.symbol || "NIFTY"} PREMIUM STRANGLE`,
       config:
         algo.holdStyle === "intraday"
-          ? `NIFTY INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`
-          : `NIFTY BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL monthly CE/PE premium ≥${algo.sellPremium || 80} · BUY weekly CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
+          ? `${algo.symbol || "NIFTY"} INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`
+          : `${algo.symbol || "NIFTY"} BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
@@ -199,11 +199,13 @@ export function Algo() {
     if (filter === "all") return true;
     if (filter === "crudeoil") {
       const symbol = String(algo.symbol || "").toUpperCase();
-      return isCrudeFirstCandleKind(algo) || (isNiftyTest1Kind(algo) && ["CRUDEOIL", "NATURALGAS", "COPPER"].includes(symbol));
+      return (
+        isCrudeFirstCandleKind(algo) ||
+        ((isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo)) && ["CRUDEOIL", "NATURALGAS", "COPPER"].includes(symbol))
+      );
     }
     if (isCrudeFirstCandleKind(algo)) return false;
-    if (isNiftyTest2Kind(algo)) return true;
-    if (isNiftyTest1Kind(algo)) return !["CRUDEOIL", "NATURALGAS", "COPPER"].includes(String(algo.symbol || "").toUpperCase());
+    if (isNiftyTest2Kind(algo) || isNiftyTest1Kind(algo)) return !["CRUDEOIL", "NATURALGAS", "COPPER"].includes(String(algo.symbol || "").toUpperCase());
     return isNiftyFirstCandleKind(algo);
   }) as AlgoStrategy[];
 
