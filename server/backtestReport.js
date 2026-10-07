@@ -264,9 +264,22 @@ export function renderBacktestPdf(report) {
     `Generated ${report.generatedAt}`,
     report.strategy.summary,
     "",
-    "COMBOS",
-    "#  Day         P&L        Margin     ROM %",
+    "LEGS",
+    "#  Day         Side  Opt  Strike   Entry     Exit    Qty      P&L     Margin",
   ].filter((line, index, all) => line || all[index - 1]);
+  const fillRows = report.legs?.length ? report.legs : [];
+  for (const row of fillRows) {
+    const n = String(row.n).padStart(3, " ");
+    const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
+    const side = String(row.side || "").padEnd(5, " ").slice(0, 5);
+    const option = String(row.option || "").padEnd(3, " ").slice(0, 3);
+    const strike = String(row.strike || "").padStart(6, " ").slice(-6);
+    lines.push(
+      `${n} ${day} ${side} ${option} ${strike} ${money(row.entry).padStart(8)} ${money(row.exit).padStart(8)} ${String(row.qty).padStart(4)} ${money(row.pnl).padStart(8)} ${money(row.margin).padStart(9)}`,
+    );
+  }
+  if (!fillRows.length) lines.push("No legs in this replay.");
+  lines.push("", "COMBOS", "#  Day         P&L        Margin     ROM %");
   for (const row of report.trades || []) {
     const n = String(row.n).padStart(3, " ");
     const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
@@ -275,19 +288,6 @@ export function renderBacktestPdf(report) {
     );
   }
   if (!(report.trades || []).length) lines.push("No combos in this replay.");
-  lines.push("", "LEGS", "#  Day         Side  Opt   Strike   Entry     Exit      Qty      P&L");
-  const fillRows = report.legs?.length ? report.legs : [];
-  for (const row of fillRows) {
-    const n = String(row.n).padStart(3, " ");
-    const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
-    const side = String(row.side || "").padEnd(5, " ").slice(0, 5);
-    const option = String(row.option || "").padEnd(4, " ").slice(0, 4);
-    const strike = String(row.strike || "").padStart(6, " ").slice(-6);
-    lines.push(
-      `${n} ${day} ${side} ${option} ${strike} ${money(row.entry).padStart(8)} ${money(row.exit).padStart(8)} ${String(row.qty).padStart(6)} ${money(row.pnl).padStart(8)}`,
-    );
-  }
-  if (!fillRows.length) lines.push("No trades in this replay.");
 
   const perPage = 46;
   const pages = [];
