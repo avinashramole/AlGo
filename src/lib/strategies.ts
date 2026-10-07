@@ -123,7 +123,18 @@ export type AlgoStrategy = {
     optionSource?: "stored" | "mixed" | "synth" | string;
     optionHits?: number;
     reused?: boolean;
-    optionHistory?: { overwritten?: string[]; days?: number; contracts?: number; source?: string; error?: string };
+    optionHistory?: {
+      overwritten?: string[];
+      days?: number;
+      contracts?: number;
+      source?: string;
+      error?: string;
+      reused?: boolean;
+      reusedDays?: number;
+      truncated?: boolean;
+      calls?: number;
+      stubs?: number;
+    };
     holdStyle?: "btst" | "intraday" | string;
     reportReady?: boolean;
     avgProfit?: number;
