@@ -23,13 +23,6 @@ export function ReportsHub() {
         <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs font-bold">
           <button
             type="button"
-            onClick={() => setParams({}, { replace: true })}
-            className={cn("rounded-md px-3 py-1.5", tab === "reports" ? "bg-brand-500 text-white" : "text-slate-400")}
-          >
-            Reports
-          </button>
-          <button
-            type="button"
             onClick={() => setParams({ tab: "orders" }, { replace: true })}
             className={cn("rounded-md px-3 py-1.5", tab === "orders" ? "bg-brand-500 text-white" : "text-slate-400")}
           >
@@ -41,6 +34,13 @@ export function ReportsHub() {
             className={cn("rounded-md px-3 py-1.5", tab === "positions" ? "bg-brand-500 text-white" : "text-slate-400")}
           >
             Position
+          </button>
+          <button
+            type="button"
+            onClick={() => setParams({}, { replace: true })}
+            className={cn("rounded-md px-3 py-1.5", tab === "reports" ? "bg-brand-500 text-white" : "text-slate-400")}
+          >
+            Reports
           </button>
         </div>
       </div>
