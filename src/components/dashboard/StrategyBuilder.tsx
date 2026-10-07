@@ -31,6 +31,7 @@ import {
   niftyFirstCandleTrail,
   isNiftyTestKind,
   isNiftyTest1Kind,
+  isNiftyTest2Kind,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
@@ -139,7 +140,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const crudeFirst = isCrudeFirstCandleKind(form) || isCrudeFirstCandleKind(algo || undefined);
   const niftyTest = isNiftyTestKind(form);
   const test1 = isNiftyTest1Kind(form) || isNiftyTest1Kind(algo || undefined);
-  const engine = isNiftyOptionEngineKind(form) || test1;
+  const test2 = isNiftyTest2Kind(form) || isNiftyTest2Kind(algo || undefined);
+  const engine = isNiftyOptionEngineKind(form) || test1 || test2;
   const preview = useMemo(() => {
     if (isNiftyVwapHedgeKind(form)) {
       return `NIFTY weekly ATM · 1 lot primary + 2 lots opposite once · last closed 15m vs VWAP · primary +40% · −20% hedge · +5% account exit · daily LIVE 09:20 IST`;
@@ -149,6 +151,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     }
     if (isNiftyTestKind(form)) {
       return `Nifty Test · NIFTY FUT · ${form.timeframe || "5m"} · live feed while started · current candle above open → BUY · below open → SELL · SL ${form.slPct || 0.4}% / TGT ${form.targetPct || 0.8}%`;
+    }
+    if (isNiftyTest2Kind(form) || test2) {
+      return `TEST2 · NIFTY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · SELL monthly CE+PE premium ≥${form.sellPremium || 80} · BUY weekly CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}%`;
     }
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
@@ -187,7 +192,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       value: form.sellValue,
     });
     return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
-  }, [form, lotSize, lots, crudeFirst, test1]);
+  }, [form, lotSize, lots, crudeFirst, test1, test2]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -200,7 +205,20 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     setError("");
     try {
       await saveAlgo(
-        test1
+        test2
+          ? {
+              ...form,
+              id: algo?.id,
+              name: "TEST2",
+              kind: "nifty-test2",
+              strategyType: "NIFTY_TEST2",
+              indicator: "NIFTY_TEST2",
+              symbol: "NIFTY",
+              instrument: "option",
+              side: "BOTH",
+              timeframe: "5m",
+            }
+          : test1
           ? {
               ...form,
               id: algo?.id,
@@ -295,6 +313,23 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }}
           />
           <TypeCard
+            active={test2}
+            title="TEST2"
+            text="AlgoTest test2: at 09:35 IST sell 1 monthly NIFTY CE and PE with premium ≥80, buy 1 weekly CE and PE with premium ≥20. Hedge SL 20%. Complete square-off at 15:15 IST."
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-test2"),
+                name: "TEST2",
+                runMode: form.runMode || "live",
+                brokerId: (form.runMode || "live") === "live" ? data.activeBrokerId || "dhan" : "paper",
+                lots: form.lots || 1,
+                lotSize,
+                qty: (form.lots || 1) * lotSize,
+                enabled: false,
+              })
+            }
+          />
+          <TypeCard
             active={test1}
             title="TEST1"
             text="Pick an NSE index or MCX script. After 09:30 IST, buy that script's current ATM CE or PE when the 5m option candle is green with body ≈90% and wicks ≈10%. Target is 100% of that body from the fill. SL is the signal candle low. One order per candle."
@@ -354,13 +389,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           Strategy name
           <input
             className={fieldClass}
-            value={test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+            value={test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
             onChange={(event) =>
               set({
-                name: test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : event.target.value,
+                name: test2
+                  ? "TEST2"
+                  : test1
+                    ? "TEST1"
+                    : firstCandle
+                      ? NIFTY_FIRST_CANDLE_NAME
+                      : crudeFirst
+                        ? CRUDE_FIRST_CANDLE_NAME
+                        : event.target.value,
               })
             }
-            readOnly={test1 || firstCandle || crudeFirst}
+            readOnly={test2 || test1 || firstCandle || crudeFirst}
             placeholder="My NIFTY VWAP"
           />
         </label>
@@ -382,7 +425,20 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
         ) : null}
 
-        {test1 ? (
+        {test2 ? (
+          <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+            <NumberField label="SELL premium ≥" value={form.sellPremium ?? 80} step={5} onChange={(sellPremium) => set({ sellPremium })} />
+            <NumberField label="BUY premium ≥" value={form.hedgePremium ?? 20} step={1} onChange={(hedgePremium) => set({ hedgePremium })} />
+            <NumberField label="Hedge SL %" value={form.hedgeSlPct ?? 20} step={1} onChange={(hedgeSlPct) => set({ hedgeSlPct })} />
+          </div>
+        ) : null}
+        {test2 ? (
+          <div className="desk-help mt-1 text-[11px] font-semibold text-slate-500">
+            NIFTY cash · 09:35 enter · 15:15 complete square-off · SELL 1 monthly CE + PE · BUY 1 weekly CE + PE. Saving does not start LIVE.
+          </div>
+        ) : null}
+
+        {test1 && !test2 ? (
           <div className="mt-2.5 space-y-1.5">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
               Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed 5m green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
@@ -419,7 +475,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
           </div>
-        ) : crudeFirst || firstCandle ? null : engine ? (
+        ) : crudeFirst || firstCandle || test2 ? null : engine ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             {hedge
               ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
@@ -492,13 +548,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             Strategy name
             <input
               className={fieldClass}
-              value={test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+              value={test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
               onChange={(event) =>
                 set({
-                  name: test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : event.target.value,
+                  name: test2
+                    ? "TEST2"
+                    : test1
+                      ? "TEST1"
+                      : firstCandle
+                        ? NIFTY_FIRST_CANDLE_NAME
+                        : crudeFirst
+                          ? CRUDE_FIRST_CANDLE_NAME
+                          : event.target.value,
                 })
               }
-              readOnly={test1 || firstCandle || crudeFirst}
+              readOnly={test2 || test1 || firstCandle || crudeFirst}
               placeholder="My NIFTY VWAP"
             />
           </label>
@@ -560,8 +624,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             Timeframe
             <select
               className={fieldClass}
-              value={reversal || hedge ? "15m" : vwap || test1 ? "5m" : form.timeframe || "5m"}
-              disabled={(engine && !firstCandle) || test1}
+              value={reversal || hedge ? "15m" : vwap || test1 || test2 ? "5m" : form.timeframe || "5m"}
+              disabled={(engine && !firstCandle) || test1 || test2}
               onChange={(event) => {
                 const timeframe = event.target.value;
                 if (firstCandle || crudeFirst) {
@@ -574,7 +638,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 set({ timeframe });
               }}
             >
-              {(reversal || hedge ? ["15m"] : vwap || test1 ? ["5m"] : firstCandle || crudeFirst || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
+              {(reversal || hedge ? ["15m"] : vwap || test1 || test2 ? ["5m"] : firstCandle || crudeFirst || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>
@@ -698,6 +762,19 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               <NumberField label="Target %" value={form.targetPct || 30} step={1} onChange={(targetPct) => set({ targetPct })} />
               <NumberField label="EOD square-off (min before 15:30)" value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
+          </div>
+        ) : test2 ? (
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+            <label className="text-xs font-semibold text-slate-500">
+              Enter (IST)
+              <input className={fieldClass} value={form.startTimeIst || "09:35"} onChange={(event) => set({ startTimeIst: event.target.value })} placeholder="09:35" />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Square-off (IST)
+              <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
+            </label>
+            <NumberField label="Overall SL ₹" value={form.overallSl ?? 30000} step={1000} onChange={(overallSl) => set({ overallSl })} />
+            <NumberField label="Overall target ₹" value={form.overallTarget ?? 15000} step={1000} onChange={(overallTarget) => set({ overallTarget })} />
           </div>
         ) : niftyTest ? (
           <div className="mt-2.5 space-y-2">

@@ -42,7 +42,9 @@ import {
   isNiftyOptionEngineAlgo,
   isNiftyTestAlgo,
   isNiftyTest1Algo,
+  isNiftyTest2Algo,
   niftyTest1Config,
+  niftyTest2Config,
   isNiftyVwapReversalAlgo,
   LiveTradingAdapter,
   NiftyVwapStrategy,
@@ -68,6 +70,7 @@ import {
   hedgePreviewTrade,
   hedgeReversalFromBars,
 } from "./niftyVwapHedge/index.js";
+import { Test2Strategy, runTest2Backtest } from "./niftyTest2/index.js";
 import { Test1Strategy } from "./niftyTest1/index.js";
 import {
   applyHedgeDailyLive,
@@ -948,7 +951,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
   const algo = (state.algos || []).find(
-    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyTest1Algo(item) || isNiftyVwapHedgeAlgo(item)),
+    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyTest1Algo(item) || isNiftyTest2Algo(item) || isNiftyVwapHedgeAlgo(item)),
   );
   if (!algo) return;
   rememberOrderStrategy(
@@ -1073,7 +1076,7 @@ let lastNiftyVwapFeed = true;
 function noteNiftyVwapFeed(feedLive) {
   if (feedLive && lastNiftyVwapFeed === false) {
     for (const algo of state.algos || []) {
-      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo)) && algo.enabled) noteFeedReconnect(algo);
+      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo) || isNiftyTest2Algo(algo)) && algo.enabled) noteFeedReconnect(algo);
     }
   }
   lastNiftyVwapFeed = Boolean(feedLive);
@@ -1109,7 +1112,7 @@ function dropPreviousIntradayBook(algo, today = VwapSignalEngine.sessionKeyIST(D
 }
 
 function beginStrategyRecord(algo) {
-  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo)) {
+  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo) || isNiftyTest2Algo(algo)) {
     const vs = runtimeState(algo);
     PositionManager.clearOpen(vs);
     vs.lastEntryBarTime = 0;
@@ -1222,6 +1225,47 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
     targetResting,
   });
   if (Number(vs.lastEntryBarTime || 0) !== beforeBar) persistAlgos();
+}
+
+function tickNiftyTest2Algo(algo, mode, feedLive) {
+  const now = Date.now();
+  const today = VwapSignalEngine.sessionKeyIST(now);
+  dropPreviousIntradayBook(algo, today);
+  const config = niftyTest2Config(algo);
+  const session = nseMarketSession();
+  const positions = positionsForStrategyName(algo, mode);
+  const open = positions.some((row) => Number(row.qty) > 0);
+  if (mode === "live" && !session.open && !open) return;
+  const pack = chainForSymbol("NIFTY");
+  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries("NIFTY", 12);
+  const weekly = nearestWeeklyExpiry(listed, "NIFTY") || listed[0] || "";
+  const monthly = listed.find((date) => !isWeeklyOptionExpiry(date, "NIFTY")) || listed[listed.length - 1] || weekly;
+  const rows = pack?.rows || [];
+  const adapter =
+    mode === "live"
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) =>
+            queueLiveAlgoOrder({
+              ...payload,
+              strategy: realStrategyName(payload.strategy) || algo.name,
+              brokerId: algo.brokerId || "dhan",
+            }),
+          squareOff,
+        })
+      : PaperTradingAdapter({ placeOrder, squareOff });
+  Test2Strategy.tick({
+    algo,
+    config,
+    now,
+    feedLive: Boolean(feedLive),
+    minutesToClose: session.open ? minutesUntilIst(15 * 60 + 30, new Date(now)) : 0,
+    monthlyRows: rows,
+    weeklyRows: rows,
+    expiries: { monthly, weekly },
+    positions,
+    orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
+    adapter,
+  });
 }
 
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
@@ -2587,6 +2631,33 @@ export async function backtestAlgo(id, options = {}) {
   if (!algo) return { error: "Strategy not found" };
   const window = resolveBacktestWindow(options);
   if (window.error) return { error: window.error };
+  if (isNiftyTest2Algo(algo)) {
+    const candles = usableCandles(options.candles, window.fromMs, window.toMs);
+    const replay = runTest2Backtest(algo, candles.length >= 8 ? candles : options.candles || []);
+    const result = {
+      ...replay,
+      sample: candles.length < 8,
+      source: options.candleSource || (candles.length >= 8 ? "dhan" : "sample"),
+      reused: Boolean(options.reused),
+      range: window.range,
+      from: window.from,
+      to: window.to,
+      timeframe: "5m",
+    };
+    algo.lastBacktest = result;
+    algo.pnl = result.pnl;
+    algo.winRate = result.winRate;
+    if (algo.runMode === "backtest") {
+      algo.enabled = false;
+      algo.status = "BACKTEST";
+      algo.brokerId = "paper";
+    }
+    const rangeLabel = window.range === "1y" ? "last 1 year" : `${window.from} → ${window.to}`;
+    state.notifications.unshift(
+      `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%`,
+    );
+    return { ok: true, algo: clone(algo), backtest: result };
+  }
   const hedge = isNiftyVwapHedgeAlgo(algo);
   const niftyVwap = isNiftyOptionEngineAlgo(algo) || hedge;
   const cfg = hedge ? niftyVwapHedgeConfig(algo) : niftyVwap ? optionEngineConfig(algo) : null;
@@ -2653,6 +2724,17 @@ export async function backtestAlgo(id, options = {}) {
   return { ok: true, algo: clone(algo), backtest: result };
 }
 
+export function resetBacktestAlgo(id) {
+  const algo = state.algos.find((item) => item.id === id);
+  if (!algo) return { error: "Strategy not found" };
+  algo.lastBacktest = null;
+  algo.pnl = 0;
+  algo.winRate = 0;
+  persistAlgos();
+  state.notifications.unshift(`Backtest ${algo.name} reset`);
+  return { ok: true, algo: clone(algo) };
+}
+
 function conditionSources(algo, side) {
   const group = side === "sell" ? algo?.sellConditions : algo?.buyConditions;
   const rows = Array.isArray(group?.rows) ? group.rows : [];
@@ -2697,6 +2779,10 @@ function runPaperAlgos() {
     }
     if (isNiftyTest1Algo(algo)) {
       tickNiftyTest1Algo(algo, "paper", feedLive);
+      continue;
+    }
+    if (isNiftyTest2Algo(algo)) {
+      tickNiftyTest2Algo(algo, "paper", feedLive);
       continue;
     }
     if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
@@ -2770,6 +2856,10 @@ function runLiveAlgos() {
     }
     if (isNiftyTest1Algo(algo)) {
       tickNiftyTest1Algo(algo, "live", feedLive);
+      continue;
+    }
+    if (isNiftyTest2Algo(algo)) {
+      tickNiftyTest2Algo(algo, "live", feedLive);
       continue;
     }
     if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {

@@ -241,7 +241,7 @@ export type Snapshot = {
     mappingScope?: "master" | "clients" | "both";
     mappedClientIds?: string[];
     runMode?: "live" | "paper" | "backtest";
-    lastBacktest?: {
+    lastBacktest?: null | {
       ranAt?: string;
       timeframe?: string;
       bars?: number;
@@ -1477,6 +1477,13 @@ export function backtestAlgo(id: string, options: BacktestOptions = {}) {
     `/algos/${id}/backtest`,
     { method: "POST", body: JSON.stringify(options) },
     { retries: 1 },
+  );
+}
+
+export function resetBacktestAlgo(id: string) {
+  return request<{ snapshot: Snapshot | null; algo?: Snapshot["algos"][number]; ok?: boolean }>(
+    `/algos/${id}/backtest/reset`,
+    { method: "POST", body: JSON.stringify({}) },
   );
 }
 

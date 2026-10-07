@@ -18,6 +18,7 @@ import {
   toggleAlgo,
   updateAlgo,
   backtestAlgo,
+  resetBacktestAlgo,
   type BacktestOptions,
   type PlaceOrderResult,
   type Snapshot,
@@ -202,6 +203,7 @@ type MarketContextValue = {
   saveAlgo: (payload: Record<string, unknown>) => Promise<void>;
   removeAlgo: (id: string) => Promise<void>;
   backtest: (id: string, options?: BacktestOptions) => Promise<void>;
+  resetBacktest: (id: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   closePosition: (id: string) => Promise<void>;
 };
@@ -648,6 +650,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       },
       backtest: async (id: string, options?: BacktestOptions) => {
         const result = await backtestAlgo(id, options);
+        if (result.snapshot) mergeSnapshot(result.snapshot);
+        else await refresh();
+      },
+      resetBacktest: async (id: string) => {
+        const result = await resetBacktestAlgo(id);
         if (result.snapshot) mergeSnapshot(result.snapshot);
         else await refresh();
       },
