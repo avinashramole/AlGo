@@ -5,6 +5,7 @@ export function MarketDNA() {
   const { data } = useMarket();
   return (
     <section className="card p-4">
+      <div className="desk-kicker">Structure</div>
       <div className="mb-1 text-sm font-bold">Market DNA</div>
       <RadarChart scores={data.dnaScores} />
       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">

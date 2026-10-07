@@ -9,7 +9,10 @@ export function ActiveAlgos() {
   return (
     <section className="card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-bold">Active Algorithms</div>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Strategies</div>
+          <div className="text-sm font-bold">Active Algorithms</div>
+        </div>
         <div className="flex items-center gap-2">
           <div className="text-[11px] font-semibold text-slate-400">{data.algos.filter((a) => a.enabled).length} live</div>
           <Link to="/algo" className="text-[11px] font-semibold text-brand-500">

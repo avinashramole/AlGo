@@ -14,7 +14,10 @@ export function OptionChain() {
   return (
     <section className="card overflow-hidden p-4">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-bold">Option Chain</div>
+        <div>
+          <div className="desk-kicker">Derivatives</div>
+          <div className="text-sm font-bold">Option Chain</div>
+        </div>
         <Link to="/options" className="min-w-0 text-[11px] font-semibold text-brand-500">
           {data.optionMeta?.symbol || "NIFTY"} · {data.optionMeta?.expiryLabel || data.optionMeta?.expiry || "expiry"} · Spot{" "}
           {formatQuote(spot, 0)} →
