@@ -694,6 +694,19 @@ function AlgoCard({
           <Metric label="Expectancy" value={formatInr(Number(algo.lastBacktest.expectancy || 0))} hint="₹ per combo (same as avg / trade)" />
         </div>
       ) : null}
+      {isNiftyTest2Kind(algo) && algo.lastBacktest?.legStats?.length ? (
+        <div className="metric-well mt-2 grid-cols-2 sm:grid-cols-4">
+          {algo.lastBacktest.legStats.map((leg) => (
+            <Metric
+              key={leg.key || `${leg.side}-${leg.option}`}
+              label={leg.label || `${leg.side || ""} ${leg.option || ""}`.trim() || "Leg"}
+              value={formatInr(Number(leg.pnl || 0))}
+              tone={moneyClass(Number(leg.pnl || 0))}
+              hint={`${leg.trades || 0} fills · WR ${formatNumber(Number(leg.winRate || 0), 1)}% · avg ${formatInr(Number(leg.avgProfit || 0))}`}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-4 text-xs text-slate-400">
         <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>

@@ -2725,6 +2725,7 @@ export async function backtestAlgo(id, options = {}) {
     delete stored.legsBook;
     delete stored.skipped;
     stored.book = (result.book || result.tradesBook || []).slice(-80);
+    stored.legBook = (result.legsBook || []).slice(-80);
     algo.lastBacktest = stored;
     algo.pnl = result.pnl;
     algo.winRate = result.winRate;

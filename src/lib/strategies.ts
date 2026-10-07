@@ -163,6 +163,23 @@ export type AlgoStrategy = {
     synthWinRate?: number;
     skippedDays?: number;
     book?: Array<{ side: string; entry: number; exit: number; qty: number; pnl: number; bars: number }>;
+    legBook?: Array<{ side: string; option?: string; strike?: number; entry: number; exit: number; qty: number; pnl: number; day?: string }>;
+    legStats?: Array<{
+      key?: string;
+      label?: string;
+      side?: string;
+      option?: string;
+      trades?: number;
+      wins?: number;
+      losses?: number;
+      winRate?: number;
+      pnl?: number;
+      avgProfit?: number;
+      avgWin?: number;
+      avgLoss?: number;
+      maxProfit?: number;
+      maxLoss?: number;
+    }>;
   };
   status: "LIVE" | "PAUSED" | "PAPER" | "BACKTEST";
   pnl: number;

@@ -358,17 +358,62 @@ function pushCombo(trades, legsBook, combo, overnight) {
   });
   for (const leg of combo.legs) {
     legsBook.push({
-      side: `${leg.side} ${leg.option}`,
+      key: leg.key || "",
+      side: leg.side,
+      option: leg.option,
+      expiryKind: leg.expiryKind || "",
+      strike: Number(leg.strike) || 0,
       symbol: leg.strike ? `NIFTY ${leg.strike} ${leg.option}` : `${leg.side} ${leg.option}`,
-      entry: leg.entry,
-      exit: leg.exit,
-      qty: leg.qty,
-      pnl: leg.pnl,
+      entry: Number(leg.entry) || 0,
+      exit: Number(leg.exit) || 0,
+      qty: combo.qty,
+      pnl: Number(leg.pnl) || 0,
       bars: overnight ? 2 : 1,
       day: combo.day,
       exitDay: combo.exitDay || combo.day,
+      source: combo.source,
     });
   }
+}
+
+const LEG_ORDER = ["sellCe", "sellPe", "buyCe", "buyPe"];
+
+function legLabel(row) {
+  const side = String(row?.side || "").toUpperCase();
+  const option = String(row?.option || "").toUpperCase();
+  return [side, option].filter(Boolean).join(" ") || String(row?.key || "LEG");
+}
+
+function summarizeLegs(legs = []) {
+  const groups = new Map();
+  for (const row of legs) {
+    const key = String(row.key || `${String(row.side || "").toLowerCase()}${row.option || ""}` || "leg");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const keys = [...LEG_ORDER.filter((key) => groups.has(key)), ...[...groups.keys()].filter((key) => !LEG_ORDER.includes(key))];
+  return keys.map((key) => {
+    const rows = groups.get(key) || [];
+    const walk = walkEquity(rows);
+    const stats = comboStats(rows, walk.equity, walk.maxDrawdown);
+    const wins = rows.filter((row) => Number(row.pnl) > 0).length;
+    const sample = rows[0] || {};
+    return {
+      key,
+      label: legLabel(sample),
+      side: String(sample.side || "").toUpperCase(),
+      option: String(sample.option || "").toUpperCase(),
+      trades: rows.length,
+      wins,
+      losses: rows.length - wins,
+      winRate: rows.length ? Number(((wins / rows.length) * 100).toFixed(1)) : 0,
+      pnl: walk.equity,
+      maxDrawdown: walk.maxDrawdown,
+      maxDdFrom: walk.maxDdFrom,
+      maxDdTo: walk.maxDdTo,
+      ...stats,
+    };
+  });
 }
 
 function walkEquity(pnls) {
@@ -439,10 +484,13 @@ export function runTest2Backtest(algo, candles = []) {
     else pushCombo(synthTrades, legsBook, combo, overnight);
   }
   const primary = storedTrades.length ? storedTrades : synthTrades;
+  const primarySource = storedTrades.length ? "stored" : "synth";
+  const primaryLegs = legsBook.filter((row) => row.source === primarySource);
   const equityWalk = walkEquity(primary);
   const pnls = primary.map((row) => row.pnl);
   const wins = pnls.filter((value) => value > 0).length;
   const stats = comboStats(primary, equityWalk.equity, equityWalk.maxDrawdown);
+  const legStats = summarizeLegs(primaryLegs);
   const storedWins = storedTrades.filter((row) => row.pnl > 0).length;
   const synthWins = synthTrades.filter((row) => row.pnl > 0).length;
   const optionSource = storedTrades.length
@@ -478,7 +526,8 @@ export function runTest2Backtest(algo, candles = []) {
     skippedDays: skipped.length,
     skipped,
     tradesBook: primary,
-    legsBook,
+    legsBook: primaryLegs,
+    legStats,
     book: primary.slice(-80),
     ...stats,
   };

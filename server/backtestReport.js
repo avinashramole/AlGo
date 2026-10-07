@@ -27,23 +27,34 @@ function money(value) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
-function tradeRows(result = {}) {
-  const rows = Array.isArray(result.tradesBook)
-    ? result.tradesBook
-    : Array.isArray(result.book)
-      ? result.book
-      : [];
-  return rows.map((row, index) => ({
+function mapTradeRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
     n: index + 1,
     day: cell(row.day || row.date || ""),
+    exitDay: cell(row.exitDay || ""),
     side: cell(row.side || row.type || ""),
+    option: cell(row.option || ""),
+    strike: Number(row.strike || 0),
     symbol: cell(row.symbol || row.reason || ""),
     entry: Number(row.entry || row.avg || 0),
     exit: Number(row.exit || 0),
     qty: Number(row.qty || 0),
     pnl: Number(row.pnl || 0),
     bars: Number(row.bars || 0),
+    key: cell(row.key || ""),
   }));
+}
+
+function tradeRows(result = {}) {
+  return mapTradeRows(
+    Array.isArray(result.tradesBook) ? result.tradesBook : Array.isArray(result.book) ? result.book : [],
+  );
+}
+
+function legRows(result = {}) {
+  if (Array.isArray(result.legsBook) && result.legsBook.length) return mapTradeRows(result.legsBook);
+  if (Array.isArray(result.legBook) && result.legBook.length) return mapTradeRows(result.legBook);
+  return [];
 }
 
 export function buildBacktestReport(algo = {}, result = {}) {
@@ -99,6 +110,8 @@ export function buildBacktestReport(algo = {}, result = {}) {
       holdStyle,
     },
     trades,
+    legs: legRows(result),
+    legStats: Array.isArray(result.legStats) ? result.legStats : [],
   };
 }
 
@@ -177,6 +190,12 @@ export function renderBacktestExcel(report) {
     ["Max trades in DD", report.summary.maxTradesInDd],
     ["Lot", report.summary.lotNote],
     ["Cost / combo", money(report.summary.costPerCombo)],
+    ...(Array.isArray(report.legStats) ? report.legStats : []).flatMap((leg) => [
+      [`${leg.label || "Leg"} P&L`, money(leg.pnl)],
+      [`${leg.label || "Leg"} trades`, leg.trades],
+      [`${leg.label || "Leg"} win rate %`, leg.winRate],
+      [`${leg.label || "Leg"} avg`, money(leg.avgProfit)],
+    ]),
     ["Stored trades", report.summary.storedTrades],
     ["Stored win rate %", report.summary.storedWinRate],
     ["Skipped days", report.summary.skippedDays],
@@ -186,18 +205,18 @@ export function renderBacktestExcel(report) {
   ]
     .map(([label, value]) => `<Row>${excelCell(label)}${excelCell(value)}</Row>`)
     .join("");
-  const tradeHeader = `<Row>${["#", "Day", "Side", "Symbol", "Entry", "Exit", "Qty", "P&L", "Bars"].map((h) => excelCell(h)).join("")}</Row>`;
-  const tradeBody = report.trades
-    .map(
-      (row) =>
-        `<Row>${excelCell(row.n, "Number")}${excelCell(row.day)}${excelCell(row.side)}${excelCell(row.symbol)}${excelCell(row.entry, "Number")}${excelCell(row.exit, "Number")}${excelCell(row.qty, "Number")}${excelCell(row.pnl, "Number")}${excelCell(row.bars, "Number")}</Row>`,
-    )
-    .join("");
+  const tradeHeader = `<Row>${["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry", "Exit", "Qty", "P&L", "Bars"].map((h) => excelCell(h)).join("")}</Row>`;
+  const rowXml = (row) =>
+    `<Row>${excelCell(row.n, "Number")}${excelCell(row.day)}${excelCell(row.side)}${excelCell(row.option)}${excelCell(row.strike, "Number")}${excelCell(row.symbol)}${excelCell(row.entry, "Number")}${excelCell(row.exit, "Number")}${excelCell(row.qty, "Number")}${excelCell(row.pnl, "Number")}${excelCell(row.bars, "Number")}</Row>`;
+  const tradeBody = (report.trades || []).map(rowXml).join("");
+  const legs = report.legs?.length ? report.legs : report.trades || [];
+  const legBody = legs.map(rowXml).join("");
   const xml = `<?xml version="1.0"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
 <Worksheet ss:Name="Summary"><Table>${summaryRows}</Table></Worksheet>
-<Worksheet ss:Name="Trades"><Table>${tradeHeader}${tradeBody}</Table></Worksheet>
+<Worksheet ss:Name="Combos"><Table>${tradeHeader}${tradeBody}</Table></Worksheet>
+<Worksheet ss:Name="Legs"><Table>${tradeHeader}${legBody}</Table></Worksheet>
 </Workbook>`;
   return Buffer.from(xml, "utf8");
 }
@@ -224,21 +243,28 @@ export function renderBacktestPdf(report) {
     report.summary.maxWinStreak || report.summary.maxLoseStreak
       ? `Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L · Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`
       : "",
-    report.summary.optionSource ? `Premiums ${report.summary.optionSource} (not AlgoTest NSE tape)` : "",
+    ...(Array.isArray(report.legStats) ? report.legStats : []).map(
+      (leg) =>
+        `${leg.label || "Leg"} P&L Rs ${money(leg.pnl)} · ${leg.trades || 0} fills · WR ${leg.winRate || 0}% · avg ${money(leg.avgProfit)}`,
+    ),
+    report.summary.optionSource ? `Premiums ${report.summary.optionSource}` : "",
     `Generated ${report.generatedAt}`,
     report.strategy.summary,
     "",
-    "#  Day         Side        Entry      Exit       Qty      P&L",
+    "#  Day         Side  Opt   Strike   Entry     Exit      Qty      P&L",
   ].filter((line, index, all) => line || all[index - 1]);
-  for (const row of report.trades) {
+  const fillRows = report.legs?.length ? report.legs : report.trades;
+  for (const row of fillRows) {
     const n = String(row.n).padStart(3, " ");
     const day = String(row.day || "").padEnd(11, " ").slice(0, 11);
-    const side = String(row.side || "").padEnd(10, " ").slice(0, 10);
+    const side = String(row.side || "").padEnd(5, " ").slice(0, 5);
+    const option = String(row.option || "").padEnd(4, " ").slice(0, 4);
+    const strike = String(row.strike || "").padStart(6, " ").slice(-6);
     lines.push(
-      `${n} ${day} ${side} ${money(row.entry).padStart(8)} ${money(row.exit).padStart(8)} ${String(row.qty).padStart(6)} ${money(row.pnl).padStart(8)}`,
+      `${n} ${day} ${side} ${option} ${strike} ${money(row.entry).padStart(8)} ${money(row.exit).padStart(8)} ${String(row.qty).padStart(6)} ${money(row.pnl).padStart(8)}`,
     );
   }
-  if (!report.trades.length) lines.push("No trades in this replay.");
+  if (!fillRows.length) lines.push("No trades in this replay.");
 
   const perPage = 46;
   const pages = [];

@@ -214,6 +214,11 @@ test("TEST2 backtest counts one combo as one trade", () => {
   assert.equal(result.trades, result.combos);
   assert.equal(result.winRate, result.comboWinRate);
   assert.equal(result.tradesBook.every((row) => row.side === "COMBO"), true);
+  assert.equal(result.legsBook.length, 36);
+  assert.equal(result.legsBook.filter((row) => row.side === "SELL").length, 18);
+  assert.equal(result.legsBook.filter((row) => row.side === "BUY").length, 18);
+  assert.equal(result.legStats.length, 4);
+  assert.equal(result.legStats.every((row) => Number.isFinite(row.pnl)), true);
   assert.equal(Number.isFinite(result.avgProfit), true);
   assert.equal(Number.isFinite(result.rewardRisk), true);
   const intra = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), candles);
