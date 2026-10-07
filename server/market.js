@@ -71,7 +71,7 @@ import {
   hedgePreviewTrade,
   hedgeReversalFromBars,
 } from "./niftyVwapHedge/index.js";
-import { Test2Strategy, runTest2Backtest } from "./niftyTest2/index.js";
+import { Test2Strategy, optionMarksFromChain, runTest2Backtest } from "./niftyTest2/index.js";
 import { Test1Strategy } from "./niftyTest1/index.js";
 import {
   applyHedgeDailyLive,
@@ -1087,12 +1087,29 @@ function preferWeeklyDeskForReversal() {
   // Strategies still read the weekly date from the listed expiries.
 }
 
+function test2LegMatch(leg, row) {
+  if (!leg || !row) return false;
+  if (leg.securityId && row.securityId && String(leg.securityId) === String(row.securityId)) return true;
+  const option = String(row.option || "");
+  const strike = Number(row.strike);
+  if (option && leg.option && option === String(leg.option) && strike === Number(leg.strike)) return true;
+  const symbol = String(row.symbol || "");
+  if (leg.strike && symbol === `NIFTY ${leg.strike} ${leg.option}`) return true;
+  return Boolean(leg.symbol && symbol && symbol === String(leg.symbol));
+}
+
 function positionsForStrategyName(algo, mode) {
   const vs = runtimeState(algo);
+  const t2 = isNiftyTest2Algo(algo) ? algo.test2State || {} : null;
+  const legs = Array.isArray(t2?.legs) ? t2.legs : [];
   const mine = (row) => {
-    if (row.strategy && row.strategy !== algo.name) return false;
-    if (row.strategy === algo.name) return true;
+    const tagged = realStrategyName(row.strategy) || row.strategy;
+    if (tagged && tagged !== algo.name) return false;
+    if (tagged === algo.name) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
+    if (t2 && (t2.entered || t2.entryDate || legs.length) && Number(row.qty) > 0) {
+      if (legs.some((leg) => test2LegMatch(leg, row))) return true;
+    }
     return false;
   };
   const rows = state.positions || [];
@@ -1330,7 +1347,7 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
     monthlyRows: rows,
     weeklyRows: rows,
     expiries: { monthly, weekly },
-    marks: spot > 0 ? { spot, NIFTY: spot } : {},
+    marks: optionMarksFromChain(rows, spot),
     positions,
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,

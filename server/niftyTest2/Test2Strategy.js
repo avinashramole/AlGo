@@ -16,7 +16,7 @@ function rollSession(state, day, hasOpen, holdOvernight) {
   state.inFlight = false;
   state.dayPnl = 0;
   if (hasOpen && holdOvernight) {
-    if (!state.entryDate) state.entryDate = previous || "overnight";
+    if (!state.entryDate || state.entryDate === "overnight") state.entryDate = previous || day;
     state.entered = true;
     return state;
   }
@@ -59,7 +59,7 @@ function minutesOf(now) {
 function shouldSellTomorrow(state, config, today, now) {
   if (!config.holdOvernight) return false;
   const entryDate = String(state.entryDate || "");
-  if (!entryDate || entryDate === today) return false;
+  if (!entryDate || entryDate === today || entryDate === "overnight") return false;
   return minutesOf(now) >= hmToMinutes(config.exitTimeIst || config.startTimeIst || "09:35");
 }
 
@@ -104,6 +104,33 @@ function fillOf(open, state) {
   return Number(match?.premium || match?.price || open.ltp || 0);
 }
 
+function markOf(open, marks = {}, fill = 0) {
+  const symbol = String(open.symbol || "");
+  const built = open.strike && open.option ? `NIFTY ${open.strike} ${open.option}` : "";
+  const fromMarks = Number(marks[symbol] || (built && marks[built]) || 0);
+  if (fromMarks > 0) return fromMarks;
+  const ltp = Number(open.ltp || 0);
+  if (ltp > 0) return ltp;
+  return Number(fill) || 0;
+}
+
+export function optionMarksFromChain(rows = [], spot = 0) {
+  const marks = {};
+  if (Number(spot) > 0) {
+    marks.spot = Number(spot);
+    marks.NIFTY = Number(spot);
+  }
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const strike = Number(row?.strike);
+    if (!(strike > 0)) continue;
+    const ce = Number(row.callLtp || row.ce || 0);
+    const pe = Number(row.putLtp || row.pe || 0);
+    if (ce > 0) marks[`NIFTY ${strike} CE`] = ce;
+    if (pe > 0) marks[`NIFTY ${strike} PE`] = pe;
+  }
+  return marks;
+}
+
 function spotFromOpens(opens = [], marks = {}) {
   const direct = Number(marks.spot || marks.NIFTY || marks.underlying || 0);
   if (direct > 0) return direct;
@@ -143,7 +170,7 @@ export const Test2Strategy = {
     const legs = [];
     for (const open of opens) {
       const fill = fillOf(open, state);
-      const mark = Number(marks[open.symbol] || open.ltp || fill);
+      const mark = markOf(open, marks, fill);
       const dir = String(open.side || open.type || "BUY").toUpperCase() === "SELL" ? -1 : 1;
       if (fill > 0 && mark > 0) dayPnl += (mark - fill) * Number(open.qty || config.qty) * dir;
       legs.push({
@@ -189,8 +216,8 @@ export const Test2Strategy = {
     for (const open of opens) {
       const side = String(open.side || open.type || "BUY").toUpperCase();
       if (side !== "BUY") continue;
-      const fill = Number(open.avg || 0);
-      const mark = Number(open.ltp || fill);
+      const fill = fillOf(open, state);
+      const mark = markOf(open, marks, fill);
       if (!(fill > 0) || !(mark > 0)) continue;
       const sl = fill * (1 - config.hedgeSlPct / 100);
       if (mark > sl) continue;

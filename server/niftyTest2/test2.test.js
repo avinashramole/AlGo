@@ -198,6 +198,68 @@ test("TEST2 intraday squares off the same day at 15:15", () => {
   assert.equal(closes.every((row) => row.product === "MIS"), true);
 });
 
+test("TEST2 same-day restart does not fire BTST exit", () => {
+  const algo = defaultNiftyTest2Algo();
+  const rows = buildSyntheticChain(24500, 50, 8);
+  Test2Strategy.tick({
+    algo,
+    now: T0935,
+    feedLive: true,
+    monthlyRows: rows,
+    weeklyRows: rows,
+    adapter: { place: () => ({ queued: true, status: "PENDING" }) },
+    positions: [],
+    orders: [],
+  });
+  algo.test2State = { entered: true, legs: algo.test2State.legs, entryDate: "", sessionDate: "" };
+  const closes = [];
+  const sameDay = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-07T09:50:00.000Z"),
+    feedLive: true,
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: [
+      { symbol: "NIFTY 24600 CE", side: "SELL", qty: 65, avg: 80, ltp: 78, option: "CE", strike: 24600 },
+      { symbol: "NIFTY 24400 PE", side: "SELL", qty: 65, avg: 80, ltp: 79, option: "PE", strike: 24400 },
+      { symbol: "NIFTY 24700 CE", side: "BUY", qty: 65, avg: 20, ltp: 21, option: "CE", strike: 24700 },
+      { symbol: "NIFTY 24300 PE", side: "BUY", qty: 65, avg: 20, ltp: 19, option: "PE", strike: 24300 },
+    ],
+    orders: [],
+  });
+  assert.equal(sameDay.action, "hold");
+  assert.equal(closes.length, 0);
+});
+
+test("TEST2 hedge SL exits only the hit BUY leg", () => {
+  const algo = defaultNiftyTest2Algo();
+  algo.test2State = {
+    entered: true,
+    entryDate: "2026-10-07",
+    sessionDate: "2026-10-07",
+    legs: [{ option: "CE", strike: 24700, premium: 20, side: "BUY" }],
+  };
+  const closes = [];
+  const hit = Test2Strategy.tick({
+    algo,
+    now: Date.parse("2026-10-07T06:00:00.000Z"),
+    feedLive: true,
+    marks: { spot: 24500, "NIFTY 24700 CE": 15 },
+    adapter: { place: (payload) => closes.push(payload) },
+    positions: [
+      { symbol: "NIFTY 24600 CE", side: "SELL", qty: 65, avg: 80, ltp: 78, option: "CE", strike: 24600 },
+      { symbol: "NIFTY 24400 PE", side: "SELL", qty: 65, avg: 80, ltp: 79, option: "PE", strike: 24400 },
+      { symbol: "NIFTY 24700 CE", side: "BUY", qty: 65, option: "CE", strike: 24700 },
+      { symbol: "NIFTY 24300 PE", side: "BUY", qty: 65, avg: 20, ltp: 19, option: "PE", strike: 24300 },
+    ],
+    orders: [],
+  });
+  assert.equal(hit.action, "hold");
+  assert.equal(closes.length, 1);
+  assert.equal(closes[0].side, "SELL");
+  assert.equal(closes[0].option, "CE");
+  assert.equal(closes[0].strike, 24700);
+});
+
 test("TEST2 overall profit 5% of margin exits all four live legs", () => {
   const algo = defaultNiftyTest2Algo();
   const cfg = niftyTest2Config(algo);
