@@ -673,9 +673,6 @@ function contractSecurityId(payload = {}) {
   if (!(strike > 0) || (opt !== "CE" && opt !== "PE")) return "";
   const root = candleSymbol(payload.symbol || "NIFTY");
   const pack = chainForSymbol(root);
-  const wanted = normalizeExpiry(payload.expiry);
-  const chainExpiry = normalizeExpiry(pack?.meta?.expiry);
-  if (wanted && chainExpiry && wanted !== chainExpiry) return "";
   const row = (pack?.rows || optionRowsForSymbol(root)).find((item) => Number(item.strike) === strike);
   if (!row) return "";
   const id = opt === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
@@ -998,11 +995,8 @@ function upsertOptionBar(list, barTime, ltp) {
   return bars;
 }
 
-function optionPremium(symbol, strike, option, expiry) {
+function optionPremium(symbol, strike, option) {
   const pack = chainForSymbol(symbol);
-  if (expiry && pack?.meta?.expiry && normalizeExpiry(pack.meta.expiry) !== normalizeExpiry(expiry)) {
-    return 0;
-  }
   const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
   const ltp = option === "PE" ? Number(row?.putLtp) : Number(row?.callLtp);
   return ltp > 0 ? round2(ltp) : 0;

@@ -268,6 +268,77 @@ test("crude first candle copies the nifty candle rule and uses the CRUDEOIL opti
   }
 });
 
+test("crude first-candle matched colors send one order after the next 5m window", () => {
+  const niftyExpiry = "2026-10-06";
+  const crudeExpiry = "2026-10-19";
+  applyLiveQuotes([{ symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6120, securityId: "426268" }]);
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: niftyExpiry,
+    rows: [{ strike: 22650, atm: true, callLtp: 120, putLtp: 110, callId: "nifty-ce-22650", putId: "nifty-pe-22650" }],
+    source: "dhan",
+  });
+  cacheOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: crudeExpiry,
+    expiries: [crudeExpiry],
+    rows: [{ strike: 6100, atm: true, callLtp: 40, putLtp: 50, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+    spot: 6120,
+    source: "dhan",
+  });
+  const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
+  const duringFirst = open0900 + 2 * 60_000;
+  const afterWindow = open0900 + 12 * 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "CRUDE late window first candle",
+    kind: "indicator",
+    symbol: "NIFTY",
+    indicator: "VWAP",
+    buyLeft: "price",
+    buyOp: "close_above",
+    buyRight: "vwap",
+    runMode: "paper",
+  });
+  Date.now = () => duringFirst;
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: duringFirst });
+  try {
+    assert.equal(created.kind, "crude-first-candle");
+    setCrudeFutureChartCandles([{ time: open0900, open: 6100, high: 6130, low: 6090, close: 6120, volume: 20 }]);
+    toggleAlgo(created.id, { enabled: true });
+    tickMarket();
+    tickMarket();
+    cacheOptionDesk({
+      symbol: "CRUDEOIL",
+      expiry: crudeExpiry,
+      expiries: [crudeExpiry],
+      rows: [{ strike: 6100, atm: true, callLtp: 48, putLtp: 44, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+      spot: 6120,
+      source: "dhan",
+    });
+    tickMarket();
+    Date.now = () => afterWindow;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: afterWindow });
+    setCrudeFutureChartCandles([{ time: open0900, open: 6100, high: 6130, low: 6090, close: 6120, volume: 20 }]);
+    tickMarket();
+    tickMarket();
+    const desk = snapshot();
+    const algo = desk.algos.find((row) => row.id === created.id);
+    const buys = desk.orders.filter((row) => row.strategy === "CRUDE late window first candle" && row.side === "BUY");
+    assert.match(String(algo.lastSignal || ""), /PREVIEW CRUDE FUT GREEN/, String(algo.lastSignal || ""));
+    assert.doesNotMatch(String(algo.lastSignal || ""), /^WAIT\b/);
+    assert.equal(buys.length, 1, String(algo.lastSignal || ""));
+    assert.equal(buys[0].symbol, "CRUDEOIL 6100 CE");
+    assert.equal(buys[0].securityId, "crude-ce-6100");
+  } finally {
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    setCrudeFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
+});
+
 test("crude live order keeps the CRUDEOIL contract while the desk shows NIFTY", () => {
   const crudeExpiry = "2026-10-19";
   setOptionDesk({

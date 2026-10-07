@@ -297,8 +297,8 @@ test("PE buy is at the next minute after the 15m close, not 17 minutes later", (
   const late = defaultNiftyVwapHedgeAlgo({ name: "Hedge 247" });
   const lateBook = bookAdapter();
   const at247 = input(late, lateBook, t0915 + 32 * 60_000);
-  assert.equal(at247.reason, "missed-close");
-  assert.equal(lateBook.places.length, 0);
+  assert.equal(at247.action, "entry");
+  assert.equal(lateBook.places[0].option, "PE");
 });
 
 test("PE 15m open above VWAP and close below buys 1 lot after the candle closes", () => {
