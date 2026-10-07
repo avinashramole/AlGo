@@ -65,8 +65,8 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.equal(saved.summary.avgProfit, -60.25);
   assert.match(renderBacktestPdf(saved).toString("latin1"), /Avg\/trade/);
   assert.match(renderBacktestPdf(saved).toString("latin1"), /Indian Rupee/);
-  assert.match(renderBacktestPdf(saved).toString("latin1"), /INR/);
-  assert.equal(renderBacktestPdf(saved).toString("latin1").includes(" Rs "), false);
+  assert.match(renderBacktestPdf(saved).toString("latin1"), /Rs\. /);
+  assert.equal(renderBacktestPdf(saved).toString("latin1").includes("₹"), false);
   const loaded = loadBacktestReport("a14", algo);
   assert.equal(loaded.summary.trades, 1);
   const pdf = renderBacktestPdf(loaded);
@@ -98,6 +98,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /ROM %/);
   assert.match(pdf.toString("latin1"), /2026-09-01 09:35/);
   assert.match(pdf.toString("latin1"), /2026-09-02 09:35/);
+  assert.match(pdf.toString("latin1"), /Rs\. 1,220\.00|Rs\. 1,08,000\.00|Rs\. /);
+  assert.match(pdf.toString("latin1"), /P&L Rs\./);
+  assert.match(pdf.toString("latin1"), /Margin Rs\./);
   assert.equal(saved.legs[0].entryAt, "2026-09-01 09:35");
   assert.equal(saved.legs[0].exitAt, "2026-09-02 09:35");
   assert.equal(saved.legs[0].margin, 108000);
