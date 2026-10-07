@@ -363,50 +363,35 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         {test1 ? (
           <div className="mt-2.5 space-y-1.5">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              TEST1 buys only the current ATM CE or PE of the selected script. After 09:30 IST, a completed 5m green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
+              Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed 5m green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
             </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-500">Script · ATM option</div>
-              <div
+            <label className="block text-xs font-semibold text-slate-500">
+              Script · ATM option
+              <select
                 data-test1-scripts
-                className="mt-1 max-h-36 overflow-y-auto overscroll-contain rounded-lg border border-[var(--border)] bg-[var(--bg)] p-1.5"
+                className={fieldClass}
+                value={form.symbol || "NIFTY"}
+                onChange={(event) => {
+                  const row = TEST1_SCRIPTS.find((item) => item.id === event.target.value) || TEST1_SCRIPTS[0];
+                  set({
+                    symbol: row.id,
+                    lotSize: row.lot,
+                    qty: (form.lots || 1) * row.lot,
+                    expiryKind: row.expiryKind,
+                    endTimeIst: row.session === "mcx" ? "23:15" : "15:15",
+                    instrument: "option",
+                    strikeOffset: 0,
+                    side: "BUY",
+                  });
+                }}
               >
-                <div className="grid grid-cols-2 gap-1.5">
-                  {TEST1_SCRIPTS.map((row) => {
-                    const active = (form.symbol || "NIFTY") === row.id;
-                    return (
-                      <button
-                        key={row.id}
-                        type="button"
-                        onClick={() =>
-                          set({
-                            symbol: row.id,
-                            lotSize: row.lot,
-                            qty: (form.lots || 1) * row.lot,
-                            expiryKind: row.expiryKind,
-                            endTimeIst: row.session === "mcx" ? "23:15" : "15:15",
-                            instrument: "option",
-                            strikeOffset: 0,
-                            side: "BUY",
-                          })
-                        }
-                        className={cn(
-                          "flex h-11 flex-col items-start justify-center rounded-md border px-2 text-left",
-                          active
-                            ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950"
-                            : "border-[var(--border)] bg-[var(--card)]",
-                        )}
-                      >
-                        <span className="text-[11px] font-bold leading-none">{row.label}</span>
-                        <span className={cn("mt-1 text-[10px] font-semibold leading-none", active ? "opacity-80" : "text-slate-400")}>
-                          ATM CE/PE · {row.group}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+                {TEST1_SCRIPTS.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label} · ATM CE/PE
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         ) : niftyTest ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
