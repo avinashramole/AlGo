@@ -9,7 +9,7 @@ set -euo pipefail
 BRANCH=${1:-main}
 WEBROOT=/var/www/trade2smart
 UI_MARKER="Script · NIFTY BANKNIFTY SENSEX"
-RESULT_MARKER="research book from index candles"
+RESULT_MARKER="Connect Dhan and run Backtest again"
 ENGINE_MARKER="storedTrades.length ? storedTrades : synthTrades"
 RAW="https://raw.githubusercontent.com/avinashramole/AlGo/${BRANCH}"
 HOME_DIR=/opt/t2s
@@ -120,4 +120,4 @@ systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || tru
 echo "OK website published."
 grep -l "$RESULT_MARKER" "$WEBROOT/assets/"*.js | head
 echo "Open https://trade2smart.com and press Ctrl+Shift+R."
-echo "Run TEST2 Backtest again. The card must show P&L and: $RESULT_MARKER"
+echo "Run TEST2 Backtest again with Dhan LIVE. The card must fetch rolling option tape."
