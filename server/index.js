@@ -1081,8 +1081,8 @@ app.get("/api/algos/:id/backtest/report", (req, res) => {
   const format = String(req.query.format || "pdf").toLowerCase();
   if (format === "xlsx" || format === "xls" || format === "excel") {
     const body = renderBacktestExcel(report);
-    res.setHeader("Content-Type", "application/vnd.ms-excel");
-    res.setHeader("Content-Disposition", `attachment; filename="${reportDownloadName(report, "xls")}"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${reportDownloadName(report, "xlsx")}"`);
     res.send(body);
     return;
   }

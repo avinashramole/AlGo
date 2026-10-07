@@ -1556,7 +1556,7 @@ export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx")
   }
   const blob = await response.blob();
   const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
-  const filename = match?.[1] || `backtest.${format === "pdf" ? "pdf" : "xls"}`;
+  const filename = match?.[1] || `backtest.${format === "pdf" ? "pdf" : "xlsx"}`;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
