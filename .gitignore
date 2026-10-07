@@ -30,6 +30,7 @@ server/data/broker-sessions.json
 server/data/scrip-front.json
 server/data/last-quotes.json
 server/data/nifty-option-history/
+server/data/nifty-rolling-options/
 server/data/index-history/
 server/data/backtest.busy
 server/data/backtests/

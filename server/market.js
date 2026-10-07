@@ -2665,10 +2665,13 @@ export async function backtestAlgo(id, options = {}) {
       timeframe: "5m",
       ranAt: new Date().toISOString(),
       reportReady: true,
+      optionHistory: options.optionHistory || undefined,
     };
     saveBacktestReport(algo, result);
     const stored = { ...result };
     delete stored.tradesBook;
+    delete stored.legsBook;
+    delete stored.skipped;
     stored.book = (result.book || result.tradesBook || []).slice(-80);
     algo.lastBacktest = stored;
     algo.pnl = result.pnl;
@@ -2681,7 +2684,9 @@ export async function backtestAlgo(id, options = {}) {
     persistAlgos();
     const rangeLabel = window.range === "custom" ? `${window.from} → ${window.to}` : `last ${window.years || 10} year${Number(window.years || 10) === 1 ? "" : "s"}`;
     state.notifications.unshift(
-      `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}% · PDF/Excel ready`,
+      `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${
+        result.storedTrades ? ` · ${result.storedTrades} Dhan rolling days` : ""
+      }${result.skippedDays ? ` · skipped ${result.skippedDays}` : ""} · PDF/Excel ready`,
     );
     return { ok: true, algo: clone(algo), backtest: stored };
   }

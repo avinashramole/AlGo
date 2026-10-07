@@ -619,7 +619,9 @@ function AlgoCard({
           value={String(trades)}
           hint={
             isNiftyTest2Kind(algo)
-              ? `${algo.lastBacktest?.legs || trades * 4} legs · 1 combo = 1 trade`
+              ? algo.lastBacktest?.storedTrades
+                ? `${algo.lastBacktest.storedTrades} Dhan rolling days · skipped ${algo.lastBacktest.skippedDays || 0}`
+                : `${algo.lastBacktest?.legs || trades * 4} legs · synth premiums`
               : algo.lastBacktest?.combos
                 ? `${algo.lastBacktest.combos} session days · 4 legs each`
                 : "Last replay fills"
@@ -628,14 +630,20 @@ function AlgoCard({
         <Metric
           label="Backtest win rate"
           value={`${formatNumber(winRate, 1)}%`}
-          hint={isNiftyTest2Kind(algo) ? "Winning combos / all combos" : "Winning fills / all fills"}
+          hint={
+            isNiftyTest2Kind(algo)
+              ? algo.lastBacktest?.storedTrades
+                ? "Winning combos on Dhan rolling days only"
+                : "Synth model — not live proof"
+              : "Winning fills / all fills"
+          }
         />
         <Metric label="Backtest drawdown" value={rupee(drawdown)} tone={moneyClass(-Math.abs(drawdown))} hint="Peak-to-trough of the replay equity" />
       </div>
 
       {isNiftyTest2Kind(algo) && algo.lastBacktest?.avgProfit != null ? (
         <div className="metric-well mt-3 grid-cols-2 sm:grid-cols-4">
-          <Metric label="Avg / trade" value={formatInr(Number(algo.lastBacktest.avgProfit || 0))} tone={moneyClass(Number(algo.lastBacktest.avgProfit || 0))} hint="AlgoTest: average profit per trade" />
+          <Metric label="Avg / trade" value={formatInr(Number(algo.lastBacktest.avgProfit || 0))} tone={moneyClass(Number(algo.lastBacktest.avgProfit || 0))} hint="After ₹80 combo cost" />
           <Metric label="Avg win" value={formatInr(Number(algo.lastBacktest.avgWin || 0))} tone="text-up" hint="Winning combos only" />
           <Metric label="Avg loss" value={formatInr(Number(algo.lastBacktest.avgLoss || 0))} tone="text-down" hint="Losing combos only" />
           <Metric
@@ -669,10 +677,10 @@ function AlgoCard({
             {algo.lastBacktest.optionSource
               ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${
                   algo.lastBacktest.optionSource === "stored"
-                    ? "stored Dhan history"
+                    ? "Dhan rolling options (trusted)"
                     : algo.lastBacktest.optionSource === "mixed"
-                      ? "stored Dhan history + synth gaps"
-                      : "synthesized from NIFTY (not AlgoTest tape)"
+                      ? "Dhan rolling + synth gaps"
+                      : "synthesized from NIFTY futures"
                 }`
               : ""}
             {algo.lastBacktest.optionHistory?.overwritten?.length
@@ -683,9 +691,10 @@ function AlgoCard({
             {" · PDF + Excel ready"}
             {isNiftyTest2Kind(algo) ? (
               <div className="mt-1 text-[11px] leading-snug text-slate-500">
-                AlgoTest.in counts one 4-leg combo as one trade — this card now does the same. Premiums still come from
-                NIFTY futures (synth or stored Dhan), not AlgoTest NSE option OHLC, so totals will not match their
-                ₹13.13L tape.
+                {algo.lastBacktest.storedTrades
+                  ? `Trusted book: ${algo.lastBacktest.storedTrades} days from Dhan /charts/rollingoption (weekly+monthly ATM±10). Win % is those days only after costs.`
+                  : "Dhan not connected or no rolling days stored — this win % is a futures model, not live proof. Connect Dhan and run Backtest again."}
+                {algo.lastBacktest.optionHistory?.truncated ? " Download hit the time cap — run Backtest again to fill more days." : ""}
               </div>
             ) : null}
           </div>
