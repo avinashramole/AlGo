@@ -45,6 +45,9 @@ if [ -d .git ]; then
     server/indexHistory.js \
     server/indexHistorySync.js \
     server/market.js \
+    server/niftyVwap/config.js \
+    server/niftyTest1/Test1Strategy.js \
+    server/strategies.js \
     server/backtestReport.js \
     deploy/publish-web.js 2>/dev/null || true
 fi
@@ -56,7 +59,7 @@ pull_raw() {
   echo "downloaded $rel"
 }
 
-if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
   echo "Git checkout did not bring the one-script TEST2 form. Downloading files from GitHub."
   pull_raw src/components/dashboard/StrategyBuilder.tsx
   pull_raw src/components/dashboard/OneMinuteHistoryBar.tsx
@@ -70,6 +73,9 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw server/indexHistory.js
   pull_raw server/indexHistorySync.js
   pull_raw server/market.js
+  pull_raw server/niftyVwap/config.js
+  pull_raw server/niftyTest1/Test1Strategy.js
+  pull_raw server/strategies.js
   pull_raw server/backtestReport.js
 fi
 
@@ -108,6 +114,10 @@ if ! grep -q "ROLLING_BACKTEST_DEADLINE_MS" "$HOME_DIR/server/dhanRollingOption.
 fi
 if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHistoryBar.tsx" || ! grep -q "ensureReplayBars" "$HOME_DIR/server/index.js"; then
   echo "FAIL: $HOME_DIR still has the old 1m history sync."
+  exit 1
+fi
+if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'FIRST_CANDLE_TIMEFRAMES\[algo.timeframe\]' "$HOME_DIR/server/niftyVwap/config.js"; then
+  echo "FAIL: $HOME_DIR still has the locked TEST1 5m timeframe."
   exit 1
 fi
 

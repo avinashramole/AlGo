@@ -298,7 +298,7 @@ export function summarizeAlgo(algo) {
     const body = Math.round((Number(algo.minBodyPct) || 0.9) * 100);
     const wick = Math.round((Number(algo.maxWickPct) || 0.1) * 100);
     const start = algo.startTimeIst || "09:30";
-    return `TEST1 · ${algo.symbol || "NIFTY"} 5m ATM CE/PE only · after ${start} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL signal low · ${size}`;
+    return `TEST1 · ${algo.symbol || "NIFTY"} ${algo.timeframe || "5m"} ATM CE/PE only · after ${start} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL signal low · ${size}`;
   }
   if (isNiftyTest2Algo(algo)) {
     const start = algo.startTimeIst || "09:35";
