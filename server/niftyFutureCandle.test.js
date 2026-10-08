@@ -5,15 +5,20 @@ import {
   createAlgo,
   crudeFuturePreviewBar,
   crudeFutureSignalBars,
+  deleteAlgo,
+  drainPendingLiveAlgoOrders,
   formatLiveFuturePreview,
   niftyFuturePreviewBar,
   niftyFutureSignalBars,
   peekNiftyFutureBars,
   setCrudeFutureChartCandles,
+  setDhanFeed,
   setLiveCandles,
   setNiftyFutureChartCandles,
+  setOptionDesk,
   snapshot,
   tickMarket,
+  toggleAlgo,
 } from "./market.js";
 
 const OPEN_0915 = Date.parse("2026-09-29T03:45:00.000Z");
@@ -292,5 +297,129 @@ test("paused NIFTY and CRUDE OIL always show future candle green or red", () => 
     Date.now = realNow;
     setNiftyFutureChartCandles([]);
     setCrudeFutureChartCandles([]);
+  }
+});
+
+const WEEKLY_EXPIRY = "2026-10-01";
+const OPEN_1420 = Date.parse("2026-09-29T08:50:00.000Z");
+
+function niftyRedFutDesk(now) {
+  Date.now = () => now;
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: now });
+  setNiftyFutureChartCandles([
+    { time: OPEN_1420, open: 22302, high: 22310, low: 22290, close: 22293, volume: 20 },
+  ]);
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: WEEKLY_EXPIRY,
+    expiries: [WEEKLY_EXPIRY],
+    rows: [{ strike: 22300, atm: true, callLtp: 120, putLtp: 80, callId: "ce-22300", putId: "pe-22300" }],
+    spot: 22293,
+    source: "dhan",
+  });
+}
+
+test("NIFTY FUT RED + ATM PE green sends BUY PE after the 5m close", () => {
+  const during1420 = OPEN_1420 + 2 * 60_000;
+  const after1425 = OPEN_1420 + FIVE + 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "NIFTY wait PE send",
+    kind: "nifty-first-candle",
+    runMode: "paper",
+    expiryKind: "weekly",
+  });
+  try {
+    niftyRedFutDesk(during1420);
+    toggleAlgo(created.id, { enabled: true });
+    tickMarket();
+    setOptionDesk({
+      symbol: "NIFTY",
+      expiry: WEEKLY_EXPIRY,
+      expiries: [WEEKLY_EXPIRY],
+      rows: [{ strike: 22300, atm: true, callLtp: 110, putLtp: 95, callId: "ce-22300", putId: "pe-22300" }],
+      spot: 22293,
+      source: "dhan",
+    });
+    tickMarket();
+    Date.now = () => after1425;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: after1425 });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1420, open: 22302, high: 22310, low: 22290, close: 22293, volume: 20 },
+      { time: OPEN_1420 + FIVE, open: 22293, high: 22300, low: 22280, close: 22285, volume: 8 },
+    ]);
+    tickMarket();
+    const desk = snapshot();
+    const algo = desk.algos.find((row) => row.id === created.id);
+    const order = desk.orders.find(
+      (row) =>
+        String(row.side || "").toUpperCase() === "BUY" &&
+        (/22300 PE/.test(String(row.symbol || "")) || row.option === "PE" && Number(row.strike) === 22300),
+    );
+    assert.ok(order, String(algo?.lastSignal || ""));
+    assert.match(String(order.symbol || `${order.strike} ${order.option}`), /22300 PE/);
+    assert.match(String(algo.lastSignal || ""), /BUY 22300 PE/, String(algo.lastSignal || ""));
+    assert.doesNotMatch(String(algo.lastSignal || ""), /WAIT PE/);
+  } finally {
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    setNiftyFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
+});
+
+test("NIFTY first-candle live still sends BUY PE when T2S_SKIP_LIVE_ALGOS is on", () => {
+  const prevSkip = process.env.T2S_SKIP_LIVE_ALGOS;
+  process.env.T2S_SKIP_LIVE_ALGOS = "1";
+  const during1420 = OPEN_1420 + 2 * 60_000;
+  const after1425 = OPEN_1420 + FIVE + 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "NIFTY live skip PE send",
+    kind: "nifty-first-candle",
+    runMode: "live",
+    expiryKind: "weekly",
+  });
+  drainPendingLiveAlgoOrders();
+  try {
+    niftyRedFutDesk(during1420);
+    toggleAlgo(created.id, { enabled: true });
+    tickMarket();
+    setOptionDesk({
+      symbol: "NIFTY",
+      expiry: WEEKLY_EXPIRY,
+      expiries: [WEEKLY_EXPIRY],
+      rows: [{ strike: 22300, atm: true, callLtp: 110, putLtp: 95, callId: "ce-22300", putId: "pe-22300" }],
+      spot: 22293,
+      source: "dhan",
+    });
+    tickMarket();
+    Date.now = () => after1425;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: after1425 });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1420, open: 22302, high: 22310, low: 22290, close: 22293, volume: 20 },
+      { time: OPEN_1420 + FIVE, open: 22293, high: 22300, low: 22280, close: 22285, volume: 8 },
+    ]);
+    tickMarket();
+    const desk = snapshot();
+    const algo = desk.algos.find((row) => row.id === created.id);
+    const queued = drainPendingLiveAlgoOrders().filter(
+      (row) => row.strategy === "NIFTY live skip PE send" && row.side === "BUY" && !row.copyUserId,
+    );
+    assert.equal(queued.length >= 1, true, String(algo?.lastSignal || ""));
+    assert.equal(queued[0].option, "PE");
+    assert.equal(Number(queued[0].strike), 22300);
+    assert.match(String(algo.lastSignal || ""), /BUY/, String(algo.lastSignal || ""));
+    assert.doesNotMatch(String(algo.lastSignal || ""), /WAIT PE/);
+  } finally {
+    if (prevSkip == null) delete process.env.T2S_SKIP_LIVE_ALGOS;
+    else process.env.T2S_SKIP_LIVE_ALGOS = prevSkip;
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setNiftyFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
   }
 });
