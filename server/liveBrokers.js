@@ -952,6 +952,35 @@ export function kotakMobileNumber(value) {
   return String(value || "").trim().replace(/[\s-]/g, "");
 }
 
+export function parseKotakTradeLoginPaste(value) {
+  const raw = String(value || "").trim().replace(/\s+/g, "");
+  const hit = raw.match(/^\+?91?([6-9]\d{9})\+(\d{6})\+([A-Z2-7]{16,})$/i);
+  if (!hit) return null;
+  return {
+    mobile: `+91${hit[1]}`,
+    mpin: hit[2],
+    totpSecret: hit[3].toUpperCase(),
+  };
+}
+
+export function applyKotakTradeLoginPaste(patch = {}) {
+  const blob = [patch.brokerMobile, patch.brokerMpin, patch.brokerTotpSecret, patch.mobile, patch.mpin, patch.totpSecret]
+    .map((value) => String(value || "").trim())
+    .find((value) => parseKotakTradeLoginPaste(value));
+  const parsed = parseKotakTradeLoginPaste(blob);
+  if (!parsed) return patch;
+  const keepMobile = String(patch.mobile || "").trim();
+  return {
+    ...patch,
+    brokerMobile: parsed.mobile,
+    brokerMpin: parsed.mpin,
+    brokerTotpSecret: parsed.totpSecret,
+    mobile: parseKotakTradeLoginPaste(keepMobile) ? parsed.mobile : keepMobile || parsed.mobile,
+    mpin: parsed.mpin,
+    totpSecret: parsed.totpSecret,
+  };
+}
+
 export function kotakMobileNumberCandidates(...values) {
   const digitsList = [];
   for (const value of values) {

@@ -92,6 +92,24 @@ test("clientStatus counts LIVE vs paper", () => {
   assert.equal(status.groups.includes("NIFTY"), true);
 });
 
+test("saveClient splits a pasted Kotak mobile+MPIN+TOTP line", () => {
+  const row = saveClient("u-arpit", {
+    brokerId: "kotak",
+    accountId: "YT2VM",
+    brokerApiKey: "member-consumer-key",
+    brokerToken: "member-access-token",
+    brokerMobile: "+919900112233+123456+JBSWY3DPEHPK3PXP",
+    tradeMode: "real",
+    copy: true,
+  });
+  assert.equal(row.brokerId, "kotak");
+  const secrets = peekClientSecrets("u-arpit");
+  assert.equal(secrets.brokerMobile, "+919900112233");
+  assert.equal(secrets.brokerMpin, "123456");
+  assert.equal(secrets.brokerTotpSecret, "JBSWY3DPEHPK3PXP");
+  assert.equal(row.mobile, "9900112233");
+});
+
 test("createClient provisions a member who signs in with mobile and 1234", () => {
   const row = createClient({
     name: "Ramesh Kumar",
