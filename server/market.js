@@ -2732,6 +2732,7 @@ export async function backtestAlgo(id, options = {}) {
     const result = {
       ...replay,
       sample: candles.length < 8,
+      bars: candles.length,
       source: options.candleSource || (candles.length >= 8 ? "dhan" : "sample"),
       reused: Boolean(options.reused),
       range: window.range,

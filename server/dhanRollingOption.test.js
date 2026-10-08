@@ -40,6 +40,18 @@ test("rolling helpers chunk dates and label wings", () => {
   assert.equal(wingLabels(2).includes("ATM-2"), true);
 });
 
+test("CE-only weekly and monthly slots are partial, not complete tape", () => {
+  wipeRollingOptions();
+  writeRollingDay("NIFTY", "2026-10-07", {
+    weekly: { slots: [{ t: Date.parse("2026-10-07T04:05:00.000Z"), spot: 25000, rows: [{ s: 25000, ce: 24 }] }] },
+    monthly: { slots: [{ t: Date.parse("2026-10-07T04:05:00.000Z"), spot: 25000, rows: [{ s: 24900, ce: 90 }] }] },
+  });
+  assert.equal(rollingDayStatus("NIFTY", "2026-10-07"), "partial");
+  assert.equal(needsRollingFetch("NIFTY", "2026-10-07"), true);
+  assert.equal(rollingCoverage("NIFTY", "2026-10-07", "2026-10-07"), "synth");
+  wipeRollingOptions();
+});
+
 test("empty rolling stubs are not treated as stored tape", () => {
   wipeRollingOptions();
   writeRollingDay("NIFTY", "2026-09-01", {

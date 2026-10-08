@@ -256,7 +256,7 @@ export function replayTest2Day(session, config, exitSession = null) {
   const lots = Math.max(1, Math.round(Number(config.lots) || 1));
   const qty = lots * lotOn(config, session.day);
   const cost = Math.max(0, Number(config.costPerCombo) || 0);
-  const rolling = storedEntryChain(session, config);
+  const rolling = config.ignoreRolling ? null : storedEntryChain(session, config);
   if (rolling?.incomplete) return { day: session.day, skip: true, reason: "incomplete-chain", source: "stored" };
   const synthRows = buildSyntheticChain(session.open, 50, 16);
   const picked = pickCombo({
@@ -704,6 +704,8 @@ export function runTest2Backtest(algo, candles = []) {
     const combo = replayTest2Day(hold, config, exit);
     if (!combo || combo.skip) {
       skipped.push({ day: entry.day, reason: combo?.reason || "skip" });
+      const research = replayTest2Day(hold, { ...config, ignoreRolling: true }, exit);
+      if (research && !research.skip) pushCombo(synthTrades, legsBook, research, overnight, config.symbol);
       continue;
     }
     if (combo.source === "stored") pushCombo(storedTrades, legsBook, combo, overnight, config.symbol);
@@ -726,6 +728,11 @@ export function runTest2Backtest(algo, candles = []) {
       ? "mixed"
       : "stored"
     : "synth";
+  const skipReasons = {};
+  for (const row of skipped) {
+    const key = String(row.reason || "skip");
+    skipReasons[key] = (skipReasons[key] || 0) + 1;
+  }
   return {
     trades: primary.length,
     combos: primary.length,
@@ -756,6 +763,7 @@ export function runTest2Backtest(algo, candles = []) {
     synthWinRate: synthTrades.length ? Number(((synthWins / synthTrades.length) * 100).toFixed(1)) : 0,
     skippedDays: skipped.length,
     skipped,
+    skipReasons,
     avgMargin: margins.length ? round2(margins.reduce((sum, value) => sum + value, 0) / margins.length) : 0,
     maxMargin: margins.length ? round2(Math.max(...margins)) : 0,
     requiredMargin: margins.length ? round2(Math.max(...margins)) : 0,

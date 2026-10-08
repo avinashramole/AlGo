@@ -173,13 +173,28 @@ export function isWeekendYmd(ymd) {
   return weekday === "Sat" || weekday === "Sun";
 }
 
+function packHasSide(pack, side) {
+  const key = side === "pe" ? "pe" : "ce";
+  for (const slot of pack?.slots || []) {
+    for (const row of slot.rows || []) {
+      if (Number(row.s) > 0 && Number(row[key]) > 0) return true;
+    }
+  }
+  return false;
+}
+
+export function rollingPackReady(pack) {
+  return packHasSide(pack, "ce") && packHasSide(pack, "pe");
+}
+
 export function rollingDayStatus(symbol, ymd) {
   const day = loadRollingDay(symbol, ymd);
   if (!day) return "missing";
   if (day.empty) return "empty";
   const weekly = day.weekly?.slots?.length || 0;
   const monthly = day.monthly?.slots?.length || 0;
-  if (weekly && monthly) return "complete";
+  if (!weekly && !monthly) return "empty";
+  if (rollingPackReady(day.weekly) && rollingPackReady(day.monthly)) return "complete";
   return "partial";
 }
 

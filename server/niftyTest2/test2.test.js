@@ -617,6 +617,13 @@ test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
   );
   assert.equal(incomplete.skip, true);
   assert.equal(incomplete.reason, "incomplete-chain");
+  const book = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), [
+    { time: open + 2 * 86_400_000, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
+  ]);
+  assert.equal(book.skippedDays >= 1, true);
+  assert.equal(book.storedTrades, 0);
+  assert.equal(book.combos >= 1, true);
+  assert.equal(book.optionSource, "synth");
   wipeRollingOptions();
 });
 

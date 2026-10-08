@@ -760,10 +760,14 @@ function AlgoCard({
                 ? `Dhan rolling download failed (${algo.lastBacktest.optionHistory.error}). Connect Dhan LIVE and run Backtest again.`
                 : algo.lastBacktest.optionHistory?.source === "none"
                   ? `Dhan is connected but /charts/rollingoption returned no NIFTY bars. Check Dhan Data API access, then run Backtest again.`
-                  : `No stored Dhan rolling days for ${algo.symbol || "this script"} (${Number(algo.lastBacktest.optionHistory?.completeDays || 0)} complete). Connect Dhan LIVE and run Backtest again — empty stub days are now retried.`}
+                  : Number(algo.lastBacktest.optionHistory?.completeDays || 0) > 0
+                    ? `${algo.symbol || "NIFTY"} has ${algo.lastBacktest.optionHistory.completeDays} Dhan rolling day${Number(algo.lastBacktest.optionHistory.completeDays) === 1 ? "" : "s"} on disk, but this replay printed ${Number(algo.lastBacktest.storedTrades || 0)} stored combo${Number(algo.lastBacktest.storedTrades) === 1 ? "" : "s"}${Number(algo.lastBacktest.skippedDays || 0) ? ` · skipped ${algo.lastBacktest.skippedDays} (need CE+PE on weekly and monthly)` : ""}. Run Backtest again — partial days are retried.`
+                    : `No stored Dhan rolling days for ${algo.symbol || "this script"} (${Number(algo.lastBacktest.optionHistory?.completeDays || 0)} complete). Connect Dhan LIVE and run Backtest again — empty stub days are now retried.`}
           {Number(algo.lastBacktest.trades || 0)
             ? ` Meanwhile this card shows a research book: ${algo.lastBacktest.trades} combos · P&L ${formatInr(Number(algo.lastBacktest.pnl || 0))}.`
-            : " 0 combos."}{" "}
+            : algo.lastBacktest.sample
+              ? " 0 combos — no index candles in this window to replay."
+              : " 0 combos."}{" "}
           Not live option prints until the tape is stored.
         </div>
       ) : null}
