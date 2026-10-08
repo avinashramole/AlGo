@@ -19,6 +19,11 @@ test("TEST2 edit form keeps the script dropdown that TEST1 already shows", () =>
   assert.match(algo, /Start with this month/);
   assert.match(algo, /has \$\{Number\(algo.lastBacktest.optionHistory\?\.completeDays \|\| 0\)\} Dhan rolling day/);
   assert.match(algo, /partial days are retried/);
+  assert.match(algo, /data-test2-skip-banner/);
+  assert.match(algo, /stored Dhan combo/);
+  assert.match(algo, /test2ShowsStoredBook/);
+  assert.match(algo, /that day is/);
+  assert.match(algo, /not in this P&L/);
 });
 
 test("backtest range tells TEST2 to fill this month first", () => {

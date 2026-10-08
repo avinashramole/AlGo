@@ -723,11 +723,7 @@ export function runTest2Backtest(algo, candles = []) {
   const margins = primary.map((row) => Number(row.margin) || 0).filter((value) => value > 0);
   const storedWins = storedTrades.filter((row) => row.pnl > 0).length;
   const synthWins = synthTrades.filter((row) => row.pnl > 0).length;
-  const optionSource = storedTrades.length
-    ? synthTrades.length
-      ? "mixed"
-      : "stored"
-    : "synth";
+  const optionSource = storedTrades.length ? "stored" : "synth";
   const skipReasons = {};
   for (const row of skipped) {
     const key = String(row.reason || "skip");
@@ -746,7 +742,7 @@ export function runTest2Backtest(algo, candles = []) {
     maxDdFrom: equityWalk.maxDdFrom,
     maxDdTo: equityWalk.maxDdTo,
     maxTradesInDd: equityWalk.maxTradesInDd,
-    legs: legsBook.length,
+    legs: primaryLegs.length,
     optionSource,
     holdStyle: config.holdStyle,
     lotNote: rootOf(config) === "NIFTY" ? "historical NIFTY lot 75→50→25→65" : `${rootOf(config)} lot ${config.lotSize}`,

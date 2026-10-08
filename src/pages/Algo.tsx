@@ -42,6 +42,13 @@ function moneyClass(value: number) {
   return "text-[var(--text)]";
 }
 
+function test2ShowsStoredBook(bt: { optionSource?: string; storedTrades?: number; trades?: number } | null | undefined) {
+  const stored = Number(bt?.storedTrades || 0);
+  const trades = Number(bt?.trades || 0);
+  if (bt?.optionSource === "stored") return stored > 0 || trades > 0;
+  return stored > 0 && stored === trades;
+}
+
 function orderActivity(signal: string | undefined, fallback: string) {
   const text = String(signal || "").trim();
   if (/\b(?:GREEN|RED)\b/i.test(text)) return text;
@@ -748,7 +755,12 @@ function AlgoCard({
         />
       </div>
 
-      {isNiftyTest2Kind(algo) && algo.lastBacktest && algo.lastBacktest.optionSource !== "stored" ? (
+      {isNiftyTest2Kind(algo) && algo.lastBacktest && test2ShowsStoredBook(algo.lastBacktest) && Number(algo.lastBacktest.skippedDays || 0) > 0 ? (
+        <div className="mt-3 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-[11px] font-semibold leading-snug text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100" data-test2-skip-banner>
+          {`${algo.symbol || "NIFTY"} replay used ${Number(algo.lastBacktest.storedTrades || 0)} stored Dhan combo${Number(algo.lastBacktest.storedTrades) === 1 ? "" : "s"} · P&L ${formatInr(Number(algo.lastBacktest.pnl || 0))}. Skipped ${algo.lastBacktest.skippedDays} session${Number(algo.lastBacktest.skippedDays) === 1 ? "" : "s"} without CE+PE on both weekly and monthly — ${Number(algo.lastBacktest.skippedDays) === 1 ? "that day is" : "those days are"} not in this P&L. Run Backtest again to retry partial days.`}
+        </div>
+      ) : null}
+      {isNiftyTest2Kind(algo) && algo.lastBacktest && !test2ShowsStoredBook(algo.lastBacktest) ? (
         <div className="mt-3 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-test2-synth-banner>
           {algo.lastBacktest.optionHistory?.error === "dhan-not-live"
             ? `Dhan is not connected, so no rolling option tape for ${algo.symbol || "this script"} was downloaded. Open Brokers, connect Dhan LIVE, then run Backtest again.`
@@ -863,7 +875,7 @@ function AlgoCard({
               : ""}
             {algo.lastBacktest.optionSource
               ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${
-                  algo.lastBacktest.optionSource === "stored"
+                  test2ShowsStoredBook(algo.lastBacktest) || algo.lastBacktest.optionSource === "stored"
                     ? "Dhan rolling options (trusted)"
                     : algo.lastBacktest.optionSource === "mixed"
                       ? "Dhan rolling + synth gaps"
