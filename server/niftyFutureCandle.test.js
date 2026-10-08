@@ -8,6 +8,7 @@ import {
   deleteAlgo,
   drainPendingLiveAlgoOrders,
   formatLiveFuturePreview,
+  getChainSpot,
   niftyFuturePreviewBar,
   niftyFutureSignalBars,
   peekNiftyFutureBars,
@@ -449,6 +450,55 @@ test("MIDCPNIFTY future ticks do not overwrite NIFTY FUT close or ATM", () => {
   } finally {
     Date.now = realNow;
     setNiftyFutureChartCandles([]);
+  }
+});
+
+test("NIFTY first-candle ATM uses live chain 22250, not FUT-rounded 22300", () => {
+  const during1420 = OPEN_1420 + 2 * 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "NIFTY atm 22250",
+    kind: "nifty-first-candle",
+    runMode: "paper",
+    expiryKind: "weekly",
+  });
+  try {
+    Date.now = () => during1420;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: during1420 });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1420, open: 22302, high: 22310, low: 22280, close: 22285.7, volume: 20 },
+    ]);
+    setOptionDesk({
+      symbol: "NIFTY",
+      expiry: WEEKLY_EXPIRY,
+      expiries: [WEEKLY_EXPIRY],
+      rows: [
+        { strike: 22250, atm: true, callLtp: 95, putLtp: 88, callId: "ce-22250", putId: "pe-22250" },
+        { strike: 22300, atm: false, callLtp: 70, putLtp: 110, callId: "ce-22300", putId: "pe-22300" },
+      ],
+      spot: 22250,
+      source: "dhan",
+    });
+    applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY", kind: "index", ltp: 22248.4, securityId: "13" }]);
+    toggleAlgo(created.id, { enabled: true });
+    tickMarket();
+    Date.now = () => OPEN_1420 + FIVE + 60_000;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: Date.now() });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1420, open: 22302, high: 22310, low: 22280, close: 22285.7, volume: 20 },
+      { time: OPEN_1420 + FIVE, open: 22285.7, high: 22290, low: 22280, close: 22282, volume: 8 },
+    ]);
+    tickMarket();
+    const algo = snapshot().algos.find((row) => row.id === created.id);
+    assert.match(String(algo?.lastSignal || ""), /22250/, String(algo?.lastSignal || ""));
+    assert.doesNotMatch(String(algo?.lastSignal || ""), /22300|13450/);
+    assert.equal(getChainSpot("NIFTY"), 22248.4);
+  } finally {
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    setNiftyFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
   }
 });
 

@@ -1075,6 +1075,45 @@ function optionBarTimes({ signalTime, formingTime } = {}) {
   return times;
 }
 
+function saneUnderlyingPx(root, px) {
+  const n = Number(px);
+  if (!(n > 0) || !Number.isFinite(n)) return false;
+  const id = String(root || "").toUpperCase();
+  if (id === "NIFTY") return n >= 18000 && n <= 35000;
+  if (id === "CRUDEOIL") return n >= 2000 && n <= 15000;
+  return n > 0;
+}
+
+function chainDeskSpot(root) {
+  const pack = chainForSymbol(root);
+  if (saneUnderlyingPx(root, pack?.meta?.spot)) return Number(pack.meta.spot);
+  if (String(state.optionMeta?.symbol || "").toUpperCase() === String(root || "").toUpperCase() && saneUnderlyingPx(root, state.optionMeta?.spot)) {
+    return Number(state.optionMeta.spot);
+  }
+  return 0;
+}
+
+function chainMarkedAtmStrike(root) {
+  const pack = chainForSymbol(root);
+  const row = (pack?.rows || []).find((item) => item.atm && Number(item.strike) > 0);
+  return Number(row?.strike) || 0;
+}
+
+function firstCandleAtmSpot(root, futPx) {
+  const chainSpot = chainDeskSpot(root);
+  const indexSpot = Number(getChainSpot(root)) || 0;
+  for (const px of [chainSpot, indexSpot, futPx]) {
+    if (saneUnderlyingPx(root, px)) return Number(px);
+  }
+  return Number(chainSpot) || Number(indexSpot) || Number(futPx) || 0;
+}
+
+function firstCandleSelectedStrike(root, futPx, step, offset) {
+  const marked = chainMarkedAtmStrike(root);
+  if (!(Number(offset) || 0) && saneUnderlyingPx(root, marked)) return marked;
+  return OptionStrikeSelector.strikeForOffset(firstCandleAtmSpot(root, futPx), step, offset);
+}
+
 function firstCandlePreviewLegs(algo, preview) {
   const vs = runtimeState(algo);
   const crude = isCrudeFirstCandleAlgo(algo);
@@ -1083,7 +1122,7 @@ function firstCandlePreviewLegs(algo, preview) {
   const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
   const und = getUnderlying(root);
   const futSpot = Number(preview?.close) || 0;
-  const selected = OptionStrikeSelector.strikeForOffset(futSpot || Number(getChainSpot(root)) || 0, und.step, config.strikeOffset);
+  const selected = firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset);
   const ceStrike =
     vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0
       ? Number(vs.lockedStrike)
@@ -1480,8 +1519,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     return;
   }
   const futSpot = Number(lastBar?.close) || Number(livePreview?.close) || Number(livePreview?.open) || 0;
-  const spot = isFirstCandleAlgo(algo) ? futSpot || Number(getChainSpot(root)) || 0 : Number(getChainSpot(root)) || futSpot;
-  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+  const spot = isFirstCandleAlgo(algo) ? firstCandleAtmSpot(root, futSpot) : Number(getChainSpot(root)) || futSpot;
+  const selected = isFirstCandleAlgo(algo)
+    ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset)
+    : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
   const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
   if (vs.ceStrike !== ceStrike) {
@@ -1547,7 +1588,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     futuresBars,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
-    spot,
+    spot: isFirstCandleAlgo(algo) && selected ? selected : spot,
     step: und.step,
     expiry,
     ceLtp,
@@ -4151,11 +4192,12 @@ export function setLiveCandles(candles, symbol = "NIFTY", instrument = "") {
 export function getChainSpot(symbol = state.optionMeta.symbol) {
   const meta = getUnderlying(symbol);
   const index = state.indices.find((item) => item.symbol === meta.indexSymbol);
-  if (Number(index?.price) > 0) return Number(index.price);
-  if (Number(index?.future) > 0) return Number(index.future);
+  const ok = (px) => meta.id !== "NIFTY" || looksLikeNiftyFuturePx(px);
+  if (Number(index?.price) > 0 && ok(index.price)) return Number(index.price);
+  if (Number(index?.future) > 0 && ok(index.future)) return Number(index.future);
   const pack = chainForSymbol(meta.id);
-  if (Number(pack?.meta?.spot) > 0) return Number(pack.meta.spot);
-  if (String(state.optionMeta?.symbol || "").toUpperCase() === meta.id && Number(state.optionMeta.spot) > 0) {
+  if (Number(pack?.meta?.spot) > 0 && ok(pack.meta.spot)) return Number(pack.meta.spot);
+  if (String(state.optionMeta?.symbol || "").toUpperCase() === meta.id && Number(state.optionMeta.spot) > 0 && ok(state.optionMeta.spot)) {
     return Number(state.optionMeta.spot);
   }
   return 0;
