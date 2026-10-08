@@ -341,7 +341,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         className="desk-sheet card p-3"
         data-edit-strategy={editing ? algo?.id || "open" : "new"}
         data-test2-edit={test2 ? "true" : "false"}
-        data-ui={test2 ? "test2-script-v3" : undefined}
+        data-ui={test2 ? "test2-script-v5" : undefined}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -353,7 +353,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </button>
         </div>
 
-        {test2 ? <Test2ScriptSelect value={form.symbol} mark="top" onPick={pickTest2Script} /> : null}
+        {test2 ? (
+          <div className="mb-2">
+            <Test2ScriptSelect value={form.symbol} mark="top" onPick={pickTest2Script} />
+          </div>
+        ) : null}
 
         {editing ? null : (
         <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
@@ -490,7 +494,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         {test2 ? (
           <div className="mt-2.5 space-y-1.5">
-            <Test2ScriptSelect value={form.symbol} mark="premiums" onPick={pickTest2Script} />
             <div className="grid grid-cols-2 gap-1.5">
               <label className="text-xs font-semibold text-slate-500">
                 SELL option
@@ -654,9 +657,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             />
           </label>
           ) : null}
-          {test2 ? (
-          <Test2ScriptSelect value={form.symbol} mark="name-slot" onPick={pickTest2Script} />
-          ) : engine ? null : (
+          {engine ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select
