@@ -3990,17 +3990,29 @@ function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = ni
   const color = VwapSignalEngine.firstBarColor(preview);
   if (color) algo.futureColor = color;
   const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
-  const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
+  const base = String(algo.lastSignal || "")
+    .replace(/ · (?:LIVE|PREVIEW) .+$/, "")
+    .replace(/^(?:LIVE|PREVIEW) .+$/, "");
   algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
   if (color && !/\b(?:GREEN|RED|DOJI)\b/i.test(String(algo.lastSignal || ""))) {
     algo.lastSignal = `${root} ${color.toUpperCase()}`;
   }
 }
 
+function firstCandlePreviewSpot(root, preview) {
+  const und = getUnderlying(root);
+  const step = Number(und.step) || 50;
+  const chainSpot = Number(getChainSpot(root)) || 0;
+  const futSpot = Number(preview?.close) || Number(preview?.open) || 0;
+  if (chainSpot >= step) return chainSpot;
+  if (futSpot >= step) return futSpot;
+  return 0;
+}
+
 function firstCandlePreviewLegs(algo, config, root, preview) {
   const vs = runtimeState(algo);
   const und = getUnderlying(root);
-  const spotNow = Number(getChainSpot(root)) || Number(preview?.close) || Number(preview?.open) || 0;
+  const spotNow = firstCandlePreviewSpot(root, preview);
   const selected = OptionStrikeSelector.strikeForOffset(spotNow, und.step, config.strikeOffset);
   const ceStrike =
     vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0

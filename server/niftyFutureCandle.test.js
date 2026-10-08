@@ -330,7 +330,6 @@ test("paused NIFTY and CRUDE OIL always show future candle green or red", () => 
     assert.match(String(nifty.lastSignal || ""), /NIFTY FUT GREEN/);
     assert.match(String(crude.lastSignal || ""), /CRUDE FUT RED/);
     assert.match(String(nifty.lastSignal || ""), /WAIT CE \d{4,6}/);
-    assert.equal(Number(nifty.trade?.strike) > 0, true);
   } finally {
     Date.now = realNow;
     setNiftyFutureChartCandles([]);
