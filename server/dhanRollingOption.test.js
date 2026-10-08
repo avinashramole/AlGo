@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   chunkDateRange,
+  chunkMissingDays,
   downloadRollingOptionRange,
   dropEmptyRollingDays,
   isWeekendYmd,
@@ -16,6 +20,8 @@ import {
   wipeRollingOptions,
   writeRollingDay,
 } from "./dhanRollingOption.js";
+
+process.env.T2S_NIFTY_ROLLING_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-rolling-"));
 
 test("rollingContract maps index scripts to Dhan rolling ids", () => {
   assert.equal(rollingContract("NIFTY")?.securityId, 13);
@@ -246,4 +252,116 @@ test("BANKNIFTY rolling download uses security id 25 and keeps weekly tape when 
   assert.equal(rollingDayStatus("BANKNIFTY", "2026-09-01"), "partial");
   assert.equal(rollingCoverage("BANKNIFTY", "2026-09-01", "2026-09-01"), "synth");
   wipeRollingOptions();
+});
+
+test("chunkMissingDays walks newest gaps first and splits large holes", () => {
+  const chunks = chunkMissingDays(["2026-08-03", "2026-08-04", "2026-09-01", "2026-09-02"], 30, true);
+  assert.equal(chunks[0].from, "2026-09-01");
+  assert.equal(chunks[0].to, "2026-09-02");
+  assert.equal(chunks[1].from, "2026-08-03");
+  const oldest = chunkDateRange("2024-01-01", "2024-02-10", 30, false);
+  assert.equal(oldest[0].from, "2024-01-01");
+  const newest = chunkDateRange("2024-01-01", "2024-02-10", 30, true);
+  assert.equal(newest[0].from, "2024-01-31");
+});
+
+test("empty ATM probe skips the rest of an old chunk", async () => {
+  wipeRollingOptions();
+  let calls = 0;
+  const result = await downloadRollingOptionRange({
+    from: "2026-07-01",
+    to: "2026-09-01",
+    delayMs: 0,
+    wings: 10,
+    concurrency: 4,
+    newestFirst: true,
+    fetchRolling: async () => {
+      calls += 1;
+      return null;
+    },
+  });
+  assert.equal(result.days, 0);
+  assert.equal(result.historyGap, true);
+  assert.ok(calls <= 4, `probe should stop after empty newest chunks, got ${calls}`);
+  assert.ok(result.skippedEmpty >= 2);
+  wipeRollingOptions();
+});
+
+test("newest missing chunk is fetched before older dates", async () => {
+  wipeRollingOptions();
+  const t = Math.floor(Date.parse("2026-09-01T04:05:00.000Z") / 1000);
+  const seen = [];
+  await downloadRollingOptionRange({
+    from: "2026-07-01",
+    to: "2026-09-01",
+    delayMs: 0,
+    wings: 1,
+    concurrency: 1,
+    newestFirst: true,
+    deadlineMs: 5_000,
+    fetchRolling: async (args) => {
+      seen.push(args.from);
+      if (args.from >= "2026-08-01") {
+        return {
+          data: {
+            ce: {
+              timestamp: [t],
+              close: [24],
+              high: [25],
+              low: [23],
+              strike: [24700],
+              spot: [24500],
+            },
+          },
+        };
+      }
+      return null;
+    },
+  });
+  assert.ok(seen.length, "expected rolling calls");
+  assert.ok(seen[0] >= "2026-08-01", `first call should be the newest chunk, got ${seen[0]}`);
+  wipeRollingOptions();
+});
+
+test("deadline mid-chunk still persists bars already fetched", async () => {
+  wipeRollingOptions();
+  const t = Math.floor(Date.parse("2026-09-01T04:05:00.000Z") / 1000);
+  let calls = 0;
+  const result = await downloadRollingOptionRange({
+    from: "2026-09-01",
+    to: "2026-09-01",
+    delayMs: 0,
+    wings: 2,
+    concurrency: 1,
+    newestFirst: true,
+    deadlineMs: 80,
+    fetchRolling: async ({ option }) => {
+      calls += 1;
+      if (calls > 1) await new Promise((resolve) => setTimeout(resolve, 200));
+      if (option !== "CE") return null;
+      return {
+        data: {
+          ce: {
+            timestamp: [t],
+            close: [24],
+            high: [25],
+            low: [23],
+            strike: [24700],
+            spot: [24500],
+          },
+        },
+      };
+    },
+  });
+  assert.equal(result.truncated, true);
+  assert.equal(result.days, 1);
+  assert.equal(rollingDayStatus("NIFTY", "2026-09-01"), "partial");
+  wipeRollingOptions();
+});
+
+test("backtest route downloads newest missing days in parallel", () => {
+  const index = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(index, /newestFirst:\s*true/);
+  assert.match(index, /ROLLING_CONCURRENCY/);
+  assert.match(index, /delayMs:\s*0/);
 });

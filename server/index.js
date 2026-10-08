@@ -1011,8 +1011,15 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
             from: window.from,
             to: window.to,
             overwrite: false,
-            fetchRolling: fetchDhanRollingOption,
-            delayMs: 40,
+            fetchRolling: (args) =>
+              fetchDhanRollingOption({
+                ...args,
+                timeoutMs: 15_000,
+                attempts: 2,
+              }),
+            delayMs: 0,
+            concurrency: Number(rolling.ROLLING_CONCURRENCY) || 6,
+            newestFirst: true,
             interval: 15,
             maxDays: Math.min(366, Math.max(2, Number(window.days) || 366)),
             deadlineMs,

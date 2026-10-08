@@ -252,7 +252,7 @@ export function BacktestRange({ open, name, busy, error, onClose, onReset, onRun
           <div className="text-lg font-bold">Run backtest</div>
           <div className="text-xs text-slate-400">{name || "Strategy"} · this month, then 1 / 3 / 6 months or years</div>
           <div className="desk-help mt-1 text-[11px] leading-snug text-slate-500">
-            Default is this calendar month through today so a first run stays short. Stored Dhan history is reused. Each finished backtest writes a PDF and Excel report.
+            Default is this calendar month through today — fastest Dhan rolling fill. Newest missing weekdays download first; stored days are reused. Each finished backtest writes a PDF and Excel report.
           </div>
         </div>
         <PeriodFields
@@ -313,7 +313,7 @@ export function BacktestRangeInline({ busy, error, onCancel, onReset, onRun }: I
     <div className="mt-3 rounded-xl border border-brand-500/50 bg-brand-50/70 p-3 dark:bg-brand-500/10">
       <div className="text-xs font-bold uppercase tracking-wide text-brand-600">Choose backtest range</div>
       <div className="mt-1 text-[11px] leading-snug text-slate-500">
-        Default is this month ({monthStartYmd()} → {localYmd()}). Then 1 / 3 / 6 months, or pick years.
+        Default is this month ({monthStartYmd()} → {localYmd()}) — fastest Dhan rolling fill. Stored days are reused. Then 1 / 3 / 6 months, or pick years.
       </div>
       <div className="mt-2">
         <PeriodFields

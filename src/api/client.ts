@@ -270,8 +270,10 @@ export type Snapshot = {
         reused?: boolean;
         reusedDays?: number;
         truncated?: boolean;
+        historyGap?: boolean;
         calls?: number;
         stubs?: number;
+        skippedEmpty?: number;
       };
       holdStyle?: "btst" | "intraday" | string;
       combos?: number;

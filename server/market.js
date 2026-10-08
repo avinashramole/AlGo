@@ -2768,7 +2768,7 @@ export async function backtestAlgo(id, options = {}) {
           : result.optionHistory?.error === "dhan-not-live"
             ? " · Dhan not connected — rolling tape not downloaded"
             : result.optionHistory?.truncated
-              ? ` · rolling download paused after ${result.optionHistory.days || 0} days — run again`
+              ? ` · rolling download paused after ${result.optionHistory.days || 0} newest days — run again`
               : result.optionSource === "synth"
                 ? " · research model (no option tape)"
                 : ""

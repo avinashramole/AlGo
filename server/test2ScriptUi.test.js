@@ -15,4 +15,12 @@ test("TEST2 edit form keeps the script dropdown that TEST1 already shows", () =>
   assert.match(builder, /data-ui=\{test2 \? "test2-script-v3"/);
   assert.match(algo, /Script · NIFTY BANKNIFTY SENSEX/);
   assert.match(algo, /data-test2-scripts="card"/);
+  assert.match(algo, /fills newest missing weekdays first/);
+  assert.match(algo, /Start with this month/);
+});
+
+test("backtest range tells TEST2 to fill this month first", () => {
+  const range = fs.readFileSync(path.join(root, "src/components/dashboard/BacktestRange.tsx"), "utf8");
+  assert.match(range, /fastest Dhan rolling fill/);
+  assert.match(range, /1 \/ 3 \/ 6 months/);
 });

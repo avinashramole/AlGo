@@ -8,6 +8,8 @@ const NIFTY_ID = 13;
 export const ROLLING_MAX_DAYS = 366;
 export const ROLLING_CHUNK_DAYS = 30;
 export const ROLLING_WINGS = 10;
+export const ROLLING_CONCURRENCY = 6;
+export const ROLLING_EMPTY_CHUNK_STOP = 2;
 export const ROLLING_BACKTEST_DEADLINE_MS = 480_000;
 
 const ROLLING_CONTRACTS = {
@@ -73,7 +75,14 @@ export function wingLabels(wings = ROLLING_WINGS) {
   return out;
 }
 
-export function chunkDateRange(from, to, size = ROLLING_CHUNK_DAYS) {
+export function ymdDiff(from, to) {
+  if (!isYmd(from) || !isYmd(to)) return 0;
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  return Math.round((b - a) / 86_400_000);
+}
+
+export function chunkDateRange(from, to, size = ROLLING_CHUNK_DAYS, newestFirst = false) {
   if (!isYmd(from) || !isYmd(to) || from > to) return [];
   const chunks = [];
   let cursor = from;
@@ -83,7 +92,28 @@ export function chunkDateRange(from, to, size = ROLLING_CHUNK_DAYS) {
     chunks.push({ from: cursor, to: last, toExclusive: shiftYmd(last, 1) });
     cursor = shiftYmd(last, 1);
   }
-  return chunks;
+  return newestFirst ? chunks.reverse() : chunks;
+}
+
+export function chunkMissingDays(ymds = [], size = ROLLING_CHUNK_DAYS, newestFirst = true) {
+  const sorted = [...ymds].filter(isYmd).sort();
+  if (!sorted.length) return [];
+  const span = Math.max(1, Number(size) || ROLLING_CHUNK_DAYS);
+  const chunks = [];
+  let from = sorted[0];
+  let to = sorted[0];
+  for (let i = 1; i < sorted.length; i += 1) {
+    const ymd = sorted[i];
+    const days = ymdDiff(from, ymd) + 1;
+    const gap = ymdDiff(to, ymd);
+    if (days > span || gap > 4) {
+      chunks.push({ from, to, toExclusive: shiftYmd(to, 1) });
+      from = ymd;
+    }
+    to = ymd;
+  }
+  chunks.push({ from, to, toExclusive: shiftYmd(to, 1) });
+  return newestFirst ? chunks.reverse() : chunks;
 }
 
 function listYmds(from, to) {
@@ -391,17 +421,57 @@ function persistFetchedDays(root, weeklyBars, monthlyBars, overwrite = false) {
   return wrote;
 }
 
+function jobKey(job) {
+  return `${job.expiryFlag}|${job.option}|${job.strike}`;
+}
+
+function wingJobs(labels = []) {
+  const jobs = [];
+  for (const expiryFlag of ["WEEK", "MONTH"]) {
+    for (const option of ["CE", "PE"]) {
+      for (const strike of labels) {
+        jobs.push({ expiryFlag, option, strike });
+      }
+    }
+  }
+  return jobs;
+}
+
+async function runPool(items, concurrency, worker) {
+  const n = Math.max(1, Math.min(8, Number(concurrency) || 1));
+  let cursor = 0;
+  async function pump() {
+    while (true) {
+      const idx = cursor;
+      cursor += 1;
+      if (idx >= items.length) return;
+      const keep = await worker(items[idx], idx);
+      if (keep === false) return;
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(n, Math.max(1, items.length)) }, () => pump()));
+}
+
+function pushParsedBars(weeklyBars, monthlyBars, expiryFlag, option, payload) {
+  const bars = parseRollingPayload(payload, option);
+  if (expiryFlag === "MONTH") monthlyBars.push(...bars);
+  else weeklyBars.push(...bars);
+  return bars.length;
+}
+
 export async function downloadRollingOptionRange({
   symbol = "NIFTY",
   from,
   to,
   overwrite = false,
   fetchRolling,
-  delayMs = 40,
+  delayMs = 0,
   wings = ROLLING_WINGS,
   interval = 15,
   maxDays = ROLLING_MAX_DAYS,
   deadlineMs = 150_000,
+  concurrency = ROLLING_CONCURRENCY,
+  newestFirst = true,
   securityId,
   exchangeSegment,
   instrument,
@@ -438,14 +508,21 @@ export async function downloadRollingOptionRange({
   let calls = 0;
   let skipped = 0;
   let stubs = 0;
+  let skippedEmpty = 0;
   let truncated = false;
+  let historyGap = false;
   const wrote = new Set();
   const labels = wingLabels(wings);
   let lastError = "";
-  for (const chunk of chunkDateRange(start, end)) {
+  let emptyStreak = 0;
+  const parallel = Math.max(1, Math.min(8, Number(concurrency) || 1));
+
+  const timedOut = () => Date.now() - started > (Number(deadlineMs) || 0);
+
+  for (const chunk of chunkMissingDays(missing, ROLLING_CHUNK_DAYS, newestFirst)) {
     const need = listYmds(chunk.from, chunk.to).filter((ymd) => (overwrite ? !isWeekendYmd(ymd) : needsRollingFetch(root, ymd)));
     if (!need.length) continue;
-    if (Date.now() - started > deadlineMs) {
+    if (timedOut()) {
       truncated = true;
       break;
     }
@@ -453,42 +530,73 @@ export async function downloadRollingOptionRange({
     const monthlyBars = [];
     let chunkDone = true;
     let okCalls = 0;
-    expiryLoop: for (const expiryFlag of ["WEEK", "MONTH"]) {
-      for (const option of ["CE", "PE"]) {
-        for (const strike of labels) {
-          if (Date.now() - started > deadlineMs) {
-            truncated = true;
-            chunkDone = false;
-            break expiryLoop;
-          }
-          let payload = null;
-          try {
-            payload = await fetchRolling({
-              expiryFlag,
-              expiryCode: 1,
-              strike,
-              option,
-              from: chunk.from,
-              to: chunk.toExclusive,
-              interval,
-              securityId: id,
-              exchangeSegment: segment,
-              instrument: inst,
-            });
-          } catch (error) {
-            skipped += 1;
-            lastError = error?.message || String(error || "rolling-option-failed");
-          }
-          calls += 1;
-          if (payload) okCalls += 1;
-          const bars = parseRollingPayload(payload, option);
-          if (expiryFlag === "MONTH") monthlyBars.push(...bars);
-          else weeklyBars.push(...bars);
-          if (delayMs > 0) await sleep(delayMs);
-        }
-      }
+    const base = {
+      expiryCode: 1,
+      from: chunk.from,
+      to: chunk.toExclusive,
+      interval,
+      securityId: id,
+      exchangeSegment: segment,
+      instrument: inst,
+    };
+
+    const flush = () => {
       for (const ymd of persistFetchedDays(root, weeklyBars, monthlyBars, overwrite)) wrote.add(ymd);
+    };
+
+    const take = async (job) => {
+      if (timedOut()) {
+        truncated = true;
+        chunkDone = false;
+        return null;
+      }
+      let payload = null;
+      try {
+        payload = await fetchRolling({ ...base, expiryFlag: job.expiryFlag, strike: job.strike, option: job.option });
+      } catch (error) {
+        skipped += 1;
+        lastError = error?.message || String(error || "rolling-option-failed");
+      }
+      calls += 1;
+      if (payload) okCalls += 1;
+      pushParsedBars(weeklyBars, monthlyBars, job.expiryFlag, job.option, payload);
+      if (delayMs > 0) await sleep(delayMs);
+      return payload;
+    };
+
+    const weekProbe = await take({ expiryFlag: "WEEK", option: "CE", strike: "ATM" });
+    const weekBars = parseRollingPayload(weekProbe, "CE").length;
+    let monthBars = 0;
+    if (!weekBars) {
+      const monthProbe = await take({ expiryFlag: "MONTH", option: "CE", strike: "ATM" });
+      monthBars = parseRollingPayload(monthProbe, "CE").length;
     }
+    if (!weekBars && !monthBars) {
+      skippedEmpty += 1;
+      emptyStreak += 1;
+      if (emptyStreak >= ROLLING_EMPTY_CHUNK_STOP) {
+        historyGap = true;
+        break;
+      }
+      continue;
+    }
+    emptyStreak = 0;
+    flush();
+
+    const done = new Set(["WEEK|CE|ATM"]);
+    if (!weekBars) done.add("MONTH|CE|ATM");
+    const jobs = wingJobs(labels).filter((job) => !done.has(jobKey(job)));
+    await runPool(jobs, parallel, async (job) => {
+      if (timedOut()) {
+        truncated = true;
+        chunkDone = false;
+        return false;
+      }
+      await take(job);
+      if (okCalls % parallel === 0) flush();
+      return true;
+    });
+    flush();
     if (chunkDone && okCalls > 0) {
       for (const ymd of need) {
         if (!needsRollingFetch(root, ymd)) continue;
@@ -511,9 +619,13 @@ export async function downloadRollingOptionRange({
     calls,
     skipped,
     stubs,
+    skippedEmpty,
     reusedDays,
     truncated,
+    historyGap,
     reused: calls === 0,
+    concurrency: parallel,
+    newestFirst: Boolean(newestFirst),
     source: wrote.size ? "dhan-rolling" : reusedDays ? "stored" : "none",
     securityId: id,
     lastError,
