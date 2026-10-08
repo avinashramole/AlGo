@@ -24,3 +24,13 @@ test("backtest range tells TEST2 to fill this month first", () => {
   assert.match(range, /fastest Dhan rolling fill/);
   assert.match(range, /1 \/ 3 \/ 6 months/);
 });
+
+test("VPS update-website publishes newest-first rolling and 600s nginx", () => {
+  const script = fs.readFileSync(path.join(root, "deploy/update-website.sh"), "utf8");
+  assert.match(script, /cursor\/fast-rolling-backtest-eae6/);
+  assert.match(script, /ROLLING_CONCURRENCY/);
+  assert.match(script, /newestFirst: true/);
+  assert.match(script, /fastest Dhan rolling fill/);
+  assert.match(script, /proxy_read_timeout 600s/);
+  assert.match(script, /write_nginx_trade2smart\.py/);
+});
