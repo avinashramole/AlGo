@@ -522,7 +522,6 @@ export function renderBacktestExcel(report) {
           kv("BUY weekly CE+PE premium >=", report.strategy.rules.hedgePremium),
           kv("Hedge SL %", report.strategy.rules.hedgeSlPct),
           kv("Overall profit %", report.strategy.rules.overallTargetPct),
-          ...(report.strategy.rules.lines || []).map((line, i) => kv(`Rule ${i + 1}`, line)),
         ]
       : []),
     kv("Start date", report.summary.from),
@@ -570,7 +569,6 @@ export function renderBacktestExcel(report) {
     kv("Option source", report.summary.optionSource, report.summary.optionSource === "stored" ? 4 : 13),
     [{ value: "Tape", style: 3 }, { value: tape, style: report.summary.optionSource === "stored" ? 4 : 13 }],
     kv("Generated", report.generatedAt),
-    kv("Summary", report.strategy.summary),
   ];
   const fills = report.legs?.length ? report.legs : report.trades || [];
   const comboRows = [fillHeaderRow(), ...(report.trades || []).map((row, i) => fillTableRow(row, i % 2 === 1))];
@@ -691,8 +689,19 @@ function buildPdfOps(report) {
   brandBar(false);
   text(`${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "strategy"}  -  Currency Indian Rupee (Rs.)`, left, y, 11, "F2", PDF.text);
   y -= 13;
+  const rules = report.strategy.rules;
+  const squareOffLabel = rules?.holdStyle === "intraday" ? "Square-off" : rules ? "Sell tomorrow" : "";
   text(
-    `Product ${report.strategy.product || "-"}  |  ${report.strategy.symbol}  |  ${report.summary.timeframe || ""}  |  Start date ${report.summary.from || "-"}  -  End date ${report.summary.to || "-"}`,
+    [
+      `Product ${report.strategy.product || "-"}`,
+      report.strategy.symbol,
+      rules?.enterIst ? `Enter ${rules.enterIst} IST` : "",
+      rules?.squareOffIst ? `${squareOffLabel} ${rules.squareOffIst} IST` : "",
+      report.summary.timeframe || "",
+      `Start date ${report.summary.from || "-"}  -  End date ${report.summary.to || "-"}`,
+    ]
+      .filter(Boolean)
+      .join("  |  "),
     left,
     y,
     8,
@@ -706,14 +715,7 @@ function buildPdfOps(report) {
       ? `Range last ${report.summary.months} month(s)`
       : `Range ${report.summary.range || `${report.summary.from} to ${report.summary.to}`}`;
   text(`${range}   Generated ${report.generatedAt}`, left, y, 8, "F1", PDF.muted);
-  y -= 14;
-
-  for (const line of report.strategy.rules?.lines || []) {
-    need(11);
-    text(line, left, y, 8, "F1", PDF.text);
-    y -= 11;
-  }
-  y -= 4;
+  y -= 18;
 
   const kpis = [
     { label: "P&L", value: pdfInr(report.summary.pnl), color: moneyColor(report.summary.pnl) },
