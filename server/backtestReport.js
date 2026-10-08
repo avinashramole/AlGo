@@ -314,22 +314,91 @@ function colLetter(index) {
   return out;
 }
 
-function xlsxCell(value, ref) {
+function xlsxCell(value, ref, style) {
+  const s = Number.isFinite(Number(style)) ? ` s="${Number(style)}"` : "";
   if (typeof value === "number" && Number.isFinite(value)) {
-    return `<c r="${ref}"><v>${value}</v></c>`;
+    return `<c r="${ref}"${s}><v>${value}</v></c>`;
   }
-  return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(value ?? "")}</t></is></c>`;
+  return `<c r="${ref}"${s} t="inlineStr"><is><t>${xmlEscape(value ?? "")}</t></is></c>`;
 }
 
-function xlsxSheet(rows = []) {
+function moneyStyle(value) {
+  const n = Number(value);
+  if (n > 0) return 6;
+  if (n < 0) return 7;
+  return 5;
+}
+
+function xlsxSheet(rows = [], { cols = [], freeze = 0, filterRef = "" } = {}) {
   const body = rows
     .map((row, r) => {
-      const cells = (Array.isArray(row) ? row : []).map((value, c) => xlsxCell(value, `${colLetter(c)}${r + 1}`)).join("");
-      return `<row r="${r + 1}">${cells}</row>`;
+      const cells = (Array.isArray(row) ? row : []).map((item, c) => {
+        const value = item && typeof item === "object" && "value" in item ? item.value : item;
+        const style = item && typeof item === "object" && "style" in item ? item.style : undefined;
+        return xlsxCell(value, `${colLetter(c)}${r + 1}`, style);
+      }).join("");
+      const firstStyle = row?.[0] && typeof row[0] === "object" ? Number(row[0].style) : NaN;
+      const ht = firstStyle === 1 ? 26 : 18;
+      return `<row r="${r + 1}" ht="${ht}" customHeight="1">${cells}</row>`;
     })
     .join("");
+  const colXml = cols.length
+    ? `<cols>${cols
+        .map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`)
+        .join("")}</cols>`
+    : "";
+  const views = freeze
+    ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+    : "";
+  const filter = filterRef ? `<autoFilter ref="${xmlEscape(filterRef)}"/>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${views}${colXml}<sheetData>${body}</sheetData>${filter}</worksheet>`;
+}
+
+function xlsxStyles() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;Rs.&quot; #,##,##0.00"/></numFmts>
+<fonts count="7">
+<font><sz val="11"/><name val="Calibri"/><color rgb="FF172B36"/></font>
+<font><b/><sz val="16"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF0F9D58"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFD93025"/></font>
+<font><sz val="11"/><name val="Calibri"/><color rgb="FF64748B"/></font>
+<font><b/><sz val="12"/><name val="Calibri"/><color rgb="FF1D4ED8"/></font>
+</fonts>
+<fills count="7">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF071833"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFEEF3FF"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE6F4EA"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFCE8E6"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/></patternFill></fill>
+</fills>
+<borders count="2">
+<border/>
+<border><left style="thin"><color rgb="FFC5D0E0"/></left><right style="thin"><color rgb="FFC5D0E0"/></right><top style="thin"><color rgb="FFC5D0E0"/></top><bottom style="thin"><color rgb="FFC5D0E0"/></bottom></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="14">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="3" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="4" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+<xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="3" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="4" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="4" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+</cellXfs>
+</styleSheet>`;
 }
 
 function xlsxWorkbook(names = []) {
@@ -341,12 +410,56 @@ function xlsxWorkbook(names = []) {
 }
 
 function xlsxRels(count) {
-  const rels = Array.from({ length: count }, (_, i) => {
-    return `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`;
-  }).join("");
+  const rels = [
+    ...Array.from({ length: count }, (_, i) => {
+      return `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`;
+    }),
+    `<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`,
+  ].join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
 }
+
+function kv(label, value, valueStyle = 4) {
+  return [
+    { value: label, style: 3 },
+    { value, style: valueStyle },
+  ];
+}
+
+function kvMoney(label, value) {
+  return kv(label, Number(value) || 0, moneyStyle(value));
+}
+
+function fillHeaderRow() {
+  return FILL_HEADER.map((title) => ({ value: title, style: 2 }));
+}
+
+function fillTableRow(row, alt = false) {
+  const text = alt ? 8 : 4;
+  const money = alt ? 9 : 5;
+  return [
+    { value: Number(row.n) || 0, style: text },
+    { value: row.day || "", style: text },
+    { value: row.side || "", style: text },
+    { value: row.option || "", style: text },
+    { value: Number(row.strike) || 0, style: text },
+    { value: row.symbol || "", style: text },
+    { value: row.entryAt || "", style: text },
+    { value: row.exitAt || "", style: text },
+    { value: Number(row.entry) || 0, style: money },
+    { value: Number(row.exit) || 0, style: money },
+    { value: Number(row.qty) || 0, style: text },
+    { value: Number(row.pnl) || 0, style: moneyStyle(row.pnl) },
+    { value: Number(row.margin) || 0, style: money },
+    { value: Number(row.rom) || 0, style: text },
+    { value: Number(row.netCredit) || 0, style: money },
+    { value: Number(row.bars) || 0, style: text },
+  ];
+}
+
+const FILL_HEADER = ["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry time", "Exit time", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"];
+const TABLE_WIDTHS = [6, 12, 8, 8, 10, 16, 18, 18, 12, 12, 8, 14, 14, 10, 12, 8];
 
 function buildXlsx(sheets = []) {
   const names = sheets.map((sheet) => String(sheet.name || "Sheet").slice(0, 31));
@@ -358,6 +471,7 @@ function buildXlsx(sheets = []) {
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 ${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}
 </Types>`,
     },
@@ -370,103 +484,103 @@ ${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Con
     },
     { name: "xl/workbook.xml", data: xlsxWorkbook(names) },
     { name: "xl/_rels/workbook.xml.rels", data: xlsxRels(names.length) },
-    ...sheets.map((sheet, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: xlsxSheet(sheet.rows || []) })),
+    { name: "xl/styles.xml", data: xlsxStyles() },
+    ...sheets.map((sheet, i) => ({
+      name: `xl/worksheets/sheet${i + 1}.xml`,
+      data: xlsxSheet(sheet.rows || [], {
+        cols: sheet.cols || [],
+        freeze: sheet.freeze || 0,
+        filterRef: sheet.filterRef || "",
+      }),
+    })),
   ];
   return zipStore(files);
 }
 
-function fillTableRow(row) {
-  return [
-    Number(row.n) || 0,
-    row.day || "",
-    row.side || "",
-    row.option || "",
-    Number(row.strike) || 0,
-    row.symbol || "",
-    row.entryAt || "",
-    row.exitAt || "",
-    Number(row.entry) || 0,
-    Number(row.exit) || 0,
-    Number(row.qty) || 0,
-    Number(row.pnl) || 0,
-    Number(row.margin) || 0,
-    Number(row.rom) || 0,
-    Number(row.netCredit) || 0,
-    Number(row.bars) || 0,
-  ];
-}
-
-const FILL_HEADER = ["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry time", "Exit time", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"];
-
 export function renderBacktestExcel(report) {
+  const tape =
+    report.summary.optionSource === "stored"
+      ? "Premiums stored Dhan rolling option tape"
+      : report.summary.optionSource === "mixed"
+        ? `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days; remaining days used the research model`
+        : `NOT REAL OPTION PRICES - research book from index candles`;
   const summaryRows = [
-    ["Currency", "Indian Rupee (INR ₹)"],
-    ["Strategy", report.strategy.name],
-    ["Style", report.summary.holdStyle || "—"],
-    ["Product", report.strategy.product || "—"],
-    ["Symbol", report.strategy.symbol],
+    [
+      { value: "TRADE 2 SMART", style: 1 },
+      { value: "Backtest report", style: 1 },
+    ],
+    kv("Currency", "Indian Rupee (INR)"),
+    kv("Strategy", report.strategy.name, 12),
+    kv("Style", report.summary.holdStyle || "—"),
+    kv("Product", report.strategy.product || "—"),
+    kv("Symbol", report.strategy.symbol),
     ...(report.strategy.rules
       ? [
-          ["Enter IST", report.strategy.rules.enterIst],
-          [report.strategy.rules.holdStyle === "intraday" ? "Square-off IST" : "Sell tomorrow IST", report.strategy.rules.squareOffIst],
-          ["SELL monthly CE+PE premium >=", report.strategy.rules.sellPremium],
-          ["BUY weekly CE+PE premium >=", report.strategy.rules.hedgePremium],
-          ["Hedge SL %", report.strategy.rules.hedgeSlPct],
-          ["Overall profit %", report.strategy.rules.overallTargetPct],
-          ...(report.strategy.rules.lines || []).map((line, i) => [`Rule ${i + 1}`, line]),
+          kv("Enter IST", report.strategy.rules.enterIst),
+          kv(report.strategy.rules.holdStyle === "intraday" ? "Square-off IST" : "Sell tomorrow IST", report.strategy.rules.squareOffIst),
+          kv("SELL monthly CE+PE premium >=", report.strategy.rules.sellPremium),
+          kv("BUY weekly CE+PE premium >=", report.strategy.rules.hedgePremium),
+          kv("Hedge SL %", report.strategy.rules.hedgeSlPct),
+          kv("Overall profit %", report.strategy.rules.overallTargetPct),
+          ...(report.strategy.rules.lines || []).map((line, i) => kv(`Rule ${i + 1}`, line)),
         ]
       : []),
-    ["Start date", report.summary.from],
-    ["End date", report.summary.to],
-    ["Range", report.summary.years ? `Last ${report.summary.years} year(s)` : report.summary.months ? `Last ${report.summary.months} month(s)` : report.summary.range || ""],
-    ["Timeframe", report.summary.timeframe],
-    ["P&L", Number(report.summary.pnl) || 0],
-    ["Trades", Number(report.summary.trades) || 0],
-    ["Wins", Number(report.summary.wins) || 0],
-    ["Losses", Number(report.summary.losses) || 0],
-    ["Win rate %", Number(report.summary.winRate) || 0],
-    ["Combos", Number(report.summary.combos) || 0],
-    ["Combo win rate %", Number(report.summary.comboWinRate) || 0],
-    ["Legs", Number(report.summary.legs) || 0],
-    ["Drawdown", Number(report.summary.maxDrawdown) || 0],
-    ["Avg profit / trade", Number(report.summary.avgProfit) || 0],
-    ["Avg win", Number(report.summary.avgWin) || 0],
-    ["Avg loss", Number(report.summary.avgLoss) || 0],
-    ["Max profit", Number(report.summary.maxProfit) || 0],
-    ["Max loss", Number(report.summary.maxLoss) || 0],
-    ["Return / Max DD", Number(report.summary.returnDd) || 0],
-    ["Reward : Risk", Number(report.summary.rewardRisk) || 0],
-    ["Expectancy", Number(report.summary.expectancy) || 0],
-    ["Max win streak", Number(report.summary.maxWinStreak) || 0],
-    ["Max lose streak", Number(report.summary.maxLoseStreak) || 0],
-    ["Max DD from", report.summary.maxDdFrom],
-    ["Max DD to", report.summary.maxDdTo],
-    ["Max trades in DD", Number(report.summary.maxTradesInDd) || 0],
-    ["Lot", report.summary.lotNote],
-    ["Cost / combo", Number(report.summary.costPerCombo) || 0],
-    ["Required margin (max)", Number(report.summary.requiredMargin) || 0],
-    ["Avg required margin", Number(report.summary.avgMargin) || 0],
-    ["Return on margin %", Number(report.summary.rom) || 0],
-    ["Overall profit %", Number(report.summary.overallTargetPct) || 5],
-    ["Overall target exits", Number(report.summary.targetHits) || 0],
+    kv("Start date", report.summary.from),
+    kv("End date", report.summary.to),
+    kv("Range", report.summary.years ? `Last ${report.summary.years} year(s)` : report.summary.months ? `Last ${report.summary.months} month(s)` : report.summary.range || ""),
+    kv("Timeframe", report.summary.timeframe),
+    kvMoney("P&L", report.summary.pnl),
+    kv("Trades", Number(report.summary.trades) || 0),
+    kv("Wins", Number(report.summary.wins) || 0),
+    kv("Losses", Number(report.summary.losses) || 0),
+    kv("Win rate %", Number(report.summary.winRate) || 0),
+    kv("Combos", Number(report.summary.combos) || 0),
+    kv("Combo win rate %", Number(report.summary.comboWinRate) || 0),
+    kv("Legs", Number(report.summary.legs) || 0),
+    kvMoney("Drawdown", report.summary.maxDrawdown),
+    kvMoney("Avg profit / trade", report.summary.avgProfit),
+    kvMoney("Avg win", report.summary.avgWin),
+    kvMoney("Avg loss", report.summary.avgLoss),
+    kvMoney("Max profit", report.summary.maxProfit),
+    kvMoney("Max loss", report.summary.maxLoss),
+    kv("Return / Max DD", Number(report.summary.returnDd) || 0),
+    kv("Reward : Risk", Number(report.summary.rewardRisk) || 0),
+    kvMoney("Expectancy", report.summary.expectancy),
+    kv("Max win streak", Number(report.summary.maxWinStreak) || 0),
+    kv("Max lose streak", Number(report.summary.maxLoseStreak) || 0),
+    kv("Max DD from", report.summary.maxDdFrom),
+    kv("Max DD to", report.summary.maxDdTo),
+    kv("Max trades in DD", Number(report.summary.maxTradesInDd) || 0),
+    kv("Lot", report.summary.lotNote),
+    kvMoney("Cost / combo", report.summary.costPerCombo),
+    kvMoney("Required margin (max)", report.summary.requiredMargin),
+    kvMoney("Avg required margin", report.summary.avgMargin),
+    kv("Return on margin %", Number(report.summary.rom) || 0),
+    kv("Overall profit %", Number(report.summary.overallTargetPct) || 5),
+    kv("Overall target exits", Number(report.summary.targetHits) || 0),
     ...(Array.isArray(report.legStats) ? report.legStats : []).flatMap((leg) => [
-      [`${leg.label || "Leg"} P&L`, Number(leg.pnl) || 0],
-      [`${leg.label || "Leg"} trades`, Number(leg.trades) || 0],
-      [`${leg.label || "Leg"} win rate %`, Number(leg.winRate) || 0],
-      [`${leg.label || "Leg"} avg`, Number(leg.avgProfit) || 0],
+      kvMoney(`${leg.label || "Leg"} P&L`, leg.pnl),
+      kv(`${leg.label || "Leg"} trades`, Number(leg.trades) || 0),
+      kv(`${leg.label || "Leg"} win rate %`, Number(leg.winRate) || 0),
+      kvMoney(`${leg.label || "Leg"} avg`, leg.avgProfit),
     ]),
-    ["Stored trades", Number(report.summary.storedTrades) || 0],
-    ["Stored win rate %", Number(report.summary.storedWinRate) || 0],
-    ["Skipped days", Number(report.summary.skippedDays) || 0],
-    ["Option source", report.summary.optionSource],
-    ["Generated", report.generatedAt],
-    ["Summary", report.strategy.summary],
+    kv("Stored trades", Number(report.summary.storedTrades) || 0),
+    kv("Stored win rate %", Number(report.summary.storedWinRate) || 0),
+    kv("Skipped days", Number(report.summary.skippedDays) || 0),
+    kv("Option source", report.summary.optionSource, report.summary.optionSource === "stored" ? 4 : 13),
+    [{ value: "Tape", style: 3 }, { value: tape, style: report.summary.optionSource === "stored" ? 4 : 13 }],
+    kv("Generated", report.generatedAt),
+    kv("Summary", report.strategy.summary),
   ];
   const fills = report.legs?.length ? report.legs : report.trades || [];
+  const comboRows = [fillHeaderRow(), ...(report.trades || []).map((row, i) => fillTableRow(row, i % 2 === 1))];
+  const legRowsOut = [fillHeaderRow(), ...fills.map((row, i) => fillTableRow(row, i % 2 === 1))];
+  const lastCombo = Math.max(1, comboRows.length);
+  const lastLeg = Math.max(1, legRowsOut.length);
   return buildXlsx([
-    { name: "Summary", rows: summaryRows },
-    { name: "Combos", rows: [FILL_HEADER, ...(report.trades || []).map(fillTableRow)] },
-    { name: "Legs", rows: [FILL_HEADER, ...fills.map(fillTableRow)] },
+    { name: "Summary", rows: summaryRows, cols: [28, 72], freeze: 1 },
+    { name: "Combos", rows: comboRows, cols: TABLE_WIDTHS, freeze: 1, filterRef: `A1:P${lastCombo}` },
+    { name: "Legs", rows: legRowsOut, cols: TABLE_WIDTHS, freeze: 1, filterRef: `A1:P${lastLeg}` },
   ]);
 }
 
