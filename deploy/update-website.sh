@@ -37,6 +37,7 @@ if [ -d .git ]; then
     src/lib/strategies.ts \
     src/index.css \
     server/niftyTest2/Test2Engine.js \
+    server/niftyVwap/NiftyVwapStrategy.js \
     server/dhanRollingOption.js \
     server/dhan.js \
     server/index.js \
@@ -58,11 +59,18 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw src/pages/Algo.tsx
   pull_raw src/lib/strategies.ts
   pull_raw server/niftyTest2/Test2Engine.js
+  pull_raw server/niftyVwap/NiftyVwapStrategy.js
   pull_raw server/dhanRollingOption.js
   pull_raw server/dhan.js
   pull_raw server/index.js
   pull_raw server/market.js
   pull_raw server/backtestReport.js
+fi
+if ! grep -q "SelectedStrikeChip" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "firstCandlePreviewLegs" "$HOME_DIR/server/market.js"; then
+  echo "Git checkout missed WAIT CE strike files. Downloading them from GitHub."
+  pull_raw src/pages/Algo.tsx
+  pull_raw server/market.js
+  pull_raw server/niftyVwap/NiftyVwapStrategy.js
 fi
 
 if ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
