@@ -22,3 +22,10 @@ test("TEST2 edit form shows the script dropdown once", () => {
   assert.equal(algo.includes("Test2ScriptBar"), false);
   assert.match(algo, /Test2ExpiryBar/);
 });
+
+test("deploy script refuses a TEST2 form with more than one Script dropdown", () => {
+  const deploy = fs.readFileSync(path.join(root, "deploy/update-website.sh"), "utf8");
+  assert.match(deploy, /UI_MARKER="test2-script-v5"/);
+  assert.match(deploy, /SELECTS=\$\(grep -c '<Test2ScriptSelect /);
+  assert.match(deploy, /bash \/tmp\/update-website.sh cursor\/test2-one-script-6826/);
+});

@@ -1,14 +1,15 @@
 #!/bin/bash
 # Publish the live site from GitHub to nginx + restart t2s.
 # Chrome reads /var/www/trade2smart. Restarting t2s alone does not change the page.
-# Run on the VPS as root:
-#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/update-website.sh -o /tmp/update-website.sh
-#   bash /tmp/update-website.sh
+# One TEST2 Script window (do not deploy main until this is merged):
+#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/cursor/test2-one-script-6826/deploy/update-website.sh -o /tmp/update-website.sh
+#   bash /tmp/update-website.sh cursor/test2-one-script-6826
 set -euo pipefail
 
 BRANCH=${1:-main}
 WEBROOT=/var/www/trade2smart
-UI_MARKER="Script · NIFTY BANKNIFTY SENSEX"
+UI_MARKER="test2-script-v5"
+SCRIPT_LABEL="Script · NIFTY BANKNIFTY SENSEX"
 RESULT_MARKER="Connect Dhan LIVE"
 ENGINE_MARKER="storedTrades.length ? storedTrades : synthTrades"
 RAW="https://raw.githubusercontent.com/avinashramole/AlGo/${BRANCH}"
@@ -52,11 +53,12 @@ pull_raw() {
   echo "downloaded $rel"
 }
 
-if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx"; then
-  echo "Git checkout did not bring the TEST2 result card. Downloading files from GitHub."
+if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+  echo "Git checkout did not bring the one-script TEST2 form. Downloading files from GitHub."
   pull_raw src/components/dashboard/StrategyBuilder.tsx
   pull_raw src/pages/Algo.tsx
   pull_raw src/lib/strategies.ts
+  pull_raw src/index.css
   pull_raw server/niftyTest2/Test2Engine.js
   pull_raw server/dhanRollingOption.js
   pull_raw server/dhan.js
@@ -66,7 +68,24 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
 fi
 
 if ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
-  echo "FAIL: $HOME_DIR still has the old TEST2 edit form."
+  echo "FAIL: $HOME_DIR still has the old TEST2 edit form. Deploy cursor/test2-one-script-6826."
+  exit 1
+fi
+if ! grep -q "$SCRIPT_LABEL" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+  echo "FAIL: $HOME_DIR is missing the TEST2 Script label."
+  exit 1
+fi
+SELECTS=$(grep -c '<Test2ScriptSelect ' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || true)
+if [ "$SELECTS" != "1" ]; then
+  echo "FAIL: TEST2 Script dropdown count is $SELECTS, need 1. Branch $BRANCH still has copies."
+  exit 1
+fi
+if grep -q 'mark="premiums"' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || grep -q 'mark="name-slot"' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+  echo "FAIL: TEST2 Edit still has extra Script dropdowns."
+  exit 1
+fi
+if grep -q 'data-test2-scripts="card"' "$HOME_DIR/src/pages/Algo.tsx"; then
+  echo "FAIL: TEST2 card still has a Script dropdown."
   exit 1
 fi
 if ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx"; then
