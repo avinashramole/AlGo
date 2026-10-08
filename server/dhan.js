@@ -200,7 +200,10 @@ export function matchLiveInstrument(instruments, securityId, segment) {
 function liveInstruments() {
   const allFuts = (futureInstruments || []).filter((row) => row?.securityId);
   const liveFuts = allFuts.filter((row) => !row.stale);
-  return INSTRUMENTS.concat(liveFuts.length ? liveFuts : allFuts, livePositionQuoteTargets());
+  const futs = liveFuts.length ? liveFuts : allFuts;
+  const hasCrude = futs.some((row) => String(row.parent || row.symbol || "").toUpperCase().includes("CRUDEOIL"));
+  const crude = hasCrude ? [] : fallbackFrontFutures().filter((row) => row.parent === "CRUDEOIL");
+  return INSTRUMENTS.concat(futs, crude, livePositionQuoteTargets());
 }
 
 function quoteFamily(segment) {

@@ -917,6 +917,24 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
   );
 }
 
+function parseKotakTradeBlob(value: string) {
+  const raw = String(value || "").trim().replace(/\s+/g, "");
+  const secret = raw.match(/^\+?91?([6-9]\d{9})\+(\d{6})\+([A-Z2-7]{16,})$/i);
+  if (secret) return { mobile: `+91${secret[1]}`, mpin: secret[2], totpSecret: secret[3].toUpperCase() };
+  const code = raw.match(/^\+?91?([6-9]\d{9})\+(\d{6})\+(\d{6})$/);
+  if (code) return { mobile: `+91${code[1]}`, mpin: code[2], totpSecret: code[3] };
+  return null;
+}
+
+function normalizeKotakTotpInput(value: string) {
+  const raw = String(value || "").trim();
+  const withWord = raw.match(/^(?:totp[:\s-]*)?(\d{6})(?:\s*totp)?$/i);
+  if (withWord) return withWord[1];
+  const compact = raw.replace(/\s+/g, "");
+  if (/^[A-Z2-7]{16,}$/i.test(compact)) return compact.toUpperCase();
+  return raw;
+}
+
 function needsBrokerApiKey(brokerId: string) {
   return ["zerodha", "fyers", "kotak", "angelone", "upstox"].includes(brokerId);
 }
@@ -942,9 +960,9 @@ function brokerLoginFields(brokerId: string, fields?: BrokerInstallField[]) {
   });
   if (brokerId === "kotak") {
     extra.push(
-      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile registered on this Kotak Neo" },
+      { id: "mobile", label: "Trade login mobile", secret: true, placeholder: "Mobile, or +91mobile+MPIN+TOTP" },
       { id: "mpin", label: "MPIN", secret: true, placeholder: "Kotak Neo MPIN" },
-      { id: "totpSecret", label: "TOTP secret", secret: true, placeholder: "TOTP secret for this client ID" },
+      { id: "totpSecret", label: "TOTP", secret: true, placeholder: "Setup TOTP secret, or the current 6-digit code" },
     );
   }
   if (brokerId === "upstox" || brokerId === "kotak") {
@@ -1012,11 +1030,18 @@ function BrokerLoginFields({
     return "";
   };
   const changeFor = (id: string, value: string) => {
+    const pasted = parseKotakTradeBlob(value);
+    if (pasted && (id === "mobile" || id === "mpin" || id === "totpSecret")) {
+      onTradeMobile(pasted.mobile);
+      onTradeMpin(pasted.mpin);
+      onTradeTotp(pasted.totpSecret);
+      return;
+    }
     if (id === "apiKey") onApiKey(value);
     else if (id === "sessionToken") onSession(value);
     else if (id === "mobile") onTradeMobile(value);
     else if (id === "mpin") onTradeMpin(value);
-    else if (id === "totpSecret") onTradeTotp(value);
+    else if (id === "totpSecret") onTradeTotp(normalizeKotakTotpInput(value));
     else if (id === "accessToken") onToken(value);
   };
   return (

@@ -36,6 +36,7 @@ import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolve
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
   isCrudeFirstCandleAlgo,
+  isCrudeFirstCandleName,
   isFirstCandleAlgo,
   isNiftyFirstCandleAlgo,
   isNiftyFirstCandleName,
@@ -872,10 +873,12 @@ function liveCopyAlgo(stamped = {}) {
   const name = String(stamped?.strategy || "");
   const exact = (state.algos || []).find((row) => String(row.name || "") === name) || {};
   const niftyFirst = isNiftyFirstCandleAlgo(exact) || isNiftyFirstCandleName(name);
-  if (!niftyFirst || String(exact.mappingScope || "") === "master") return exact;
+  const crudeFirst = isCrudeFirstCandleAlgo(exact) || isCrudeFirstCandleName(name);
+  if ((!niftyFirst && !crudeFirst) || String(exact.mappingScope || "") === "master") return exact;
   const also = new Set();
   for (const row of state.algos || []) {
-    if (!isCrudeFirstCandleAlgo(row)) continue;
+    if (niftyFirst && !isCrudeFirstCandleAlgo(row)) continue;
+    if (crudeFirst && !isNiftyFirstCandleAlgo(row)) continue;
     for (const id of row.mappedClientIds || []) {
       const clean = String(id || "").trim();
       if (clean) also.add(clean);

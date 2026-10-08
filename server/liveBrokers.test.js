@@ -17,6 +17,8 @@ const {
   firstKotakMobile,
   kotakMobileNumber,
   kotakMobileNumberCandidates,
+  parseKotakTradeLoginPaste,
+  applyKotakTradeLoginPaste,
   kotakOrderAmo,
   kotakTotpCandidates,
   nfoTradingSymbol,
@@ -629,6 +631,31 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrume
   assert.equal(live.orderId, "upx-oct");
   assert.ok(calls.some((url) => url.includes(`expiry_date=${day}`)));
   assert.ok(calls.some((url) => url.includes("api-hft.upstox.com/v3/order/place")));
+});
+
+test("Kotak trade login paste splits mobile, MPIN, and TOTP", () => {
+  const parsed = parseKotakTradeLoginPaste("+919900112233+123456+JBSWY3DPEHPK3PXP");
+  assert.deepEqual(parsed, {
+    mobile: "+919900112233",
+    mpin: "123456",
+    totpSecret: "JBSWY3DPEHPK3PXP",
+  });
+  const applied = applyKotakTradeLoginPaste({ brokerMobile: "+919900112233+123456+JBSWY3DPEHPK3PXP" });
+  assert.equal(applied.brokerMobile, "+919900112233");
+  assert.equal(applied.brokerMpin, "123456");
+  assert.equal(applied.brokerTotpSecret, "JBSWY3DPEHPK3PXP");
+});
+
+test("Kotak trade login paste accepts a current 6-digit TOTP", () => {
+  const parsed = parseKotakTradeLoginPaste("+919900112233+123456+654321");
+  assert.deepEqual(parsed, {
+    mobile: "+919900112233",
+    mpin: "123456",
+    totpSecret: "654321",
+  });
+  const applied = applyKotakTradeLoginPaste({ brokerTotpSecret: "654321 totp" });
+  assert.equal(applied.brokerTotpSecret, "654321");
+  assert.equal(applied.totpSecret, "654321");
 });
 
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {

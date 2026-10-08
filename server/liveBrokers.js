@@ -952,6 +952,62 @@ export function kotakMobileNumber(value) {
   return String(value || "").trim().replace(/[\s-]/g, "");
 }
 
+export function normalizeKotakTotpInput(value) {
+  const raw = String(value || "").trim();
+  const compact = raw.replace(/\s+/g, "");
+  const withWord = raw.match(/^(?:totp[:\s-]*)?(\d{6})(?:\s*totp)?$/i);
+  if (withWord) return withWord[1];
+  if (/^[A-Z2-7]{16,}$/i.test(compact)) return compact.toUpperCase();
+  return raw;
+}
+
+export function parseKotakTradeLoginPaste(value) {
+  const raw = String(value || "").trim().replace(/\s+/g, "");
+  const secret = raw.match(/^\+?91?([6-9]\d{9})\+(\d{6})\+([A-Z2-7]{16,})$/i);
+  if (secret) {
+    return {
+      mobile: `+91${secret[1]}`,
+      mpin: secret[2],
+      totpSecret: secret[3].toUpperCase(),
+    };
+  }
+  const code = raw.match(/^\+?91?([6-9]\d{9})\+(\d{6})\+(\d{6})$/);
+  if (code) {
+    return {
+      mobile: `+91${code[1]}`,
+      mpin: code[2],
+      totpSecret: code[3],
+    };
+  }
+  return null;
+}
+
+export function applyKotakTradeLoginPaste(patch = {}) {
+  const blob = [patch.brokerMobile, patch.brokerMpin, patch.brokerTotpSecret, patch.mobile, patch.mpin, patch.totpSecret]
+    .map((value) => String(value || "").trim())
+    .find((value) => parseKotakTradeLoginPaste(value));
+  const parsed = parseKotakTradeLoginPaste(blob);
+  if (parsed) {
+    const keepMobile = String(patch.mobile || "").trim();
+    return {
+      ...patch,
+      brokerMobile: parsed.mobile,
+      brokerMpin: parsed.mpin,
+      brokerTotpSecret: parsed.totpSecret,
+      mobile: parseKotakTradeLoginPaste(keepMobile) ? parsed.mobile : keepMobile || parsed.mobile,
+      mpin: parsed.mpin,
+      totpSecret: parsed.totpSecret,
+    };
+  }
+  const totp = normalizeKotakTotpInput(patch.brokerTotpSecret || patch.totpSecret);
+  if (!totp || totp === String(patch.brokerTotpSecret || patch.totpSecret || "").trim()) return patch;
+  return {
+    ...patch,
+    brokerTotpSecret: totp,
+    totpSecret: totp,
+  };
+}
+
 export function kotakMobileNumberCandidates(...values) {
   const digitsList = [];
   for (const value of values) {

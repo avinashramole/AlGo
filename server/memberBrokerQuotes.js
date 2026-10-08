@@ -135,49 +135,205 @@ export function supportedMemberQuoteBroker(brokerId) {
   return ["dhan", "upstox", "zerodha", "fyers", "angelone", "kotak"].includes(String(brokerId || "").toLowerCase());
 }
 
+export function flattenKotakQuoteRows(payload) {
+  if (Array.isArray(payload)) return payload.filter((row) => row && typeof row === "object");
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload.data)) return payload.data.filter((row) => row && typeof row === "object");
+  const data = payload.data && typeof payload.data === "object" ? payload.data : payload;
+  if (Array.isArray(data)) return data.filter((row) => row && typeof row === "object");
+  if (!data || typeof data !== "object") return [];
+  const entries = Object.entries(data).filter(([, row]) => row && typeof row === "object" && !Array.isArray(row));
+  const quoteLike = (row) =>
+    row.ltp != null ||
+    row.lp != null ||
+    row.last_price != null ||
+    row.last_traded_price != null ||
+    row.ts ||
+    row.trading_symbol ||
+    row.tradingsymbol ||
+    row.display_symbol;
+  if (entries.length && entries.every(([, row]) => quoteLike(row))) {
+    return entries.map(([key, row]) => ({ ...row, _key: key }));
+  }
+  if (quoteLike(data)) return [data];
+  return [];
+}
+
 export function quotesFromKotakPayload(payload) {
-  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  const rows = flattenKotakQuoteRows(payload);
   const quotes = [];
   for (const spec of KOTAK_INDEX_TOKENS) {
     const row = rows.find((item) => {
-      const token = String(item?.exchange_token || item?.instrument_token || "").trim().toUpperCase();
-      return token === spec.token.toUpperCase();
+      const token = String(item?.exchange_token || item?.instrument_token || item?.ts || item?.display_symbol || "").trim().toUpperCase();
+      return token === spec.token.toUpperCase() || token.startsWith(`${spec.token.toUpperCase()}-`);
     });
     if (!row) continue;
-    const last = pickNumber(row.ltp, row.last_traded_price);
-    const prev = pickNumber(row.ohlc?.close, row.close);
-    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change));
+    const last = pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lp);
+    const prev = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close);
+    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change, row.chg));
     if (next) quotes.push(next);
   }
   return quotes;
 }
 
+export function kotakNeoFutCode(root, ymd) {
+  const match = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "";
+  return `${root}${match[3]}${MONTHS[Number(match[2]) - 1]}${match[1].slice(-2)}FUT`;
+}
+
 export function kotakCrudeSymbols(dates = upcomingExpiries("CRUDEOIL", 2)) {
-  const codes = ["CRUDEOIL"];
+  const neo = [];
+  const kite = [];
   for (const ymd of dates || []) {
-    const code = frontMonthFutCode("CRUDEOIL", ymd);
-    if (code) codes.push(code);
+    const neoCode = kotakNeoFutCode("CRUDEOIL", ymd);
+    const kiteCode = frontMonthFutCode("CRUDEOIL", ymd);
+    if (neoCode) neo.push(neoCode);
+    if (kiteCode) kite.push(kiteCode);
+  }
+  return [...new Set([...neo, ...kite, "CRUDEOIL"])];
+}
+
+function kotakRowBlob(row = {}) {
+  return `${row.trading_symbol || ""} ${row.tradingsymbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""} ${row.ts || ""} ${row.n || ""} ${row.symbol || ""} ${row._key || ""}`.toUpperCase();
+}
+
+function expiryFromKotakCrudeBlob(blob = "") {
+  const neo = String(blob || "").toUpperCase().match(/CRUDEOIL(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})FUT/);
+  if (neo) {
+    const month = MONTHS.indexOf(neo[2]) + 1;
+    if (month < 1) return "";
+    return `20${neo[3]}-${String(month).padStart(2, "0")}-${neo[1]}`;
+  }
+  return "";
+}
+
+function kotakCrudeLtp(row = {}) {
+  return pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lastPrice, row.lp);
+}
+
+function kotakCrudeQuoteRow(row) {
+  if (!row) return null;
+  const last = kotakCrudeLtp(row);
+  const close = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close, row.prevClose);
+  const next = quoteRow(CRUDE_INSTRUMENT, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
+  if (next) {
+    next.expiry = String(row.expiry || row.exp || expiryFromKotakCrudeBlob(kotakRowBlob(row))).slice(0, 10);
+  }
+  return next;
+}
+
+export function quoteFromKotakCrude(payload, requested = "") {
+  const rows = flattenKotakQuoteRows(payload);
+  const hits = rows.filter((item) => {
+    const blob = kotakRowBlob(item);
+    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
+    const kind = `${item?.instrument_type || ""} ${item?.exchange_token || ""} ${blob}`.toUpperCase();
+    if (/\b(CE|PE)\b/.test(kind) && !/FUT/.test(kind)) return false;
+    return true;
+  });
+  const named = kotakCrudeQuoteRow(hits[0]);
+  if (named) return named;
+  const want = String(requested || "").toUpperCase();
+  if (!want) return null;
+  const tokenHit = rows.find((item) => {
+    const blob = kotakRowBlob(item);
+    return blob.includes(want) || (rows.length === 1 && kotakCrudeLtp(item) > 0);
+  });
+  return kotakCrudeQuoteRow(tokenHit);
+}
+
+function splitKotakCsvLine(line) {
+  const out = [];
+  let cur = "";
+  let quoted = false;
+  for (const ch of String(line || "")) {
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (ch === "," && !quoted) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+export function pickKotakCrudeFutCodes(text) {
+  const lines = String(text || "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) return [];
+  const header = splitKotakCsvLine(lines[0]).map((col) => col.trim());
+  const idx = (name) => header.findIndex((col) => col === name);
+  const iName = idx("pSymbolName");
+  const iTrd = idx("pTrdSymbol");
+  const iType = idx("pInstType") >= 0 ? idx("pInstType") : idx("pInstName");
+  const iOpt = idx("pOptionType");
+  const iTok = idx("pSymbol");
+  const iExp = header.findIndex((col) => col === "lExpiryDate" || col === "pExpiryDate");
+  const hits = [];
+  for (const line of lines.slice(1)) {
+    const cols = splitKotakCsvLine(line);
+    const name = String(iName >= 0 ? cols[iName] : "").toUpperCase().trim();
+    const trd = String(iTrd >= 0 ? cols[iTrd] : "").toUpperCase().trim();
+    const type = String(iType >= 0 ? cols[iType] : "").toUpperCase().trim();
+    const opt = String(iOpt >= 0 ? cols[iOpt] : "").toUpperCase().trim();
+    if (name !== "CRUDEOIL" && !trd.startsWith("CRUDEOIL")) continue;
+    if (name.includes("CRUDEOILM") || trd.includes("CRUDEOILM")) continue;
+    if (type && type !== "FUTCOM" && type !== "FUT") continue;
+    if (opt && opt !== "XX") continue;
+    hits.push({
+      token: String(iTok >= 0 ? cols[iTok] : "").trim(),
+      code: trd,
+      expiry: Number(iExp >= 0 ? cols[iExp] : 0) || 0,
+    });
+  }
+  hits.sort((a, b) => a.expiry - b.expiry);
+  const codes = [];
+  for (const row of hits.slice(0, 2)) {
+    if (row.code) codes.push(row.code);
+    if (row.token) codes.push(row.token);
   }
   return [...new Set(codes)];
 }
 
-function kotakRowBlob(row = {}) {
-  return `${row.trading_symbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""}`.toUpperCase();
+export function kotakMcxMasterUrls(date = new Date()) {
+  return [0, 1, 2].map((offset) => {
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
+      new Date(date.getTime() - offset * 86_400_000),
+    );
+    return `https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/${ymd}/transformed/mcx_fo.csv`;
+  });
 }
 
-export function quoteFromKotakCrude(payload) {
-  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
-  const hits = rows.filter((item) => {
-    const blob = kotakRowBlob(item);
-    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
-    const kind = `${item?.instrument_type || ""} ${item?.exchange_token || ""}`.toUpperCase();
-    if (/\b(CE|PE)\b/.test(kind) && !/FUT/.test(kind)) return false;
-    return true;
-  });
-  const row = hits[0];
-  if (!row) return null;
-  const last = pickNumber(row.ltp, row.last_traded_price);
-  return quoteRow(CRUDE_INSTRUMENT, last, pickNumber(row.ohlc?.close, row.close), pickSignedNumber(row.change, row.per_change));
+let kotakMcxMasterCache = { at: 0, codes: [] };
+const KOTAK_MCX_MASTER_TTL_MS = 6 * 60 * 60 * 1000;
+
+export function resetKotakMcxMasterCache() {
+  kotakMcxMasterCache = { at: 0, codes: [] };
+}
+
+async function kotakCrudeLookupCodes(fetchImpl) {
+  if (kotakMcxMasterCache.codes.length && Date.now() - kotakMcxMasterCache.at < KOTAK_MCX_MASTER_TTL_MS) {
+    return kotakMcxMasterCache.codes;
+  }
+  for (const url of kotakMcxMasterUrls()) {
+    try {
+      const res = await fetchImpl(url, { headers: { Accept: "text/csv, */*" } });
+      if (!res?.ok) continue;
+      const text = typeof res.text === "function" ? await res.text() : "";
+      const codes = pickKotakCrudeFutCodes(text);
+      if (!codes.length) continue;
+      kotakMcxMasterCache = { at: Date.now(), codes };
+      return codes;
+    } catch {
+      /* next dated MCX file */
+    }
+  }
+  return [];
 }
 
 function quoteRow(instrument, ltp, close, netChange) {
@@ -495,9 +651,10 @@ async function fetchKotakQuotes({ accessToken, apiKey, fetchImpl }) {
   } catch {
     quotes = [];
   }
-  for (const code of kotakCrudeSymbols()) {
+  const codes = [...new Set([...(await kotakCrudeLookupCodes(fetchImpl)), ...kotakCrudeSymbols()])];
+  for (const code of codes) {
     try {
-      const crude = quoteFromKotakCrude(await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`));
+      const crude = quoteFromKotakCrude(await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`), code);
       if (!crude) continue;
       quotes = quotes.filter((row) => row.symbol !== "CRUDEOIL").concat(crude);
       break;

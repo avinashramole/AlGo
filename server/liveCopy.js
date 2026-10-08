@@ -239,10 +239,12 @@ function mergeCopyTargets(...lists) {
   return [...byUser.values()];
 }
 
-/** Crude already copies to its mapped user. NIFTY 5m first candle uses that same user. */
-function niftySharesCrudeCopyTargets(payload = {}, algo = {}) {
+/** NIFTY and Crude 5m first candle share the same mapped copy users. */
+function firstCandleSharesCopyTargets(payload = {}, algo = {}) {
   if (String(algo.mappingScope || "") === "master") return [];
-  if (!isNiftyFirstCandleName(payload.strategy)) return [];
+  const nifty = isNiftyFirstCandleName(payload.strategy);
+  const crude = isCrudeFirstCandleName(payload.strategy);
+  if (!nifty && !crude) return [];
   const ids = new Set();
   for (const id of Array.isArray(algo.alsoMappedClientIds) ? algo.alsoMappedClientIds : []) {
     const clean = String(id || "").trim();
@@ -251,8 +253,8 @@ function niftySharesCrudeCopyTargets(payload = {}, algo = {}) {
   for (const row of listDeskRecords()) {
     if (!row.userId || row.userId === "admin") continue;
     if (!subscriptionOpen(row.subscriptionUntil)) continue;
-    if (!isCrudeFirstCandleName(row.mappedStrategy)) continue;
-    ids.add(row.userId);
+    if (nifty && isCrudeFirstCandleName(row.mappedStrategy)) ids.add(row.userId);
+    if (crude && isNiftyFirstCandleName(row.mappedStrategy)) ids.add(row.userId);
   }
   const targets = [];
   for (const userId of ids) {
@@ -281,7 +283,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
       masterQty: payload.qty,
       lotSize: payload.lotSize || payload.qty,
     }),
-    niftySharesCrudeCopyTargets(payload, algo),
+    firstCandleSharesCopyTargets(payload, algo),
   );
   return targets.map((target) => ({
     ...payload,

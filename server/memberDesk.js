@@ -7,7 +7,7 @@ import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./
 import { buildReport, closedTradesToday } from "./desk.js";
 import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
 import { sessionUsesAdminKotak } from "./brokerIsolation.js";
-import { LIVE_BROKER_CATALOG, kotakMobileNumber, liveBrokerSession } from "./liveBrokers.js";
+import { LIVE_BROKER_CATALOG, applyKotakTradeLoginPaste, kotakMobileNumber, liveBrokerSession } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
@@ -853,14 +853,15 @@ export function saveClientSettings(userId, patch = {}) {
   } else if (patch.brokerSessionToken != null && String(patch.brokerSessionToken).trim()) {
     desk.brokerSessionToken = String(patch.brokerSessionToken).trim();
   }
-  if (patch.brokerMobile != null && String(patch.brokerMobile).trim()) {
-    desk.brokerMobile = kotakMobileNumber(patch.brokerMobile);
+  const kotakLogin = applyKotakTradeLoginPaste(patch);
+  if (kotakLogin.brokerMobile != null && String(kotakLogin.brokerMobile).trim()) {
+    desk.brokerMobile = kotakMobileNumber(kotakLogin.brokerMobile);
   }
-  if (patch.brokerMpin != null && String(patch.brokerMpin).trim()) {
-    desk.brokerMpin = String(patch.brokerMpin).trim();
+  if (kotakLogin.brokerMpin != null && String(kotakLogin.brokerMpin).trim()) {
+    desk.brokerMpin = String(kotakLogin.brokerMpin).trim();
   }
-  if (patch.brokerTotpSecret != null && String(patch.brokerTotpSecret).trim()) {
-    desk.brokerTotpSecret = String(patch.brokerTotpSecret).trim();
+  if (kotakLogin.brokerTotpSecret != null && String(kotakLogin.brokerTotpSecret).trim()) {
+    desk.brokerTotpSecret = String(kotakLogin.brokerTotpSecret).trim();
   }
   if (patch.notes != null) desk.notes = String(patch.notes || "").trim();
   if (tokenWritten) enableLiveCopyFromToken(desk, patch);
@@ -1938,9 +1939,16 @@ export function installMemberBroker({ user, brokerId, clientId, apiKey, accessTo
   } else if (sessionToken != null && String(sessionToken).trim()) {
     desk.brokerSessionToken = String(sessionToken).trim();
   }
-  if (String(mobile || "").trim()) desk.brokerMobile = kotakMobileNumber(mobile);
-  if (String(mpin || "").trim()) desk.brokerMpin = String(mpin).trim();
-  if (String(totpSecret || "").trim()) desk.brokerTotpSecret = String(totpSecret).trim();
+  const kotakLogin = applyKotakTradeLoginPaste({ mobile, mpin, totpSecret, brokerMobile: mobile, brokerMpin: mpin, brokerTotpSecret: totpSecret });
+  if (String(kotakLogin.mobile || kotakLogin.brokerMobile || "").trim()) {
+    desk.brokerMobile = kotakMobileNumber(kotakLogin.brokerMobile || kotakLogin.mobile);
+  }
+  if (String(kotakLogin.mpin || kotakLogin.brokerMpin || "").trim()) {
+    desk.brokerMpin = String(kotakLogin.brokerMpin || kotakLogin.mpin).trim();
+  }
+  if (String(kotakLogin.totpSecret || kotakLogin.brokerTotpSecret || "").trim()) {
+    desk.brokerTotpSecret = String(kotakLogin.brokerTotpSecret || kotakLogin.totpSecret).trim();
+  }
   syncSelectedBrokerAccount(desk, { clearSessionToken: Boolean(clearSessionToken) });
   if (clearSessionToken && desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].clearSessionToken = true;
   if (desk.brokerAccounts?.[wanted]) desk.brokerAccounts[wanted].memberAdded = true;

@@ -18,6 +18,7 @@ import {
   assertOwnKotakForSave,
 } from "./memberDesk.js";
 import { deleteOrphanEnrollments, deleteUserEnrollments, listEnrollments } from "./subscriptions.js";
+import { applyKotakTradeLoginPaste, indianMobileDigits } from "./liveBrokers.js";
 import { inventoryAddresses } from "./ipManagement.js";
 import { messagingHandleForUser, removeMessagingUser, removeOrphanMessaging, upsertMessagingContact } from "./messaging.js";
 
@@ -72,12 +73,13 @@ function asClient(user, desk, handle = {}) {
 }
 
 function fillKotakTradeMobile(patch = {}, profileMobile = "", current = {}) {
-  const brokerId = String(patch.brokerId || current.brokerId || "").trim().toLowerCase();
-  if (brokerId !== "kotak") return patch;
-  if (String(patch.brokerMobile || current.brokerMobile || "").trim()) return patch;
+  const next = applyKotakTradeLoginPaste(patch);
+  const brokerId = String(next.brokerId || current.brokerId || "").trim().toLowerCase();
+  if (brokerId !== "kotak") return next;
+  if (String(next.brokerMobile || current.brokerMobile || "").trim()) return next;
   const mobile = String(profileMobile || "").trim();
-  if (!mobile) return patch;
-  return { ...patch, brokerMobile: mobile };
+  if (!mobile) return next;
+  return { ...next, brokerMobile: mobile };
 }
 
 function settingsPatch(patch = {}) {
@@ -201,16 +203,18 @@ export function saveClient(userId, patch = {}) {
   if (String(patch.brokerToken || "").trim() && !targetAccount) {
     throw fail("Paste the client ID with the access token.");
   }
-  if (patch.name != null || patch.mobile != null) {
+  const login = applyKotakTradeLoginPaste(patch);
+  const profileMobile = String(login.mobile || patch.mobile || "").trim() || (indianMobileDigits(login.brokerMobile) ? login.brokerMobile : "");
+  if (patch.name != null || patch.mobile != null || profileMobile) {
     adminUpdateUser(userId, {
       ...(patch.name != null ? { name: patch.name } : {}),
-      ...(patch.mobile != null ? { mobile: patch.mobile } : {}),
+      ...(patch.mobile != null || profileMobile ? { mobile: profileMobile || patch.mobile } : {}),
     });
   }
   const next = getPublicUser(userId);
   saveClientSettings(
     userId,
-    settingsPatch(fillKotakTradeMobile(patch, next?.mobile, peekClientSecrets(userId))),
+    settingsPatch(fillKotakTradeMobile(login, next?.mobile, peekClientSecrets(userId))),
   );
   const handle = messagingHandleForUser(userId);
   const telegramId = patch.telegramId != null ? String(patch.telegramId).trim() : handle.telegramId;
