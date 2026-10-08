@@ -474,59 +474,152 @@ function pdfEscape(text) {
   return String(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function pdfLineOps(line) {
-  return [`(${pdfEscape(line)}) Tj`, "T*"];
+const PDF_W = 842;
+const PDF_H = 595;
+const PDF = {
+  navy: "0.027 0.094 0.200",
+  brand: "0.114 0.306 0.847",
+  white: "1 1 1",
+  text: "0.090 0.141 0.212",
+  muted: "0.392 0.455 0.545",
+  line: "0.780 0.820 0.880",
+  alt: "0.933 0.949 0.988",
+  card: "0.976 0.980 0.992",
+  up: "0.059 0.616 0.345",
+  down: "0.851 0.188 0.145",
+  warnBg: "1.000 0.953 0.878",
+  warn: "0.573 0.251 0.047",
+};
+
+const TABLE_COLS = [
+  { key: "n", title: "#", w: 22, align: "right" },
+  { key: "day", title: "Day", w: 58 },
+  { key: "side", title: "Side", w: 36 },
+  { key: "option", title: "Opt", w: 24 },
+  { key: "strike", title: "Strike", w: 42, align: "right" },
+  { key: "symbol", title: "Symbol", w: 70 },
+  { key: "entryAt", title: "Entry time", w: 80 },
+  { key: "exitAt", title: "Exit time", w: 80 },
+  { key: "entry", title: "Entry Rs.", w: 62, align: "right", money: true },
+  { key: "exit", title: "Exit Rs.", w: 62, align: "right", money: true },
+  { key: "qty", title: "Qty", w: 28, align: "right" },
+  { key: "pnl", title: "P&L Rs.", w: 64, align: "right", money: true, signed: true },
+  { key: "margin", title: "Margin Rs.", w: 68, align: "right", money: true },
+  { key: "rom", title: "ROM %", w: 40, align: "right" },
+];
+
+function pdfTextWidth(text, size) {
+  return String(text || "").length * size * 0.5;
 }
 
-function col(value, width, right = false) {
-  const text = String(value ?? "");
-  return right ? text.slice(-width).padStart(width, " ") : text.slice(0, width).padEnd(width, " ");
+function moneyColor(value) {
+  const n = Number(value);
+  if (n > 0) return PDF.up;
+  if (n < 0) return PDF.down;
+  return PDF.text;
 }
 
-function pdfFillRow(row) {
-  return [
-    col(row.n, 3, true),
-    col(row.day, 10),
-    col(row.side, 5),
-    col(row.option, 3),
-    col(row.strike || "", 6, true),
-    col(row.symbol, 14),
-    col(row.entryAt, 16),
-    col(row.exitAt, 16),
-    col(pdfInr(row.entry), 16, true),
-    col(pdfInr(row.exit), 16, true),
-    col(row.qty, 4, true),
-    col(pdfInr(row.pnl), 16, true),
-    col(pdfInr(row.margin), 16, true),
-    col(Number(row.rom || 0).toFixed(2), 6, true),
-  ].join(" ");
+function cellDisplay(col, row) {
+  if (col.key === "rom") return Number(row.rom || 0).toFixed(2);
+  if (col.key === "strike") return row.strike ? String(row.strike) : "";
+  if (col.money) return pdfInr(row[col.key]);
+  return row[col.key] == null ? "" : String(row[col.key]);
 }
 
-const PDF_FILL_HEADER = [
-  col("#", 3, true),
-  col("Day", 10),
-  col("Side", 5),
-  col("Opt", 3),
-  col("Strike", 6, true),
-  col("Symbol", 14),
-  col("Entry time", 16),
-  col("Exit time", 16),
-  col("Entry Rs.", 16, true),
-  col("Exit Rs.", 16, true),
-  col("Qty", 4, true),
-  col("P&L Rs.", 16, true),
-  col("Margin Rs.", 16, true),
-  col("ROM %", 6, true),
-].join(" ");
+function buildPdfOps(report) {
+  const pages = [];
+  let ops = [];
+  let y = PDF_H - 18;
+  const left = 18;
+  const tableW = TABLE_COLS.reduce((sum, col) => sum + col.w, 0);
+  const rowH = 14;
 
-export function renderBacktestPdf(report) {
-  const lines = [
-    `T2S backtest report  (landscape)`,
-    `${report.strategy.name} - ${report.summary.holdStyle || report.strategy.kind || "strategy"} - Currency Indian Rupee (Rs.)`,
-    `Product ${report.strategy.product || "-"} - ${report.strategy.symbol} - ${report.summary.timeframe || ""}`,
-    ...(report.strategy.rules?.lines || []),
-    `Start date ${report.summary.from || "-"} - End date ${report.summary.to || "-"}`,
-    `Range ${report.summary.years ? `last ${report.summary.years} year(s)` : report.summary.months ? `last ${report.summary.months} month(s)` : report.summary.range || `${report.summary.from} to ${report.summary.to}`}`,
+  const push = (...items) => {
+    ops.push(...items);
+  };
+  const text = (str, x, yy, size, font, color, align = "left", width = 0) => {
+    const value = pdfSafe(str);
+    let tx = x;
+    if (align === "right" && width) tx = x + width - 3 - pdfTextWidth(value, size);
+    else if (align === "center" && width) tx = x + (width - pdfTextWidth(value, size)) / 2;
+    else tx = x + (align === "left" ? 3 : 0);
+    push("BT", `${color} rg`, `/${font} ${size} Tf`, `1 0 0 1 ${tx.toFixed(2)} ${yy.toFixed(2)} Tm`, `(${pdfEscape(value)}) Tj`, "ET");
+  };
+  const rect = (x, yy, w, h, fill, stroke) => {
+    if (fill) push(`${fill} rg`, `${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+    if (stroke) push(`${stroke} RG`, "0.4 w", `${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S`);
+  };
+  const finishPage = () => {
+    text("trade2smart.com   Confidential desk report   A4 landscape", left, 12, 7, "F1", PDF.muted);
+    text(`Page ${pages.length + 1}`, PDF_W - 70, 12, 7, "F1", PDF.muted);
+    pages.push(ops);
+    ops = [];
+    y = PDF_H - 18;
+  };
+  const need = (h) => {
+    if (y - h < 28) {
+      finishPage();
+      brandBar(true);
+    }
+  };
+  const brandBar = (cont = false) => {
+    rect(0, PDF_H - 36, PDF_W, 36, PDF.navy);
+    text("TRADE 2 SMART", left, PDF_H - 23, 13, "F2", PDF.white);
+    text(cont ? "Backtest report (continued)" : "Backtest report", PDF_W - 210, PDF_H - 23, 10, "F1", PDF.white);
+    y = PDF_H - 48;
+  };
+  const section = (title) => {
+    need(22);
+    text(title, left, y, 10, "F2", PDF.navy);
+    y -= 16;
+  };
+
+  brandBar(false);
+  text(`${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "strategy"}  -  Currency Indian Rupee (Rs.)`, left, y, 11, "F2", PDF.text);
+  y -= 13;
+  text(
+    `Product ${report.strategy.product || "-"}  |  ${report.strategy.symbol}  |  ${report.summary.timeframe || ""}  |  Start date ${report.summary.from || "-"}  -  End date ${report.summary.to || "-"}`,
+    left,
+    y,
+    8,
+    "F1",
+    PDF.muted,
+  );
+  y -= 12;
+  const range = report.summary.years
+    ? `Range last ${report.summary.years} year(s)`
+    : report.summary.months
+      ? `Range last ${report.summary.months} month(s)`
+      : `Range ${report.summary.range || `${report.summary.from} to ${report.summary.to}`}`;
+  text(`${range}   Generated ${report.generatedAt}`, left, y, 8, "F1", PDF.muted);
+  y -= 14;
+
+  for (const line of report.strategy.rules?.lines || []) {
+    need(11);
+    text(line, left, y, 8, "F1", PDF.text);
+    y -= 11;
+  }
+  y -= 4;
+
+  const kpis = [
+    { label: "P&L", value: pdfInr(report.summary.pnl), color: moneyColor(report.summary.pnl) },
+    { label: "Trades", value: String(report.summary.trades || 0) },
+    { label: "Win rate", value: `${report.summary.winRate || 0}%` },
+    { label: "Drawdown", value: pdfInr(report.summary.maxDrawdown), color: PDF.down },
+    { label: "ROM", value: `${report.summary.rom || 0}%` },
+  ];
+  const cardW = 152;
+  const cardH = 36;
+  need(cardH + 8);
+  kpis.forEach((kpi, i) => {
+    const x = left + i * (cardW + 8);
+    rect(x, y - cardH + 10, cardW, cardH, PDF.card, PDF.line);
+    text(kpi.label, x + 6, y, 7, "F1", PDF.muted);
+    text(kpi.value, x + 6, y - 16, 11, "F2", kpi.color || PDF.text);
+  });
+  y -= cardH + 8;
+
+  const facts = [
     `P&L ${pdfInr(report.summary.pnl)} - Trades ${report.summary.trades} - Win rate ${report.summary.winRate}%`,
     `Wins ${report.summary.wins} - Losses ${report.summary.losses} - Drawdown ${pdfInr(report.summary.maxDrawdown)}`,
     report.summary.combos ? `Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}` : "",
@@ -549,35 +642,65 @@ export function renderBacktestPdf(report) {
       (leg) =>
         `${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`,
     ),
+  ].filter(Boolean);
+  for (const line of facts) {
+    need(11);
+    text(line, left, y, 8, "F1", line.startsWith("P&L ") ? moneyColor(report.summary.pnl) : PDF.text);
+    y -= 11;
+  }
+
+  const tape =
     report.summary.optionSource === "stored"
       ? "Premiums stored Dhan rolling option tape"
       : report.summary.optionSource === "mixed"
         ? `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days in this book; remaining days used the research model`
-        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - research book from index candles - do not treat P&L or win rate as live proof`,
-    `Generated ${report.generatedAt}`,
-    "",
-    "LEGS",
-    PDF_FILL_HEADER,
-  ]
-    .filter((line, index, all) => line || all[index - 1])
-    .map((line) => pdfSafe(line));
-  const fillRows = report.legs?.length ? report.legs : [];
-  for (const row of fillRows) lines.push(pdfSafe(pdfFillRow(row)));
-  if (!fillRows.length) lines.push("No legs in this replay.");
-  lines.push("", "COMBOS", PDF_FILL_HEADER);
-  for (const row of report.trades || []) lines.push(pdfSafe(pdfFillRow(row)));
-  if (!(report.trades || []).length) lines.push("No combos in this replay.");
+        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - research book from index candles - do not treat P&L or win rate as live proof`;
+  need(22);
+  rect(left, y - 10, tableW, 18, report.summary.optionSource === "stored" ? PDF.alt : PDF.warnBg, PDF.line);
+  text(tape, left + 4, y - 4, 7.5, "F2", report.summary.optionSource === "stored" ? PDF.navy : PDF.warn);
+  y -= 26;
 
-  const pageW = 842;
-  const pageH = 595;
-  const marginX = 24;
-  const marginY = 24;
-  const fontSize = 8;
-  const leading = 10;
-  const startY = pageH - marginY - 6;
-  const perPage = Math.max(20, Math.floor((startY - marginY) / leading));
-  const pages = [];
-  for (let i = 0; i < lines.length; i += perPage) pages.push(lines.slice(i, i + perPage));
+  const drawTable = (title, rows) => {
+    section(title);
+    const headerH = 16;
+    need(headerH + rowH);
+    let x = left;
+    rect(left, y - headerH + 4, tableW, headerH, PDF.navy);
+    for (const col of TABLE_COLS) {
+      text(col.title, x, y - 7, 7, "F2", PDF.white, col.align === "right" ? "right" : "left", col.w);
+      x += col.w;
+    }
+    y -= headerH;
+    if (!rows.length) {
+      need(rowH);
+      rect(left, y - rowH + 4, tableW, rowH, PDF.card, PDF.line);
+      text(title === "LEGS" ? "No legs in this replay." : "No combos in this replay.", left + 6, y - 6, 8, "F1", PDF.muted);
+      y -= rowH + 8;
+      return;
+    }
+    rows.forEach((row, index) => {
+      need(rowH);
+      let cx = left;
+      rect(left, y - rowH + 4, tableW, rowH, index % 2 ? PDF.alt : PDF.white, PDF.line);
+      for (const col of TABLE_COLS) {
+        const value = cellDisplay(col, row);
+        const color = col.signed ? moneyColor(row.pnl) : PDF.text;
+        text(value, cx, y - 6, 7, col.signed ? "F2" : "F1", color, col.align === "right" ? "right" : "left", col.w);
+        cx += col.w;
+      }
+      y -= rowH;
+    });
+    y -= 10;
+  };
+
+  drawTable("LEGS", report.legs || []);
+  drawTable("COMBOS", report.trades || []);
+  finishPage();
+  return pages;
+}
+
+export function renderBacktestPdf(report) {
+  const pages = buildPdfOps(report);
   const firstPage = 3;
   const kids = pages.map((_, i) => `${firstPage + i * 2} 0 R`).join(" ");
   const objects = [
@@ -588,16 +711,9 @@ export function renderBacktestPdf(report) {
   for (let i = 0; i < pages.length; i += 1) {
     const contentId = firstPage + i * 2 + 1;
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >> >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_W} ${PDF_H}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>`,
     );
-    const stream = [
-      "BT",
-      `/F1 ${fontSize} Tf`,
-      `${marginX} ${startY} Td`,
-      `${leading} TL`,
-      ...pages[i].flatMap((line) => pdfLineOps(line)),
-      "ET",
-    ].join("\n");
+    const stream = pages[i].join("\n");
     objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
   }
   let pdf = "%PDF-1.4\n";
