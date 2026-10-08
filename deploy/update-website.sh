@@ -54,8 +54,9 @@ if [ -d .git ]; then
   echo "git-head=$(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
   git remote -v | head -n 2 || true
   git fetch origin "$BRANCH"
-  git checkout -B "$BRANCH" "origin/$BRANCH"
-  git pull origin "$BRANCH"
+  # Discard dirty tracked copies from older hotfixes. Leaves .env, tokan.env, and server/data alone.
+  git checkout -f -B "$BRANCH" "origin/$BRANCH"
+  git reset --hard "origin/$BRANCH"
   # shellcheck disable=SC2086
   git checkout "origin/$BRANCH" -- $FILES
 fi

@@ -36,4 +36,6 @@ test("VPS update-website publishes newest-first rolling and 600s nginx", () => {
   assert.match(script, /fastest Dhan rolling fill/);
   assert.match(script, /proxy_read_timeout 600s/);
   assert.match(script, /write_nginx_trade2smart\.py/);
+  assert.match(script, /git checkout -f -B/);
+  assert.match(script, /git reset --hard/);
 });
