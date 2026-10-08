@@ -8,6 +8,7 @@ import {
   deleteAlgo,
   drainPendingLiveAlgoOrders,
   formatLiveFuturePreview,
+  getChainSpot,
   niftyFuturePreviewBar,
   niftyFutureSignalBars,
   peekNiftyFutureBars,
@@ -422,4 +423,99 @@ test("NIFTY first-candle live still sends BUY PE when T2S_SKIP_LIVE_ALGOS is on"
     setNiftyFutureChartCandles([]);
     setDhanFeed({ live: false, source: "idle", lastTickAt: null });
   }
+});
+
+test("MIDCPNIFTY future ticks do not overwrite NIFTY FUT close or ATM", () => {
+  const open1450 = Date.parse("2026-10-08T09:20:00.000Z");
+  const now = open1450 + FIVE + 60_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    setNiftyFutureChartCandles([
+      { time: open1450, open: 22285.7, high: 22290, low: 22280, close: 22285.7, volume: 20 },
+    ]);
+    applyLiveQuotes([
+      { symbol: "MIDCPNIFTY FUT", parent: "MIDCPNIFTY", kind: "future", ltp: 13459.45, securityId: "442" },
+    ]);
+    const stored = peekNiftyFutureBars();
+    assert.equal(stored[0].open, 22285.7);
+    assert.equal(stored[0].close, 22285.7);
+    assert.notEqual(stored[0].close, 13459.45);
+    const closed = niftyFutureSignalBars("5m", now);
+    assert.equal(closed.at(-1).open, 22285.7);
+    assert.equal(closed.at(-1).close, 22285.7);
+    const text = formatLiveFuturePreview(closed.at(-1), 5);
+    assert.match(text, /O 22285\.70 C 22285\.70/);
+    assert.doesNotMatch(text, /13459|13450/);
+  } finally {
+    Date.now = realNow;
+    setNiftyFutureChartCandles([]);
+  }
+});
+
+test("NIFTY first-candle never uses MIDCP 13450 as ATM", () => {
+  const during1420 = OPEN_1420 + 2 * 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "NIFTY no midcp atm",
+    kind: "nifty-first-candle",
+    runMode: "paper",
+    expiryKind: "weekly",
+  });
+  try {
+    Date.now = () => during1420;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: during1420 });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1420, open: 22302, high: 22310, low: 22280, close: 22285.7, volume: 20 },
+    ]);
+    setOptionDesk({
+      symbol: "NIFTY",
+      expiry: WEEKLY_EXPIRY,
+      expiries: [WEEKLY_EXPIRY],
+      rows: [
+        { strike: 13450, atm: true, callLtp: 95, putLtp: 88, callId: "ce-13450", putId: "pe-13450" },
+        { strike: 22300, atm: false, callLtp: 70, putLtp: 110, callId: "ce-22300", putId: "pe-22300" },
+      ],
+      spot: 13459.45,
+      source: "dhan",
+    });
+    applyLiveQuotes([
+      { symbol: "MIDCPNIFTY FUT", parent: "MIDCPNIFTY", kind: "future", ltp: 13459.45, securityId: "442" },
+    ]);
+    toggleAlgo(created.id, { enabled: true });
+    tickMarket();
+    Date.now = () => OPEN_1420 + FIVE + 60_000;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: Date.now() });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1420, open: 22302, high: 22310, low: 22280, close: 22285.7, volume: 20 },
+      { time: OPEN_1420 + FIVE, open: 22285.7, high: 22290, low: 22280, close: 22282, volume: 8 },
+    ]);
+    tickMarket();
+    const algo = snapshot().algos.find((row) => row.id === created.id);
+    const text = String(algo?.lastSignal || "");
+    assert.match(text, /22[23]00/, text);
+    assert.doesNotMatch(text, /13450|13459/);
+    assert.notEqual(getChainSpot("NIFTY"), 13459.45);
+  } finally {
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    setNiftyFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
+});
+
+test("a mixed NIFTY FUT bar does not print MIDCP close or a 13450 strike", () => {
+  const open1450 = Date.parse("2026-10-08T09:20:00.000Z");
+  const now = open1450 + FIVE + 60_000;
+  setNiftyFutureChartCandles([
+    { time: open1450, open: 22285.7, high: 22290, low: 13459.45, close: 13459.45, volume: 20 },
+  ]);
+  const closed = niftyFutureSignalBars("5m", now);
+  assert.equal(closed.at(-1).open, 22285.7);
+  assert.equal(closed.at(-1).close, 22285.7);
+  const shown = formatLiveFuturePreview(closed.at(-1), 5);
+  assert.match(shown, /O 22285\.70 C 22285\.70/);
+  assert.doesNotMatch(shown, /13459|13450|WAIT PE 13450/);
+  setNiftyFutureChartCandles([]);
 });

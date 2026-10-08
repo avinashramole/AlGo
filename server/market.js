@@ -213,18 +213,22 @@ function clockSession(date, openMins, closeMins, hours) {
   };
 }
 
-export function nseMarketSession(date = new Date()) {
+function nowDate() {
+  return new Date(Date.now());
+}
+
+export function nseMarketSession(date = nowDate()) {
   return clockSession(date, 9 * 60 + 15, 15 * 60 + 30, "09:15–15:30 IST");
 }
 
-export function firstCandleWatchSession(algo = {}, date = new Date()) {
+export function firstCandleWatchSession(algo = {}, date = nowDate()) {
   const cfg = optionEngineConfig(algo);
   const start = parseIstHm(cfg.dailyLiveIst || cfg.firstBarStartIst, "09:00");
   const [hour, minute] = start.split(":").map(Number);
   return clockSession(date, hour * 60 + minute, 15 * 60 + 30, `${start}–15:30 IST`);
 }
 
-export function mcxMarketSession(date = new Date()) {
+export function mcxMarketSession(date = nowDate()) {
   return clockSession(date, 9 * 60, 23 * 60 + 30, "09:00–23:30 IST");
 }
 
@@ -1075,6 +1079,50 @@ function optionBarTimes({ signalTime, formingTime } = {}) {
   return times;
 }
 
+function saneUnderlyingPx(root, px) {
+  const n = Number(px);
+  if (!(n > 0) || !Number.isFinite(n)) return false;
+  const id = String(root || "").toUpperCase();
+  if (id === "NIFTY") return n >= 18000 && n <= 35000;
+  if (id === "CRUDEOIL") return n >= 2000 && n <= 15000;
+  return n > 0;
+}
+
+function chainDeskSpot(root) {
+  const pack = chainForSymbol(root);
+  if (saneUnderlyingPx(root, pack?.meta?.spot)) return Number(pack.meta.spot);
+  if (String(state.optionMeta?.symbol || "").toUpperCase() === String(root || "").toUpperCase() && saneUnderlyingPx(root, state.optionMeta?.spot)) {
+    return Number(state.optionMeta.spot);
+  }
+  return 0;
+}
+
+function chainMarkedAtmStrike(root) {
+  const pack = chainForSymbol(root);
+  const row = (pack?.rows || []).find((item) => item.atm && Number(item.strike) > 0);
+  return Number(row?.strike) || 0;
+}
+
+function firstCandleAtmSpot(root, futPx) {
+  const chainSpot = chainDeskSpot(root);
+  const indexSpot = Number(getChainSpot(root)) || 0;
+  for (const px of [futPx, chainSpot, indexSpot]) {
+    if (saneUnderlyingPx(root, px)) return Number(px);
+  }
+  return 0;
+}
+
+function firstCandleSelectedStrike(root, futPx, step, offset) {
+  const fromSpot = OptionStrikeSelector.strikeForOffset(firstCandleAtmSpot(root, futPx), step, offset);
+  if (saneUnderlyingPx(root, fromSpot)) return fromSpot;
+  const marked = chainMarkedAtmStrike(root);
+  return saneUnderlyingPx(root, marked) ? marked : 0;
+}
+
+function usableFirstCandleStrike(root, strike) {
+  return saneUnderlyingPx(root, strike) ? Number(strike) : 0;
+}
+
 function firstCandlePreviewLegs(algo, preview) {
   const vs = runtimeState(algo);
   const crude = isCrudeFirstCandleAlgo(algo);
@@ -1083,15 +1131,17 @@ function firstCandlePreviewLegs(algo, preview) {
   const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
   const und = getUnderlying(root);
   const futSpot = Number(preview?.close) || 0;
-  const selected = OptionStrikeSelector.strikeForOffset(futSpot || Number(getChainSpot(root)) || 0, und.step, config.strikeOffset);
+  const selected = firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset);
   const ceStrike =
-    vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0
-      ? Number(vs.lockedStrike)
-      : Number(vs.ceStrike) || selected || 0;
+    usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) ||
+    usableFirstCandleStrike(root, vs.ceStrike) ||
+    selected ||
+    0;
   const peStrike =
-    vs.lockedOption === "PE" && Number(vs.lockedStrike) > 0
-      ? Number(vs.lockedStrike)
-      : Number(vs.peStrike) || selected || 0;
+    usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) ||
+    usableFirstCandleStrike(root, vs.peStrike) ||
+    selected ||
+    0;
   return {
     ce: preview ? sameTime(vs.ceBars, preview.time) : null,
     pe: preview ? sameTime(vs.peBars, preview.time) : null,
@@ -1480,10 +1530,14 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     return;
   }
   const futSpot = Number(lastBar?.close) || Number(livePreview?.close) || Number(livePreview?.open) || 0;
-  const spot = isFirstCandleAlgo(algo) ? futSpot || Number(getChainSpot(root)) || 0 : Number(getChainSpot(root)) || futSpot;
-  const selected = OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
-  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
-  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  const spot = isFirstCandleAlgo(algo) ? firstCandleAtmSpot(root, futSpot) : Number(getChainSpot(root)) || futSpot;
+  const selected = isFirstCandleAlgo(algo)
+    ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset)
+    : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
+  const ceStrike =
+    usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) || selected;
+  const peStrike =
+    usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) || selected;
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;
@@ -1547,7 +1601,7 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     futuresBars,
     ceBars: vs.ceBars,
     peBars: vs.peBars,
-    spot,
+    spot: isFirstCandleAlgo(algo) && selected ? selected : spot,
     step: und.step,
     expiry,
     ceLtp,
@@ -1928,6 +1982,9 @@ const INDEX_ALIASES = {
   "FINNIFTY FUT": "FINNIFTY",
   SENSEX: "SENSEX",
   "SENSEX FUT": "SENSEX",
+  MIDCPNIFTY: "MIDCPNIFTY",
+  "MIDCPNIFTY FUT": "MIDCPNIFTY",
+  MIDCAPNIFTY: "MIDCPNIFTY",
   CRUDEOIL: "CRUDEOIL",
   "CRUDEOIL FUT": "CRUDEOIL",
   "CRUDE OIL": "CRUDEOIL",
@@ -3826,9 +3883,48 @@ function patchFutureMinute(series, openMs, price, now) {
   }
 }
 
+function niftyFutureReferencePrice() {
+  const last = (futureCandleSource() || []).at(-1);
+  return Number(last?.close || last?.open || 0);
+}
+
+function looksLikeNiftyFuturePx(price) {
+  const px = Number(price);
+  return px >= 18000 && px <= 35000;
+}
+
+function looksLikeOtherIndexPx(price) {
+  const px = Number(price);
+  return px >= 8000 && px <= 16000;
+}
+
+function isPlausibleNiftyFuturePrice(price, reference = niftyFutureReferencePrice()) {
+  const px = Number(price);
+  if (!(px > 0)) return false;
+  const ref = Number(reference);
+  if (looksLikeNiftyFuturePx(ref) && looksLikeOtherIndexPx(px)) return false;
+  if (looksLikeNiftyFuturePx(ref) && !looksLikeNiftyFuturePx(px) && Math.abs(px - ref) / ref > 0.08) return false;
+  return true;
+}
+
+function sanitizeNiftyFutureBar(bar) {
+  if (!bar) return bar;
+  const open = Number(bar.open);
+  const close = Number(bar.close);
+  if (looksLikeNiftyFuturePx(open) && looksLikeOtherIndexPx(close)) {
+    return {
+      ...bar,
+      close: open,
+      high: Math.max(Number(bar.high) || open, open),
+      low: Math.min(Number(bar.low) || open, open),
+    };
+  }
+  return bar;
+}
+
 function touchNiftyFutureMinute(ltp, now = Date.now()) {
   const price = Number(ltp);
-  if (!(price > 0)) return;
+  if (!(price > 0) || !isPlausibleNiftyFuturePrice(price)) return;
   const openMs = futureMinuteOpen(now);
   if (openMs == null) return;
   if (niftyFutureChartCandles.length) patchFutureMinute(niftyFutureChartCandles, openMs, price, now);
@@ -3981,7 +4077,7 @@ export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now(), sessio
 export function niftyFutureSignalBars(timeframe = "5m", now = Date.now(), session) {
   const source = futureCandleSource();
   if (!source.length) return [];
-  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false, session);
+  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false, session).map(sanitizeNiftyFutureBar);
 }
 
 export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), session) {
@@ -3990,7 +4086,7 @@ export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), sessio
   const minutes = futureBarMinutes(timeframe);
   const barMs = minutes * 60_000;
   const rows = aggregateFutureBars(source, minutes, now, true, session);
-  const last = rows[rows.length - 1];
+  const last = sanitizeNiftyFutureBar(rows[rows.length - 1]);
   if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
   if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
   return last;
@@ -4109,11 +4205,12 @@ export function setLiveCandles(candles, symbol = "NIFTY", instrument = "") {
 export function getChainSpot(symbol = state.optionMeta.symbol) {
   const meta = getUnderlying(symbol);
   const index = state.indices.find((item) => item.symbol === meta.indexSymbol);
-  if (Number(index?.price) > 0) return Number(index.price);
-  if (Number(index?.future) > 0) return Number(index.future);
+  const ok = (px) => meta.id !== "NIFTY" || looksLikeNiftyFuturePx(px);
+  if (Number(index?.price) > 0 && ok(index.price)) return Number(index.price);
+  if (Number(index?.future) > 0 && ok(index.future)) return Number(index.future);
   const pack = chainForSymbol(meta.id);
-  if (Number(pack?.meta?.spot) > 0) return Number(pack.meta.spot);
-  if (String(state.optionMeta?.symbol || "").toUpperCase() === meta.id && Number(state.optionMeta.spot) > 0) {
+  if (Number(pack?.meta?.spot) > 0 && ok(pack.meta.spot)) return Number(pack.meta.spot);
+  if (String(state.optionMeta?.symbol || "").toUpperCase() === meta.id && Number(state.optionMeta.spot) > 0 && ok(state.optionMeta.spot)) {
     return Number(state.optionMeta.spot);
   }
   return 0;
@@ -4220,6 +4317,7 @@ function relatedIndex(symbol) {
   const upper = String(symbol || "").toUpperCase();
   if (upper.includes("BANKNIFTY") || upper.includes("BANK NIFTY")) return "BANKNIFTY";
   if (upper.includes("FINNIFTY")) return "FINNIFTY";
+  if (upper.includes("MIDCPNIFTY") || upper.includes("MIDCAPNIFTY")) return "MIDCPNIFTY";
   if (upper.includes("SENSEX")) return "SENSEX";
   if (upper.includes("CRUDEOIL")) return "CRUDEOIL";
   if (upper.includes("NIFTY")) return "NIFTY 50";
@@ -4377,6 +4475,8 @@ export function applyLiveQuotes(quotes) {
         touchCrudeFutureMinute(ltp);
       }
       if (index.symbol === "NIFTY 50") {
+        const root = underlyingIdFromSymbol(quote.parent || quote.symbol);
+        if (root !== "NIFTY") continue;
         noteNiftyFuturePrice(ltp);
         touchNiftyFutureMinute(ltp);
       }
