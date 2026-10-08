@@ -1388,22 +1388,11 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     if (!isFirstCandleAlgo(algo)) return;
     const closed = signalBars(config.timeframe || "5m", Date.now(), barSession);
     const preview = closed[closed.length - 1] || null;
-    const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
-    const und = getUnderlying(root);
-    const spotNow = Number(getChainSpot(root)) || 0;
-    const selected = OptionStrikeSelector.strikeForOffset(spotNow, und.step, config.strikeOffset);
-    const ceStrike = vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0 ? Number(vs.lockedStrike) : selected || Number(vs.ceStrike) || 0;
-    const peStrike = vs.lockedOption === "PE" && Number(vs.lockedStrike) > 0 ? Number(vs.lockedStrike) : selected || Number(vs.peStrike) || 0;
     stampLiveFuturePreview(
       algo,
       config.timeframe || "5m",
       Date.now(),
-      {
-        ce: preview ? sameTime(vs.ceBars, preview.time) : null,
-        pe: preview ? sameTime(vs.peBars, preview.time) : null,
-        ceStrike,
-        peStrike,
-      },
+      firstCandlePreviewLegs(algo, config, root, preview),
       signalBars,
       barSession,
     );
@@ -4001,11 +3990,45 @@ function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = ni
   const color = VwapSignalEngine.firstBarColor(preview);
   if (color) algo.futureColor = color;
   const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
-  const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
+  const base = String(algo.lastSignal || "")
+    .replace(/ · (?:LIVE|PREVIEW) .+$/, "")
+    .replace(/^(?:LIVE|PREVIEW) .+$/, "");
   algo.lastSignal = label ? (base ? `${base} · ${label}` : label) : base;
   if (color && !/\b(?:GREEN|RED|DOJI)\b/i.test(String(algo.lastSignal || ""))) {
     algo.lastSignal = `${root} ${color.toUpperCase()}`;
   }
+}
+
+function firstCandlePreviewSpot(root, preview) {
+  const und = getUnderlying(root);
+  const step = Number(und.step) || 50;
+  const chainSpot = Number(getChainSpot(root)) || 0;
+  const futSpot = Number(preview?.close) || Number(preview?.open) || 0;
+  if (chainSpot >= step) return chainSpot;
+  if (futSpot >= step) return futSpot;
+  return 0;
+}
+
+function firstCandlePreviewLegs(algo, config, root, preview) {
+  const vs = runtimeState(algo);
+  const und = getUnderlying(root);
+  const spotNow = firstCandlePreviewSpot(root, preview);
+  const selected = OptionStrikeSelector.strikeForOffset(spotNow, und.step, config.strikeOffset);
+  const ceStrike =
+    vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0
+      ? Number(vs.lockedStrike)
+      : selected || Number(vs.ceStrike) || 0;
+  const peStrike =
+    vs.lockedOption === "PE" && Number(vs.lockedStrike) > 0
+      ? Number(vs.lockedStrike)
+      : selected || Number(vs.peStrike) || 0;
+  const sameTime = (bars, time) => (Array.isArray(bars) ? bars : []).find((bar) => Number(bar.time) === Number(time)) || null;
+  return {
+    ce: preview ? sameTime(vs.ceBars, preview.time) : null,
+    pe: preview ? sameTime(vs.peBars, preview.time) : null,
+    ceStrike,
+    peStrike,
+  };
 }
 
 function stampDeskFirstCandleColors() {
@@ -4015,7 +4038,17 @@ function stampDeskFirstCandleColors() {
     const config = optionEngineConfig(algo);
     const barSession = firstCandleBarSession(config, crude);
     const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
-    stampLiveFuturePreview(algo, config.timeframe || "5m", Date.now(), {}, signalBars, barSession);
+    const root = crude ? "CRUDEOIL" : "NIFTY";
+    const closed = signalBars(config.timeframe || "5m", Date.now(), barSession);
+    const preview = closed[closed.length - 1] || null;
+    stampLiveFuturePreview(
+      algo,
+      config.timeframe || "5m",
+      Date.now(),
+      firstCandlePreviewLegs(algo, config, root, preview),
+      signalBars,
+      barSession,
+    );
   }
 }
 

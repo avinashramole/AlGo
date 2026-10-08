@@ -183,17 +183,13 @@ export const NiftyVwapStrategy = {
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
           algo.lastSignal = signal.ceColor
             ? `NO TRADE · ${preview}${fut} GREEN ${optionColorText("CE", signal.ceColor, ceTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : ceTrack
-              ? `WAIT CE ${ceTrack} 5m`
-              : "WAIT CE 5m";
+            : `WAIT · ${preview}${fut} GREEN${ceTrack ? ` CE ${ceTrack}` : ""} O ${tape.open} C ${tape.close}${tape.clock} · WAIT CE${ceTrack ? ` ${ceTrack}` : ""}`;
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
           algo.lastSignal = signal.peColor
             ? `NO TRADE · ${preview}${fut} RED ${optionColorText("PE", signal.peColor, peTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : peTrack
-              ? `WAIT PE ${peTrack} 5m`
-              : "WAIT PE 5m";
+            : `WAIT · ${preview}${fut} RED${peTrack ? ` PE ${peTrack}` : ""} O ${tape.open} C ${tape.close}${tape.clock} · WAIT PE${peTrack ? ` ${peTrack}` : ""}`;
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
         algo.lastSignal = "WAIT NEXT 5m";

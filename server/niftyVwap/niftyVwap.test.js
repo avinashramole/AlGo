@@ -1665,6 +1665,32 @@ test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
   assert.equal(TrailingStopManager.targetPrice(100, 40), 140);
 });
 
+test("first candle WAIT CE prints the selected strike on the preview line", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Wait CE strike" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22510.6, 22523.6)],
+    ceBars: [],
+    peBars: [],
+    ceLtp: 0,
+    peLtp: 0,
+    spot: 22523.6,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "wait");
+  assert.equal(tick.reason, "wait-ce");
+  assert.match(algo.lastSignal, /WAIT · PREVIEW NIFTY FUT GREEN CE 22500 O 22510\.60 C 22523\.60/);
+  assert.match(algo.lastSignal, /09:00–09:05 IST/);
+  assert.match(algo.lastSignal, /WAIT CE 22500/);
+});
+
 test("first candle no-trade line prints the Nifty future candle", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "Fut OHLC" });
   const book = bookAdapter();
