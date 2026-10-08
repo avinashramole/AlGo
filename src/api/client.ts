@@ -1535,6 +1535,48 @@ export function unlockBacktest() {
   );
 }
 
+export type OneMinuteHistorySymbol = {
+  symbol: string;
+  stored: number;
+  missing: number;
+  fineEnough: boolean;
+};
+
+export type OneMinuteHistoryStatus = {
+  from?: string;
+  to?: string;
+  years?: number;
+  chunkDays?: number;
+  storedDays?: number;
+  missingDays?: number;
+  fineEnough?: boolean;
+  symbols?: OneMinuteHistorySymbol[];
+  job?: {
+    running?: boolean;
+    paused?: boolean;
+    symbol?: string;
+    written?: number;
+    calls?: number;
+    error?: string;
+  };
+};
+
+export function getOneMinuteHistory(options: { years?: number; from?: string; to?: string } = {}) {
+  const query = new URLSearchParams();
+  if (options.years) query.set("years", String(options.years));
+  if (options.from) query.set("from", options.from);
+  if (options.to) query.set("to", options.to);
+  const suffix = query.toString() ? `?${query}` : "";
+  return request<OneMinuteHistoryStatus>(`/index-history/1m${suffix}`);
+}
+
+export function syncOneMinuteHistory(payload: { years?: number; from?: string; to?: string; symbols?: string[] } = {}) {
+  return request<OneMinuteHistoryStatus>("/index-history/1m/sync", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
   let response: Response;
   try {

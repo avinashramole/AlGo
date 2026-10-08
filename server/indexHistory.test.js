@@ -10,7 +10,9 @@ process.env.T2S_INDEX_HISTORY_DIR = dir;
 const {
   aggregateIndexBars,
   ensureIndexHistory,
+  ensureReplayBars,
   inferBarTimeframe,
+  missingDayWindows,
   saveIndexBars,
   shiftYmd,
   storedIndexCoverage,
@@ -50,8 +52,10 @@ test("1 year backtest keeps the strategy timeframe instead of forcing 1H", () =>
   assert.equal(pickBacktestTimeframe("5m", 365), "5m");
   assert.equal(pickBacktestTimeframe("15m", 365), "15m");
   assert.equal(pickBacktestTimeframe("1H", 365), "1H");
-  assert.equal(pickBacktestTimeframe("1m", 365), "5m");
+  assert.equal(pickBacktestTimeframe("1m", 365), "1m");
   assert.equal(pickBacktestTimeframe("1m", 10), "1m");
+  assert.equal(pickBacktestTimeframe("2m", 365), "2m");
+  assert.equal(pickBacktestTimeframe("10m", 90), "10m");
   assert.equal(pickBacktestTimeframe("5m", 3650), "5m");
 });
 
@@ -243,4 +247,98 @@ test("EMA 5m and 15m backtests on the same stored year do not match", async () =
     deleteAlgo(ema5.id);
     deleteAlgo(ema15.id);
   }
+});
+
+test("stored 1m bars build 2m 5m 10m and 15m and a later replay reuses disk", async () => {
+  wipeIndexHistory();
+  const raw = bars(75, 1);
+  saveIndexBars("NIFTY", raw, { overwrite: true });
+  assert.equal(inferBarTimeframe(raw), "1m");
+  const two = aggregateIndexBars(raw, "2m");
+  const five = aggregateIndexBars(raw, "5m");
+  const ten = aggregateIndexBars(raw, "10m");
+  const fifteen = aggregateIndexBars(raw, "15m");
+  assert.ok(two.length < raw.length);
+  assert.ok(five.length < two.length);
+  assert.ok(ten.length < five.length);
+  assert.ok(fifteen.length <= ten.length);
+  let fetches = 0;
+  const replay = await ensureReplayBars({
+    symbol: "NIFTY",
+    from: "2026-08-21",
+    to: "2026-08-21",
+    timeframe: "5m",
+    fetchRange: async () => {
+      fetches += 1;
+      throw new Error("should reuse stored 1m");
+    },
+  });
+  assert.equal(fetches, 0);
+  assert.equal(replay.reused, true);
+  assert.equal(replay.storedTf, "1m");
+  assert.equal(replay.candles.length, five.length);
+  assert.equal((await storedIndexCoverage("NIFTY", "2026-08-21", "2026-08-21", "1m")).fineEnough, true);
+});
+
+test("1m download uses 30-day chunks for a 40-day gap", async () => {
+  wipeIndexHistory();
+  let calls = 0;
+  const first = await ensureIndexHistory({
+    symbol: "BANKNIFTY",
+    from: "2026-01-05",
+    to: "2026-02-13",
+    timeframe: "1m",
+    overwrite: false,
+    fetchRange: async ({ from, to, timeframe }) => {
+      calls += 1;
+      assert.equal(timeframe, "1m");
+      const span = Math.round((Date.parse(`${to}T12:00:00+05:30`) - Date.parse(`${from}T12:00:00+05:30`)) / 86_400_000) + 1;
+      assert.ok(span <= 30, `chunk ${from} ${to} was ${span} days`);
+      return bars(30, 1);
+    },
+  });
+  assert.equal(calls, 2);
+  assert.equal(first.reused, false);
+  assert.ok(first.written.length > 0);
+});
+
+test("missing 1m days are fetched in 30-day windows and complete days stay on disk", async () => {
+  wipeIndexHistory();
+  saveIndexBars(
+    "NIFTY",
+    [0, 1].map((i) => ({
+      time: Date.parse("2026-01-05T03:45:00.000Z") + i * 60_000,
+      open: 24000 + i,
+      high: 24010 + i,
+      low: 23990 + i,
+      close: 24005 + i,
+      volume: 10,
+    })),
+    { overwrite: true },
+  );
+  const windows = missingDayWindows(["2026-01-06", "2026-01-07", "2026-02-10"], 30);
+  assert.equal(windows.length, 2);
+  assert.equal(windows[0].from, "2026-01-06");
+  assert.equal(windows[1].from, "2026-02-10");
+  let calls = 0;
+  await ensureIndexHistory({
+    symbol: "NIFTY",
+    from: "2026-01-05",
+    to: "2026-01-07",
+    timeframe: "1m",
+    overwrite: false,
+    fetchRange: async ({ from, to }) => {
+      calls += 1;
+      assert.notEqual(from, "2026-01-05");
+      return [0, 1].map((i) => ({
+        time: Date.parse(`${from}T03:45:00.000Z`) + i * 60_000,
+        open: 24100 + i,
+        high: 24110 + i,
+        low: 24090 + i,
+        close: 24105 + i,
+        volume: 8,
+      }));
+    },
+  });
+  assert.equal(calls, 1);
 });

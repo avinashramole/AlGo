@@ -93,8 +93,8 @@ export const DEFAULT_CRUDE_FIRST_CANDLE_CONFIG = {
   eodSquareOffMinutes: 15,
 };
 
-const FIRST_CANDLE_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15 };
-const NIFTY_TEST_TIMEFRAMES = { "1m": 1, "5m": 5, "15m": 15, "1H": 60 };
+const FIRST_CANDLE_TIMEFRAMES = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15 };
+const NIFTY_TEST_TIMEFRAMES = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15, "1H": 60 };
 
 export const DEFAULT_NIFTY_TEST_CONFIG = {
   timeframe: "5m",

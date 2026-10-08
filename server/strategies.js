@@ -25,7 +25,7 @@ const SYMBOLS = [
 
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
-const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
+const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "1H"];
 const OPERATORS = ["close_above", "close_below", "crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
 const SOURCES = [
   "price",
