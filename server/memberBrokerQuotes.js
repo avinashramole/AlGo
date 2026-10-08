@@ -208,7 +208,22 @@ function expiryFromKotakCrudeBlob(blob = "") {
   return "";
 }
 
-export function quoteFromKotakCrude(payload) {
+function kotakCrudeLtp(row = {}) {
+  return pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lastPrice, row.lp);
+}
+
+function kotakCrudeQuoteRow(row) {
+  if (!row) return null;
+  const last = kotakCrudeLtp(row);
+  const close = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close, row.prevClose);
+  const next = quoteRow(CRUDE_INSTRUMENT, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
+  if (next) {
+    next.expiry = String(row.expiry || row.exp || expiryFromKotakCrudeBlob(kotakRowBlob(row))).slice(0, 10);
+  }
+  return next;
+}
+
+export function quoteFromKotakCrude(payload, requested = "") {
   const rows = flattenKotakQuoteRows(payload);
   const hits = rows.filter((item) => {
     const blob = kotakRowBlob(item);
@@ -217,15 +232,108 @@ export function quoteFromKotakCrude(payload) {
     if (/\b(CE|PE)\b/.test(kind) && !/FUT/.test(kind)) return false;
     return true;
   });
-  const row = hits[0];
-  if (!row) return null;
-  const last = pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lastPrice, row.lp);
-  const close = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close, row.prevClose);
-  const next = quoteRow(CRUDE_INSTRUMENT, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
-  if (next) {
-    next.expiry = String(row.expiry || row.exp || expiryFromKotakCrudeBlob(kotakRowBlob(row))).slice(0, 10);
+  const named = kotakCrudeQuoteRow(hits[0]);
+  if (named) return named;
+  const want = String(requested || "").toUpperCase();
+  if (!want) return null;
+  const tokenHit = rows.find((item) => {
+    const blob = kotakRowBlob(item);
+    return blob.includes(want) || (rows.length === 1 && kotakCrudeLtp(item) > 0);
+  });
+  return kotakCrudeQuoteRow(tokenHit);
+}
+
+function splitKotakCsvLine(line) {
+  const out = [];
+  let cur = "";
+  let quoted = false;
+  for (const ch of String(line || "")) {
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (ch === "," && !quoted) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
   }
-  return next;
+  out.push(cur);
+  return out;
+}
+
+export function pickKotakCrudeFutCodes(text) {
+  const lines = String(text || "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) return [];
+  const header = splitKotakCsvLine(lines[0]).map((col) => col.trim());
+  const idx = (name) => header.findIndex((col) => col === name);
+  const iName = idx("pSymbolName");
+  const iTrd = idx("pTrdSymbol");
+  const iType = idx("pInstType") >= 0 ? idx("pInstType") : idx("pInstName");
+  const iOpt = idx("pOptionType");
+  const iTok = idx("pSymbol");
+  const iExp = header.findIndex((col) => col === "lExpiryDate" || col === "pExpiryDate");
+  const hits = [];
+  for (const line of lines.slice(1)) {
+    const cols = splitKotakCsvLine(line);
+    const name = String(iName >= 0 ? cols[iName] : "").toUpperCase().trim();
+    const trd = String(iTrd >= 0 ? cols[iTrd] : "").toUpperCase().trim();
+    const type = String(iType >= 0 ? cols[iType] : "").toUpperCase().trim();
+    const opt = String(iOpt >= 0 ? cols[iOpt] : "").toUpperCase().trim();
+    if (name !== "CRUDEOIL" && !trd.startsWith("CRUDEOIL")) continue;
+    if (name.includes("CRUDEOILM") || trd.includes("CRUDEOILM")) continue;
+    if (type && type !== "FUTCOM" && type !== "FUT") continue;
+    if (opt && opt !== "XX") continue;
+    hits.push({
+      token: String(iTok >= 0 ? cols[iTok] : "").trim(),
+      code: trd,
+      expiry: Number(iExp >= 0 ? cols[iExp] : 0) || 0,
+    });
+  }
+  hits.sort((a, b) => a.expiry - b.expiry);
+  const codes = [];
+  for (const row of hits.slice(0, 2)) {
+    if (row.code) codes.push(row.code);
+    if (row.token) codes.push(row.token);
+  }
+  return [...new Set(codes)];
+}
+
+export function kotakMcxMasterUrls(date = new Date()) {
+  return [0, 1, 2].map((offset) => {
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
+      new Date(date.getTime() - offset * 86_400_000),
+    );
+    return `https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/${ymd}/transformed/mcx_fo.csv`;
+  });
+}
+
+let kotakMcxMasterCache = { at: 0, codes: [] };
+const KOTAK_MCX_MASTER_TTL_MS = 6 * 60 * 60 * 1000;
+
+export function resetKotakMcxMasterCache() {
+  kotakMcxMasterCache = { at: 0, codes: [] };
+}
+
+async function kotakCrudeLookupCodes(fetchImpl) {
+  if (kotakMcxMasterCache.codes.length && Date.now() - kotakMcxMasterCache.at < KOTAK_MCX_MASTER_TTL_MS) {
+    return kotakMcxMasterCache.codes;
+  }
+  for (const url of kotakMcxMasterUrls()) {
+    try {
+      const res = await fetchImpl(url, { headers: { Accept: "text/csv, */*" } });
+      if (!res?.ok) continue;
+      const text = typeof res.text === "function" ? await res.text() : "";
+      const codes = pickKotakCrudeFutCodes(text);
+      if (!codes.length) continue;
+      kotakMcxMasterCache = { at: Date.now(), codes };
+      return codes;
+    } catch {
+      /* next dated MCX file */
+    }
+  }
+  return [];
 }
 
 function quoteRow(instrument, ltp, close, netChange) {
@@ -543,9 +651,10 @@ async function fetchKotakQuotes({ accessToken, apiKey, fetchImpl }) {
   } catch {
     quotes = [];
   }
-  for (const code of kotakCrudeSymbols()) {
+  const codes = [...new Set([...(await kotakCrudeLookupCodes(fetchImpl)), ...kotakCrudeSymbols()])];
+  for (const code of codes) {
     try {
-      const crude = quoteFromKotakCrude(await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`));
+      const crude = quoteFromKotakCrude(await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`), code);
       if (!crude) continue;
       quotes = quotes.filter((row) => row.symbol !== "CRUDEOIL").concat(crude);
       break;

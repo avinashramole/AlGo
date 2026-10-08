@@ -6,9 +6,12 @@ import {
   fetchMemberBrokerQuotes,
   frontMonthFutCode,
   kotakCrudeSymbols,
+  kotakMcxMasterUrls,
   kotakNeoFutCode,
   pickCrudeSearchHit,
+  pickKotakCrudeFutCodes,
   quoteFromKotakCrude,
+  resetKotakMcxMasterCache,
   quotesFromAngelPayload,
   quotesFromFyersPayload,
   quotesFromKotakPayload,
@@ -84,6 +87,29 @@ test("Kotak Crude quote reads Neo object payload ts/lp", () => {
   assert.equal(quote.ltp, 6124.5);
   assert.equal(quote.close, 6100);
   assert.equal(quote.expiry, "2026-10-19");
+});
+
+test("Kotak MCX scrip master picks the nearest CRUDEOIL FUTCOM", () => {
+  const codes = pickKotakCrudeFutCodes(
+    [
+      "pSymbol,pSymbolName,pTrdSymbol,pInstType,pOptionType,lExpiryDate",
+      "1,CRUDEOILM,CRUDEOILM19OCT26FUT,FUTCOM,XX,1",
+      "569900,CRUDEOIL,CRUDEOIL19OCT26FUT,FUTCOM,XX,1792454399",
+      "9,CRUDEOIL,CRUDEOIL19OCT26 6100 CE,OPTFUT,CE,1792454399",
+      "573422,CRUDEOIL,CRUDEOIL19NOV26FUT,FUTCOM,XX,1795132799",
+    ].join("\n"),
+  );
+  assert.deepEqual(codes, ["CRUDEOIL19OCT26FUT", "569900", "CRUDEOIL19NOV26FUT", "573422"]);
+  assert.match(kotakMcxMasterUrls(new Date("2026-10-08T06:00:00.000Z"))[0], /2026-10-08\/transformed\/mcx_fo\.csv/);
+});
+
+test("Kotak Crude quote accepts a Neo token-only MCX row", () => {
+  const quote = quoteFromKotakCrude(
+    { data: { "mcx_fo|569900": { exchange_token: "569900", lp: "6144.00", c: "6110.00" } } },
+    "569900",
+  );
+  assert.equal(quote.ltp, 6144);
+  assert.equal(quote.symbol, "CRUDEOIL");
 });
 
 test("Kotak Crude quote ignores mini contracts and CE/PE rows", () => {
@@ -171,6 +197,7 @@ test("Kotak Neo quote payload maps index LTP and yesterday close", () => {
 });
 
 test("fetchMemberBrokerQuotes calls Kotak with the plain consumer key", async () => {
+  resetKotakMcxMasterCache();
   const seen = [];
   const quotes = await fetchMemberBrokerQuotes({
     brokerId: "kotak",
@@ -198,6 +225,7 @@ test("fetchMemberBrokerQuotes calls Kotak with the plain consumer key", async ()
 });
 
 test("Kotak crude is requested on MCX after the index quotes", async () => {
+  resetKotakMcxMasterCache();
   const seen = [];
   const quotes = await fetchMemberBrokerQuotes({
     brokerId: "kotak",
@@ -238,7 +266,53 @@ test("Kotak crude is requested on MCX after the index quotes", async () => {
   assert.equal(JSON.stringify(quotes).includes("trade-token-1452"), false);
 });
 
+test("Kotak Crude feed quotes the MCX scrip-master future when NSE indexes already work", async () => {
+  resetKotakMcxMasterCache();
+  const seen = [];
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "kotak",
+    apiKey: "member-consumer-key",
+    accessToken: "trade-token-1452",
+    clientId: "YT2VM",
+    fetchImpl: async (url) => {
+      const raw = decodeURIComponent(String(url));
+      seen.push(raw);
+      if (raw.includes("transformed/mcx_fo.csv")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            [
+              "pSymbol,pSymbolName,pTrdSymbol,pInstType,pOptionType,lExpiryDate",
+              "569900,CRUDEOIL,CRUDEOIL19OCT26FUT,FUTCOM,XX,1792454399",
+            ].join("\n"),
+        };
+      }
+      if (raw.includes("mcx_fo|569900") || raw.includes("mcx_fo|CRUDEOIL19OCT26FUT")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: { "mcx_fo|569900": { exchange_token: "569900", lp: "6151.50", c: "6118" } } }),
+        };
+      }
+      if (raw.includes("mcx_fo|")) {
+        return { ok: false, status: 400, text: async () => JSON.stringify({ message: "invalid symbol" }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ exchange_token: "Nifty 50", exchange: "nse_cm", ltp: "22421.95", ohlc: { close: "22620.45" } }]),
+      };
+    },
+  });
+  assert.ok(seen.some((url) => url.includes("transformed/mcx_fo.csv")));
+  assert.ok(seen.some((url) => url.includes("mcx_fo|569900") || url.includes("mcx_fo|CRUDEOIL19OCT26FUT")));
+  assert.equal(quotes.find((row) => row.symbol === "NIFTY 50").ltp, 22421.95);
+  assert.equal(quotes.find((row) => row.symbol === "CRUDEOIL").ltp, 6151.5);
+});
+
 test("Kotak Crude feed uses the Neo expiry-day symbol when Kite-style codes fail", async () => {
+  resetKotakMcxMasterCache();
   const seen = [];
   const quotes = await fetchMemberBrokerQuotes({
     brokerId: "kotak",
