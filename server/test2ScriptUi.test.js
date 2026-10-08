@@ -28,6 +28,7 @@ test("backtest range tells TEST2 to fill this month first", () => {
 test("VPS update-website publishes newest-first rolling and 600s nginx", () => {
   const script = fs.readFileSync(path.join(root, "deploy/update-website.sh"), "utf8");
   assert.match(script, /cursor\/fast-rolling-backtest-eae6/);
+  assert.match(script, /BRANCH=\$\{BRANCH%%\[\[:space:\]\.\]\*\}/);
   assert.match(script, /ROLLING_CONCURRENCY/);
   assert.match(script, /newestFirst: true/);
   assert.match(script, /fastest Dhan rolling fill/);

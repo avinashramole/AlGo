@@ -3,10 +3,15 @@
 # Chrome reads /var/www/trade2smart. Restarting t2s alone does not change the page.
 # Run on the VPS as root to publish the fast rolling Backtest branch:
 #   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/cursor/fast-rolling-backtest-eae6/deploy/update-website.sh -o /tmp/update-website.sh
-#   bash /tmp/update-website.sh cursor/fast-rolling-backtest-eae6
+#   bash /tmp/update-website.sh
 set -euo pipefail
 
 BRANCH=${1:-cursor/fast-rolling-backtest-eae6}
+BRANCH=${BRANCH%%[[:space:].]*}
+BRANCH=${BRANCH%/}
+if [ -z "$BRANCH" ]; then
+  BRANCH=cursor/fast-rolling-backtest-eae6
+fi
 WEBROOT=/var/www/trade2smart
 UI_MARKER="Script · NIFTY BANKNIFTY SENSEX"
 RESULT_MARKER="Connect Dhan LIVE"
@@ -48,11 +53,11 @@ cd "$HOME_DIR"
 if [ -d .git ]; then
   echo "git-head=$(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
   git remote -v | head -n 2 || true
-  git fetch origin "$BRANCH" || git fetch origin || true
-  git checkout "$BRANCH" 2>/dev/null || git checkout -B "$BRANCH" "origin/$BRANCH" || true
-  git pull origin "$BRANCH" || true
+  git fetch origin "$BRANCH"
+  git checkout -B "$BRANCH" "origin/$BRANCH"
+  git pull origin "$BRANCH"
   # shellcheck disable=SC2086
-  git checkout "origin/$BRANCH" -- $FILES 2>/dev/null || true
+  git checkout "origin/$BRANCH" -- $FILES
 fi
 
 pull_raw() {
