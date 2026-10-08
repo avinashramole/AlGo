@@ -1543,7 +1543,13 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     config,
     now,
     feedLive: Boolean(feedLive),
-    minutesToClose: session.open ? (crude ? minutesUntilIst(23 * 60 + 30, new Date(now)) : undefined) : 0,
+    minutesToClose: session.open
+      ? crude
+        ? minutesUntilIst(23 * 60 + 30, new Date(now))
+        : undefined
+      : open
+        ? minutesUntilIst(crude ? 23 * 60 + 30 : 15 * 60 + 30, new Date(now))
+        : 0,
     futuresBars,
     ceBars: vs.ceBars,
     peBars: vs.peBars,

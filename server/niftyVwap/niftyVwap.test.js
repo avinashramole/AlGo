@@ -1991,6 +1991,98 @@ test("preview candle open and close buy PE at the next open, and the current clo
   assert.match(algo.lastSignal, /PREVIEW NIFTY FUT RED \+ PE 22650 GREEN O 22680\.00 C 22647\.50/);
 });
 
+test("first candle holds after BUY PE and does not exit on a stale cheap PE print", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Hold after PE buy" });
+  const book = bookAdapter();
+  const preview = {
+    time: T0_0900 + BAR,
+    open: 22680,
+    high: 22690,
+    low: 22640,
+    close: 22647.5,
+    volume: 1000,
+  };
+  const pePreview = { time: T0_0900 + BAR, open: 80, high: 170, low: 78, close: 167.1, volume: 500 };
+  const entry = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540), preview],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96), pePreview],
+    ceLtp: 100,
+    peLtp: 167.1,
+    spot: 22647.5,
+    step: 50,
+    expiry: "2026-10-01",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(entry.action, "entry");
+  assert.equal(book.places[0].option, "PE");
+  assert.equal(book.positions[0].avg, 167.1);
+  const stale = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR + 20_000,
+    feedLive: true,
+    minutesToClose: 359,
+    futuresBars: [firstBar(24500, 24540), preview],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96), pePreview],
+    ceLtp: 100,
+    peLtp: 80,
+    spot: 22647.5,
+    step: 50,
+    expiry: "2026-10-01",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(stale.action, "hold", String(algo.lastSignal || ""));
+  assert.equal(book.exits.length, 0);
+  assert.match(String(algo.lastSignal || ""), /HOLD/);
+  assert.match(String(algo.lastSignal || ""), /SL /);
+  assert.match(String(algo.lastSignal || ""), /TGT /);
+  const dip = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR + 40_000,
+    feedLive: true,
+    minutesToClose: 358,
+    futuresBars: [firstBar(24500, 24540), preview],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96), pePreview],
+    ceLtp: 100,
+    peLtp: 166.5,
+    spot: 22647.5,
+    step: 50,
+    expiry: "2026-10-01",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(dip.action, "hold");
+  assert.equal(book.exits.length, 0);
+  book.positions[0].ltp = 130;
+  book.positions[0].ticked = true;
+  const sl = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR + 60_000,
+    feedLive: true,
+    minutesToClose: 357,
+    futuresBars: [firstBar(24500, 24540), preview],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96), { ...pePreview, close: 130 }],
+    ceLtp: 100,
+    peLtp: 130,
+    spot: 22647.5,
+    step: 50,
+    expiry: "2026-10-01",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(sl.action, "exit");
+  assert.equal(sl.reason, "sl");
+});
+
 test("first candle duplicate bar and restart do not place a second order", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "First candle once" });
   const book = bookAdapter();

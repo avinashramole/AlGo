@@ -11,6 +11,9 @@ test("Dhan expiry-style option symbols are options", () => {
 test("NIFTY spot is not a sane option premium", () => {
   assert.equal(isSaneOptionLtp(23403.4, 96.71), false);
   assert.equal(isSaneOptionLtp(91.48, 96.71), true);
+  assert.equal(isSaneOptionLtp(166.5, 167.1), true);
+  assert.equal(isSaneOptionLtp(130, 167.1), true);
+  assert.equal(isSaneOptionLtp(80, 167.1), false);
 });
 
 test("Live MTM uses broker option P&L instead of index minus fill", () => {
