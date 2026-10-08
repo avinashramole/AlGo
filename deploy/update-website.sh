@@ -34,6 +34,7 @@ if [ -d .git ]; then
   git pull origin "$BRANCH" || true
   git checkout "origin/$BRANCH" -- \
     src/components/dashboard/StrategyBuilder.tsx \
+    src/components/dashboard/OneMinuteHistoryBar.tsx \
     src/pages/Algo.tsx \
     src/lib/strategies.ts \
     src/index.css \
@@ -41,6 +42,8 @@ if [ -d .git ]; then
     server/dhanRollingOption.js \
     server/dhan.js \
     server/index.js \
+    server/indexHistory.js \
+    server/indexHistorySync.js \
     server/market.js \
     server/backtestReport.js \
     deploy/publish-web.js 2>/dev/null || true
@@ -56,6 +59,7 @@ pull_raw() {
 if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
   echo "Git checkout did not bring the one-script TEST2 form. Downloading files from GitHub."
   pull_raw src/components/dashboard/StrategyBuilder.tsx
+  pull_raw src/components/dashboard/OneMinuteHistoryBar.tsx
   pull_raw src/pages/Algo.tsx
   pull_raw src/lib/strategies.ts
   pull_raw src/index.css
@@ -63,6 +67,8 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw server/dhanRollingOption.js
   pull_raw server/dhan.js
   pull_raw server/index.js
+  pull_raw server/indexHistory.js
+  pull_raw server/indexHistorySync.js
   pull_raw server/market.js
   pull_raw server/backtestReport.js
 fi
@@ -98,6 +104,10 @@ if ! grep -q "$ENGINE_MARKER" "$HOME_DIR/server/niftyTest2/Test2Engine.js"; then
 fi
 if ! grep -q "ROLLING_BACKTEST_DEADLINE_MS" "$HOME_DIR/server/dhanRollingOption.js" || ! grep -q "dhan-not-live" "$HOME_DIR/server/index.js"; then
   echo "FAIL: $HOME_DIR still has the old TEST2 rolling download."
+  exit 1
+fi
+if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHistoryBar.tsx" || ! grep -q "ensureReplayBars" "$HOME_DIR/server/index.js"; then
+  echo "FAIL: $HOME_DIR still has the old 1m history sync."
   exit 1
 fi
 

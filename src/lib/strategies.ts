@@ -276,7 +276,7 @@ export const PATTERNS = [
   { id: "SR_BOUNCE", label: "Support / resistance bounce" },
 ];
 
-export const TIMEFRAMES = ["1m", "5m", "15m", "1H"];
+export const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "1H"];
 
 export const RUN_MODES = [
   { id: "paper" as const, title: "Paper trading", text: "Uses the live Dhan feed. Fills stay virtual on Paper Trading — nothing is sent to Dhan." },
@@ -389,6 +389,8 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
 
 export function firstCandleMinutes(timeframe?: string) {
   if (timeframe === "1m") return 1;
+  if (timeframe === "2m") return 2;
+  if (timeframe === "10m") return 10;
   if (timeframe === "15m") return 15;
   return 5;
 }
@@ -409,7 +411,7 @@ export function firstCandleEntryIst(firstBar?: string, timeframe?: string, store
   const barClose = addIstMinutes(start, minutes);
   const current = String(stored || "").trim();
   if (!current) return barClose;
-  const otherClocks = [1, 5, 15].filter((step) => step !== minutes).map((step) => addIstMinutes(start, step));
+  const otherClocks = [1, 2, 5, 10, 15].filter((step) => step !== minutes).map((step) => addIstMinutes(start, step));
   if (otherClocks.includes(current)) return barClose;
   return current;
 }

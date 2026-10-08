@@ -728,7 +728,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 set({ timeframe });
               }}
             >
-              {(reversal || hedge ? ["15m"] : vwap || test1 || test2 ? ["5m"] : firstCandle || crudeFirst || niftyTest ? ["1m", "5m", "15m"] : TIMEFRAMES).map((row) => (
+              {(reversal || hedge
+                ? ["15m"]
+                : vwap
+                  ? ["5m"]
+                  : test1 || test2 || firstCandle || crudeFirst || niftyTest
+                    ? ["1m", "2m", "5m", "10m", "15m"]
+                    : TIMEFRAMES
+              ).map((row) => (
                 <option key={row} value={row}>
                   {row}
                 </option>

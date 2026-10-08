@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { downloadBacktestReport, updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
+import { OneMinuteHistoryBar } from "../components/dashboard/OneMinuteHistoryBar";
 import { SignalFeed } from "../components/dashboard/SignalFeed";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
@@ -321,6 +322,7 @@ export function Algo() {
               </button>
             </div>
           </div>
+          <OneMinuteHistoryBar />
           <div className="flex flex-wrap gap-2">
             {(
               [

@@ -9,7 +9,8 @@ import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBroker
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
-import { ensureIndexHistory } from "./indexHistory.js";
+import { ensureReplayBars } from "./indexHistory.js";
+import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
@@ -960,7 +961,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
     let candleSource = "";
     let reused = false;
     try {
-      const packed = await ensureIndexHistory({
+      const packed = await ensureReplayBars({
         symbol: algo.symbol,
         from: window.from,
         to: window.to,
@@ -972,7 +973,7 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
                 symbol: args.symbol,
                 from: args.from,
                 to: args.to,
-                timeframe: args.timeframe,
+                timeframe: args.timeframe || "1m",
               })
           : undefined,
       });
@@ -1085,6 +1086,54 @@ app.post("/api/algos/:id/backtest", async (req, res) => {
 app.post("/api/backtest/unlock", (_req, res) => {
   clearBacktestBusy();
   res.json({ ok: true, unlocked: true });
+});
+
+app.get("/api/index-history/1m", async (req, res) => {
+  try {
+    const status = await oneMinuteSyncStatus({
+      years: req.query.years,
+      from: req.query.from,
+      to: req.query.to,
+    });
+    res.json(status);
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Could not read 1m history" });
+  }
+});
+
+app.post("/api/index-history/1m/sync", async (req, res) => {
+  try {
+    if (!isDhanLive()) {
+      await ensureDhanLiveFromSavedToken();
+    }
+    if (!isDhanLive()) {
+      res.status(400).json({ error: "Connect Dhan LIVE before syncing 1m history." });
+      return;
+    }
+    const body = req.body || {};
+    startOneMinuteIndexSync({
+      years: body.years,
+      from: body.from,
+      to: body.to,
+      symbols: body.symbols,
+      fetchRange: (args) =>
+        fetchDhanHistory({
+          symbol: args.symbol,
+          from: args.from,
+          to: args.to,
+          timeframe: "1m",
+        }),
+    });
+    const status = await oneMinuteSyncStatus({
+      years: body.years,
+      from: body.from,
+      to: body.to,
+      symbols: body.symbols,
+    });
+    res.json(status);
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Could not start 1m sync" });
+  }
 });
 
 app.post("/api/algos/:id/backtest/reset", (req, res) => {

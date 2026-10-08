@@ -42,27 +42,41 @@ function isYmd(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
+export const ONE_MINUTE_HISTORY_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL"];
+export const ONE_MINUTE_CHUNK_DAYS = 30;
+
 export function historySymbol(symbol) {
   const root = optionRoot(symbol);
-  if (root === "CRUDEOIL") return "CRUDEOIL";
-  if (root === "BANKNIFTY" || root === "FINNIFTY" || root === "SENSEX") return root;
+  if (root === "CRUDEOIL" || root === "NATURALGAS" || root === "COPPER") return root;
+  if (root === "BANKNIFTY" || root === "FINNIFTY" || root === "MIDCPNIFTY" || root === "SENSEX") return root;
   return root || "NIFTY";
 }
 
 export function tfMinutes(tf) {
-  const raw = String(tf || "5m");
+  const raw = String(tf || "5m").toLowerCase();
   if (raw === "1m") return 1;
+  if (raw === "2m") return 2;
+  if (raw === "3m") return 3;
+  if (raw === "5m") return 5;
+  if (raw === "10m") return 10;
   if (raw === "15m") return 15;
-  if (raw === "1H" || raw === "1h") return 60;
-  if (raw === "1D" || raw === "1d" || raw === "day") return 390;
+  if (raw === "30m") return 30;
+  if (raw === "1h") return 60;
+  if (raw === "1d" || raw === "day") return 390;
+  const mins = Number(String(tf || "").replace(/[^0-9.]/g, ""));
+  if (mins > 0 && /m$/i.test(String(tf || ""))) return mins;
   return 5;
 }
 
 export function normalizeTimeframe(tf) {
   const mins = tfMinutes(tf);
   if (mins <= 1) return "1m";
-  if (mins <= 5) return "5m";
-  if (mins <= 15) return "15m";
+  if (mins === 2) return "2m";
+  if (mins === 3) return "3m";
+  if (mins === 5) return "5m";
+  if (mins === 10) return "10m";
+  if (mins === 15) return "15m";
+  if (mins === 30) return "30m";
   if (mins <= 60) return "1H";
   return "1D";
 }
@@ -125,7 +139,10 @@ export function inferBarTimeframe(candles = []) {
   deltas.sort((a, b) => a - b);
   const median = deltas[Math.floor(deltas.length / 2)];
   if (median <= 90_000) return "1m";
+  if (median <= 2.5 * 60_000) return "2m";
+  if (median <= 4 * 60_000) return "3m";
   if (median <= 8 * 60_000) return "5m";
+  if (median <= 12 * 60_000) return "10m";
   if (median <= 20 * 60_000) return "15m";
   if (median <= 2 * 60 * 60_000) return "1H";
   return "1D";
@@ -287,15 +304,38 @@ export async function storedIndexCoverage(symbol, from, to, timeframe = "5m") {
   return { stored, missing, fineEnough: missing.length === 0 };
 }
 
-function chunkRange(from, to, size = 30) {
+export function chunkRange(from, to, size = ONE_MINUTE_CHUNK_DAYS) {
   const chunks = [];
   let cur = from;
+  const step = Math.max(1, Number(size) || ONE_MINUTE_CHUNK_DAYS);
   while (cur <= to) {
-    const end = shiftYmd(cur, size - 1);
+    const end = shiftYmd(cur, step - 1);
     chunks.push({ from: cur, to: end < to ? end : to });
     cur = shiftYmd(end, 1);
   }
   return chunks;
+}
+
+export function missingDayWindows(missing = [], size = ONE_MINUTE_CHUNK_DAYS) {
+  const days = [...missing].filter(isYmd).sort();
+  if (!days.length) return [];
+  const step = Math.max(1, Number(size) || ONE_MINUTE_CHUNK_DAYS);
+  const windows = [];
+  let start = days[0];
+  let prev = days[0];
+  for (let i = 1; i < days.length; i += 1) {
+    const cur = days[i];
+    const between = listYmds(shiftYmd(prev, 1), shiftYmd(cur, -1));
+    const gap = between.some((ymd) => !isWeekend(ymd));
+    const span = listYmds(start, cur).length;
+    if (gap || span > step) {
+      windows.push({ from: start, to: prev });
+      start = cur;
+    }
+    prev = cur;
+  }
+  windows.push({ from: start, to: prev });
+  return windows;
 }
 
 async function fetchWindow(fetchRange, { symbol, from, to, timeframe }) {
@@ -313,12 +353,18 @@ async function fetchWindow(fetchRange, { symbol, from, to, timeframe }) {
   }
 }
 
-async function fetchAndStoreChunks(fetchRange, { symbol, from, to, timeframe, overwrite }) {
+async function fetchAndStoreChunks(fetchRange, { symbol, from, to, timeframe, overwrite, missing }) {
   if (typeof fetchRange !== "function") return [];
+  const oneMinute = tfMinutes(timeframe) <= 1;
+  const limit = oneMinute ? ONE_MINUTE_CHUNK_DAYS : 45;
   const days = Math.max(1, listYmds(from, to).length);
-  const windows = days > 45 ? chunkRange(from, to, 30) : [{ from, to }];
+  const windows = !overwrite && Array.isArray(missing) && missing.length
+    ? missingDayWindows(missing, ONE_MINUTE_CHUNK_DAYS)
+    : days > limit
+      ? chunkRange(from, to, ONE_MINUTE_CHUNK_DAYS)
+      : [{ from, to }];
   const written = [];
-  const parallel = 3;
+  const parallel = oneMinute ? 2 : 3;
   for (let i = 0; i < windows.length; i += parallel) {
     const batch = windows.slice(i, i + parallel);
     const packs = await Promise.all(
@@ -366,15 +412,77 @@ export async function ensureIndexHistory({
     to,
     timeframe: tf,
     overwrite,
+    missing: overwrite ? undefined : coverage.missing,
   });
-  const candles = aggregateIndexBars(await loadIndexBars(root, from, to), tf);
   const after = await storedIndexCoverage(root, from, to, tf);
+  const raw = await loadIndexBars(root, from, to);
+  const storedTf = inferBarTimeframe(raw);
+  const canReplay = after.fineEnough || tfMinutes(storedTf) <= tfMinutes(tf);
+  const candles = canReplay ? aggregateIndexBars(raw, tf) : [];
   return {
     candles,
     source: candles.length ? (written.length ? "dhan" : "stored") : "",
     reused: !written.length && candles.length > 0,
     written,
     missing: after.missing,
+    storedTf,
+  };
+}
+
+export async function ensureReplayBars({
+  symbol,
+  from,
+  to,
+  timeframe = "5m",
+  fetchRange,
+  overwrite = false,
+} = {}) {
+  const replayTf = normalizeTimeframe(timeframe);
+  const one = await ensureIndexHistory({
+    symbol,
+    from,
+    to,
+    timeframe: "1m",
+    fetchRange,
+    overwrite,
+  });
+  if (one.candles?.length && (!(one.missing || []).length || tfMinutes(one.storedTf || "1m") <= 1)) {
+    return {
+      candles: aggregateIndexBars(one.candles, replayTf),
+      source: one.source,
+      reused: one.reused,
+      written: one.written,
+      missing: one.missing,
+      storedTf: "1m",
+    };
+  }
+  if (replayTf === "1m") {
+    return { ...one, candles: one.candles || [], storedTf: one.storedTf || "1m" };
+  }
+  const fallback = await ensureIndexHistory({
+    symbol,
+    from,
+    to,
+    timeframe: replayTf,
+    fetchRange,
+    overwrite,
+  });
+  return {
+    ...fallback,
+    storedTf: fallback.storedTf || inferBarTimeframe(fallback.candles),
+  };
+}
+
+export async function oneMinuteCoverage(symbol, from, to) {
+  const root = historySymbol(symbol);
+  const coverage = await storedIndexCoverage(root, from, to, "1m");
+  return {
+    symbol: root,
+    stored: coverage.stored.length,
+    missing: coverage.missing.length,
+    storedDays: coverage.stored,
+    missingDays: coverage.missing,
+    fineEnough: coverage.fineEnough,
   };
 }
 
