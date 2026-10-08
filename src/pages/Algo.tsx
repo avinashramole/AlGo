@@ -75,6 +75,34 @@ function FutureCandleChip({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
+function selectedStrikeFromAlgo(algo: AlgoStrategy) {
+  const text = String(algo.lastSignal || "");
+  const wait = text.match(/\bWAIT\s+(CE|PE)\s+(\d{3,6})\b/i);
+  if (wait) return { option: wait[1].toUpperCase(), strike: Number(wait[2]) };
+  const colored = text.match(/\b(CE|PE)\s+(\d{3,6})\s+(?:GREEN|RED|DOJI)\b/i);
+  if (colored) return { option: colored[1].toUpperCase(), strike: Number(colored[2]) };
+  const buy = text.match(/\bBUY\s+(\d{3,6})\s+(CE|PE)\b/i);
+  if (buy) return { option: buy[2].toUpperCase(), strike: Number(buy[1]) };
+  const strike = Number(algo.trade?.strike || 0);
+  if (!(strike > 0)) return { option: "", strike: 0 };
+  const option = String(algo.trade?.option || "").toUpperCase();
+  return { option: option === "PE" || option === "CE" ? option : "", strike };
+}
+
+function SelectedStrikeChip({ algo }: { algo: AlgoStrategy }) {
+  const { option, strike } = selectedStrikeFromAlgo(algo);
+  if (!(strike > 0)) return null;
+  return (
+    <span
+      className="rounded bg-[var(--card-muted)] px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-slate-500"
+      data-selected-strike={strike}
+      data-selected-option={option || ""}
+    >
+      {option ? `${option} ${strike}` : `STRIKE ${strike}`}
+    </span>
+  );
+}
+
 function statusLabel(algo: AlgoStrategy) {
   if (algo.runMode === "backtest" || algo.status === "BACKTEST") return "RESEARCH";
   if (algo.enabled && algo.runMode === "paper") return "PAPER";
@@ -649,7 +677,10 @@ function AlgoCard({
       ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
   const status = statusLabel(algo);
-  const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
+  const contract =
+    isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || algo.instrument === "option"
+      ? algo.trade?.label || contractLabel(algo)
+      : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
     <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"}>
@@ -661,7 +692,12 @@ function AlgoCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-base font-bold">{algo.name}</h2>
-              {isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <FutureCandleChip algo={algo} /> : null}
+              {isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? (
+                <>
+                  <FutureCandleChip algo={algo} />
+                  <SelectedStrikeChip algo={algo} />
+                </>
+              ) : null}
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",
@@ -684,7 +720,9 @@ function AlgoCard({
               </div>
             ) : null}
             <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>
-            {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
+            {(isNiftyVwapHedgeKind(algo) || isNiftyFirstCandleKind(algo) || isCrudeFirstCandleKind(algo)) &&
+            algo.trade?.hint &&
+            algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
             ) : null}
           </div>

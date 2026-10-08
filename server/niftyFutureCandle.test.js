@@ -85,6 +85,18 @@ test("live preview candle keeps its own open and close while the 5m bar is still
     "LIVE NIFTY FUT RED O 22663.00 C 22647.50 · 09:20–09:25 IST · WAIT PE",
   );
   assert.equal(
+    formatLiveFuturePreview(preview, 5, { ceStrike: 22650, peStrike: 22650 }),
+    "LIVE NIFTY FUT RED O 22663.00 C 22647.50 · 09:20–09:25 IST · WAIT PE 22650",
+  );
+  assert.equal(
+    formatLiveFuturePreview(
+      { time: preview.time, open: 22510.6, high: 22530, low: 22500, close: 22523.6, volume: 12 },
+      5,
+      { ceStrike: 22500, peStrike: 22500 },
+    ),
+    "LIVE NIFTY FUT GREEN O 22510.60 C 22523.60 · 09:20–09:25 IST · WAIT CE 22500",
+  );
+  assert.equal(
     formatLiveFuturePreview(
       preview,
       5,
@@ -259,6 +271,35 @@ test("changing the strategy to 15m builds 15-minute candles from 09:00", () => {
   setNiftyFutureChartCandles([]);
 });
 
+test("WAIT CE preview card line shows the selected ATM strike", () => {
+  const open0945 = Date.parse("2026-09-29T04:15:00.000Z");
+  const now = open0945 + FIVE + 30_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    setNiftyFutureChartCandles([
+      { time: open0945, open: 22510.6, high: 22530, low: 22500, close: 22523.6, volume: 20 },
+    ]);
+    applyLiveQuotes([
+      { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 22523.6, open: 22510.6 },
+    ]);
+    const desk = snapshot();
+    if (!desk.algos.some((row) => row.kind === "nifty-first-candle")) {
+      createAlgo({ name: "NIFTY", kind: "nifty-first-candle", runMode: "live" });
+    }
+    tickMarket();
+    const nifty = snapshot().algos.find((row) => row.kind === "nifty-first-candle");
+    assert.match(String(nifty.lastSignal || ""), /PREVIEW NIFTY FUT GREEN O 22510\.60 C 22523\.60/);
+    assert.match(String(nifty.lastSignal || ""), /09:45–09:50 IST/);
+    assert.match(String(nifty.lastSignal || ""), /WAIT CE 22500/);
+    assert.equal(Number(nifty.trade?.strike), 22500);
+  } finally {
+    Date.now = realNow;
+    setNiftyFutureChartCandles([]);
+    setLiveCandles([{ time: Date.now(), open: 1, high: 1, low: 1, close: 1, volume: 1 }], "NIFTY");
+  }
+});
+
 test("paused NIFTY and CRUDE OIL always show future candle green or red", () => {
   const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
   const now = open0900 + FIVE + 60_000;
@@ -288,6 +329,8 @@ test("paused NIFTY and CRUDE OIL always show future candle green or red", () => 
     assert.equal(crude.futureColor, "red");
     assert.match(String(nifty.lastSignal || ""), /NIFTY FUT GREEN/);
     assert.match(String(crude.lastSignal || ""), /CRUDE FUT RED/);
+    assert.match(String(nifty.lastSignal || ""), /WAIT CE \d{4,6}/);
+    assert.equal(Number(nifty.trade?.strike) > 0, true);
   } finally {
     Date.now = realNow;
     setNiftyFutureChartCandles([]);
