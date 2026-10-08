@@ -16,7 +16,9 @@ test("TEST2 edit form shows the script dropdown once", () => {
   assert.match(builder, /mark="top"/);
   assert.equal(builder.includes('mark="premiums"'), false);
   assert.equal(builder.includes('mark="name-slot"'), false);
-  assert.match(builder, /data-ui=\{test2 \? "test2-script-v4"/);
-  assert.match(algo, /Script · NIFTY BANKNIFTY SENSEX/);
-  assert.match(algo, /data-test2-scripts="card"/);
+  assert.match(builder, /data-ui=\{test2 \? "test2-script-v5"/);
+  assert.equal((algo.match(/data-test2-scripts=/g) || []).length, 0);
+  assert.equal(algo.includes("Script · NIFTY BANKNIFTY SENSEX"), false);
+  assert.equal(algo.includes("Test2ScriptBar"), false);
+  assert.match(algo, /Test2ExpiryBar/);
 });

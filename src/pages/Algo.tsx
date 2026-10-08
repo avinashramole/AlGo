@@ -503,7 +503,7 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
-function Test2ScriptBar({ algo }: { algo: AlgoStrategy }) {
+function Test2ExpiryBar({ algo }: { algo: AlgoStrategy }) {
   const { refresh } = useMarket();
   const [saving, setSaving] = useState(false);
   const script = TEST2_SCRIPTS.find((row) => row.id === algo.symbol) || TEST2_SCRIPTS[0];
@@ -515,42 +515,14 @@ function Test2ScriptBar({ algo }: { algo: AlgoStrategy }) {
       await updateAlgo(algo.id, patch);
       await refresh();
     } catch (err) {
-      window.alert(catchDeskError(err, "Could not save TEST2 script"));
+      window.alert(catchDeskError(err, "Could not save TEST2 expiry"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="mt-2 grid w-full grid-cols-1 gap-2 sm:grid-cols-3" data-test2-card-scripts>
-      <label className="block text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300 sm:col-span-3">
-        Script · NIFTY BANKNIFTY SENSEX
-        <select
-          data-test2-scripts="card"
-          className="mt-1 h-10 w-full rounded-lg border border-sky-500 bg-[var(--bg)] px-2 text-sm font-bold text-[var(--text)]"
-          value={algo.symbol || "NIFTY"}
-          disabled={saving}
-          onChange={(event) => {
-            const row = TEST2_SCRIPTS.find((item) => item.id === event.target.value) || TEST2_SCRIPTS[0];
-            const nextMcx = row.session === "mcx";
-            const lots = Math.max(1, Number(algo.lots) || 1);
-            void save({
-              symbol: row.id,
-              lotSize: row.lot,
-              qty: lots * row.lot,
-              endTimeIst: nextMcx ? "23:15" : algo.endTimeIst || "15:15",
-              sellExpiryKind: nextMcx ? "monthly" : algo.sellExpiryKind || "monthly",
-              hedgeExpiryKind: nextMcx ? "monthly" : algo.hedgeExpiryKind || "weekly",
-            });
-          }}
-        >
-          {TEST2_SCRIPTS.map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.label} · CE/PE
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className="mt-2 grid w-full grid-cols-1 gap-2 sm:grid-cols-2" data-test2-card-expiry>
       <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
         SELL option
         <select
@@ -675,7 +647,7 @@ function AlgoCard({
               </span>
             </div>
             {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
-            {isNiftyTest2Kind(algo) ? <Test2ScriptBar algo={algo} /> : null}
+            {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
             <div className="desk-help mt-2 text-sm text-slate-400">{meta.config}</div>
             {algo.runMode === "live" ? (

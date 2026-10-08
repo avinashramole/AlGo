@@ -341,7 +341,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         className="desk-sheet card p-3"
         data-edit-strategy={editing ? algo?.id || "open" : "new"}
         data-test2-edit={test2 ? "true" : "false"}
-        data-ui={test2 ? "test2-script-v4" : undefined}
+        data-ui={test2 ? "test2-script-v5" : undefined}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
