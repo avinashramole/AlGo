@@ -1628,6 +1628,8 @@ export async function fetchDhanRollingOption({
   securityId = 13,
   exchangeSegment = "NSE_FNO",
   instrument = "OPTIDX",
+  timeoutMs = 15_000,
+  attempts = 2,
 } = {}) {
   if (!accessToken) return null;
   const fromDate = dateOnly(from);
@@ -1651,7 +1653,7 @@ export async function fetchDhanRollingOption({
       fromDate,
       toDate,
     },
-    { timeoutMs: 30_000, attempts: 2 },
+    { timeoutMs: Number(timeoutMs) > 0 ? Number(timeoutMs) : 15_000, attempts: Number(attempts) > 0 ? Number(attempts) : 2 },
   );
 }
 

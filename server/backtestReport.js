@@ -314,22 +314,91 @@ function colLetter(index) {
   return out;
 }
 
-function xlsxCell(value, ref) {
+function xlsxCell(value, ref, style) {
+  const s = Number.isFinite(Number(style)) ? ` s="${Number(style)}"` : "";
   if (typeof value === "number" && Number.isFinite(value)) {
-    return `<c r="${ref}"><v>${value}</v></c>`;
+    return `<c r="${ref}"${s}><v>${value}</v></c>`;
   }
-  return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(value ?? "")}</t></is></c>`;
+  return `<c r="${ref}"${s} t="inlineStr"><is><t>${xmlEscape(value ?? "")}</t></is></c>`;
 }
 
-function xlsxSheet(rows = []) {
+function moneyStyle(value) {
+  const n = Number(value);
+  if (n > 0) return 6;
+  if (n < 0) return 7;
+  return 5;
+}
+
+function xlsxSheet(rows = [], { cols = [], freeze = 0, filterRef = "" } = {}) {
   const body = rows
     .map((row, r) => {
-      const cells = (Array.isArray(row) ? row : []).map((value, c) => xlsxCell(value, `${colLetter(c)}${r + 1}`)).join("");
-      return `<row r="${r + 1}">${cells}</row>`;
+      const cells = (Array.isArray(row) ? row : []).map((item, c) => {
+        const value = item && typeof item === "object" && "value" in item ? item.value : item;
+        const style = item && typeof item === "object" && "style" in item ? item.style : undefined;
+        return xlsxCell(value, `${colLetter(c)}${r + 1}`, style);
+      }).join("");
+      const firstStyle = row?.[0] && typeof row[0] === "object" ? Number(row[0].style) : NaN;
+      const ht = firstStyle === 1 ? 26 : 18;
+      return `<row r="${r + 1}" ht="${ht}" customHeight="1">${cells}</row>`;
     })
     .join("");
+  const colXml = cols.length
+    ? `<cols>${cols
+        .map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`)
+        .join("")}</cols>`
+    : "";
+  const views = freeze
+    ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+    : "";
+  const filter = filterRef ? `<autoFilter ref="${xmlEscape(filterRef)}"/>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${views}${colXml}<sheetData>${body}</sheetData>${filter}</worksheet>`;
+}
+
+function xlsxStyles() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;Rs.&quot; #,##,##0.00"/></numFmts>
+<fonts count="7">
+<font><sz val="11"/><name val="Calibri"/><color rgb="FF172B36"/></font>
+<font><b/><sz val="16"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF0F9D58"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFD93025"/></font>
+<font><sz val="11"/><name val="Calibri"/><color rgb="FF64748B"/></font>
+<font><b/><sz val="12"/><name val="Calibri"/><color rgb="FF1D4ED8"/></font>
+</fonts>
+<fills count="7">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF071833"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFEEF3FF"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE6F4EA"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFCE8E6"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/></patternFill></fill>
+</fills>
+<borders count="2">
+<border/>
+<border><left style="thin"><color rgb="FFC5D0E0"/></left><right style="thin"><color rgb="FFC5D0E0"/></right><top style="thin"><color rgb="FFC5D0E0"/></top><bottom style="thin"><color rgb="FFC5D0E0"/></bottom></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="14">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="3" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="4" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+<xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="3" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="4" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="4" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+</cellXfs>
+</styleSheet>`;
 }
 
 function xlsxWorkbook(names = []) {
@@ -341,12 +410,56 @@ function xlsxWorkbook(names = []) {
 }
 
 function xlsxRels(count) {
-  const rels = Array.from({ length: count }, (_, i) => {
-    return `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`;
-  }).join("");
+  const rels = [
+    ...Array.from({ length: count }, (_, i) => {
+      return `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`;
+    }),
+    `<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`,
+  ].join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
 }
+
+function kv(label, value, valueStyle = 4) {
+  return [
+    { value: label, style: 3 },
+    { value, style: valueStyle },
+  ];
+}
+
+function kvMoney(label, value) {
+  return kv(label, Number(value) || 0, moneyStyle(value));
+}
+
+function fillHeaderRow() {
+  return FILL_HEADER.map((title) => ({ value: title, style: 2 }));
+}
+
+function fillTableRow(row, alt = false) {
+  const text = alt ? 8 : 4;
+  const money = alt ? 9 : 5;
+  return [
+    { value: Number(row.n) || 0, style: text },
+    { value: row.day || "", style: text },
+    { value: row.side || "", style: text },
+    { value: row.option || "", style: text },
+    { value: Number(row.strike) || 0, style: text },
+    { value: row.symbol || "", style: text },
+    { value: row.entryAt || "", style: text },
+    { value: row.exitAt || "", style: text },
+    { value: Number(row.entry) || 0, style: money },
+    { value: Number(row.exit) || 0, style: money },
+    { value: Number(row.qty) || 0, style: text },
+    { value: Number(row.pnl) || 0, style: moneyStyle(row.pnl) },
+    { value: Number(row.margin) || 0, style: money },
+    { value: Number(row.rom) || 0, style: text },
+    { value: Number(row.netCredit) || 0, style: money },
+    { value: Number(row.bars) || 0, style: text },
+  ];
+}
+
+const FILL_HEADER = ["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry time", "Exit time", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"];
+const TABLE_WIDTHS = [6, 12, 8, 8, 10, 16, 18, 18, 12, 12, 8, 14, 14, 10, 12, 8];
 
 function buildXlsx(sheets = []) {
   const names = sheets.map((sheet) => String(sheet.name || "Sheet").slice(0, 31));
@@ -358,6 +471,7 @@ function buildXlsx(sheets = []) {
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 ${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}
 </Types>`,
     },
@@ -370,103 +484,101 @@ ${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Con
     },
     { name: "xl/workbook.xml", data: xlsxWorkbook(names) },
     { name: "xl/_rels/workbook.xml.rels", data: xlsxRels(names.length) },
-    ...sheets.map((sheet, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: xlsxSheet(sheet.rows || []) })),
+    { name: "xl/styles.xml", data: xlsxStyles() },
+    ...sheets.map((sheet, i) => ({
+      name: `xl/worksheets/sheet${i + 1}.xml`,
+      data: xlsxSheet(sheet.rows || [], {
+        cols: sheet.cols || [],
+        freeze: sheet.freeze || 0,
+        filterRef: sheet.filterRef || "",
+      }),
+    })),
   ];
   return zipStore(files);
 }
 
-function fillTableRow(row) {
-  return [
-    Number(row.n) || 0,
-    row.day || "",
-    row.side || "",
-    row.option || "",
-    Number(row.strike) || 0,
-    row.symbol || "",
-    row.entryAt || "",
-    row.exitAt || "",
-    Number(row.entry) || 0,
-    Number(row.exit) || 0,
-    Number(row.qty) || 0,
-    Number(row.pnl) || 0,
-    Number(row.margin) || 0,
-    Number(row.rom) || 0,
-    Number(row.netCredit) || 0,
-    Number(row.bars) || 0,
-  ];
-}
-
-const FILL_HEADER = ["#", "Day", "Side", "Option", "Strike", "Symbol", "Entry time", "Exit time", "Entry", "Exit", "Qty", "P&L", "Margin", "ROM %", "Net credit", "Bars"];
-
 export function renderBacktestExcel(report) {
+  const tape =
+    report.summary.optionSource === "stored"
+      ? "Premiums stored Dhan rolling option tape"
+      : report.summary.optionSource === "mixed"
+        ? `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days; remaining days used the research model`
+        : `NOT REAL OPTION PRICES - research book from index candles`;
   const summaryRows = [
-    ["Currency", "Indian Rupee (INR ₹)"],
-    ["Strategy", report.strategy.name],
-    ["Style", report.summary.holdStyle || "—"],
-    ["Product", report.strategy.product || "—"],
-    ["Symbol", report.strategy.symbol],
+    [
+      { value: "TRADE 2 SMART", style: 1 },
+      { value: "Backtest report", style: 1 },
+    ],
+    kv("Currency", "Indian Rupee (INR)"),
+    kv("Strategy", report.strategy.name, 12),
+    kv("Style", report.summary.holdStyle || "—"),
+    kv("Product", report.strategy.product || "—"),
+    kv("Symbol", report.strategy.symbol),
     ...(report.strategy.rules
       ? [
-          ["Enter IST", report.strategy.rules.enterIst],
-          [report.strategy.rules.holdStyle === "intraday" ? "Square-off IST" : "Sell tomorrow IST", report.strategy.rules.squareOffIst],
-          ["SELL monthly CE+PE premium >=", report.strategy.rules.sellPremium],
-          ["BUY weekly CE+PE premium >=", report.strategy.rules.hedgePremium],
-          ["Hedge SL %", report.strategy.rules.hedgeSlPct],
-          ["Overall profit %", report.strategy.rules.overallTargetPct],
-          ...(report.strategy.rules.lines || []).map((line, i) => [`Rule ${i + 1}`, line]),
+          kv("Enter IST", report.strategy.rules.enterIst),
+          kv(report.strategy.rules.holdStyle === "intraday" ? "Square-off IST" : "Sell tomorrow IST", report.strategy.rules.squareOffIst),
+          kv("SELL monthly CE+PE premium >=", report.strategy.rules.sellPremium),
+          kv("BUY weekly CE+PE premium >=", report.strategy.rules.hedgePremium),
+          kv("Hedge SL %", report.strategy.rules.hedgeSlPct),
+          kv("Overall profit %", report.strategy.rules.overallTargetPct),
         ]
       : []),
-    ["Start date", report.summary.from],
-    ["End date", report.summary.to],
-    ["Range", report.summary.years ? `Last ${report.summary.years} year(s)` : report.summary.months ? `Last ${report.summary.months} month(s)` : report.summary.range || ""],
-    ["Timeframe", report.summary.timeframe],
-    ["P&L", Number(report.summary.pnl) || 0],
-    ["Trades", Number(report.summary.trades) || 0],
-    ["Wins", Number(report.summary.wins) || 0],
-    ["Losses", Number(report.summary.losses) || 0],
-    ["Win rate %", Number(report.summary.winRate) || 0],
-    ["Combos", Number(report.summary.combos) || 0],
-    ["Combo win rate %", Number(report.summary.comboWinRate) || 0],
-    ["Legs", Number(report.summary.legs) || 0],
-    ["Drawdown", Number(report.summary.maxDrawdown) || 0],
-    ["Avg profit / trade", Number(report.summary.avgProfit) || 0],
-    ["Avg win", Number(report.summary.avgWin) || 0],
-    ["Avg loss", Number(report.summary.avgLoss) || 0],
-    ["Max profit", Number(report.summary.maxProfit) || 0],
-    ["Max loss", Number(report.summary.maxLoss) || 0],
-    ["Return / Max DD", Number(report.summary.returnDd) || 0],
-    ["Reward : Risk", Number(report.summary.rewardRisk) || 0],
-    ["Expectancy", Number(report.summary.expectancy) || 0],
-    ["Max win streak", Number(report.summary.maxWinStreak) || 0],
-    ["Max lose streak", Number(report.summary.maxLoseStreak) || 0],
-    ["Max DD from", report.summary.maxDdFrom],
-    ["Max DD to", report.summary.maxDdTo],
-    ["Max trades in DD", Number(report.summary.maxTradesInDd) || 0],
-    ["Lot", report.summary.lotNote],
-    ["Cost / combo", Number(report.summary.costPerCombo) || 0],
-    ["Required margin (max)", Number(report.summary.requiredMargin) || 0],
-    ["Avg required margin", Number(report.summary.avgMargin) || 0],
-    ["Return on margin %", Number(report.summary.rom) || 0],
-    ["Overall profit %", Number(report.summary.overallTargetPct) || 5],
-    ["Overall target exits", Number(report.summary.targetHits) || 0],
+    kv("Start date", report.summary.from),
+    kv("End date", report.summary.to),
+    kv("Range", report.summary.years ? `Last ${report.summary.years} year(s)` : report.summary.months ? `Last ${report.summary.months} month(s)` : report.summary.range || ""),
+    kv("Timeframe", report.summary.timeframe),
+    kvMoney("P&L", report.summary.pnl),
+    kv("Trades", Number(report.summary.trades) || 0),
+    kv("Wins", Number(report.summary.wins) || 0),
+    kv("Losses", Number(report.summary.losses) || 0),
+    kv("Win rate %", Number(report.summary.winRate) || 0),
+    kv("Combos", Number(report.summary.combos) || 0),
+    kv("Combo win rate %", Number(report.summary.comboWinRate) || 0),
+    kv("Legs", Number(report.summary.legs) || 0),
+    kvMoney("Drawdown", report.summary.maxDrawdown),
+    kvMoney("Avg profit / trade", report.summary.avgProfit),
+    kvMoney("Avg win", report.summary.avgWin),
+    kvMoney("Avg loss", report.summary.avgLoss),
+    kvMoney("Max profit", report.summary.maxProfit),
+    kvMoney("Max loss", report.summary.maxLoss),
+    kv("Return / Max DD", Number(report.summary.returnDd) || 0),
+    kv("Reward : Risk", Number(report.summary.rewardRisk) || 0),
+    kvMoney("Expectancy", report.summary.expectancy),
+    kv("Max win streak", Number(report.summary.maxWinStreak) || 0),
+    kv("Max lose streak", Number(report.summary.maxLoseStreak) || 0),
+    kv("Max DD from", report.summary.maxDdFrom),
+    kv("Max DD to", report.summary.maxDdTo),
+    kv("Max trades in DD", Number(report.summary.maxTradesInDd) || 0),
+    kv("Lot", report.summary.lotNote),
+    kvMoney("Cost / combo", report.summary.costPerCombo),
+    kvMoney("Required margin (max)", report.summary.requiredMargin),
+    kvMoney("Avg required margin", report.summary.avgMargin),
+    kv("Return on margin %", Number(report.summary.rom) || 0),
+    kv("Overall profit %", Number(report.summary.overallTargetPct) || 5),
+    kv("Overall target exits", Number(report.summary.targetHits) || 0),
     ...(Array.isArray(report.legStats) ? report.legStats : []).flatMap((leg) => [
-      [`${leg.label || "Leg"} P&L`, Number(leg.pnl) || 0],
-      [`${leg.label || "Leg"} trades`, Number(leg.trades) || 0],
-      [`${leg.label || "Leg"} win rate %`, Number(leg.winRate) || 0],
-      [`${leg.label || "Leg"} avg`, Number(leg.avgProfit) || 0],
+      kvMoney(`${leg.label || "Leg"} P&L`, leg.pnl),
+      kv(`${leg.label || "Leg"} trades`, Number(leg.trades) || 0),
+      kv(`${leg.label || "Leg"} win rate %`, Number(leg.winRate) || 0),
+      kvMoney(`${leg.label || "Leg"} avg`, leg.avgProfit),
     ]),
-    ["Stored trades", Number(report.summary.storedTrades) || 0],
-    ["Stored win rate %", Number(report.summary.storedWinRate) || 0],
-    ["Skipped days", Number(report.summary.skippedDays) || 0],
-    ["Option source", report.summary.optionSource],
-    ["Generated", report.generatedAt],
-    ["Summary", report.strategy.summary],
+    kv("Stored trades", Number(report.summary.storedTrades) || 0),
+    kv("Stored win rate %", Number(report.summary.storedWinRate) || 0),
+    kv("Skipped days", Number(report.summary.skippedDays) || 0),
+    kv("Option source", report.summary.optionSource, report.summary.optionSource === "stored" ? 4 : 13),
+    [{ value: "Tape", style: 3 }, { value: tape, style: report.summary.optionSource === "stored" ? 4 : 13 }],
+    kv("Generated", report.generatedAt),
   ];
   const fills = report.legs?.length ? report.legs : report.trades || [];
+  const comboRows = [fillHeaderRow(), ...(report.trades || []).map((row, i) => fillTableRow(row, i % 2 === 1))];
+  const legRowsOut = [fillHeaderRow(), ...fills.map((row, i) => fillTableRow(row, i % 2 === 1))];
+  const lastCombo = Math.max(1, comboRows.length);
+  const lastLeg = Math.max(1, legRowsOut.length);
   return buildXlsx([
-    { name: "Summary", rows: summaryRows },
-    { name: "Combos", rows: [FILL_HEADER, ...(report.trades || []).map(fillTableRow)] },
-    { name: "Legs", rows: [FILL_HEADER, ...fills.map(fillTableRow)] },
+    { name: "Summary", rows: summaryRows, cols: [28, 72], freeze: 1 },
+    { name: "Combos", rows: comboRows, cols: TABLE_WIDTHS, freeze: 1, filterRef: `A1:P${lastCombo}` },
+    { name: "Legs", rows: legRowsOut, cols: TABLE_WIDTHS, freeze: 1, filterRef: `A1:P${lastLeg}` },
   ]);
 }
 
@@ -474,59 +586,156 @@ function pdfEscape(text) {
   return String(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function pdfLineOps(line) {
-  return [`(${pdfEscape(line)}) Tj`, "T*"];
+const PDF_W = 842;
+const PDF_H = 595;
+const PDF = {
+  navy: "0.027 0.094 0.200",
+  brand: "0.114 0.306 0.847",
+  white: "1 1 1",
+  text: "0.090 0.141 0.212",
+  muted: "0.392 0.455 0.545",
+  line: "0.780 0.820 0.880",
+  alt: "0.933 0.949 0.988",
+  card: "0.976 0.980 0.992",
+  up: "0.059 0.616 0.345",
+  down: "0.851 0.188 0.145",
+  warnBg: "1.000 0.953 0.878",
+  warn: "0.573 0.251 0.047",
+};
+
+const TABLE_COLS = [
+  { key: "n", title: "#", w: 22, align: "right" },
+  { key: "day", title: "Day", w: 58 },
+  { key: "side", title: "Side", w: 36 },
+  { key: "option", title: "Opt", w: 24 },
+  { key: "strike", title: "Strike", w: 42, align: "right" },
+  { key: "symbol", title: "Symbol", w: 70 },
+  { key: "entryAt", title: "Entry time", w: 80 },
+  { key: "exitAt", title: "Exit time", w: 80 },
+  { key: "entry", title: "Entry Rs.", w: 62, align: "right", money: true },
+  { key: "exit", title: "Exit Rs.", w: 62, align: "right", money: true },
+  { key: "qty", title: "Qty", w: 28, align: "right" },
+  { key: "pnl", title: "P&L Rs.", w: 64, align: "right", money: true, signed: true },
+  { key: "margin", title: "Margin Rs.", w: 68, align: "right", money: true },
+  { key: "rom", title: "ROM %", w: 40, align: "right" },
+];
+
+function pdfTextWidth(text, size) {
+  return String(text || "").length * size * 0.5;
 }
 
-function col(value, width, right = false) {
-  const text = String(value ?? "");
-  return right ? text.slice(-width).padStart(width, " ") : text.slice(0, width).padEnd(width, " ");
+function moneyColor(value) {
+  const n = Number(value);
+  if (n > 0) return PDF.up;
+  if (n < 0) return PDF.down;
+  return PDF.text;
 }
 
-function pdfFillRow(row) {
-  return [
-    col(row.n, 3, true),
-    col(row.day, 10),
-    col(row.side, 5),
-    col(row.option, 3),
-    col(row.strike || "", 6, true),
-    col(row.symbol, 14),
-    col(row.entryAt, 16),
-    col(row.exitAt, 16),
-    col(pdfInr(row.entry), 16, true),
-    col(pdfInr(row.exit), 16, true),
-    col(row.qty, 4, true),
-    col(pdfInr(row.pnl), 16, true),
-    col(pdfInr(row.margin), 16, true),
-    col(Number(row.rom || 0).toFixed(2), 6, true),
-  ].join(" ");
+function cellDisplay(col, row) {
+  if (col.key === "rom") return Number(row.rom || 0).toFixed(2);
+  if (col.key === "strike") return row.strike ? String(row.strike) : "";
+  if (col.money) return pdfInr(row[col.key]);
+  return row[col.key] == null ? "" : String(row[col.key]);
 }
 
-const PDF_FILL_HEADER = [
-  col("#", 3, true),
-  col("Day", 10),
-  col("Side", 5),
-  col("Opt", 3),
-  col("Strike", 6, true),
-  col("Symbol", 14),
-  col("Entry time", 16),
-  col("Exit time", 16),
-  col("Entry Rs.", 16, true),
-  col("Exit Rs.", 16, true),
-  col("Qty", 4, true),
-  col("P&L Rs.", 16, true),
-  col("Margin Rs.", 16, true),
-  col("ROM %", 6, true),
-].join(" ");
+function buildPdfOps(report) {
+  const pages = [];
+  let ops = [];
+  let y = PDF_H - 18;
+  const left = 18;
+  const tableW = TABLE_COLS.reduce((sum, col) => sum + col.w, 0);
+  const rowH = 14;
 
-export function renderBacktestPdf(report) {
-  const lines = [
-    `T2S backtest report  (landscape)`,
-    `${report.strategy.name} - ${report.summary.holdStyle || report.strategy.kind || "strategy"} - Currency Indian Rupee (Rs.)`,
-    `Product ${report.strategy.product || "-"} - ${report.strategy.symbol} - ${report.summary.timeframe || ""}`,
-    ...(report.strategy.rules?.lines || []),
-    `Start date ${report.summary.from || "-"} - End date ${report.summary.to || "-"}`,
-    `Range ${report.summary.years ? `last ${report.summary.years} year(s)` : report.summary.months ? `last ${report.summary.months} month(s)` : report.summary.range || `${report.summary.from} to ${report.summary.to}`}`,
+  const push = (...items) => {
+    ops.push(...items);
+  };
+  const text = (str, x, yy, size, font, color, align = "left", width = 0) => {
+    const value = pdfSafe(str);
+    let tx = x;
+    if (align === "right" && width) tx = x + width - 3 - pdfTextWidth(value, size);
+    else if (align === "center" && width) tx = x + (width - pdfTextWidth(value, size)) / 2;
+    else tx = x + (align === "left" ? 3 : 0);
+    push("BT", `${color} rg`, `/${font} ${size} Tf`, `1 0 0 1 ${tx.toFixed(2)} ${yy.toFixed(2)} Tm`, `(${pdfEscape(value)}) Tj`, "ET");
+  };
+  const rect = (x, yy, w, h, fill, stroke) => {
+    if (fill) push(`${fill} rg`, `${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+    if (stroke) push(`${stroke} RG`, "0.4 w", `${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S`);
+  };
+  const finishPage = () => {
+    text("trade2smart.com   Confidential desk report   A4 landscape", left, 12, 7, "F1", PDF.muted);
+    text(`Page ${pages.length + 1}`, PDF_W - 70, 12, 7, "F1", PDF.muted);
+    pages.push(ops);
+    ops = [];
+    y = PDF_H - 18;
+  };
+  const need = (h) => {
+    if (y - h < 28) {
+      finishPage();
+      brandBar(true);
+    }
+  };
+  const brandBar = (cont = false) => {
+    rect(0, PDF_H - 36, PDF_W, 36, PDF.navy);
+    text("TRADE 2 SMART", left, PDF_H - 23, 13, "F2", PDF.white);
+    text(cont ? "Backtest report (continued)" : "Backtest report", PDF_W - 210, PDF_H - 23, 10, "F1", PDF.white);
+    y = PDF_H - 48;
+  };
+  const section = (title) => {
+    need(22);
+    text(title, left, y, 10, "F2", PDF.navy);
+    y -= 16;
+  };
+
+  brandBar(false);
+  text(`${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "strategy"}  -  Currency Indian Rupee (Rs.)`, left, y, 11, "F2", PDF.text);
+  y -= 13;
+  const rules = report.strategy.rules;
+  const squareOffLabel = rules?.holdStyle === "intraday" ? "Square-off" : rules ? "Sell tomorrow" : "";
+  text(
+    [
+      `Product ${report.strategy.product || "-"}`,
+      report.strategy.symbol,
+      rules?.enterIst ? `Enter ${rules.enterIst} IST` : "",
+      rules?.squareOffIst ? `${squareOffLabel} ${rules.squareOffIst} IST` : "",
+      report.summary.timeframe || "",
+      `Start date ${report.summary.from || "-"}  -  End date ${report.summary.to || "-"}`,
+    ]
+      .filter(Boolean)
+      .join("  |  "),
+    left,
+    y,
+    8,
+    "F1",
+    PDF.muted,
+  );
+  y -= 12;
+  const range = report.summary.years
+    ? `Range last ${report.summary.years} year(s)`
+    : report.summary.months
+      ? `Range last ${report.summary.months} month(s)`
+      : `Range ${report.summary.range || `${report.summary.from} to ${report.summary.to}`}`;
+  text(`${range}   Generated ${report.generatedAt}`, left, y, 8, "F1", PDF.muted);
+  y -= 18;
+
+  const kpis = [
+    { label: "P&L", value: pdfInr(report.summary.pnl), color: moneyColor(report.summary.pnl) },
+    { label: "Trades", value: String(report.summary.trades || 0) },
+    { label: "Win rate", value: `${report.summary.winRate || 0}%` },
+    { label: "Drawdown", value: pdfInr(report.summary.maxDrawdown), color: PDF.down },
+    { label: "ROM", value: `${report.summary.rom || 0}%` },
+  ];
+  const cardW = 152;
+  const cardH = 36;
+  need(cardH + 8);
+  kpis.forEach((kpi, i) => {
+    const x = left + i * (cardW + 8);
+    rect(x, y - cardH + 10, cardW, cardH, PDF.card, PDF.line);
+    text(kpi.label, x + 6, y, 7, "F1", PDF.muted);
+    text(kpi.value, x + 6, y - 16, 11, "F2", kpi.color || PDF.text);
+  });
+  y -= cardH + 8;
+
+  const facts = [
     `P&L ${pdfInr(report.summary.pnl)} - Trades ${report.summary.trades} - Win rate ${report.summary.winRate}%`,
     `Wins ${report.summary.wins} - Losses ${report.summary.losses} - Drawdown ${pdfInr(report.summary.maxDrawdown)}`,
     report.summary.combos ? `Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}` : "",
@@ -549,35 +758,65 @@ export function renderBacktestPdf(report) {
       (leg) =>
         `${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`,
     ),
+  ].filter(Boolean);
+  for (const line of facts) {
+    need(11);
+    text(line, left, y, 8, "F1", line.startsWith("P&L ") ? moneyColor(report.summary.pnl) : PDF.text);
+    y -= 11;
+  }
+
+  const tape =
     report.summary.optionSource === "stored"
       ? "Premiums stored Dhan rolling option tape"
       : report.summary.optionSource === "mixed"
         ? `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days in this book; remaining days used the research model`
-        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - research book from index candles - do not treat P&L or win rate as live proof`,
-    `Generated ${report.generatedAt}`,
-    "",
-    "LEGS",
-    PDF_FILL_HEADER,
-  ]
-    .filter((line, index, all) => line || all[index - 1])
-    .map((line) => pdfSafe(line));
-  const fillRows = report.legs?.length ? report.legs : [];
-  for (const row of fillRows) lines.push(pdfSafe(pdfFillRow(row)));
-  if (!fillRows.length) lines.push("No legs in this replay.");
-  lines.push("", "COMBOS", PDF_FILL_HEADER);
-  for (const row of report.trades || []) lines.push(pdfSafe(pdfFillRow(row)));
-  if (!(report.trades || []).length) lines.push("No combos in this replay.");
+        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - research book from index candles - do not treat P&L or win rate as live proof`;
+  need(22);
+  rect(left, y - 10, tableW, 18, report.summary.optionSource === "stored" ? PDF.alt : PDF.warnBg, PDF.line);
+  text(tape, left + 4, y - 4, 7.5, "F2", report.summary.optionSource === "stored" ? PDF.navy : PDF.warn);
+  y -= 26;
 
-  const pageW = 842;
-  const pageH = 595;
-  const marginX = 24;
-  const marginY = 24;
-  const fontSize = 8;
-  const leading = 10;
-  const startY = pageH - marginY - 6;
-  const perPage = Math.max(20, Math.floor((startY - marginY) / leading));
-  const pages = [];
-  for (let i = 0; i < lines.length; i += perPage) pages.push(lines.slice(i, i + perPage));
+  const drawTable = (title, rows) => {
+    section(title);
+    const headerH = 16;
+    need(headerH + rowH);
+    let x = left;
+    rect(left, y - headerH + 4, tableW, headerH, PDF.navy);
+    for (const col of TABLE_COLS) {
+      text(col.title, x, y - 7, 7, "F2", PDF.white, col.align === "right" ? "right" : "left", col.w);
+      x += col.w;
+    }
+    y -= headerH;
+    if (!rows.length) {
+      need(rowH);
+      rect(left, y - rowH + 4, tableW, rowH, PDF.card, PDF.line);
+      text(title === "LEGS" ? "No legs in this replay." : "No combos in this replay.", left + 6, y - 6, 8, "F1", PDF.muted);
+      y -= rowH + 8;
+      return;
+    }
+    rows.forEach((row, index) => {
+      need(rowH);
+      let cx = left;
+      rect(left, y - rowH + 4, tableW, rowH, index % 2 ? PDF.alt : PDF.white, PDF.line);
+      for (const col of TABLE_COLS) {
+        const value = cellDisplay(col, row);
+        const color = col.signed ? moneyColor(row.pnl) : PDF.text;
+        text(value, cx, y - 6, 7, col.signed ? "F2" : "F1", color, col.align === "right" ? "right" : "left", col.w);
+        cx += col.w;
+      }
+      y -= rowH;
+    });
+    y -= 10;
+  };
+
+  drawTable("LEGS", report.legs || []);
+  drawTable("COMBOS", report.trades || []);
+  finishPage();
+  return pages;
+}
+
+export function renderBacktestPdf(report) {
+  const pages = buildPdfOps(report);
   const firstPage = 3;
   const kids = pages.map((_, i) => `${firstPage + i * 2} 0 R`).join(" ");
   const objects = [
@@ -588,16 +827,9 @@ export function renderBacktestPdf(report) {
   for (let i = 0; i < pages.length; i += 1) {
     const contentId = firstPage + i * 2 + 1;
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >> >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_W} ${PDF_H}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>`,
     );
-    const stream = [
-      "BT",
-      `/F1 ${fontSize} Tf`,
-      `${marginX} ${startY} Td`,
-      `${leading} TL`,
-      ...pages[i].flatMap((line) => pdfLineOps(line)),
-      "ET",
-    ].join("\n");
+    const stream = pages[i].join("\n");
     objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
   }
   let pdf = "%PDF-1.4\n";

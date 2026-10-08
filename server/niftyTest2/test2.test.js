@@ -617,6 +617,47 @@ test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
   );
   assert.equal(incomplete.skip, true);
   assert.equal(incomplete.reason, "incomplete-chain");
+  const book = runTest2Backtest(defaultNiftyTest2Algo({ holdStyle: "intraday" }), [
+    { time: open + 2 * 86_400_000, open: 24500, high: 24510, low: 24490, close: 24500, volume: 1 },
+  ]);
+  assert.equal(book.skippedDays >= 1, true);
+  assert.equal(book.storedTrades, 0);
+  assert.equal(book.combos >= 1, true);
+  assert.equal(book.optionSource, "synth");
+  wipeRollingOptions();
+});
+
+test("TEST2 stored SENSEX book stays trusted when one incomplete day is skipped", () => {
+  wipeRollingOptions();
+  const open = Date.parse("2026-09-01T04:05:00.000Z");
+  const pack = (t, spot) => ({
+    weekly: { slots: [{ t, spot, rows: [{ s: 82000, ce: 24, pe: 23, ceL: 20, peL: 19 }] }] },
+    monthly: { slots: [{ t, spot, rows: [{ s: 81800, ce: 90, pe: 88, ceL: 80, peL: 79 }] }] },
+  });
+  writeRollingDay("SENSEX", "2026-09-01", pack(open, 81800));
+  writeRollingDay("SENSEX", "2026-09-02", pack(open + 86_400_000, 81840));
+  writeRollingDay("SENSEX", "2026-09-03", {
+    weekly: { slots: [{ t: open + 2 * 86_400_000, spot: 81800, rows: [{ s: 82000, ce: 24, pe: 0 }] }] },
+    monthly: { slots: [] },
+  });
+  const candles = [0, 1, 2].map((i) => ({
+    time: open + i * 86_400_000,
+    open: 81800,
+    high: 81900,
+    low: 81700,
+    close: 81820,
+    volume: 1,
+  }));
+  const book = runTest2Backtest(
+    defaultNiftyTest2Algo({ symbol: "SENSEX", holdStyle: "intraday", lotSize: 20 }),
+    candles,
+  );
+  assert.equal(book.storedTrades, 2);
+  assert.equal(book.skippedDays, 1);
+  assert.equal(book.skipReasons["incomplete-chain"], 1);
+  assert.equal(book.trades, 2);
+  assert.equal(book.optionSource, "stored");
+  assert.equal(book.tradesBook.every((row) => row.source === "stored"), true);
   wipeRollingOptions();
 });
 

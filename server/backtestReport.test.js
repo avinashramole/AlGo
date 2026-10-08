@@ -87,11 +87,24 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(zip, /Required margin/);
   assert.match(zip, /Indian Rupee/);
   assert.match(zip, /INR/);
+  assert.match(zip, /xl\/styles.xml/);
+  assert.match(zip, /TRADE 2 SMART/);
+  assert.match(zip, /name="Combos"/);
+  assert.match(zip, /name="Legs"/);
+  assert.match(zip, /FF071833/);
+  assert.match(zip, /FF0F9D58/);
+  assert.match(zip, /FFD93025/);
+  assert.match(zip, /s="6"/);
+  assert.match(zip, /s="7"/);
   assert.match(pdf.toString("latin1"), /Required margin/);
   assert.match(pdf.toString("latin1"), /LEGS/);
   assert.match(pdf.toString("latin1"), /Margin/);
   assert.match(pdf.toString("latin1"), /MediaBox \[0 0 842 595\]/);
   assert.match(pdf.toString("latin1"), /landscape/);
+  assert.match(pdf.toString("latin1"), /Helvetica-Bold/);
+  assert.match(pdf.toString("latin1"), /TRADE 2 SMART/);
+  assert.match(pdf.toString("latin1"), /0.059 0.616 0.345 rg/);
+  assert.match(pdf.toString("latin1"), /0.851 0.188 0.145 rg/);
   assert.match(pdf.toString("latin1"), /Entry time/);
   assert.match(pdf.toString("latin1"), /Exit time/);
   assert.match(pdf.toString("latin1"), /Symbol/);
@@ -146,23 +159,24 @@ test("TEST2 PDF and Excel print enter, square-off, premiums and hedge SL", () =>
   assert.equal(report.strategy.rules.hedgeSlPct, 20);
   assert.equal(report.strategy.product, "MIS");
   const pdf = renderBacktestPdf(report).toString("latin1");
-  assert.match(pdf, /enter 09:31 IST/);
-  assert.match(pdf, /square-off 15:00 IST/);
-  assert.match(pdf, /MIS same day/);
-  assert.match(pdf, /premium >= 200/);
-  assert.match(pdf, /premium >= 20/);
-  assert.match(pdf, /Hedge SL 20%/);
+  assert.match(pdf, /Enter 09:31 IST/);
+  assert.match(pdf, /Square-off 15:00 IST/);
+  assert.match(pdf, /Product MIS/);
   assert.equal(pdf.includes("·"), false);
   assert.equal(pdf.includes("≥"), false);
+  assert.equal(pdf.includes("SELL 1 monthly"), false);
+  assert.equal(pdf.includes("exits all"), false);
+  assert.equal(pdf.includes("1 lot"), false);
   const zip = renderBacktestExcel(report).toString("latin1");
   assert.match(zip, /Enter IST/);
   assert.match(zip, /09:31/);
   assert.match(zip, /Square-off IST/);
   assert.match(zip, /15:00/);
   assert.match(zip, /Hedge SL %/);
-  assert.match(zip, /Hedge SL 20% of buy premium/);
-  assert.match(zip, /SELL 1 monthly CE \+ PE premium &gt;= 200/);
-  assert.match(zip, /BUY 1 weekly CE \+ PE premium &gt;= 20/);
+  assert.equal(zip.includes("Hedge SL 20% of buy premium"), false);
+  assert.equal(zip.includes("SELL 1 monthly CE + PE premium"), false);
+  assert.equal(zip.includes("exits all legs"), false);
+  assert.equal(zip.includes("1 lot"), false);
 });
 
 test("TEST2 PDF warns when premiums are not from the option tape", () => {
@@ -182,6 +196,12 @@ test("TEST2 PDF warns when premiums are not from the option tape", () => {
   assert.match(pdf, /BANKNIFTY/);
   assert.match(pdf, /research book from index candles/);
   assert.match(pdf, /COMBO/);
+  const zip = renderBacktestExcel(report).toString("latin1");
+  assert.match(zip, /NOT REAL OPTION PRICES/);
+  assert.match(zip, /research book from index candles/);
+  assert.match(zip, /BANKNIFTY/);
+  assert.match(zip, /TRADE 2 SMART/);
+  assert.match(zip, /FFD93025/);
 });
 
 test("backtest report falls back to lastBacktest when the file is missing", () => {

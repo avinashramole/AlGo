@@ -102,7 +102,7 @@ def _proxy_block(target: str, send_timeout: str = "15s", read_timeout: str = "15
 def server_locations(webroot: str) -> str:
     login = _proxy_block("http://127.0.0.1:3999", "8s", "8s")
     api = _proxy_block("http://127.0.0.1:4000", "15s", "15s")
-    backtest = _proxy_block("http://127.0.0.1:4000", "180s", "180s")
+    backtest = _proxy_block("http://127.0.0.1:4000", "600s", "600s")
     return f"""
     client_max_body_size 2m;
 

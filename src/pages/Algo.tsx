@@ -42,6 +42,13 @@ function moneyClass(value: number) {
   return "text-[var(--text)]";
 }
 
+function test2ShowsStoredBook(bt: { optionSource?: string; storedTrades?: number; trades?: number } | null | undefined) {
+  const stored = Number(bt?.storedTrades || 0);
+  const trades = Number(bt?.trades || 0);
+  if (bt?.optionSource === "stored") return stored > 0 || trades > 0;
+  return stored > 0 && stored === trades;
+}
+
 function orderActivity(signal: string | undefined, fallback: string) {
   const text = String(signal || "").trim();
   if (/\b(?:GREEN|RED)\b/i.test(text)) return text;
@@ -748,20 +755,31 @@ function AlgoCard({
         />
       </div>
 
-      {isNiftyTest2Kind(algo) && algo.lastBacktest && algo.lastBacktest.optionSource !== "stored" ? (
+      {isNiftyTest2Kind(algo) && algo.lastBacktest && test2ShowsStoredBook(algo.lastBacktest) && Number(algo.lastBacktest.skippedDays || 0) > 0 ? (
+        <div className="mt-3 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-[11px] font-semibold leading-snug text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100" data-test2-skip-banner>
+          {`${algo.symbol || "NIFTY"} replay used ${Number(algo.lastBacktest.storedTrades || 0)} stored Dhan combo${Number(algo.lastBacktest.storedTrades) === 1 ? "" : "s"} · P&L ${formatInr(Number(algo.lastBacktest.pnl || 0))}. Skipped ${algo.lastBacktest.skippedDays} session${Number(algo.lastBacktest.skippedDays) === 1 ? "" : "s"} without CE+PE on both weekly and monthly — ${Number(algo.lastBacktest.skippedDays) === 1 ? "that day is" : "those days are"} not in this P&L. Run Backtest again to retry partial days.`}
+        </div>
+      ) : null}
+      {isNiftyTest2Kind(algo) && algo.lastBacktest && !test2ShowsStoredBook(algo.lastBacktest) ? (
         <div className="mt-3 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-test2-synth-banner>
           {algo.lastBacktest.optionHistory?.error === "dhan-not-live"
             ? `Dhan is not connected, so no rolling option tape for ${algo.symbol || "this script"} was downloaded. Open Brokers, connect Dhan LIVE, then run Backtest again.`
             : algo.lastBacktest.optionHistory?.truncated
-              ? `Dhan rolling download hit the time cap after ${algo.lastBacktest.optionHistory.days || 0} new day${Number(algo.lastBacktest.optionHistory.days) === 1 ? "" : "s"}. Run Backtest again to keep filling the tape.`
-              : algo.lastBacktest.optionHistory?.error
+              ? `Dhan rolling download hit the time cap after ${algo.lastBacktest.optionHistory.days || 0} new day${Number(algo.lastBacktest.optionHistory.days) === 1 ? "" : "s"}. It fills newest missing weekdays first and saves whatever landed — run Backtest again to keep filling older days.`
+              : algo.lastBacktest.optionHistory?.historyGap
+                ? `Dhan /charts/rollingoption had no bars in the newest missing window for ${algo.symbol || "this script"}. Already-stored days stay on disk. Try this month first, or run Backtest again after Dhan Data API is answering.`
+                : algo.lastBacktest.optionHistory?.error
                 ? `Dhan rolling download failed (${algo.lastBacktest.optionHistory.error}). Connect Dhan LIVE and run Backtest again.`
                 : algo.lastBacktest.optionHistory?.source === "none"
                   ? `Dhan is connected but /charts/rollingoption returned no NIFTY bars. Check Dhan Data API access, then run Backtest again.`
-                  : `No stored Dhan rolling days for ${algo.symbol || "this script"} (${Number(algo.lastBacktest.optionHistory?.completeDays || 0)} complete). Connect Dhan LIVE and run Backtest again — empty stub days are now retried.`}
+                  : Number(algo.lastBacktest.optionHistory?.completeDays || 0) > 0
+                    ? `${algo.symbol || "NIFTY"} has ${Number(algo.lastBacktest.optionHistory?.completeDays || 0)} Dhan rolling day${Number(algo.lastBacktest.optionHistory?.completeDays) === 1 ? "" : "s"} on disk, but this replay printed ${Number(algo.lastBacktest.storedTrades || 0)} stored combo${Number(algo.lastBacktest.storedTrades) === 1 ? "" : "s"}${Number(algo.lastBacktest.skippedDays || 0) ? ` · skipped ${algo.lastBacktest.skippedDays} (need CE+PE on weekly and monthly)` : ""}. Run Backtest again — partial days are retried.`
+                    : `No stored Dhan rolling days for ${algo.symbol || "this script"} (${Number(algo.lastBacktest.optionHistory?.completeDays || 0)} complete). Connect Dhan LIVE and run Backtest again — empty stub days are now retried.`}
           {Number(algo.lastBacktest.trades || 0)
             ? ` Meanwhile this card shows a research book: ${algo.lastBacktest.trades} combos · P&L ${formatInr(Number(algo.lastBacktest.pnl || 0))}.`
-            : " 0 combos."}{" "}
+            : algo.lastBacktest.sample
+              ? " 0 combos — no index candles in this window to replay."
+              : " 0 combos."}{" "}
           Not live option prints until the tape is stored.
         </div>
       ) : null}
@@ -857,7 +875,7 @@ function AlgoCard({
               : ""}
             {algo.lastBacktest.optionSource
               ? `${algo.lastBacktest.timeframe ? " · " : ""}option premiums: ${
-                  algo.lastBacktest.optionSource === "stored"
+                  test2ShowsStoredBook(algo.lastBacktest) || algo.lastBacktest.optionSource === "stored"
                     ? "Dhan rolling options (trusted)"
                     : algo.lastBacktest.optionSource === "mixed"
                       ? "Dhan rolling + synth gaps"
@@ -873,11 +891,11 @@ function AlgoCard({
             {isNiftyTest2Kind(algo) ? (
               <div className="mt-1 text-[11px] leading-snug text-slate-500">
                 {algo.lastBacktest.storedTrades
-                  ? `Trusted book: ${algo.lastBacktest.storedTrades} stored Dhan rolling days. Already-downloaded days are reused from disk — only missing weekdays are fetched.`
+                  ? `Trusted book: ${algo.lastBacktest.storedTrades} stored Dhan rolling days. Newest missing weekdays download first in parallel — already-downloaded days stay on disk.`
                   : algo.lastBacktest.optionHistory?.error === "dhan-not-live"
                     ? "Dhan is not connected — Backtest could not call /charts/rollingoption. Connect Dhan, then run Backtest again."
-                    : "No stored Dhan rolling tape yet. With Dhan connected, Backtest downloads WEEK/MONTH ATM wings and keeps them on disk. Run Backtest again to continue."}
-                {algo.lastBacktest.optionHistory?.truncated ? " Download hit the time cap — run Backtest again to fill more days." : ""}
+                    : "No stored Dhan rolling tape yet. Start with this month — Backtest downloads newest missing WEEK/MONTH ATM wings in parallel and keeps them on disk. Widen the range after the month is stored."}
+                {algo.lastBacktest.optionHistory?.truncated ? " Download hit the time cap — run Backtest again; already-saved days are reused." : ""}
                 {algo.lastBacktest.optionHistory?.days
                   ? ` Last run stored ${algo.lastBacktest.optionHistory.days} new rolling day${Number(algo.lastBacktest.optionHistory.days) === 1 ? "" : "s"}.`
                   : ""}

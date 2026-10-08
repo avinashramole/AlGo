@@ -135,8 +135,10 @@ export type AlgoStrategy = {
       reused?: boolean;
       reusedDays?: number;
       truncated?: boolean;
+      historyGap?: boolean;
       calls?: number;
       stubs?: number;
+      skippedEmpty?: number;
       completeDays?: number;
       droppedEmpty?: number;
     };
