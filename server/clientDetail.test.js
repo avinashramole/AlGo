@@ -126,10 +126,11 @@ test("getClientDetail returns profile, subscription, transaction, and P&L", () =
   assert.ok(detail.transactions.some((row) => row.kind === "wallet" && row.amount === 2500 && row.status === "paid"));
   assert.equal(detail.wallet.balance, 2500);
   assert.equal(detail.plans[0].strategyName, "NIFTY VWAP ATM");
-  assert.equal(detail.report.realizedPnl, 650);
-  assert.equal(detail.report.unrealizedPnl, 780);
-  assert.equal(detail.positions.length, 1);
-  assert.ok(detail.report.tradeBook.some((row) => row.id === "t1"));
+  assert.equal(detail.report.realizedPnl, 0);
+  assert.equal(detail.report.unrealizedPnl, 0);
+  assert.equal(detail.report.netPnl, 0);
+  assert.equal(detail.positions.length, 0);
+  assert.equal(detail.report.tradeBook.some((row) => row.id === "t1"), false);
   assert.equal(detail.report.tradeBook.some((row) => row.id === "t-old"), false);
 });
 

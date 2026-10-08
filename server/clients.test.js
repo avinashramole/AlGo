@@ -685,6 +685,33 @@ test("client MTM uses each user's broker book instead of the local copy loss", (
   assert.equal(desk.totalMtm, 60.75);
 });
 
+test("a Kotak user with no fills stays at zero and does not inherit another user's day loss", () => {
+  const desk = applyBrokerBooksToDesk(
+    {
+      masterMtm: -10861,
+      master: { mtm: -10861 },
+      clients: [
+        { id: "u-filled", kind: "client", tradeMode: "real", positions: [], mtm: 0, realized: 0, open: 0 },
+        { id: "u-new-kotak", kind: "client", tradeMode: "real", positions: [], mtm: 0, realized: 0, open: 0 },
+      ],
+      clientMtm: 0,
+      totalMtm: -10861,
+    },
+    {
+      "u-filled": { realizedPnl: -10902, unrealizedPnl: 41, mtm: -10861, closed: [], open: [] },
+      "u-new-kotak": { realizedPnl: 0, unrealizedPnl: 0, mtm: 0, closed: [], open: [], empty: true },
+    },
+  );
+  const filled = desk.clients.find((row) => row.id === "u-filled");
+  const fresh = desk.clients.find((row) => row.id === "u-new-kotak");
+  assert.equal(filled.mtm, -10861);
+  assert.equal(filled.realized, -10902);
+  assert.equal(fresh.mtm, 0);
+  assert.equal(fresh.realized, 0);
+  assert.equal(fresh.unrealized, 0);
+  assert.equal(desk.clientMtm, -10861);
+});
+
 test("position MTM uses marked LTP pnl, so a 96.71 fill is not stuck at send-time 106", () => {
   const row = asLedgerPosition({
     symbol: "NIFTY 23450 PE",

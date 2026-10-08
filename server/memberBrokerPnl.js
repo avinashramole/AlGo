@@ -609,30 +609,47 @@ function kotakLimitRows(body) {
   return rows;
 }
 
+function kotakLimitCategory(row) {
+  return String(row?.Category || row?.category || "").toLowerCase();
+}
+
+function kotakPnlLimitCategory(category) {
+  return /mtm|pnl|dpnl|dpnp|unreal|realiz/.test(String(category || ""));
+}
+
+function kotakPreferredLimitCategory(category) {
+  const kind = String(category || "");
+  return !kind || kind === "all" || kind === "net" || kind === "rms" || kind.includes("client");
+}
+
 export function kotakAvailableBalance(body) {
   const rows = kotakLimitRows(body);
-  let firstNet = null;
-  for (const row of rows) {
-    const net = kotakMoneyField(row, ["Net", "net"]);
-    if (net == null) continue;
-    if (firstNet == null) firstNet = net;
-    const category = String(row.Category || row.category || "").toLowerCase();
-    if (!category || category === "net" || category.includes("client")) return round2(net);
+  const usable = rows.filter((row) => !kotakPnlLimitCategory(kotakLimitCategory(row)));
+  const preferred = usable.filter((row) => kotakPreferredLimitCategory(kotakLimitCategory(row)));
+  const pool = preferred.length ? preferred : usable;
+  for (const row of pool) {
+    const net = kotakMoneyField(row, ["Net", "net", "AvailableCash", "availableCash", "CshBal", "cashBal"]);
+    if (net != null) return round2(net);
   }
-  if (firstNet != null) return round2(firstNet);
   let fallback = null;
-  for (const row of rows) {
-    const cash = kotakMoneyField(row, ["NotionalCash", "notionalCash", "Cash", "cash"]);
+  for (const row of pool) {
+    const cash = kotakMoneyField(row, ["NotionalCash", "notionalCash", "Cash", "cash", "CollateralValue", "collateralValue"]);
     if (cash == null || fallback != null) continue;
     const used = kotakMoneyField(row, ["MarginUsed", "marginUsed"]) || 0;
-    fallback = round2(Math.max(0, cash - used));
+    fallback = round2(cash - used);
   }
   return fallback;
+}
+
+function kotakEmptyBook() {
+  return { realizedPnl: 0, unrealizedPnl: 0, mtm: 0, source: "kotak", closed: [], open: [], empty: true };
 }
 
 function kotakPositionRows(raw) {
   if (Array.isArray(raw)) return raw;
   if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.data?.data)) return raw.data.data;
+  if (Array.isArray(raw?.data?.positions)) return raw.data.positions;
   return null;
 }
 
@@ -647,7 +664,11 @@ function kotakSignedQty(row) {
 
 export function kotakMasterBook(raw) {
   const rows = kotakPositionRows(raw);
-  if (!rows) return null;
+  if (!rows) {
+    if (raw && typeof raw === "object" && (raw.stat || raw.data != null || raw.stCode != null)) return kotakEmptyBook();
+    return null;
+  }
+  if (!rows.length) return kotakEmptyBook();
   const closed = [];
   const open = [];
   let realized = 0;
