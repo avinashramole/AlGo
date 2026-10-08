@@ -867,6 +867,50 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
   assert.equal(master.some((row) => row.copyUserId === user.id), false);
 });
 
+test("crude first candle copies the same NIFTY-mapped Kotak user", async () => {
+  const user = { id: "u-kotak-nifty-map", name: "K", email: "kotaknifty@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "kotak" });
+  installMemberBroker({
+    user,
+    brokerId: "kotak",
+    clientId: "YT2VM",
+    accessToken: "kotak-member-token-3324",
+    apiKey: "kotak-consumer-key",
+  });
+  saveClientSettings(user.id, {
+    copy: false,
+    subscriptionMode: "strategy",
+    mappedStrategy: "NIFTY 5m first candle",
+    tradeMode: "real",
+    brokerId: "kotak",
+    subscriptionUntil: "2026-10-31",
+  });
+  const copies = memberCopyPayloads(
+    {
+      strategy: "CRUDE OIL 5m first candle",
+      side: "BUY",
+      symbol: "CRUDEOIL 6100 CE",
+      qty: 100,
+      lots: 1,
+      lotSize: 100,
+      price: 42.5,
+      option: "CE",
+      strike: 6100,
+      expiry: "2026-10-19",
+      exchangeSegment: "MCX_COMM",
+      brokerId: "dhan",
+    },
+    { id: "a-crude-share", name: "CRUDE OIL", mappingScope: "both", mappedClientIds: [] },
+  );
+  const copy = copies.find((row) => row.copyUserId === user.id);
+  assert.ok(copy, "NIFTY-mapped Kotak user must also receive Crude Oil copies");
+  assert.equal(copy.symbol, "CRUDEOIL 6100 CE");
+  assert.equal(copy.exchangeSegment, "MCX_COMM");
+  assert.equal(copy.brokerId, "kotak");
+  assert.equal(copy.account.accessToken, "kotak-member-token-3324");
+  assert.equal(copy.account.clientId, "YT2VM");
+});
+
 test("admin BUY PE copies a mapped client who is not Copy ON", async () => {
   const user = { id: "u-pe-mapped", name: "PE Mapped", email: "pemapped@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
