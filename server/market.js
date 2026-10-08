@@ -213,18 +213,22 @@ function clockSession(date, openMins, closeMins, hours) {
   };
 }
 
-export function nseMarketSession(date = new Date()) {
+function nowDate() {
+  return new Date(Date.now());
+}
+
+export function nseMarketSession(date = nowDate()) {
   return clockSession(date, 9 * 60 + 15, 15 * 60 + 30, "09:15–15:30 IST");
 }
 
-export function firstCandleWatchSession(algo = {}, date = new Date()) {
+export function firstCandleWatchSession(algo = {}, date = nowDate()) {
   const cfg = optionEngineConfig(algo);
   const start = parseIstHm(cfg.dailyLiveIst || cfg.firstBarStartIst, "09:00");
   const [hour, minute] = start.split(":").map(Number);
   return clockSession(date, hour * 60 + minute, 15 * 60 + 30, `${start}–15:30 IST`);
 }
 
-export function mcxMarketSession(date = new Date()) {
+export function mcxMarketSession(date = nowDate()) {
   return clockSession(date, 9 * 60, 23 * 60 + 30, "09:00–23:30 IST");
 }
 
@@ -1102,16 +1106,21 @@ function chainMarkedAtmStrike(root) {
 function firstCandleAtmSpot(root, futPx) {
   const chainSpot = chainDeskSpot(root);
   const indexSpot = Number(getChainSpot(root)) || 0;
-  for (const px of [chainSpot, indexSpot, futPx]) {
+  for (const px of [futPx, chainSpot, indexSpot]) {
     if (saneUnderlyingPx(root, px)) return Number(px);
   }
-  return Number(chainSpot) || Number(indexSpot) || Number(futPx) || 0;
+  return 0;
 }
 
 function firstCandleSelectedStrike(root, futPx, step, offset) {
+  const fromSpot = OptionStrikeSelector.strikeForOffset(firstCandleAtmSpot(root, futPx), step, offset);
+  if (saneUnderlyingPx(root, fromSpot)) return fromSpot;
   const marked = chainMarkedAtmStrike(root);
-  if (!(Number(offset) || 0) && saneUnderlyingPx(root, marked)) return marked;
-  return OptionStrikeSelector.strikeForOffset(firstCandleAtmSpot(root, futPx), step, offset);
+  return saneUnderlyingPx(root, marked) ? marked : 0;
+}
+
+function usableFirstCandleStrike(root, strike) {
+  return saneUnderlyingPx(root, strike) ? Number(strike) : 0;
 }
 
 function firstCandlePreviewLegs(algo, preview) {
@@ -1124,13 +1133,15 @@ function firstCandlePreviewLegs(algo, preview) {
   const futSpot = Number(preview?.close) || 0;
   const selected = firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset);
   const ceStrike =
-    vs.lockedOption === "CE" && Number(vs.lockedStrike) > 0
-      ? Number(vs.lockedStrike)
-      : Number(vs.ceStrike) || selected || 0;
+    usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) ||
+    usableFirstCandleStrike(root, vs.ceStrike) ||
+    selected ||
+    0;
   const peStrike =
-    vs.lockedOption === "PE" && Number(vs.lockedStrike) > 0
-      ? Number(vs.lockedStrike)
-      : Number(vs.peStrike) || selected || 0;
+    usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) ||
+    usableFirstCandleStrike(root, vs.peStrike) ||
+    selected ||
+    0;
   return {
     ce: preview ? sameTime(vs.ceBars, preview.time) : null,
     pe: preview ? sameTime(vs.peBars, preview.time) : null,
@@ -1523,8 +1534,10 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const selected = isFirstCandleAlgo(algo)
     ? firstCandleSelectedStrike(root, futSpot, und.step, config.strikeOffset)
     : OptionStrikeSelector.strikeForOffset(spot, und.step, config.strikeOffset);
-  const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
-  const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  const ceStrike =
+    usableFirstCandleStrike(root, vs.lockedOption === "CE" ? vs.lockedStrike : 0) || selected;
+  const peStrike =
+    usableFirstCandleStrike(root, vs.lockedOption === "PE" ? vs.lockedStrike : 0) || selected;
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;

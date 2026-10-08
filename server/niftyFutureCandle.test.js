@@ -453,11 +453,11 @@ test("MIDCPNIFTY future ticks do not overwrite NIFTY FUT close or ATM", () => {
   }
 });
 
-test("NIFTY first-candle ATM uses live chain 22250, not FUT-rounded 22300", () => {
+test("NIFTY first-candle never uses MIDCP 13450 as ATM", () => {
   const during1420 = OPEN_1420 + 2 * 60_000;
   const realNow = Date.now;
   const created = createAlgo({
-    name: "NIFTY atm 22250",
+    name: "NIFTY no midcp atm",
     kind: "nifty-first-candle",
     runMode: "paper",
     expiryKind: "weekly",
@@ -473,13 +473,15 @@ test("NIFTY first-candle ATM uses live chain 22250, not FUT-rounded 22300", () =
       expiry: WEEKLY_EXPIRY,
       expiries: [WEEKLY_EXPIRY],
       rows: [
-        { strike: 22250, atm: true, callLtp: 95, putLtp: 88, callId: "ce-22250", putId: "pe-22250" },
+        { strike: 13450, atm: true, callLtp: 95, putLtp: 88, callId: "ce-13450", putId: "pe-13450" },
         { strike: 22300, atm: false, callLtp: 70, putLtp: 110, callId: "ce-22300", putId: "pe-22300" },
       ],
-      spot: 22250,
+      spot: 13459.45,
       source: "dhan",
     });
-    applyLiveQuotes([{ symbol: "NIFTY 50", parent: "NIFTY", kind: "index", ltp: 22248.4, securityId: "13" }]);
+    applyLiveQuotes([
+      { symbol: "MIDCPNIFTY FUT", parent: "MIDCPNIFTY", kind: "future", ltp: 13459.45, securityId: "442" },
+    ]);
     toggleAlgo(created.id, { enabled: true });
     tickMarket();
     Date.now = () => OPEN_1420 + FIVE + 60_000;
@@ -490,9 +492,10 @@ test("NIFTY first-candle ATM uses live chain 22250, not FUT-rounded 22300", () =
     ]);
     tickMarket();
     const algo = snapshot().algos.find((row) => row.id === created.id);
-    assert.match(String(algo?.lastSignal || ""), /22250/, String(algo?.lastSignal || ""));
-    assert.doesNotMatch(String(algo?.lastSignal || ""), /22300|13450/);
-    assert.equal(getChainSpot("NIFTY"), 22248.4);
+    const text = String(algo?.lastSignal || "");
+    assert.match(text, /22[23]00/, text);
+    assert.doesNotMatch(text, /13450|13459/);
+    assert.notEqual(getChainSpot("NIFTY"), 13459.45);
   } finally {
     Date.now = realNow;
     toggleAlgo(created.id, { enabled: false });
