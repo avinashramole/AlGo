@@ -1928,6 +1928,9 @@ const INDEX_ALIASES = {
   "FINNIFTY FUT": "FINNIFTY",
   SENSEX: "SENSEX",
   "SENSEX FUT": "SENSEX",
+  MIDCPNIFTY: "MIDCPNIFTY",
+  "MIDCPNIFTY FUT": "MIDCPNIFTY",
+  MIDCAPNIFTY: "MIDCPNIFTY",
   CRUDEOIL: "CRUDEOIL",
   "CRUDEOIL FUT": "CRUDEOIL",
   "CRUDE OIL": "CRUDEOIL",
@@ -3826,9 +3829,48 @@ function patchFutureMinute(series, openMs, price, now) {
   }
 }
 
+function niftyFutureReferencePrice() {
+  const last = (futureCandleSource() || []).at(-1);
+  return Number(last?.close || last?.open || 0);
+}
+
+function looksLikeNiftyFuturePx(price) {
+  const px = Number(price);
+  return px >= 18000 && px <= 35000;
+}
+
+function looksLikeOtherIndexPx(price) {
+  const px = Number(price);
+  return px >= 8000 && px <= 16000;
+}
+
+function isPlausibleNiftyFuturePrice(price, reference = niftyFutureReferencePrice()) {
+  const px = Number(price);
+  if (!(px > 0)) return false;
+  const ref = Number(reference);
+  if (looksLikeNiftyFuturePx(ref) && looksLikeOtherIndexPx(px)) return false;
+  if (looksLikeNiftyFuturePx(ref) && !looksLikeNiftyFuturePx(px) && Math.abs(px - ref) / ref > 0.08) return false;
+  return true;
+}
+
+function sanitizeNiftyFutureBar(bar) {
+  if (!bar) return bar;
+  const open = Number(bar.open);
+  const close = Number(bar.close);
+  if (looksLikeNiftyFuturePx(open) && looksLikeOtherIndexPx(close)) {
+    return {
+      ...bar,
+      close: open,
+      high: Math.max(Number(bar.high) || open, open),
+      low: Math.min(Number(bar.low) || open, open),
+    };
+  }
+  return bar;
+}
+
 function touchNiftyFutureMinute(ltp, now = Date.now()) {
   const price = Number(ltp);
-  if (!(price > 0)) return;
+  if (!(price > 0) || !isPlausibleNiftyFuturePrice(price)) return;
   const openMs = futureMinuteOpen(now);
   if (openMs == null) return;
   if (niftyFutureChartCandles.length) patchFutureMinute(niftyFutureChartCandles, openMs, price, now);
@@ -3981,7 +4023,7 @@ export function crudeFuturePreviewBar(timeframe = "5m", now = Date.now(), sessio
 export function niftyFutureSignalBars(timeframe = "5m", now = Date.now(), session) {
   const source = futureCandleSource();
   if (!source.length) return [];
-  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false, session);
+  return aggregateFutureBars(source, futureBarMinutes(timeframe), now, false, session).map(sanitizeNiftyFutureBar);
 }
 
 export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), session) {
@@ -3990,7 +4032,7 @@ export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), sessio
   const minutes = futureBarMinutes(timeframe);
   const barMs = minutes * 60_000;
   const rows = aggregateFutureBars(source, minutes, now, true, session);
-  const last = rows[rows.length - 1];
+  const last = sanitizeNiftyFutureBar(rows[rows.length - 1]);
   if (!last || !(Number(last.open) > 0) || !(Number(last.close) > 0)) return null;
   if (!(now >= Number(last.time) && now < Number(last.time) + barMs)) return null;
   return last;
@@ -4220,6 +4262,7 @@ function relatedIndex(symbol) {
   const upper = String(symbol || "").toUpperCase();
   if (upper.includes("BANKNIFTY") || upper.includes("BANK NIFTY")) return "BANKNIFTY";
   if (upper.includes("FINNIFTY")) return "FINNIFTY";
+  if (upper.includes("MIDCPNIFTY") || upper.includes("MIDCAPNIFTY")) return "MIDCPNIFTY";
   if (upper.includes("SENSEX")) return "SENSEX";
   if (upper.includes("CRUDEOIL")) return "CRUDEOIL";
   if (upper.includes("NIFTY")) return "NIFTY 50";
@@ -4377,6 +4420,8 @@ export function applyLiveQuotes(quotes) {
         touchCrudeFutureMinute(ltp);
       }
       if (index.symbol === "NIFTY 50") {
+        const root = underlyingIdFromSymbol(quote.parent || quote.symbol);
+        if (root !== "NIFTY") continue;
         noteNiftyFuturePrice(ltp);
         touchNiftyFutureMinute(ltp);
       }
