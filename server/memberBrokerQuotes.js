@@ -135,49 +135,97 @@ export function supportedMemberQuoteBroker(brokerId) {
   return ["dhan", "upstox", "zerodha", "fyers", "angelone", "kotak"].includes(String(brokerId || "").toLowerCase());
 }
 
+export function flattenKotakQuoteRows(payload) {
+  if (Array.isArray(payload)) return payload.filter((row) => row && typeof row === "object");
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload.data)) return payload.data.filter((row) => row && typeof row === "object");
+  const data = payload.data && typeof payload.data === "object" ? payload.data : payload;
+  if (Array.isArray(data)) return data.filter((row) => row && typeof row === "object");
+  if (!data || typeof data !== "object") return [];
+  const entries = Object.entries(data).filter(([, row]) => row && typeof row === "object" && !Array.isArray(row));
+  const quoteLike = (row) =>
+    row.ltp != null ||
+    row.lp != null ||
+    row.last_price != null ||
+    row.last_traded_price != null ||
+    row.ts ||
+    row.trading_symbol ||
+    row.tradingsymbol ||
+    row.display_symbol;
+  if (entries.length && entries.every(([, row]) => quoteLike(row))) {
+    return entries.map(([key, row]) => ({ ...row, _key: key }));
+  }
+  if (quoteLike(data)) return [data];
+  return [];
+}
+
 export function quotesFromKotakPayload(payload) {
-  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  const rows = flattenKotakQuoteRows(payload);
   const quotes = [];
   for (const spec of KOTAK_INDEX_TOKENS) {
     const row = rows.find((item) => {
-      const token = String(item?.exchange_token || item?.instrument_token || "").trim().toUpperCase();
-      return token === spec.token.toUpperCase();
+      const token = String(item?.exchange_token || item?.instrument_token || item?.ts || item?.display_symbol || "").trim().toUpperCase();
+      return token === spec.token.toUpperCase() || token.startsWith(`${spec.token.toUpperCase()}-`);
     });
     if (!row) continue;
-    const last = pickNumber(row.ltp, row.last_traded_price);
-    const prev = pickNumber(row.ohlc?.close, row.close);
-    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change));
+    const last = pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lp);
+    const prev = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close);
+    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change, row.chg));
     if (next) quotes.push(next);
   }
   return quotes;
 }
 
+export function kotakNeoFutCode(root, ymd) {
+  const match = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "";
+  return `${root}${match[3]}${MONTHS[Number(match[2]) - 1]}${match[1].slice(-2)}FUT`;
+}
+
 export function kotakCrudeSymbols(dates = upcomingExpiries("CRUDEOIL", 2)) {
-  const codes = ["CRUDEOIL"];
+  const neo = [];
+  const kite = [];
   for (const ymd of dates || []) {
-    const code = frontMonthFutCode("CRUDEOIL", ymd);
-    if (code) codes.push(code);
+    const neoCode = kotakNeoFutCode("CRUDEOIL", ymd);
+    const kiteCode = frontMonthFutCode("CRUDEOIL", ymd);
+    if (neoCode) neo.push(neoCode);
+    if (kiteCode) kite.push(kiteCode);
   }
-  return [...new Set(codes)];
+  return [...new Set([...neo, ...kite, "CRUDEOIL"])];
 }
 
 function kotakRowBlob(row = {}) {
-  return `${row.trading_symbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""}`.toUpperCase();
+  return `${row.trading_symbol || ""} ${row.tradingsymbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""} ${row.ts || ""} ${row.n || ""} ${row.symbol || ""} ${row._key || ""}`.toUpperCase();
+}
+
+function expiryFromKotakCrudeBlob(blob = "") {
+  const neo = String(blob || "").toUpperCase().match(/CRUDEOIL(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})FUT/);
+  if (neo) {
+    const month = MONTHS.indexOf(neo[2]) + 1;
+    if (month < 1) return "";
+    return `20${neo[3]}-${String(month).padStart(2, "0")}-${neo[1]}`;
+  }
+  return "";
 }
 
 export function quoteFromKotakCrude(payload) {
-  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  const rows = flattenKotakQuoteRows(payload);
   const hits = rows.filter((item) => {
     const blob = kotakRowBlob(item);
     if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
-    const kind = `${item?.instrument_type || ""} ${item?.exchange_token || ""}`.toUpperCase();
+    const kind = `${item?.instrument_type || ""} ${item?.exchange_token || ""} ${blob}`.toUpperCase();
     if (/\b(CE|PE)\b/.test(kind) && !/FUT/.test(kind)) return false;
     return true;
   });
   const row = hits[0];
   if (!row) return null;
-  const last = pickNumber(row.ltp, row.last_traded_price);
-  return quoteRow(CRUDE_INSTRUMENT, last, pickNumber(row.ohlc?.close, row.close), pickSignedNumber(row.change, row.per_change));
+  const last = pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lastPrice, row.lp);
+  const close = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close, row.prevClose);
+  const next = quoteRow(CRUDE_INSTRUMENT, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
+  if (next) {
+    next.expiry = String(row.expiry || row.exp || expiryFromKotakCrudeBlob(kotakRowBlob(row))).slice(0, 10);
+  }
+  return next;
 }
 
 function quoteRow(instrument, ltp, close, netChange) {
