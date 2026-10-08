@@ -110,6 +110,23 @@ test("saveClient splits a pasted Kotak mobile+MPIN+TOTP line", () => {
   assert.equal(row.mobile, "9900112233");
 });
 
+test("saveClient keeps a current 6-digit Kotak TOTP", () => {
+  saveClient("u-arpit", {
+    brokerId: "kotak",
+    accountId: "YT2VM",
+    brokerApiKey: "member-consumer-key",
+    brokerToken: "member-access-token",
+    brokerMobile: "+919900112233",
+    brokerMpin: "123456",
+    brokerTotpSecret: "654321 totp",
+    tradeMode: "real",
+  });
+  const secrets = peekClientSecrets("u-arpit");
+  assert.equal(secrets.brokerMobile, "+919900112233");
+  assert.equal(secrets.brokerMpin, "123456");
+  assert.equal(secrets.brokerTotpSecret, "654321");
+});
+
 test("createClient provisions a member who signs in with mobile and 1234", () => {
   const row = createClient({
     name: "Ramesh Kumar",

@@ -646,6 +646,18 @@ test("Kotak trade login paste splits mobile, MPIN, and TOTP", () => {
   assert.equal(applied.brokerTotpSecret, "JBSWY3DPEHPK3PXP");
 });
 
+test("Kotak trade login paste accepts a current 6-digit TOTP", () => {
+  const parsed = parseKotakTradeLoginPaste("+919900112233+123456+654321");
+  assert.deepEqual(parsed, {
+    mobile: "+919900112233",
+    mpin: "123456",
+    totpSecret: "654321",
+  });
+  const applied = applyKotakTradeLoginPaste({ brokerTotpSecret: "654321 totp" });
+  assert.equal(applied.brokerTotpSecret, "654321");
+  assert.equal(applied.totpSecret, "654321");
+});
+
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {
   assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY2691524500CE");
   assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY2691524500PE");
