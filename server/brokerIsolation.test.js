@@ -19,6 +19,7 @@ const {
   dhanSendOptions,
   isMemberScopedOrder,
   liveOrderSession,
+  sessionUsesAdminKotak,
 } = await import("./brokerIsolation.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
@@ -274,6 +275,10 @@ test("a member Kotak order refuses the admin login instead of calling Kotak", ()
     assert.match(member.message, /trade login/);
     assert.equal(member.message.includes("OAuth access_token"), false);
     assert.equal(member.message.includes("member-token-1452"), false);
+    assert.equal(
+      sessionUsesAdminKotak({ clientId: "YT2VM", accessToken: "kotak-member-token-3324", apiKey: "member-consumer" }),
+      false,
+    );
   } finally {
     if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;
     else process.env.T2S_KOTAK_CLIENT_ID = saved.id;

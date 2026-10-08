@@ -57,13 +57,11 @@ export function sessionUsesAdminKotak(session = {}) {
   const clientId = String(process.env.T2S_KOTAK_CLIENT_ID || "").trim();
   const apiKey = String(process.env.T2S_KOTAK_CONSUMER_KEY || "").trim();
   const accessToken = String(process.env.T2S_KOTAK_ACCESS_TOKEN || apiKey).trim();
-  const id = String(session.clientId || session.accountId || "").trim();
   const token = String(session.accessToken || session.brokerToken || "").trim();
   const key = String(session.apiKey || session.brokerApiKey || "").trim();
   if (!clientId && !apiKey && !accessToken) return false;
   if (token && ((accessToken && token === accessToken) || (apiKey && token === apiKey))) return true;
   if (key && ((apiKey && key === apiKey) || (accessToken && key === accessToken))) return true;
-  if (id && clientId && id === clientId) return true;
   return false;
 }
 

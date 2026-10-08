@@ -909,6 +909,77 @@ test("crude first candle copies the same NIFTY-mapped Kotak user", async () => {
   assert.equal(copy.brokerId, "kotak");
   assert.equal(copy.account.accessToken, "kotak-member-token-3324");
   assert.equal(copy.account.clientId, "YT2VM");
+  assert.equal(copy.copyBlocked, "");
+});
+
+test("crude copies the Upstox user and the NIFTY-mapped Kotak user even if admin env has the same client id", () => {
+  const saved = {
+    id: process.env.T2S_KOTAK_CLIENT_ID,
+    key: process.env.T2S_KOTAK_CONSUMER_KEY,
+    token: process.env.T2S_KOTAK_ACCESS_TOKEN,
+  };
+  process.env.T2S_KOTAK_CLIENT_ID = "YT2VM";
+  process.env.T2S_KOTAK_CONSUMER_KEY = "admin-kotak-key";
+  process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-kotak-token";
+  const upstox = { id: "u-upx-crude", name: "Upstox User", email: "upxcrude@t2s.app", role: "user" };
+  const kotak = { id: "u-kotak-crude", name: "K", email: "kotakcrude@t2s.app", role: "user" };
+  try {
+    selectMemberBroker({ user: upstox, brokerId: "upstox" });
+    installMemberBroker({ user: upstox, brokerId: "upstox", clientId: "UPX2200", accessToken: "upstox-crude-token" });
+    saveClientSettings(upstox.id, {
+      copy: true,
+      subscriptionMode: "copy",
+      tradeMode: "real",
+      brokerId: "upstox",
+      subscriptionUntil: "2026-10-31",
+    });
+    selectMemberBroker({ user: kotak, brokerId: "kotak" });
+    installMemberBroker({
+      user: kotak,
+      brokerId: "kotak",
+      clientId: "YT2VM",
+      accessToken: "kotak-member-token-3324",
+      apiKey: "kotak-member-consumer",
+    });
+    saveClientSettings(kotak.id, {
+      copy: false,
+      subscriptionMode: "strategy",
+      mappedStrategy: "NIFTY 5m first candle",
+      tradeMode: "real",
+      brokerId: "kotak",
+      subscriptionUntil: "2026-10-31",
+    });
+    const copies = memberCopyPayloads(
+      {
+        strategy: "CRUDE OIL 5m first candle",
+        side: "BUY",
+        symbol: "CRUDEOIL 6100 CE",
+        qty: 100,
+        lots: 1,
+        lotSize: 100,
+        exchangeSegment: "MCX_COMM",
+        brokerId: "dhan",
+      },
+      { id: "a-crude-both", name: "CRUDE OIL", mappingScope: "both", mappedClientIds: [] },
+    );
+    const upx = copies.find((row) => row.copyUserId === upstox.id);
+    const ktk = copies.find((row) => row.copyUserId === kotak.id);
+    assert.ok(upx, "Upstox copy user must receive Crude");
+    assert.ok(ktk, "Kotak Neo user must receive Crude with the Upstox users");
+    assert.equal(upx.brokerId, "upstox");
+    assert.equal(ktk.brokerId, "kotak");
+    assert.equal(ktk.copyBlocked, "");
+    assert.equal(ktk.account.clientId, "YT2VM");
+    assert.equal(ktk.account.accessToken, "kotak-member-token-3324");
+    assert.equal(JSON.stringify(ktk).includes("admin-kotak-token"), false);
+  } finally {
+    if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;
+    else process.env.T2S_KOTAK_CLIENT_ID = saved.id;
+    if (saved.key == null) delete process.env.T2S_KOTAK_CONSUMER_KEY;
+    else process.env.T2S_KOTAK_CONSUMER_KEY = saved.key;
+    if (saved.token == null) delete process.env.T2S_KOTAK_ACCESS_TOKEN;
+    else process.env.T2S_KOTAK_ACCESS_TOKEN = saved.token;
+  }
 });
 
 test("admin BUY PE copies a mapped client who is not Copy ON", async () => {
