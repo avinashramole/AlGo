@@ -17,7 +17,7 @@ test("TEST2 edit form keeps the script dropdown that TEST1 already shows", () =>
   assert.match(algo, /data-test2-scripts="card"/);
   assert.match(algo, /fills newest missing weekdays first/);
   assert.match(algo, /Start with this month/);
-  assert.match(algo, /has \$\{algo.lastBacktest.optionHistory.completeDays\} Dhan rolling day/);
+  assert.match(algo, /has \$\{Number\(algo.lastBacktest.optionHistory\?\.completeDays \|\| 0\)\} Dhan rolling day/);
   assert.match(algo, /partial days are retried/);
 });
 

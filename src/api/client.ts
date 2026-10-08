@@ -274,6 +274,7 @@ export type Snapshot = {
         calls?: number;
         stubs?: number;
         skippedEmpty?: number;
+        completeDays?: number;
       };
       holdStyle?: "btst" | "intraday" | string;
       combos?: number;
