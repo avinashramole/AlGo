@@ -289,7 +289,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               instrument: "option",
               strikeOffset: 0,
               side: "BUY",
-              timeframe: "5m",
+              timeframe: ["1m", "2m", "5m", "10m", "15m"].includes(String(form.timeframe || ""))
+                ? form.timeframe
+                : "5m",
             }
           : crudeFirst
           ? {
