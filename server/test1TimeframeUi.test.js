@@ -15,4 +15,7 @@ test("TEST1 edit form lets the user pick 1m 2m 5m 10m 15m", () => {
   assert.equal(builder.includes("|| test1 || test2}"), false);
   assert.match(builder, /test1 \|\| test2 \|\| firstCandle \|\| crudeFirst \|\| niftyTest/);
   assert.match(builder, /\["1m", "2m", "5m", "10m", "15m"\]/);
+  const test1Save = builder.split(": test1")[1]?.split(": crudeFirst")[0] || "";
+  assert.match(test1Save, /timeframe: \["1m", "2m", "5m", "10m", "15m"\]\.includes/);
+  assert.equal(test1Save.includes('timeframe: "5m"'), false);
 });

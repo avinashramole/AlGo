@@ -59,7 +59,7 @@ pull_raw() {
   echo "downloaded $rel"
 }
 
-if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
   echo "Git checkout did not bring the one-script TEST2 form. Downloading files from GitHub."
   pull_raw src/components/dashboard/StrategyBuilder.tsx
   pull_raw src/components/dashboard/OneMinuteHistoryBar.tsx
@@ -118,6 +118,10 @@ if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHis
 fi
 if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'FIRST_CANDLE_TIMEFRAMES\[algo.timeframe\]' "$HOME_DIR/server/niftyVwap/config.js"; then
   echo "FAIL: $HOME_DIR still has the locked TEST1 5m timeframe."
+  exit 1
+fi
+if ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+  echo "FAIL: TEST1 Save still hardcodes 5m. Deploy cursor/test1-save-timeframe-6826."
   exit 1
 fi
 
