@@ -118,12 +118,12 @@ export const Test1Strategy = {
       return { action: "skip", reason: "duplicate-bar" };
     }
     if (signal.waitingEval) {
-      algo.lastSignal = `WAIT ${config.startTimeIst || "09:30"} ATM 5m`;
+      algo.lastSignal = `WAIT ${config.startTimeIst || "09:30"} ATM ${config.timeframe || "5m"}`;
       return { action: "wait", reason: "wait-start" };
     }
     if (!signal.buyCe && !signal.buyPe) {
       if (!signal.ready) {
-        algo.lastSignal = "WAIT ATM 5m";
+        algo.lastSignal = `WAIT ATM ${config.timeframe || "5m"}`;
         return { action: "wait", reason: "wait-bar" };
       }
       algo.lastSignal = `NO TRADE · ATM ${signal.green ? "GREEN" : "NOT GREEN"} BODY ${(signal.bodyPct * 100).toFixed(1)}% WICK ${(signal.wickPct * 100).toFixed(1)}%`;

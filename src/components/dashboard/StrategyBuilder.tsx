@@ -196,7 +196,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
       const wick = Math.round((Number(form.maxWickPct) || 0.1) * 100);
-      return `TEST1 · ${form.symbol || "NIFTY"} 5m ATM CE/PE · after ${form.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT ${form.targetMultiple || 1}× signal ${form.targetSource === "range" ? "range" : "body"} from fill · SL candle low`;
+      return `TEST1 · ${form.symbol || "NIFTY"} ${form.timeframe || "5m"} ATM CE/PE · after ${form.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT ${form.targetMultiple || 1}× signal ${form.targetSource === "range" ? "range" : "body"} from fill · SL candle low`;
     }
     if (crudeFirst) {
       const requested = Number(form.maxTradesPerDay);
@@ -399,7 +399,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={test1}
             title="TEST1"
-            text="Pick an NSE index or MCX script. After 09:30 IST, buy that script's current ATM CE or PE when the 5m option candle is green with body ≈90% and wicks ≈10%. Target is 100% of that body from the fill. SL is the signal candle low. One order per candle."
+            text="Pick an NSE index or MCX script and a timeframe. After 09:30 IST, buy that script's current ATM CE or PE when that option candle is green with body ≈90% and wicks ≈10%. Target is 100% of that body from the fill. SL is the signal candle low. One order per candle."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-test1"),
@@ -533,7 +533,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         {test1 && !test2 ? (
           <div className="mt-2.5 space-y-1.5">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed 5m green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
+              Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed {form.timeframe || "5m"} green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
             </div>
             <label className="block text-xs font-semibold text-slate-500">
               Script · ATM option
@@ -714,8 +714,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             Timeframe
             <select
               className={fieldClass}
-              value={reversal || hedge ? "15m" : vwap || test1 || test2 ? "5m" : form.timeframe || "5m"}
-              disabled={(engine && !firstCandle) || test1 || test2}
+              value={reversal || hedge ? "15m" : vwap || test2 ? "5m" : form.timeframe || "5m"}
+              disabled={(engine && !firstCandle && !test1) || test2}
+              data-test1-timeframe={test1 ? "true" : undefined}
               onChange={(event) => {
                 const timeframe = event.target.value;
                 if (firstCandle || crudeFirst) {

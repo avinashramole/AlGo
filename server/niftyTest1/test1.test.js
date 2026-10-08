@@ -58,7 +58,7 @@ test("TEST1 name and ATM-only config stay locked", () => {
   const algo = defaultNiftyTest1Algo({ name: "other", strikeOffset: 2, timeframe: "15m" });
   assert.equal(algo.name, "TEST1");
   assert.equal(algo.kind, "nifty-test1");
-  assert.equal(algo.timeframe, "5m");
+  assert.equal(algo.timeframe, "15m");
   assert.equal(algo.strikeOffset, 0);
   assert.equal(isNiftyTest1Algo({ name: "TEST1" }), true);
   const cfg = niftyTest1Config({ minBodyPct: 0.9, maxWickPct: 0.1, lots: 2 });
@@ -78,6 +78,13 @@ test("TEST1 name and ATM-only config stay locked", () => {
   assert.equal(niftyTest1Config({ symbol: "BANKNIFTY" }).lotSize, 30);
   assert.equal(niftyTest1Config({ symbol: "MIDCPNIFTY" }).step, 25);
   assert.equal(defaultNiftyTest1Algo({ symbol: "CRUDEOIL" }).symbol, "CRUDEOIL");
+  assert.equal(niftyTest1Config({ timeframe: "1m" }).barMinutes, 1);
+  assert.equal(niftyTest1Config({ timeframe: "2m" }).timeframe, "2m");
+  assert.equal(niftyTest1Config({ timeframe: "10m" }).barMinutes, 10);
+  assert.equal(niftyTest1Config({ timeframe: "15m" }).barMinutes, 15);
+  assert.equal(niftyTest1Config({ timeframe: "1H" }).timeframe, "5m");
+  assert.equal(defaultNiftyTest1Algo({ timeframe: "1m" }).timeframe, "1m");
+  assert.equal(normalizeAlgo({ name: "TEST1", timeframe: "10m" }).timeframe, "10m");
 });
 
 test("seed catalog includes paused TEST1", () => {
@@ -119,6 +126,13 @@ test("TEST1 waits before 09:30 and buys ATM CE once on a completed strong green"
   });
   assert.equal(forming.waitingEval, false);
   assert.equal(forming.buyCe, false);
+  const oneMin = Test1SignalEngine.evaluate({
+    ceBars: [ce],
+    peBars: [pe],
+    now: T0930 + 60_000,
+    barMs: 60_000,
+  });
+  assert.equal(oneMin.buyCe, true);
   const now = T0930 + BAR;
   const signal = Test1SignalEngine.evaluate({
     ceBars: [ce],
@@ -167,6 +181,47 @@ test("TEST1 waits before 09:30 and buys ATM CE once on a completed strong green"
     adapter: book.adapter,
   });
   assert.notEqual(again.action, "entry");
+  assert.equal(book.places.length, 1);
+});
+
+test("TEST1 1m timeframe buys after the 1m candle closes", () => {
+  const ce = bar(100, 109, { high: 110, low: 100, time: T0930 });
+  const pe = bar(80, 78, { high: 81, low: 77, time: T0930 });
+  const algo = defaultNiftyTest1Algo({ name: "TEST1", timeframe: "1m", enabled: true });
+  assert.equal(niftyTest1Config(algo).barMinutes, 1);
+  const book = bookAdapter();
+  const early = Test1Strategy.tick({
+    algo,
+    now: T0930 + 20_000,
+    feedLive: true,
+    minutesToClose: 300,
+    ceBars: [ce],
+    peBars: [pe],
+    ceLtp: 109,
+    peLtp: 78,
+    spot: 22680,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.notEqual(early.action, "entry");
+  const tick = Test1Strategy.tick({
+    algo: defaultNiftyTest1Algo({ name: "TEST1", timeframe: "1m", enabled: true }),
+    now: T0930 + 60_000,
+    feedLive: true,
+    minutesToClose: 300,
+    ceBars: [ce],
+    peBars: [pe],
+    ceLtp: 109,
+    peLtp: 78,
+    spot: 22680,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
   assert.equal(book.places.length, 1);
 });
 

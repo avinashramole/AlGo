@@ -570,9 +570,10 @@ export function niftyTest1Config(algo = {}) {
   const maxWickPct = Math.min(0.5, Math.max(0.01, num(algo.maxWickPct, DEFAULT_NIFTY_TEST1_CONFIG.maxWickPct)));
   const targetMultiple = Math.min(5, Math.max(0.1, num(algo.targetMultiple, DEFAULT_NIFTY_TEST1_CONFIG.targetMultiple)));
   const targetSource = String(algo.targetSource || DEFAULT_NIFTY_TEST1_CONFIG.targetSource) === "range" ? "range" : "body";
+  const timeframe = FIRST_CANDLE_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_TEST1_CONFIG.timeframe;
   return {
-    timeframe: "5m",
-    barMinutes: 5,
+    timeframe,
+    barMinutes: FIRST_CANDLE_TIMEFRAMES[timeframe] || 5,
     symbol: script.id,
     lots,
     lotSize,
@@ -935,7 +936,7 @@ export function defaultNiftyTest1Algo(patch = {}) {
     lots: cfg.lots,
     lotSize: cfg.lotSize,
     qty: cfg.qty,
-    timeframe: "5m",
+    timeframe: cfg.timeframe,
     slPct: 0,
     targetPct: 0,
     minBodyPct: cfg.minBodyPct,
@@ -964,7 +965,7 @@ export function defaultNiftyTest1Algo(patch = {}) {
     lots: cfg.lots,
     lotSize: cfg.lotSize,
     qty: cfg.qty,
-    timeframe: "5m",
+    timeframe: cfg.timeframe,
     minBodyPct: cfg.minBodyPct,
     maxWickPct: cfg.maxWickPct,
     targetMultiple: cfg.targetMultiple,

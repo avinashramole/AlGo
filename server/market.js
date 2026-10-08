@@ -1334,12 +1334,17 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
     : config.expiryKind === "weekly"
       ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || ""
       : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
-  const lastFut = (getCandles("5m", root) || [])[(getCandles("5m", root) || []).length - 1];
+  const lastFut = (getCandles(config.timeframe || "5m", root) || [])[(getCandles(config.timeframe || "5m", root) || []).length - 1];
   const spot = Number(getChainSpot(root)) || Number(lastFut?.close) || 0;
   const step = Number(config.step || und.step) || 50;
   const selected = OptionStrikeSelector.strikeForOffset(spot, step, 0);
   const ceStrike = vs.lockedOption === "CE" && vs.lockedStrike ? vs.lockedStrike : selected;
   const peStrike = vs.lockedOption === "PE" && vs.lockedStrike ? vs.lockedStrike : selected;
+  if (vs.barMinutes !== config.barMinutes) {
+    vs.ceBars = [];
+    vs.peBars = [];
+    vs.barMinutes = config.barMinutes;
+  }
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;
@@ -1350,7 +1355,7 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
   }
   const ceLtp = optionPremium(root, ceStrike, "CE");
   const peLtp = optionPremium(root, peStrike, "PE");
-  const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, 5, { sessionOpenMinutes: mcx ? 9 * 60 : 9 * 60 + 15 }) || 0;
+  const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.barMinutes || 5, { sessionOpenMinutes: mcx ? 9 * 60 : 9 * 60 + 15 }) || 0;
   vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
   const ceSecurityId = optionLegId(ceStrike, "CE", root);
