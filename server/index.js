@@ -11,6 +11,7 @@ import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSav
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureIndexHistory } from "./indexHistory.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
+import { rollingFillStatus, startRollingOptionFillScheduler, stepRollingOptionFill } from "./rollingOptionFill.js";
 import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
@@ -1087,6 +1088,25 @@ app.post("/api/backtest/unlock", (_req, res) => {
   res.json({ ok: true, unlocked: true });
 });
 
+app.get("/api/rolling-options/fill", (_req, res) => {
+  res.json(rollingFillStatus());
+});
+
+app.post("/api/rolling-options/fill", async (_req, res) => {
+  try {
+    if (!isDhanLive()) {
+      await ensureDhanLiveFromSavedToken();
+    }
+    const status = await stepRollingOptionFill({
+      fetchRolling: fetchDhanRollingOption,
+      isLive: isDhanLive,
+    });
+    res.json(status);
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Could not start 1m option fill" });
+  }
+});
+
 app.post("/api/algos/:id/backtest/reset", (req, res) => {
   clearBacktestBusy();
   const result = resetBacktestAlgo(String(req.params.id || ""));
@@ -1470,6 +1490,7 @@ async function bootBackground() {
   if (skipDhanBoot()) {
     console.log("Dhan boot skipped (T2S_SKIP_DHAN_BOOT). API is answering on this port.");
     startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
+    startOneMinuteOptionFill();
     return;
   }
   try {
@@ -1488,4 +1509,15 @@ async function bootBackground() {
     console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }
   startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
+  startOneMinuteOptionFill();
+}
+
+function startOneMinuteOptionFill() {
+  if (/^(1|true|yes)$/i.test(String(process.env.T2S_SKIP_TICK || ""))) return;
+  if (/^(1|true|yes)$/i.test(String(process.env.T2S_SKIP_ROLLING_FILL || ""))) return;
+  startRollingOptionFillScheduler({
+    fetchRolling: fetchDhanRollingOption,
+    isLive: isDhanLive,
+  });
+  console.log("1m option OHLC fill: NIFTY BANKNIFTY FINNIFTY MIDCPNIFTY · 1 year · stored on this VPS");
 }
