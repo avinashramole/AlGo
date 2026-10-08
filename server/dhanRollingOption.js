@@ -7,8 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NIFTY_ID = 13;
 export const ROLLING_MAX_DAYS = 366;
 export const ROLLING_CHUNK_DAYS = 30;
+export const ROLLING_1M_CHUNK_DAYS = 5;
 export const ROLLING_WINGS = 10;
 export const ROLLING_BACKTEST_DEADLINE_MS = 480_000;
+export const NSE_OPTION_INDEXES = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];
 
 const ROLLING_CONTRACTS = {
   NIFTY: { symbol: "NIFTY", securityId: 13, exchangeSegment: "NSE_FNO", instrument: "OPTIDX" },
@@ -31,16 +33,27 @@ function isYmd(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
-export function rollingOptionDir() {
-  return process.env.T2S_NIFTY_ROLLING_DIR || path.join(__dirname, "data", "nifty-rolling-options");
+export function rollingInterval(value) {
+  const n = Number(value);
+  return n === 1 || n === 5 ? n : 15;
 }
 
-function symbolDir(symbol = "NIFTY") {
-  return path.join(rollingOptionDir(), String(symbol || "NIFTY").toUpperCase());
+export function rollingOptionDir(interval = 15) {
+  const root = process.env.T2S_NIFTY_ROLLING_DIR || path.join(__dirname, "data", "nifty-rolling-options");
+  const tf = rollingInterval(interval);
+  return tf === 15 ? root : `${root}-${tf}m`;
 }
 
-function dayFile(symbol, ymd) {
-  return path.join(symbolDir(symbol), `${ymd}.json`);
+function symbolDir(symbol = "NIFTY", interval = 15) {
+  return path.join(rollingOptionDir(interval), String(symbol || "NIFTY").toUpperCase());
+}
+
+function dayFile(symbol, ymd, interval = 15) {
+  return path.join(symbolDir(symbol, interval), `${ymd}.json`);
+}
+
+function cacheKey(symbol, ymd, interval = 15) {
+  return `${rollingInterval(interval)}|${symbol}|${ymd}`;
 }
 
 const memory = new Map();
@@ -49,12 +62,15 @@ export function resetRollingOptionCache() {
   memory.clear();
 }
 
-export function wipeRollingOptions() {
+export function wipeRollingOptions(interval) {
   resetRollingOptionCache();
-  try {
-    fs.rmSync(rollingOptionDir(), { recursive: true, force: true });
-  } catch {
-    /* missing is fine */
+  const dirs = interval == null ? [15, 1, 5].map((tf) => rollingOptionDir(tf)) : [rollingOptionDir(interval)];
+  for (const dir of [...new Set(dirs)]) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* missing is fine */
+    }
   }
 }
 
@@ -97,20 +113,20 @@ function listYmds(from, to) {
   return days;
 }
 
-export function hasRollingDay(symbol, ymd) {
-  if (memory.has(`${symbol}|${ymd}`)) return true;
+export function hasRollingDay(symbol, ymd, interval = 15) {
+  if (memory.has(cacheKey(symbol, ymd, interval))) return true;
   try {
-    return fs.existsSync(dayFile(symbol, ymd));
+    return fs.existsSync(dayFile(symbol, ymd, interval));
   } catch {
     return false;
   }
 }
 
-export function loadRollingDay(symbol, ymd) {
-  const key = `${symbol}|${ymd}`;
+export function loadRollingDay(symbol, ymd, interval = 15) {
+  const key = cacheKey(symbol, ymd, interval);
   if (memory.has(key)) return memory.get(key);
   try {
-    const row = JSON.parse(fs.readFileSync(dayFile(symbol, ymd), "utf8"));
+    const row = JSON.parse(fs.readFileSync(dayFile(symbol, ymd, interval), "utf8"));
     if (!row || row.ymd !== ymd) return null;
     memory.set(key, row);
     return row;
@@ -119,19 +135,21 @@ export function loadRollingDay(symbol, ymd) {
   }
 }
 
-export function writeRollingDay(symbol, ymd, payload) {
+export function writeRollingDay(symbol, ymd, payload, interval = 15) {
+  const tf = rollingInterval(interval);
   const next = {
     symbol: String(symbol || "NIFTY").toUpperCase(),
     ymd,
+    interval: tf,
     source: payload.source || "dhan-rolling",
     empty: Boolean(payload.empty),
     updatedAt: payload.updatedAt || new Date().toISOString(),
     weekly: payload.weekly || { slots: [] },
     monthly: payload.monthly || { slots: [] },
   };
-  fs.mkdirSync(symbolDir(next.symbol), { recursive: true });
-  fs.writeFileSync(dayFile(next.symbol, ymd), `${JSON.stringify(next)}\n`);
-  memory.set(`${next.symbol}|${ymd}`, next);
+  fs.mkdirSync(symbolDir(next.symbol, tf), { recursive: true });
+  fs.writeFileSync(dayFile(next.symbol, ymd, tf), `${JSON.stringify(next)}\n`);
+  memory.set(cacheKey(next.symbol, ymd, tf), next);
   return next;
 }
 
@@ -143,8 +161,8 @@ export function isWeekendYmd(ymd) {
   return weekday === "Sat" || weekday === "Sun";
 }
 
-export function rollingDayStatus(symbol, ymd) {
-  const day = loadRollingDay(symbol, ymd);
+export function rollingDayStatus(symbol, ymd, interval = 15) {
+  const day = loadRollingDay(symbol, ymd, interval);
   if (!day) return "missing";
   if (day.empty) return "empty";
   const weekly = day.weekly?.slots?.length || 0;
@@ -153,49 +171,50 @@ export function rollingDayStatus(symbol, ymd) {
   return "partial";
 }
 
-export function needsRollingFetch(symbol, ymd) {
+export function needsRollingFetch(symbol, ymd, interval = 15) {
   if (isWeekendYmd(ymd)) return false;
-  const status = rollingDayStatus(symbol, ymd);
+  const status = rollingDayStatus(symbol, ymd, interval);
   return status === "missing" || status === "partial" || status === "empty";
 }
 
-export function dropEmptyRollingDays(symbol = "NIFTY") {
+export function dropEmptyRollingDays(symbol = "NIFTY", interval = 15) {
   const root = String(symbol || "NIFTY").toUpperCase();
+  const tf = rollingInterval(interval);
   let dropped = 0;
   let names = [];
   try {
-    names = fs.readdirSync(symbolDir(root)).filter((name) => name.endsWith(".json"));
+    names = fs.readdirSync(symbolDir(root, tf)).filter((name) => name.endsWith(".json"));
   } catch {
     names = [];
   }
   for (const name of names) {
     const ymd = name.replace(/\.json$/, "");
-    if (rollingDayStatus(root, ymd) !== "empty") continue;
+    if (rollingDayStatus(root, ymd, tf) !== "empty") continue;
     try {
-      fs.rmSync(dayFile(root, ymd), { force: true });
+      fs.rmSync(dayFile(root, ymd, tf), { force: true });
     } catch {
       /* missing is fine */
     }
-    memory.delete(`${root}|${ymd}`);
+    memory.delete(cacheKey(root, ymd, tf));
     dropped += 1;
   }
   return dropped;
 }
 
-export function preloadRollingDays(symbol, ymds = []) {
+export function preloadRollingDays(symbol, ymds = [], interval = 15) {
   let loaded = 0;
   for (const ymd of ymds) {
-    if (loadRollingDay(symbol, ymd)) loaded += 1;
+    if (loadRollingDay(symbol, ymd, interval)) loaded += 1;
   }
   return loaded;
 }
 
-export function rollingCoverage(symbol, from, to) {
+export function rollingCoverage(symbol, from, to, interval = 15) {
   const weekdays = listYmds(from, to).filter((ymd) => !isWeekendYmd(ymd));
   if (!weekdays.length) return "synth";
   let stored = 0;
   for (const ymd of weekdays) {
-    const status = rollingDayStatus(symbol, ymd);
+    const status = rollingDayStatus(symbol, ymd, interval);
     if (status === "complete") stored += 1;
   }
   if (!stored) return "synth";
@@ -203,8 +222,8 @@ export function rollingCoverage(symbol, from, to) {
   return "mixed";
 }
 
-export function completeRollingDays(symbol, from, to) {
-  return listYmds(from, to).filter((ymd) => !isWeekendYmd(ymd) && rollingDayStatus(symbol, ymd) === "complete").length;
+export function completeRollingDays(symbol, from, to, interval = 15) {
+  return listYmds(from, to).filter((ymd) => !isWeekendYmd(ymd) && rollingDayStatus(symbol, ymd, interval) === "complete").length;
 }
 
 export function parseRollingPayload(payload, option = "CE") {
@@ -374,18 +393,18 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function persistFetchedDays(root, weeklyBars, monthlyBars, overwrite = false) {
+function persistFetchedDays(root, weeklyBars, monthlyBars, overwrite = false, interval = 15) {
   const weeklyDays = mergeBarsIntoDays(weeklyBars);
   const monthlyDays = mergeBarsIntoDays(monthlyBars);
   const ymds = new Set([...weeklyDays.keys(), ...monthlyDays.keys()]);
   const wrote = [];
   for (const ymd of ymds) {
-    const existing = loadRollingDay(root, ymd);
-    if (!overwrite && existing && rollingDayStatus(root, ymd) === "complete") continue;
+    const existing = loadRollingDay(root, ymd, interval);
+    if (!overwrite && existing && rollingDayStatus(root, ymd, interval) === "complete") continue;
     const weekly = weeklyDays.get(ymd)?.slots?.length ? weeklyDays.get(ymd) : existing?.weekly || { slots: [] };
     const monthly = monthlyDays.get(ymd)?.slots?.length ? monthlyDays.get(ymd) : existing?.monthly || { slots: [] };
     if (!weekly.slots.length && !monthly.slots.length) continue;
-    writeRollingDay(root, ymd, { weekly, monthly, empty: false, source: "dhan-rolling" });
+    writeRollingDay(root, ymd, { weekly, monthly, empty: false, source: "dhan-rolling" }, interval);
     wrote.push(ymd);
   }
   return wrote;
@@ -414,12 +433,14 @@ export async function downloadRollingOptionRange({
   if (!isYmd(from) || !isYmd(to) || typeof fetchRolling !== "function") {
     return { symbol: root, from, to, days: 0, calls: 0, skipped: 0, truncated: false, reused: false, source: "none" };
   }
+  const tf = rollingInterval(interval);
+  const chunkDays = tf <= 5 ? ROLLING_1M_CHUNK_DAYS : ROLLING_CHUNK_DAYS;
   const all = listYmds(from, to);
   const wanted = all.length > maxDays ? all.slice(-maxDays) : all;
   const start = wanted[0];
   const end = wanted[wanted.length - 1];
-  const missing = overwrite ? wanted.filter((ymd) => !isWeekendYmd(ymd)) : wanted.filter((ymd) => needsRollingFetch(root, ymd));
-  const reusedDays = wanted.filter((ymd) => !isWeekendYmd(ymd) && !needsRollingFetch(root, ymd)).length;
+  const missing = overwrite ? wanted.filter((ymd) => !isWeekendYmd(ymd)) : wanted.filter((ymd) => needsRollingFetch(root, ymd, tf));
+  const reusedDays = wanted.filter((ymd) => !isWeekendYmd(ymd) && !needsRollingFetch(root, ymd, tf)).length;
   if (!missing.length) {
     return {
       symbol: root,
@@ -442,8 +463,8 @@ export async function downloadRollingOptionRange({
   const wrote = new Set();
   const labels = wingLabels(wings);
   let lastError = "";
-  for (const chunk of chunkDateRange(start, end)) {
-    const need = listYmds(chunk.from, chunk.to).filter((ymd) => (overwrite ? !isWeekendYmd(ymd) : needsRollingFetch(root, ymd)));
+  for (const chunk of chunkDateRange(start, end, chunkDays)) {
+    const need = listYmds(chunk.from, chunk.to).filter((ymd) => (overwrite ? !isWeekendYmd(ymd) : needsRollingFetch(root, ymd, tf)));
     if (!need.length) continue;
     if (Date.now() - started > deadlineMs) {
       truncated = true;
@@ -470,7 +491,7 @@ export async function downloadRollingOptionRange({
               option,
               from: chunk.from,
               to: chunk.toExclusive,
-              interval,
+              interval: tf,
               securityId: id,
               exchangeSegment: segment,
               instrument: inst,
@@ -487,18 +508,23 @@ export async function downloadRollingOptionRange({
           if (delayMs > 0) await sleep(delayMs);
         }
       }
-      for (const ymd of persistFetchedDays(root, weeklyBars, monthlyBars, overwrite)) wrote.add(ymd);
+      for (const ymd of persistFetchedDays(root, weeklyBars, monthlyBars, overwrite, tf)) wrote.add(ymd);
     }
     if (chunkDone && okCalls > 0) {
       for (const ymd of need) {
-        if (!needsRollingFetch(root, ymd)) continue;
-        if (loadRollingDay(root, ymd)) continue;
-        writeRollingDay(root, ymd, {
-          empty: true,
-          weekly: { slots: [] },
-          monthly: { slots: [] },
-          source: "dhan-rolling-empty",
-        });
+        if (!needsRollingFetch(root, ymd, tf)) continue;
+        if (loadRollingDay(root, ymd, tf)) continue;
+        writeRollingDay(
+          root,
+          ymd,
+          {
+            empty: true,
+            weekly: { slots: [] },
+            monthly: { slots: [] },
+            source: "dhan-rolling-empty",
+          },
+          tf,
+        );
         stubs += 1;
       }
     }
@@ -516,6 +542,7 @@ export async function downloadRollingOptionRange({
     reused: calls === 0,
     source: wrote.size ? "dhan-rolling" : reusedDays ? "stored" : "none",
     securityId: id,
+    interval: tf,
     lastError,
   };
 }
