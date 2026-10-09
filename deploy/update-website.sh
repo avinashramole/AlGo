@@ -162,8 +162,12 @@ if ! grep -q 'data-mir-trade-mode="true"' "$HOME_DIR/src/components/dashboard/St
   echo "FAIL: Multi-Index Edit has no Paper/Live selector. Deploy cursor/multi-index-paper-live-6826."
   exit 1
 fi
-if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx" || ! [ -f "$HOME_DIR/public/Trade2Smart-web.apk" ]; then
-  echo "FAIL: Android APK download is missing. Deploy cursor/hybrid-web-apk-6826."
+if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx" || ! [ -f "$HOME_DIR/releases/Trade2Smart-web.apk" ]; then
+  echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
+  exit 1
+fi
+if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts" || grep -q 'url: "https://trade2smart.com"' "$HOME_DIR/capacitor.config.ts"; then
+  echo "FAIL: Capacitor must bundle dist/, not open the live website URL."
   exit 1
 fi
 
@@ -177,10 +181,7 @@ if ! grep -Rql "$RESULT_MARKER" "$HOME_DIR/dist/assets"; then
   echo "FAIL: dist/ does not contain $RESULT_MARKER. Build is still old."
   exit 1
 fi
-if ! [ -f "$HOME_DIR/dist/Trade2Smart-web.apk" ]; then
-  echo "FAIL: website build did not copy Trade2Smart-web.apk. Deploy cursor/hybrid-web-apk-6826."
-  exit 1
-fi
+cp -f "$HOME_DIR/releases/Trade2Smart-web.apk" "$HOME_DIR/dist/Trade2Smart-web.apk"
 
 mkdir -p "$WEBROOT"
 /bin/cp -af "$HOME_DIR/dist/." "$WEBROOT/"

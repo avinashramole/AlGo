@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, HashRouter } from "react-router-dom";
+import { isNativeHybrid } from "./lib/hybrid";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
@@ -9,10 +10,12 @@ import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
 import "./login.css";
 
+const Router = isNativeHybrid() ? HashRouter : BrowserRouter;
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <BrowserRouter>
+      <Router>
         <ThemeProvider>
           <AuthProvider>
             <MarketProvider>
@@ -20,7 +23,7 @@ createRoot(document.getElementById("root")!).render(
             </MarketProvider>
           </AuthProvider>
         </ThemeProvider>
-      </BrowserRouter>
+      </Router>
     </ErrorBoundary>
   </StrictMode>,
 );

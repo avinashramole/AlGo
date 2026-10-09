@@ -1,6 +1,5 @@
+import { apiBase, googleLoginNext } from "../lib/hybrid";
 import { apiDownMessage, publicDeskError } from "../lib/liveSite";
-
-const API = "/api";
 
 function authHeaders(): HeadersInit {
   const token =
@@ -15,7 +14,7 @@ async function requestOnce<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
   let response: Response;
   try {
-    response = await fetch(`${API}${path}`, {
+    response = await fetch(`${apiBase()}${path}`, {
       ...rest,
       headers: {
         "Content-Type": "application/json",
@@ -621,8 +620,8 @@ export function googleAuthStatus() {
 }
 
 export function googleAuthStartUrl() {
-  const next = encodeURIComponent(window.location.origin);
-  return `/api/auth/google?next=${next}`;
+  const next = encodeURIComponent(googleLoginNext());
+  return `${apiBase()}/auth/google?next=${next}`;
 }
 
 export function listUsers() {
@@ -1584,7 +1583,7 @@ export function syncOneMinuteHistory(payload: { years?: number; from?: string; t
 export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
   let response: Response;
   try {
-    response = await fetch(`${API}/algos/${id}/backtest/report?format=${format}`, {
+    response = await fetch(`${apiBase()}/algos/${id}/backtest/report?format=${format}`, {
       headers: authHeaders(),
     });
   } catch {

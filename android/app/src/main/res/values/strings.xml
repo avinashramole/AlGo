@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Trade 2 Smart</string>
+    <string name="title_activity_main">Trade 2 Smart</string>
+    <string name="package_name">com.t2s.algo</string>
+    <string name="custom_url_scheme">com.t2s.algo</string>
+</resources>

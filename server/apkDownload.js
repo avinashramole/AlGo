@@ -9,6 +9,7 @@ export const ANDROID_APK_NAME = "Trade2Smart-web.apk";
 export function androidApkPath(extraDirs = []) {
   const candidates = [
     ...extraDirs,
+    path.join(root, "releases", ANDROID_APK_NAME),
     path.join(root, "dist", ANDROID_APK_NAME),
     path.join(root, "public", ANDROID_APK_NAME),
   ];

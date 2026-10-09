@@ -40,7 +40,13 @@ android-hybrid/build/
 android-hybrid/app/build/
 android-hybrid/local.properties
 android-hybrid/gradle/wrapper/gradle-wrapper.jar
+android/.gradle/
+android/app/build/
+android/app/src/main/assets/public/
+android/build/
+android/local.properties
+android/captures/
 *.apk
-!public/Trade2Smart-web.apk
+!releases/Trade2Smart-web.apk
 *.aab
 deploy/__pycache__/

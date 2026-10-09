@@ -147,43 +147,35 @@ Open **Chain** in the left menu for the full option chain (NIFTY / BANKNIFTY / F
 
 ```
 AlGo/
-  src/             Web dashboard (React)
+  src/             Web dashboard (React) — also bundled into the Android APK
   server/          API (live prices, algos, orders)
-  mobile/          iOS + Android hybrid app (Expo WebView of the live site)
-  android-hybrid/  Standalone Android APK that opens trade2smart.com
+  mobile/          Optional Expo preview
+  android/         Capacitor Android project (real hybrid app)
+  capacitor.config.ts
   scripts/build-hybrid-apk.sh
 ```
 
 ---
 
-## Android APK (full website hybrid)
+## Android APK (real Capacitor hybrid)
 
-The phone APK is a hybrid wrapper of the **entire** live desk: `https://trade2smart.com`.
-Login, Algo, Reports, Brokers, Multi-Index, and every other web page are the same as Chrome.
+The phone APK is a **Capacitor** app. It ships the real Trade 2 Smart website UI inside the APK (the Vite `dist/` bundle). It does **not** open Chrome or a remote website wrapper.
 
-On a Linux machine with Java 17+ (the VPS is fine):
+Login, Algo, Reports, Brokers, and Multi-Index are the same screens as the website. Live quotes and orders still use `https://trade2smart.com/api`.
+
+On a Linux machine with Java 17+:
 
 ```bash
 bash scripts/build-hybrid-apk.sh
 ```
 
-Download on the phone from the login page, or open:
+Download from the login page, or open:
 
 https://trade2smart.com/Trade2Smart-web.apk
 
-The same file is also written to `/opt/cursor/artifacts/Trade2Smart-web.apk` when that folder exists.
 On the phone allow **Install unknown apps**, then open the APK.
 
-Or build with Expo / EAS (same full website WebView):
-
-```bash
-cd mobile
-npx eas-cli login
-npx eas build -p android --profile preview
-npx eas build -p ios --profile preview
-```
-
-Expo Go still works for a quick preview. The Play Store / App Store upload still needs Google / Apple developer accounts.
+Expo Go (`npm run dev:mobile`) is still the older native preview. Play Store upload needs a Google developer account.
 
 ---
 
