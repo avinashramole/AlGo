@@ -208,6 +208,10 @@ if [ "$HOME_DIR" != /opt/t2s ] && [ -d /opt/t2s ]; then
   /bin/cp -af "$HOME_DIR/server/backtestReport.js" /opt/t2s/server/backtestReport.js
 fi
 
+if [ -f "$HOME_DIR/deploy/write_nginx_trade2smart.py" ]; then
+  python3 "$HOME_DIR/deploy/write_nginx_trade2smart.py" --webroot "$WEBROOT" --out /etc/nginx/conf.d/trade2smart.conf || echo "nginx writer skipped; keeping current conf"
+fi
+
 systemctl restart t2s
 systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 

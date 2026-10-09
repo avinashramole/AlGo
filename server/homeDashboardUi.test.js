@@ -42,3 +42,9 @@ test("Market info widgets render DeskTape cells", () => {
     assert.equal(text.includes("<Gauge"), false, rel);
   }
 });
+
+test("Home chart candles refresh every 15s, not every 2s", () => {
+  const chart = fs.readFileSync(path.join(root, "src/components/dashboard/PriceChart.tsx"), "utf8");
+  assert.match(chart, /setInterval\(\(\) => void load\(\), 15000\)/);
+  assert.equal(chart.includes("dhanLive ? 2000"), false);
+});

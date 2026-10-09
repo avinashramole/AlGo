@@ -21,6 +21,15 @@ function render(certDir, webroot = "/var/www/trade2smart") {
   return result.stdout;
 }
 
+test("nginx gzip and long-cache hashed /assets so first load is smaller", () => {
+  const text = render("/tmp/t2s-no-certs");
+  assert.match(text, /gzip on;/);
+  assert.match(text, /gzip_types/);
+  assert.match(text, /location \^~ \/assets\//);
+  assert.match(text, /max-age=2592000/);
+  assert.match(text, /Cache-Control "no-cache"/);
+});
+
 test("nginx conf never roots files under /root and proxies API", () => {
   const text = render("/tmp/t2s-no-certs");
   assert.match(text, /listen 80/);
@@ -99,6 +108,11 @@ test("nginx writer is safe on Python 3.6 (AlmaLinux 8)", () => {
     { encoding: "utf8" },
   );
   assert.equal(parsed.status, 0, parsed.stderr || parsed.stdout);
+});
+
+test("website deploy rewrites nginx so gzip lands on the VPS", () => {
+  const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
+  assert.match(src, /write_nginx_trade2smart\.py/);
 });
 
 test("install-t2s-service still restarts t2s if the nginx writer fails", () => {
