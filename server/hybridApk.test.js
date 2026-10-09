@@ -20,6 +20,8 @@ test("Capacitor hybrid app bundles the website instead of opening the live URL",
   assert.equal(hybrid.includes("@capacitor/core"), false);
   assert.match(hybrid, /isNativePlatform/);
   assert.match(hybrid, /LIVE_DESK_ORIGIN = "https:\/\/trade2smart\.com"/);
+  assert.match(hybrid, /apiBaseFromLocation/);
+  assert.match(hybrid, /isLocalDeskHost/);
   assert.match(hybrid, /\$\{LIVE_DESK_ORIGIN\}\/api/);
   assert.match(client, /apiBase\(\)/);
   assert.match(main, /HashRouter/);
