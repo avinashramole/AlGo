@@ -4,7 +4,7 @@ import { OptionIdsTape } from "../components/dashboard/OptionIdsTape";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
 import { useMarket } from "../context/MarketContext";
 import { cn, dhanFeedLabel, formatNumber, formatQuote, hasDhanQuotes, isMcxSessionOpen, isNseSessionOpen } from "../lib/format";
-import { isCrudeUnderlying, OPTION_UNDERLYINGS } from "../lib/markets";
+import { isCrudeUnderlying, isMcxUnderlying, OPTION_UNDERLYINGS } from "../lib/markets";
 
 export function Options() {
   const { data, selectChain } = useMarket();
@@ -17,8 +17,9 @@ export function Options() {
   const lotSize = underlyings.find((item) => item.id === meta?.symbol)?.lot || 65;
   const qty = Math.max(1, lots) * lotSize;
   const isCrude = isCrudeUnderlying(meta?.symbol);
-  const sessionOpen = isCrude ? isMcxSessionOpen() : isNseSessionOpen();
-  const sessionHours = isCrude ? "MCX 09:00–23:30 IST" : "NSE 09:15–15:30 IST";
+  const isMcx = isMcxUnderlying(meta?.symbol);
+  const sessionOpen = isMcx ? isMcxSessionOpen() : isNseSessionOpen();
+  const sessionHours = isMcx ? "MCX 09:00–23:30 IST" : "NSE 09:15–15:30 IST";
   const dhanQuotes = hasDhanQuotes(data);
   const sourceLabel = dhanFeedLabel(data, sessionOpen);
   const expiryLabel = meta?.expiryLabel || meta?.expiry || "—";
@@ -49,23 +50,6 @@ export function Options() {
               {isCrude ? ` · size ${lotSize}` : ""}
             </span>
           </label>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {underlyings.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => void selectChain(item.id)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-semibold",
-                meta?.symbol === item.id
-                  ? "bg-brand-500 text-white"
-                  : "border border-[var(--border)] bg-[var(--card)]",
-              )}
-            >
-              {item.label} · {item.lot}
-            </button>
-          ))}
         </div>
         <TickerStrip selectedId={meta?.symbol} onSelect={(chainId) => void selectChain(chainId)} />
         <div

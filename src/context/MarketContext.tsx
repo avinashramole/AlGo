@@ -33,6 +33,7 @@ import {
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
 import { keepLastIndexPrices, keepStrikeWindow, patchById } from "../lib/deskFeed";
+import { OPTION_UNDERLYINGS } from "../lib/markets";
 import { presentDeskAlgo } from "../lib/strategies";
 
 const fallback: Snapshot = {
@@ -115,13 +116,7 @@ const fallback: Snapshot = {
     source: "idle",
     lastAt: null,
     expiryLabel: "—",
-            underlyings: [
-      { id: "NIFTY", label: "NIFTY", lot: 65 },
-      { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
-      { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
-      { id: "SENSEX", label: "SENSEX", lot: 20 },
-      { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
-    ],
+    underlyings: OPTION_UNDERLYINGS,
   },
 };
 
