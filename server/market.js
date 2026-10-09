@@ -461,6 +461,8 @@ const state = {
     emptyDeskIndex("FINNIFTY", "FINNIFTY"),
     emptyDeskIndex("SENSEX", "SENSEX"),
     emptyDeskIndex("CRUDEOIL", "CRUDE OIL"),
+    emptyDeskIndex("NATURALGAS", "NATURAL GAS"),
+    emptyDeskIndex("COPPER", "COPPER"),
     emptyDeskIndex("INDIA VIX", "VIX"),
   ],
   ohlc: { open: 0, high: 0, low: 0, close: 0 },
@@ -1093,6 +1095,8 @@ function saneUnderlyingPx(root, px) {
   const id = String(root || "").toUpperCase();
   if (id === "NIFTY") return n >= 18000 && n <= 35000;
   if (id === "CRUDEOIL") return n >= 2000 && n <= 15000;
+  if (id === "NATURALGAS") return n >= 50 && n <= 2000;
+  if (id === "COPPER") return n >= 200 && n <= 5000;
   return n > 0;
 }
 
@@ -2116,6 +2120,12 @@ const INDEX_ALIASES = {
   CRUDEOIL: "CRUDEOIL",
   "CRUDEOIL FUT": "CRUDEOIL",
   "CRUDE OIL": "CRUDEOIL",
+  NATURALGAS: "NATURALGAS",
+  "NATURALGAS FUT": "NATURALGAS",
+  "NATURAL GAS": "NATURALGAS",
+  NATGAS: "NATURALGAS",
+  COPPER: "COPPER",
+  "COPPER FUT": "COPPER",
   "INDIA VIX": "INDIA VIX",
 };
 
@@ -2135,7 +2145,16 @@ function withDeskQuotes(item) {
     (Number(item.prevClose) > 0 ? Number(item.prevClose) : price > 0 && Number(item.change) ? round2(price - Number(item.change)) : 0);
   const change = prevClose > 0 && price > 0 ? round2(price - prevClose) : Number(item.change) || 0;
   const changePct = prevClose > 0 && price > 0 ? round2((change / prevClose) * 100) : Number(item.changePct) || 0;
-  const ids = { "NIFTY 50": 13, BANKNIFTY: 25, FINNIFTY: 27, SENSEX: 51, CRUDEOIL: 565899, "INDIA VIX": 21 };
+  const ids = {
+    "NIFTY 50": 13,
+    BANKNIFTY: 25,
+    FINNIFTY: 27,
+    SENSEX: 51,
+    CRUDEOIL: 565899,
+    NATURALGAS: 570750,
+    COPPER: 574829,
+    "INDIA VIX": 21,
+  };
   return {
     ...item,
     future,
@@ -2189,13 +2208,17 @@ function underNodeTest() {
   );
 }
 
+function isMcxDeskIndex(symbol) {
+  const id = String(symbol || "").toUpperCase().replace(/\s+/g, "");
+  return id === "CRUDEOIL" || id === "NATURALGAS" || id === "NATGAS" || id === "COPPER";
+}
+
 export function indexFamilyHasTape(family) {
   const rows = state.indices || [];
   if (family === "mcx") {
-    const crude = rows.find((row) => row.symbol === "CRUDEOIL");
-    return Number(crude?.price) > 0 || Number(crude?.future) > 0;
+    return rows.some((row) => isMcxDeskIndex(row.symbol) && (Number(row.price) > 0 || Number(row.future) > 0));
   }
-  return rows.some((row) => row.symbol !== "CRUDEOIL" && Number(row.price) > 0);
+  return rows.some((row) => !isMcxDeskIndex(row.symbol) && Number(row.price) > 0);
 }
 
 export function persistLastIndexQuotes(file = LAST_QUOTES_FILE) {
@@ -4528,6 +4551,8 @@ function relatedIndex(symbol) {
   if (upper.includes("MIDCPNIFTY") || upper.includes("MIDCAPNIFTY")) return "MIDCPNIFTY";
   if (upper.includes("SENSEX")) return "SENSEX";
   if (upper.includes("CRUDEOIL")) return "CRUDEOIL";
+  if (upper.includes("NATURALGAS") || upper.includes("NATURAL GAS") || upper.includes("NATGAS")) return "NATURALGAS";
+  if (upper.includes("COPPER")) return "COPPER";
   if (upper.includes("NIFTY")) return "NIFTY 50";
   return null;
 }
@@ -4673,14 +4698,14 @@ export function applyLiveQuotes(quotes) {
         index.futureVwap = round2(futVwap);
         index.vwap = round2(futVwap);
       }
-      if (index.symbol === "CRUDEOIL") {
+      if (isMcxDeskIndex(index.symbol)) {
         const day = dayChange(index, quote, ltp);
         index.price = round2(ltp);
         index.change = day.change;
         index.changePct = day.changePct;
         index.prevClose = day.prevClose;
         index.spark = pushSpark(index.spark, ltp);
-        touchCrudeFutureMinute(ltp);
+        if (index.symbol === "CRUDEOIL") touchCrudeFutureMinute(ltp);
       }
       if (index.symbol === "NIFTY 50") {
         const root = underlyingIdFromSymbol(quote.parent || quote.symbol);
