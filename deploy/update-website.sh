@@ -154,6 +154,10 @@ if ! grep -q 'data-mir-strategy' "$HOME_DIR/src/components/dashboard/StrategyBui
   echo "FAIL: Multi-Index Reversal Strategy is missing. Deploy cursor/multi-index-reversal-6826."
   exit 1
 fi
+if ! grep -q 'data-algo-live-signals="all"' "$HOME_DIR/src/components/dashboard/SignalFeed.tsx" || ! grep -q 'slice(0, 80)' "$HOME_DIR/server/liveSignals.js"; then
+  echo "FAIL: Algo Live book still hides signals after 4. Deploy cursor/algo-signals-all-6826."
+  exit 1
+fi
 
 npm run build
 
