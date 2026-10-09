@@ -70,11 +70,20 @@ export function MemberPlans() {
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => {
+    const deskId = window.setInterval(() => {
+      void getMemberDesk()
+        .then((next) => {
+          setDesk(next);
+          setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
+        })
+        .catch(() => undefined);
+    }, 2000);
+    const fullId = window.setInterval(() => {
       void load();
-    }, 8000);
+    }, 12000);
     return () => {
-      window.clearInterval(id);
+      window.clearInterval(deskId);
+      window.clearInterval(fullId);
       tokenWaitGen.current += 1;
     };
   }, [load]);

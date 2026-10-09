@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, overlayDeskLiveMtm, overlayLiveUnrealized, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -120,6 +120,31 @@ test("admin report uses the broker MTM and realized P&L", () => {
   assert.equal(report.unrealizedPnl, 12.5);
   assert.equal(report.netPnl, -224.75);
   assert.equal(report.charges, 0);
+});
+
+test("live quote MTM replaces stale broker unrealized and keeps realized", () => {
+  const report = overlayLiveUnrealized(
+    { realizedPnl: 308, unrealizedPnl: 12.5, grossPnl: 320.5, charges: 0, netPnl: 320.5, brokerPnl: true },
+    [{ qty: 65, pnl: 40 }],
+  );
+  assert.equal(report.realizedPnl, 308);
+  assert.equal(report.unrealizedPnl, 40);
+  assert.equal(report.netPnl, 348);
+  assert.equal(report.liveMtm, true);
+});
+
+test("member desk overlay keeps broker realized and ticks wallet MTM", () => {
+  const desk = {
+    wallet: { balance: 10000, mtm: 12.5, equity: 10012.5 },
+    report: { realizedPnl: 200, unrealizedPnl: 12.5, charges: 0, netPnl: 212.5, brokerPnl: true },
+    positions: [{ qty: 65, pnl: 78 }],
+  };
+  overlayDeskLiveMtm(desk);
+  assert.equal(desk.report.realizedPnl, 200);
+  assert.equal(desk.report.unrealizedPnl, 78);
+  assert.equal(desk.report.netPnl, 278);
+  assert.equal(desk.wallet.mtm, 78);
+  assert.equal(desk.wallet.equity, 10078);
 });
 
 test("Upstox user book keeps realised and open MTM on separate legs", () => {

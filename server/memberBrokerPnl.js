@@ -1,4 +1,4 @@
-const CACHE_MS = 9000;
+const CACHE_MS = 2000;
 const cache = new Map();
 const inflight = new Map();
 const balanceCache = new Map();
@@ -303,6 +303,39 @@ export function applyBrokerBookToReport(report, book) {
     brokerPnl: true,
     brokerPnlSource: book.source || "",
   };
+}
+
+export function liveUnrealizedFromPositions(positions = []) {
+  return round2((positions || []).reduce((sum, row) => sum + Number(row.pnl || 0), 0));
+}
+
+export function overlayLiveUnrealized(report, positions = [], wallet) {
+  const open = (positions || []).filter((row) => Number(row.qty) > 0);
+  if (!report || !open.length) return report;
+  const unrealized = liveUnrealizedFromPositions(open);
+  const realized = round2(report.realizedPnl);
+  const charges = report.brokerPnl ? 0 : round2(report.charges || 0);
+  const gross = round2(realized + unrealized);
+  const next = {
+    ...report,
+    unrealizedPnl: unrealized,
+    grossPnl: gross,
+    netPnl: round2(gross - charges),
+    liveMtm: true,
+  };
+  if (wallet && typeof wallet === "object") {
+    const balance = round2(wallet.balance || 0);
+    wallet.mtm = unrealized;
+    wallet.equity = round2(balance + unrealized);
+  }
+  return next;
+}
+
+export function overlayDeskLiveMtm(desk) {
+  if (!desk) return desk;
+  const report = overlayLiveUnrealized(desk.report, desk.positions, desk.wallet);
+  if (report) desk.report = report;
+  return desk;
 }
 
 export function applyBrokerPnl(desk, pnl) {

@@ -30,7 +30,7 @@ import {
 } from "./ipManagement.js";
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, saveMemberStaticIp, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
-import { attachMemberBrokerBalance, attachMemberBrokerPnl, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
+import { attachMemberBrokerBalance, attachMemberBrokerPnl, overlayDeskLiveMtm, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
@@ -361,6 +361,7 @@ app.get("/api/member/desk", async (req, res) => {
     });
     await attachMemberBrokerPnl(desk, user.id);
     await attachMemberBrokerBalance(desk, user.id);
+    overlayDeskLiveMtm(desk);
     res.json(desk);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
@@ -530,6 +531,7 @@ app.get("/api/clients/:id/detail", async (req, res) => {
     });
     await attachMemberBrokerPnl(detail, req.params.id);
     await attachMemberBrokerBalance(detail, req.params.id);
+    overlayDeskLiveMtm(detail);
     res.json(detail);
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load client detail" });

@@ -3,7 +3,7 @@ import { dhanTokenStatus } from "./dhanToken.js";
 import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
-import { applyBrokerBookToReport, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { applyBrokerBookToReport, overlayLiveUnrealized, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
   atmStrike,
@@ -2387,9 +2387,17 @@ function markPaperToMarket() {
   syncPaperLedger();
 }
 
+function liveDeskReport(positions, orders, closedTrades) {
+  return overlayLiveUnrealized(
+    applyBrokerBookToReport(buildReport({ positions, orders, closedTrades, algos: state.algos || [] }), state.adminBrokerBook),
+    positions,
+  );
+}
+
 export function deskMtm() {
   markPaperToMarket();
-  const { positions } = liveDesk();
+  const { positions, orders, closedTrades } = liveDesk();
+  const report = liveDeskReport(positions, orders, closedTrades);
   return {
     positions: (positions || []).map((row) => ({
       id: row.id,
@@ -2398,6 +2406,9 @@ export function deskMtm() {
       pnl: Number(row.pnl) || 0,
       strategy: row.strategy || "",
     })),
+    realizedPnl: Number(report?.realizedPnl || 0),
+    unrealizedPnl: Number(report?.unrealizedPnl || 0),
+    netPnl: Number(report?.netPnl || 0),
     serverTime: new Date().toISOString(),
   };
 }
@@ -2475,7 +2486,7 @@ export function snapshot() {
     marketWatch: watch,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
-    report: applyBrokerBookToReport(buildReport(liveState), state.adminBrokerBook),
+    report: liveDeskReport(positions, orders, closedTrades),
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
@@ -2532,7 +2543,7 @@ export function deskFeed() {
     sentiment: liveSentiment(dnaScores),
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
-    report: applyBrokerBookToReport(buildReport({ positions, orders, closedTrades, algos: state.algos || [] }), state.adminBrokerBook),
+    report: liveDeskReport(positions, orders, closedTrades),
     marketWatch: watch,
     watchlist: watch.map(({ volume: _volume, ...row }) => row),
     marketStatus: nseMarketSession().status,

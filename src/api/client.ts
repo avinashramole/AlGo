@@ -1232,6 +1232,9 @@ export function getDeskFeed() {
 export function getDeskMtm() {
   return request<{
     positions: Array<{ id: string; symbol: string; ltp: number; pnl: number; strategy?: string }>;
+    realizedPnl?: number;
+    unrealizedPnl?: number;
+    netPnl?: number;
     serverTime?: string;
   }>("/mtm");
 }

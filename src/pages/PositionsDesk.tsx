@@ -171,7 +171,7 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => {
     const id = window.setInterval(() => {
       void loadDesk();
-    }, 4000);
+    }, 2000);
     return () => window.clearInterval(id);
   }, [loadDesk]);
 
