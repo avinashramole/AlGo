@@ -1080,6 +1080,12 @@ export function seedAlgos() {
       }),
       { id: "a14", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "dhan", runMode: "live" },
     ),
+    normalizeAlgo(
+      defaultMultiIndexReversalAlgo({
+        runMode: "paper",
+      }),
+      { id: "a15", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
+    ),
   ];
 }
 
