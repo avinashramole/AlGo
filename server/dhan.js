@@ -546,7 +546,7 @@ let adminBookRefresh = null;
 
 export async function refreshAdminBrokerBook() {
   const current = getAdminBrokerBook();
-  if (current?.readAt && Date.now() - Number(current.readAt) < 12000) return current;
+  if (current?.readAt && Date.now() - Number(current.readAt) < 2000) return current;
   if (adminBookRefresh) return adminBookRefresh;
   adminBookRefresh = loadAdminBrokerBook().finally(() => {
     adminBookRefresh = null;
@@ -1495,11 +1495,11 @@ function startLiveLoop() {
   }, 18_000);
   pollTimer = setInterval(() => {
     void pullQuotes();
-  }, 2500);
+  }, 2_000);
   accountTimer = setInterval(() => {
     void pullAccount();
     void requestMemberOrderSync();
-  }, 5_000);
+  }, 2_000);
   chainTimer = setInterval(() => {
     if (chainBusy || Date.now() < quoteBackoffUntil) return;
     chainBusy = true;

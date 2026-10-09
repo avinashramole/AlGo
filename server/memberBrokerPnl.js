@@ -1,4 +1,4 @@
-const CACHE_MS = 2500;
+const CACHE_MS = 2000;
 const cache = new Map();
 const inflight = new Map();
 const balanceCache = new Map();

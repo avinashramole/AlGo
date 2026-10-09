@@ -434,15 +434,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     };
   }, [admin, refresh, refreshFeed]);
 
-  const liveOpen = (data.positions || []).length > 0;
   useEffect(() => {
     if (!admin) return;
     void refreshMtm();
     const id = window.setInterval(() => {
       void refreshMtm();
-    }, liveOpen ? 400 : 1500);
+    }, 2000);
     return () => window.clearInterval(id);
-  }, [admin, liveOpen, refreshMtm]);
+  }, [admin, refreshMtm]);
 
   const value = useMemo(
     () => ({

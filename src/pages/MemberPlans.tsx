@@ -77,7 +77,7 @@ export function MemberPlans() {
           setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
         })
         .catch(() => undefined);
-    }, 1500);
+    }, 2000);
     const fullId = window.setInterval(() => {
       void load();
     }, 12000);
