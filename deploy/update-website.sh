@@ -36,6 +36,13 @@ if [ -d .git ]; then
     src/components/dashboard/StrategyBuilder.tsx \
     src/components/dashboard/OneMinuteHistoryBar.tsx \
     src/pages/Algo.tsx \
+    src/pages/ReportsHub.tsx \
+    src/context/MarketContext.tsx \
+    src/pages/UserHome.tsx \
+    src/pages/MemberPlans.tsx \
+    src/pages/PositionsDesk.tsx \
+    src/components/users/UserDetailModal.tsx \
+    src/api/client.ts \
     src/lib/strategies.ts \
     src/index.css \
     server/niftyTest2/Test2Engine.js \
@@ -45,6 +52,8 @@ if [ -d .git ]; then
     server/indexHistory.js \
     server/indexHistorySync.js \
     server/market.js \
+    server/memberBrokerPnl.js \
+    server/memberDesk.js \
     server/niftyVwap/config.js \
     server/niftyTest1/Test1Strategy.js \
     server/strategies.js \
@@ -64,6 +73,13 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw src/components/dashboard/StrategyBuilder.tsx
   pull_raw src/components/dashboard/OneMinuteHistoryBar.tsx
   pull_raw src/pages/Algo.tsx
+  pull_raw src/pages/ReportsHub.tsx
+  pull_raw src/context/MarketContext.tsx
+  pull_raw src/pages/UserHome.tsx
+  pull_raw src/pages/MemberPlans.tsx
+  pull_raw src/pages/PositionsDesk.tsx
+  pull_raw src/components/users/UserDetailModal.tsx
+  pull_raw src/api/client.ts
   pull_raw src/lib/strategies.ts
   pull_raw src/index.css
   pull_raw server/niftyTest2/Test2Engine.js
@@ -73,6 +89,8 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw server/indexHistory.js
   pull_raw server/indexHistorySync.js
   pull_raw server/market.js
+  pull_raw server/memberBrokerPnl.js
+  pull_raw server/memberDesk.js
   pull_raw server/niftyVwap/config.js
   pull_raw server/niftyTest1/Test1Strategy.js
   pull_raw server/strategies.js
@@ -126,6 +144,10 @@ if ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR
 fi
 if ! grep -q 'overlayLiveUnrealized' "$HOME_DIR/server/memberBrokerPnl.js" || ! grep -q 'unrealizedPnl: Number(report?.unrealizedPnl || 0)' "$HOME_DIR/server/market.js"; then
   echo "FAIL: Live Unrealized/Net P&L still waits on the slow broker book. Deploy cursor/fast-live-pnl-6826."
+  exit 1
+fi
+if ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/pages/ReportsHub.tsx"; then
+  echo "FAIL: Reports tabs are not Position, Orders, Reports. Deploy cursor/fast-live-pnl-6826."
   exit 1
 fi
 
