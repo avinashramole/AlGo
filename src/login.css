@@ -375,6 +375,27 @@
   text-align: center;
 }
 
+.t2s-apk-download {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  margin-top: 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #fd6b01;
+  border-radius: 10px;
+  background: #fff7f0;
+  color: #c2410c;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.t2s-apk-download:hover {
+  background: #ffedd5;
+}
+
 .t2s-switch b {
   color: var(--orange);
   font-weight: 700;

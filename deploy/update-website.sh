@@ -162,6 +162,10 @@ if ! grep -q 'data-mir-trade-mode="true"' "$HOME_DIR/src/components/dashboard/St
   echo "FAIL: Multi-Index Edit has no Paper/Live selector. Deploy cursor/multi-index-paper-live-6826."
   exit 1
 fi
+if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx" || ! [ -f "$HOME_DIR/public/Trade2Smart-web.apk" ]; then
+  echo "FAIL: Android APK download is missing. Deploy cursor/hybrid-web-apk-6826."
+  exit 1
+fi
 
 npm run build
 
@@ -173,6 +177,10 @@ if ! grep -Rql "$RESULT_MARKER" "$HOME_DIR/dist/assets"; then
   echo "FAIL: dist/ does not contain $RESULT_MARKER. Build is still old."
   exit 1
 fi
+if ! [ -f "$HOME_DIR/dist/Trade2Smart-web.apk" ]; then
+  echo "FAIL: website build did not copy Trade2Smart-web.apk. Deploy cursor/hybrid-web-apk-6826."
+  exit 1
+fi
 
 mkdir -p "$WEBROOT"
 /bin/cp -af "$HOME_DIR/dist/." "$WEBROOT/"
@@ -181,6 +189,10 @@ chown -R nginx:nginx "$WEBROOT" 2>/dev/null || true
 
 if ! grep -Rql "$RESULT_MARKER" "$WEBROOT/assets"; then
   echo "FAIL: $WEBROOT/assets still missing $RESULT_MARKER."
+  exit 1
+fi
+if ! [ -f "$WEBROOT/Trade2Smart-web.apk" ]; then
+  echo "FAIL: $WEBROOT is missing Trade2Smart-web.apk so the login download will 404."
   exit 1
 fi
 

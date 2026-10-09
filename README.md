@@ -167,8 +167,12 @@ On a Linux machine with Java 17+ (the VPS is fine):
 bash scripts/build-hybrid-apk.sh
 ```
 
-The installable file is `Trade2Smart-web.apk` (copied to `/opt/cursor/artifacts` when that folder exists).
-Copy the APK to your phone and open it (allow Install unknown apps).
+Download on the phone from the login page, or open:
+
+https://trade2smart.com/Trade2Smart-web.apk
+
+The same file is also written to `/opt/cursor/artifacts/Trade2Smart-web.apk` when that folder exists.
+On the phone allow **Install unknown apps**, then open the APK.
 
 Or build with Expo / EAS (same full website WebView):
 

@@ -36,6 +36,7 @@ import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
+import { sendAndroidApk } from "./apkDownload.js";
 import { isNiftyTest2Algo, niftyTest2Config } from "./niftyVwap/config.js";
 import {
   addChat,
@@ -1400,6 +1401,8 @@ app.use("/api", (req, res) => {
 const dist = path.join(__dirname, "..", "dist");
 const distIndex = path.join(dist, "index.html");
 const serveWebsite = fs.existsSync(distIndex);
+
+app.get(["/Trade2Smart-web.apk", "/download/android", "/app.apk"], sendAndroidApk);
 
 app.get(["/", "/index.html"], (_req, res) => {
   sendReadyPage(res, serveWebsite ? distIndex : "");

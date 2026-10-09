@@ -6,6 +6,22 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("login page has a real Android APK download link", () => {
+  const login = fs.readFileSync(path.join(root, "src/pages/Login.tsx"), "utf8");
+  const nginx = fs.readFileSync(path.join(root, "deploy/nginx-trade2smart.conf"), "utf8");
+  const writer = fs.readFileSync(path.join(root, "deploy/write_nginx_trade2smart.py"), "utf8");
+  const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
+  const apk = path.join(root, "public/Trade2Smart-web.apk");
+  assert.match(login, /data-android-apk="download"/);
+  assert.match(login, /href="\/Trade2Smart-web\.apk"/);
+  assert.match(login, /download="Trade2Smart-web\.apk"/);
+  assert.match(index, /sendAndroidApk/);
+  assert.match(nginx, /Content-Disposition 'attachment; filename="Trade2Smart-web\.apk"'/);
+  assert.match(writer, /location = \/Trade2Smart-web\.apk/);
+  assert.equal(fs.existsSync(apk), true);
+  assert.ok(fs.statSync(apk).size > 1000);
+});
+
 test("hybrid APK wrapper opens the full Trade 2 Smart website", () => {
   const activity = fs.readFileSync(path.join(root, "android-hybrid/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   const gradle = fs.readFileSync(path.join(root, "android-hybrid/app/build.gradle"), "utf8");

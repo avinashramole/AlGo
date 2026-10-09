@@ -50,5 +50,7 @@ if [ ! -f "$APK" ]; then
 fi
 
 cp -f "$APK" "$ARTIFACTS/$OUT_NAME"
+cp -f "$APK" "$ROOT/public/$OUT_NAME"
 echo "APK ready: $ARTIFACTS/$OUT_NAME"
-ls -lh "$ARTIFACTS/$OUT_NAME"
+echo "Website download: $ROOT/public/$OUT_NAME"
+ls -lh "$ARTIFACTS/$OUT_NAME" "$ROOT/public/$OUT_NAME"
