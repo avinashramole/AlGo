@@ -26,7 +26,7 @@ export function UserHome() {
         .catch(() => undefined);
     };
     load();
-    const id = window.setInterval(load, 5000);
+    const id = window.setInterval(load, 1500);
     return () => {
       alive = false;
       window.clearInterval(id);

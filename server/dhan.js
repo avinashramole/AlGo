@@ -1499,7 +1499,7 @@ function startLiveLoop() {
   accountTimer = setInterval(() => {
     void pullAccount();
     void requestMemberOrderSync();
-  }, 20_000);
+  }, 5_000);
   chainTimer = setInterval(() => {
     if (chainBusy || Date.now() < quoteBackoffUntil) return;
     chainBusy = true;

@@ -128,6 +128,37 @@ test("paid plan report uses the live desk book, not a seeded paper P&L", () => {
   assert.equal(desk.brokerId, "dhan");
 });
 
+test("open member legs remake Unrealized P&L from the live quote", () => {
+  const desk = getMemberDesk({
+    user,
+    enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
+    algos: [algo],
+    quote: (symbol) => (String(symbol).includes("24600 CE") ? 100 : 0),
+    liveBook: {
+      positions: [
+        {
+          id: "p-live",
+          symbol: "NIFTY 24600 CE",
+          type: "BUY",
+          qty: 65,
+          avg: 80,
+          ltp: 92,
+          pnl: 780,
+          strategy: "NIFTY VWAP ATM",
+        },
+      ],
+      orders: [],
+      closedTrades: [],
+    },
+  });
+  assert.equal(desk.positions[0].ltp, 100);
+  assert.equal(desk.positions[0].pnl, 1300);
+  assert.equal(desk.report.unrealizedPnl, 1300);
+  assert.equal(desk.report.netPnl, 1300);
+  assert.equal(desk.wallet.mtm, 1300);
+  assert.equal(desk.plans[0].unrealizedPnl, 1300);
+});
+
 test("wallet topup asks for GPay/PhonePe and credits balance after paid", () => {
   const started = startWalletTopup({ user, amount: 2500, channel: "phonepe" });
   assert.equal(started.topup.status, "pending");

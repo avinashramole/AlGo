@@ -1817,7 +1817,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   };
   const hasOwn = own.positions.length || own.orders.length || own.orderHistory.length || own.closedTrades.length;
   const book = hasOwn || ownBookOnly ? own : liveBookForPlans(liveBook, enrollments, brokerId);
-  if (!book.positions.length && typeof quote === "function") {
+  if (book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
   const report = buildReport({

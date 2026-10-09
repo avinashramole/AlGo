@@ -124,6 +124,10 @@ if ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR
   echo "FAIL: TEST1 Save still hardcodes 5m. Deploy cursor/test1-save-timeframe-6826."
   exit 1
 fi
+if ! grep -q 'overlayLiveUnrealized' "$HOME_DIR/server/memberBrokerPnl.js" || ! grep -q 'unrealizedPnl: Number(report?.unrealizedPnl || 0)' "$HOME_DIR/server/market.js"; then
+  echo "FAIL: Live Unrealized/Net P&L still waits on the slow broker book. Deploy cursor/fast-live-pnl-6826."
+  exit 1
+fi
 
 npm run build
 

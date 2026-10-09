@@ -376,12 +376,26 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       const mtm = await getDeskMtm();
       setData((current) => {
         const byId = new Map((mtm.positions || []).map((row) => [row.id, row]));
-        if (!byId.size) return current;
-        const positions = (current.positions || []).map((row) => {
-          const next = byId.get(row.id);
-          return next ? { ...row, ltp: next.ltp, pnl: next.pnl } : row;
-        });
-        const next = { ...current, positions };
+        const positions = byId.size
+          ? (current.positions || []).map((row) => {
+              const next = byId.get(row.id);
+              return next ? { ...row, ltp: next.ltp, pnl: next.pnl } : row;
+            })
+          : current.positions;
+        const report =
+          current.report && (Number.isFinite(mtm.unrealizedPnl) || Number.isFinite(mtm.netPnl))
+            ? {
+                ...current.report,
+                realizedPnl: Number.isFinite(mtm.realizedPnl) ? Number(mtm.realizedPnl) : current.report.realizedPnl,
+                unrealizedPnl: Number.isFinite(mtm.unrealizedPnl) ? Number(mtm.unrealizedPnl) : current.report.unrealizedPnl,
+                netPnl: Number.isFinite(mtm.netPnl) ? Number(mtm.netPnl) : current.report.netPnl,
+                grossPnl: Number.isFinite(mtm.realizedPnl) && Number.isFinite(mtm.unrealizedPnl)
+                  ? Number(mtm.realizedPnl) + Number(mtm.unrealizedPnl)
+                  : current.report.grossPnl,
+              }
+            : current.report;
+        if (positions === current.positions && report === current.report) return current;
+        const next = { ...current, positions, report };
         dataRef.current = next;
         return next;
       });
@@ -420,13 +434,13 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     };
   }, [admin, refresh, refreshFeed]);
 
-  const liveOpen = Boolean(data.dhanFeed?.live) && (data.positions || []).some((row) => row.live || row.brokerId === "dhan");
+  const liveOpen = (data.positions || []).length > 0;
   useEffect(() => {
-    if (!admin || !liveOpen) return;
+    if (!admin) return;
     void refreshMtm();
     const id = window.setInterval(() => {
       void refreshMtm();
-    }, 300);
+    }, liveOpen ? 400 : 1500);
     return () => window.clearInterval(id);
   }, [admin, liveOpen, refreshMtm]);
 

@@ -26,6 +26,10 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
 
   useEffect(() => {
     void load();
+    const id = window.setInterval(() => {
+      void load();
+    }, 2000);
+    return () => window.clearInterval(id);
   }, [load]);
 
   const onConfirmPay = async (id: string) => {
