@@ -6,7 +6,6 @@ import { PriceChart } from "../components/dashboard/PriceChart";
 import { RecentSignals } from "../components/dashboard/RecentSignals";
 import { SentimentGauge } from "../components/dashboard/SentimentGauge";
 import { TickerStrip } from "../components/dashboard/TickerStrip";
-import { FuturesTape } from "../components/dashboard/FuturesTape";
 import { TradeModal } from "../components/dashboard/TradeModal";
 
 export function Dashboard() {
@@ -15,14 +14,13 @@ export function Dashboard() {
   return (
     <div className="space-y-3">
       <TickerStrip />
-      <FuturesTape />
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <PriceChart />
         </div>
         <AISignal onReview={() => setReviewOpen(true)} />
       </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3" data-home-widgets="no-option-chain">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3" data-home-widgets="no-option-chain-no-futures">
         <MarketDNA />
         <SentimentGauge />
         <InstitutionalFlow />
