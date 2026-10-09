@@ -289,7 +289,7 @@ export const TEST1_SCRIPTS = [
 
 export const TEST2_SCRIPTS = TEST1_SCRIPTS;
 
-export const MULTI_INDEX_REVERSAL_NAME = "Multi-Index Reversal Strategy";
+export const MULTI_INDEX_REVERSAL_NAME = "Multi-Index";
 
 export const MULTI_INDEX_SCRIPTS = [
   { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", lot: 65 },
@@ -535,6 +535,7 @@ export function isMultiIndexReversalKind(algo?: { kind?: string; strategyType?: 
     algo?.kind === "multi-index-reversal" ||
     algo?.strategyType === "MULTI_INDEX_REVERSAL" ||
     algo?.indicator === "MULTI_INDEX_REVERSAL" ||
+    String(algo?.name || "").trim() === "Multi-Index" ||
     String(algo?.name || "").trim() === "Multi-Index Reversal Strategy"
   );
 }
@@ -886,7 +887,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
   }
   if (kind === "multi-index-reversal") {
     return {
-      name: "Multi-Index Reversal Strategy",
+      name: "Multi-Index",
       kind: "multi-index-reversal",
       tag: "multi-index",
       strategyType: "MULTI_INDEX_REVERSAL",

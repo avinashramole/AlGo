@@ -1,6 +1,7 @@
 export const MULTI_INDEX_REVERSAL_KIND = "multi-index-reversal";
 export const MULTI_INDEX_REVERSAL_TYPE = "MULTI_INDEX_REVERSAL";
-export const MULTI_INDEX_REVERSAL_NAME = "Multi-Index Reversal Strategy";
+export const MULTI_INDEX_REVERSAL_NAME = "Multi-Index";
+export const MULTI_INDEX_REVERSAL_NAMES = [MULTI_INDEX_REVERSAL_NAME, "Multi-Index Reversal Strategy"];
 
 export const MULTI_INDEX_SCRIPTS = [
   { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", segment: "NSE_FNO" },
@@ -57,7 +58,7 @@ export function isMultiIndexReversalAlgo(algo = {}) {
   if (algo.kind === MULTI_INDEX_REVERSAL_KIND || algo.strategyType === MULTI_INDEX_REVERSAL_TYPE || algo.indicator === "MULTI_INDEX_REVERSAL") {
     return true;
   }
-  return String(algo.name || "").trim() === MULTI_INDEX_REVERSAL_NAME;
+  return MULTI_INDEX_REVERSAL_NAMES.includes(String(algo.name || "").trim());
 }
 
 export function multiIndexReversalConfig(algo = {}) {

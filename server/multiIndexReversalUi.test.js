@@ -23,7 +23,7 @@ test("Multi-Index Reversal settings expose four indices and locked defaults", ()
   assert.match(builder, /runMode: "paper"/);
   assert.match(builder, /MULTI_INDEX_SCRIPTS\.map/);
   assert.equal((builder.match(/data-mir-index/g) || []).length, 1);
-  assert.match(lib, /MULTI_INDEX_REVERSAL_NAME = "Multi-Index Reversal Strategy"/);
+  assert.match(lib, /MULTI_INDEX_REVERSAL_NAME = "Multi-Index"/);
   assert.match(lib, /id: "NIFTY", label: "NIFTY 50"/);
   assert.match(lib, /id: "SENSEX", label: "SENSEX", exchange: "BSE"/);
   assert.match(lib, /MULTI_INDEX_TIMEFRAMES = \["5m", "10m", "15m", "30m", "1H"\]/);
