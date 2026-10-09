@@ -2,7 +2,6 @@ import { useState } from "react";
 import { AISignal } from "../components/dashboard/AISignal";
 import { InstitutionalFlow } from "../components/dashboard/InstitutionalFlow";
 import { MarketDNA } from "../components/dashboard/MarketDNA";
-import { OptionChain } from "../components/dashboard/OptionChain";
 import { PriceChart } from "../components/dashboard/PriceChart";
 import { RecentSignals } from "../components/dashboard/RecentSignals";
 import { SentimentGauge } from "../components/dashboard/SentimentGauge";
@@ -23,11 +22,10 @@ export function Dashboard() {
         </div>
         <AISignal onReview={() => setReviewOpen(true)} />
       </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3" data-home-widgets="no-option-chain">
         <MarketDNA />
         <SentimentGauge />
         <InstitutionalFlow />
-        <OptionChain />
       </div>
       <RecentSignals />
       <TradeModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
