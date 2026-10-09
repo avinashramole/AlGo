@@ -12,19 +12,13 @@ export function Dashboard() {
   const [reviewOpen, setReviewOpen] = useState(false);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-home-layout="tapes">
       <TickerStrip />
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <PriceChart />
-        </div>
-        <AISignal onReview={() => setReviewOpen(true)} />
-      </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3" data-home-widgets="no-option-chain-no-futures">
-        <MarketDNA />
-        <SentimentGauge />
-        <InstitutionalFlow />
-      </div>
+      <PriceChart />
+      <AISignal onReview={() => setReviewOpen(true)} />
+      <MarketDNA />
+      <SentimentGauge />
+      <InstitutionalFlow />
       <RecentSignals />
       <TradeModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
     </div>

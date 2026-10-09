@@ -1,48 +1,22 @@
 import { useMarket } from "../../context/MarketContext";
 import { formatNumber } from "../../lib/format";
-
-function FlowBar({ label, buy, sell, net }: { label: string; buy: number; sell: number; net: number }) {
-  const total = buy + sell;
-  const buyPct = (buy / total) * 100;
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-semibold">{label}</span>
-        <span className="font-bold text-up">+{formatNumber(net, 0)} Cr</span>
-      </div>
-      <div className="flex h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="bg-up" style={{ width: `${buyPct}%` }} />
-        <div className="bg-down" style={{ width: `${100 - buyPct}%` }} />
-      </div>
-      <div className="mt-1 flex justify-between text-[10px] text-slate-400">
-        <span>Buy {formatNumber(buy, 0)} Cr</span>
-        <span>Sell {formatNumber(sell, 0)} Cr</span>
-      </div>
-    </div>
-  );
-}
+import { DeskTape, TapeCell } from "./DeskTape";
 
 export function InstitutionalFlow() {
   const { data } = useMarket();
   const combined = data.fiiDii.fii.net + data.fiiDii.dii.net;
   const hasFeed = Boolean(data.fiiDii.fii.buy || data.fiiDii.fii.sell || data.fiiDii.dii.buy || data.fiiDii.dii.sell);
   return (
-    <section className="card p-4">
-      <div className="desk-kicker">Flow</div>
-      <div className="mb-3 text-sm font-bold">FII / DII Activity</div>
+    <DeskTape kicker="Flow" extra="FII / DII" testId="flow">
       {hasFeed ? (
         <>
-          <div className="space-y-4">
-            <FlowBar label="FII" {...data.fiiDii.fii} />
-            <FlowBar label="DII" {...data.fiiDii.dii} />
-          </div>
-          <div className="mt-4 rounded-lg bg-[var(--bg)] px-3 py-2 text-xs text-slate-500">
-            Combined net inflow <span className="font-bold text-up">+{formatNumber(combined, 0)} Cr</span> today
-          </div>
+          <TapeCell title="FII" value={`${formatNumber(data.fiiDii.fii.net, 0)} Cr`} tone="text-up" detail={`Buy ${formatNumber(data.fiiDii.fii.buy, 0)} · Sell ${formatNumber(data.fiiDii.fii.sell, 0)}`} />
+          <TapeCell title="DII" value={`${formatNumber(data.fiiDii.dii.net, 0)} Cr`} tone="text-up" detail={`Buy ${formatNumber(data.fiiDii.dii.buy, 0)} · Sell ${formatNumber(data.fiiDii.dii.sell, 0)}`} />
+          <TapeCell title="Combined" value={`${formatNumber(combined, 0)} Cr`} detail="Net inflow today" />
         </>
       ) : (
-        <p className="text-xs text-slate-400">No live FII/DII feed from Dhan. Figures stay 0 until a live source is connected.</p>
+        <TapeCell title="FII / DII" value="—" detail="No live Dhan feed. Figures stay 0." />
       )}
-    </section>
+    </DeskTape>
   );
 }

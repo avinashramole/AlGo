@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Bell, Shield, UserRound, Wallet } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { getMemberDesk, getMemberQuotes, type MemberCopyAlert, type MemberDesk, type MemberIndexQuote } from "../api/client";
+import { DeskTape, TapeCell } from "../components/dashboard/DeskTape";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
 import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { useAuth } from "../context/AuthContext";
-import { cn, formatInr, formatIst } from "../lib/format";
+import { formatInr, formatIst } from "../lib/format";
 
 export function UserHome() {
   const { user } = useAuth();
@@ -34,23 +34,24 @@ export function UserHome() {
   }, []);
 
   const report = desk?.report;
+  const navigate = useNavigate();
   const brokerName = (id?: string) => desk?.brokers.find((row) => row.id === id)?.name || id || "Paper";
+  const balance = memberBalance(desk);
 
   return (
-    <div className="space-y-4">
-      <section className="card p-6">
-        <div className="text-xs font-extrabold uppercase tracking-wide text-slate-400">Member dashboard</div>
-        <h1 className="mt-1 text-2xl font-extrabold">{user?.email || ""}</h1>
-      </section>
+    <div className="space-y-3">
+      <DeskTape kicker="Member" extra={user?.email || ""} testId="member-home">
+        <TapeCell title="Account" value={user?.email || "—"} detail="Signed in" />
+      </DeskTape>
 
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Balance" value={formatInr(memberBalance(desk))} signed={memberBalance(desk)} />
-        <Stat label="MTM" value={formatInr(desk?.wallet.mtm || 0)} signed={desk?.wallet.mtm} />
-        <Stat label="P&L" value={formatInr(report?.realizedPnl || 0)} signed={report?.realizedPnl} />
-        <Stat label="Net P&L" value={formatInr(report?.netPnl || 0)} signed={report?.netPnl} />
-      </div>
+      <DeskTape kicker="P&L" extra="Live" testId="member-pnl">
+        <TapeCell title="Balance" value={formatInr(balance)} tone={balance >= 0 ? "text-up" : "text-down"} />
+        <TapeCell title="MTM" value={formatInr(desk?.wallet.mtm || 0)} tone={(desk?.wallet.mtm || 0) >= 0 ? "text-up" : "text-down"} />
+        <TapeCell title="P&L" value={formatInr(report?.realizedPnl || 0)} tone={(report?.realizedPnl || 0) >= 0 ? "text-up" : "text-down"} />
+        <TapeCell title="Net P&L" value={formatInr(report?.netPnl || 0)} tone={(report?.netPnl || 0) >= 0 ? "text-up" : "text-down"} />
+      </DeskTape>
       {desk?.brokerId === "kotak" && !Number.isFinite(Number(desk.wallet.brokerBalance)) ? (
         <p className="text-xs text-slate-500">
           Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
@@ -65,44 +66,18 @@ export function UserHome() {
         brokerName={brokerName}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <article className="card p-5">
-          <Wallet size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Plan report · MTM</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Enroll monthly, quarterly, or yearly. After admin confirms payment and you install your token, live copies use your account size.
-          </p>
-          <Link to="/plans" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
-            Open my plan
-          </Link>
-        </article>
-        <article className="card p-5">
-          <Bell size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Updates</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Copied admin orders land here and in Alerts. The same order is sent from your selected broker.
-          </p>
-          <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
-          <Link to="/notifications" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
-            Open alerts
-          </Link>
-        </article>
-        <article className="card p-5">
-          <UserRound size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Your profile</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Name, Gmail, mobile, broker, and static IP.</p>
-          <Link to="/profile" className="mt-3 inline-flex h-9 items-center rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white">
-            Open profile
-          </Link>
-        </article>
-        <article className="card p-5">
-          <Shield size={18} className="text-brand-500" />
-          <h2 className="mt-3 text-sm font-bold">Admin desk</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Brokers, algos, live orders, and settings are only for admin users.
-          </p>
-        </article>
-      </div>
+      <DeskTape kicker="Desk" extra="Tap" testId="member-links">
+        <TapeCell title="Plan" value="MTM" detail="Open my plan" onClick={() => navigate("/plans")} />
+        <TapeCell
+          title="Alerts"
+          value={String((desk?.alerts || []).length || 0)}
+          detail={(desk?.alerts || [])[0]?.text || "Open alerts"}
+          onClick={() => navigate("/notifications")}
+        />
+        <TapeCell title="Profile" value="You" detail="Name · broker · IP" onClick={() => navigate("/profile")} />
+        <TapeCell title="Admin" value="Desk" detail="Brokers and algos stay admin-only" />
+      </DeskTape>
+      <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
     </div>
   );
 }
@@ -129,11 +104,3 @@ function memberBalance(desk: MemberDesk | null) {
   return Number(desk?.wallet.balance) || 0;
 }
 
-function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {
-  return (
-    <div className="card p-4">
-      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
-      <div className={cn("mt-1 text-2xl font-bold", signed != null && (signed >= 0 ? "text-up" : "text-down"))}>{value}</div>
-    </div>
-  );
-}
