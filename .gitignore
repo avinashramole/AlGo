@@ -35,4 +35,11 @@ server/data/index-history/
 server/data/backtest.busy
 server/data/backtests/
 *.zip
+android-hybrid/.gradle/
+android-hybrid/build/
+android-hybrid/app/build/
+android-hybrid/local.properties
+android-hybrid/gradle/wrapper/gradle-wrapper.jar
+*.apk
+*.aab
 deploy/__pycache__/

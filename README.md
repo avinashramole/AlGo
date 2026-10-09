@@ -147,16 +147,30 @@ Open **Chain** in the left menu for the full option chain (NIFTY / BANKNIFTY / F
 
 ```
 AlGo/
-  src/        Web dashboard (React)
-  server/     API (live prices, algos, orders)
-  mobile/     iOS + Android app (Expo / React Native)
+  src/             Web dashboard (React)
+  server/          API (live prices, algos, orders)
+  mobile/          iOS + Android hybrid app (Expo WebView of the live site)
+  android-hybrid/  Standalone Android APK that opens trade2smart.com
+  scripts/build-hybrid-apk.sh
 ```
 
 ---
 
-## Later: put the app on Play Store / App Store
+## Android APK (full website hybrid)
 
-This needs an Expo account and Apple/Google developer accounts:
+The phone APK is a hybrid wrapper of the **entire** live desk: `https://trade2smart.com`.
+Login, Algo, Reports, Brokers, Multi-Index, and every other web page are the same as Chrome.
+
+On a Linux machine with Java 17+ (the VPS is fine):
+
+```bash
+bash scripts/build-hybrid-apk.sh
+```
+
+The installable file is `Trade2Smart-web.apk` (copied to `/opt/cursor/artifacts` when that folder exists).
+Copy the APK to your phone and open it (allow Install unknown apps).
+
+Or build with Expo / EAS (same full website WebView):
 
 ```bash
 cd mobile
@@ -165,7 +179,7 @@ npx eas build -p android --profile preview
 npx eas build -p ios --profile preview
 ```
 
-You do **not** need this to try the app today. Expo Go is enough.
+Expo Go still works for a quick preview. The Play Store / App Store upload still needs Google / Apple developer accounts.
 
 ---
 

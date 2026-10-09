@@ -1,0 +1,10 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = "Trade2Smart"
+include ":app"
