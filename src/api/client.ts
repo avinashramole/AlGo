@@ -355,9 +355,10 @@ export type Snapshot = {
   report?: DeskReport;
   signals: Array<{
     id: string;
-    action: "BUY" | "SELL";
+    action: "BUY" | "SELL" | "WAIT" | "HOLD" | "ALERT" | "EXIT" | "INFO" | string;
     symbol: string;
     strategy: string;
+    note?: string;
     time: string;
     confidence: number;
   }>;

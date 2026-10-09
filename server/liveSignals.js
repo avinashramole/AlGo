@@ -24,6 +24,18 @@ export function signalAction(text) {
   return "";
 }
 
+export function signalLabel(text) {
+  const action = signalAction(text);
+  if (action) return action;
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  if (/^WAIT\b|NO TRADE|NO SIGNAL|DOJI|STALE CANDLE/i.test(raw)) return "WAIT";
+  if (/^HOLD\b|COMBINED\b/i.test(raw)) return "HOLD";
+  if (/FEED DOWN|ERROR|REJECT|UNVERIFIED/i.test(raw)) return "ALERT";
+  if (/\bEXIT\b|CYCLE CLOSED/i.test(raw)) return "EXIT";
+  return "INFO";
+}
+
 function optionFromSignal(text, algo) {
   const raw = String(text || "");
   const named = raw.match(/\b(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\s+(\d{3,6})\s*(CE|PE)\b/i);
@@ -65,6 +77,7 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
       action,
       symbol: String(order.symbol || "").trim(),
       strategy: String(order.strategy || "Desk").trim() || "Desk",
+      note: status === "FILLED" ? "" : String(order.status || ""),
       time: ts ? formatIstTime(ts) : formatIstTime(Date.now()),
       confidence: status === "FILLED" ? 90 : status === "PARTIAL" ? 75 : 70,
       ts,
@@ -76,15 +89,16 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
       const exact = String(algo.lastSignal || "").trim().toUpperCase();
       if (!algo.enabled || (exact !== "BUY" && exact !== "SELL")) continue;
     }
-    const action = signalAction(algo.lastSignal);
+    const action = signalLabel(algo.lastSignal);
     if (!action) continue;
-    const symbol = optionFromSignal(algo.lastSignal, algo);
+    const symbol = optionFromSignal(algo.lastSignal, algo) || String(algo.symbol || algo.name || "").trim();
     if (!symbol) continue;
     rows.push({
       id: `sig-${algo.id}`,
       action,
       symbol,
       strategy: String(algo.name || "Strategy").trim() || "Strategy",
+      note: String(algo.lastSignal || "").trim(),
       time: formatIstTime(Date.now()),
       confidence: algo.status === "LIVE" || algo.runMode === "live" ? 88 : 72,
       ts: Date.now(),
@@ -94,12 +108,12 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
   return rows
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
     .filter((row) => {
-      const key = `${row.strategy}|${row.action}|${row.symbol}`;
+      const key = String(row.id || `${row.strategy}|${row.action}|${row.symbol}|${row.time}`);
       if (seen.has(key)) return false;
       seen.add(key);
       return Boolean(row.symbol);
     })
-    .slice(0, 20)
+    .slice(0, 80)
     .map(({ ts: _ts, ...row }) => row);
 }
 

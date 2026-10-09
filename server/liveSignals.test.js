@@ -30,10 +30,10 @@ test("buildLiveSignals uses desk orders and skips rejected rows", () => {
       { id: "o2", symbol: "NIFTY 24600 PE", side: "SELL", status: "REJECTED", strategy: "NIFTY 15m VWAP hedge" },
     ],
   });
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].action, "BUY");
-  assert.equal(rows[0].symbol, "NIFTY 24500 CE");
-  assert.equal(rows[0].strategy, "NIFTY 15m VWAP hedge");
+  assert.equal(rows.filter((row) => row.id.startsWith("ord-")).length, 1);
+  assert.equal(rows.some((row) => row.action === "BUY" && row.symbol === "NIFTY 24500 CE"), true);
+  assert.equal(rows.some((row) => row.action === "WAIT"), true);
+  assert.equal(rows.some((row) => row.action === "SELL"), false);
 });
 
 test("nifty test does not show BUY in the signal feed unless that side just fired", () => {
@@ -65,6 +65,35 @@ test("nifty test does not show BUY in the signal feed unless that side just fire
   assert.equal(live.length, 1);
   assert.equal(live[0].action, "BUY");
   assert.equal(live[0].strategy, "nifty test");
+});
+
+test("algo live book keeps wait hold and every distinct fill", () => {
+  const rows = buildLiveSignals({
+    algos: [
+      { id: "a10", name: "NIFTY", lastSignal: "WAIT 5m CLOSE", symbol: "NIFTY", enabled: true, status: "LIVE" },
+      { id: "a12", name: "CRUDE OIL", lastSignal: "HOLD PE 6100", symbol: "CRUDEOIL", enabled: true, status: "LIVE" },
+      {
+        id: "a15",
+        name: "Multi-Index Reversal Strategy",
+        lastSignal: "NO TRADE · NIFTY GREEN CE RED PE DOJI",
+        symbol: "NIFTY",
+        enabled: true,
+        status: "PAPER",
+      },
+    ],
+    orders: [
+      { id: "o1", symbol: "NIFTY 24500 CE", side: "BUY", status: "FILLED", strategy: "NIFTY", createdAt: "2026-10-09T03:30:00.000Z" },
+      { id: "o2", symbol: "NIFTY 24500 CE", side: "BUY", status: "FILLED", strategy: "NIFTY", createdAt: "2026-10-09T04:00:00.000Z" },
+      { id: "o3", symbol: "CRUDEOIL 6100 PE", side: "BUY", status: "FILLED", strategy: "CRUDE OIL", createdAt: "2026-10-09T04:05:00.000Z" },
+      { id: "o4", symbol: "NIFTY 24600 PE", side: "BUY", status: "PARTIAL", strategy: "TEST1", createdAt: "2026-10-09T04:10:00.000Z" },
+      { id: "o5", symbol: "BANKNIFTY 52000 CE", side: "SELL", status: "FILLED", strategy: "TEST2", createdAt: "2026-10-09T04:15:00.000Z" },
+    ],
+  });
+  assert.ok(rows.length >= 8);
+  assert.equal(rows.filter((row) => row.id.startsWith("ord-")).length, 5);
+  assert.equal(rows.some((row) => row.action === "WAIT"), true);
+  assert.equal(rows.some((row) => row.action === "HOLD"), true);
+  assert.equal(rows.some((row) => row.note && /NO TRADE/.test(row.note)), true);
 });
 
 test("featured signal is empty until a live BUY or SELL exists", () => {
