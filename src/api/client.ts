@@ -16,6 +16,8 @@ async function requestOnce<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${apiBase()}${path}`, {
       ...rest,
+      mode: "cors",
+      credentials: "omit",
       headers: {
         "Content-Type": "application/json",
         ...authHeaders(),

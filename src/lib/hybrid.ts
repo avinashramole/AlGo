@@ -9,10 +9,18 @@ function capacitorBridge(): CapacitorBridge | undefined {
   return (window as Window & { Capacitor?: CapacitorBridge }).Capacitor;
 }
 
+export function isLocalDeskHost(hostname = "", port = "") {
+  const host = String(hostname || "").toLowerCase();
+  const local = host === "localhost" || host === "127.0.0.1" || host === "10.0.2.2";
+  if (!local) return false;
+  return port !== "5173" && port !== "4173" && port !== "4000";
+}
+
 export function isNativeHybrid() {
   try {
     if (capacitorBridge()?.isNativePlatform?.()) return true;
     if (typeof window !== "undefined" && window.location.protocol === "capacitor:") return true;
+    if (typeof window !== "undefined" && isLocalDeskHost(window.location.hostname, window.location.port)) return true;
     if (typeof navigator !== "undefined" && /;\s*wv\)/i.test(navigator.userAgent)) return true;
     return false;
   } catch {
@@ -31,8 +39,16 @@ export function markHybridDocument() {
   );
 }
 
+export function apiBaseFromLocation(hostname = "", port = "", protocol = "") {
+  const host = String(hostname || "").toLowerCase();
+  if (host.includes("trade2smart")) return "/api";
+  if (protocol === "capacitor:" || isLocalDeskHost(host, port)) return `${LIVE_DESK_ORIGIN}/api`;
+  return "/api";
+}
+
 export function apiBase() {
-  return isNativeHybrid() ? `${LIVE_DESK_ORIGIN}/api` : "/api";
+  if (typeof window === "undefined") return "/api";
+  return apiBaseFromLocation(window.location.hostname, window.location.port, window.location.protocol);
 }
 
 export function googleLoginNext() {
