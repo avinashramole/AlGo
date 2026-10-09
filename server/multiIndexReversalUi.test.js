@@ -16,6 +16,7 @@ test("Multi-Index Reversal settings expose four indices and locked defaults", ()
   assert.match(builder, /data-mir-exchange/);
   assert.match(builder, /data-mir-offset/);
   assert.match(builder, /data-mir-basis/);
+  assert.match(builder, /data-mir-trade-mode="true"/);
   assert.match(builder, /data-mir-timeframe=\{mir \? "true"/);
   assert.match(builder, /MULTI_INDEX_SCRIPTS/);
   assert.match(builder, /MULTI_INDEX_TIMEFRAMES/);
@@ -31,4 +32,5 @@ test("Multi-Index Reversal settings expose four indices and locked defaults", ()
   assert.match(algoPage, /data-mir-strategy=\{isMultiIndexReversalKind\(algo\) \? "true"/);
   assert.match(algoPage, /data-mir-monitor="true"/);
   assert.match(deploy, /data-mir-strategy/);
+  assert.match(deploy, /data-mir-trade-mode="true"/);
 });

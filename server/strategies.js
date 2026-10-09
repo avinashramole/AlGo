@@ -325,7 +325,7 @@ export function summarizeAlgo(algo) {
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
-    return `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · offset ${cfg.strikeOffset} · index+option candle · CE green/green · PE red+green · TGT ${cfg.initialTargetPct}% · reverse −${cfg.reversalLossPct}% ×${cfg.reversalQtyMultiple} · combined +${cfg.combinedTargetPct}% ${cfg.combinedTargetBasis} · paper until Live · ${size}`;
+    return `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · offset ${cfg.strikeOffset} · index+option candle · CE green/green · PE red+green · TGT ${cfg.initialTargetPct}% · reverse −${cfg.reversalLossPct}% ×${cfg.reversalQtyMultiple} · combined +${cfg.combinedTargetPct}% ${cfg.combinedTargetBasis} · ${algo.runMode === "live" ? "Live" : "Paper"} · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -585,7 +585,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
       mirState: existing.mirState,
-      enabled: creating ? false : Boolean(existing.enabled),
+      enabled: creating ? false : existing.runMode && existing.runMode !== runMode ? false : Boolean(existing.enabled),
       status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
     };
     if (next.enabled && next.runMode === "live") next.status = "LIVE";

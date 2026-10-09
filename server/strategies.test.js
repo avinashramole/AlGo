@@ -375,6 +375,26 @@ test("seed does not include nifty test", () => {
   assert.equal(seeded.some((item) => item.kind === "nifty-test" || item.id === "a11"), false);
 });
 
+test("normalizeAlgo keeps Multi-Index live when the user saves Live", () => {
+  const algo = normalizeAlgo({
+    kind: "multi-index-reversal",
+    symbol: "NIFTY",
+    timeframe: "15m",
+    runMode: "live",
+    brokerId: "dhan",
+  });
+  assert.equal(algo.runMode, "live");
+  assert.equal(algo.brokerId, "dhan");
+  assert.equal(algo.enabled, false);
+  const switched = normalizeAlgo(
+    { kind: "multi-index-reversal", runMode: "live", brokerId: "dhan" },
+    { id: "a15", kind: "multi-index-reversal", runMode: "paper", brokerId: "paper", enabled: true, status: "PAPER" },
+  );
+  assert.equal(switched.runMode, "live");
+  assert.equal(switched.enabled, false);
+  assert.equal(switched.status, "PAUSED");
+});
+
 test("normalizeAlgo keeps Multi-Index Reversal paper and disabled on create", () => {
   const algo = normalizeAlgo({
     kind: "multi-index-reversal",
