@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import {
   enableThumb as enableThumbApi,
   getMe,
+  googleAuthStartUrl,
   googleAuthStatus,
   logoutSession,
   login as loginRequest,
@@ -309,7 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Google login is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the VPS, then restart t2s.",
           );
         }
-        window.location.href = `/api/auth/google?next=${encodeURIComponent(window.location.origin)}`;
+        window.location.href = googleAuthStartUrl();
       },
       enableThumb: async () => {
         const token = readToken();

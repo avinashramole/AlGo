@@ -515,7 +515,7 @@ export function Login() {
             </button>
             <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
               <Smartphone size={18} />
-              Download Android APK
+              Download Android App
             </a>
           </div>
         </section>

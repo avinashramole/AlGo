@@ -1,7 +1,0 @@
-<resources>
-    <style name="Theme.T2S" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="android:statusBarColor">#071833</item>
-        <item name="android:navigationBarColor">#071833</item>
-        <item name="android:windowBackground">#071833</item>
-    </style>
-</resources>
