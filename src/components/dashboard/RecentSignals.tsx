@@ -1,42 +1,23 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
-import { cn } from "../../lib/format";
+import { DeskTape, TapeCell } from "./DeskTape";
 
 export function RecentSignals() {
   const { data } = useMarket();
+  const navigate = useNavigate();
   return (
-    <section className="card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className="desk-kicker">Signals</div>
-          <div className="text-sm font-bold">Recent Signals</div>
-        </div>
-        <Link to="/algo" className="text-[11px] font-semibold text-brand-500">
-          Algo →
-        </Link>
-      </div>
-      <div className="space-y-2">
-        {!data.signals.length ? <p className="text-xs text-slate-400">No live signals yet.</p> : null}
-        {data.signals.map((signal) => (
-          <div key={signal.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2">
-            <span
-              className={cn(
-                "w-10 rounded-md py-1 text-center text-[10px] font-extrabold",
-                signal.action === "BUY" ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-rose-50 text-down dark:bg-rose-950/40",
-              )}
-            >
-              {signal.action}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-semibold">{signal.symbol}</div>
-              <div className="text-[10px] text-slate-400">
-                {signal.strategy} · {signal.time}
-              </div>
-            </div>
-            <div className="text-xs font-bold text-brand-500">{signal.confidence}%</div>
-          </div>
-        ))}
-      </div>
-    </section>
+    <DeskTape kicker="Signals" extra="Tap → Algo" testId="recent-signals">
+      {!data.signals.length ? <TapeCell title="Recent" value="—" detail="No live signals yet" onClick={() => navigate("/algo")} /> : null}
+      {data.signals.map((signal) => (
+        <TapeCell
+          key={signal.id}
+          title={signal.action}
+          value={signal.symbol}
+          detail={`${signal.strategy} · ${signal.time} · ${signal.confidence}%`}
+          tone={signal.action === "SELL" ? "text-down" : "text-up"}
+          onClick={() => navigate("/algo")}
+        />
+      ))}
+    </DeskTape>
   );
 }

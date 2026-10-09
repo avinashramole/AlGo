@@ -1,21 +1,14 @@
 import { useMarket } from "../../context/MarketContext";
-import { Gauge } from "../charts/Gauge";
 import { hasDhanQuotes } from "../../lib/format";
+import { DeskTape, TapeCell } from "./DeskTape";
 
 export function SentimentGauge() {
   const { data } = useMarket();
   const bullish = data.sentiment >= 55;
   return (
-    <section className="card p-4">
-      <div className="desk-kicker">Tape</div>
-      <div className="mb-1 text-sm font-bold">Market Sentiment</div>
-      <Gauge score={data.sentiment} />
-      <div className={`mt-1 text-center text-sm font-extrabold tracking-wide ${bullish ? "text-up" : "text-down"}`}>
-        {bullish ? "BULLISH" : "BEARISH"}
-      </div>
-      <p className="mt-1 text-center text-[11px] text-slate-400">
-        {hasDhanQuotes(data) ? "From live index change and option buy pressure" : "From the current desk tape"}
-      </p>
-    </section>
+    <DeskTape kicker="Sentiment" extra={hasDhanQuotes(data) ? "Live tape" : "Desk tape"} testId="sentiment">
+      <TapeCell title="Score" value={`${data.sentiment}%`} tone={bullish ? "text-up" : "text-down"} detail={bullish ? "BULLISH" : "BEARISH"} />
+      <TapeCell title="Source" value={hasDhanQuotes(data) ? "DHAN" : "DESK"} detail="Index + option pressure" />
+    </DeskTape>
   );
 }
