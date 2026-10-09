@@ -13,15 +13,15 @@ export function SignalFeed() {
   const { data } = useMarket();
   const signals = data.signals || [];
   return (
-    <section className="card p-4" data-algo-live-signals="all">
+    <section className="card p-4" data-algo-live-signals="recent-2">
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
           <div className="desk-kicker">Live book</div>
           <div className="text-sm font-bold">Signals</div>
         </div>
-        <div className="text-[11px] font-semibold text-slate-400">{signals.length ? `${signals.length} rows` : "None"}</div>
+        <div className="text-[11px] font-semibold text-slate-400">{signals.length ? `${signals.length} latest` : "None"}</div>
       </div>
-      <div className="grid max-h-[min(70vh,44rem)] gap-2 overflow-y-auto pr-1">
+      <div className="grid gap-2">
         {!signals.length ? (
           <div className="px-2 py-6 text-center text-sm text-slate-400">
             No live signals yet. Start an algo or wait for a Dhan / paper fill.
