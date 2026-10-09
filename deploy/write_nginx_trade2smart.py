@@ -105,6 +105,12 @@ def server_locations(webroot: str) -> str:
     backtest = _proxy_block("http://127.0.0.1:4000", "180s", "180s")
     return f"""
     client_max_body_size 2m;
+    gzip on;
+    gzip_min_length 256;
+    gzip_comp_level 5;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types text/plain text/css application/javascript application/json application/xml image/svg+xml;
 
     location = /api/health {{
 {login}
@@ -159,8 +165,16 @@ def server_locations(webroot: str) -> str:
         add_header Content-Disposition 'attachment; filename="Trade2Smart-web.apk"';
     }}
 
+    location ^~ /assets/ {{
+        root {webroot};
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        access_log off;
+    }}
+
     location / {{
         root {webroot};
+        add_header Cache-Control "no-cache";
         try_files $uri $uri/ /index.html;
     }}
 """.rstrip()

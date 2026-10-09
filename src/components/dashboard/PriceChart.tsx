@@ -85,12 +85,12 @@ export function PriceChart() {
       }
     };
     void load();
-    const id = window.setInterval(() => void load(), dhanLive ? 2000 : 8000);
+    const id = window.setInterval(() => void load(), 15000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [tf, dhanLive]);
+  }, [tf]);
 
   useEffect(() => {
     setDrawings([]);
