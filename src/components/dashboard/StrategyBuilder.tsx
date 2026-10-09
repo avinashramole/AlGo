@@ -303,6 +303,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               combinedTargetPct: Number(form.combinedTargetPct) > 0 ? Number(form.combinedTargetPct) : 20,
               combinedTargetBasis: form.combinedTargetBasis === "combined" ? "combined" : "original",
               maxCycleLossPct: Math.max(0, Number(form.maxCycleLossPct) || 0),
+              runMode: form.runMode === "live" ? "live" : form.runMode === "backtest" ? "backtest" : "paper",
+              brokerId: form.runMode === "live" ? form.brokerId || data.activeBrokerId || "dhan" : "paper",
               enabled: Boolean(algo?.enabled),
             }
           : test2
@@ -502,7 +504,22 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {editing ? null : (
+        {mir ? (
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5" data-mir-trade-mode="true">
+          <TypeCard
+            active={(form.runMode || "paper") !== "live"}
+            title="Paper"
+            text="Uses the live feed. Fills stay virtual — they never go to a broker."
+            onClick={() => set({ runMode: "paper", brokerId: "paper" })}
+          />
+          <TypeCard
+            active={form.runMode === "live"}
+            title="Live"
+            text="Real CE/PE orders go to the selected broker after you press Start. Saving does not start LIVE."
+            onClick={() => set({ runMode: "live", brokerId: data.activeBrokerId || "dhan" })}
+          />
+        </div>
+        ) : editing ? null : (
         <div className="mt-1.5 grid grid-cols-3 gap-1.5">
           {RUN_MODES.map((mode) => (
             <TypeCard

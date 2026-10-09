@@ -158,6 +158,10 @@ if ! grep -q 'data-algo-live-signals="all"' "$HOME_DIR/src/components/dashboard/
   echo "FAIL: Algo Live book still hides signals after 4. Deploy cursor/algo-signals-all-6826."
   exit 1
 fi
+if ! grep -q 'data-mir-trade-mode="true"' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+  echo "FAIL: Multi-Index Edit has no Paper/Live selector. Deploy cursor/multi-index-paper-live-6826."
+  exit 1
+fi
 
 npm run build
 

@@ -146,7 +146,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "multi-index-reversal" as const,
       category: `MULTI-INDEX ${script.label} ${script.exchange} ${String(algo.timeframe || "15m").toUpperCase()}`,
-      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · paper until Live`,
+      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · ${algo.runMode === "live" ? "Live" : "Paper"}`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
