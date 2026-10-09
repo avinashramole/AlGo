@@ -10,6 +10,7 @@ import {
   Phone,
   Shield,
   ShieldCheck,
+  Smartphone,
   User,
   Users,
   Zap,
@@ -512,6 +513,10 @@ export function Login() {
                 </>
               )}
             </button>
+            <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
+              <Smartphone size={18} />
+              Download Android APK
+            </a>
           </div>
         </section>
       </div>

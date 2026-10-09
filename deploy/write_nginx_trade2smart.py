@@ -146,6 +146,19 @@ def server_locations(webroot: str) -> str:
 {api}
     }}
 
+    location = /Trade2Smart-web.apk {{
+        root {webroot};
+        default_type application/vnd.android.package-archive;
+        add_header Content-Disposition 'attachment; filename="Trade2Smart-web.apk"';
+        try_files /Trade2Smart-web.apk =404;
+    }}
+
+    location = /download/android {{
+        alias {webroot}/Trade2Smart-web.apk;
+        default_type application/vnd.android.package-archive;
+        add_header Content-Disposition 'attachment; filename="Trade2Smart-web.apk"';
+    }}
+
     location / {{
         root {webroot};
         try_files $uri $uri/ /index.html;
