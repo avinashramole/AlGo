@@ -12,10 +12,23 @@ function capacitorBridge(): CapacitorBridge | undefined {
 export function isNativeHybrid() {
   try {
     if (capacitorBridge()?.isNativePlatform?.()) return true;
-    return typeof window !== "undefined" && window.location.protocol === "capacitor:";
+    if (typeof window !== "undefined" && window.location.protocol === "capacitor:") return true;
+    if (typeof navigator !== "undefined" && /;\s*wv\)/i.test(navigator.userAgent)) return true;
+    return false;
   } catch {
     return false;
   }
+}
+
+export function markHybridDocument() {
+  if (typeof document === "undefined") return;
+  if (!isNativeHybrid()) return;
+  document.documentElement.classList.add("t2s-hybrid");
+  const viewport = document.querySelector('meta[name="viewport"]');
+  viewport?.setAttribute(
+    "content",
+    "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover",
+  );
 }
 
 export function apiBase() {

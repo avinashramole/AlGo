@@ -25,6 +25,12 @@ test("Capacitor hybrid app bundles the website instead of opening the live URL",
   assert.match(main, /HashRouter/);
   assert.match(build, /cap sync android/);
   assert.match(login, /data-android-apk="download"/);
+  const shell = fs.readFileSync(path.join(root, "src/components/layout/AppShell.tsx"), "utf8");
+  const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
+  const hybridSrc = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
+  assert.match(shell, /data-mobile-app="responsive"/);
+  assert.match(css, /html\.t2s-hybrid aside\.desk-chrome/);
+  assert.match(hybridSrc, /markHybridDocument/);
   const activity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(activity, /BridgeActivity/);
   assert.equal(activity.includes("trade2smart.com"), false);

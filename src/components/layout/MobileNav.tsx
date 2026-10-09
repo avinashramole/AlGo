@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { isNativeHybrid } from "../../lib/hybrid";
 import { isAdminUser } from "../../lib/roles";
 import { cn } from "../../lib/format";
 
@@ -66,7 +67,7 @@ export function MobileNav() {
   return (
     <>
       {moreOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className={cn("fixed inset-0 z-40", isNativeHybrid() ? "" : "md:hidden")}>
           <button type="button" className="absolute inset-0 bg-slate-900/40" aria-label="Close menu" onClick={() => setMoreOpen(false)} />
           <div className="absolute inset-x-0 bottom-16 rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-lg">
             <div className="mb-2 flex items-center justify-between px-1">
@@ -106,7 +107,7 @@ export function MobileNav() {
           </div>
         </div>
       ) : null}
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(7,24,51,0.06)] md:hidden">
+      <nav className={cn("t2s-mobile-nav fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--card)] pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(7,24,51,0.06)]", isNativeHybrid() ? "" : "md:hidden")}>
         <div className={admin ? "grid grid-cols-5" : "grid grid-cols-4"}>
           {visiblePrimary.map((item) => (
             <NavLink

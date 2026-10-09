@@ -507,3 +507,89 @@ main > .desk-page {
   }
 }
 
+/* Phone + Capacitor APK: keep the desk on one column even if WebView reports a wide width. */
+html.t2s-hybrid {
+  --t2s-phone: 1;
+}
+
+html.t2s-hybrid body,
+html.t2s-hybrid #root {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+html.t2s-hybrid aside.desk-chrome {
+  display: none !important;
+}
+
+html.t2s-hybrid .t2s-shell-main {
+  padding-left: 0 !important;
+}
+
+html.t2s-hybrid .t2s-mobile-nav,
+html.t2s-hybrid .t2s-mobile-nav.hidden,
+html.t2s-hybrid .t2s-mobile-nav.md\:hidden {
+  display: block !important;
+}
+
+html.t2s-hybrid .t2s-desktop-only {
+  display: none !important;
+}
+
+html.t2s-hybrid .desk-header {
+  height: calc(3.25rem + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+
+html.t2s-hybrid main {
+  padding: 0.65rem 0.65rem calc(4.75rem + env(safe-area-inset-bottom)) !important;
+}
+
+html.t2s-hybrid main .card {
+  border-radius: 12px;
+}
+
+html.t2s-hybrid main input,
+html.t2s-hybrid main select,
+html.t2s-hybrid main textarea,
+html.t2s-hybrid main button {
+  max-width: 100%;
+  font-size: 16px;
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  html.t2s-hybrid main .grid.grid-cols-3,
+  html.t2s-hybrid main .grid.lg\:grid-cols-3,
+  html.t2s-hybrid main .grid.lg\:grid-cols-4,
+  html.t2s-hybrid main .grid.md\:grid-cols-4,
+  html.t2s-hybrid main .grid.xl\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+html.t2s-hybrid .tape-strip,
+html.t2s-hybrid .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  aside.desk-chrome {
+    display: none !important;
+  }
+
+  .t2s-shell-main {
+    padding-left: 0 !important;
+  }
+
+  .desk-header {
+    height: calc(3.25rem + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  main input,
+  main select,
+  main textarea {
+    font-size: 16px;
+  }
+}
+
