@@ -150,6 +150,10 @@ if ! grep -q 'data-reports-tabs="position-order-reports"' "$HOME_DIR/src/pages/R
   echo "FAIL: Reports tabs are not Position, Orders, Reports. Deploy cursor/fast-live-pnl-6826."
   exit 1
 fi
+if ! grep -q 'data-mir-strategy' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'multi-index-reversal' "$HOME_DIR/server/multiIndexReversal/config.js"; then
+  echo "FAIL: Multi-Index Reversal Strategy is missing. Deploy cursor/multi-index-reversal-6826."
+  exit 1
+fi
 
 npm run build
 

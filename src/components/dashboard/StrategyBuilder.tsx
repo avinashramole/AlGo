@@ -32,6 +32,11 @@ import {
   isNiftyTestKind,
   isNiftyTest1Kind,
   isNiftyTest2Kind,
+  isMultiIndexReversalKind,
+  MULTI_INDEX_REVERSAL_NAME,
+  MULTI_INDEX_SCRIPTS,
+  MULTI_INDEX_TIMEFRAMES,
+  MULTI_INDEX_OFFSETS,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
@@ -95,6 +100,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               ? "crude-first-candle"
               : isNiftyFirstCandleKind(algo)
                 ? "nifty-first-candle"
+              : isMultiIndexReversalKind(algo)
+                ? "multi-index-reversal"
               : isNiftyTest2Kind(algo)
                 ? "nifty-test2"
               : isNiftyTest1Kind(algo)
@@ -171,6 +178,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const niftyTest = isNiftyTestKind(form);
   const test1 = isNiftyTest1Kind(form) || isNiftyTest1Kind(algo || undefined);
   const test2 = isNiftyTest2Kind(form) || isNiftyTest2Kind(algo || undefined);
+  const mir = isMultiIndexReversalKind(form) || isMultiIndexReversalKind(algo || undefined);
   const engine = isNiftyOptionEngineKind(form) || test1 || test2;
   const preview = useMemo(() => {
     if (isNiftyVwapHedgeKind(form)) {
@@ -192,6 +200,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ? `${root} INTRADAY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · MIS same day`
           : `${root} BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "15:15"} IST · NRML overnight`;
       return `TEST2 · ${hold} · SELL ${sellOpt} CE+PE premium ≥${form.sellPremium || 80} · BUY ${hedgeOpt} CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}% · overall +${form.overallTargetPct ?? 5}% exits all`;
+    }
+    if (isMultiIndexReversalKind(form) || mir) {
+      const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0];
+      const basis = form.combinedTargetBasis === "combined" ? "combined premium" : "original premium";
+      return `Multi-Index Reversal · ${script.label} ${script.exchange} · ${form.timeframe || "15m"} · offset ${form.strikeOffset ?? 0} · TGT ${form.initialTargetPct || 40}% · reverse −${form.reversalLossPct || 20}% ×${form.reversalQtyMultiple || 2} · combined +${form.combinedTargetPct || 20}% ${basis} · paper until Live`;
     }
     if (isNiftyTest1Kind(form) || test1) {
       const body = Math.round((Number(form.minBodyPct) || 0.9) * 100);
@@ -230,7 +243,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       value: form.sellValue,
     });
     return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
-  }, [form, lotSize, lots, crudeFirst, test1, test2]);
+  }, [form, lotSize, lots, crudeFirst, test1, test2, mir]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
   const pickTest2Script = (symbol: string) => {
@@ -249,7 +262,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   };
 
   const submit = async () => {
-    if (!String(form.name || "").trim()) {
+    if (mir) {
+      if (!MULTI_INDEX_SCRIPTS.some((row) => row.id === (form.symbol || "NIFTY"))) {
+        setError("Pick NIFTY 50, BANK NIFTY, FINNIFTY, or SENSEX.");
+        return;
+      }
+      const offset = Math.round(Number(form.strikeOffset) || 0);
+      if (offset < -4 || offset > 4) {
+        setError("Strike offset must be between -4 and +4.");
+        return;
+      }
+    } else if (!String(form.name || "").trim()) {
       setError("Give the strategy a name.");
       return;
     }
@@ -257,7 +280,32 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     setError("");
     try {
       await saveAlgo(
-        test2
+        mir
+          ? {
+              ...form,
+              id: algo?.id,
+              name: MULTI_INDEX_REVERSAL_NAME,
+              kind: "multi-index-reversal",
+              strategyType: "MULTI_INDEX_REVERSAL",
+              indicator: "MULTI_INDEX_REVERSAL",
+              symbol: MULTI_INDEX_SCRIPTS.some((row) => row.id === form.symbol) ? form.symbol : "NIFTY",
+              instrument: "option",
+              side: "BUY",
+              timeframe: MULTI_INDEX_TIMEFRAMES.includes(form.timeframe as (typeof MULTI_INDEX_TIMEFRAMES)[number])
+                ? form.timeframe
+                : form.timeframe === "1h"
+                  ? "1H"
+                  : "15m",
+              strikeOffset: Math.max(-4, Math.min(4, Math.round(Number(form.strikeOffset) || 0))),
+              initialTargetPct: Number(form.initialTargetPct) > 0 ? Number(form.initialTargetPct) : 40,
+              reversalLossPct: Number(form.reversalLossPct) > 0 ? Number(form.reversalLossPct) : 20,
+              reversalQtyMultiple: Number(form.reversalQtyMultiple) >= 1 ? Number(form.reversalQtyMultiple) : 2,
+              combinedTargetPct: Number(form.combinedTargetPct) > 0 ? Number(form.combinedTargetPct) : 20,
+              combinedTargetBasis: form.combinedTargetBasis === "combined" ? "combined" : "original",
+              maxCycleLossPct: Math.max(0, Number(form.maxCycleLossPct) || 0),
+              enabled: Boolean(algo?.enabled),
+            }
+          : test2
           ? {
               ...form,
               id: algo?.id,
@@ -343,6 +391,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         className="desk-sheet card p-3"
         data-edit-strategy={editing ? algo?.id || "open" : "new"}
         data-test2-edit={test2 ? "true" : "false"}
+        data-mir-strategy={mir ? "true" : undefined}
         data-ui={test2 ? "test2-script-v5" : undefined}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -416,6 +465,24 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }
           />
           <TypeCard
+            active={mir}
+            title="MULTI-INDEX"
+            text="NIFTY 50, BANK NIFTY, FINNIFTY, or SENSEX. Completed candle: index green + CE green buys CE. Index red + PE green buys PE. Initial target 40%. At −20% plus opposite index candle, buy 2× the other side and keep both. Combined target 20%. Default paper."
+            onClick={() => {
+              const next = emptyStrategy("multi-index-reversal");
+              set({
+                ...next,
+                name: MULTI_INDEX_REVERSAL_NAME,
+                runMode: "paper",
+                brokerId: "paper",
+                lots: form.lots || 1,
+                lotSize: next.lotSize,
+                qty: (form.lots || 1) * Number(next.lotSize || 65),
+                enabled: false,
+              });
+            }}
+          />
+          <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
             text="Every 5m NIFTY FUT candle, up to 5 trades a day. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
@@ -454,14 +521,16 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2) && "sm:hidden", test2 && "hidden")}>
+        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2 || mir) && "sm:hidden", (test2 || mir) && "hidden")}>
           Strategy name
           <input
             className={fieldClass}
-            value={test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+            value={mir ? MULTI_INDEX_REVERSAL_NAME : test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
             onChange={(event) =>
               set({
-                name: test2
+                name: mir
+                  ? MULTI_INDEX_REVERSAL_NAME
+                  : test2
                   ? "TEST2"
                   : test1
                     ? "TEST1"
@@ -472,7 +541,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                         : event.target.value,
               })
             }
-            readOnly={test2 || test1 || firstCandle || crudeFirst}
+            readOnly={mir || test2 || test1 || firstCandle || crudeFirst}
             placeholder="My NIFTY VWAP"
           />
         </label>
@@ -532,7 +601,48 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : null}
 
-        {test1 && !test2 ? (
+        {mir ? (
+          <div className="mt-2.5 space-y-1.5" data-mir-settings="true">
+            <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
+              Index maps its exchange automatically. Completed {form.timeframe || "15m"} candles only: index green + CE green buys CE. Index red + PE green buys PE. Initial target {form.initialTargetPct || 40}%. At −{form.reversalLossPct || 20}% plus the opposite index candle, buy {form.reversalQtyMultiple || 2}× the other side and keep both. Combined target {form.combinedTargetPct || 20}% on {form.combinedTargetBasis === "combined" ? "combined premium" : "original premium"}. Saving does not start trading.
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <label className="text-xs font-semibold text-slate-500">
+                Index
+                <select
+                  data-mir-index
+                  className={fieldClass}
+                  value={form.symbol || "NIFTY"}
+                  onChange={(event) => {
+                    const row = MULTI_INDEX_SCRIPTS.find((item) => item.id === event.target.value) || MULTI_INDEX_SCRIPTS[0];
+                    set({
+                      symbol: row.id,
+                      lotSize: row.lot,
+                      qty: (form.lots || 1) * row.lot,
+                      instrument: "option",
+                      side: "BUY",
+                    });
+                  }}
+                >
+                  {MULTI_INDEX_SCRIPTS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label} · {row.exchange}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Exchange
+                <input
+                  data-mir-exchange
+                  className={fieldClass}
+                  value={(MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0]).exchange}
+                  readOnly
+                />
+              </label>
+            </div>
+          </div>
+        ) : test1 && !test2 ? (
           <div className="mt-2.5 space-y-1.5">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
               Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed {form.timeframe || "5m"} green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
@@ -569,7 +679,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
           </div>
-        ) : crudeFirst || firstCandle || test2 ? null : engine ? (
+        ) : crudeFirst || firstCandle || test2 || mir ? null : engine ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             {hedge
               ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
@@ -594,7 +704,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {!engine && !crudeFirst && !niftyTest && form.instrument === "option" ? (
+        {!engine && !crudeFirst && !niftyTest && !mir && form.instrument === "option" ? (
           <div className="mt-2.5 grid gap-2 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold text-slate-500">Call or put</div>
@@ -642,10 +752,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             Strategy name
             <input
               className={fieldClass}
-              value={test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+              value={mir ? MULTI_INDEX_REVERSAL_NAME : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
               onChange={(event) =>
                 set({
-                  name: test1
+                  name: mir
+                    ? MULTI_INDEX_REVERSAL_NAME
+                    : test1
                     ? "TEST1"
                     : firstCandle
                       ? NIFTY_FIRST_CANDLE_NAME
@@ -654,12 +766,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                         : event.target.value,
                 })
               }
-              readOnly={test1 || firstCandle || crudeFirst}
+              readOnly={mir || test1 || firstCandle || crudeFirst}
               placeholder="My NIFTY VWAP"
             />
           </label>
           ) : null}
-          {engine ? null : (
+          {engine || mir ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select
@@ -681,7 +793,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             </select>
           </label>
           )}
-          {engine ? null : (
+          {engine || mir ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Side
             <select className={fieldClass} value={niftyTest ? "BOTH" : form.side || "BUY"} disabled={engine || niftyTest || crudeFirst} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
@@ -719,6 +831,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               value={reversal || hedge ? "15m" : vwap || test2 ? "5m" : form.timeframe || "5m"}
               disabled={(engine && !firstCandle && !test1) || test2}
               data-test1-timeframe={test1 ? "true" : undefined}
+              data-mir-timeframe={mir ? "true" : undefined}
               onChange={(event) => {
                 const timeframe = event.target.value;
                 if (firstCandle || crudeFirst) {
@@ -735,6 +848,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 ? ["15m"]
                 : vwap
                   ? ["5m"]
+                  : mir
+                    ? [...MULTI_INDEX_TIMEFRAMES]
                   : test1 || test2 || firstCandle || crudeFirst || niftyTest
                     ? ["1m", "2m", "5m", "10m", "15m"]
                     : TIMEFRAMES
@@ -768,7 +883,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </label>
         </div>
 
-        {engine || niftyTest || crudeFirst ? null : kind === "indicator" ? (
+        {engine || niftyTest || crudeFirst || mir ? null : kind === "indicator" ? (
           <div className="mt-2.5 grid gap-2 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Indicator
@@ -929,6 +1044,42 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 <input className={fieldClass} value={form.endTimeIst || "15:15"} onChange={(event) => set({ endTimeIst: event.target.value })} placeholder="15:15" />
               </label>
             </div>
+          </div>
+        ) : mir ? (
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5 lg:grid-cols-4" data-mir-targets="true">
+            <label className="text-xs font-semibold text-slate-500">
+              Strike offset
+              <select
+                data-mir-offset
+                className={fieldClass}
+                value={form.strikeOffset ?? 0}
+                onChange={(event) => set({ strikeOffset: Number(event.target.value) })}
+              >
+                {MULTI_INDEX_OFFSETS.map((offset) => (
+                  <option key={offset} value={offset}>
+                    {offset === 0 ? "ATM (0)" : offset > 0 ? `ATM +${offset}` : `ATM ${offset}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <NumberField label="Initial target %" value={form.initialTargetPct ?? 40} step={1} onChange={(initialTargetPct) => set({ initialTargetPct, targetPct: initialTargetPct })} />
+            <NumberField label="Reversal loss %" value={form.reversalLossPct ?? 20} step={1} onChange={(reversalLossPct) => set({ reversalLossPct })} />
+            <NumberField label="Reversal qty ×" value={form.reversalQtyMultiple ?? 2} step={1} onChange={(reversalQtyMultiple) => set({ reversalQtyMultiple })} />
+            <NumberField label="Combined target %" value={form.combinedTargetPct ?? 20} step={1} onChange={(combinedTargetPct) => set({ combinedTargetPct })} />
+            <label className="text-xs font-semibold text-slate-500">
+              Combined target basis
+              <select
+                data-mir-basis
+                className={fieldClass}
+                value={form.combinedTargetBasis || "original"}
+                onChange={(event) => set({ combinedTargetBasis: event.target.value === "combined" ? "combined" : "original" })}
+              >
+                <option value="original">Original Position Premium</option>
+                <option value="combined">Combined Premium</option>
+              </select>
+            </label>
+            <NumberField label="Max cycle loss % (0 off)" value={form.maxCycleLossPct ?? 0} step={1} onChange={(maxCycleLossPct) => set({ maxCycleLossPct: Math.max(0, maxCycleLossPct) })} />
+            <NumberField label="EOD square-off (min)" value={form.eodSquareOffMinutes ?? 15} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
           </div>
         ) : test1 ? (
           <div className="mt-2.5 grid grid-cols-2 gap-1.5 lg:grid-cols-4">
@@ -1094,7 +1245,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
 
         )}
 
-        {engine || crudeFirst ? null : (
+        {engine || crudeFirst || mir ? null : (
         <div className="mt-2.5 grid gap-2 md:grid-cols-2">
           <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
           <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
@@ -1111,6 +1262,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               ? "NIFTY goes LIVE automatically at 09:00 IST on session days. Saving this form or restarting t2s does not start LIVE."
               : niftyTest
               ? "nifty test stays off until you press Start strategy. Orders are NIFTY futures. Saving this form does not place orders."
+              : mir
+              ? "Multi-Index Reversal stays paper until you choose Live and press Start. Saving this form does not start LIVE and does not place an order."
               : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}

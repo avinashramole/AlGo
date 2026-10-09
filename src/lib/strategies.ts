@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test" | "nifty-test1" | "nifty-test2";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test" | "nifty-test1" | "nifty-test2" | "multi-index-reversal";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -93,6 +93,12 @@ export type AlgoStrategy = {
   sellPremium?: number;
   hedgePremium?: number;
   hedgeSlPct?: number;
+  initialTargetPct?: number;
+  reversalLossPct?: number;
+  reversalQtyMultiple?: number;
+  combinedTargetPct?: number;
+  combinedTargetBasis?: "original" | "combined";
+  maxCycleLossPct?: number;
   sellExpiryKind?: "weekly" | "monthly";
   hedgeExpiryKind?: "weekly" | "monthly";
   overallSl?: number;
@@ -222,6 +228,29 @@ export type AlgoStrategy = {
   enabled: boolean;
   brokerId?: string;
   lastSignal?: string;
+  mirState?: {
+    phase?: string;
+    lastBarTime?: number;
+    lastIndexColor?: string;
+    lastCeColor?: string;
+    lastPeColor?: string;
+    lastError?: string;
+    originalOption?: string;
+    originalStrike?: number;
+    originalQty?: number;
+    originalAvg?: number;
+    originalTarget?: number;
+    reversalOption?: string;
+    reversalStrike?: number;
+    reversalQty?: number;
+    reversalAvg?: number;
+    reversalDone?: boolean;
+    charges?: number;
+    realizedPnl?: number;
+    expiry?: string;
+    symbol?: string;
+    lastTransitionReason?: string;
+  };
   futureColor?: "green" | "red" | "doji" | "";
   trade?: {
     kind?: "future" | "option";
@@ -259,6 +288,19 @@ export const TEST1_SCRIPTS = [
 ];
 
 export const TEST2_SCRIPTS = TEST1_SCRIPTS;
+
+export const MULTI_INDEX_REVERSAL_NAME = "Multi-Index Reversal Strategy";
+
+export const MULTI_INDEX_SCRIPTS = [
+  { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", lot: 65 },
+  { id: "BANKNIFTY", label: "BANK NIFTY", exchange: "NSE", lot: 30 },
+  { id: "FINNIFTY", label: "FINNIFTY", exchange: "NSE", lot: 60 },
+  { id: "SENSEX", label: "SENSEX", exchange: "BSE", lot: 20 },
+];
+
+export const MULTI_INDEX_TIMEFRAMES = ["5m", "10m", "15m", "30m", "1H"] as const;
+
+export const MULTI_INDEX_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4] as const;
 
 export const INDICATORS = [
   { id: "VWAP", label: "VWAP" },
@@ -488,6 +530,15 @@ export function isNiftyTest1Kind(algo?: { kind?: string; strategyType?: string; 
   );
 }
 
+export function isMultiIndexReversalKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
+  return (
+    algo?.kind === "multi-index-reversal" ||
+    algo?.strategyType === "MULTI_INDEX_REVERSAL" ||
+    algo?.indicator === "MULTI_INDEX_REVERSAL" ||
+    String(algo?.name || "").trim() === "Multi-Index Reversal Strategy"
+  );
+}
+
 export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; tag?: string }) {
   const name = String(algo?.name || "").trim().toUpperCase();
   const tag = String(algo?.tag || "").trim().toUpperCase();
@@ -505,7 +556,7 @@ export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; 
 
 export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
   if (!algo) return false;
-  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo)) return false;
+  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo)) return false;
   if (isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyTestKind(algo)) return true;
   const kind = String(algo.kind || "");
   return kind === "indicator" || kind === "price-action" || kind === "";
@@ -540,6 +591,10 @@ export function contractLabel(algo: {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
+  if (isMultiIndexReversalKind(algo)) {
+    const off = Number(algo.strikeOffset || 0);
+    return `${algo.symbol || "NIFTY"} ${algo.timeframe || "15m"} ${off ? `ATM${off > 0 ? `+${off}` : off}` : "ATM"} CE/PE`;
+  }
   if (isNiftyTest1Kind(algo)) return `${algo.symbol || "NIFTY"} ATM CE/PE`;
   if (isNiftyTest2Kind(algo)) {
     const sell = algo.sellExpiryKind === "weekly" ? "weekly" : "monthly";
@@ -825,6 +880,37 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       indicator: "NIFTY_TEST2",
       runMode: "live",
       brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "multi-index-reversal") {
+    return {
+      name: "Multi-Index Reversal Strategy",
+      kind: "multi-index-reversal",
+      tag: "multi-index",
+      strategyType: "MULTI_INDEX_REVERSAL",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      lotSize: 65,
+      qty: 65,
+      timeframe: "15m",
+      initialTargetPct: 40,
+      targetPct: 40,
+      reversalLossPct: 20,
+      reversalQtyMultiple: 2,
+      combinedTargetPct: 20,
+      combinedTargetBasis: "original",
+      maxCycleLossPct: 0,
+      maxPositions: 2,
+      expiryKind: "weekly",
+      indicator: "MULTI_INDEX_REVERSAL",
+      runMode: "paper",
+      brokerId: "paper",
       enabled: false,
       status: "PAUSED",
     };

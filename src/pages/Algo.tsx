@@ -18,6 +18,8 @@ import {
   isNiftyTestKind,
   isNiftyTest1Kind,
   isNiftyTest2Kind,
+  isMultiIndexReversalKind,
+  MULTI_INDEX_SCRIPTS,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
@@ -76,6 +78,35 @@ function FutureCandleChip({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
+function MirMonitor({ algo }: { algo: AlgoStrategy }) {
+  const vs = algo.mirState || {};
+  const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === (vs.symbol || algo.symbol)) || MULTI_INDEX_SCRIPTS[0];
+  const lastBar = Number(vs.lastBarTime || 0);
+  return (
+    <div className="mt-2 grid gap-1 text-[11px] font-semibold text-slate-500" data-mir-monitor="true">
+      <div>
+        {script.label} {script.exchange} · state {String(vs.phase || "IDLE").replace(/_/g, " ")}
+        {vs.reversalDone ? " · reversed" : ""}
+      </div>
+      {vs.originalOption ? (
+        <div>
+          Original {vs.originalStrike} {vs.originalOption} ×{vs.originalQty || 0} @ {Number(vs.originalAvg || 0).toFixed(2)}
+          {vs.originalTarget ? ` · TGT ${Number(vs.originalTarget).toFixed(2)}` : ""}
+        </div>
+      ) : null}
+      {vs.reversalOption ? (
+        <div>
+          Reversal {vs.reversalStrike} {vs.reversalOption} ×{vs.reversalQty || 0} @ {Number(vs.reversalAvg || 0).toFixed(2)}
+        </div>
+      ) : null}
+      <div>
+        Last candle {lastBar ? new Date(lastBar).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
+        {vs.lastError ? ` · ${vs.lastError}` : ""}
+      </div>
+    </div>
+  );
+}
+
 function statusLabel(algo: AlgoStrategy) {
   if (algo.runMode === "backtest" || algo.status === "BACKTEST") return "RESEARCH";
   if (algo.enabled && algo.runMode === "paper") return "PAPER";
@@ -107,6 +138,15 @@ function kindMeta(algo: AlgoStrategy) {
         algo.holdStyle === "intraday"
           ? `${algo.symbol || "NIFTY"} INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`
           : `${algo.symbol || "NIFTY"} BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
+    };
+  }
+  if (isMultiIndexReversalKind(algo)) {
+    const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === algo.symbol) || MULTI_INDEX_SCRIPTS[0];
+    const offset = Number(algo.strikeOffset || 0);
+    return {
+      kind: "multi-index-reversal" as const,
+      category: `MULTI-INDEX ${script.label} ${script.exchange} ${String(algo.timeframe || "15m").toUpperCase()}`,
+      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · paper until Live`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
@@ -208,6 +248,7 @@ export function Algo() {
     }
     if (isCrudeFirstCandleKind(algo)) return false;
     if (isNiftyTest2Kind(algo) || isNiftyTest1Kind(algo)) return !["CRUDEOIL", "NATURALGAS", "COPPER"].includes(String(algo.symbol || "").toUpperCase());
+    if (isMultiIndexReversalKind(algo)) return true;
     return isNiftyFirstCandleKind(algo);
   }) as AlgoStrategy[];
 
@@ -619,14 +660,14 @@ function AlgoCard({
       ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
         ? algo.lastSignal
         : "No signal"
-    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo)
+    : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo)
       ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
   const status = statusLabel(algo);
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"}>
+    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"} data-mir-strategy={isMultiIndexReversalKind(algo) ? "true" : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--card-muted)] text-slate-400">
@@ -658,6 +699,7 @@ function AlgoCard({
               </div>
             ) : null}
             <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>
+            {isMultiIndexReversalKind(algo) ? <MirMonitor algo={algo} /> : null}
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
             ) : null}
