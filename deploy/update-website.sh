@@ -166,8 +166,8 @@ if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx" || ! 
   echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
   exit 1
 fi
-if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts" || grep -q 'url: "https://trade2smart.com"' "$HOME_DIR/capacitor.config.ts"; then
-  echo "FAIL: Capacitor must bundle dist/, not open the live website URL."
+if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts" || ! grep -q 'url: "https://trade2smart.com"' "$HOME_DIR/capacitor.config.ts"; then
+  echo "FAIL: Capacitor app must open https://trade2smart.com so website deploys update the app."
   exit 1
 fi
 

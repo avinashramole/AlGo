@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("Capacitor hybrid app bundles the website instead of opening the live URL", () => {
+test("Capacitor app opens the live website so a site deploy updates the app", () => {
   const cap = fs.readFileSync(path.join(root, "capacitor.config.ts"), "utf8");
   const hybrid = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
   const client = fs.readFileSync(path.join(root, "src/api/client.ts"), "utf8");
@@ -16,7 +16,7 @@ test("Capacitor hybrid app bundles the website instead of opening the live URL",
 
   assert.match(cap, /webDir:\s*"dist"/);
   assert.match(cap, /appId:\s*"com\.t2s\.algo"/);
-  assert.equal(/server:\s*\{[^}]*url:\s*"https:\/\/trade2smart\.com"/s.test(cap), false);
+  assert.match(cap, /url:\s*"https:\/\/trade2smart\.com"/);
   assert.equal(hybrid.includes("@capacitor/core"), false);
   assert.match(hybrid, /isNativePlatform/);
   assert.match(hybrid, /LIVE_DESK_ORIGIN = "https:\/\/trade2smart\.com"/);
