@@ -65,6 +65,12 @@ export function emptyFeaturedSignal() {
   };
 }
 
+function isPreviewOrWaitSignal(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return true;
+  return /PREVIEW|^WAIT\b|WAIT ORDER|^HOLD\b|^NO TRADE|^NO SIGNAL|DOJI|STALE CANDLE/i.test(raw);
+}
+
 export function buildLiveSignals({ algos = [], orders = [] } = {}) {
   const rows = [];
   for (const order of orders || []) {
@@ -84,13 +90,9 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
     });
   }
   for (const algo of algos || []) {
-    const niftyTest = algo?.kind === "nifty-test" || algo?.strategyType === "NIFTY_TEST" || algo?.indicator === "NIFTY_TEST";
-    if (niftyTest) {
-      const exact = String(algo.lastSignal || "").trim().toUpperCase();
-      if (!algo.enabled || (exact !== "BUY" && exact !== "SELL")) continue;
-    }
-    const action = signalLabel(algo.lastSignal);
-    if (!action) continue;
+    if (isPreviewOrWaitSignal(algo.lastSignal)) continue;
+    const action = signalAction(algo.lastSignal);
+    if (action !== "BUY" && action !== "SELL") continue;
     const symbol = optionFromSignal(algo.lastSignal, algo) || String(algo.symbol || algo.name || "").trim();
     if (!symbol) continue;
     rows.push({
@@ -98,10 +100,10 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
       action,
       symbol,
       strategy: String(algo.name || "Strategy").trim() || "Strategy",
-      note: String(algo.lastSignal || "").trim(),
+      note: "",
       time: formatIstTime(Date.now()),
       confidence: algo.status === "LIVE" || algo.runMode === "live" ? 88 : 72,
-      ts: Date.now(),
+      ts: 0,
     });
   }
   const seen = new Set();
@@ -113,7 +115,7 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
       seen.add(key);
       return Boolean(row.symbol);
     })
-    .slice(0, 80)
+    .slice(0, 2)
     .map(({ ts: _ts, ...row }) => row);
 }
 
