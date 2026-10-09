@@ -1,10 +1,18 @@
-import { Capacitor } from "@capacitor/core";
-
 export const LIVE_DESK_ORIGIN = "https://trade2smart.com";
+
+type CapacitorBridge = {
+  isNativePlatform?: () => boolean;
+};
+
+function capacitorBridge(): CapacitorBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as Window & { Capacitor?: CapacitorBridge }).Capacitor;
+}
 
 export function isNativeHybrid() {
   try {
-    return Capacitor.isNativePlatform();
+    if (capacitorBridge()?.isNativePlatform?.()) return true;
+    return typeof window !== "undefined" && window.location.protocol === "capacitor:";
   } catch {
     return false;
   }
