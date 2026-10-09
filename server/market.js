@@ -74,6 +74,8 @@ import {
 } from "./niftyVwapHedge/index.js";
 import { Test2Strategy, optionMarksFromChain, runTest2Backtest } from "./niftyTest2/index.js";
 import { Test1Strategy } from "./niftyTest1/index.js";
+import { isMultiIndexReversalAlgo, MultiIndexReversalStrategy, multiIndexReversalConfig, mirState, strikeForIndexOffset, validateMultiIndexReversal } from "./multiIndexReversal/index.js";
+import { runMultiIndexReversalBacktest } from "./multiIndexReversal/backtest.js";
 import {
   applyHedgeDailyLive,
   applyFirstCandleDailyLive,
@@ -385,6 +387,7 @@ function tfMinutesForSample(tf) {
   if (raw === "2m") return 2;
   if (raw === "10m") return 10;
   if (raw === "15m") return 15;
+  if (raw === "30m") return 30;
   if (raw === "1H" || raw === "1h") return 60;
   if (raw === "1D" || raw === "1d") return 390;
   return 5;
@@ -392,7 +395,7 @@ function tfMinutesForSample(tf) {
 
 function sessionSlots(tf) {
   if (tf === "1D" || tf === "1d" || tf === "day") return ["15:30"];
-  const step = tf === "1m" ? 1 : tf === "2m" ? 2 : tf === "5m" ? 5 : tf === "10m" ? 10 : tf === "15m" ? 15 : 60;
+  const step = tf === "1m" ? 1 : tf === "2m" ? 2 : tf === "5m" ? 5 : tf === "10m" ? 10 : tf === "15m" ? 15 : tf === "30m" ? 30 : 60;
   const slots = [];
   for (let minute = 9 * 60 + 15; minute < 15 * 60 + 30; minute += step) {
     slots.push(`${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`);
@@ -1025,7 +1028,7 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
   const algo = (state.algos || []).find(
-    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyTest1Algo(item) || isNiftyTest2Algo(item) || isNiftyVwapHedgeAlgo(item)),
+    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyTest1Algo(item) || isNiftyTest2Algo(item) || isNiftyVwapHedgeAlgo(item) || isMultiIndexReversalAlgo(item)),
   );
   if (!algo) return;
   rememberOrderStrategy(
@@ -1257,7 +1260,7 @@ let lastNiftyVwapFeed = true;
 function noteNiftyVwapFeed(feedLive) {
   if (feedLive && lastNiftyVwapFeed === false) {
     for (const algo of state.algos || []) {
-      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo) || isNiftyTest2Algo(algo)) && algo.enabled) noteFeedReconnect(algo);
+      if ((isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo) || isNiftyTest2Algo(algo) || isMultiIndexReversalAlgo(algo)) && algo.enabled) noteFeedReconnect(algo);
     }
   }
   lastNiftyVwapFeed = Boolean(feedLive);
@@ -1308,6 +1311,90 @@ function beginStrategyRecord(algo) {
     hs.inFlight = false;
     hs.pendingRole = "";
   }
+}
+
+function tickMultiIndexReversalAlgo(algo, mode, feedLive) {
+  const now = Date.now();
+  const config = multiIndexReversalConfig(algo);
+  const root = config.symbol;
+  const session = nseMarketSession();
+  const positions = (state.positions || []).filter((row) => {
+    if (row.copyUserId) return false;
+    if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
+    if (mode === "paper") return row.paper || row.brokerId === "paper";
+    return row.live || row.brokerId === (algo.brokerId || "dhan");
+  });
+  const open = positions.some((row) => Number(row.qty) > 0);
+  if (mode === "live" && !session.open && !open) return;
+  const und = getUnderlying(root);
+  const pack = chainForSymbol(root);
+  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(root, 12);
+  const expiry =
+    config.expiryKind === "weekly"
+      ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || ""
+      : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
+  const lastIndex = (getCandles(config.timeframe, root) || []).at(-1);
+  const spot = Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
+  const step = Number(und.step) || 50;
+  const ceStrike =
+    vsLockStrike(algo, "CE") || strikeForIndexOffset(spot, step, config.strikeOffset, "CE");
+  const peStrike =
+    vsLockStrike(algo, "PE") || strikeForIndexOffset(spot, step, config.strikeOffset, "PE");
+  const vs = mirState(algo);
+  if (vs.ceStrike !== ceStrike) {
+    vs.ceBars = [];
+    vs.ceStrike = ceStrike;
+  }
+  if (vs.peStrike !== peStrike) {
+    vs.peBars = [];
+    vs.peStrike = peStrike;
+  }
+  const ceLtp = optionPremium(root, ceStrike, "CE", expiry);
+  const peLtp = optionPremium(root, peStrike, "PE", expiry);
+  const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.barMinutes || 15) || 0;
+  vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
+  vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
+  const before = JSON.stringify(vs);
+  const adapter =
+    mode === "live"
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) =>
+            queueLiveAlgoOrder({
+              ...payload,
+              strategy: realStrategyName(payload.strategy) || algo.name,
+              brokerId: algo.brokerId || "dhan",
+            }),
+          squareOff,
+        })
+      : PaperTradingAdapter({ placeOrder, squareOff });
+  MultiIndexReversalStrategy.tick({
+    algo,
+    config,
+    now,
+    feedLive: Boolean(feedLive),
+    indexBars: getCandles(config.timeframe, root) || [],
+    ceBars: vs.ceBars,
+    peBars: vs.peBars,
+    spot,
+    step,
+    expiry,
+    ceLtp,
+    peLtp,
+    ceSecurityId: optionLegId(ceStrike, "CE", root),
+    peSecurityId: optionLegId(peStrike, "PE", root),
+    requireSecurityId: pack?.meta?.source === "dhan" && mode === "live",
+    positions,
+    orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
+    adapter,
+  });
+  if (JSON.stringify(algo.mirState || {}) !== before) persistAlgos();
+}
+
+function vsLockStrike(algo, option) {
+  const locked = algo?.mirState || {};
+  if (locked.originalOption === option && Number(locked.originalStrike) > 0) return Number(locked.originalStrike);
+  if (locked.reversalOption === option && Number(locked.reversalStrike) > 0) return Number(locked.reversalStrike);
+  return 0;
 }
 
 function tickNiftyTest1Algo(algo, mode, feedLive) {
@@ -1867,6 +1954,37 @@ function resolveCrudeFirstCandleTrade(algo) {
 }
 
 export function resolveAlgoTrade(algo) {
+  if (isMultiIndexReversalAlgo(algo)) {
+    const cfg = multiIndexReversalConfig(algo);
+    const symbol = cfg.symbol;
+    const und = getUnderlying(symbol);
+    const pack = chainForSymbol(symbol);
+    const spot = Number(pack?.meta?.spot) || getChainSpot(symbol);
+    const vs = algo.mirState || {};
+    const option = vs.originalOption || vs.reversalOption || "";
+    const strike =
+      Number(vs.originalStrike || vs.reversalStrike) ||
+      strikeForIndexOffset(spot, und.step, cfg.strikeOffset, option || "CE");
+    const expiry = pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
+    const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+    const ceLtp = Number(row?.callLtp);
+    const peLtp = Number(row?.putLtp);
+    const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
+    const liveChain = pack?.meta?.source === "dhan";
+    const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike || "ATM"}`;
+    return {
+      kind: "option",
+      symbol: contract,
+      option: option || "CE",
+      strike,
+      expiry,
+      ltp: premium > 0 ? round2(premium) : 0,
+      label: `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · ${contract}`,
+      source: pack?.meta?.source || "",
+      ready: liveChain && (ceLtp > 0 || peLtp > 0),
+      hint: vs.phase ? String(vs.phase).replace(/_/g, " ") : `WAIT ${cfg.timeframe} CLOSE`,
+    };
+  }
   if (isNiftyVwapHedgeAlgo(algo)) return resolveHedgeAlgoTrade(algo);
   if (isCrudeFirstCandleAlgo(algo)) return resolveCrudeFirstCandleTrade(algo);
   if (isNiftyTest1Algo(algo) || isNiftyOptionEngineAlgo(algo)) {
@@ -2663,6 +2781,10 @@ export function toggleAlgo(id, patch = {}) {
     }
     return clone(algo);
   }
+  if (starting && isMultiIndexReversalAlgo(algo)) {
+    const invalid = validateMultiIndexReversal(algo);
+    if (invalid) return { error: invalid };
+  }
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
   }
@@ -2854,6 +2976,61 @@ export async function backtestAlgo(id, options = {}) {
   if (!algo) return { error: "Strategy not found" };
   const window = resolveBacktestWindow(options);
   if (window.error) return { error: window.error };
+  if (isMultiIndexReversalAlgo(algo)) {
+    const cfg = multiIndexReversalConfig(algo);
+    const wantedTf = cfg.timeframe;
+    let candles = usableCandles(options.candles, window.fromMs, window.toMs);
+    if (candles.length) candles = usableCandles(aggregateIndexBars(candles, wantedTf), window.fromMs, window.toMs);
+    let sample = false;
+    let source = "dhan";
+    if (candles.length < 16) {
+      const index =
+        state.indices.find(
+          (item) => item.name === cfg.symbol || item.symbol === cfg.symbol || String(item.symbol).startsWith(cfg.symbol),
+        ) || state.indices[0];
+      candles = generateRangeCandles({
+        from: window.from,
+        to: window.to,
+        timeframe: wantedTf,
+        startPrice: Number(index?.price || 24580),
+        seed: 77 + String(cfg.symbol).length,
+      });
+      sample = true;
+      source = "sample";
+    }
+    const replay = runMultiIndexReversalBacktest(algo, candles);
+    const result = {
+      ...replay,
+      sample,
+      source: options.candleSource || source,
+      reused: Boolean(options.reused),
+      range: window.range,
+      years: window.years,
+      months: window.months,
+      from: window.from,
+      to: window.to,
+      timeframe: wantedTf,
+      ranAt: new Date().toISOString(),
+      reportReady: true,
+    };
+    saveBacktestReport(algo, result);
+    const stored = { ...result };
+    stored.book = (result.book || []).slice(-80);
+    algo.lastBacktest = stored;
+    algo.pnl = result.pnl;
+    algo.winRate = result.winRate;
+    if (algo.runMode === "backtest") {
+      algo.enabled = false;
+      algo.status = "BACKTEST";
+      algo.brokerId = "paper";
+    }
+    persistAlgos();
+    const rangeLabel = backtestWindowLabel(window);
+    state.notifications.unshift(
+      `Backtest ${algo.name} (${rangeLabel}): ${result.trades} trades · P&L ₹${result.pnl} · WR ${result.winRate}%${sample ? " · sample bars" : ""} · paper replay · PDF/Excel ready`,
+    );
+    return { ok: true, algo: clone(algo), backtest: stored };
+  }
   if (isNiftyTest2Algo(algo)) {
     const candles = usableCandles(options.candles, window.fromMs, window.toMs, {
       padBeforeMs: 0,
@@ -3040,6 +3217,10 @@ function runPaperAlgos() {
       tickNiftyTest1Algo(algo, "paper", feedLive);
       continue;
     }
+    if (isMultiIndexReversalAlgo(algo)) {
+      tickMultiIndexReversalAlgo(algo, "paper", feedLive);
+      continue;
+    }
     if (isNiftyTest2Algo(algo)) {
       tickNiftyTest2Algo(algo, "paper", feedLive);
       continue;
@@ -3115,6 +3296,10 @@ function runLiveAlgos() {
     }
     if (isNiftyTest1Algo(algo)) {
       tickNiftyTest1Algo(algo, "live", feedLive);
+      continue;
+    }
+    if (isMultiIndexReversalAlgo(algo)) {
+      tickMultiIndexReversalAlgo(algo, "live", feedLive);
       continue;
     }
     if (isNiftyTest2Algo(algo)) {

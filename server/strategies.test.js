@@ -359,6 +359,31 @@ test("seed does not include nifty test", () => {
   assert.equal(seeded.some((item) => item.kind === "nifty-test" || item.id === "a11"), false);
 });
 
+test("normalizeAlgo keeps Multi-Index Reversal paper and disabled on create", () => {
+  const algo = normalizeAlgo({
+    kind: "multi-index-reversal",
+    symbol: "SENSEX",
+    timeframe: "30m",
+    strikeOffset: 2,
+    initialTargetPct: 40,
+    reversalLossPct: 20,
+    reversalQtyMultiple: 2,
+    combinedTargetPct: 20,
+    combinedTargetBasis: "original",
+    runMode: "paper",
+  });
+  assert.equal(algo.kind, "multi-index-reversal");
+  assert.equal(algo.name, "Multi-Index Reversal Strategy");
+  assert.equal(algo.symbol, "SENSEX");
+  assert.equal(algo.timeframe, "30m");
+  assert.equal(algo.strikeOffset, 2);
+  assert.equal(algo.enabled, false);
+  assert.equal(algo.runMode, "paper");
+  assert.equal(algo.brokerId, "paper");
+  assert.equal(algo.status, "PAUSED");
+  assert.match(algo.summary, /SENSEX/);
+});
+
 test("a saved nifty test is dropped with the retired strategies", () => {
   const catalog = seedAlgos();
   const next = hydrateAlgos(
