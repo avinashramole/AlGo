@@ -1,5 +1,5 @@
 import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteDayChange, quoteTone, vwapTone } from "../../lib/format";
-import { chainIdFromIndex } from "../../lib/markets";
+import { chainIdFromIndex, OPTION_UNDERLYINGS } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 
 function cardVwap(item: { future?: number; price: number; vwap?: number; futureVwap?: number }) {
@@ -14,10 +14,50 @@ type TickerStripProps = {
 
 export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
   const { data } = useMarket();
-  const watchBySymbol = new Map((data.marketWatch || []).map((row) => [row.symbol, row]));
+  const liveLots = data.optionMeta?.underlyings || [];
+  const underlyings = [
+    ...OPTION_UNDERLYINGS.map((row) => liveLots.find((item) => item.id === row.id) || row),
+    ...liveLots.filter((item) => !OPTION_UNDERLYINGS.some((row) => row.id === item.id)),
+  ];
+  const quotes = data.indices || [];
+  const tape = [
+    ...underlyings.map((row) => {
+      const quote = quotes.find((item) => chainIdFromIndex(item.symbol) === row.id);
+      return {
+        key: row.id,
+        chainId: row.id,
+        title: `${row.label} · ${row.lot}`,
+        symbol: quote?.symbol || row.label,
+        lot: row.lot,
+        price: Number(quote?.price || 0),
+        change: Number(quote?.change || 0),
+        changePct: Number(quote?.changePct || 0),
+        prevClose: Number(quote?.prevClose || 0),
+        future: Number(quote?.future || quote?.price || 0),
+        vwap: Number(quote?.futureVwap || quote?.vwap || 0),
+        selectable: Boolean(onSelect),
+      };
+    }),
+    ...quotes
+      .filter((item) => item.symbol === "INDIA VIX")
+      .map((item) => ({
+        key: item.symbol,
+        chainId: "",
+        title: item.symbol,
+        symbol: item.symbol,
+        lot: 0,
+        price: Number(item.price || 0),
+        change: Number(item.change || 0),
+        changePct: Number(item.changePct || 0),
+        prevClose: Number(item.prevClose || 0),
+        future: 0,
+        vwap: 0,
+        selectable: false,
+      })),
+  ];
 
   return (
-    <section className="card overflow-x-auto p-0">
+    <section className="card overflow-x-auto p-0" data-market-tape="option-lots">
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
         <div className="desk-kicker">Market tape</div>
         <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
@@ -25,34 +65,29 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
         </div>
       </div>
       <div className="tape-strip">
-        {data.indices.map((item) => {
+        {tape.map((item) => {
           const day = quoteDayChange(item);
           const tone = quoteTone(day.change);
-          const showDeriv = item.symbol !== "INDIA VIX";
+          const showDeriv = item.chainId !== "";
           const vwap = cardVwap(item);
           const futureLtp = item.future || item.price;
-          const chainId = chainIdFromIndex(item.symbol);
-          const selectable = Boolean(onSelect && chainId);
-          const selected = selectable && chainId === selectedId;
+          const selected = Boolean(onSelect && item.chainId && item.chainId === selectedId);
           const tapeLabel = indexTapeLabel(item.symbol);
-          const volume = watchBySymbol.get(item.symbol)?.volume || (showDeriv ? tapeLabel : "—");
           return (
             <button
-              key={item.symbol}
+              key={item.key}
               type="button"
               onClick={() => {
-                if (selectable) onSelect?.(chainId);
+                if (item.selectable && item.chainId) onSelect?.(item.chainId);
               }}
               className={cn(
                 "tape-cell text-left",
-                selectable ? "cursor-pointer hover:bg-[var(--card-muted)]" : "cursor-default",
+                item.selectable ? "cursor-pointer hover:bg-[var(--card-muted)]" : "cursor-default",
                 selected && "bg-[var(--card-muted)]",
               )}
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                  {item.symbol}
-                </div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{item.title}</div>
                 <div className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</div>
               </div>
               <div className={cn("px mt-1 text-lg font-extrabold leading-none", tone)}>{formatQuote(item.price)}</div>
@@ -70,8 +105,8 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
                     <div className={cn("px font-bold", vwapTone(vwap, futureLtp))}>{vwap ? formatQuote(vwap) : "—"}</div>
                   </div>
                   <div>
-                    <div className="uppercase tracking-wide text-slate-400">{onSelect ? "Vol" : "Lot"}</div>
-                    <div className="font-bold">{onSelect ? volume : item.lot || "—"}</div>
+                    <div className="uppercase tracking-wide text-slate-400">Lot</div>
+                    <div className="font-bold">{item.lot || "—"}</div>
                   </div>
                 </div>
               ) : null}

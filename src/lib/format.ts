@@ -1,3 +1,5 @@
+import { isMcxUnderlying } from "./markets";
+
 export function formatQuote(value: number, digits = 2) {
   return Number(value) > 0 ? formatNumber(value, digits) : "—";
 }
@@ -90,11 +92,7 @@ export function isMcxSessionOpen(date = new Date()) {
 }
 
 export function isIndexTapeOpen(symbol: string, date = new Date()) {
-  return String(symbol || "")
-    .toUpperCase()
-    .includes("CRUDE")
-    ? isMcxSessionOpen(date)
-    : isNseSessionOpen(date);
+  return isMcxUnderlying(symbol) ? isMcxSessionOpen(date) : isNseSessionOpen(date);
 }
 
 export function indexTapeLabel(symbol: string, date = new Date()) {
