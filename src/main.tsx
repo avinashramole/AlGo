@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
-import { isNativeHybrid } from "./lib/hybrid";
+import { isNativeHybrid, markHybridDocument } from "./lib/hybrid";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
@@ -10,6 +10,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
 import "./login.css";
 
+markHybridDocument();
 const Router = isNativeHybrid() ? HashRouter : BrowserRouter;
 
 createRoot(document.getElementById("root")!).render(

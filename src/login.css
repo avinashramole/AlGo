@@ -508,6 +508,27 @@
   }
 }
 
+html.t2s-hybrid .t2s-login {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+html.t2s-hybrid .t2s-login-hero,
+html.t2s-hybrid .t2s-benefits {
+  display: none !important;
+}
+
+html.t2s-hybrid .t2s-login-main,
+html.t2s-hybrid .t2s-legal {
+  width: calc(100% - 16px);
+  max-width: 28rem;
+  grid-template-columns: 1fr !important;
+}
+
+html.t2s-hybrid .t2s-login-card {
+  padding: 20px 16px 16px;
+}
+
 @media (min-width: 960px) {
   .t2s-login-main {
     grid-template-columns: minmax(0, 1.15fr) minmax(360px, 420px);

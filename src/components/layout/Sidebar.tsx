@@ -20,6 +20,7 @@ import { NavLink } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { isNativeHybrid } from "../../lib/hybrid";
 import { isAdminUser } from "../../lib/roles";
 import { cn } from "../../lib/format";
 
@@ -45,7 +46,7 @@ export function Sidebar() {
   const visible = items.filter((item) => (admin ? !item.member : !item.admin));
 
   return (
-    <aside className="desk-chrome fixed inset-y-0 left-0 z-30 hidden w-56 flex-col py-3 md:flex">
+    <aside className={cn("desk-chrome fixed inset-y-0 left-0 z-30 w-56 flex-col py-3", isNativeHybrid() ? "hidden" : "hidden md:flex")}>
       <NavLink to="/" end className="mb-4 flex items-center gap-2.5 px-3" title="Trade 2 Smart">
         <BrandMark variant="emblem" size="md" />
         <span className="min-w-0">

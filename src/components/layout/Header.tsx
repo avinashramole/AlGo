@@ -115,7 +115,7 @@ export function Header() {
         <h1 className="truncate text-sm font-extrabold tracking-tight md:text-[17px]">{pageTitle}</h1>
       </div>
       {admin ? (
-        <div className="relative hidden min-w-0 max-w-md flex-1 lg:block">
+        <div className="t2s-desktop-only relative hidden min-w-0 max-w-md flex-1 lg:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             className="h-10 w-full rounded-full border border-[var(--border)] bg-[var(--bg)] pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-brand-500"
@@ -143,19 +143,19 @@ export function Header() {
           {showTick ? <span className="hidden font-medium text-slate-400 lg:inline">· tick {lastTick}</span> : null}
         </div>
         {admin ? (
-          <Link to="/users" className="icon-btn hidden md:flex" title="User & IP Manager">
+          <Link to="/users" className="t2s-desktop-only icon-btn hidden md:flex" title="User & IP Manager">
             <Users size={17} />
           </Link>
         ) : null}
-        <Link to="/notifications" className="icon-btn hidden md:flex" title="Notifications">
+        <Link to="/notifications" className="t2s-desktop-only icon-btn hidden md:flex" title="Notifications">
           <Bell size={17} />
         </Link>
         {admin ? (
-          <Link to="/chat" className="icon-btn hidden md:flex" title="Messages">
+          <Link to="/chat" className="t2s-desktop-only icon-btn hidden md:flex" title="Messages">
             <MessageSquare size={17} />
           </Link>
         ) : null}
-        <button type="button" onClick={toggleTheme} className="icon-btn hidden md:flex" title="Theme">
+        <button type="button" onClick={toggleTheme} className="t2s-desktop-only icon-btn hidden md:flex" title="Theme">
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
         <div className="relative" ref={menuRef}>
@@ -187,7 +187,7 @@ export function Header() {
             </div>
           ) : null}
         </div>
-        <button type="button" onClick={logout} className="icon-btn hidden md:flex" title="Log out">
+        <button type="button" onClick={logout} className="t2s-desktop-only icon-btn hidden md:flex" title="Log out">
           <LogOut size={17} />
         </button>
       </div>
