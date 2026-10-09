@@ -216,7 +216,7 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(test2.hedgePremium, 20);
   assert.equal(test2.hedgeSlPct, 20);
   const mir = seeded.find((row) => row.id === "a15");
-  assert.equal(mir.name, "Multi-Index Reversal Strategy");
+  assert.equal(mir.name, "Multi-Index");
   assert.equal(mir.kind, "multi-index-reversal");
   assert.equal(mir.symbol, "NIFTY");
   assert.equal(mir.timeframe, "15m");
@@ -389,7 +389,7 @@ test("normalizeAlgo keeps Multi-Index Reversal paper and disabled on create", ()
     runMode: "paper",
   });
   assert.equal(algo.kind, "multi-index-reversal");
-  assert.equal(algo.name, "Multi-Index Reversal Strategy");
+  assert.equal(algo.name, "Multi-Index");
   assert.equal(algo.symbol, "SENSEX");
   assert.equal(algo.timeframe, "30m");
   assert.equal(algo.strikeOffset, 2);
