@@ -25,6 +25,7 @@ export PATH="$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH"
 yes | sdkmanager --sdk_root="$SDK_DIR" --licenses >/dev/null || true
 sdkmanager --sdk_root="$SDK_DIR" "platforms;android-36" "platforms;android-35" "build-tools;36.0.0" "build-tools;35.0.0" "platform-tools"
 
+rm -f "$ROOT/dist/Trade2Smart-web.apk" "$ROOT/public/Trade2Smart-web.apk"
 if [ ! -f "$ROOT/dist/index.html" ]; then
   echo "Building the website bundle for Capacitor"
   (cd "$ROOT" && npm run build)
@@ -33,9 +34,7 @@ if [ ! -f "$ROOT/dist/index.html" ]; then
   echo "FAIL: dist/index.html missing. Capacitor needs the built website."
   exit 1
 fi
-if grep -q 'https://trade2smart.com' "$ROOT/dist/index.html" && grep -q 'id="root"' "$ROOT/dist/index.html"; then
-  true
-fi
+rm -f "$ROOT/dist/Trade2Smart-web.apk"
 
 printf 'sdk.dir=%s\n' "$SDK_DIR" > "$APP_DIR/local.properties"
 (cd "$ROOT" && npx cap sync android)
@@ -53,8 +52,8 @@ if [ ! -f "$APK" ]; then
   exit 1
 fi
 
-mkdir -p "$ARTIFACTS" "$ROOT/public"
+mkdir -p "$ARTIFACTS" "$ROOT/releases"
 cp -f "$APK" "$ARTIFACTS/$OUT_NAME"
-cp -f "$APK" "$ROOT/public/$OUT_NAME"
+cp -f "$APK" "$ROOT/releases/$OUT_NAME"
 echo "Capacitor APK ready: $ARTIFACTS/$OUT_NAME"
-ls -lh "$ARTIFACTS/$OUT_NAME" "$ROOT/public/$OUT_NAME"
+ls -lh "$ARTIFACTS/$OUT_NAME" "$ROOT/releases/$OUT_NAME"

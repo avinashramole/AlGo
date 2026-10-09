@@ -47,6 +47,6 @@ android/build/
 android/local.properties
 android/captures/
 *.apk
-!public/Trade2Smart-web.apk
+!releases/Trade2Smart-web.apk
 *.aab
 deploy/__pycache__/
