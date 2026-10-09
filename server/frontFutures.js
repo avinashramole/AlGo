@@ -16,8 +16,8 @@ const UNDERLYINGS = [
   { parent: "MIDCPNIFTY", root: "MIDCPNIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 50, indexId: 442, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
   { parent: "SENSEX", root: "SENSEX", exchange: "BSE", segment: "BSE_FNO", lot: 20, indexId: 51, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
   { parent: "CRUDEOIL", root: "CRUDEOIL", exchange: "MCX", segment: "MCX_COMM", lot: 100, indexId: 565899, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
-  { parent: "NATURALGAS", root: "NATURALGAS", exchange: "MCX", segment: "MCX_COMM", lot: 1250, indexId: 0, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
-  { parent: "COPPER", root: "COPPER", exchange: "MCX", segment: "MCX_COMM", lot: 2500, indexId: 0, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
+  { parent: "NATURALGAS", root: "NATURALGAS", exchange: "MCX", segment: "MCX_COMM", lot: 1250, indexId: 570750, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
+  { parent: "COPPER", root: "COPPER", exchange: "MCX", segment: "MCX_COMM", lot: 2500, indexId: 574829, indexSegment: "MCX_COMM", futInstrument: "FUTCOM", optInstrument: "OPTFUT" },
 ];
 
 const FALLBACK = [
@@ -26,6 +26,8 @@ const FALLBACK = [
   { parent: "FINNIFTY", symbol: "FINNIFTY FUT", kind: "future", segment: "NSE_FNO", securityId: 58070 },
   { parent: "SENSEX", symbol: "SENSEX FUT", kind: "future", segment: "BSE_FNO", securityId: 825622 },
   { parent: "CRUDEOIL", symbol: "CRUDEOIL FUT", kind: "future", segment: "MCX_COMM", securityId: 565899 },
+  { parent: "NATURALGAS", symbol: "NATURALGAS FUT", kind: "future", segment: "MCX_COMM", securityId: 570750 },
+  { parent: "COPPER", symbol: "COPPER FUT", kind: "future", segment: "MCX_COMM", securityId: 574829 },
 ];
 
 export function fallbackFrontFutures() {

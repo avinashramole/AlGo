@@ -201,9 +201,16 @@ function liveInstruments() {
   const allFuts = (futureInstruments || []).filter((row) => row?.securityId);
   const liveFuts = allFuts.filter((row) => !row.stale);
   const futs = liveFuts.length ? liveFuts : allFuts;
-  const hasCrude = futs.some((row) => String(row.parent || row.symbol || "").toUpperCase().includes("CRUDEOIL"));
-  const crude = hasCrude ? [] : fallbackFrontFutures().filter((row) => row.parent === "CRUDEOIL");
-  return INSTRUMENTS.concat(futs, crude, livePositionQuoteTargets());
+  const missing = fallbackFrontFutures().filter((row) => {
+    const parent = String(row.parent || "")
+      .toUpperCase()
+      .replace(/\s+/g, "");
+    return !futs.some((item) => {
+      const blob = `${item.parent || ""} ${item.symbol || ""} ${item.root || ""}`.toUpperCase().replace(/\s+/g, "");
+      return blob.includes(parent);
+    });
+  });
+  return INSTRUMENTS.concat(futs, missing, livePositionQuoteTargets());
 }
 
 function quoteFamily(segment) {
@@ -1595,8 +1602,8 @@ const CHART_UNDERLYINGS = {
   MIDCPNIFTY: { securityId: "442", exchangeSegment: "IDX_I", instrument: "INDEX" },
   SENSEX: { securityId: "51", exchangeSegment: "IDX_I", instrument: "INDEX" },
   CRUDEOIL: { securityId: "565899", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
-  NATURALGAS: { securityId: "0", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
-  COPPER: { securityId: "0", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
+  NATURALGAS: { securityId: "570750", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
+  COPPER: { securityId: "574829", exchangeSegment: "MCX_COMM", instrument: "FUTCOM" },
 };
 
 function chartInstrument(symbol) {
@@ -1604,6 +1611,17 @@ function chartInstrument(symbol) {
     .toUpperCase()
     .replace(/\s+/g, " ")
     .trim();
+  const root = contractRoot(key);
+  if (root === "CRUDEOIL" || root === "NATURALGAS" || root === "COPPER") {
+    const front = listFutures().find((row) => row.root === root && row.front && row.securityId);
+    if (front?.securityId) {
+      return {
+        securityId: String(front.securityId),
+        exchangeSegment: front.segment || "MCX_COMM",
+        instrument: "FUTCOM",
+      };
+    }
+  }
   return CHART_UNDERLYINGS[key] || CHART_UNDERLYINGS[key.split(" ")[0]] || CHART_UNDERLYINGS.NIFTY;
 }
 

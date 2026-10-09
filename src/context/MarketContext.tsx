@@ -101,6 +101,8 @@ const fallback: Snapshot = {
       { root: "FINNIFTY", parent: "FINNIFTY", symbol: "FINNIFTY", kind: "index", segment: "IDX_I", lot: 60, tradable: false },
       { root: "SENSEX", parent: "SENSEX", symbol: "SENSEX", kind: "index", segment: "IDX_I", lot: 20, tradable: false },
       { root: "CRUDEOIL", parent: "CRUDEOIL", symbol: "CRUDEOIL", kind: "index", segment: "MCX_COMM", lot: 100, tradable: false },
+      { root: "NATURALGAS", parent: "NATURALGAS", symbol: "NATURALGAS", kind: "index", segment: "MCX_COMM", lot: 1250, tradable: false },
+      { root: "COPPER", parent: "COPPER", symbol: "COPPER", kind: "index", segment: "MCX_COMM", lot: 2500, tradable: false },
     ],
     futures: [],
     optionCount: 0,

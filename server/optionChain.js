@@ -5,8 +5,8 @@ export const UNDERLYINGS = [
   { id: "MIDCPNIFTY", label: "MIDCPNIFTY", indexSymbol: "MIDCPNIFTY", step: 25, scrip: 442, segment: "IDX_I", lot: 50, expiryWeekday: "Tue", weekly: false },
   { id: "SENSEX", label: "SENSEX", indexSymbol: "SENSEX", step: 100, scrip: 51, segment: "IDX_I", lot: 20, expiryWeekday: "Thu", weekly: true },
   { id: "CRUDEOIL", label: "CRUDE OIL", indexSymbol: "CRUDEOIL", step: 50, scrip: 565899, segment: "MCX_COMM", lot: 100, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
-  { id: "NATURALGAS", label: "NATURAL GAS", indexSymbol: "NATURALGAS", step: 5, scrip: 0, segment: "MCX_COMM", lot: 1250, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
-  { id: "COPPER", label: "COPPER", indexSymbol: "COPPER", step: 5, scrip: 0, segment: "MCX_COMM", lot: 2500, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
+  { id: "NATURALGAS", label: "NATURAL GAS", indexSymbol: "NATURALGAS", step: 5, scrip: 570750, segment: "MCX_COMM", lot: 1250, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
+  { id: "COPPER", label: "COPPER", indexSymbol: "COPPER", step: 5, scrip: 574829, segment: "MCX_COMM", lot: 2500, expiryWeekday: "", weekly: false, expiryKind: "mcx" },
 ];
 
 export function underlyingIdFromSymbol(symbol) {
