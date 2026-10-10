@@ -72,12 +72,18 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   const pdf = renderBacktestPdf(loaded);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.match(pdf.toString("latin1"), /TEST2/);
+  assert.match(pdf.toString("latin1"), /TRADE 2 SMART/);
+  assert.match(pdf.toString("latin1"), /BACKTEST REPORT/);
+  assert.match(pdf.toString("latin1"), /Helvetica-Bold/);
   assert.match(pdf.toString("latin1"), /SELL/);
   assert.match(pdf.toString("latin1"), /BUY/);
   const xlsx = renderBacktestExcel(loaded);
   const zip = xlsx.toString("latin1");
   assert.equal(xlsx.subarray(0, 2).toString(), "PK");
   assert.match(zip, /xl\/workbook.xml/);
+  assert.match(zip, /xl\/styles.xml/);
+  assert.match(zip, /TRADE 2 SMART/);
+  assert.match(zip, /trade2smart.com/);
   assert.match(zip, /worksheets\/sheet1.xml/);
   assert.match(zip, /SELL/);
   assert.match(zip, /Entry time/);
