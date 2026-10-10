@@ -1,4 +1,5 @@
 import { liveExitPrice } from "../executionSpeed.js";
+import { isSaneOptionLtp } from "../positionMark.js";
 import { exchangeSegmentFor } from "../optionChain.js";
 import { optionEngineConfig } from "./config.js";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
@@ -63,6 +64,23 @@ function fillFromResult(result, fallbackPrice) {
   return price > 0 ? price : 0;
 }
 
+function holdLevelsText(open, state, mark) {
+  const strike = Number(open?.strike || state?.lockedStrike) || "";
+  const option = open?.option || state?.lockedOption || "";
+  const px = Number(mark) > 0 ? Number(mark).toFixed(2) : "";
+  const sl = Number(state?.stopPrice) > 0 ? Number(state.stopPrice).toFixed(2) : "";
+  const tgt = Number(state?.targetPrice) > 0 ? Number(state.targetPrice).toFixed(2) : "";
+  const head = [option, strike].filter(Boolean).join(" ");
+  const levels = [px ? `@ ${px}` : "", sl ? `SL ${sl}` : "", tgt ? `TGT ${tgt}` : ""].filter(Boolean).join(" ");
+  return `HOLD${head ? ` ${head}` : ""}${levels ? ` · ${levels}` : ""}`;
+}
+
+function brokerConfirmPx(open = {}) {
+  if (open.ticked === true && Number(open.ltp) > 0) return Number(open.ltp);
+  if (Number(open.avg) > 0) return Number(open.avg);
+  return Number(open.ltp) || 0;
+}
+
 function pendingExitOnBook(orders = [], open, strategyName) {
   return (orders || []).some((row) => {
     if (row?.copyUserId) return false;
@@ -80,14 +98,18 @@ function pendingExitOnBook(orders = [], open, strategyName) {
 export const NiftyVwapStrategy = {
   manageOpen({ algo, config, signal, open, mark, now, minutesToClose, adapter, targetResting, orders = [] }) {
     const state = runtimeState(algo);
-    if (!(mark > 0) || !(state.fillPrice > 0)) return { action: "hold" };
+    if (!(state.fillPrice > 0)) return { action: "hold" };
     const live = liveExitPrice({
       chain: mark,
       tick: open.ltp,
       avg: open.avg || state.fillPrice,
       ticked: open.ticked === true,
     });
-    const trailMark = live || Number(mark);
+    const trailMark = live > 0 ? live : isSaneOptionLtp(mark, state.fillPrice) ? Number(mark) : 0;
+    if (!(trailMark > 0)) {
+      if (config.signalMode === "first-candle") algo.lastSignal = holdLevelsText(open, state, 0);
+      return { action: "hold", reason: "wait-mark" };
+    }
     const stopMark = trailMark;
     const nextStop =
       config.useTrail === false
@@ -120,7 +142,16 @@ export const NiftyVwapStrategy = {
     else if (TrailingStopManager.hitTarget(trailMark, state.targetPrice)) reason = "target";
     else if (config.useVwapExit !== false && against >= config.vwapExitCandles) reason = "vwap-exit";
     else if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) reason = "eod";
-    if (!reason) return { action: "hold", stop: state.stopPrice };
+    if (reason === "sl") {
+      const brokerPx = brokerConfirmPx(open);
+      if (brokerPx > Number(state.stopPrice) && trailMark / Math.max(brokerPx, trailMark) < 0.7 && open.ticked !== true) {
+        reason = "";
+      }
+    }
+    if (!reason) {
+      if (config.signalMode === "first-candle") algo.lastSignal = holdLevelsText(open, state, trailMark);
+      return { action: "hold", stop: state.stopPrice, target: state.targetPrice };
+    }
     if (reason === "target" && targetResting) {
       algo.lastSignal = "EXIT TARGET AT BROKER";
       return { action: "exit-pending", reason: "target" };
@@ -234,6 +265,11 @@ export const NiftyVwapStrategy = {
     state.lastEntryBarTime = signal.barTime;
     if (crudeSignal) state.sentSignalBarTime = signal.barTime;
     state.lastEntryAt = Date.now();
+    state.fillPrice = 0;
+    state.stopPrice = 0;
+    state.targetPrice = 0;
+    state.trailActive = false;
+    state.exitQueued = false;
     PositionManager.lockContract(state, pick);
     const payload = {
       symbol: pick.symbol,
@@ -371,13 +407,18 @@ export const NiftyVwapStrategy = {
     const open = PositionManager.openFor(input.positions, algo.name, state);
     if (open) {
       state.buyPhase = "open";
-      if (!state.fillPrice) {
+      const fill = Number(open.avg || open.ltp);
+      const staleFill =
+        fill > 0 &&
+        Number(state.fillPrice) > 0 &&
+        Math.abs(fill - Number(state.fillPrice)) / Math.max(fill, Number(state.fillPrice)) > 0.15;
+      if (fill > 0 && (!state.fillPrice || (staleFill && state.trailActive !== true))) {
         const leg = PositionManager.niftyOptionLeg(open) || {};
         PositionManager.markFill(
           state,
-          Number(open.avg || open.ltp),
-          TrailingStopManager.initialStop(Number(open.avg || open.ltp), config.initialSlPct),
-          TrailingStopManager.targetPrice(Number(open.avg || open.ltp), config.targetPct),
+          fill,
+          TrailingStopManager.initialStop(fill, config.initialSlPct),
+          TrailingStopManager.targetPrice(fill, config.targetPct),
         );
         PositionManager.lockContract(state, {
           strike: open.strike || leg.strike,
