@@ -17,7 +17,7 @@ import {
   type OtpRequestResult,
   type SocialProvider,
 } from "../api/client";
-import { deskHomeUrl, googleQueryFromHref, isNativeHybrid } from "../lib/hybrid";
+import { deskHomeUrl, googleDeskHashUrl, googleQueryFromHref, isLiveDeskHref, isNativeHybrid } from "../lib/hybrid";
 
 type OtpPayload = {
   identifier: string;
@@ -298,6 +298,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rememberGoogleError(params);
       const googleToken = params.get("google_token") || "";
       if (!googleToken) return;
+      if (isNativeHybrid() && !isLiveDeskHref(window.location.href)) {
+        window.location.replace(googleDeskHashUrl(params));
+        return;
+      }
       const appliedKey = `t2s-google-applied-${googleToken}`;
       try {
         if (sessionStorage.getItem(appliedKey)) return;
@@ -309,6 +313,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!next) return;
       setUser(next);
       stripGoogleQuery();
+      void import("@capacitor/browser")
+        .then((mod) => mod.Browser.close())
+        .catch(() => undefined);
       if (isNativeHybrid()) {
         window.location.replace(deskHomeUrl());
       }
@@ -369,7 +376,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Google login is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the VPS, then restart t2s.",
           );
         }
-        window.location.href = googleAuthStartUrl();
+        const url = googleAuthStartUrl();
+        if (isNativeHybrid()) {
+          try {
+            const { Browser } = await import("@capacitor/browser");
+            await Browser.open({ url });
+            return;
+          } catch {
+            /* Custom Tabs unavailable — stay in the WebView. */
+          }
+        }
+        window.location.href = url;
       },
       enableThumb: async () => {
         const token = readToken();

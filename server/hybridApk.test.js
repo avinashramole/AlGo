@@ -29,6 +29,12 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const auth = fs.readFileSync(path.join(root, "server/auth.js"), "utf8");
   assert.match(auth, /googleAppReturnHtml/);
   assert.match(auth, /shouldReturnToApp/);
+  assert.match(auth, /googleAppIntentUrl/);
+  assert.match(auth, /package=com\.t2s\.algo/);
+  const context = fs.readFileSync(path.join(root, "src/context/AuthContext.tsx"), "utf8");
+  assert.match(context, /@capacitor\/browser/);
+  assert.match(context, /Browser\.open/);
+  assert.match(manifest, /android:host="auth"/);
   assert.equal(hybrid.includes("@capacitor/core"), false);
   assert.match(hybrid, /isNativePlatform/);
   assert.match(hybrid, /LIVE_DESK_ORIGIN = "https:\/\/trade2smart\.com"/);

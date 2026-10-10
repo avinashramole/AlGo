@@ -96,3 +96,17 @@ export function googleQueryFromHref(href = "", search = "", hash = "") {
 export function deskHomeUrl() {
   return isNativeHybrid() ? `${LIVE_DESK_ORIGIN}/#/` : "/";
 }
+
+export function isLiveDeskHref(href = "") {
+  try {
+    const url = new URL(href);
+    return url.hostname === "trade2smart.com" || url.hostname.endsWith(".trade2smart.com");
+  } catch {
+    return false;
+  }
+}
+
+export function googleDeskHashUrl(params: URLSearchParams | string) {
+  const q = typeof params === "string" ? String(params).replace(/^\?/, "") : params.toString();
+  return `${LIVE_DESK_ORIGIN}/#/?${q}`;
+}

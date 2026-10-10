@@ -27,7 +27,9 @@ const {
   GMAIL_SMTP_TIMEOUT_MS,
   requestOtp,
   resolveUserRole,
+  googleAppIntentUrl,
   googleAppReturnHtml,
+  googleDeskHashReturn,
   googleFrontendReturnUrl,
   isAppLoginOrigin,
   safeFrontendOrigin,
@@ -156,8 +158,16 @@ test("OAuth state round-trips and blocks open redirects", () => {
   );
   const html = googleAppReturnHtml("google_token=abc");
   assert.match(html, /t2salgo:\/\/auth\?google_token=abc/);
+  assert.match(html, /intent:\/\/auth\?google_token=abc#Intent;scheme=t2salgo;package=com\.t2s\.algo;end/);
+  assert.match(html, /trade2smart\.com\/#\/\?google_token=abc/);
+  assert.equal(html.includes("https://trade2smart.com/login?"), false);
   assert.match(html, /t2s-logo\.png/);
   assert.match(html, /Opening the Trade 2 Smart app/);
+  assert.equal(
+    googleAppIntentUrl("google_token=abc"),
+    "intent://auth?google_token=abc#Intent;scheme=t2salgo;package=com.t2s.algo;end",
+  );
+  assert.equal(googleDeskHashReturn("google_token=abc"), "https://trade2smart.com/#/?google_token=abc");
 });
 
 test("upsertGoogleUser adds a member and keeps admin emails as admin", () => {

@@ -341,7 +341,7 @@ function xlsxStylesXml() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="4">
-<font><sz val="11"/><name val="Calibri"/><color rgb="FF071833"/></font>
+<font><sz val="11"/><name val="Calibri"/><color rgb="FF000F29"/></font>
 <font><sz val="16"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
 <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
 <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FFFD6B01"/></font>
@@ -349,9 +349,9 @@ function xlsxStylesXml() {
 <fills count="5">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF000F29"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE8EEF6"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFD6B01"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFFF1E6"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFE85D00"/></patternFill></fill>
 </fills>
 <borders count="2">
 <border><left/><right/><top/><bottom/><diagonal/></border>
@@ -594,11 +594,12 @@ function pdfEscape(text) {
   return String(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
+const PDF_NAVY = "0.000 0.059 0.161";
 const PDF_ORANGE = "0.992 0.420 0.004";
-const PDF_LINE = "1.000 0.784 0.596";
-const PDF_ZEBRA = "1.000 0.945 0.902";
+const PDF_LINE = "0.820 0.847 0.886";
+const PDF_ZEBRA = "0.910 0.933 0.965";
 const PDF_WHITE = "1 1 1";
-const PDF_INK = "0.027 0.094 0.200";
+const PDF_INK = "0.000 0.059 0.161";
 const PAGE_W = 842;
 const PAGE_H = 595;
 const PAGE_MARGIN = 22;
@@ -654,18 +655,26 @@ function makePdfDoc(report) {
   }
 
   function footer() {
-    rect(PAGE_MARGIN, 12, PAGE_W - PAGE_MARGIN * 2, 14, PDF_ORANGE);
+    rect(PAGE_MARGIN, 12, PAGE_W - PAGE_MARGIN * 2, 14, PDF_NAVY);
+    rect(PAGE_MARGIN, 26, PAGE_W - PAGE_MARGIN * 2, 2, PDF_ORANGE);
     text(PAGE_MARGIN + 8, 16, `trade2smart.com  |  T2S desk  |  A4 landscape  |  Page ${pageNo}`, 7, "F2", PDF_WHITE);
+  }
+
+  function brandTitle(x, yPos, size) {
+    text(x, yPos, "TRADE ", size, "F2", PDF_WHITE);
+    text(x + pdfTextWidth("TRADE ", size), yPos, "2", size, "F2", PDF_ORANGE);
+    text(x + pdfTextWidth("TRADE 2", size), yPos, " SMART", size, "F2", PDF_WHITE);
   }
 
   function header() {
     pageNo += 1;
     y = PAGE_H - PAGE_MARGIN;
-    rect(0, PAGE_H - 40, PAGE_W, 40, PDF_ORANGE);
-    text(PAGE_MARGIN, PAGE_H - 18, "TRADE 2 SMART", 13, "F2", PDF_WHITE);
-    text(PAGE_W - PAGE_MARGIN - pdfTextWidth("PROPOSAL REPORT", 11), PAGE_H - 18, "PROPOSAL REPORT", 11, "F2", PDF_WHITE);
+    rect(0, PAGE_H - 40, PAGE_W, 40, PDF_NAVY);
+    rect(0, PAGE_H - 44, PAGE_W, 4, PDF_ORANGE);
+    brandTitle(PAGE_MARGIN, PAGE_H - 18, 13);
+    text(PAGE_W - PAGE_MARGIN - pdfTextWidth("PROPOSAL REPORT", 11), PAGE_H - 18, "PROPOSAL REPORT", 11, "F2", PDF_ORANGE);
     text(PAGE_MARGIN, PAGE_H - 32, `${report.strategy.name}  |  T2S branded row/column proposal  |  Indian Rupee (Rs.)`, 8, "F1", PDF_WHITE);
-    y = PAGE_H - 52;
+    y = PAGE_H - 56;
     footer();
   }
 
@@ -684,7 +693,8 @@ function makePdfDoc(report) {
 
   function section(title) {
     ensure(20);
-    rect(PAGE_MARGIN, y - 16, PAGE_W - PAGE_MARGIN * 2, 16, PDF_ORANGE);
+    rect(PAGE_MARGIN, y - 16, PAGE_W - PAGE_MARGIN * 2, 16, PDF_NAVY);
+    rect(PAGE_MARGIN, y - 16, 4, 16, PDF_ORANGE);
     text(PAGE_MARGIN + 8, y - 11, title, 9, "F2", PDF_WHITE);
     y -= 20;
   }
@@ -713,7 +723,7 @@ function makePdfDoc(report) {
       ensure(rowH + 2);
       let x = PAGE_MARGIN;
       for (const col of PDF_COLS) {
-        rect(x, y - rowH, col.w, rowH, PDF_ORANGE, PDF_ORANGE);
+        rect(x, y - rowH, col.w, rowH, PDF_NAVY, PDF_NAVY);
         const label = col.title;
         const tx = col.align === "right" ? x + col.w - 3 - pdfTextWidth(label, 6.5) : x + 3;
         text(tx, y - 9, label, 6.5, "F2", PDF_WHITE);

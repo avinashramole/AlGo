@@ -1111,10 +1111,21 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+export function googleAppIntentUrl(query) {
+  const q = String(query || "").replace(/^\?/, "");
+  return `intent://auth?${q}#Intent;scheme=${APP_LOGIN_SCHEME};package=com.t2s.algo;end`;
+}
+
+export function googleDeskHashReturn(query) {
+  const q = String(query || "").replace(/^\?/, "");
+  return `https://trade2smart.com/#/?${q}`;
+}
+
 export function googleAppReturnHtml(query) {
   const q = String(query || "").replace(/^\?/, "");
   const app = `${APP_LOGIN_ORIGIN}?${q}`;
-  const web = `https://trade2smart.com/login?${q}`;
+  const intent = googleAppIntentUrl(q);
+  const desk = googleDeskHashReturn(q);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1133,16 +1144,26 @@ export function googleAppReturnHtml(query) {
 <body>
   <img src="/t2s-logo.png" alt="Trade 2 Smart" />
   <h1>Opening the Trade 2 Smart app</h1>
-  <p>Finish Google login inside the app. Do not stay on this website page.</p>
-  <p><a href="${escapeHtml(app)}">Open the app</a></p>
+  <p>Finish Google login inside the app. This browser page cannot sign the app in.</p>
+  <p><a href="${escapeHtml(intent)}">Open the app</a></p>
   <script>
     var app = ${JSON.stringify(app)};
-    var web = ${JSON.stringify(web)};
-    var inApp = /;\\s*wv\\)/i.test(navigator.userAgent) || Boolean(window.Capacitor);
-    try { location.replace(app); } catch (e) {}
+    var intent = ${JSON.stringify(intent)};
+    var desk = ${JSON.stringify(desk)};
+    var ua = navigator.userAgent || "";
+    var inWebView = /;\\s*wv\\)/i.test(ua) || Boolean(window.Capacitor);
+    function goApp() {
+      try { location.replace(inWebView ? desk : intent); } catch (e) {}
+    }
+    goApp();
     setTimeout(function () {
-      if (inApp && document.visibilityState === "visible") location.replace(web);
-    }, 900);
+      if (document.visibilityState !== "visible") return;
+      if (inWebView) {
+        try { location.replace(desk); } catch (e) {}
+        return;
+      }
+      try { location.replace(app); } catch (e) {}
+    }, 350);
   </script>
 </body>
 </html>`;

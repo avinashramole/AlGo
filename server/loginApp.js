@@ -94,7 +94,7 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
       } catch (mailError) {
         console.error("[auth] Google login mail failed:", mailError?.message || mailError);
       }
-      keepSession(res, req, result.token);
+      if (!shouldReturnToApp(payload, next)) keepSession(res, req, result.token);
       finish(googleLoginSearch(result));
     } catch (error) {
       console.error("[auth] Google callback failed:", error?.message || error);
