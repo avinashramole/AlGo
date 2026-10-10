@@ -188,9 +188,11 @@ test("TEST2 PDF warns when premiums are not from the option tape", () => {
     },
   );
   const pdf = renderBacktestPdf(report).toString("latin1");
-  assert.match(pdf, /NOT REAL OPTION PRICES/);
+  assert.match(pdf, /No Dhan rolling option tape stored for BANKNIFTY/);
+  assert.match(pdf, /Connect Dhan LIVE/);
   assert.match(pdf, /BANKNIFTY/);
-  assert.match(pdf, /research book from index candles/);
+  assert.equal(pdf.includes("NOT REAL OPTION PRICES"), false);
+  assert.equal(pdf.includes("research book from index candles"), false);
   assert.match(pdf, /COMBO/);
 });
 

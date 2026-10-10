@@ -64,6 +64,15 @@ function pdfInr(value) {
   return `Rs. ${indianNumber(value)}`;
 }
 
+function optionSourceLine(report) {
+  const symbol = report.strategy?.symbol || "NIFTY";
+  if (report.summary?.optionSource === "stored") return "Option premiums: Dhan rolling option tape";
+  if (report.summary?.optionSource === "mixed") {
+    return `Option premiums: Dhan rolling tape + research gaps (${report.summary.storedTrades || 0} stored days)`;
+  }
+  return `No Dhan rolling option tape stored for ${symbol}. Connect Dhan LIVE and run Backtest again to fill option OHLC.`;
+}
+
 function mapTradeRows(rows = []) {
   return (Array.isArray(rows) ? rows : []).map((row, index) => ({
     n: index + 1,
@@ -558,7 +567,7 @@ export function renderBacktestExcel(report) {
     ["Stored trades", Number(report.summary.storedTrades) || 0],
     ["Stored win rate %", Number(report.summary.storedWinRate) || 0],
     ["Skipped days", Number(report.summary.skippedDays) || 0],
-    ["Option source", report.summary.optionSource],
+    ["Option source", optionSourceLine(report)],
     ["Generated", report.generatedAt],
     ["Summary", report.strategy.summary],
   ];
@@ -755,6 +764,7 @@ function makePdfDoc(report) {
     { label: "Avg margin / ROM", value: `${pdfInr(report.summary.avgMargin)} / ${report.summary.rom || 0}%` },
     { label: "Range", value: report.summary.years ? `last ${report.summary.years} year(s)` : report.summary.months ? `last ${report.summary.months} month(s)` : report.summary.range || `${report.summary.from} to ${report.summary.to}` },
     { label: "Generated", value: String(report.generatedAt || "").slice(0, 19) },
+    { label: "Option source", value: optionSourceLine(report) },
   ]);
   line(`Start date ${report.summary.from || "-"}  End date ${report.summary.to || "-"}`);
   if (report.summary.combos) line(`Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}`);
@@ -768,13 +778,7 @@ function makePdfDoc(report) {
   for (const leg of report.legStats || []) {
     line(`${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`);
   }
-  line(
-    report.summary.optionSource === "stored"
-      ? "Premiums stored Dhan rolling option tape"
-      : report.summary.optionSource === "mixed"
-        ? `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days in this book; remaining days used the research model`
-        : `NOT REAL OPTION PRICES - no Dhan rolling tape for ${report.strategy.symbol} - research book from index candles - do not treat P&L or win rate as live proof`,
-  );
+  line(optionSourceLine(report));
   line(`Generated ${report.generatedAt}`);
   section("LEGS");
   table(report.legs?.length ? report.legs : []);

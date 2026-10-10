@@ -1661,7 +1661,7 @@ export async function fetchDhanRollingOption({
     clientId,
     {
       exchangeSegment: String(exchangeSegment || "NSE_FNO"),
-      interval: Number(interval) || 15,
+      interval: String(Number(interval) || 15),
       securityId: String(Number(securityId) || 13),
       instrument: String(instrument || "OPTIDX"),
       expiryFlag: String(expiryFlag || "WEEK").toUpperCase() === "MONTH" ? "MONTH" : "WEEK",
