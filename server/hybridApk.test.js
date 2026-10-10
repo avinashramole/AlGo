@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("Capacitor app opens the live website so a site deploy updates the app", () => {
+test("Capacitor APK ships the website UI and calls the live API", () => {
   const cap = fs.readFileSync(path.join(root, "capacitor.config.ts"), "utf8");
   const hybrid = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
   const client = fs.readFileSync(path.join(root, "src/api/client.ts"), "utf8");

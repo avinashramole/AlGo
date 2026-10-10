@@ -24,21 +24,21 @@ export function ReportsHub() {
           <button
             type="button"
             onClick={() => setParams({ tab: "positions" }, { replace: true })}
-            className={cn(tab === "positions" ? "bg-navy-900 text-white" : "text-slate-400")}
+            className={cn(tab === "positions" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
           >
             Position
           </button>
           <button
             type="button"
             onClick={() => setParams({ tab: "orders" }, { replace: true })}
-            className={cn(tab === "orders" ? "bg-navy-900 text-white" : "text-slate-400")}
+            className={cn(tab === "orders" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
           >
             Orders
           </button>
           <button
             type="button"
             onClick={() => setParams({ tab: "reports" }, { replace: true })}
-            className={cn(tab === "reports" ? "bg-navy-900 text-white" : "text-slate-400")}
+            className={cn(tab === "reports" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
           >
             Reports
           </button>

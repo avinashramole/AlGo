@@ -316,9 +316,9 @@ export function Login() {
             <p>Advanced Tools. Real-time Data. Smarter Decisions.</p>
           </div>
           <ul className="t2s-hero-points">
-            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market" text="Live data & advanced analytics" tone="blue" />
+            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market" text="Live data & advanced analytics" tone="gold" />
             <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" tone="gold" />
-            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="blue" />
+            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="gold" />
           </ul>
         </aside>
 
@@ -327,8 +327,40 @@ export function Login() {
             <div className="t2s-login-avatar">
               <BrandMark variant="stacked" size="md" className="t2s-login-logo" />
             </div>
-            <h2 className="t2s-login-title">{title}</h2>
-            {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
+            {page === "reset" ? (
+              <>
+                <h2 className="t2s-login-title">{title}</h2>
+                {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
+              </>
+            ) : (
+              <>
+                <div className="t2s-auth-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={page === "signin"}
+                    className={page === "signin" ? "on" : ""}
+                    onClick={() => {
+                      setPage("signin");
+                      resetNotice();
+                    }}
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={page === "signup"}
+                    className={page === "signup" ? "on" : ""}
+                    onClick={openSignup}
+                  >
+                    Register
+                  </button>
+                </div>
+                <h2 className="t2s-login-title">{title}</h2>
+                {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
+              </>
+            )}
 
             <form
               onSubmit={(event) => {
@@ -468,7 +500,7 @@ export function Login() {
                   </button>
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onGoogle()}>
                     <GoogleIcon />
-                    Continue with Google
+                    Login with Google
                   </button>
                 </div>
               </>
@@ -510,7 +542,7 @@ export function Login() {
                 </>
               ) : (
                 <>
-                  Don&apos;t have an account? <b>Create Account</b>
+                  Don&apos;t have an account? <b>Register</b>
                 </>
               )}
             </button>
@@ -520,6 +552,15 @@ export function Login() {
             </a>
           </div>
         </section>
+      </div>
+
+      <div className="t2s-login-watermark" aria-hidden>
+        <BullMark />
+        <p>
+          Trade Smarter
+          <br />
+          Trade Together
+        </p>
       </div>
 
       <section className="t2s-benefits">
@@ -656,6 +697,21 @@ function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: 
       {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
       {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
     </>
+  );
+}
+
+function BullMark() {
+  return (
+    <svg viewBox="0 0 240 120" width="240" height="120">
+      <path
+        fill="currentColor"
+        d="M18 88c22-6 38-28 52-28 10 0 16 10 28 10 14 0 20-18 36-18 18 0 28 22 46 22 12 0 22-10 34-16 4 14 8 26 8 36H18c0-8 0-16 0-6z"
+      />
+      <path
+        fill="currentColor"
+        d="M168 46c8-18 28-28 40-22 4 2 8 8 6 14-8-4-22-2-30 10-2-2-8-4-16-2zM46 58c10-16 28-18 38-8-12 2-22 10-28 20-6-4-10-8-10-12z"
+      />
+    </svg>
   );
 }
 

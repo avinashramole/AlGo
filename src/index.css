@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --bg: #f2f4f8;
+  --bg: #f4f6fb;
   --card: #ffffff;
-  --card-muted: #f6f8fb;
-  --border: #e2e7f0;
-  --text: #071833;
-  --muted: #5b6478;
-  --muted-2: #8b93a7;
-  --navy: #071833;
+  --card-muted: #f7f9fc;
+  --border: #e6ebf3;
+  --text: #0f2744;
+  --muted: #6b7386;
+  --muted-2: #94a0b8;
+  --navy: #0f2744;
   --accent: #fd6b01;
-  --shadow: 0 1px 2px rgba(7, 24, 51, 0.04), 0 10px 28px rgba(7, 24, 51, 0.05);
+  --shadow: 0 1px 2px rgba(15, 39, 68, 0.04), 0 10px 24px rgba(15, 39, 68, 0.05);
 }
 
 .dark {
@@ -26,6 +26,49 @@
   --navy: #071833;
   --accent: #fd6b01;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.32);
+}
+
+/* Keep Tailwind brand utilities on the T2S logo orange even if JIT is stale. */
+.bg-brand-50,
+.bg-brand-50\/70,
+.bg-brand-50\/80 {
+  background-color: #fff4ea;
+}
+.bg-brand-100 {
+  background-color: #ffe4cc;
+}
+.bg-brand-500,
+.bg-brand-600 {
+  background-color: #fd6b01;
+}
+.bg-brand-500\/10,
+.bg-brand-500\/15 {
+  background-color: rgba(253, 107, 1, 0.14);
+}
+.bg-brand-700 {
+  background-color: #c2410c;
+}
+.text-brand-500,
+.text-brand-400,
+.text-brand-600,
+.hover\:text-brand-500:hover {
+  color: #fd6b01;
+}
+.border-brand-500,
+.border-brand-600,
+.focus\:border-brand-500:focus {
+  border-color: #fd6b01;
+}
+.dark .bg-brand-50,
+.dark .bg-brand-50\/70,
+.dark .bg-brand-50\/80,
+.dark .dark\:bg-brand-500\/10,
+.dark .dark\:bg-brand-500\/15 {
+  background-color: rgba(253, 107, 1, 0.14);
+}
+.dark .text-brand-500,
+.dark .text-brand-600 {
+  color: #ff8618;
 }
 
 html,
@@ -106,17 +149,17 @@ main table thead th {
 }
 
 main table tbody tr:hover {
-  background: color-mix(in srgb, #1d4ed8 5%, transparent);
+  background: color-mix(in srgb, #fd6b01 6%, transparent);
 }
 
 .desk-tabs {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 999px;
-  background: var(--card);
+  background: #eef2f7;
   padding: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  box-shadow: none;
 }
 
 .desk-tabs button {
@@ -160,13 +203,13 @@ main table tbody tr:hover {
 
 .icon-btn-on,
 .icon-btn[aria-pressed="true"] {
-  background: #0b1f3a;
+  background: #fd6b01;
   color: #fff;
 }
 
 .icon-btn-on:hover,
 .icon-btn[aria-pressed="true"]:hover {
-  background: #123056;
+  background: #e85d00;
   color: #fff;
 }
 
@@ -410,7 +453,7 @@ main > .desk-page {
 
 .desk-chip-on,
 .desk-chip[aria-pressed="true"] {
-  background: #0b1f3a;
+  background: #fd6b01;
   color: #fff;
   border-color: transparent;
 }
@@ -471,8 +514,8 @@ main > .desk-page {
 }
 
 .status-paper {
-  background: rgba(29, 78, 216, 0.12);
-  color: #1d4ed8;
+  background: rgba(253, 107, 1, 0.14);
+  color: #e85d00;
 }
 
 .status-stop {
@@ -482,7 +525,7 @@ main > .desk-page {
 
 .blotter-card {
   overflow: hidden;
-  border-left: 3px solid #1d4ed8;
+  border-left: 3px solid #fd6b01;
 }
 
 .blotter-card[data-live="true"] {

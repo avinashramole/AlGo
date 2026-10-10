@@ -267,7 +267,7 @@ export function Users({ embedded = false }: { embedded?: boolean }) {
                       className={cn(
                         "h-8 rounded-md border px-2 text-[11px] font-extrabold uppercase",
                         row.tradeMode === "real"
-                          ? "border-blue-700 bg-blue-700 text-white dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100"
+                          ? "border-brand-600 bg-brand-600 text-white dark:border-brand-700 dark:bg-brand-700 dark:text-orange-50"
                           : "border-[var(--border)] bg-[var(--bg)] text-slate-600 dark:bg-slate-800 dark:text-slate-200",
                       )}
                       value={row.tradeMode}

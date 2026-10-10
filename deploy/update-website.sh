@@ -4,6 +4,9 @@
 # One TEST2 Script window (do not deploy main until this is merged):
 #   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/cursor/test2-one-script-6826/deploy/update-website.sh -o /tmp/update-website.sh
 #   bash /tmp/update-website.sh cursor/test2-one-script-6826
+# Orange phone UI + bundled APK:
+#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/cursor/trade2smart-mobile-ui-ddae/deploy/update-website.sh -o /tmp/update-website.sh
+#   bash /tmp/update-website.sh cursor/trade2smart-mobile-ui-ddae
 set -euo pipefail
 
 BRANCH=${1:-main}
@@ -174,8 +177,16 @@ if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx" || ! 
   echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
   exit 1
 fi
-if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts" || ! grep -q 'url: "https://trade2smart.com"' "$HOME_DIR/capacitor.config.ts"; then
-  echo "FAIL: Capacitor app must open https://trade2smart.com so website deploys update the app."
+if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts"; then
+  echo "FAIL: Capacitor app must ship the website from dist."
+  exit 1
+fi
+if ! grep -q 'LIVE_DESK_ORIGIN = "https://trade2smart.com"' "$HOME_DIR/src/lib/hybrid.ts"; then
+  echo "FAIL: Capacitor APK must call the live API."
+  exit 1
+fi
+if ! grep -q '#fd6b01' "$HOME_DIR/src/index.css" || ! grep -q 'data-home-overview="phone"' "$HOME_DIR/src/components/home/HomeOverview.tsx"; then
+  echo "FAIL: Phone orange UI is missing. Deploy cursor/trade2smart-mobile-ui-ddae."
   exit 1
 fi
 if ! grep -q 'source: "admin"' "$HOME_DIR/server/memberQuotesFeed.js" || ! grep -q "adminDeskBoard" "$HOME_DIR/server/memberQuotesFeed.js"; then

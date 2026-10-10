@@ -5,7 +5,7 @@ function actionClass(action: string) {
   if (action === "BUY") return "status-live";
   if (action === "SELL") return "bg-rose-50 text-down dark:bg-rose-950/40";
   if (action === "ALERT") return "bg-amber-50 text-amber-700 dark:bg-amber-950/40";
-  if (action === "EXIT") return "bg-sky-50 text-sky-700 dark:bg-sky-950/40";
+  if (action === "EXIT") return "status-paper";
   return "bg-[var(--card)] text-slate-500";
 }
 

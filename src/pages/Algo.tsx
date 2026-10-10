@@ -321,7 +321,7 @@ export function Algo() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <div className="desk-kicker">Strategy blotter</div>
-              <h1 className="text-xl font-bold">Algo</h1>
+              <h1 className="text-xl font-bold">Algo Strategies</h1>
               <p className="text-sm text-slate-400">
                 {deskAlgos.filter((row) => row.enabled).length} live · {deskAlgos.length} strategies
               </p>
@@ -378,7 +378,7 @@ export function Algo() {
                 onClick={() => setFilter(id)}
                 className={cn(
                   "rounded-full px-3 py-1.5 text-xs font-semibold",
-                  filter === id ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950" : "border border-[var(--border)] bg-[var(--card)]",
+                  filter === id ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)]",
                 )}
               >
                 {label}
@@ -1075,7 +1075,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
                   className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5"
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggleId(row.id)} />
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
                     {(row.name || "?").trim().charAt(0).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1">

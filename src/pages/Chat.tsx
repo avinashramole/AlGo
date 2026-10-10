@@ -550,7 +550,7 @@ function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => voi
       onClick={onClick}
       className={cn(
         "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold uppercase tracking-wide",
-        on ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-blue-200" : "border-[var(--border)] text-slate-400",
+        on ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-orange-200" : "border-[var(--border)] text-slate-400",
       )}
     >
       {children}

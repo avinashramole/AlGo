@@ -44,6 +44,12 @@ export function formatInr(value: number) {
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;
 }
 
+export function formatRupee(value: number, digits = 2) {
+  const n = Number(value) || 0;
+  const sign = n < 0 ? "-" : "";
+  return `${sign}₹${formatNumber(Math.abs(n), digits)}`;
+}
+
 export function formatIstClock(date = new Date()) {
   const clock = date.toLocaleTimeString("en-IN", {
     timeZone: "Asia/Kolkata",
