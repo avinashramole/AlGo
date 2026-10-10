@@ -63,7 +63,7 @@ export function Sidebar() {
               cn(
                 "flex h-10 items-center gap-3 rounded-xl px-3 text-[13px] font-semibold transition-colors",
                 isActive
-                  ? "bg-white/10 text-white shadow-[inset_3px_0_0_#2563eb]"
+                  ? "bg-white/10 text-white shadow-[inset_3px_0_0_#fd6b01]"
                   : "text-white/55 hover:bg-white/5 hover:text-white",
               )
             }

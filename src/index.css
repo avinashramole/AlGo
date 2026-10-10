@@ -11,7 +11,7 @@
   --muted: #6b7386;
   --muted-2: #94a0b8;
   --navy: #0f2744;
-  --accent: #2563eb;
+  --accent: #fd6b01;
   --shadow: 0 1px 2px rgba(15, 39, 68, 0.04), 0 10px 24px rgba(15, 39, 68, 0.05);
 }
 
@@ -24,7 +24,7 @@
   --muted: #9aa3b5;
   --muted-2: #6b7386;
   --navy: #071833;
-  --accent: #3b82f6;
+  --accent: #fd6b01;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.32);
 }
 
@@ -106,7 +106,7 @@ main table thead th {
 }
 
 main table tbody tr:hover {
-  background: color-mix(in srgb, #1d4ed8 5%, transparent);
+  background: color-mix(in srgb, #fd6b01 6%, transparent);
 }
 
 .desk-tabs {
@@ -160,7 +160,7 @@ main table tbody tr:hover {
 
 .icon-btn-on,
 .icon-btn[aria-pressed="true"] {
-  background: #2563eb;
+  background: #fd6b01;
   color: #fff;
 }
 
@@ -410,7 +410,7 @@ main > .desk-page {
 
 .desk-chip-on,
 .desk-chip[aria-pressed="true"] {
-  background: #2563eb;
+  background: #fd6b01;
   color: #fff;
   border-color: transparent;
 }
@@ -482,7 +482,7 @@ main > .desk-page {
 
 .blotter-card {
   overflow: hidden;
-  border-left: 3px solid #1d4ed8;
+  border-left: 3px solid #fd6b01;
 }
 
 .blotter-card[data-live="true"] {

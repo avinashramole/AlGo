@@ -6,8 +6,8 @@
   --muted: #5b6478;
   --navy: #071833;
   --blue: #0a2a6e;
-  --orange: #2563eb;
-  --gold: #2563eb;
+  --orange: #fd6b01;
+  --gold: #fd6b01;
   box-sizing: border-box;
   position: relative;
   overflow: auto;
@@ -18,8 +18,8 @@
   color-scheme: light;
   color: var(--text);
   background:
-    radial-gradient(900px 420px at 12% -10%, rgba(37, 99, 235, 0.12), transparent 55%),
-    radial-gradient(900px 480px at 88% 0%, rgba(15, 39, 68, 0.08), transparent 50%),
+    radial-gradient(900px 420px at 12% -10%, rgba(253, 107, 1, 0.16), transparent 55%),
+    radial-gradient(900px 480px at 88% 0%, rgba(10, 42, 110, 0.12), transparent 50%),
     linear-gradient(180deg, #f7f8fc 0%, #eef1f6 100%);
   font-family: Inter, system-ui, sans-serif;
 }
@@ -242,8 +242,8 @@
 }
 
 .t2s-field-box:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(253, 107, 1, 0.16);
 }
 
 .t2s-field-box svg {
@@ -330,12 +330,12 @@
   justify-content: center;
   border: 0;
   border-radius: 12px;
-  background: #2563eb;
+  background: linear-gradient(180deg, #ff8618 0%, #fd6b01 48%, #e85d00 100%);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 10px 24px rgba(253, 107, 1, 0.32);
 }
 
 .t2s-submit:disabled {
@@ -415,10 +415,10 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid #2563eb;
+  border: 1px solid #fd6b01;
   border-radius: 10px;
-  background: #eef3ff;
-  color: #1d4ed8;
+  background: #fff7f0;
+  color: #c2410c;
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;

@@ -54,10 +54,10 @@ export function RadarChart({ scores }: { scores: Score[] }) {
           />
         );
       })}
-      <polygon points={polygon} fill="rgba(47,84,235,0.18)" stroke="#2f54eb" strokeWidth="2" />
+      <polygon points={polygon} fill="rgba(253,107,1,0.18)" stroke="#fd6b01" strokeWidth="2" />
       {scores.map((item, i) => {
         const p = point(i, item.value / 100);
-        return <circle key={item.label} cx={p.x} cy={p.y} r="3" fill="#2f54eb" />;
+        return <circle key={item.label} cx={p.x} cy={p.y} r="3" fill="#fd6b01" />;
       })}
       {scores.map((item, i) => {
         const p = point(i, 1.28);
