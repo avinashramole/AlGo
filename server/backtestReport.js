@@ -69,11 +69,15 @@ function pdfInr(value) {
 
 function optionSourceLine(report) {
   const symbol = report.strategy?.symbol || "NIFTY";
-  if (report.summary?.optionSource === "stored") return "Option premiums: Dhan rolling option tape";
+  if (report.summary?.optionSource === "stored") return "Premiums stored Dhan rolling option tape";
   if (report.summary?.optionSource === "mixed") {
-    return `Option premiums: Dhan rolling tape + research gaps (${report.summary.storedTrades || 0} stored days)`;
+    return `Premiums mixed - ${report.summary.storedTrades || 0} stored Dhan days in this book; remaining days used the research model`;
   }
   return `No Dhan rolling option tape stored for ${symbol}. Connect Dhan LIVE and run Backtest again to fill option OHLC.`;
+}
+
+function reportKindLabel(report) {
+  return report.strategy?.kind === "desk" ? "Proposal report" : "Backtest report";
 }
 
 function mapTradeRows(rows = []) {
@@ -404,7 +408,7 @@ function xlsxSheet(rows = [], { widths = [], freeze = 0 } = {}) {
     })
     .join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${view}${cols}<sheetData>${body}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddHeader>&amp;C&amp;"Calibri,Bold"TRADE 2 SMART — Proposal report</oddHeader><oddFooter>&amp;Ltrade2smart.com&amp;CPage &amp;P&amp;RA4 landscape rows</oddFooter></headerFooter></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${view}${cols}<sheetData>${body}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddHeader>&amp;C&amp;"Calibri,Bold"TRADE 2 SMART - Backtest report</oddHeader><oddFooter>&amp;Ltrade2smart.com&amp;CConfidential desk report&amp;RA4 landscape</oddFooter></headerFooter></worksheet>`;
 }
 
 function xlsxWorkbook(names = []) {
@@ -500,10 +504,10 @@ function excelFillRow(row, zebra) {
   }));
 }
 
-function excelBookRows(rows) {
+function excelBookRows(rows, title = "Backtest report") {
   return [
-    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: "Proposal report", s: XLSX_STYLE.brandSub }],
-    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "A4 landscape row / column desk", s: XLSX_STYLE.brandSub }],
+    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: title, s: XLSX_STYLE.brandSub }],
+    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "Confidential desk report A4 landscape", s: XLSX_STYLE.brandSub }],
     [],
     excelHeaderRow(FILL_HEADER),
     ...rows.map((row, i) => excelFillRow(row, i % 2 === 1)),
@@ -574,9 +578,10 @@ export function renderBacktestExcel(report) {
     ["Generated", report.generatedAt],
     ["Summary", report.strategy.summary],
   ];
+  const title = reportKindLabel(report);
   const summaryRows = [
-    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: "Proposal report", s: XLSX_STYLE.brandSub }],
-    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "A4 landscape row / column desk", s: XLSX_STYLE.brandSub }],
+    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: title, s: XLSX_STYLE.brandSub }],
+    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "Confidential desk report A4 landscape", s: XLSX_STYLE.brandSub }],
     [],
     excelHeaderRow(["Metric", "Value"]),
     ...pairs.map(([label, value], i) => excelPair(label, value, i % 2 === 1)),
@@ -585,8 +590,8 @@ export function renderBacktestExcel(report) {
   const tableWidths = [6, 12, 8, 8, 10, 18, 16, 16, 12, 12, 8, 12, 14, 10, 12, 8];
   return buildXlsx([
     { name: "Summary", rows: summaryRows, widths: [36, 72], freeze: 4 },
-    { name: "Combos", rows: excelBookRows(report.trades || []), widths: tableWidths, freeze: 4 },
-    { name: "Legs", rows: excelBookRows(fills), widths: tableWidths, freeze: 4 },
+    { name: "Combos", rows: excelBookRows(report.trades || [], title), widths: tableWidths, freeze: 4 },
+    { name: "Legs", rows: excelBookRows(fills, title), widths: tableWidths, freeze: 4 },
   ]);
 }
 
@@ -600,6 +605,9 @@ const PDF_LINE = "0.820 0.847 0.886";
 const PDF_ZEBRA = "0.910 0.933 0.965";
 const PDF_WHITE = "1 1 1";
 const PDF_INK = "0.000 0.059 0.161";
+const PDF_MUTED = "0.392 0.455 0.545";
+const PDF_GREEN = "0.059 0.616 0.345";
+const PDF_RED = "0.851 0.188 0.145";
 const PAGE_W = 842;
 const PAGE_H = 595;
 const PAGE_MARGIN = 22;
@@ -657,7 +665,7 @@ function makePdfDoc(report) {
   function footer() {
     rect(PAGE_MARGIN, 12, PAGE_W - PAGE_MARGIN * 2, 14, PDF_NAVY);
     rect(PAGE_MARGIN, 26, PAGE_W - PAGE_MARGIN * 2, 2, PDF_ORANGE);
-    text(PAGE_MARGIN + 8, 16, `trade2smart.com  |  T2S desk  |  A4 landscape  |  Page ${pageNo}`, 7, "F2", PDF_WHITE);
+    text(PAGE_MARGIN + 8, 16, `trade2smart.com  Confidential desk report  A4 landscape  Page ${pageNo}`, 7, "F2", PDF_WHITE);
   }
 
   function brandTitle(x, yPos, size) {
@@ -666,14 +674,17 @@ function makePdfDoc(report) {
     text(x + pdfTextWidth("TRADE 2", size), yPos, " SMART", size, "F2", PDF_WHITE);
   }
 
-  function header() {
+  function header({ continued = false } = {}) {
     pageNo += 1;
     y = PAGE_H - PAGE_MARGIN;
     rect(0, PAGE_H - 40, PAGE_W, 40, PDF_NAVY);
     rect(0, PAGE_H - 44, PAGE_W, 4, PDF_ORANGE);
     brandTitle(PAGE_MARGIN, PAGE_H - 18, 13);
-    text(PAGE_W - PAGE_MARGIN - pdfTextWidth("PROPOSAL REPORT", 11), PAGE_H - 18, "PROPOSAL REPORT", 11, "F2", PDF_ORANGE);
-    text(PAGE_MARGIN, PAGE_H - 32, `${report.strategy.name}  |  T2S branded row/column proposal  |  Indian Rupee (Rs.)`, 8, "F1", PDF_WHITE);
+    const kind = reportKindLabel(report);
+    const right = continued ? `${kind} (continued)` : kind;
+    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11), PAGE_H - 18, right, 11, "F2", PDF_ORANGE);
+    const subtitle = `${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "desk"}  -  Currency Indian Rupee (Rs.)`;
+    text(PAGE_MARGIN, PAGE_H - 32, subtitle, 8, "F1", PDF_WHITE);
     y = PAGE_H - 56;
     footer();
   }
@@ -681,7 +692,7 @@ function makePdfDoc(report) {
   function ensure(h) {
     if (y - h < 32) {
       flush();
-      header();
+      header({ continued: true });
     }
   }
 
@@ -699,8 +710,7 @@ function makePdfDoc(report) {
     y -= 20;
   }
 
-  function metricGrid(items) {
-    const cols = 4;
+  function metricGrid(items, cols = 5) {
     const gap = 6;
     const boxW = (PAGE_W - PAGE_MARGIN * 2 - gap * (cols - 1)) / cols;
     const boxH = 28;
@@ -710,8 +720,9 @@ function makePdfDoc(report) {
       const x = PAGE_MARGIN + col * (boxW + gap);
       if (col === 0) y -= boxH + 6;
       rect(x, y, boxW, boxH, PDF_ZEBRA, PDF_LINE);
-      text(x + 6, y + 17, item.label, 7);
-      text(x + 6, y + 6, item.value, 9, "F2");
+      text(x + 6, y + 17, item.label, 7, "F1", PDF_MUTED);
+      const tone = item.money && Number(item.raw) < 0 ? PDF_RED : item.money && Number(item.raw) > 0 ? PDF_GREEN : PDF_INK;
+      text(x + 6, y + 6, item.value, 9, "F2", tone);
     });
     y -= 4;
   }
@@ -742,7 +753,7 @@ function makePdfDoc(report) {
     rows.forEach((row, i) => {
       if (y - rowH < 32) {
         flush();
-        header();
+        header({ continued: true });
         drawHead();
       }
       let x = PAGE_MARGIN;
@@ -751,7 +762,8 @@ function makePdfDoc(report) {
         const raw = String(cellDisplay(row, col));
         const label = raw.length > 18 && col.w < 50 ? raw.slice(0, 16) : raw;
         const tx = col.align === "right" ? x + col.w - 3 - pdfTextWidth(label, 6.5) : x + 3;
-        text(tx, y - 9, label, 6.5);
+        const tone = col.key === "pnl" && Number(row.pnl) < 0 ? PDF_RED : col.key === "pnl" && Number(row.pnl) > 0 ? PDF_GREEN : PDF_INK;
+        text(tx, y - 9, label, 6.5, "F1", tone);
         x += col.w;
       }
       y -= rowH;
@@ -760,30 +772,46 @@ function makePdfDoc(report) {
   }
 
   header();
-  metricGrid([
-    { label: "Product / Symbol", value: `${report.strategy.product || "-"} ${report.strategy.symbol}` },
-    { label: "Style / Timeframe", value: `${report.summary.holdStyle || report.strategy.kind || "strategy"} ${report.summary.timeframe || ""}`.trim() },
-    { label: "Start date", value: report.summary.from || "-" },
-    { label: "End date", value: report.summary.to || "-" },
-    { label: "P&L", value: pdfInr(report.summary.pnl) },
-    { label: "Trades / Win rate", value: `${report.summary.trades} / ${report.summary.winRate}%` },
-    { label: "Wins / Losses", value: `${report.summary.wins} / ${report.summary.losses}` },
-    { label: "Drawdown", value: pdfInr(report.summary.maxDrawdown) },
-    { label: "Avg/trade", value: pdfInr(report.summary.avgProfit) },
-    { label: "Avg win / Avg loss", value: `${pdfInr(report.summary.avgWin)} / ${pdfInr(report.summary.avgLoss)}` },
-    { label: "Return/DD", value: String(report.summary.returnDd || 0) },
-    { label: "R:R / Expectancy", value: `${report.summary.rewardRisk || 0} / ${pdfInr(report.summary.expectancy)}` },
-    { label: "Required margin", value: `${pdfInr(report.summary.requiredMargin)} max` },
-    { label: "Avg margin / ROM", value: `${pdfInr(report.summary.avgMargin)} / ${report.summary.rom || 0}%` },
-    { label: "Range", value: report.summary.years ? `last ${report.summary.years} year(s)` : report.summary.months ? `last ${report.summary.months} month(s)` : report.summary.range || `${report.summary.from} to ${report.summary.to}` },
-    { label: "Generated", value: String(report.generatedAt || "").slice(0, 19) },
-    { label: "Option source", value: optionSourceLine(report) },
-  ]);
-  line(`Start date ${report.summary.from || "-"}  End date ${report.summary.to || "-"}`);
+  const rules = report.strategy.rules || {};
+  const enter = rules.enterIst ? `Enter ${rules.enterIst} IST` : "";
+  const square = rules.squareOffIst
+    ? `${rules.holdStyle === "btst" ? "Sell tomorrow" : "Square-off"} ${rules.squareOffIst} IST`
+    : "";
+  const productBits = [
+    report.strategy.product ? `Product ${report.strategy.product}` : "",
+    report.strategy.symbol || "",
+    enter,
+    square,
+    report.summary.timeframe || "",
+    `Start date ${report.summary.from || "-"}`,
+    `End date ${report.summary.to || "-"}`,
+  ].filter(Boolean);
+  line(productBits.join(" | "));
+  const range = report.summary.years
+    ? `last ${report.summary.years} year(s)`
+    : report.summary.months
+      ? `last ${report.summary.months} month(s)`
+      : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
+  line(`Range ${range} Generated ${report.generatedAt || ""}`);
+  metricGrid(
+    [
+      { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
+      { label: "Trades", value: String(report.summary.trades || 0) },
+      { label: "Win rate", value: `${report.summary.winRate || 0}%` },
+      { label: "Drawdown", value: pdfInr(report.summary.maxDrawdown), money: true, raw: report.summary.maxDrawdown },
+      { label: "ROM", value: `${report.summary.rom || 0}%` },
+    ],
+    5,
+  );
+  line(`P&L ${pdfInr(report.summary.pnl)} - Trades ${report.summary.trades || 0} - Win rate ${report.summary.winRate || 0}%`);
+  line(`Wins ${report.summary.wins || 0} - Losses ${report.summary.losses || 0} - Drawdown ${pdfInr(report.summary.maxDrawdown)}`);
   if (report.summary.combos) line(`Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}`);
+  line(`Avg/trade ${pdfInr(report.summary.avgProfit)} - Avg win ${pdfInr(report.summary.avgWin)} - Avg loss ${pdfInr(report.summary.avgLoss)}`);
+  line(`Return/DD ${report.summary.returnDd || 0} - R:R ${report.summary.rewardRisk || 0} - Expectancy ${pdfInr(report.summary.expectancy)}`);
   if (report.summary.maxWinStreak || report.summary.maxLoseStreak) {
     line(`Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L - Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`);
   }
+  line(`Required margin ${pdfInr(report.summary.requiredMargin)} max - avg ${pdfInr(report.summary.avgMargin)} - ROM ${report.summary.rom || 0}%`);
   if (report.summary.overallTargetPct || report.summary.targetHits) {
     line(`Overall profit ${report.summary.overallTargetPct || 5}% of margin - ${report.summary.targetHits || 0} target exits (all 4 legs)`);
   }
@@ -792,7 +820,6 @@ function makePdfDoc(report) {
     line(`${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`);
   }
   line(optionSourceLine(report));
-  line(`Generated ${report.generatedAt}`);
   section("LEGS");
   table(report.legs?.length ? report.legs : []);
   section("COMBOS");
