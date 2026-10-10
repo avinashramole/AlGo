@@ -1,7 +1,8 @@
 import { Bell, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { BrandMark } from "../BrandMark";
+import { Wordmark } from "../Wordmark";
+import { Avatar } from "../phone/PhoneUi";
 import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
@@ -17,6 +18,7 @@ export function Header() {
   const { data } = useMarket();
   const location = useLocation();
   const pageTitle = pageTitleForPath(location.pathname, user);
+  const isHome = location.pathname === "/";
   const [now, setNow] = useState(() => new Date());
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -35,7 +37,7 @@ export function Header() {
   }, []);
 
   useEffect(() => {
-    document.title = `${pageTitle} · Trade 2 Smart`;
+    document.title = `${pageTitle} · Trade2Smart`;
   }, [pageTitle]);
 
   const [memberFeed, setMemberFeed] = useState<{
@@ -105,14 +107,14 @@ export function Header() {
 
   return (
     <header className="desk-header sticky top-0 z-20 flex h-14 min-w-0 items-center gap-2 px-3 md:h-16 md:gap-4 md:px-5">
-      <Link to="/" className="shrink-0 md:hidden" title="Trade 2 Smart">
-        <BrandMark variant="horizontal" size="sm" theme={theme} />
+      <Link to="/" className="min-w-0 shrink-0 md:hidden" title="Trade2Smart">
+        {isHome ? <Wordmark compact /> : <h1 className="truncate text-[17px] font-extrabold tracking-tight">{pageTitle}</h1>}
       </Link>
-      <div className="min-w-[4.75rem] flex-1">
-        <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 md:block">
+      <div className="hidden min-w-[4.75rem] flex-1 md:block">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
           {admin ? "Institutional desk" : "Member portal"}
         </p>
-        <h1 className="truncate text-sm font-extrabold tracking-tight md:text-[17px]">{pageTitle}</h1>
+        <h1 className="truncate text-[17px] font-extrabold tracking-tight">{pageTitle}</h1>
       </div>
       {admin ? (
         <div className="t2s-desktop-only relative hidden min-w-0 max-w-md flex-1 lg:block">
@@ -123,11 +125,11 @@ export function Header() {
           />
         </div>
       ) : null}
-      <div className="ml-auto flex min-w-0 max-w-[58%] items-center gap-1.5 md:max-w-none md:gap-3">
-        {admin ? <BrokerSwitch /> : null}
+      <div className="ml-auto flex min-w-0 items-center gap-1.5 md:gap-3">
+        {admin ? <div className="t2s-desktop-only hidden md:block"><BrokerSwitch /></div> : null}
         <div
           className={cn(
-            "flex min-w-0 max-w-[6.5rem] shrink items-center gap-1.5 overflow-hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:max-w-[9rem] md:max-w-none md:gap-2 md:px-3 md:py-1.5 md:text-xs",
+            "t2s-desktop-only hidden min-w-0 items-center gap-1.5 overflow-hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:max-w-[9rem] md:flex md:max-w-none md:gap-2 md:px-3 md:py-1.5 md:text-xs",
             marketOpen
               ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
               : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -147,7 +149,7 @@ export function Header() {
             <Users size={17} />
           </Link>
         ) : null}
-        <Link to="/notifications" className="t2s-desktop-only icon-btn hidden md:flex" title="Notifications">
+        <Link to="/notifications" className="icon-btn" title="Notifications">
           <Bell size={17} />
         </Link>
         {admin ? (
@@ -159,16 +161,8 @@ export function Header() {
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
         <div className="relative" ref={menuRef}>
-          <button type="button" onClick={() => setOpen((value) => !value)} className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-slate-100 dark:hover:bg-slate-800" title="Profile">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-xs font-bold text-white">
-              {(user?.name || "T").slice(0, 1).toUpperCase()}
-            </div>
-            <div className="hidden text-left lg:block">
-              <div className="text-xs font-bold leading-tight">{user?.name || "Trader"}</div>
-              <div className="text-[10px] font-semibold text-slate-400">
-                {admin ? "Admin" : "Member"} · {user?.email || formatMobile(user?.mobile)}
-              </div>
-            </div>
+          <button type="button" onClick={() => setOpen((value) => !value)} className="rounded-full" title="Profile">
+            <Avatar name={user?.name} size="sm" />
           </button>
           {open ? (
             <div className="absolute right-0 top-12 z-30 w-[min(18rem,calc(100vw-1.5rem))] rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-lg">

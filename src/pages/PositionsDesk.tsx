@@ -282,7 +282,7 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         {embedded ? null : (
         <div>
-          <h1 className="text-xl font-bold">Reports</h1>
+          <h1 className="text-xl font-bold">Live Positions</h1>
           <p className="text-sm text-slate-400">Portfolio, master book, and a live ledger for every client</p>
         </div>
         )}

@@ -278,9 +278,9 @@ export function MemberPlans() {
   return (
     <div className="space-y-3">
       <div>
-        <h1 className="text-xl font-bold">My plan</h1>
+        <h1 className="text-xl font-bold">Algo Strategies</h1>
         <p className="text-sm text-slate-400">
-          Enroll monthly, quarterly, or yearly. After you pay, tap I have paid. Live copy starts only after the desk confirms payment and you install your own broker token.
+          My plan: enroll monthly, quarterly, or yearly. After you pay, tap I have paid. Live copy starts only after the desk confirms payment and you install your own broker token.
         </p>
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}

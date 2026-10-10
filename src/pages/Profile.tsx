@@ -1,10 +1,26 @@
 import { useEffect, useState, type FormEvent } from "react";
+import {
+  Building2,
+  CreditCard,
+  Headphones,
+  LogOut,
+  Moon,
+  Shield,
+  SlidersHorizontal,
+  Sun,
+  UserRound,
+} from "lucide-react";
 import { isGmailMember, MemberAccountSetup } from "../components/desk/MemberAccountSetup";
+import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import { isAdminUser } from "../lib/roles";
 import { formatMobile } from "../lib/format";
 
 export function Profile() {
   const { user, updateProfile, refreshMe, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const admin = isAdminUser(user);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
@@ -36,27 +52,44 @@ export function Profile() {
   };
 
   return (
-    <div className="desk-page mx-auto max-w-3xl space-y-2">
-      <h1 className="text-xl font-bold">Profile</h1>
-      <section className="card p-3">
-        <div className="mb-5 flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-lg font-extrabold text-white">
-            {(user?.name || "T").slice(0, 1).toUpperCase()}
-          </div>
-          <div>
-            <div className="text-lg font-extrabold">{user?.name || "Trader"}</div>
-            <div className="text-sm text-slate-400">{user?.role === "admin" ? "Admin" : "Member"} · {user?.desk || "Index Options"}</div>
+    <div className="desk-page mx-auto max-w-3xl space-y-3">
+      <PhoneCard className="p-4">
+        <div className="flex items-center gap-3">
+          <Avatar name={user?.name} size="lg" />
+          <div className="min-w-0">
+            <div className="truncate text-lg font-extrabold">{user?.name || "Trader"}</div>
+            <div className="truncate text-sm text-slate-400">{user?.email || formatMobile(user?.mobile)}</div>
+            <div className="mt-1 text-[11px] font-semibold uppercase text-slate-400">
+              {admin ? "Admin" : "Member"} · {user?.desk || "Index Options"}
+            </div>
           </div>
         </div>
-        <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
-          <Row label="Name" value={user?.name || "—"} />
-          <Row label="Email" value={user?.email || "Not added"} />
-          <Row label="Role" value={user?.role === "admin" ? "Admin" : "Member"} />
-          <Row label="Mobile no" value={formatMobile(user?.mobile)} />
-          <Row label="Login IP" value={user?.loginIp || "Not captured yet"} />
-        </dl>
-      </section>
+      </PhoneCard>
+
+      <PhoneCard>
+        <SettingsRow icon={UserRound} label="My Account" detail={user?.email || formatMobile(user?.mobile)} />
+        <SettingsRow icon={Building2} label="Broker Connections" to={admin ? "/brokers" : "/plans"} detail={admin ? "Desk brokers" : "Install your token on My plan"} />
+        <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to={admin ? "/algo" : "/plans"} />
+        <SettingsRow icon={CreditCard} label="Subscription Plan" to={admin ? "/users?tab=enrollments" : "/plans"} />
+        <SettingsRow icon={Headphones} label="Support" to="/notifications" />
+        <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
+        <SettingsRow
+          icon={theme === "light" ? Moon : Sun}
+          label="Theme"
+          detail={theme === "light" ? "Light" : "Dark"}
+          onClick={toggleTheme}
+        />
+        {admin ? (
+          <>
+            <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
+            <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" />
+          </>
+        ) : null}
+        <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
+      </PhoneCard>
+
       <MemberAccountSetup />
+
       {isGmailMember(user) ? null : (
         <section className="card p-3">
           <div className="mb-2 text-sm font-bold">Edit profile</div>
@@ -87,18 +120,6 @@ export function Profile() {
           </form>
         </section>
       )}
-      <button type="button" onClick={logout} className="h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
-        Log out
-      </button>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-right text-sm font-semibold">{value}</dd>
     </div>
   );
 }

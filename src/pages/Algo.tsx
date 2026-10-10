@@ -321,7 +321,7 @@ export function Algo() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <div className="desk-kicker">Strategy blotter</div>
-              <h1 className="text-xl font-bold">Algo</h1>
+              <h1 className="text-xl font-bold">Algo Strategies</h1>
               <p className="text-sm text-slate-400">
                 {deskAlgos.filter((row) => row.enabled).length} live · {deskAlgos.length} strategies
               </p>
@@ -378,7 +378,7 @@ export function Algo() {
                 onClick={() => setFilter(id)}
                 className={cn(
                   "rounded-full px-3 py-1.5 text-xs font-semibold",
-                  filter === id ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950" : "border border-[var(--border)] bg-[var(--card)]",
+                  filter === id ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)]",
                 )}
               >
                 {label}

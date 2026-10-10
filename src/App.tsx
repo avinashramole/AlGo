@@ -13,9 +13,14 @@ const Dashboard = lazyPage(() => import("./pages/Dashboard"), "Dashboard");
 const UserHome = lazyPage(() => import("./pages/UserHome"), "UserHome");
 const Profile = lazyPage(() => import("./pages/Profile"), "Profile");
 const MemberPlans = lazyPage(() => import("./pages/MemberPlans"), "MemberPlans");
+const MemberOrders = lazyPage(() => import("./pages/MemberBook"), "MemberOrders");
+const MemberPositions = lazyPage(() => import("./pages/MemberBook"), "MemberPositions");
+const MemberReports = lazyPage(() => import("./pages/MemberBook"), "MemberReports");
 const Options = lazyPage(() => import("./pages/Options"), "Options");
 const Algo = lazyPage(() => import("./pages/Algo"), "Algo");
 const ReportsHub = lazyPage(() => import("./pages/ReportsHub"), "ReportsHub");
+const Orders = lazyPage(() => import("./pages/Orders"), "Orders");
+const PositionsDesk = lazyPage(() => import("./pages/PositionsDesk"), "PositionsDesk");
 const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
 const UserIpManager = lazyPage(() => import("./pages/UserIpManager"), "UserIpManager");
@@ -46,6 +51,21 @@ function RoleHome() {
   return isAdminUser(user) ? <Dashboard /> : <UserHome />;
 }
 
+function RoleOrders() {
+  const { user } = useAuth();
+  return isAdminUser(user) ? <Orders /> : <MemberOrders />;
+}
+
+function RolePositions() {
+  const { user } = useAuth();
+  return isAdminUser(user) ? <PositionsDesk /> : <MemberPositions />;
+}
+
+function RoleReports() {
+  const { user } = useAuth();
+  return isAdminUser(user) ? <ReportsHub /> : <MemberReports />;
+}
+
 export default function App() {
   const { user } = useAuth();
 
@@ -68,10 +88,10 @@ export default function App() {
           <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
           <Route path="signals" element={<Navigate to="/algo" replace />} />
           <Route path="algo" element={<AdminOnly><Algo /></AdminOnly>} />
-          <Route path="orders" element={<Navigate to="/reports?tab=orders" replace />} />
-          <Route path="positions" element={<Navigate to="/reports?tab=positions" replace />} />
-          <Route path="reports" element={<AdminOnly><ReportsHub /></AdminOnly>} />
-          <Route path="portfolio" element={<Navigate to="/reports?tab=positions" replace />} />
+          <Route path="orders" element={<RoleOrders />} />
+          <Route path="positions" element={<RolePositions />} />
+          <Route path="reports" element={<RoleReports />} />
+          <Route path="portfolio" element={<Navigate to="/positions" replace />} />
           <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
           <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
           <Route path="users" element={<AdminOnly><UserIpManager /></AdminOnly>} />
