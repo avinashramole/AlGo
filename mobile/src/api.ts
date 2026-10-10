@@ -16,6 +16,10 @@ export function setApiToken(token: string) {
   sessionToken = token && token !== "t2s-offline-token" ? token : "";
 }
 
+export function getApiToken() {
+  return sessionToken;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = init ?? {};
   let response: Response;
