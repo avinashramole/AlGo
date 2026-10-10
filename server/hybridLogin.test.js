@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { APP_LOGIN_ORIGIN, googleDeskHashUrl, googleLoginNextFrom, googleQueryFromHref, isLiveDeskHref } from "../src/lib/hybrid.ts";
+import { APP_LOGIN_ORIGIN, deskHomeUrl, googleAppIntentUrl, googleDeskHashUrl, googleLoginNextFrom, googleQueryFromHref, isLiveDeskHref } from "../src/lib/hybrid.ts";
 
 test("native Google login returns to the app scheme, not the website", () => {
   assert.equal(googleLoginNextFrom({ native: true }), APP_LOGIN_ORIGIN);
@@ -9,6 +9,11 @@ test("native Google login returns to the app scheme, not the website", () => {
   assert.equal(isLiveDeskHref("https://trade2smart.com/#/"), true);
   assert.equal(isLiveDeskHref("t2salgo://auth?google_token=abc"), false);
   assert.equal(googleDeskHashUrl("google_token=abc"), "https://trade2smart.com/#/?google_token=abc");
+  assert.equal(
+    googleAppIntentUrl("google_token=abc"),
+    "intent://auth?google_token=abc#Intent;scheme=t2salgo;package=com.t2s.algo;end",
+  );
+  assert.equal(deskHomeUrl(), "/");
 });
 
 test("Google callback query is read from website, hash, and app scheme URLs", () => {

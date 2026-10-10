@@ -94,7 +94,7 @@ export function googleQueryFromHref(href = "", search = "", hash = "") {
 }
 
 export function deskHomeUrl() {
-  return isNativeHybrid() ? `${LIVE_DESK_ORIGIN}/#/` : "/";
+  return isNativeHybrid() ? "/#/" : "/";
 }
 
 export function isLiveDeskHref(href = "") {
@@ -108,5 +108,34 @@ export function isLiveDeskHref(href = "") {
 
 export function googleDeskHashUrl(params: URLSearchParams | string) {
   const q = typeof params === "string" ? String(params).replace(/^\?/, "") : params.toString();
+  if (typeof window !== "undefined" && isNativeHybrid()) return `/#/?${q}`;
   return `${LIVE_DESK_ORIGIN}/#/?${q}`;
+}
+
+export function isAndroidBrowser() {
+  try {
+    if (isNativeHybrid()) return false;
+    return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
+  } catch {
+    return false;
+  }
+}
+
+export function googleAppIntentUrl(query: URLSearchParams | string) {
+  const q = typeof query === "string" ? String(query).replace(/^\?/, "") : query.toString();
+  return `intent://auth?${q}#Intent;scheme=${APP_LOGIN_SCHEME};package=com.t2s.algo;end`;
+}
+
+export function shouldHandoffGoogleToApp(params: URLSearchParams) {
+  return Boolean(params.get("google_token")) && isAndroidBrowser();
+}
+
+export function handoffGoogleToAndroidApp(params: URLSearchParams) {
+  const intent = googleAppIntentUrl(params);
+  try {
+    window.location.replace(intent);
+  } catch {
+    /* Chrome may require the visible Open-the-app link */
+  }
+  return intent;
 }

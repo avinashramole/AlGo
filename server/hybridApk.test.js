@@ -16,8 +16,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
 
   assert.match(cap, /webDir:\s*"dist"/);
   assert.match(cap, /appId:\s*"com\.t2s\.algo"/);
-  assert.match(cap, /url:\s*"https:\/\/trade2smart\.com"/);
-  assert.match(cap, /accounts\.google\.com/);
+  assert.equal(cap.includes('url: "https://trade2smart.com"'), false);
+  assert.match(cap, /androidScheme:\s*"https"/);
   assert.match(hybrid, /APP_LOGIN_SCHEME = "t2salgo"/);
   assert.match(hybrid, /googleLoginNextFrom/);
   assert.match(client, /native=1/);
@@ -34,7 +34,10 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const context = fs.readFileSync(path.join(root, "src/context/AuthContext.tsx"), "utf8");
   assert.match(context, /@capacitor\/browser/);
   assert.match(context, /Browser\.open/);
+  assert.match(context, /handoffGoogleToAndroidApp/);
   assert.match(manifest, /android:host="auth"/);
+  assert.match(manifest, /android:host="trade2smart\.com"/);
+  assert.match(manifest, /android:path="\/login"/);
   assert.equal(hybrid.includes("@capacitor/core"), false);
   assert.match(hybrid, /isNativePlatform/);
   assert.match(hybrid, /LIVE_DESK_ORIGIN = "https:\/\/trade2smart\.com"/);

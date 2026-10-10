@@ -17,7 +17,13 @@ import {
   type OtpRequestResult,
   type SocialProvider,
 } from "../api/client";
-import { deskHomeUrl, googleDeskHashUrl, googleQueryFromHref, isLiveDeskHref, isNativeHybrid } from "../lib/hybrid";
+import {
+  deskHomeUrl,
+  googleQueryFromHref,
+  handoffGoogleToAndroidApp,
+  isNativeHybrid,
+  shouldHandoffGoogleToApp,
+} from "../lib/hybrid";
 
 type OtpPayload = {
   identifier: string;
@@ -231,6 +237,15 @@ function bootFromWindow() {
   if (typeof window === "undefined") return readUser();
   const params = googleQueryFromHref(window.location.href, window.location.search, window.location.hash);
   rememberGoogleError(params);
+  if (shouldHandoffGoogleToApp(params)) {
+    try {
+      sessionStorage.setItem("t2s-google-handoff", params.toString());
+    } catch {
+      /* continue */
+    }
+    handoffGoogleToAndroidApp(params);
+    return readUser();
+  }
   return userFromGoogleParams(params) || readUser();
 }
 
@@ -298,8 +313,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rememberGoogleError(params);
       const googleToken = params.get("google_token") || "";
       if (!googleToken) return;
-      if (isNativeHybrid() && !isLiveDeskHref(window.location.href)) {
-        window.location.replace(googleDeskHashUrl(params));
+      if (shouldHandoffGoogleToApp(params)) {
+        try {
+          sessionStorage.setItem("t2s-google-handoff", params.toString());
+        } catch {
+          /* continue */
+        }
+        handoffGoogleToAndroidApp(params);
         return;
       }
       const appliedKey = `t2s-google-applied-${googleToken}`;
@@ -311,6 +331,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const next = userFromGoogleParams(params);
       if (!next) return;
+      try {
+        sessionStorage.removeItem("t2s-google-handoff");
+      } catch {
+        /* ignore */
+      }
       setUser(next);
       stripGoogleQuery();
       void import("@capacitor/browser")
@@ -322,6 +347,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     applyHref(window.location.href);
     stripGoogleQuery();
+    let handoffTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const pending = sessionStorage.getItem("t2s-google-handoff");
+      if (pending && !isNativeHybrid()) {
+        handoffTimer = setTimeout(() => {
+          if (document.visibilityState !== "visible") return;
+          const leftover = new URLSearchParams(pending);
+          if (!leftover.get("google_token")) return;
+          sessionStorage.removeItem("t2s-google-handoff");
+          const next = userFromGoogleParams(leftover);
+          if (next) setUser(next);
+        }, 1600);
+      }
+    } catch {
+      /* ignore */
+    }
     let stop: () => void = () => undefined;
     void listenAppGoogleReturn(applyHref).then((done) => {
       stop = done;
@@ -329,7 +370,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = readToken();
     if (token === "t2s-offline-token") {
       setReady(true);
-      return () => stop();
+      return () => {
+        if (handoffTimer) clearTimeout(handoffTimer);
+        stop();
+      };
     }
     void refreshMe()
       .catch((error) => {
@@ -339,7 +383,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setReady(true));
-    return () => stop();
+    return () => {
+      if (handoffTimer) clearTimeout(handoffTimer);
+      stop();
+    };
   }, [refreshMe]);
 
   const value = useMemo(

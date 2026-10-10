@@ -1125,7 +1125,6 @@ export function googleAppReturnHtml(query) {
   const q = String(query || "").replace(/^\?/, "");
   const app = `${APP_LOGIN_ORIGIN}?${q}`;
   const intent = googleAppIntentUrl(q);
-  const desk = googleDeskHashReturn(q);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1149,19 +1148,12 @@ export function googleAppReturnHtml(query) {
   <script>
     var app = ${JSON.stringify(app)};
     var intent = ${JSON.stringify(intent)};
-    var desk = ${JSON.stringify(desk)};
-    var ua = navigator.userAgent || "";
-    var inWebView = /;\\s*wv\\)/i.test(ua) || Boolean(window.Capacitor);
     function goApp() {
-      try { location.replace(inWebView ? desk : intent); } catch (e) {}
+      try { location.replace(intent); } catch (e) {}
     }
     goApp();
     setTimeout(function () {
       if (document.visibilityState !== "visible") return;
-      if (inWebView) {
-        try { location.replace(desk); } catch (e) {}
-        return;
-      }
       try { location.replace(app); } catch (e) {}
     }, 350);
   </script>
