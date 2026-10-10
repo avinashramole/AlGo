@@ -141,6 +141,7 @@ if ! grep -q "ROLLING_BACKTEST_DEADLINE_MS" "$HOME_DIR/server/dhanRollingOption.
   echo "FAIL: $HOME_DIR still has the old TEST2 rolling download."
   exit 1
 fi
+<<<<<<< HEAD
 if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHistoryBar.tsx" || ! grep -q "ensureReplayBars" "$HOME_DIR/server/index.js"; then
   echo "FAIL: $HOME_DIR still has the old 1m history sync."
   exit 1
@@ -193,6 +194,10 @@ if ! grep -q 'source: "admin"' "$HOME_DIR/server/memberQuotesFeed.js" || ! grep 
   echo "FAIL: New members must see admin desk live cards when no broker is installed. Deploy cursor/member-admin-live-cards-6826."
   exit 1
 fi
+if ! grep -q "dropEmptyRollingDays" "$HOME_DIR/server/dhanRollingOption.js" || ! grep -q "dropEmptyRollingDays" "$HOME_DIR/server/index.js"; then
+  echo "FAIL: $HOME_DIR index.js and dhanRollingOption.js do not match. API would crash on boot."
+  exit 1
+fi
 
 npm run build
 
@@ -239,7 +244,21 @@ fi
 systemctl restart t2s
 systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 
-echo "OK website published."
+api=000
+for _try in 1 2 3 4 5 6 7 8; do
+  sleep 2
+  api=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:4000/api/health || echo 000)
+  if [ "$api" = "200" ]; then
+    break
+  fi
+done
+if [ "$api" != "200" ]; then
+  echo "FAIL: t2s did not answer /api/health (got $api). Last log:"
+  journalctl -u t2s -n 40 --no-pager || true
+  exit 1
+fi
+
+echo "OK website published. api:$api"
 grep -l "$RESULT_MARKER" "$WEBROOT/assets/"*.js | head
 echo "Open https://trade2smart.com and press Ctrl+Shift+R."
 echo "Run TEST2 Backtest again with Dhan LIVE. The card must fetch rolling option tape."
