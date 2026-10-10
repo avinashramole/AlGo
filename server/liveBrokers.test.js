@@ -20,6 +20,7 @@ const {
   parseKotakTradeLoginPaste,
   applyKotakTradeLoginPaste,
   kotakOrderAmo,
+  kotakTradingSymbol,
   kotakTotpCandidates,
   nfoTradingSymbol,
   parseDeskFutureSymbol,
@@ -33,6 +34,7 @@ const {
   upstoxExpiryDay,
   upstoxInstrumentKeyFromPayload,
 } = await import("./liveBrokers.js");
+const { resetKotakMcxMasterCache } = await import("./kotakMcx.js");
 
 test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
   assert.deepEqual(parseDeskOptionSymbol("NIFTY 22850 CE"), { root: "NIFTY", strike: 22850, option: "CE" });
@@ -287,7 +289,7 @@ test("Upstox master file resolves crude, NIFTY options, and the NIFTY future whe
     { symbol: "CRUDEOIL 8700 CE", qty: 100, lots: 1, lotSize: 100, type: "LIMIT", price: 468.6, strike: 8700, option: "CE", expiry: "2026-10-15", exchangeSegment: "MCX_COMM" },
     { symbol: "CRUDEOIL-15Oct2026-8850-PE", qty: 1, lots: 1, lotSize: 100, type: "LIMIT", price: 10, exchangeSegment: "MCX_COMM" },
     { symbol: "NIFTY-Sep2026-22900-CE", qty: 65 },
-    { symbol: "NIFTY-Oct2026-22650-CE", qty: 65 },
+    { symbol: "NIFTY-06Oct2026-22650-CE", qty: 65 },
     { symbol: "NIFTY-Sep2026-FUT", qty: 65 },
   ];
   try {
@@ -398,7 +400,7 @@ test("Upstox switches a crude copy to NSE NSCOM when MCX orders are disabled and
       "upstox",
       {
         ...crude,
-        symbol: "NIFTY-Oct2026-22650-CE",
+        symbol: "NIFTY-06Oct2026-22650-CE",
         qty: 65,
         lots: 0,
         lotSize: 65,
@@ -584,10 +586,10 @@ test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on th
   assert.equal(placed.instrument_token, "NSE_FO|426269");
 });
 
-test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrument key", async () => {
-  const day = upstoxExpiryDate("2026-10", "NIFTY");
-  assert.equal(day, "2026-10-06");
-  assert.notEqual(day, "2026-10-27");
+test("Upstox copy of NIFTY-Nov2026-23100-CE looks up the nearest weekly instrument key", async () => {
+  const day = upstoxExpiryDate("2026-11", "NIFTY");
+  assert.equal(day, "2026-11-03");
+  assert.notEqual(day, "2026-11-24");
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(String(url));
@@ -602,11 +604,11 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrume
           JSON.stringify({
             data: [
               {
-                trading_symbol: "NIFTY 06 OCT 26 23100 CE",
+                trading_symbol: "NIFTY 03 NOV 26 23100 CE",
                 underlying_symbol: "NIFTY",
                 instrument_type: "CE",
                 strike_price: 23100,
-                expiry: "2026-10-06",
+                expiry: day,
                 instrument_key: "NSE_FO|23100ce",
               },
             ],
@@ -620,7 +622,7 @@ test("Upstox copy of NIFTY-Oct2026-23100-CE looks up the nearest weekly instrume
     {
       copyUserId: "u-upstox-oct",
       brokerSession: { accessToken: "member-upstox-token", clientId: "393216" },
-      symbol: "NIFTY-Oct2026-23100-CE",
+      symbol: "NIFTY-Nov2026-23100-CE",
       side: "BUY",
       qty: 65,
       securityId: "55123",
@@ -658,13 +660,24 @@ test("Kotak trade login paste accepts a current 6-digit TOTP", () => {
   assert.equal(applied.totpSecret, "654321");
 });
 
+test("kotakTradingSymbol uses Neo MCX option codes, not NFO month codes", () => {
+  assert.equal(nfoTradingSymbol("CRUDEOIL 8800 PE", "2026-10-15"), "CRUDEOIL26OCT8800PE");
+  assert.equal(kotakTradingSymbol("NIFTY 22500 PE", "2026-10-06"), "NIFTY26O0622500PE");
+  assert.equal(
+    kotakTradingSymbol("CRUDEOIL 8800 PE", "2026-10-19", ["2026-10-15", "2026-11-17"]),
+    "CRUDEOIL15OCT268800PE",
+  );
+  assert.equal(kotakTradingSymbol("CRUDEOIL 8800 PE", "2026-10-19", []), "CRUDEOIL15OCT268800PE");
+  assert.equal(kotakTradingSymbol("CRUDEOIL 8700 CE", "2026-10-15", ["2026-10-15"]), "CRUDEOIL15OCT268700CE");
+});
+
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {
   assert.equal(nfoTradingSymbol("NIFTY 24500 CE", "2026-09-15"), "NIFTY2691524500CE");
   assert.equal(fyersSymbol("NIFTY 24500 PE", "2026-09-15"), "NSE:NIFTY2691524500PE");
   assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-06"), "NIFTY26O0622500PE");
-  assert.equal(nfoTradingSymbol("NIFTY 06 OCT 22500 PUT"), "NIFTY26O0622500PE");
+  assert.equal(nfoTradingSymbol("NIFTY 06 OCT 2026 22500 PUT"), "NIFTY26O0622500PE");
   assert.equal(nfoTradingSymbol("NIFTY 22500 PE", "2026-10-27"), "NIFTY26OCT22500PE");
-  assert.equal(nfoTradingSymbol("NIFTY-Oct2026-22500-PE"), "NIFTY26O0622500PE");
+  assert.equal(nfoTradingSymbol("NIFTY-06Oct2026-22500-PE"), "NIFTY26O0622500PE");
 });
 
 test("connectLiveBroker stores Zerodha after a profile probe and does not invent positions", async () => {
@@ -1060,6 +1073,7 @@ test("a member crude order opens that user's Kotak trade login and does not use 
   process.env.T2S_KOTAK_CONSUMER_KEY = "admin-consumer";
   process.env.T2S_KOTAK_ACCESS_TOKEN = "admin-access-9f44";
   const calls = [];
+  resetKotakMcxMasterCache();
   const fetchImpl = async (url, options = {}) => {
     calls.push({
       url: String(url),
@@ -1069,6 +1083,18 @@ test("a member crude order opens that user's Kotak trade login and does not use 
       body: options.body,
     });
     const target = String(url);
+    if (target.includes("transformed/mcx_fo.csv")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          [
+            "pSymbol,pSymbolName,pTrdSymbol,pInstType,pOptionType,lExpiryDate",
+            "569900,CRUDEOIL,CRUDEOIL19OCT26FUT,FUTCOM,XX,1792454399",
+            "580626,CRUDEOIL,CRUDEOIL15OCT268800PE,OPTFUT,PE,1792108799",
+          ].join("\n"),
+      };
+    }
     if (target.includes("tradeApiLogin")) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ data: { token: "view-token", sid: "view-sid" } }) };
     }
@@ -1102,6 +1128,10 @@ test("a member crude order opens that user's Kotak trade login and does not use 
         qty: 100,
         price: 383.3,
         type: "MARKET",
+        expiry: "2026-10-19",
+        option: "PE",
+        strike: 8800,
+        exchangeSegment: "MCX_COMM",
         orderAt: "2026-10-01T14:00:15.000Z",
       },
       fetchImpl,
@@ -1126,6 +1156,8 @@ test("a member crude order opens that user's Kotak trade login and does not use 
     assert.equal(String(place.sessionAuth).includes("member-consumer"), false);
     const jData = JSON.parse(new URLSearchParams(place.body).get("jData"));
     assert.equal(jData.es, "mcx_fo");
+    assert.equal(jData.ts, "CRUDEOIL15OCT268800PE");
+    assert.notEqual(jData.ts, "CRUDEOIL26OCT8800PE");
     assert.equal(jData.am, "NO");
     assert.equal(jData.tt, "B");
     assert.equal(jData.qt, "100");
@@ -1205,13 +1237,14 @@ test("a member Kotak refusal stays on that user's own key and does not send the 
         return true;
       },
     );
-    assert.equal(calls.length, 1);
-    assert.match(calls[0].url, /tradeApiLogin/);
-    assert.equal(calls[0].auth, "user-own-key-1452");
-    assert.equal(String(calls[0].body).includes("9922980000"), true);
-    assert.equal(String(calls[0].body).includes("YT2Vm"), true);
-    assert.equal(String(calls[0].body).includes("9000000099"), false);
-    assert.equal(String(calls[0].body).includes("YIX14"), false);
+    const login = calls.find((row) => row.url.includes("tradeApiLogin"));
+    assert.ok(login);
+    assert.equal(calls.some((row) => row.url.includes("/quick/order/rule/ms/place")), false);
+    assert.equal(login.auth, "user-own-key-1452");
+    assert.equal(String(login.body).includes("9922980000"), true);
+    assert.equal(String(login.body).includes("YT2Vm"), true);
+    assert.equal(String(login.body).includes("9000000099"), false);
+    assert.equal(String(login.body).includes("YIX14"), false);
   } finally {
     for (const [name, value] of [
       ["T2S_KOTAK_MOBILE", saved.mobile],

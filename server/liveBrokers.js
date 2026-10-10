@@ -3,6 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getPublicUser } from "./auth.js";
 import { annotateMemberLiveAuthError, credentialHint, liveOrderSession } from "./brokerIsolation.js";
+import {
+  ensureKotakMcxMaster,
+  kotakCrudeOptionExpiries,
+  lookupKotakCrudeOptionCode,
+} from "./kotakMcx.js";
 import { getUnderlying, isMcxSymbol, isWeeklyOptionExpiry, upcomingExpiries } from "./optionChain.js";
 import { totpCodes } from "./totp.js";
 
@@ -200,6 +205,48 @@ export function nfoTradingSymbol(symbol, expiry) {
   }
   const ymd = resolveNfoExpiry(parsed.root, expiry, parsed.expiry);
   const token = nfoDateToken(ymd, parsed.root);
+  if (!token) return `${parsed.root}${parsed.strike}${parsed.option}`;
+  return `${parsed.root}${token}${parsed.strike}${parsed.option}`;
+}
+
+export function kotakMcxDateToken(ymd) {
+  const match = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "";
+  return `${match[3]}${MONTHS[Number(match[2]) - 1]}${match[1].slice(-2)}`;
+}
+
+function kotakOptionExpiryFromFutDate(ymd) {
+  const match = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return ymd || "";
+  // MCX Crude futures expire ~19th; Neo options use the mid-month code (15–17).
+  if (Number(match[3]) >= 18) return `${match[1]}-${match[2]}-15`;
+  return ymd;
+}
+
+export function pickKotakOptionExpiry(wanted, listed = []) {
+  const want = String(wanted || "").slice(0, 10);
+  const days = [...new Set((listed || []).map((day) => String(day || "").slice(0, 10)).filter(Boolean))].sort();
+  if (want && days.includes(want)) return want;
+  if (want) {
+    const sameMonth = days.filter((day) => day.startsWith(want.slice(0, 7)));
+    if (sameMonth.length) return sameMonth[0];
+    const next = days.find((day) => day >= want);
+    if (next) return next;
+  }
+  return days[0] || kotakOptionExpiryFromFutDate(want);
+}
+
+export function kotakTradingSymbol(symbol, expiry, optionExpiries = kotakCrudeOptionExpiries()) {
+  if (!isMcxSymbol(symbol)) return nfoTradingSymbol(symbol, expiry);
+  const parsed = parseDeskOptionSymbol(symbol, { expiry });
+  if (!parsed) {
+    const ymd = resolveNfoExpiry("CRUDEOIL", expiry, "");
+    const token = kotakMcxDateToken(ymd);
+    return token ? `CRUDEOIL${token}FUT` : nfoTradingSymbol(symbol, expiry);
+  }
+  const wanted = resolveNfoExpiry(parsed.root, expiry, parsed.expiry);
+  const ymd = pickKotakOptionExpiry(wanted, optionExpiries);
+  const token = kotakMcxDateToken(ymd);
   if (!token) return `${parsed.root}${parsed.strike}${parsed.option}`;
   return `${parsed.root}${token}${parsed.strike}${parsed.option}`;
 }
@@ -1371,7 +1418,17 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, la
   const side = orderSide(payload);
   const symbol = String(payload.symbol || "").trim();
   const expiry = payload.expiry || "";
-  const nfo = nfoTradingSymbol(symbol, expiry);
+  let nfo = nfoTradingSymbol(symbol, expiry);
+  if (id === "kotak" && isMcxSymbol(symbol)) {
+    const parsed = parseDeskOptionSymbol(symbol, { expiry, strike: payload.strike, option: payload.option });
+    await ensureKotakMcxMaster(fetchImpl);
+    nfo =
+      lookupKotakCrudeOptionCode({
+        strike: parsed?.strike || payload.strike,
+        option: parsed?.option || payload.option,
+        expiry: parsed?.expiry || expiry,
+      }) || kotakTradingSymbol(symbol, expiry);
+  }
   const product = String(payload.product || "MIS").toUpperCase();
 
   if (id === "zerodha") {
