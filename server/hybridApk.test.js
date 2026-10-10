@@ -17,6 +17,18 @@ test("Capacitor app opens the live website so a site deploy updates the app", ()
   assert.match(cap, /webDir:\s*"dist"/);
   assert.match(cap, /appId:\s*"com\.t2s\.algo"/);
   assert.match(cap, /url:\s*"https:\/\/trade2smart\.com"/);
+  assert.match(cap, /accounts\.google\.com/);
+  assert.match(hybrid, /APP_LOGIN_SCHEME = "t2salgo"/);
+  assert.match(hybrid, /googleLoginNextFrom/);
+  assert.match(client, /native=1/);
+  const manifest = fs.readFileSync(path.join(root, "android/app/src/main/AndroidManifest.xml"), "utf8");
+  assert.match(manifest, /android:scheme="t2salgo"/);
+  assert.match(login, /BrandMark/);
+  const brand = fs.readFileSync(path.join(root, "src/components/BrandMark.tsx"), "utf8");
+  assert.match(brand, /t2s-logo\.png/);
+  const auth = fs.readFileSync(path.join(root, "server/auth.js"), "utf8");
+  assert.match(auth, /googleAppReturnHtml/);
+  assert.match(auth, /shouldReturnToApp/);
   assert.equal(hybrid.includes("@capacitor/core"), false);
   assert.match(hybrid, /isNativePlatform/);
   assert.match(hybrid, /LIVE_DESK_ORIGIN = "https:\/\/trade2smart\.com"/);

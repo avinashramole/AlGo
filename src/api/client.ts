@@ -1,4 +1,4 @@
-import { apiBase, googleLoginNext } from "../lib/hybrid";
+import { apiBase, googleLoginNext, isNativeHybrid } from "../lib/hybrid";
 import { apiDownMessage, publicDeskError } from "../lib/liveSite";
 
 function authHeaders(): HeadersInit {
@@ -623,7 +623,8 @@ export function googleAuthStatus() {
 
 export function googleAuthStartUrl() {
   const next = encodeURIComponent(googleLoginNext());
-  return `${apiBase()}/auth/google?next=${next}`;
+  const native = isNativeHybrid() ? "&native=1" : "";
+  return `${apiBase()}/auth/google?next=${next}${native}`;
 }
 
 export function listUsers() {

@@ -1,4 +1,6 @@
 export const LIVE_DESK_ORIGIN = "https://trade2smart.com";
+export const APP_LOGIN_SCHEME = "t2salgo";
+export const APP_LOGIN_ORIGIN = `${APP_LOGIN_SCHEME}://auth`;
 
 type CapacitorBridge = {
   isNativePlatform?: () => boolean;
@@ -51,7 +53,46 @@ export function apiBase() {
   return apiBaseFromLocation(window.location.hostname, window.location.port, window.location.protocol);
 }
 
+export function googleLoginNextFrom({ native, origin }: { native?: boolean; origin?: string } = {}) {
+  if (native) return APP_LOGIN_ORIGIN;
+  return origin || LIVE_DESK_ORIGIN;
+}
+
 export function googleLoginNext() {
   if (typeof window === "undefined") return LIVE_DESK_ORIGIN;
-  return isNativeHybrid() ? LIVE_DESK_ORIGIN : window.location.origin;
+  return googleLoginNextFrom({
+    native: isNativeHybrid(),
+    origin: window.location.origin,
+  });
+}
+
+export function googleQueryFromHref(href = "", search = "", hash = "") {
+  const read = (value: string) => {
+    const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
+    if (params.get("google_token") || params.get("google_error")) return params;
+    return null;
+  };
+  if (href) {
+    try {
+      const url = new URL(href);
+      const fromUrl = read(url.search);
+      if (fromUrl) return fromUrl;
+      if (url.hash.includes("?")) {
+        const fromHash = read(url.hash.slice(url.hash.indexOf("?")));
+        if (fromHash) return fromHash;
+      }
+    } catch {
+      /* ignore malformed custom-scheme URLs until we parse the query by hand */
+      const q = href.indexOf("?");
+      if (q >= 0) {
+        const fromHref = read(href.slice(q));
+        if (fromHref) return fromHref;
+      }
+    }
+  }
+  return read(search) || (hash.includes("?") ? read(hash.slice(hash.indexOf("?"))) : null) || new URLSearchParams();
+}
+
+export function deskHomeUrl() {
+  return isNativeHybrid() ? `${LIVE_DESK_ORIGIN}/#/` : "/";
 }

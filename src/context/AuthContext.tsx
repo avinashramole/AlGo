@@ -17,6 +17,7 @@ import {
   type OtpRequestResult,
   type SocialProvider,
 } from "../api/client";
+import { deskHomeUrl, googleQueryFromHref, isNativeHybrid } from "../lib/hybrid";
 
 type OtpPayload = {
   identifier: string;
@@ -187,11 +188,9 @@ function preferAccount(current: AuthUser | null, next: AuthUser): AuthUser {
   };
 }
 
-function bootFromWindow() {
-  if (typeof window === "undefined") return readUser();
-  const params = new URLSearchParams(window.location.search);
+function userFromGoogleParams(params: URLSearchParams): AuthUser | null {
   const googleToken = params.get("google_token") || "";
-  if (!googleToken) return readUser();
+  if (!googleToken) return null;
   const email = params.get("google_email")?.trim() || "";
   const mobile = params.get("google_mobile")?.trim() || "";
   const given = params.get("google_name")?.trim() || "";
@@ -205,6 +204,48 @@ function bootFromWindow() {
   };
   persist(pending, googleToken, true);
   return pending;
+}
+
+function rememberGoogleError(params: URLSearchParams) {
+  const googleError = params.get("google_error");
+  if (!googleError) return;
+  try {
+    sessionStorage.setItem("t2s-google-error", googleError);
+  } catch {
+    /* ignore */
+  }
+}
+
+function stripGoogleQuery() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (![...url.searchParams.keys()].some((key) => key.startsWith("google_"))) return;
+  ["google_token", "google_email", "google_mobile", "google_name", "google_error"].forEach((key) => {
+    url.searchParams.delete(key);
+  });
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", next || "/");
+}
+
+function bootFromWindow() {
+  if (typeof window === "undefined") return readUser();
+  const params = googleQueryFromHref(window.location.href, window.location.search, window.location.hash);
+  rememberGoogleError(params);
+  return userFromGoogleParams(params) || readUser();
+}
+
+async function listenAppGoogleReturn(apply: (href: string) => void) {
+  try {
+    const mod = await import("@capacitor/app");
+    const opened = await mod.App.addListener("appUrlOpen", (event) => apply(event.url));
+    const launch = await mod.App.getLaunchUrl();
+    if (launch?.url) apply(launch.url);
+    return () => {
+      void opened.remove();
+    };
+  } catch {
+    return () => undefined;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -252,19 +293,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const googleError = params.get("google_error");
-    if (googleError) {
+    const applyHref = (href: string) => {
+      const params = googleQueryFromHref(href);
+      rememberGoogleError(params);
+      const googleToken = params.get("google_token") || "";
+      if (!googleToken) return;
+      const appliedKey = `t2s-google-applied-${googleToken}`;
       try {
-        sessionStorage.setItem("t2s-google-error", googleError);
+        if (sessionStorage.getItem(appliedKey)) return;
+        sessionStorage.setItem(appliedKey, "1");
       } catch {
-        /* ignore */
+        /* continue */
       }
-    }
+      const next = userFromGoogleParams(params);
+      if (!next) return;
+      setUser(next);
+      stripGoogleQuery();
+      if (isNativeHybrid()) {
+        window.location.replace(deskHomeUrl());
+      }
+    };
+    applyHref(window.location.href);
+    stripGoogleQuery();
+    let stop = () => undefined;
+    void listenAppGoogleReturn(applyHref).then((done) => {
+      stop = done;
+    });
     const token = readToken();
     if (token === "t2s-offline-token") {
       setReady(true);
-      return;
+      return () => stop();
     }
     void refreshMe()
       .catch((error) => {
@@ -274,6 +332,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setReady(true));
+    return () => stop();
   }, [refreshMe]);
 
   const value = useMemo(

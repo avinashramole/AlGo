@@ -106,7 +106,7 @@ export function Header() {
   return (
     <header className="desk-header sticky top-0 z-20 flex h-14 min-w-0 items-center gap-2 px-3 md:h-16 md:gap-4 md:px-5">
       <Link to="/" className="shrink-0 md:hidden" title="Trade 2 Smart">
-        <BrandMark variant="horizontal" size="sm" theme={theme} />
+        <BrandMark variant="horizontal" size="md" theme={theme} className="t2s-app-logo" />
       </Link>
       <div className="min-w-[4.75rem] flex-1">
         <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 md:block">

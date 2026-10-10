@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { BrandMark } from "../components/BrandMark";
 import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import type { SocialProvider } from "../api/client";
@@ -324,7 +325,7 @@ export function Login() {
         <section className="t2s-login-panel">
           <div className="t2s-login-card">
             <div className="t2s-login-avatar">
-              <img src="/t2s-logo.png" alt="Trade 2 Smart" />
+              <BrandMark variant="stacked" size="md" className="t2s-login-logo" />
             </div>
             <h2 className="t2s-login-title">{title}</h2>
             {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
