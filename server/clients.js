@@ -346,6 +346,7 @@ export function getClientDetail({ userId, users = [], algos = [], quote, admins 
     quote,
     admins,
     liveBook,
+    ownBookOnly: true,
   });
   const topups = listTopups({ userId: user.id });
   const transactions = [

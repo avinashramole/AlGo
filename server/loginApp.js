@@ -3,10 +3,13 @@ import {
   decodeOAuthPayload,
   decodeOAuthState,
   enableThumb,
+  googleAppReturnHtml,
   googleAuthorizeUrl,
+  googleFrontendReturnUrl,
   googleLoginSearch,
   googleOAuthConfigured,
   googleRedirectUri,
+  shouldReturnToApp,
   loginWithGoogleCode,
   loginWithPassword,
   loginWithThumb,
@@ -55,7 +58,8 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
   app.get("/api/auth/google", (req, res) => {
     try {
       const next = Array.isArray(req.query.next) ? req.query.next[0] : req.query.next;
-      res.redirect(googleAuthorizeUrl({ next, req }));
+      const native = queryValue(req.query.native) === "1";
+      res.redirect(googleAuthorizeUrl({ next, native, req }));
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Google login is not configured" });
     }
@@ -65,6 +69,13 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
     const state = queryValue(req.query.state);
     const payload = decodeOAuthPayload(state);
     const next = safeFrontendOrigin(payload.next || decodeOAuthState(state) || process.env.PUBLIC_URL);
+    const finish = (query) => {
+      if (shouldReturnToApp(payload, next)) {
+        res.status(200).type("html").send(googleAppReturnHtml(query));
+        return;
+      }
+      res.redirect(googleFrontendReturnUrl(next, query));
+    };
     try {
       if (req.query.error) {
         throw Object.assign(new Error("Google login was cancelled."), { status: 401 });
@@ -83,11 +94,11 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
       } catch (mailError) {
         console.error("[auth] Google login mail failed:", mailError?.message || mailError);
       }
-      keepSession(res, req, result.token);
-      res.redirect(`${next}/login?${googleLoginSearch(result)}`);
+      if (!shouldReturnToApp(payload, next)) keepSession(res, req, result.token);
+      finish(googleLoginSearch(result));
     } catch (error) {
       console.error("[auth] Google callback failed:", error?.message || error);
-      res.redirect(`${next}/login?google_error=${encodeURIComponent(error.message || "Google login failed")}`);
+      finish(`google_error=${encodeURIComponent(error.message || "Google login failed")}`);
     }
   });
 

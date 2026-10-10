@@ -34,8 +34,8 @@ function MemberHome() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <BrandMark variant="horizontal" />
       <Text style={styles.user}>Welcome, {user?.name || "trader"}</Text>
-      <Text style={styles.muted}>Price and future only. VWAP is hidden. Quotes use your broker token, not the desk token.</Text>
-      {!indices.length ? <Text style={styles.muted}>{quoteNote || "Install your access token on My plan to load index quotes."}</Text> : null}
+      <Text style={styles.muted}>Price and future only. VWAP is hidden. New accounts use the admin desk tape until you install your own broker.</Text>
+      {!indices.length ? <Text style={styles.muted}>{quoteNote || "Desk live tape will fill here from the admin broker until you install your own on Profile."}</Text> : null}
       {indices.map((item) => {
         const tone = item.change > 0 ? colors.up : item.change < 0 ? colors.down : colors.text;
         return (

@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { getMemberDesk, getMemberQuotes, type MemberCopyAlert, type MemberDesk, type MemberIndexQuote } from "../api/client";
+import { HomeOverview } from "../components/home/HomeOverview";
 import { DeskTape, TapeCell } from "../components/dashboard/DeskTape";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
-import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import { useAuth } from "../context/AuthContext";
 import { formatInr, formatIst } from "../lib/format";
 
@@ -34,16 +33,38 @@ export function UserHome() {
   }, []);
 
   const report = desk?.report;
-  const navigate = useNavigate();
-  const brokerName = (id?: string) => desk?.brokers.find((row) => row.id === id)?.name || id || "Paper";
+  const nifty = indices.find((row) => row.symbol === "NIFTY 50" || row.symbol === "NIFTY") || indices[0];
   const balance = memberBalance(desk);
+  const available = Number(desk?.wallet.balance) || 0;
+  const pnl = Number(report?.netPnl || desk?.wallet.mtm || 0);
+  const strategies = (desk?.plans || [])
+    .filter((row) => String(row.status || "").toLowerCase() !== "expired")
+    .map((row) => ({
+      id: row.strategyId,
+      name: row.strategyName,
+      detail: `${row.term || "Plan"} · ${row.openPositions || 0} open`,
+      pnl: Number(row.netPnl || 0),
+      status: row.status || "Active",
+      running: row.openPositions > 0 || String(row.status).toLowerCase() === "active",
+      to: "/plans",
+    }));
 
   return (
     <div className="space-y-3">
-      <DeskTape kicker="Member" extra={user?.email || ""} testId="member-home">
-        <TapeCell title="Account" value={user?.email || "—"} detail="Signed in" />
-      </DeskTape>
+      <HomeOverview
+        name={user?.name}
+        quote={nifty ? { symbol: nifty.symbol, price: nifty.price, change: nifty.change, changePct: nifty.changePct } : null}
+        capital={balance}
+        available={available}
+        pnl={pnl}
+        algosTo="/plans"
+        ordersTo="/orders"
+        positionsTo="/positions"
+        reportsTo="/reports"
+        strategies={strategies}
+      />
 
+      <div className="hidden md:block">
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
       <DeskTape kicker="P&L" extra="Live" testId="member-pnl">
@@ -57,26 +78,8 @@ export function UserHome() {
           Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
         </p>
       ) : null}
+      </div>
 
-      <MemberLiveBook
-        positions={desk?.positions || []}
-        orders={desk?.orders || []}
-        orderHistory={desk?.orderHistory || []}
-        tradeBook={report?.tradeBook}
-        brokerName={brokerName}
-      />
-
-      <DeskTape kicker="Desk" extra="Tap" testId="member-links">
-        <TapeCell title="Plan" value="MTM" detail="Open my plan" onClick={() => navigate("/plans")} />
-        <TapeCell
-          title="Alerts"
-          value={String((desk?.alerts || []).length || 0)}
-          detail={(desk?.alerts || [])[0]?.text || "Open alerts"}
-          onClick={() => navigate("/notifications")}
-        />
-        <TapeCell title="Profile" value="You" detail="Name · broker · IP" onClick={() => navigate("/profile")} />
-        <TapeCell title="Admin" value="Desk" detail="Brokers and algos stay admin-only" />
-      </DeskTape>
       <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
     </div>
   );

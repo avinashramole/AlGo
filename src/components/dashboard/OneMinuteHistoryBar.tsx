@@ -52,7 +52,7 @@ export function OneMinuteHistoryBar() {
   return (
     <section className="card flex flex-wrap items-center justify-between gap-3 p-3" data-one-minute-history>
       <div className="min-w-0">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">1m history store</div>
+        <div className="text-[11px] font-bold uppercase tracking-wide text-brand-600 dark:text-orange-300">1m history store</div>
         <div className="mt-0.5 text-sm font-semibold">{coverageLabel(status)}</div>
         <p className="mt-1 text-xs text-slate-400">
           Sync Dhan 1-minute OHLC in 30-day chunks, then every backtest reuses disk and builds 2 / 5 / 10 / 15m candles.
@@ -66,7 +66,7 @@ export function OneMinuteHistoryBar() {
         type="button"
         disabled={running}
         onClick={() => void sync()}
-        className="h-10 shrink-0 rounded-lg border border-sky-500 px-4 text-sm font-semibold text-sky-800 disabled:opacity-60 dark:text-sky-200"
+        className="h-10 shrink-0 rounded-lg border border-brand-500 px-4 text-sm font-semibold text-brand-600 disabled:opacity-60 dark:text-orange-200"
       >
         {running ? "Syncing 1m…" : ready ? "Re-sync 1m (1 year)" : "Sync 1m (1 year)"}
       </button>

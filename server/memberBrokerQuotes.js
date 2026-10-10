@@ -1,5 +1,14 @@
 import { fetchDhanTapeQuotes } from "./dhan.js";
+import {
+  ensureKotakMcxMaster,
+  kotakMcxMasterUrls,
+  parseKotakMcxCrudeMaster,
+  pickKotakCrudeFutCodes,
+  resetKotakMcxMasterCache,
+} from "./kotakMcx.js";
 import { upcomingExpiries } from "./optionChain.js";
+
+export { ensureKotakMcxMaster, kotakMcxMasterUrls, parseKotakMcxCrudeMaster, pickKotakCrudeFutCodes, resetKotakMcxMasterCache };
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
@@ -243,97 +252,9 @@ export function quoteFromKotakCrude(payload, requested = "") {
   return kotakCrudeQuoteRow(tokenHit);
 }
 
-function splitKotakCsvLine(line) {
-  const out = [];
-  let cur = "";
-  let quoted = false;
-  for (const ch of String(line || "")) {
-    if (ch === '"') {
-      quoted = !quoted;
-      continue;
-    }
-    if (ch === "," && !quoted) {
-      out.push(cur);
-      cur = "";
-      continue;
-    }
-    cur += ch;
-  }
-  out.push(cur);
-  return out;
-}
-
-export function pickKotakCrudeFutCodes(text) {
-  const lines = String(text || "").split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2) return [];
-  const header = splitKotakCsvLine(lines[0]).map((col) => col.trim());
-  const idx = (name) => header.findIndex((col) => col === name);
-  const iName = idx("pSymbolName");
-  const iTrd = idx("pTrdSymbol");
-  const iType = idx("pInstType") >= 0 ? idx("pInstType") : idx("pInstName");
-  const iOpt = idx("pOptionType");
-  const iTok = idx("pSymbol");
-  const iExp = header.findIndex((col) => col === "lExpiryDate" || col === "pExpiryDate");
-  const hits = [];
-  for (const line of lines.slice(1)) {
-    const cols = splitKotakCsvLine(line);
-    const name = String(iName >= 0 ? cols[iName] : "").toUpperCase().trim();
-    const trd = String(iTrd >= 0 ? cols[iTrd] : "").toUpperCase().trim();
-    const type = String(iType >= 0 ? cols[iType] : "").toUpperCase().trim();
-    const opt = String(iOpt >= 0 ? cols[iOpt] : "").toUpperCase().trim();
-    if (name !== "CRUDEOIL" && !trd.startsWith("CRUDEOIL")) continue;
-    if (name.includes("CRUDEOILM") || trd.includes("CRUDEOILM")) continue;
-    if (type && type !== "FUTCOM" && type !== "FUT") continue;
-    if (opt && opt !== "XX") continue;
-    hits.push({
-      token: String(iTok >= 0 ? cols[iTok] : "").trim(),
-      code: trd,
-      expiry: Number(iExp >= 0 ? cols[iExp] : 0) || 0,
-    });
-  }
-  hits.sort((a, b) => a.expiry - b.expiry);
-  const codes = [];
-  for (const row of hits.slice(0, 2)) {
-    if (row.code) codes.push(row.code);
-    if (row.token) codes.push(row.token);
-  }
-  return [...new Set(codes)];
-}
-
-export function kotakMcxMasterUrls(date = new Date()) {
-  return [0, 1, 2].map((offset) => {
-    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
-      new Date(date.getTime() - offset * 86_400_000),
-    );
-    return `https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/${ymd}/transformed/mcx_fo.csv`;
-  });
-}
-
-let kotakMcxMasterCache = { at: 0, codes: [] };
-const KOTAK_MCX_MASTER_TTL_MS = 6 * 60 * 60 * 1000;
-
-export function resetKotakMcxMasterCache() {
-  kotakMcxMasterCache = { at: 0, codes: [] };
-}
-
 async function kotakCrudeLookupCodes(fetchImpl) {
-  if (kotakMcxMasterCache.codes.length && Date.now() - kotakMcxMasterCache.at < KOTAK_MCX_MASTER_TTL_MS) {
-    return kotakMcxMasterCache.codes;
-  }
-  for (const url of kotakMcxMasterUrls()) {
-    try {
-      const res = await fetchImpl(url, { headers: { Accept: "text/csv, */*" } });
-      if (!res?.ok) continue;
-      const text = typeof res.text === "function" ? await res.text() : "";
-      const codes = pickKotakCrudeFutCodes(text);
-      if (!codes.length) continue;
-      kotakMcxMasterCache = { at: Date.now(), codes };
-      return codes;
-    } catch {
-      /* next dated MCX file */
-    }
-  }
-  return [];
+  const master = await ensureKotakMcxMaster(fetchImpl);
+  return master.codes || [];
 }
 
 function quoteRow(instrument, ltp, close, netChange) {

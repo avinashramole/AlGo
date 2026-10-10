@@ -1,4 +1,4 @@
-import { apiBase, googleLoginNext } from "../lib/hybrid";
+import { apiBase, googleLoginNext, isNativeHybrid } from "../lib/hybrid";
 import { apiDownMessage, publicDeskError } from "../lib/liveSite";
 
 function authHeaders(): HeadersInit {
@@ -623,7 +623,8 @@ export function googleAuthStatus() {
 
 export function googleAuthStartUrl() {
   const next = encodeURIComponent(googleLoginNext());
-  return `${apiBase()}/auth/google?next=${next}`;
+  const native = isNativeHybrid() ? "&native=1" : "";
+  return `${apiBase()}/auth/google?next=${next}${native}`;
 }
 
 export function listUsers() {
@@ -1582,17 +1583,17 @@ export function syncOneMinuteHistory(payload: { years?: number; from?: string; t
   });
 }
 
-export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
+async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallback: string) {
   let response: Response;
   try {
-    response = await fetch(`${apiBase()}/algos/${id}/backtest/report?format=${format}`, {
+    response = await fetch(`${apiBase()}${path}${path.includes("?") ? "&" : "?"}format=${format}`, {
       headers: authHeaders(),
     });
   } catch {
     throw new Error(apiDownMessage());
   }
   if (!response.ok) {
-    let message = "Run a backtest first to create the PDF and Excel report.";
+    let message = fallback;
     try {
       const body = (await response.json()) as { error?: string };
       if (body.error) message = body.error;
@@ -1603,13 +1604,25 @@ export async function downloadBacktestReport(id: string, format: "pdf" | "xlsx")
   }
   const blob = await response.blob();
   const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
-  const filename = match?.[1] || `backtest.${format === "pdf" ? "pdf" : "xlsx"}`;
+  const filename = match?.[1] || `t2s-proposal.${format === "pdf" ? "pdf" : "xlsx"}`;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+export function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
+  return downloadBrandedFile(
+    `/algos/${id}/backtest/report`,
+    format,
+    "Run a backtest first to create the PDF and Excel report.",
+  );
+}
+
+export function downloadDeskReport(format: "pdf" | "xlsx") {
+  return downloadBrandedFile("/report/download", format, "Could not download the branded proposal report.");
 }
 
 export function selectOptionChain(symbol: string, expiry?: string) {

@@ -27,7 +27,13 @@ const {
   GMAIL_SMTP_TIMEOUT_MS,
   requestOtp,
   resolveUserRole,
+  googleAppIntentUrl,
+  googleAppReturnHtml,
+  googleDeskHashReturn,
+  googleFrontendReturnUrl,
+  isAppLoginOrigin,
   safeFrontendOrigin,
+  shouldReturnToApp,
   clientAddress,
   recordLoginIp,
   requestToken,
@@ -73,9 +79,21 @@ test("googleAuthorizeUrl requires client id and secret", () => {
   assert.match(url, /accounts\.google\.com\/o\/oauth2\/v2\/auth/);
   assert.match(url, /client_id=cid/);
   assert.match(url, /scope=openid/);
-  assert.equal(new URL(url).searchParams.get("prompt"), null);
+  assert.equal(new URL(url).searchParams.get("prompt"), "select_account");
   const state = new URL(url).searchParams.get("state");
   assert.equal(decodeOAuthPayload(state).redirectUri, "http://localhost:4000/api/auth/google/callback");
+  const nativeUrl = googleAuthorizeUrl({
+    next: "t2salgo://auth",
+    native: true,
+    env: {
+      GOOGLE_CLIENT_ID: "cid.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REDIRECT_URI: "https://trade2smart.com/api/auth/google/callback",
+    },
+  });
+  const nativeState = decodeOAuthPayload(new URL(nativeUrl).searchParams.get("state"));
+  assert.equal(nativeState.next, "t2salgo://auth");
+  assert.equal(nativeState.native, 1);
 });
 
 test("googleOAuthConfigured and redirect URI", () => {
@@ -124,6 +142,32 @@ test("OAuth state round-trips and blocks open redirects", () => {
   assert.equal(safeFrontendOrigin("http://evil.example"), "http://localhost:5173");
   assert.equal(safeFrontendOrigin("http://localhost:5173"), "http://localhost:5173");
   assert.equal(safeFrontendOrigin("https://trade2smart.com"), "https://trade2smart.com");
+  assert.equal(safeFrontendOrigin("t2salgo://auth"), "t2salgo://auth");
+  assert.equal(safeFrontendOrigin("https://evil.example"), "http://localhost:5173");
+  assert.equal(isAppLoginOrigin("t2salgo://auth"), true);
+  assert.equal(shouldReturnToApp({ native: 1 }, "https://trade2smart.com"), true);
+  assert.equal(shouldReturnToApp({}, "t2salgo://auth"), true);
+  assert.equal(shouldReturnToApp({}, "https://trade2smart.com"), false);
+  assert.equal(
+    googleFrontendReturnUrl("t2salgo://auth", "google_token=abc"),
+    "t2salgo://auth?google_token=abc",
+  );
+  assert.equal(
+    googleFrontendReturnUrl("https://trade2smart.com", "google_token=abc"),
+    "https://trade2smart.com/login?google_token=abc",
+  );
+  const html = googleAppReturnHtml("google_token=abc");
+  assert.match(html, /t2salgo:\/\/auth\?google_token=abc/);
+  assert.match(html, /intent:\/\/auth\?google_token=abc#Intent;scheme=t2salgo;package=com\.t2s\.algo;end/);
+  assert.equal(html.includes("https://trade2smart.com/login?"), false);
+  assert.equal(html.includes("https://trade2smart.com/#/?"), false);
+  assert.match(html, /t2s-logo\.png/);
+  assert.match(html, /Opening the Trade 2 Smart app/);
+  assert.equal(
+    googleAppIntentUrl("google_token=abc"),
+    "intent://auth?google_token=abc#Intent;scheme=t2salgo;package=com.t2s.algo;end",
+  );
+  assert.equal(googleDeskHashReturn("google_token=abc"), "https://trade2smart.com/#/?google_token=abc");
 });
 
 test("upsertGoogleUser adds a member and keeps admin emails as admin", () => {

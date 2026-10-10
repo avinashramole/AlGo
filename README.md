@@ -159,7 +159,9 @@ AlGo/
 
 ## Android APK (real Capacitor hybrid)
 
-The phone APK is a **Capacitor** app. It ships the real Trade 2 Smart website UI inside the APK (the Vite `dist/` bundle). It does **not** open Chrome or a remote website wrapper.
+The phone APK is a **Capacitor** app. It uses the Trade 2 Smart logo on the launcher, splash, and login screen — the same `/t2s-logo.png` as the website.
+
+**Google / Gmail login stays in the app.** Continue with Google opens Google inside the app WebView and returns through `t2salgo://auth`. It must not leave you on the public website login page. If a browser ever opens, tap **Open the app** to finish inside Trade 2 Smart.
 
 Login, Algo, Reports, Brokers, and Multi-Index are the same screens as the website. Live quotes and orders still use `https://trade2smart.com/api`.
 

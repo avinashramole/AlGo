@@ -12,7 +12,10 @@ export function isSaneOptionLtp(ltp, avg = 0) {
   if (!(price > 0) || !Number.isFinite(price)) return false;
   if (price >= 8000) return false;
   const cost = Number(avg) || 0;
-  if (cost > 0 && cost < 2000 && price > Math.max(cost * 15, 2500)) return false;
+  if (cost > 0 && cost < 2000) {
+    if (price > Math.max(cost * 15, 2500)) return false;
+    if (cost >= 20 && price < cost * 0.55) return false;
+  }
   return true;
 }
 

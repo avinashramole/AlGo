@@ -30,7 +30,7 @@ export function Gauge({ score }: Props) {
       {arc(90, 136, "#15b79e")}
       {arc(140, 180, "#12b76a")}
       <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#111827" className="dark:stroke-white" strokeWidth="3" strokeLinecap="round" />
-      <circle cx={cx} cy={cy} r="6" fill="#2f54eb" />
+      <circle cx={cx} cy={cy} r="6" fill="#fd6b01" />
       <text x={cx} y={136} textAnchor="middle" className="fill-slate-900 dark:fill-white" fontSize="22" fontWeight="800">
         {clamped}/100
       </text>

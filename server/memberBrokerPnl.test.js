@@ -229,6 +229,26 @@ test("Kotak limits and positions are this user's account balance, MTM, and P&L",
     }),
     88420.5,
   );
+  assert.equal(
+    kotakAvailableBalance({
+      stat: "Ok",
+      data: [
+        { Category: "DPNP", Net: "-10902.00", RealizedMtomPrsnt: "-10902" },
+        { Category: "CLIENT_ALL", Net: "0.00", NotionalCash: "0", MarginUsed: "0" },
+      ],
+    }),
+    0,
+  );
+  assert.equal(
+    kotakAvailableBalance({
+      stat: "Ok",
+      data: [{ Category: "DPNP", Net: "-10861.00", UnrealizedMtomPrsnt: "-10861" }],
+    }),
+    null,
+  );
+  assert.equal(kotakMasterBook({ stat: "Ok", stCode: 200 }).realizedPnl, 0);
+  assert.equal(kotakMasterBook({ stat: "Ok", data: [] }).mtm, 0);
+  assert.equal(kotakMasterBook({ stat: "Ok", data: [] }).empty, true);
   const book = kotakMasterBook([
     { trdSym: "NIFTY26O0622900CE", flBuyQty: "65", flSellQty: "0", avgPrc: "15.40", ltp: "16.00", rlMtom: "0", urMtom: "39", prod: "MIS" },
     { trdSym: "NIFTY26O0622800PE", flBuyQty: "65", flSellQty: "65", rlMtom: "120.5", urMtom: "0", prod: "MIS" },

@@ -37,7 +37,7 @@ export function Orders({ embedded = false }: { embedded?: boolean }) {
       {embedded ? null : (
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Reports</h1>
+          <h1 className="text-xl font-bold">Orders</h1>
           <p className="text-sm text-slate-400">
             {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))} Price is the Dhan average fill, not the LTP at send.
           </p>

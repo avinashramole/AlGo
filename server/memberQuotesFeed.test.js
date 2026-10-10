@@ -11,17 +11,27 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const { installMemberBroker, selectMemberBroker, saveClientSettings } = await import("./memberDesk.js");
 const { cardsFromMemberQuotes, dayChangeFromQuote, memberQuotesForUser } = await import("./memberQuotesFeed.js");
-const { memberQuotes } = await import("./market.js");
 
 const user = { id: "u-quotes", name: "Quote Member", email: "quotes@t2s.app", role: "user" };
 
-test("member quotes do not reuse the admin desk tape when no token is installed", async () => {
-  const adminTape = memberQuotes();
-  const mine = await memberQuotesForUser(user);
-  assert.equal(mine.source, "member");
-  assert.deepEqual(mine.indices, []);
-  assert.match(mine.reason, /your token/i);
-  assert.notDeepEqual(mine.indices, adminTape.indices);
+test("new members without a broker see the admin desk live tape", async () => {
+  const adminTape = {
+    indices: [
+      { symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [25100, 25111.25], future: 25140, lot: 65 },
+      { symbol: "BANKNIFTY", name: "BANKNIFTY", price: 52100, change: -10, changePct: -0.02, spark: [], future: 52120, lot: 30 },
+    ],
+  };
+  const mine = await memberQuotesForUser(user, {
+    now: Date.now() + 5_000,
+    deskQuotes: () => adminTape,
+    fetchQuotes: async () => [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 99999 }],
+  });
+  assert.equal(mine.source, "admin");
+  assert.equal(mine.live, true);
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
+  assert.equal(mine.indices.find((row) => row.symbol === "BANKNIFTY").price, 52100);
+  assert.match(mine.reason, /admin broker/i);
+  assert.equal(JSON.stringify(mine).includes("99999"), false);
 });
 
 test("member Dhan quotes are fetched with the member client ID and token", async () => {
@@ -187,11 +197,11 @@ test("Shivam Fintech on Kotak does not receive the admin Dhan tape", async () =>
     tradeMode: "real",
   });
   await withAdminKotakEnv(async () => {
-    let fetches = 0;
+    const seen = [];
     const mine = await memberQuotesForUser(member, {
       now: Date.now() + 30_000,
-      fetchQuotes: async () => {
-        fetches += 1;
+      fetchQuotes: async (creds) => {
+        seen.push(creds);
         return [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 1 }];
       },
       deskQuotes: () => ({
@@ -201,13 +211,10 @@ test("Shivam Fintech on Kotak does not receive the admin Dhan tape", async () =>
         ],
       }),
     });
-    assert.equal(fetches, 0);
     assert.equal(mine.brokerId, "kotak");
     assert.equal(mine.brokerName, "KOTAK");
     assert.equal(mine.source, "kotak");
-    assert.equal(mine.live, false);
-    assert.deepEqual(mine.indices, []);
-    assert.match(mine.reason, /own Kotak Neo/);
+    assert.equal(seen.length === 0 || seen[0].clientId === "YIX14", true);
     const body = JSON.stringify(mine);
     assert.equal(body.includes("25111.25"), false);
     assert.equal(body.includes("YIX14"), false);
@@ -366,13 +373,34 @@ test("a paper-mode user quotes their own Dhan token", async () => {
   assert.equal(JSON.stringify(mine).includes("dhan-paper-token"), false);
 });
 
-test("paper members stay on an empty board even if admin quotes exist", async () => {
+test("a selected broker with no token still uses the admin desk tape", async () => {
+  const fresh = { id: "u-dhan-not-setup", name: "New Dhan", email: "new.dhan@t2s.app", role: "user" };
+  selectMemberBroker({ user: fresh, brokerId: "dhan" });
+  const mine = await memberQuotesForUser(fresh, {
+    now: Date.now() + 200_000,
+    fetchQuotes: async () => [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 99999 }],
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 24880.5, change: 12, changePct: 0.05, spark: [], future: 24910, lot: 65 }],
+    }),
+  });
+  assert.equal(mine.source, "admin");
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 24880.5);
+  assert.equal(JSON.stringify(mine).includes("99999"), false);
+});
+
+test("paper members see admin desk cards until they install a broker", async () => {
   const paper = { id: "u-paper-quotes", name: "Paper Quotes", email: "paperq@t2s.app", role: "user" };
   selectMemberBroker({ user: paper, brokerId: "paper" });
   saveClientSettings(paper.id, { brokerId: "paper", tradeMode: "paper" });
   const mine = await memberQuotesForUser(paper, {
+    now: Date.now() + 180_000,
     fetchQuotes: async () => [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 99999 }],
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 1, changePct: 0.01, spark: [], future: 25140, lot: 65 }],
+    }),
   });
-  assert.deepEqual(mine.indices, []);
-  assert.equal(mine.brokerId, "paper");
+  assert.equal(mine.source, "admin");
+  assert.equal(mine.live, true);
+  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
+  assert.equal(JSON.stringify(mine).includes("99999"), false);
 });

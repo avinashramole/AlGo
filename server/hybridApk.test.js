@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("Capacitor app opens the live website so a site deploy updates the app", () => {
+test("Capacitor APK ships the website UI and calls the live API", () => {
   const cap = fs.readFileSync(path.join(root, "capacitor.config.ts"), "utf8");
   const hybrid = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
   const client = fs.readFileSync(path.join(root, "src/api/client.ts"), "utf8");
@@ -16,7 +16,28 @@ test("Capacitor app opens the live website so a site deploy updates the app", ()
 
   assert.match(cap, /webDir:\s*"dist"/);
   assert.match(cap, /appId:\s*"com\.t2s\.algo"/);
-  assert.match(cap, /url:\s*"https:\/\/trade2smart\.com"/);
+  assert.equal(cap.includes('url: "https://trade2smart.com"'), false);
+  assert.match(cap, /androidScheme:\s*"https"/);
+  assert.match(hybrid, /APP_LOGIN_SCHEME = "t2salgo"/);
+  assert.match(hybrid, /googleLoginNextFrom/);
+  assert.match(client, /native=1/);
+  const manifest = fs.readFileSync(path.join(root, "android/app/src/main/AndroidManifest.xml"), "utf8");
+  assert.match(manifest, /android:scheme="t2salgo"/);
+  assert.match(login, /BrandMark/);
+  const brand = fs.readFileSync(path.join(root, "src/components/BrandMark.tsx"), "utf8");
+  assert.match(brand, /t2s-logo\.png/);
+  const auth = fs.readFileSync(path.join(root, "server/auth.js"), "utf8");
+  assert.match(auth, /googleAppReturnHtml/);
+  assert.match(auth, /shouldReturnToApp/);
+  assert.match(auth, /googleAppIntentUrl/);
+  assert.match(auth, /package=com\.t2s\.algo/);
+  const context = fs.readFileSync(path.join(root, "src/context/AuthContext.tsx"), "utf8");
+  assert.match(context, /@capacitor\/browser/);
+  assert.match(context, /Browser\.open/);
+  assert.match(context, /handoffGoogleToAndroidApp/);
+  assert.match(manifest, /android:host="auth"/);
+  assert.match(manifest, /android:host="trade2smart\.com"/);
+  assert.match(manifest, /android:path="\/login"/);
   assert.equal(hybrid.includes("@capacitor/core"), false);
   assert.match(hybrid, /isNativePlatform/);
   assert.match(hybrid, /LIVE_DESK_ORIGIN = "https:\/\/trade2smart\.com"/);

@@ -207,6 +207,11 @@ function rollingKind(leg) {
   return leg.expiryKind === "monthly" ? "monthly" : "weekly";
 }
 
+function rollingKinds(leg) {
+  const first = rollingKind(leg);
+  return first === "monthly" ? ["monthly", "weekly"] : ["weekly", "monthly"];
+}
+
 function storedEntryChain(session, config = {}) {
   const time = Number(session.bars?.[0]?.time || 0);
   const symbol = rootOf(config);
@@ -216,7 +221,8 @@ function storedEntryChain(session, config = {}) {
   const monthly = rollingChainAt({ symbol, ymd: session.day, time, kind: "monthly" });
   if (needWeekly && needMonthly) {
     if (weekly?.length && monthly?.length) return { weekly, monthly, source: "stored" };
-    if (weekly?.length || monthly?.length) return { incomplete: true };
+    if (weekly?.length) return { weekly, monthly: weekly, source: "stored" };
+    if (monthly?.length) return { monthly, weekly: monthly, source: "stored" };
     return null;
   }
   if (needWeekly) {
@@ -228,14 +234,15 @@ function storedEntryChain(session, config = {}) {
 }
 
 function rollingExitForLeg(leg, entry, config, session, exitSession) {
-  const kind = rollingKind(leg);
   const symbol = rootOf(config);
-  const path = [
-    ...rollingPath({ symbol, ymd: session.day, strike: leg.strike, option: leg.option, kind }),
-    ...(exitSession && exitSession.day !== session.day
-      ? rollingPath({ symbol, ymd: exitSession.day, strike: leg.strike, option: leg.option, kind })
-      : []),
-  ];
+  const path = [];
+  for (const kind of rollingKinds(leg)) {
+    path.push(...rollingPath({ symbol, ymd: session.day, strike: leg.strike, option: leg.option, kind }));
+    if (exitSession && exitSession.day !== session.day) {
+      path.push(...rollingPath({ symbol, ymd: exitSession.day, strike: leg.strike, option: leg.option, kind }));
+    }
+    if (path.length) break;
+  }
   if (leg.side === "BUY") {
     const sl = Number((entry * (1 - config.hedgeSlPct / 100)).toFixed(2));
     for (const bar of path) {
@@ -245,11 +252,12 @@ function rollingExitForLeg(leg, entry, config, session, exitSession) {
   const exitBars = (exitSession || session).bars || [];
   const exitTime = Number(exitBars[exitBars.length - 1]?.time || session.bars?.[session.bars.length - 1]?.time || 0);
   const exitYmd = (exitSession || session).day;
-  const mark =
-    rollingPremiumAt({ symbol, ymd: exitYmd, time: exitTime, strike: leg.strike, option: leg.option, kind }) ??
-    path[path.length - 1]?.close ??
-    null;
-  return mark;
+  let mark = null;
+  for (const kind of rollingKinds(leg)) {
+    mark = rollingPremiumAt({ symbol, ymd: exitYmd, time: exitTime, strike: leg.strike, option: leg.option, kind });
+    if (mark != null) break;
+  }
+  return mark ?? path[path.length - 1]?.close ?? null;
 }
 
 export function replayTest2Day(session, config, exitSession = null) {

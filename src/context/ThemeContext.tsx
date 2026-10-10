@@ -12,8 +12,8 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem("t2s-theme");
-    if (stored === "light") return "light";
-    return "dark";
+    if (stored === "dark") return "dark";
+    return "light";
   });
 
   useEffect(() => {

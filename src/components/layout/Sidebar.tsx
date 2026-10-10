@@ -6,7 +6,6 @@ import {
   Cpu,
   FileText,
   Home,
-  Wallet,
   Layers,
   MessageSquare,
   Moon,
@@ -15,6 +14,7 @@ import {
   Sun,
   User,
   Users,
+  Wallet,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
@@ -26,14 +26,16 @@ import { cn } from "../../lib/format";
 
 const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean; member?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/plans", label: "My plan", icon: Wallet, member: true },
+  { to: "/algo", label: "Algos", icon: Cpu, admin: true },
+  { to: "/plans", label: "Algos", icon: Cpu, member: true },
+  { to: "/orders", label: "Orders", icon: Layers },
+  { to: "/positions", label: "Positions", icon: Wallet, member: true },
+  { to: "/reports", label: "Reports", icon: FileText },
   { to: "/notifications", label: "Alerts", icon: Bell, member: true },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
-  { to: "/algo", label: "Algo", icon: Cpu, admin: true },
-  { to: "/reports", label: "Reports", icon: FileText, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
-  { to: "/users", label: "User & IP Manager", icon: Users, admin: true },
+  { to: "/users", label: "Users", icon: Users, admin: true },
   { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User },
   { to: "/settings", label: "Settings", icon: Settings, admin: true },

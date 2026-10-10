@@ -22,6 +22,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="t2salgo" android:host="auth" />
+                <data android:scheme="com.t2s.algo" android:host="auth" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="trade2smart.com" android:path="/login" />
+            </intent-filter>
+
         </activity>
 
         <provider

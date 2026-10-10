@@ -18,9 +18,18 @@ const ROLLING_CONTRACTS = {
   SENSEX: { symbol: "SENSEX", securityId: 51, exchangeSegment: "BSE_FNO", instrument: "OPTIDX" },
 };
 
+export function rollingRoot(symbol = "NIFTY") {
+  const raw = String(symbol || "NIFTY").toUpperCase().replace(/\s+/g, "");
+  if (raw.includes("BANKNIFTY")) return "BANKNIFTY";
+  if (raw.includes("FINNIFTY")) return "FINNIFTY";
+  if (raw.includes("MIDCP")) return "MIDCPNIFTY";
+  if (raw.includes("SENSEX")) return "SENSEX";
+  if (raw.includes("NIFTY")) return "NIFTY";
+  return raw || "NIFTY";
+}
+
 export function rollingContract(symbol = "NIFTY") {
-  const root = String(symbol || "NIFTY").toUpperCase();
-  return ROLLING_CONTRACTS[root] || null;
+  return ROLLING_CONTRACTS[rollingRoot(symbol)] || null;
 }
 
 function pad2(value) {
@@ -36,7 +45,7 @@ export function rollingOptionDir() {
 }
 
 function symbolDir(symbol = "NIFTY") {
-  return path.join(rollingOptionDir(), String(symbol || "NIFTY").toUpperCase());
+  return path.join(rollingOptionDir(), rollingRoot(symbol));
 }
 
 function dayFile(symbol, ymd) {
@@ -98,19 +107,21 @@ function listYmds(from, to) {
 }
 
 export function hasRollingDay(symbol, ymd) {
-  if (memory.has(`${symbol}|${ymd}`)) return true;
+  const root = rollingRoot(symbol);
+  if (memory.has(`${root}|${ymd}`)) return true;
   try {
-    return fs.existsSync(dayFile(symbol, ymd));
+    return fs.existsSync(dayFile(root, ymd));
   } catch {
     return false;
   }
 }
 
 export function loadRollingDay(symbol, ymd) {
-  const key = `${symbol}|${ymd}`;
+  const root = rollingRoot(symbol);
+  const key = `${root}|${ymd}`;
   if (memory.has(key)) return memory.get(key);
   try {
-    const row = JSON.parse(fs.readFileSync(dayFile(symbol, ymd), "utf8"));
+    const row = JSON.parse(fs.readFileSync(dayFile(root, ymd), "utf8"));
     if (!row || row.ymd !== ymd) return null;
     memory.set(key, row);
     return row;
@@ -121,7 +132,7 @@ export function loadRollingDay(symbol, ymd) {
 
 export function writeRollingDay(symbol, ymd, payload) {
   const next = {
-    symbol: String(symbol || "NIFTY").toUpperCase(),
+    symbol: rollingRoot(symbol),
     ymd,
     source: payload.source || "dhan-rolling",
     empty: Boolean(payload.empty),
@@ -160,7 +171,7 @@ export function needsRollingFetch(symbol, ymd) {
 }
 
 export function dropEmptyRollingDays(symbol = "NIFTY") {
-  const root = String(symbol || "NIFTY").toUpperCase();
+  const root = rollingRoot(symbol);
   let dropped = 0;
   let names = [];
   try {
@@ -227,7 +238,9 @@ export function parseRollingPayload(payload, option = "CE") {
       : Array.isArray(pack.time)
         ? pack.time
         : [];
-  const closes = Array.isArray(pack.close) ? pack.close : Array.isArray(pack.ltp) ? pack.ltp : [];
+  const closes = Array.isArray(pack.close) ? pack.close : [];
+  const opens = Array.isArray(pack.open) ? pack.open : [];
+  const ltps = Array.isArray(pack.ltp) ? pack.ltp : [];
   const highs = Array.isArray(pack.high) ? pack.high : [];
   const lows = Array.isArray(pack.low) ? pack.low : [];
   const strikes = Array.isArray(pack.strike)
@@ -239,7 +252,7 @@ export function parseRollingPayload(payload, option = "CE") {
   const bars = [];
   for (let i = 0; i < times.length; i += 1) {
     const t = Number(times[i]) > 1e12 ? Number(times[i]) : Number(times[i]) * 1000;
-    const c = Number(closes[i]);
+    const c = Number(closes[i] || ltps[i] || opens[i] || 0);
     const strike = Number(strikes[i]);
     if (!(t > 0) || !(c > 0) || !(strike > 0)) continue;
     bars.push({
@@ -406,7 +419,7 @@ export async function downloadRollingOptionRange({
   exchangeSegment,
   instrument,
 } = {}) {
-  const root = String(symbol || "NIFTY").toUpperCase();
+  const root = rollingRoot(symbol);
   const contract = rollingContract(root);
   const id = Number(securityId || contract?.securityId || NIFTY_ID);
   const segment = String(exchangeSegment || contract?.exchangeSegment || "NSE_FNO");

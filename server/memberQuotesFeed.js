@@ -1,5 +1,6 @@
+import { listBrokers } from "./brokers.js";
 import { brokerNeedsApiKey, fetchMemberBrokerQuotes, supportedMemberQuoteBroker } from "./memberBrokerQuotes.js";
-import { memberIndexQuote } from "./market.js";
+import { memberIndexQuote, memberQuotes } from "./market.js";
 import { peekClientSecrets } from "./memberDesk.js";
 import { dayChangeFromQuote } from "./quoteDayChange.js";
 
@@ -90,6 +91,38 @@ function emptyQuotes(brokerId, reason) {
   };
 }
 
+function memberHasOwnQuoteSetup(secrets = {}) {
+  const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
+  if (!brokerId || brokerId === "paper") return false;
+  const token = String(secrets.brokerToken || "").trim();
+  const accountId = String(secrets.accountId || "").trim();
+  const apiKey = String(secrets.brokerApiKey || "").trim();
+  if (brokerId === "kotak") {
+    return Boolean(secrets.credentialsInstalled && token && accountId && apiKey);
+  }
+  if (!token || !accountId) return false;
+  if (brokerNeedsApiKey(brokerId) && !apiKey) return false;
+  return supportedMemberQuoteBroker(brokerId);
+}
+
+function adminDeskBoard(user, { deskQuotes, now } = {}) {
+  const tape = typeof deskQuotes === "function" ? deskQuotes() : memberQuotes();
+  const indices = (Array.isArray(tape?.indices) ? tape.indices : []).map(memberIndexQuote).filter(Boolean);
+  const brokerId = String(listBrokers().activeBrokerId || "dhan").trim().toLowerCase() || "dhan";
+  const live = indices.some((row) => Number(row.price) > 0);
+  return {
+    indices,
+    source: "admin",
+    brokerId,
+    brokerName: brokerNameOf(brokerId),
+    live,
+    lastTickAt: live ? now : null,
+    reason: live
+      ? "Desk live tape from the admin broker. Install your own broker on Profile to switch to your quotes."
+      : "Desk live tape is not ready yet. Admin broker quotes will appear here until you install your own on Profile.",
+  };
+}
+
 function kotakFeedCreds(secrets) {
   const ownReady = Boolean(secrets.credentialsInstalled && secrets.brokerToken && secrets.accountId && secrets.brokerApiKey);
   if (!ownReady) return null;
@@ -155,7 +188,7 @@ async function kotakLiveBoard(user, secrets, { fetchQuotes, now }) {
   }
 }
 
-export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() } = {}) {
+export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now = Date.now() } = {}) {
   if (!user?.id) return emptyQuotes("paper", "Sign in first.");
   const secrets = peekClientSecrets(user.id);
   const brokerId = String(secrets.brokerId || "paper").trim().toLowerCase() || "paper";
@@ -165,11 +198,8 @@ export async function memberQuotesForUser(user, { fetchQuotes, now = Date.now() 
   if (brokerId === "kotak") {
     return kotakLiveBoard(user, secrets, { fetchQuotes, now });
   }
-  if (brokerId === "paper" || !token || !accountId) {
-    return emptyQuotes(
-      brokerId,
-      "Install your broker client ID and access token on My plan. Index quotes use your token, not the desk token.",
-    );
+  if (!memberHasOwnQuoteSetup(secrets)) {
+    return adminDeskBoard(user, { deskQuotes, now });
   }
   if (!supportedMemberQuoteBroker(brokerId)) {
     return emptyQuotes(

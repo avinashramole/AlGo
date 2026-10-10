@@ -1,6 +1,8 @@
 import { SideBadge } from "../components/desk/Badges";
+import { downloadDeskReport } from "../api/client";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
+import { catchDeskError } from "../lib/liveSite";
 import { cn, formatInr, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 
 export function Reports({ embedded = false }: { embedded?: boolean }) {
@@ -8,30 +10,10 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
   const report = data.report;
   const maxDaily = Math.max(1, ...(report?.daily || []).map((row) => Math.abs(row.pnl)));
 
-  const download = () => {
-    if (!report) return;
-    const rows = [
-      ["Symbol", "Side", "Qty", "Entry", "Exit", "P&L", "Strategy", "Broker", "Closed"],
-      ...report.tradeBook.map((row) => [
-        row.symbol,
-        row.side,
-        row.qty,
-        row.entry,
-        row.exit,
-        row.pnl,
-        deskStrategyName(row.strategy, data.algos) || row.strategy || "",
-        brokerName(data.brokers, row.brokerId),
-        formatIst(row.closedAt),
-      ]),
-    ];
-    const csv = rows.map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `t2s-report-${report.date}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const download = (format: "pdf" | "xlsx") => {
+    void downloadDeskReport(format).catch((error) => {
+      window.alert(catchDeskError(error, "Could not download the branded proposal report"));
+    });
   };
 
   if (!report) {
@@ -55,8 +37,21 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
         </div>
         )}
         <div className="flex items-center gap-3">
-          <button type="button" onClick={download} className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
-            Download CSV
+          <button
+            type="button"
+            data-report-download="pdf"
+            onClick={() => download("pdf")}
+            className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+          >
+            Download PDF
+          </button>
+          <button
+            type="button"
+            data-report-download="xlsx"
+            onClick={() => download("xlsx")}
+            className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500"
+          >
+            Download Excel
           </button>
         </div>
       </div>

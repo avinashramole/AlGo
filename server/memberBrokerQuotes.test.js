@@ -9,6 +9,7 @@ import {
   kotakMcxMasterUrls,
   kotakNeoFutCode,
   pickCrudeSearchHit,
+  parseKotakMcxCrudeMaster,
   pickKotakCrudeFutCodes,
   quoteFromKotakCrude,
   resetKotakMcxMasterCache,
@@ -100,6 +101,16 @@ test("Kotak MCX scrip master picks the nearest CRUDEOIL FUTCOM", () => {
     ].join("\n"),
   );
   assert.deepEqual(codes, ["CRUDEOIL19OCT26FUT", "569900", "CRUDEOIL19NOV26FUT", "573422"]);
+  const parsed = parseKotakMcxCrudeMaster(
+    [
+      "pSymbol,pSymbolName,pTrdSymbol,pInstType,pOptionType,lExpiryDate",
+      "569900,CRUDEOIL,CRUDEOIL19OCT26FUT,FUTCOM,XX,1",
+      "580626,CRUDEOIL,CRUDEOIL15OCT268800PE,OPTFUT,PE,2",
+      "580473,CRUDEOIL,CRUDEOIL15OCT268700CE,OPTFUT,CE,2",
+    ].join("\n"),
+  );
+  assert.deepEqual(parsed.optionExpiries, ["2026-10-15"]);
+  assert.equal(parsed.options[0].code, "CRUDEOIL15OCT268800PE");
   assert.match(kotakMcxMasterUrls(new Date("2026-10-08T06:00:00.000Z"))[0], /2026-10-08\/transformed\/mcx_fo\.csv/);
 });
 

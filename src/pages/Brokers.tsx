@@ -234,6 +234,34 @@ export function Brokers() {
         <Stat label="Connected" value={String(connectedCount)} />
         <Stat label="Dhan funds" value={dhan?.liveFeed ? `₹${formatNumber(actualFunds, 0)}` : paper ? fundsCaption(paper) : "—"} />
       </div>
+      <section className="card divide-y divide-[var(--border)]" data-broker-list="connections">
+        {brokers.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
+            <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => pickBroker(item.id)}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-extrabold text-white" style={{ background: item.color }}>
+                {item.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold">{item.name}</div>
+                <div className={item.connected || item.liveFeed ? "text-[11px] font-semibold text-up" : "text-[11px] text-slate-400"}>
+                  {item.connected || item.liveFeed ? "Connected" : "Not connected"}
+                </div>
+              </div>
+            </button>
+            {item.id === "paper" ? (
+              <span className="text-xs font-semibold text-slate-400">Paper</span>
+            ) : item.connected || item.liveFeed ? (
+              <button type="button" onClick={() => void disconnect(item.id)} className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-down">
+                Disconnect
+              </button>
+            ) : (
+              <button type="button" onClick={() => openForm(item)} className="rounded-full bg-brand-500 px-3 py-1.5 text-xs font-bold text-white">
+                Connect
+              </button>
+            )}
+          </div>
+        ))}
+      </section>
       {viewed ? (
         <section className="card p-3 md:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">

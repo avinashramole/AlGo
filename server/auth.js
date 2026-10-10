@@ -1064,11 +1064,26 @@ export function decodeOAuthState(state) {
   return String(decodeOAuthPayload(state).next || "");
 }
 
+export const APP_LOGIN_SCHEME = "t2salgo";
+export const APP_LOGIN_ORIGIN = `${APP_LOGIN_SCHEME}://auth`;
+
+export function isAppLoginOrigin(next) {
+  const value = String(next || "").trim().toLowerCase();
+  return value.startsWith(`${APP_LOGIN_SCHEME}://`) || value.startsWith("com.t2s.algo://");
+}
+
+export function shouldReturnToApp(payload = {}, next = "") {
+  const native = payload?.native === 1 || payload?.native === true || payload?.native === "1";
+  return native || isAppLoginOrigin(next) || isAppLoginOrigin(payload?.next);
+}
+
 export function safeFrontendOrigin(next, env = process.env) {
   const publicUrl = String(env.PUBLIC_URL || "").replace(/\/$/, "");
   const fallback = publicUrl || "http://localhost:5173";
+  const raw = String(next || "").trim();
+  if (isAppLoginOrigin(raw)) return APP_LOGIN_ORIGIN;
   try {
-    const url = new URL(String(next || ""));
+    const url = new URL(raw);
     if (url.protocol !== "http:" && url.protocol !== "https:") return fallback;
     if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return url.origin;
     if (url.hostname === "trade2smart.com" || url.hostname.endsWith(".trade2smart.com")) return url.origin;
@@ -1080,6 +1095,70 @@ export function safeFrontendOrigin(next, env = process.env) {
   } catch {
     return fallback;
   }
+}
+
+export function googleFrontendReturnUrl(next, query, env = process.env) {
+  const origin = safeFrontendOrigin(next, env);
+  const q = String(query || "").replace(/^\?/, "");
+  if (isAppLoginOrigin(origin)) return `${APP_LOGIN_ORIGIN}?${q}`;
+  return `${origin}/login?${q}`;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function googleAppIntentUrl(query) {
+  const q = String(query || "").replace(/^\?/, "");
+  return `intent://auth?${q}#Intent;scheme=${APP_LOGIN_SCHEME};package=com.t2s.algo;end`;
+}
+
+export function googleDeskHashReturn(query) {
+  const q = String(query || "").replace(/^\?/, "");
+  return `https://trade2smart.com/#/?${q}`;
+}
+
+export function googleAppReturnHtml(query) {
+  const q = String(query || "").replace(/^\?/, "");
+  const app = `${APP_LOGIN_ORIGIN}?${q}`;
+  const intent = googleAppIntentUrl(q);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Opening Trade 2 Smart</title>
+  <style>
+    html,body{margin:0;min-height:100vh;background:#071833;color:#fff;font-family:Inter,system-ui,sans-serif}
+    body{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 20px;box-sizing:border-box}
+    img{width:140px;height:140px;object-fit:contain}
+    h1{margin:16px 0 8px;font-size:24px}
+    p{margin:0 0 12px;max-width:26rem;line-height:1.5;color:#d6deea}
+    a{color:#fd6b01;font-weight:700}
+  </style>
+</head>
+<body>
+  <img src="/t2s-logo.png" alt="Trade 2 Smart" />
+  <h1>Opening the Trade 2 Smart app</h1>
+  <p>Finish Google login inside the app. This browser page cannot sign the app in.</p>
+  <p><a href="${escapeHtml(intent)}">Open the app</a></p>
+  <script>
+    var app = ${JSON.stringify(app)};
+    var intent = ${JSON.stringify(intent)};
+    function goApp() {
+      try { location.replace(intent); } catch (e) {}
+    }
+    goApp();
+    setTimeout(function () {
+      if (document.visibilityState !== "visible") return;
+      try { location.replace(app); } catch (e) {}
+    }, 350);
+  </script>
+</body>
+</html>`;
 }
 
 export function googleLoginSearch({ token, user } = {}) {
@@ -1094,7 +1173,7 @@ export function googleLoginSearch({ token, user } = {}) {
   return query.toString();
 }
 
-export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
+export function googleAuthorizeUrl({ next, native, env = process.env, req } = {}) {
   const clientId = String(env.GOOGLE_CLIENT_ID || "").trim();
   if (!clientId || !String(env.GOOGLE_CLIENT_SECRET || "").trim()) {
     throw fail("Google login is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.", 503);
@@ -1107,7 +1186,8 @@ export function googleAuthorizeUrl({ next, env = process.env, req } = {}) {
     scope: "openid email profile",
     access_type: "online",
     include_granted_scopes: "true",
-    state: encodeOAuthState(next, { redirectUri }),
+    prompt: "select_account",
+    state: encodeOAuthState(next, { redirectUri, native: native ? 1 : 0 }),
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }

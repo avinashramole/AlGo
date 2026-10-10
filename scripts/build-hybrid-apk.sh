@@ -26,10 +26,8 @@ yes | sdkmanager --sdk_root="$SDK_DIR" --licenses >/dev/null || true
 sdkmanager --sdk_root="$SDK_DIR" "platforms;android-36" "platforms;android-35" "build-tools;36.0.0" "build-tools;35.0.0" "platform-tools"
 
 rm -f "$ROOT/dist/Trade2Smart-web.apk" "$ROOT/public/Trade2Smart-web.apk"
-if [ ! -f "$ROOT/dist/index.html" ]; then
-  echo "Building the website bundle for Capacitor"
-  (cd "$ROOT" && npm run build)
-fi
+echo "Building the website bundle for Capacitor"
+(cd "$ROOT" && npm run build)
 if [ ! -f "$ROOT/dist/index.html" ]; then
   echo "FAIL: dist/index.html missing. Capacitor needs the built website."
   exit 1

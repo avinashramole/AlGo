@@ -3,11 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-bt-"));
 process.env.T2S_BACKTEST_REPORT_DIR = dir;
 
-const { buildBacktestReport, clearBacktestReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
+const { T2S_STANDARD_BRAND_REPORT, brandedReportFile, buildBacktestReport, clearBacktestReport, deskToProposalReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
 
 test("backtest report builds PDF and Excel from the trade book", () => {
   const algo = { id: "a14", name: "TEST2", kind: "nifty-test2", symbol: "NIFTY", holdStyle: "btst", summary: "TEST2 BTST" };
@@ -72,12 +73,31 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   const pdf = renderBacktestPdf(loaded);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.match(pdf.toString("latin1"), /TEST2/);
+  assert.match(pdf.toString("latin1"), /\(TRADE \)/);
+  assert.match(pdf.toString("latin1"), /\(2\)/);
+  assert.match(pdf.toString("latin1"), /\( SMART\)/);
+  assert.match(pdf.toString("latin1"), /Backtest report/);
+  assert.match(pdf.toString("latin1"), /Confidential desk report/);
+  assert.match(pdf.toString("latin1"), /Currency Indian Rupee/);
+  assert.match(pdf.toString("latin1"), /Win rate/);
+  assert.match(pdf.toString("latin1"), /ROM/);
+  assert.match(pdf.toString("latin1"), /Helvetica-Bold/);
+  assert.match(pdf.toString("latin1"), /0\.992 0\.420 0\.004/);
+  assert.match(pdf.toString("latin1"), /0\.000 0\.059 0\.161/);
+  assert.match(pdf.toString("latin1"), /0\.000 0\.059 0\.161 rg\n0\.00 555\.00/);
   assert.match(pdf.toString("latin1"), /SELL/);
   assert.match(pdf.toString("latin1"), /BUY/);
   const xlsx = renderBacktestExcel(loaded);
   const zip = xlsx.toString("latin1");
   assert.equal(xlsx.subarray(0, 2).toString(), "PK");
   assert.match(zip, /xl\/workbook.xml/);
+  assert.match(zip, /xl\/styles.xml/);
+  assert.match(zip, /FFFD6B01/);
+  assert.match(zip, /FF000F29/);
+  assert.match(zip, /FFE8EEF6/);
+  assert.equal(zip.includes("FFFFF1E6"), false);
+  assert.match(zip, /TRADE 2 SMART/);
+  assert.match(zip, /trade2smart.com/);
   assert.match(zip, /worksheets\/sheet1.xml/);
   assert.match(zip, /SELL/);
   assert.match(zip, /Entry time/);
@@ -178,9 +198,11 @@ test("TEST2 PDF warns when premiums are not from the option tape", () => {
     },
   );
   const pdf = renderBacktestPdf(report).toString("latin1");
-  assert.match(pdf, /NOT REAL OPTION PRICES/);
+  assert.match(pdf, /No Dhan rolling option tape stored for BANKNIFTY/);
+  assert.match(pdf, /Connect Dhan LIVE/);
   assert.match(pdf, /BANKNIFTY/);
-  assert.match(pdf, /research book from index candles/);
+  assert.equal(pdf.includes("NOT REAL OPTION PRICES"), false);
+  assert.equal(pdf.includes("research book from index candles"), false);
   assert.match(pdf, /COMBO/);
 });
 
@@ -198,4 +220,43 @@ test("backtest report falls back to lastBacktest when the file is missing", () =
   const report = buildBacktestReport(algo, algo.lastBacktest);
   assert.equal(report.trades[0].pnl, 650);
   assert.equal(renderBacktestPdf(report)[0], 0x25);
+});
+
+test("desk download uses the same branded proposal PDF and Excel", () => {
+  assert.equal(T2S_STANDARD_BRAND_REPORT, "proposal-v1");
+  const report = deskToProposalReport({
+    date: "2026-10-10",
+    netPnl: 1220,
+    realizedPnl: 1220,
+    trades: 1,
+    wins: 1,
+    losses: 0,
+    winRate: 100,
+    tradeBook: [
+      { id: "t1", symbol: "NIFTY 24800 CE", side: "SELL", qty: 65, entry: 80, exit: 70, pnl: 650, closedAt: "2026-10-10T10:00:00.000Z" },
+    ],
+  });
+  assert.equal(report.strategy.kind, "desk");
+  assert.equal(report.trades[0].symbol, "NIFTY 24800 CE");
+  const pdf = renderBacktestPdf(report).toString("latin1");
+  assert.match(pdf, /\(TRADE \)/);
+  assert.match(pdf, /\(2\)/);
+  assert.match(pdf, /\( SMART\)/);
+  assert.match(pdf, /Proposal report/);
+  assert.match(pdf, /Confidential desk report/);
+  assert.match(pdf, /NIFTY 24800 CE/);
+  const file = brandedReportFile(report, "xlsx");
+  assert.match(file.name, /proposal/);
+  assert.match(file.body.toString("latin1"), /FFFD6B01/);
+  assert.match(file.body.toString("latin1"), /FF000F29/);
+  assert.match(file.body.toString("latin1"), /Proposal report/);
+  assert.match(file.body.toString("latin1"), /Confidential desk report/);
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const deploy = fs.readFileSync(path.join(root, "deploy", "update-website.sh"), "utf8");
+  assert.match(deploy, /T2S_STANDARD_BRAND_REPORT/);
+  assert.match(deploy, /Do not deploy an old backtestReport\.js/);
+  const reports = fs.readFileSync(path.join(root, "src", "pages", "Reports.tsx"), "utf8");
+  assert.match(reports, /data-report-download="pdf"/);
+  assert.match(reports, /data-report-download="xlsx"/);
+  assert.equal(reports.includes("Download CSV"), false);
 });

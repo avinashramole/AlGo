@@ -1,51 +1,16 @@
 import { NavigationContainer } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./src/AuthContext";
-import { MarketProvider } from "./src/MarketContext";
 import { BrandMark } from "./src/components/BrandMark";
-import { AlgoScreen } from "./src/screens/AlgoScreen";
-import { BrokersScreen } from "./src/screens/BrokersScreen";
-import { HomeScreen } from "./src/screens/HomeScreen";
+import { DeskWebScreen } from "./src/screens/DeskWebScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
-import { OptionsScreen } from "./src/screens/OptionsScreen";
-import { OrdersScreen } from "./src/screens/OrdersScreen";
-import { PositionsScreen } from "./src/screens/PositionsScreen";
-import { ProfileScreen } from "./src/screens/ProfileScreen";
-import { ReportScreen } from "./src/screens/ReportScreen";
-import { SettingsScreen } from "./src/screens/SettingsScreen";
-import { MemberPlansScreen } from "./src/screens/MemberPlansScreen";
-import { TradeScreen } from "./src/screens/TradeScreen";
 import { colors } from "./src/theme";
 
-const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-
-function Tabs() {
-  const { user } = useAuth();
-  const admin = user?.role === "admin";
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.brand,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
-      }}
-    >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      {admin ? <Tab.Screen name="Option Chain" component={OptionsScreen} /> : null}
-      {admin ? <Tab.Screen name="Algo" component={AlgoScreen} /> : null}
-      {admin ? <Tab.Screen name="Position" component={PositionsScreen} /> : null}
-      {!admin ? <Tab.Screen name="My plan" component={MemberPlansScreen} /> : null}
-      {!admin ? <Tab.Screen name="Profile" component={ProfileScreen} /> : null}
-    </Tab.Navigator>
-  );
-}
 
 function Root() {
   const { ready, user } = useAuth();
@@ -61,21 +26,11 @@ function Root() {
   return (
     <Stack.Navigator screenOptions={{ headerTintColor: colors.brand, headerTitleStyle: { fontWeight: "800" } }}>
       {user ? (
-        <>
-          <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
-          {user?.role === "admin" ? (
-            <>
-              <Stack.Screen name="Options" component={OptionsScreen} />
-              <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: "Order Book" }} />
-              <Stack.Screen name="Positions" component={PositionsScreen} options={{ title: "Position" }} />
-              <Stack.Screen name="Report" component={ReportScreen} />
-              <Stack.Screen name="Brokers" component={BrokersScreen} />
-              <Stack.Screen name="Settings" component={SettingsScreen} />
-              <Stack.Screen name="Trade" component={TradeScreen} options={{ title: "Review Trade" }} />
-            </>
-          ) : null}
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </>
+        <Stack.Screen
+          name="Desk"
+          component={DeskWebScreen}
+          options={{ headerShown: false, title: user.role === "admin" ? "Admin Algo" : "Member desk" }}
+        />
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
       )}
@@ -88,12 +43,10 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <MarketProvider>
-            <NavigationContainer>
-              <StatusBar style="dark" />
-              <Root />
-            </NavigationContainer>
-          </MarketProvider>
+          <NavigationContainer>
+            <StatusBar style="dark" />
+            <Root />
+          </NavigationContainer>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
