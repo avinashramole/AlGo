@@ -141,7 +141,6 @@ if ! grep -q "ROLLING_BACKTEST_DEADLINE_MS" "$HOME_DIR/server/dhanRollingOption.
   echo "FAIL: $HOME_DIR still has the old TEST2 rolling download."
   exit 1
 fi
-<<<<<<< HEAD
 if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHistoryBar.tsx" || ! grep -q "ensureReplayBars" "$HOME_DIR/server/index.js"; then
   echo "FAIL: $HOME_DIR still has the old 1m history sync."
   exit 1
