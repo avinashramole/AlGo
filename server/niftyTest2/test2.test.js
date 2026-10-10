@@ -568,7 +568,7 @@ test("TEST2 backtest uses the full session, not only the first 5m bar", () => {
   assert.notEqual(trendBook.pnl, quietBook.pnl);
 });
 
-test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
+test("TEST2 uses Dhan rolling chains and fills a weekly-only day from that tape", () => {
   wipeRollingOptions();
   const open = Date.parse("2026-09-01T04:05:00.000Z");
   const next = open + 86_400_000;
@@ -608,15 +608,27 @@ test("TEST2 uses Dhan rolling chains and skips incomplete days", () => {
   assert.equal(combo.legs[0].entry, 90);
   assert.equal(Number(combo.cost), 80);
   writeRollingDay("NIFTY", "2026-09-03", {
-    weekly: { slots: [{ t: open + 2 * 86_400_000, spot: 24500, rows: [{ s: 24700, ce: 24, pe: 23 }] }] },
+    weekly: {
+      slots: [
+        {
+          t: open + 2 * 86_400_000,
+          spot: 24500,
+          rows: [
+            { s: 24600, ce: 90, pe: 88 },
+            { s: 24700, ce: 24, pe: 23 },
+          ],
+        },
+      ],
+    },
     monthly: { slots: [] },
   });
-  const incomplete = replayTest2Day(
+  const weeklyOnly = replayTest2Day(
     { ...session, day: "2026-09-03", bars: [{ time: open + 2 * 86_400_000, open: 24500, high: 24510, low: 24490, close: 24500 }] },
     niftyTest2Config(defaultNiftyTest2Algo()),
   );
-  assert.equal(incomplete.skip, true);
-  assert.equal(incomplete.reason, "incomplete-chain");
+  assert.equal(weeklyOnly.skip, undefined);
+  assert.equal(weeklyOnly.source, "stored");
+  assert.equal(weeklyOnly.legs[0].entry > 0, true);
   wipeRollingOptions();
 });
 

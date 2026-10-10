@@ -19,6 +19,7 @@ import {
 
 test("rollingContract maps index scripts to Dhan rolling ids", () => {
   assert.equal(rollingContract("NIFTY")?.securityId, 13);
+  assert.equal(rollingContract("NIFTY 50")?.securityId, 13);
   assert.equal(rollingContract("BANKNIFTY")?.securityId, 25);
   assert.equal(rollingContract("SENSEX")?.exchangeSegment, "BSE_FNO");
   assert.equal(rollingContract("CRUDEOIL"), null);
@@ -84,6 +85,24 @@ test("parseRollingPayload reads CE bars", () => {
   );
   assert.equal(alias[0].strike, 24600);
   assert.equal(alias[0].c, 80);
+  const openOnly = parseRollingPayload(
+    {
+      data: {
+        ce: {
+          timestamp: [1_725_500_100],
+          open: [354],
+          high: [],
+          low: [],
+          close: [],
+          strike: [24600],
+          spot: [24500],
+        },
+      },
+    },
+    "CE",
+  );
+  assert.equal(openOnly.length, 1);
+  assert.equal(openOnly[0].c, 354);
 });
 
 test("rolling chain lookup and coverage", () => {

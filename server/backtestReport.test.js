@@ -72,12 +72,22 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   const pdf = renderBacktestPdf(loaded);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.match(pdf.toString("latin1"), /TEST2/);
+  assert.match(pdf.toString("latin1"), /TRADE 2 SMART/);
+  assert.match(pdf.toString("latin1"), /BACKTEST REPORT/);
+  assert.match(pdf.toString("latin1"), /Helvetica-Bold/);
+  assert.match(pdf.toString("latin1"), /0\.992 0\.420 0\.004/);
+  assert.equal(pdf.toString("latin1").includes("0.027 0.094 0.200 rg\n0.00 555.00"), false);
   assert.match(pdf.toString("latin1"), /SELL/);
   assert.match(pdf.toString("latin1"), /BUY/);
   const xlsx = renderBacktestExcel(loaded);
   const zip = xlsx.toString("latin1");
   assert.equal(xlsx.subarray(0, 2).toString(), "PK");
   assert.match(zip, /xl\/workbook.xml/);
+  assert.match(zip, /xl\/styles.xml/);
+  assert.match(zip, /FFFD6B01/);
+  assert.match(zip, /FFFFF1E6/);
+  assert.match(zip, /TRADE 2 SMART/);
+  assert.match(zip, /trade2smart.com/);
   assert.match(zip, /worksheets\/sheet1.xml/);
   assert.match(zip, /SELL/);
   assert.match(zip, /Entry time/);
@@ -178,9 +188,11 @@ test("TEST2 PDF warns when premiums are not from the option tape", () => {
     },
   );
   const pdf = renderBacktestPdf(report).toString("latin1");
-  assert.match(pdf, /NOT REAL OPTION PRICES/);
+  assert.match(pdf, /No Dhan rolling option tape stored for BANKNIFTY/);
+  assert.match(pdf, /Connect Dhan LIVE/);
   assert.match(pdf, /BANKNIFTY/);
-  assert.match(pdf, /research book from index candles/);
+  assert.equal(pdf.includes("NOT REAL OPTION PRICES"), false);
+  assert.equal(pdf.includes("research book from index candles"), false);
   assert.match(pdf, /COMBO/);
 });
 
