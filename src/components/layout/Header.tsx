@@ -91,7 +91,9 @@ export function Header() {
   const sessionLabel = nseOpen && mcxOpen ? "Open" : nseOpen ? "NSE Open" : mcxOpen ? "MCX Open" : "Closed";
   const sessionTitle = admin
     ? `Admin live tape ${feedLabel || "DHAN"}. Default order broker ${active?.name || adminBrokerId}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
-    : `Your selected broker ${feedLabel || memberFeed?.brokerId || ""}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`;
+    : memberFeed?.hasQuotes
+      ? `Live tape ${feedLabel || memberFeed?.brokerId || "desk"}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
+      : `Live tape from the admin broker until you install your own. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`;
   const tickAt = admin ? tape.lastTickAt : memberFeed?.lastTickAt;
   const lastTick = tickAt
     ? new Date(tickAt).toLocaleTimeString("en-IN", {

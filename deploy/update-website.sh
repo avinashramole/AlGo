@@ -54,6 +54,10 @@ if [ -d .git ]; then
     server/market.js \
     server/memberBrokerPnl.js \
     server/memberDesk.js \
+    server/memberQuotesFeed.js \
+    src/components/dashboard/MemberIndexBoard.tsx \
+    src/components/layout/Header.tsx \
+    mobile/src/screens/HomeScreen.tsx \
     server/niftyVwap/config.js \
     server/niftyTest1/Test1Strategy.js \
     server/strategies.js \
@@ -91,6 +95,10 @@ if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_
   pull_raw server/market.js
   pull_raw server/memberBrokerPnl.js
   pull_raw server/memberDesk.js
+  pull_raw server/memberQuotesFeed.js
+  pull_raw src/components/dashboard/MemberIndexBoard.tsx
+  pull_raw src/components/layout/Header.tsx
+  pull_raw mobile/src/screens/HomeScreen.tsx
   pull_raw server/niftyVwap/config.js
   pull_raw server/niftyTest1/Test1Strategy.js
   pull_raw server/strategies.js
@@ -170,6 +178,10 @@ if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts" || ! grep -q 'url:
   echo "FAIL: Capacitor app must open https://trade2smart.com so website deploys update the app."
   exit 1
 fi
+if ! grep -q 'source: "admin"' "$HOME_DIR/server/memberQuotesFeed.js" || ! grep -q "adminDeskBoard" "$HOME_DIR/server/memberQuotesFeed.js"; then
+  echo "FAIL: New members must see admin desk live cards when no broker is installed. Deploy cursor/member-admin-live-cards-6826."
+  exit 1
+fi
 
 npm run build
 
@@ -206,6 +218,7 @@ if [ "$HOME_DIR" != /opt/t2s ] && [ -d /opt/t2s ]; then
   /bin/cp -af "$HOME_DIR/server/index.js" /opt/t2s/server/index.js
   /bin/cp -af "$HOME_DIR/server/market.js" /opt/t2s/server/market.js
   /bin/cp -af "$HOME_DIR/server/backtestReport.js" /opt/t2s/server/backtestReport.js
+  /bin/cp -af "$HOME_DIR/server/memberQuotesFeed.js" /opt/t2s/server/memberQuotesFeed.js
 fi
 
 if [ -f "$HOME_DIR/deploy/write_nginx_trade2smart.py" ]; then
