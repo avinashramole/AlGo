@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn, formatInr, formatRupee } from "../../lib/format";
@@ -173,6 +174,7 @@ export function SettingsRow({
         <span className={cn("block text-sm font-bold", danger && "text-down")}>{label}</span>
         {detail ? <span className="block truncate text-[11px] text-slate-400">{detail}</span> : null}
       </span>
+      {danger ? null : <ChevronRight size={16} className="text-slate-300" />}
     </>
   );
   if (to) {

@@ -1,7 +1,7 @@
 import { Cpu, FileText, Layers, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn, formatChange, formatInr, formatPct, formatQuote, formatRupee } from "../../lib/format";
-import { Avatar, MetricTile, QuickLink, SectionHead, StatusPill } from "../phone/PhoneUi";
+import { MetricTile, QuickLink, SectionHead, StatusPill } from "../phone/PhoneUi";
 
 export type HomeQuote = {
   symbol: string;
@@ -48,12 +48,9 @@ export function HomeOverview({
 
   return (
     <div className="space-y-3" data-home-overview="phone">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-lg font-extrabold tracking-tight">Hello, {first}</div>
-          <div className="text-xs text-slate-400">Welcome back!</div>
-        </div>
-        <Avatar name={name} />
+      <div>
+        <div className="text-lg font-extrabold tracking-tight">Hello, {first}</div>
+        <div className="text-xs text-slate-400">Welcome back!</div>
       </div>
 
       <section className="card p-4">

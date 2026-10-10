@@ -64,6 +64,7 @@ export function UserHome() {
         strategies={strategies}
       />
 
+      <div className="hidden md:block">
       <MemberIndexBoard indices={indices} note={quoteNote} />
 
       <DeskTape kicker="P&L" extra="Live" testId="member-pnl">
@@ -77,6 +78,7 @@ export function UserHome() {
           Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
         </p>
       ) : null}
+      </div>
 
       <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
     </div>
