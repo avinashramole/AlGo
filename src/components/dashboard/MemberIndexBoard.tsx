@@ -36,7 +36,7 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
   if (!indices.length) {
     return (
       <DeskTape kicker="Market tape" extra="Member" testId="member-tape">
-        <TapeCell title="Quotes" value="—" detail={note || "Install client ID and access token on My plan."} />
+        <TapeCell title="Quotes" value="—" detail={note || "Desk live tape will fill here from the admin broker until you install your own on Profile."} />
       </DeskTape>
     );
   }
