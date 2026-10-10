@@ -249,9 +249,32 @@ function bootFromWindow() {
   return userFromGoogleParams(params) || readUser();
 }
 
-async function listenAppGoogleReturn(apply: (href: string) => void) {
+type CapacitorAppPlugin = {
+  App: {
+    addListener: (event: "appUrlOpen", cb: (event: { url: string }) => void) => Promise<{ remove: () => Promise<void> }>;
+    getLaunchUrl: () => Promise<{ url?: string } | undefined>;
+  };
+};
+
+type CapacitorBrowserPlugin = {
+  Browser: {
+    open: (options: { url: string }) => Promise<void>;
+    close: () => Promise<void>;
+  };
+};
+
+async function importCapacitorPlugin<T>(specifier: string): Promise<T | null> {
   try {
-    const mod = await import("@capacitor/app");
+    return (await import(/* @vite-ignore */ specifier)) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function listenAppGoogleReturn(apply: (href: string) => void) {
+  const mod = await importCapacitorPlugin<CapacitorAppPlugin>("@capacitor/app");
+  if (!mod) return () => {};
+  try {
     const opened = await mod.App.addListener("appUrlOpen", (event) => apply(event.url));
     const launch = await mod.App.getLaunchUrl();
     if (launch?.url) apply(launch.url);
@@ -338,9 +361,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(next);
       stripGoogleQuery();
-      void import("@capacitor/browser")
-        .then((mod) => mod.Browser.close())
-        .catch(() => undefined);
+      void importCapacitorPlugin<CapacitorBrowserPlugin>("@capacitor/browser").then((mod) => {
+        void mod?.Browser.close();
+      });
       if (isNativeHybrid()) {
         window.location.replace(deskHomeUrl());
       }
@@ -426,9 +449,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const url = googleAuthStartUrl();
         if (isNativeHybrid()) {
           try {
-            const { Browser } = await import("@capacitor/browser");
-            await Browser.open({ url });
-            return;
+            const cap = await importCapacitorPlugin<CapacitorBrowserPlugin>("@capacitor/browser");
+            if (cap) {
+              await cap.Browser.open({ url });
+              return;
+            }
           } catch {
             /* Custom Tabs unavailable — stay in the WebView. */
           }

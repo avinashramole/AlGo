@@ -115,6 +115,12 @@ test("website deploy rewrites nginx so gzip lands on the VPS", () => {
   assert.match(src, /write_nginx_trade2smart\.py/);
 });
 
+test("website deploy installs npm packages before tsc", () => {
+  const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
+  assert.match(src, /npm install --no-audit --no-fund/);
+  assert.match(src, /@capacitor\/browser/);
+});
+
 test("install-t2s-service still restarts t2s if the nginx writer fails", () => {
   const src = fs.readFileSync(path.join(deployDir, "install-t2s-service.sh"), "utf8");
   assert.match(src, /if ! python3 .*write_nginx_trade2smart\.py/s);

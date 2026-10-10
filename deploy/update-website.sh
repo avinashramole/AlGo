@@ -210,6 +210,9 @@ if ! grep -q 'data-report-download="pdf"' "$HOME_DIR/src/pages/Reports.tsx" || !
   exit 1
 fi
 
+# VPS checkouts often keep an old node_modules. Install before tsc so
+# new website packages such as @capacitor/browser do not fail the build.
+npm install --no-audit --no-fund
 npm run build
 
 if ! grep -Rql "$UI_MARKER" "$HOME_DIR/dist/assets"; then
