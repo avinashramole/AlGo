@@ -316,9 +316,9 @@ export function Login() {
             <p>Advanced Tools. Real-time Data. Smarter Decisions.</p>
           </div>
           <ul className="t2s-hero-points">
-            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market" text="Live data & advanced analytics" tone="blue" />
+            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market" text="Live data & advanced analytics" tone="gold" />
             <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" tone="gold" />
-            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="blue" />
+            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="gold" />
           </ul>
         </aside>
 

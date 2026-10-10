@@ -32,7 +32,7 @@ export function ActiveAlgos() {
                     algo.status === "LIVE"
                       ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
                       : algo.status === "PAPER"
-                        ? "bg-sky-50 text-sky-700 dark:bg-sky-950/40"
+                        ? "status-paper"
                         : algo.status === "BACKTEST"
                           ? "bg-violet-50 text-violet-700 dark:bg-violet-950/40"
                           : "bg-amber-50 text-amber-600 dark:bg-amber-950/40",

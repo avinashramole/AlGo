@@ -166,7 +166,7 @@ main table tbody tr:hover {
 
 .icon-btn-on:hover,
 .icon-btn[aria-pressed="true"]:hover {
-  background: #123056;
+  background: #e85d00;
   color: #fff;
 }
 
@@ -471,8 +471,8 @@ main > .desk-page {
 }
 
 .status-paper {
-  background: rgba(29, 78, 216, 0.12);
-  color: #1d4ed8;
+  background: rgba(253, 107, 1, 0.14);
+  color: #e85d00;
 }
 
 .status-stop {

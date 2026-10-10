@@ -1075,7 +1075,7 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
                   className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5"
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggleId(row.id)} />
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">
                     {(row.name || "?").trim().charAt(0).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1">

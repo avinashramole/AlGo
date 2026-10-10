@@ -5,7 +5,7 @@
   --text: #071833;
   --muted: #5b6478;
   --navy: #071833;
-  --blue: #0a2a6e;
+  --blue: #fd6b01;
   --orange: #fd6b01;
   --gold: #fd6b01;
   box-sizing: border-box;
@@ -18,9 +18,9 @@
   color-scheme: light;
   color: var(--text);
   background:
-    radial-gradient(900px 420px at 12% -10%, rgba(253, 107, 1, 0.16), transparent 55%),
-    radial-gradient(900px 480px at 88% 0%, rgba(10, 42, 110, 0.12), transparent 50%),
-    linear-gradient(180deg, #f7f8fc 0%, #eef1f6 100%);
+    radial-gradient(900px 420px at 12% -10%, rgba(253, 107, 1, 0.22), transparent 55%),
+    radial-gradient(900px 480px at 88% 0%, rgba(255, 134, 24, 0.14), transparent 50%),
+    linear-gradient(180deg, #fff8f1 0%, #f4f6fb 100%);
   font-family: Inter, system-ui, sans-serif;
 }
 
@@ -112,8 +112,8 @@
 }
 
 .t2s-point-blue {
-  color: var(--blue);
-  background: #e4eaf6;
+  color: var(--orange);
+  background: #fff1e6;
 }
 
 .t2s-point-gold {
@@ -179,8 +179,8 @@
 
 .t2s-auth-tabs button.on {
   background: #fff;
-  color: #0f2744;
-  box-shadow: 0 4px 12px rgba(15, 39, 68, 0.08);
+  color: #fd6b01;
+  box-shadow: 0 4px 12px rgba(253, 107, 1, 0.12);
 }
 
 .t2s-login-avatar {
