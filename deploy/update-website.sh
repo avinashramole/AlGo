@@ -197,6 +197,18 @@ if ! grep -q "dropEmptyRollingDays" "$HOME_DIR/server/dhanRollingOption.js" || !
   echo "FAIL: $HOME_DIR index.js and dhanRollingOption.js do not match. API would crash on boot."
   exit 1
 fi
+if ! grep -q 'T2S_STANDARD_BRAND_REPORT' "$HOME_DIR/server/backtestReport.js" || ! grep -q 'PROPOSAL REPORT' "$HOME_DIR/server/backtestReport.js" || ! grep -q 'FFFD6B01' "$HOME_DIR/server/backtestReport.js"; then
+  echo "downloaded branded report from $BRANCH"
+  pull_raw server/backtestReport.js
+fi
+if ! grep -q 'T2S_STANDARD_BRAND_REPORT' "$HOME_DIR/server/backtestReport.js" || ! grep -q 'PROPOSAL REPORT' "$HOME_DIR/server/backtestReport.js" || ! grep -q 'FFFD6B01' "$HOME_DIR/server/backtestReport.js"; then
+  echo "FAIL: branded PDF/Excel proposal report is missing. Do not deploy an old backtestReport.js."
+  exit 1
+fi
+if ! grep -q 'data-report-download="pdf"' "$HOME_DIR/src/pages/Reports.tsx" || ! grep -q 'downloadDeskReport' "$HOME_DIR/src/api/client.ts"; then
+  echo "FAIL: Reports page still downloads a plain CSV. Deploy the branded PDF/Excel proposal buttons."
+  exit 1
+fi
 
 npm run build
 

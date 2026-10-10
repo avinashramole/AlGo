@@ -3,11 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-bt-"));
 process.env.T2S_BACKTEST_REPORT_DIR = dir;
 
-const { buildBacktestReport, clearBacktestReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
+const { T2S_STANDARD_BRAND_REPORT, brandedReportFile, buildBacktestReport, clearBacktestReport, deskToProposalReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
 
 test("backtest report builds PDF and Excel from the trade book", () => {
   const algo = { id: "a14", name: "TEST2", kind: "nifty-test2", symbol: "NIFTY", holdStyle: "btst", summary: "TEST2 BTST" };
@@ -73,7 +74,7 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.match(pdf.toString("latin1"), /TEST2/);
   assert.match(pdf.toString("latin1"), /TRADE 2 SMART/);
-  assert.match(pdf.toString("latin1"), /BACKTEST REPORT/);
+  assert.match(pdf.toString("latin1"), /PROPOSAL REPORT/);
   assert.match(pdf.toString("latin1"), /Helvetica-Bold/);
   assert.match(pdf.toString("latin1"), /0\.992 0\.420 0\.004/);
   assert.equal(pdf.toString("latin1").includes("0.027 0.094 0.200 rg\n0.00 555.00"), false);
@@ -210,4 +211,38 @@ test("backtest report falls back to lastBacktest when the file is missing", () =
   const report = buildBacktestReport(algo, algo.lastBacktest);
   assert.equal(report.trades[0].pnl, 650);
   assert.equal(renderBacktestPdf(report)[0], 0x25);
+});
+
+test("desk download uses the same branded proposal PDF and Excel", () => {
+  assert.equal(T2S_STANDARD_BRAND_REPORT, "proposal-v1");
+  const report = deskToProposalReport({
+    date: "2026-10-10",
+    netPnl: 1220,
+    realizedPnl: 1220,
+    trades: 1,
+    wins: 1,
+    losses: 0,
+    winRate: 100,
+    tradeBook: [
+      { id: "t1", symbol: "NIFTY 24800 CE", side: "SELL", qty: 65, entry: 80, exit: 70, pnl: 650, closedAt: "2026-10-10T10:00:00.000Z" },
+    ],
+  });
+  assert.equal(report.strategy.kind, "desk");
+  assert.equal(report.trades[0].symbol, "NIFTY 24800 CE");
+  const pdf = renderBacktestPdf(report).toString("latin1");
+  assert.match(pdf, /TRADE 2 SMART/);
+  assert.match(pdf, /PROPOSAL REPORT/);
+  assert.match(pdf, /NIFTY 24800 CE/);
+  const file = brandedReportFile(report, "xlsx");
+  assert.match(file.name, /proposal/);
+  assert.match(file.body.toString("latin1"), /FFFD6B01/);
+  assert.match(file.body.toString("latin1"), /Proposal report/);
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const deploy = fs.readFileSync(path.join(root, "deploy", "update-website.sh"), "utf8");
+  assert.match(deploy, /T2S_STANDARD_BRAND_REPORT/);
+  assert.match(deploy, /Do not deploy an old backtestReport\.js/);
+  const reports = fs.readFileSync(path.join(root, "src", "pages", "Reports.tsx"), "utf8");
+  assert.match(reports, /data-report-download="pdf"/);
+  assert.match(reports, /data-report-download="xlsx"/);
+  assert.equal(reports.includes("Download CSV"), false);
 });

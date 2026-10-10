@@ -12,7 +12,7 @@ import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage
 import { ensureReplayBars } from "./indexHistory.js";
 import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
-import { loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName } from "./backtestReport.js";
+import { brandedReportFile, deskToProposalReport, loadBacktestReport } from "./backtestReport.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
@@ -1161,18 +1161,10 @@ app.get("/api/algos/:id/backtest/report", (req, res) => {
     res.status(404).json({ error: "Run a backtest first to create the PDF and Excel report." });
     return;
   }
-  const format = String(req.query.format || "pdf").toLowerCase();
-  if (format === "xlsx" || format === "xls" || format === "excel") {
-    const body = renderBacktestExcel(report);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${reportDownloadName(report, "xlsx")}"`);
-    res.send(body);
-    return;
-  }
-  const body = renderBacktestPdf(report);
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${reportDownloadName(report, "pdf")}"`);
-  res.send(body);
+  const file = brandedReportFile(report, req.query.format);
+  res.setHeader("Content-Type", file.type);
+  res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+  res.send(file.body);
 });
 
 app.post("/api/orders", async (req, res) => {
@@ -1328,6 +1320,14 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
 
 app.get("/api/report", (_req, res) => {
   res.json(snapshot().report);
+});
+
+app.get("/api/report/download", (req, res) => {
+  const report = deskToProposalReport(snapshot().report || {});
+  const file = brandedReportFile(report, req.query.format);
+  res.setHeader("Content-Type", file.type);
+  res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+  res.send(file.body);
 });
 
 app.post("/api/chat", (req, res) => {

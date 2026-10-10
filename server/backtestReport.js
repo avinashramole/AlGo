@@ -6,6 +6,9 @@ import { test2HoldStyle } from "./niftyVwap/config.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_DIR = process.env.T2S_BACKTEST_REPORT_DIR || path.join(__dirname, "data", "backtests");
 
+/** Deploy must keep this marker. Old plain PDF/Excel files must not replace this file. */
+export const T2S_STANDARD_BRAND_REPORT = "proposal-v1";
+
 function safeName(value) {
   return String(value || "strategy")
     .replace(/[^\w.-]+/g, "-")
@@ -401,7 +404,7 @@ function xlsxSheet(rows = [], { widths = [], freeze = 0 } = {}) {
     })
     .join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${view}${cols}<sheetData>${body}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddHeader>&amp;C&amp;"Calibri,Bold"TRADE 2 SMART — Backtest report</oddHeader><oddFooter>&amp;Ltrade2smart.com&amp;CPage &amp;P&amp;RA4 landscape</oddFooter></headerFooter></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${view}${cols}<sheetData>${body}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddHeader>&amp;C&amp;"Calibri,Bold"TRADE 2 SMART — Proposal report</oddHeader><oddFooter>&amp;Ltrade2smart.com&amp;CPage &amp;P&amp;RA4 landscape rows</oddFooter></headerFooter></worksheet>`;
 }
 
 function xlsxWorkbook(names = []) {
@@ -499,8 +502,8 @@ function excelFillRow(row, zebra) {
 
 function excelBookRows(rows) {
   return [
-    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: "Backtest report", s: XLSX_STYLE.brandSub }],
-    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "A4 landscape desk", s: XLSX_STYLE.brandSub }],
+    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: "Proposal report", s: XLSX_STYLE.brandSub }],
+    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "A4 landscape row / column desk", s: XLSX_STYLE.brandSub }],
     [],
     excelHeaderRow(FILL_HEADER),
     ...rows.map((row, i) => excelFillRow(row, i % 2 === 1)),
@@ -572,8 +575,8 @@ export function renderBacktestExcel(report) {
     ["Summary", report.strategy.summary],
   ];
   const summaryRows = [
-    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: "Backtest report", s: XLSX_STYLE.brandSub }],
-    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "A4 landscape desk", s: XLSX_STYLE.brandSub }],
+    [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: "Proposal report", s: XLSX_STYLE.brandSub }],
+    [{ v: "trade2smart.com", s: XLSX_STYLE.brandSub }, { v: "A4 landscape row / column desk", s: XLSX_STYLE.brandSub }],
     [],
     excelHeaderRow(["Metric", "Value"]),
     ...pairs.map(([label, value], i) => excelPair(label, value, i % 2 === 1)),
@@ -660,8 +663,8 @@ function makePdfDoc(report) {
     y = PAGE_H - PAGE_MARGIN;
     rect(0, PAGE_H - 40, PAGE_W, 40, PDF_ORANGE);
     text(PAGE_MARGIN, PAGE_H - 18, "TRADE 2 SMART", 13, "F2", PDF_WHITE);
-    text(PAGE_W - PAGE_MARGIN - pdfTextWidth("BACKTEST REPORT", 11), PAGE_H - 18, "BACKTEST REPORT", 11, "F2", PDF_WHITE);
-    text(PAGE_MARGIN, PAGE_H - 32, `${report.strategy.name}  |  T2S backtest report (landscape)  |  Indian Rupee (Rs.)`, 8, "F1", PDF_WHITE);
+    text(PAGE_W - PAGE_MARGIN - pdfTextWidth("PROPOSAL REPORT", 11), PAGE_H - 18, "PROPOSAL REPORT", 11, "F2", PDF_WHITE);
+    text(PAGE_MARGIN, PAGE_H - 32, `${report.strategy.name}  |  T2S branded row/column proposal  |  Indian Rupee (Rs.)`, 8, "F1", PDF_WHITE);
     y = PAGE_H - 52;
     footer();
   }
@@ -819,7 +822,86 @@ export function renderBacktestPdf(report) {
 }
 
 export function reportDownloadName(report, format) {
-  const stamp = String(report.generatedAt || "").slice(0, 10) || "backtest";
-  const style = report.summary.holdStyle ? `-${report.summary.holdStyle}` : "";
-  return `${safeName(report.strategy.name)}${style}-backtest-${stamp}.${format === "pdf" ? "pdf" : "xlsx"}`;
+  const stamp = String(report.generatedAt || report.summary?.to || "").slice(0, 10) || "report";
+  const style = report.summary?.holdStyle ? `-${report.summary.holdStyle}` : "";
+  const kind = report.strategy?.kind === "desk" ? "proposal" : "backtest";
+  return `${safeName(report.strategy?.name)}${style}-${kind}-${stamp}.${format === "pdf" ? "pdf" : "xlsx"}`;
+}
+
+export function isExcelFormat(format) {
+  const value = String(format || "").toLowerCase();
+  return value === "xlsx" || value === "xls" || value === "excel";
+}
+
+export function brandedReportFile(report, format) {
+  if (isExcelFormat(format)) {
+    return {
+      body: renderBacktestExcel(report),
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      name: reportDownloadName(report, "xlsx"),
+    };
+  }
+  return {
+    body: renderBacktestPdf(report),
+    type: "application/pdf",
+    name: reportDownloadName(report, "pdf"),
+  };
+}
+
+export function deskToProposalReport(desk = {}, extras = {}) {
+  const book = Array.isArray(desk.tradeBook) ? desk.tradeBook : [];
+  const trades = book.map((row, index) => ({
+    n: index + 1,
+    day: String(row.closedAt || desk.date || "").slice(0, 10),
+    side: cell(row.side),
+    option: cell(row.option),
+    strike: Number(row.strike || 0),
+    symbol: cell(row.symbol),
+    entry: Number(row.entry || 0),
+    exit: Number(row.exit || 0),
+    entryAt: cell(row.entryAt || row.openedAt),
+    exitAt: cell(row.exitAt || row.closedAt),
+    qty: Number(row.qty || 0),
+    pnl: Number(row.pnl || 0),
+    margin: Number(row.margin || 0),
+    rom: Number(row.rom || 0),
+    netCredit: Number(row.netCredit || 0),
+    bars: Number(row.bars || 0),
+    key: cell(row.id || row.key),
+  }));
+  const date = cell(desk.date) || new Date().toISOString().slice(0, 10);
+  return {
+    strategy: {
+      name: extras.title || "Desk P&L",
+      product: "T2S",
+      symbol: "ALL",
+      kind: "desk",
+      summary: "Trade 2 Smart standard branded proposal report",
+    },
+    summary: {
+      from: date,
+      to: date,
+      holdStyle: "live",
+      timeframe: "1d",
+      pnl: Number(desk.netPnl || 0),
+      trades: Number(desk.trades || trades.length || 0),
+      wins: Number(desk.wins || 0),
+      losses: Number(desk.losses || 0),
+      winRate: Number(desk.winRate || 0),
+      maxDrawdown: Number(desk.maxDrawdown || 0),
+      avgProfit: Number(desk.trades || trades.length) ? Number(desk.realizedPnl || 0) / Number(desk.trades || trades.length) : 0,
+      avgWin: 0,
+      avgLoss: 0,
+      returnDd: 0,
+      rewardRisk: 0,
+      expectancy: 0,
+      requiredMargin: 0,
+      avgMargin: 0,
+      rom: 0,
+      range: date,
+    },
+    trades,
+    legs: trades,
+    generatedAt: extras.generatedAt || new Date().toISOString(),
+  };
 }
