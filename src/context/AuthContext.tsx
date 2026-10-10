@@ -244,7 +244,7 @@ async function listenAppGoogleReturn(apply: (href: string) => void) {
       void opened.remove();
     };
   } catch {
-    return () => undefined;
+    return () => {};
   }
 }
 
@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     applyHref(window.location.href);
     stripGoogleQuery();
-    let stop = () => undefined;
+    let stop: () => void = () => undefined;
     void listenAppGoogleReturn(applyHref).then((done) => {
       stop = done;
     });
