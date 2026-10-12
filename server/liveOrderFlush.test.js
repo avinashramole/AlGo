@@ -78,24 +78,21 @@ test("a large copy list does not open every member broker at once", async () => 
   assert.ok(peak <= 2, `copy peak was ${peak}`);
 });
 
-test("a 429 copy is retried and later reaches the broker", async () => {
+test("a 429 copy is not retried so Upstox UDAPI10005 cannot storm", async () => {
   let hits = 0;
   const results = await sendQueuedLiveOrders([{ brokerId: "dhan", copyUserId: "u-429", side: "BUY" }], {
     sendCopy: async () => {
       hits += 1;
-      if (hits < 2) {
-        const error = new Error("Dhan 429 rate limit");
-        error.status = 429;
-        error.rateLimit = true;
-        error.retryAfterMs = 5;
-        throw error;
-      }
-      return { id: "late-fill", status: "PENDING" };
+      const error = new Error("UDAPI10005 · Too Many Request Sent");
+      error.status = 429;
+      error.rateLimit = true;
+      error.retryAfterMs = 5;
+      throw error;
     },
   });
-  assert.equal(hits, 2);
-  assert.equal(results[0].ok, true);
-  assert.equal(results[0].value.id, "late-fill");
+  assert.equal(hits, 1);
+  assert.equal(results[0].ok, false);
+  assert.match(results[0].error.message, /UDAPI10005/);
 });
 
 test("isRetryableCopyError is only for rate limits", () => {

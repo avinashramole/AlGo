@@ -7,6 +7,31 @@ import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { exchangeSegmentFor } from "./optionChain.js";
 
 let pendingCopySends = [];
+const sentMemberExits = new Map();
+
+export function resetMemberExitCopyLocks() {
+  sentMemberExits.clear();
+}
+
+function firstPositive(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
+function memberExitLockKey(copy = {}) {
+  return [copy.copyUserId, copy.symbol, copy.side, copy.strategy].map((part) => String(part || "").trim()).join("|");
+}
+
+function claimMemberExitCopy(copy = {}) {
+  if (!copy.copyUserId || !copy.symbol) return true;
+  const key = memberExitLockKey(copy);
+  if (sentMemberExits.has(key)) return false;
+  sentMemberExits.set(key, Date.now());
+  return true;
+}
 
 function strategyLabel(name) {
   const text = String(name || "").trim().toLowerCase();
@@ -325,7 +350,9 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
 
 export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder } = {}) {
   const live = [];
+  const exitCopy = /^(exit|target|sl)$/i.test(String(payload.role || ""));
   for (const copy of memberCopyPayloads(payload, algo || {})) {
+    if (exitCopy && !claimMemberExitCopy(copy)) continue;
     if (copy.paper || copy.brokerId === "paper") {
       recordMemberCopyFill({ userId: copy.copyUserId, payload: copy, paper: true });
       continue;
@@ -375,9 +402,10 @@ export function memberExitPayload(pos = {}, extras = {}) {
     name: symbol,
     side,
     qty,
-    price: Number(extras.price || pos.ltp || pos.avg || 0),
+    price: firstPositive(extras.price, pos.ltp, pos.avg, pos.buyPrice, pos.entry),
     product: pos.product || "MIS",
     type: "MARKET",
+    role: extras.role || "exit",
     strategy,
     brokerId: pos.brokerId && pos.brokerId !== "paper" ? pos.brokerId : extras.brokerId || "dhan",
     securityId: pos.securityId,
@@ -394,7 +422,9 @@ export function dispatchMemberExitCopies(pos, algo = {}, { enqueueLiveOrder } = 
   if (!pos || pos.copyUserId) return;
   const strategy = String(pos.strategy || algo?.name || "").trim();
   if (!strategy || !pos.symbol) return;
-  dispatchMemberCopies(memberExitPayload(pos, { strategy }), algo || {}, { enqueueLiveOrder });
+  const payload = memberExitPayload(pos, { strategy, role: "exit" });
+  if (!(Number(payload.qty) > 0) || !payload.symbol) return;
+  dispatchMemberCopies(payload, algo || {}, { enqueueLiveOrder });
 }
 
 export { recordMemberCopyFill, sizeCopyQty };

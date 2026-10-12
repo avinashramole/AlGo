@@ -343,7 +343,6 @@ export function AlgoScreen() {
           />
         </View>
         )}
-        {draft.id ? null : (
         <>
         <Text style={styles.muted}>Run mode</Text>
         <View style={styles.chips}>
@@ -353,7 +352,6 @@ export function AlgoScreen() {
         </View>
         {draft.runMode === "paper" ? <Text style={styles.muted}>Paper uses live Dhan quotes. Fills stay virtual — nothing is sent to Dhan.</Text> : null}
         </>
-        )}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>

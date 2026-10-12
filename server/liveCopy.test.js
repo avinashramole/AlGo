@@ -15,7 +15,7 @@ process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 const { adminCreateMember } = await import("./auth.js");
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, peekClientSecrets, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
-const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload } = await import("./liveCopy.js");
+const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload, resetMemberExitCopyLocks } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
 savePaymentSettings({
@@ -547,6 +547,34 @@ test("memberExitPayload is the opposite market side of the master open", () => {
   assert.equal(exit.qty, 65);
   assert.equal(exit.type, "MARKET");
   assert.equal(exit.strategy, algo.name);
+  assert.equal(exit.price, 88);
+  assert.equal(exit.role, "exit");
+});
+
+test("memberExitPayload uses fill avg instead of SELL @ 0.00", () => {
+  const exit = memberExitPayload(
+    { symbol: "NIFTY-Oct2026-22450-CE", type: "BUY", qty: 65, ltp: 0, avg: 62.45, strategy: algo.name },
+    { strategy: algo.name, price: 0 },
+  );
+  assert.equal(exit.side, "SELL");
+  assert.equal(exit.price, 62.45);
+});
+
+test("dispatchMemberExitCopies sends one TGT/SL copy per user contract", () => {
+  resetMemberExitCopyLocks();
+  const user = { id: "u-exit-once", name: "Exit Once", email: "exitonce@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100999", accessToken: "exit-once-token" });
+  payMember(user);
+  const queued = [];
+  const pos = { symbol: "NIFTY-Oct2026-22450-CE", type: "BUY", qty: 65, avg: 62.45, strategy: algo.name, securityId: "22450" };
+  dispatchMemberExitCopies(pos, algo, { enqueueLiveOrder: (copy) => queued.push(copy) });
+  dispatchMemberExitCopies(pos, algo, { enqueueLiveOrder: (copy) => queued.push(copy) });
+  const mine = queued.filter((row) => row.copyUserId === user.id);
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].side, "SELL");
+  assert.equal(mine[0].price, 62.45);
+  assert.equal(mine[0].role, "exit");
 });
 
 test("dispatchMemberExitCopies closes mapped paper positions on master exit", () => {

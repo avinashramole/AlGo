@@ -128,6 +128,35 @@ test("paid plan report uses the live desk book, not a seeded paper P&L", () => {
   assert.equal(desk.brokerId, "dhan");
 });
 
+test("hyphenated option legs do not mark MTM from the NIFTY index", () => {
+  const desk = getMemberDesk({
+    user,
+    enrollments: [{ strategyId: "a4", strategyName: "NIFTY VWAP ATM", status: "paid" }],
+    algos: [algo],
+    quote: () => 22386,
+    liveBook: {
+      positions: [
+        {
+          id: "p-hyphen",
+          symbol: "NIFTY-Oct2026-22450-CE",
+          option: "CE",
+          type: "BUY",
+          qty: 650,
+          avg: 62.45,
+          ltp: 62.45,
+          pnl: 80,
+          strategy: "NIFTY VWAP ATM",
+        },
+      ],
+      orders: [],
+      closedTrades: [],
+    },
+  });
+  assert.ok(Math.abs(Number(desk.positions[0].pnl || 0)) < 100000);
+  assert.ok(Number(desk.positions[0].ltp) < 1000);
+  assert.ok(Math.abs(Number(desk.report.unrealizedPnl || 0)) < 100000);
+});
+
 test("open member legs remake Unrealized P&L from the live quote", () => {
   const desk = getMemberDesk({
     user,

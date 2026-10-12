@@ -519,8 +519,8 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             onClick={() => set({ runMode: "live", brokerId: data.activeBrokerId || "dhan" })}
           />
         </div>
-        ) : editing ? null : (
-        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+        ) : (
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5" data-strategy-trade-mode="true">
           {RUN_MODES.map((mode) => (
             <TypeCard
               key={mode.id}

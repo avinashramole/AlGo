@@ -36,17 +36,6 @@ export function UserHome() {
   const balance = memberBalance(desk);
   const available = Number(desk?.wallet.balance) || 0;
   const pnl = Number(report?.netPnl || desk?.wallet.mtm || 0);
-  const strategies = (desk?.plans || [])
-    .filter((row) => String(row.status || "").toLowerCase() !== "expired")
-    .map((row) => ({
-      id: row.strategyId,
-      name: row.strategyName,
-      detail: `${row.term || "Plan"} · ${row.openPositions || 0} open`,
-      pnl: Number(row.netPnl || 0),
-      status: row.status || "Active",
-      running: row.openPositions > 0 || String(row.status).toLowerCase() === "active",
-      to: "/plans",
-    }));
 
   return (
     <div className="space-y-3">
@@ -58,12 +47,8 @@ export function UserHome() {
         algosTo="/plans"
         ordersTo="/reports?tab=orders"
         positionsTo="/reports?tab=positions"
-        reportsTo="/reports"
-        strategies={strategies}
+        tape={<MemberIndexBoard indices={indices} note={quoteNote} />}
       />
-
-      <div className="hidden md:block">
-      <MemberIndexBoard indices={indices} note={quoteNote} />
 
       <DeskTape kicker="P&L" extra="Live" testId="member-pnl">
         <TapeCell title="Balance" value={formatInr(balance)} tone={balance >= 0 ? "text-up" : "text-down"} />
@@ -76,7 +61,6 @@ export function UserHome() {
           Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
         </p>
       ) : null}
-      </div>
 
       <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
     </div>

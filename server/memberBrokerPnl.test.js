@@ -210,6 +210,28 @@ test("live quote MTM replaces stale broker unrealized and keeps realized", () =>
   assert.equal(report.liveMtm, true);
 });
 
+test("index-like option marks do not overwrite broker MTM with crore P&L", () => {
+  const desk = {
+    wallet: { balance: 9511.17, mtm: 80, equity: 9591.17 },
+    report: { realizedPnl: 10549.5, unrealizedPnl: 80, charges: 0, netPnl: 10629.5, brokerPnl: true },
+    positions: [
+      {
+        symbol: "NIFTY-Oct2026-22450-CE",
+        option: "CE",
+        qty: 650,
+        avg: 62.45,
+        ltp: 22386,
+        pnl: (22386 - 62.45) * 650,
+      },
+    ],
+  };
+  overlayDeskLiveMtm(desk);
+  assert.equal(desk.report.unrealizedPnl, 80);
+  assert.equal(desk.report.realizedPnl, 10549.5);
+  assert.ok(Math.abs(desk.wallet.mtm) < 1000);
+  assert.ok(Math.abs(desk.report.netPnl) < 20000);
+});
+
 test("member desk overlay keeps broker realized and ticks wallet MTM", () => {
   const desk = {
     wallet: { balance: 10000, mtm: 12.5, equity: 10012.5 },

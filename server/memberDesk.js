@@ -12,6 +12,7 @@ import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNoti
 import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from "./subscriptions.js";
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 import { firstCandleNameAliases } from "./niftyVwap/config.js";
+import { markContractToMarket } from "./positionMark.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1630,6 +1631,15 @@ export function sizeCopyQty(masterQty, { sizingKind, sizingValue, lotSize } = {}
   return Math.max(1, Math.round((master || lot) * mult));
 }
 
+function sameMemberCopyContract(left, right) {
+  return (
+    String(left?.symbol || "") === String(right?.symbol || "") &&
+    String(left?.side || "") === String(right?.side || "") &&
+    Number(left?.qty || 0) === Number(right?.qty || 0) &&
+    String(left?.strategy || "") === String(right?.strategy || "")
+  );
+}
+
 export function recordMemberCopyFill({ userId, payload = {}, live, error, paper = false } = {}) {
   if (!userId) return null;
   const desk = loadDesk(userId);
@@ -1660,6 +1670,27 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
   desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
   desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
+  const working = desk.orders.find((row) => isWorkingMemberOrder(row.status) && sameMemberCopyContract(row, order));
+  if (working && (mapped === "PENDING" || error)) {
+    if (error && order.reason) working.reason = working.reason || order.reason;
+    if (order.price > 0 && !(Number(working.price) > 0)) working.price = order.price;
+    persist();
+    return working;
+  }
+  if (error) {
+    const recent = desk.orderHistory.find((row) => {
+      if (!sameMemberCopyContract(row, order)) return false;
+      const st = String(row.status || "").toUpperCase();
+      if (st !== "REJECTED" && st !== "FAILED") return false;
+      const age = Date.now() - Date.parse(row.createdAt || 0);
+      return Number.isFinite(age) && age >= 0 && age < 60_000;
+    });
+    if (recent) {
+      if (order.reason) recent.reason = order.reason;
+      persist();
+      return recent;
+    }
+  }
   placeMemberOrder(desk, order);
   const alert = {
     id: `na${crypto.randomBytes(6).toString("hex")}`,
@@ -1755,15 +1786,8 @@ function applyMemberPosition(desk, fill) {
 
 function markMtm(desk, quote) {
   desk.positions = (desk.positions || []).map((row) => {
-    const ltp = Number(typeof quote === "function" ? quote(row.symbol) : 0);
-    const nextLtp = ltp > 0 ? ltp : Number(row.ltp || row.avg || 0);
-    const dir = row.type === "SELL" ? -1 : 1;
-    return {
-      ...row,
-      ltp: nextLtp,
-      pnl: round2((nextLtp - Number(row.avg || 0)) * Number(row.qty || 0) * dir),
-      brokerId: row.brokerId || desk.brokerId,
-    };
+    const feed = Number(typeof quote === "function" ? quote(row.symbol) : 0);
+    return markContractToMarket({ ...row, brokerId: row.brokerId || desk.brokerId }, feed);
   });
 }
 

@@ -1,3 +1,5 @@
+import { isOptionContract, isSaneOptionLtp } from "./positionMark.js";
+
 const CACHE_MS = 2000;
 const cache = new Map();
 const inflight = new Map();
@@ -432,9 +434,25 @@ export function liveUnrealizedFromPositions(positions = []) {
   return round2((positions || []).reduce((sum, row) => sum + Number(row.pnl || 0), 0));
 }
 
+function usableLiveMark(row) {
+  if (isOptionContract(row?.symbol, row?.option)) {
+    const ltp = Number(row?.ltp || 0);
+    const avg = Number(row?.avg || 0);
+    if (!isSaneOptionLtp(ltp, avg)) return false;
+    return Math.abs(ltp - avg) > 0.04;
+  }
+  return Number.isFinite(Number(row?.pnl));
+}
+
 export function overlayLiveUnrealized(report, positions = [], wallet) {
   const open = (positions || []).filter((row) => Number(row.qty) > 0);
   if (!report || !open.length) return report;
+  if (open.some((row) => isOptionContract(row.symbol, row.option) && !isSaneOptionLtp(Number(row.ltp || 0), Number(row.avg || 0)))) {
+    return report;
+  }
+  if (report.brokerPnl && open.some((row) => isOptionContract(row.symbol, row.option) && !usableLiveMark(row))) {
+    return report;
+  }
   const unrealized = liveUnrealizedFromPositions(open);
   const realized = round2(report.realizedPnl);
   const charges = report.brokerPnl ? 0 : round2(report.charges || 0);

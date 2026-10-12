@@ -5,6 +5,7 @@ import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp 
 test("Dhan expiry-style option symbols are options", () => {
   assert.equal(isOptionContract("NIFTY 10 SEP 23450 PE"), true);
   assert.equal(isOptionContract("NIFTY 23450 CE"), true);
+  assert.equal(isOptionContract("NIFTY-Oct2026-22450-CE"), true);
   assert.equal(isOptionContract("NIFTY 50"), false);
 });
 

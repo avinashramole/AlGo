@@ -10,7 +10,6 @@ import { TradeModal } from "../components/dashboard/TradeModal";
 import { HomeOverview } from "../components/home/HomeOverview";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
-import { isRetiredDeskStrategy, sortDeskAlgos } from "../lib/strategies";
 
 export function Dashboard() {
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -20,17 +19,6 @@ export function Dashboard() {
   const capital = Number(broker?.funds || 0);
   const available = Math.max(0, capital - Number(broker?.marginUsed || 0));
   const pnl = Number(data.report?.netPnl || data.report?.realizedPnl || 0);
-  const strategies = sortDeskAlgos((data.algos || []).filter((algo) => !isRetiredDeskStrategy(algo)))
-    .slice(0, 5)
-    .map((algo) => ({
-      id: algo.id,
-      name: algo.name,
-      detail: `${algo.tag || algo.kind || "Strategy"} · ${algo.runMode || "live"}`,
-      pnl: Number(algo.pnl || 0),
-      status: algo.status || (algo.enabled ? "LIVE" : "STOPPED"),
-      running: Boolean(algo.enabled),
-      to: "/algo",
-    }));
 
   return (
     <div className="space-y-3" data-home-layout="tapes">
@@ -42,10 +30,8 @@ export function Dashboard() {
         algosTo="/algo"
         ordersTo="/reports?tab=orders"
         positionsTo="/reports?tab=positions"
-        reportsTo="/reports"
-        strategies={strategies}
+        tape={<TickerStrip />}
       />
-      <TickerStrip />
       <PriceChart />
       <AISignal onReview={() => setReviewOpen(true)} />
       <MarketDNA />

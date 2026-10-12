@@ -23,7 +23,7 @@ export function MemberReports() {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-bold">Position and Orders</h1>
+        <h1 className="text-lg font-bold">Position & Orders</h1>
         <div className="desk-tabs" data-reports-tabs="position-order-reports">
           <button
             type="button"

@@ -10,7 +10,7 @@ const tabs: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean
   { to: "/", label: "Home", icon: Home },
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
-  { to: "/reports", label: "Position and Orders", icon: FileText },
+  { to: "/reports", label: "Position & Orders", icon: FileText },
   { to: "/profile", label: "Profile", icon: User },
 ];
 

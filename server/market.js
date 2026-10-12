@@ -2480,21 +2480,30 @@ export function quoteSymbol(symbol) {
 
 setLivePriceReader(quoteSymbol);
 
-function liveLtpForSymbol(symbol) {
+function parseOptionSymbol(symbol) {
   const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
   const named = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)(?:\s+\d{1,2}\s+[A-Z]{3})?\s+(\d{3,6})\s*(CE|PE)\b/);
-  const option = named || raw.match(/(\d{3,6})\s*(CE|PE)\b/);
-  if (option) {
-    const strike = Number(named ? named[2] : option[1]);
-    const opt = named ? named[3] : option[2];
-    const rows = named ? chainForSymbol(named[1])?.rows || [] : state.optionChain || [];
-    const row = rows.find((item) => Number(item.strike) === strike);
+  if (named) return { root: named[1], strike: Number(named[2]), opt: named[3] };
+  const hyphen = raw.match(/^(NIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL)[-_][A-Z0-9]*[-_](\d{3,6})[-_](CE|PE)\b/);
+  if (hyphen) return { root: hyphen[1], strike: Number(hyphen[2]), opt: hyphen[3] };
+  const loose = raw.match(/(\d{3,6})\s*(CE|PE)\b/);
+  if (loose) return { root: "", strike: Number(loose[1]), opt: loose[2] };
+  return null;
+}
+
+function liveLtpForSymbol(symbol) {
+  const raw = String(symbol || "").toUpperCase().replace(/,/g, "");
+  const parsed = parseOptionSymbol(symbol);
+  if (parsed) {
+    const rows = parsed.root ? chainForSymbol(parsed.root)?.rows || [] : state.optionChain || [];
+    const row = rows.find((item) => Number(item.strike) === parsed.strike);
     if (row) {
-      const ltp = opt === "PE" ? Number(row.putLtp) : Number(row.callLtp);
+      const ltp = parsed.opt === "PE" ? Number(row.putLtp) : Number(row.callLtp);
       if (isSaneOptionLtp(ltp)) return round2(ltp);
     }
     return 0;
   }
+  if (isOptionContract(symbol)) return 0;
   const indexName = relatedIndex(symbol);
   const index = indexName
     ? state.indices.find((item) => item.symbol === indexName || item.name === indexName)

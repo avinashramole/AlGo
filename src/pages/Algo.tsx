@@ -206,7 +206,7 @@ function kindMeta(algo: AlgoStrategy) {
 }
 
 export function Algo() {
-  const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, unlockBacktest, closePosition, refresh } = useMarket();
+  const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, unlockBacktest, closePosition, refresh, saveAlgo } = useMarket();
   const [tab, setTab] = useState<DeskTab>("copy");
   const [filter, setFilter] = useState<Filter>("all");
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -268,6 +268,25 @@ export function Algo() {
       await toggle(algo.id, !algo.enabled);
     } catch (err) {
       window.alert(catchDeskError(err, "Could not start"));
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const startInMode = async (algo: AlgoStrategy, mode: "paper" | "live") => {
+    setBusyId(algo.id);
+    try {
+      if (algo.runMode !== mode) {
+        await saveAlgo({
+          id: algo.id,
+          runMode: mode,
+          brokerId: mode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
+        });
+        await refresh();
+      }
+      await toggle(algo.id, true);
+    } catch (err) {
+      window.alert(catchDeskError(err, mode === "paper" ? "Could not start paper" : "Could not start live"));
     } finally {
       setBusyId("");
     }
@@ -433,6 +452,8 @@ export function Algo() {
                       .finally(() => setBusyId(""));
                   }}
                   onStart={() => void startOrPause(algo)}
+                  onStartPaper={() => void startInMode(algo, "paper")}
+                  onStartLive={() => void startInMode(algo, "live")}
                   onExit={() => void exitStrategy(algo)}
                   onDelete={() => void remove(algo)}
                 />
@@ -616,6 +637,8 @@ function AlgoCard({
   onCancelRange,
   onRunBacktest,
   onStart,
+  onStartPaper,
+  onStartLive,
   onExit,
   onDelete,
 }: {
@@ -634,6 +657,8 @@ function AlgoCard({
   onCancelRange: () => void;
   onRunBacktest: (payload: BacktestRangePayload) => void;
   onStart: () => void;
+  onStartPaper: () => void;
+  onStartLive: () => void;
   onExit: () => void;
   onDelete: () => void;
 }) {
@@ -963,15 +988,36 @@ function AlgoCard({
             <button type="button" disabled className="h-10 rounded-lg bg-slate-200 px-4 text-sm font-semibold text-slate-500 dark:bg-slate-800">
               Research only
             </button>
-          ) : (
+          ) : algo.enabled ? (
             <button
               type="button"
               disabled={busy}
               onClick={onStart}
-              className={cn("h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60", algo.enabled ? "btn-halt" : "btn-go")}
+              className="btn-halt h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {algo.enabled ? "Stop strategy" : "Start strategy"}
+              Stop strategy
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onStartPaper}
+                className="h-10 rounded-lg border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-60"
+                data-start-paper="true"
+              >
+                Start paper
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onStartLive}
+                className="btn-go h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60"
+                data-start-live="true"
+              >
+                Start live
+              </button>
+            </>
           )}
         </div>
       </div>

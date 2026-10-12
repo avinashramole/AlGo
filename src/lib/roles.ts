@@ -9,7 +9,7 @@ export function isAdminUser(user?: Pick<AuthUser, "role"> | null) {
 export const adminNav = [
   { to: "/", label: "Home" },
   { to: "/algo", label: "Algos" },
-  { to: "/reports", label: "Position and Orders" },
+  { to: "/reports", label: "Position & Orders" },
   { to: "/options", label: "Option Chain" },
   { to: "/brokers", label: "Brokers" },
   { to: "/analytics", label: "Analytics" },
@@ -22,7 +22,7 @@ export const adminNav = [
 export const userNav = [
   { to: "/", label: "Home" },
   { to: "/plans", label: "Algos" },
-  { to: "/reports", label: "Position and Orders" },
+  { to: "/reports", label: "Position & Orders" },
   { to: "/notifications", label: "Alerts" },
   { to: "/profile", label: "Profile" },
 ] as const;
@@ -36,9 +36,9 @@ const extraTitles = [
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algos" },
-  { to: "/orders", label: "Position and Orders" },
-  { to: "/positions", label: "Position and Orders" },
-  { to: "/portfolio", label: "Position and Orders" },
+  { to: "/orders", label: "Position & Orders" },
+  { to: "/positions", label: "Position & Orders" },
+  { to: "/portfolio", label: "Position & Orders" },
   { to: "/settings/ips", label: "User & IP Manager" },
 ] as const;
 

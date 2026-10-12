@@ -1,5 +1,5 @@
 const COPY_SEND_CONCURRENCY = 2;
-const COPY_RETRY_ATTEMPTS = 3;
+const COPY_RETRY_ATTEMPTS = 1;
 
 export function isRetryableCopyError(error) {
   if (!error) return false;
