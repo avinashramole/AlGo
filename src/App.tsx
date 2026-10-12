@@ -23,6 +23,7 @@ const UserIpManager = lazyPage(() => import("./pages/UserIpManager"), "UserIpMan
 const Settings = lazyPage(() => import("./pages/Settings"), "Settings");
 const MemberSettings = lazyPage(() => import("./pages/MemberSettings"), "MemberSettings");
 const Notifications = lazyPage(() => import("./pages/Notifications"), "Notifications");
+const Support = lazyPage(() => import("./pages/Support"), "Support");
 const Chat = lazyPage(() => import("./pages/Chat"), "Chat");
 
 function PageLoading({ label }: { label: string }) {
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="settings" element={<RoleSettings />} />
           <Route path="settings/ips" element={<Navigate to="/users?tab=ips" replace />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="support" element={<Support />} />
           <Route path="chat" element={<AdminOnly><Chat /></AdminOnly>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

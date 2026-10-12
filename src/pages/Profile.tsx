@@ -92,7 +92,7 @@ export function Profile() {
           <SettingsRow icon={Building2} label="Broker Connections" to="/brokers" detail="Desk brokers" />
           <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/algo" />
           <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
-          <SettingsRow icon={Headphones} label="Support" to="/notifications" />
+          <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
           <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
           <SettingsRow
             icon={theme === "light" ? Moon : Sun}

@@ -33,6 +33,7 @@ export function navForUser(user?: Pick<AuthUser, "role"> | null) {
 
 const extraTitles = [
   { to: "/notifications", label: "Notifications" },
+  { to: "/support", label: "Support" },
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algos" },
@@ -64,6 +65,7 @@ export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, p
   const clean = normalizePath(path);
   if (isAdminUser(user)) return true;
   if (clean === "/subscriptions" || clean.startsWith("/subscriptions/")) return true;
+  if (clean === "/support" || clean.startsWith("/support/")) return true;
   if (clean === "/orders" || clean === "/positions" || clean === "/portfolio") return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
 }

@@ -1,4 +1,4 @@
-import { CreditCard, Headphones, LogOut, Moon, Shield, SlidersHorizontal, Sun } from "lucide-react";
+import { Headphones, LogOut, Moon, Sun } from "lucide-react";
 import { MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
@@ -17,10 +17,7 @@ export function MemberSettings() {
       </div>
       <MemberAccountSetup showProfile={false} />
       <PhoneCard data-member-settings="menu">
-        <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/plans" />
-        <SettingsRow icon={CreditCard} label="Subscription Plan" to="/plans" />
-        <SettingsRow icon={Headphones} label="Support" to="/notifications" />
-        <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
+        <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
         <SettingsRow
           icon={theme === "light" ? Moon : Sun}
           label="Theme"
