@@ -1287,6 +1287,24 @@ export function isWorkingMemberOrder(status) {
   return raw === "PENDING" || raw === "PARTIAL" || raw === "TRANSIT" || raw === "OPEN";
 }
 
+export function optionContractKey(symbol = "") {
+  const raw = String(symbol || "")
+    .toUpperCase()
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const hit = raw.match(/\b(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\b.*?\b(\d{4,6})\b\s+(CE|PE)\b/);
+  if (hit) return `${hit[1]} ${hit[2]} ${hit[3]}`;
+  return raw;
+}
+
+export function isLocalGhostOrder(row = {}) {
+  if (!row || row.paper || String(row.brokerId || "").toLowerCase() === "paper") return false;
+  if (!isWorkingMemberOrder(row.status)) return false;
+  const localId = !row.live || /^mo/i.test(String(row.id || ""));
+  return localId && !(Number(row.price) > 0);
+}
+
 export function isExecutedMemberOrder(status) {
   const raw = String(status || "").toUpperCase();
   return raw === "FILLED" || raw === "TRADED";
@@ -1433,17 +1451,22 @@ export function reconcileCopyAlerts(desk) {
 export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
   if (!userId) return [];
   const desk = loadDesk(userId);
+  const list = Array.isArray(brokerOrders) ? brokerOrders : [];
   const byId = new Map();
-  for (const row of Array.isArray(brokerOrders) ? brokerOrders : []) {
+  const mapped = [];
+  for (const row of list) {
     const id = String(row?.orderId || row?.dhanOrderId || row?.order_id || row?.id || "").trim();
     if (id) byId.set(id, row);
+    const next = asMemberBrokerOrder(row, String(desk.brokerId || "dhan"));
+    if (next) mapped.push(next);
   }
   const updates = [];
   const working = [];
+  const seen = new Set();
   for (const order of desk.orders || []) {
     const broker = byId.get(String(order.id || ""));
     if (!broker || !isWorkingMemberOrder(order.status)) {
-      working.push(order);
+      if (!isLocalGhostOrder(order)) working.push(order);
       continue;
     }
     const status = mapMemberOrderStatus(broker.orderStatus || broker.status, { live: broker });
@@ -1455,30 +1478,42 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
       reason === String(order.reason || "") &&
       !(status === "FILLED" && filledQty !== Number(order.filledQty || 0));
     if (same) {
-      working.push(order);
+      working.push({ ...order, live: true, price: nextPrice > 0 ? nextPrice : Number(order.price || 0) });
+      seen.add(String(order.id));
       continue;
     }
     const updated = {
       ...order,
       status,
       reason,
+      live: true,
       filledQty: status === "FILLED" ? Number(order.qty) || filledQty : filledQty,
       price: nextPrice > 0 ? nextPrice : Number(order.price || 0),
     };
     updates.push({ id: String(order.id), status, reason: updated.reason, filledQty: updated.filledQty });
     if (isWorkingMemberOrder(status)) {
       working.push(updated);
+      seen.add(String(order.id));
       continue;
     }
     if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
     if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
+    seen.add(String(order.id));
   }
-  if (updates.length) {
-    desk.orders = working;
-    desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  for (const row of mapped) {
+    if (seen.has(row.id)) continue;
+    const existingHistory = (desk.orderHistory || []).some((item) => String(item.id) === row.id);
+    if (existingHistory) continue;
+    updates.push({ id: row.id, status: row.status, reason: row.reason, filledQty: row.filledQty });
+    if (isWorkingMemberOrder(row.status)) working.push(row);
+    else if (isStoredHistoryMemberOrder(row.status)) desk.orderHistory.unshift(row);
+    seen.add(row.id);
   }
+  desk.orders = working;
+  const ghostsDropped = dropGhostMemberOrders(desk);
+  desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
   const alertsChanged = reconcileCopyAlerts(desk);
-  if (!updates.length && !alertsChanged) return [];
+  if (!updates.length && !alertsChanged && !ghostsDropped) return [];
   persist();
   return updates;
 }
@@ -1634,11 +1669,58 @@ export function sizeCopyQty(masterQty, { sizingKind, sizingValue, lotSize } = {}
 
 function sameMemberCopyContract(left, right) {
   return (
-    String(left?.symbol || "") === String(right?.symbol || "") &&
+    optionContractKey(left?.symbol) === optionContractKey(right?.symbol) &&
     String(left?.side || "") === String(right?.side || "") &&
     Number(left?.qty || 0) === Number(right?.qty || 0) &&
     String(left?.strategy || "") === String(right?.strategy || "")
   );
+}
+
+function workingOrderKey(row = {}) {
+  return `${optionContractKey(row.symbol)}|${String(row.side || "").toUpperCase()}|${Number(row.qty) || 0}`;
+}
+
+export function dropGhostMemberOrders(desk) {
+  if (!desk) return false;
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+  const before = desk.orders.length;
+  const kept = [];
+  const seen = new Set();
+  for (const row of desk.orders) {
+    if (isLocalGhostOrder(row)) continue;
+    const key = workingOrderKey(row);
+    if (isWorkingMemberOrder(row.status) && seen.has(key) && !(Number(row.price) > 0) && !row.live) continue;
+    if (isWorkingMemberOrder(row.status)) seen.add(key);
+    kept.push(row);
+  }
+  desk.orders = kept;
+  return desk.orders.length !== before;
+}
+
+function asMemberBrokerOrder(row = {}, brokerId = "dhan") {
+  const id = String(row.orderId || row.dhanOrderId || row.order_id || row.id || "").trim();
+  if (!id || /^mo/i.test(id)) return null;
+  const status = mapMemberOrderStatus(row.orderStatus || row.status, { live: row });
+  const price = brokerOrderPrice(row);
+  return {
+    id,
+    symbol: String(row.tradingSymbol || row.trading_symbol || row.tradingsymbol || row.symbol || ""),
+    side: String(row.transactionType || row.transaction_type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+    qty: Number(row.quantity || row.qty || 0),
+    filledQty: Number(row.filledQty || row.tradedQuantity || row.filled_qty || 0),
+    price,
+    product: row.productType || row.product || "MIS",
+    type: String(row.orderType || row.type || "MARKET").toUpperCase(),
+    status,
+    brokerId,
+    live: true,
+    paper: false,
+    sim: false,
+    reason: brokerOrderReason(row),
+    securityId: String(row.securityId || row.security_id || ""),
+    createdAt: row.createTime || row.orderTimestamp || row.createdAt || new Date().toISOString(),
+  };
 }
 
 export function recordMemberCopyFill({ userId, payload = {}, live, error, paper = false } = {}) {
@@ -1650,6 +1732,13 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
   const side = payload.side === "SELL" ? "SELL" : "BUY";
   const brokerId = String(payload.brokerId || desk.brokerId || "paper");
   const mapped = mapMemberOrderStatus(live?.status, { error, paper, live });
+  const hasBrokerId = Boolean(String(live?.orderId || "").trim());
+  if (!paper && !error && !hasBrokerId && isWorkingMemberOrder(mapped)) {
+    const existing = (Array.isArray(desk.orders) ? desk.orders : []).find(
+      (row) => isWorkingMemberOrder(row.status) && sameMemberCopyContract(row, { ...payload, side }),
+    );
+    return existing || null;
+  }
   const order = {
     id: live?.orderId ? String(live.orderId) : `mo${crypto.randomBytes(6).toString("hex")}`,
     userId,
@@ -1724,7 +1813,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     text: alert.text,
     notifications: asNotifications(desk.notifications),
   });
-  if (!error && (paper || mapped === "FILLED" || mapped === "PENDING")) {
+  if (!error && (paper || mapped === "FILLED" || (mapped === "PENDING" && price > 0 && hasBrokerId))) {
     applyMemberPosition(desk, {
       symbol: order.symbol,
       side,
@@ -1736,6 +1825,7 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
       openedAt: now,
     });
   }
+  dropGhostMemberOrders(desk);
   persist();
   return order;
 }
@@ -1834,7 +1924,8 @@ function planRows(book, enrollments = []) {
 export function getMemberDesk({ user, enrollments = [], algos = [], quote, admins = [], liveBook, ownBookOnly = false } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
-  if (reconcileCopyAlerts(desk)) persist();
+  const ghostsDropped = dropGhostMemberOrders(desk);
+  if (ghostsDropped || reconcileCopyAlerts(desk)) persist();
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],

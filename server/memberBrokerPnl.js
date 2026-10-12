@@ -486,6 +486,27 @@ export function applyBrokerPnl(desk, pnl) {
   if (!Number.isFinite(realized) || !Number.isFinite(unrealized)) return desk;
   const report = desk.report && typeof desk.report === "object" ? desk.report : {};
   desk.report = applyBrokerBookToReport(report, pnl);
+  if (Array.isArray(pnl.open)) {
+    const paper = (desk.positions || []).filter((row) => row?.paper || row?.brokerId === "paper");
+    desk.positions = [
+      ...paper,
+      ...pnl.open.map((row) => ({
+        id: String(row.id || ""),
+        symbol: String(row.symbol || ""),
+        type: String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+        qty: Number(row.qty) || 0,
+        avg: Number(row.avg || row.entry || row.buyPrice || 0),
+        ltp: Number(row.ltp || row.avg || 0),
+        pnl: Number(row.pnl || row.unrealized || 0),
+        product: row.product || "MIS",
+        strategy: row.strategy || "",
+        brokerId: row.brokerId || desk.brokerId,
+        live: true,
+        paper: false,
+      })),
+    ];
+  }
+  desk.orders = (desk.orders || []).filter((row) => row?.paper || row?.live || Number(row?.price) > 0);
   const balance = round2(desk.wallet?.balance || 0);
   desk.wallet = {
     ...(desk.wallet || {}),

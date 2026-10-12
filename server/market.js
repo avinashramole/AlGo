@@ -2359,6 +2359,14 @@ function isPaperRow(row) {
   return Boolean(row?.paper) || row?.brokerId === "paper";
 }
 
+function isGhostCopyOrder(row) {
+  if (!row?.copyUserId || isPaperRow(row)) return false;
+  if (!/PEND|TRANSIT|OPEN/i.test(String(row.status || ""))) return false;
+  if (Number(row.price) > 0) return false;
+  const ticket = String(row.id || "").split(":").pop() || "";
+  return !ticket || /^rej|^mo/i.test(ticket);
+}
+
 function strategySets(algos = []) {
   const ids = new Set();
   const names = new Set();
@@ -2386,7 +2394,8 @@ function rowIsMissingStrategy(row, ids, names) {
 
 function liveDesk() {
   const live = isDhanFeedLive();
-  const keep = (row) => isPaperRow(row) || (!isSimRow(row) && row?.live !== false);
+  const keep = (row) =>
+    !isGhostCopyOrder(row) && (isPaperRow(row) || (!isSimRow(row) && row?.live !== false));
   const algos = state.algos || [];
   const { ids, names } = strategySets(algos);
   const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });
@@ -3520,8 +3529,18 @@ export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
   const name = copyUserLabel(payload.copyUserId);
   const status = copyDeskStatus(live, error);
   const rawId = String(live?.orderId || live?.id || "");
-  const id = `copy:${payload.copyUserId}:${rawId || `rej${Date.now()}`}`;
+  const price = Number(live?.price || payload.price || 0);
   const paper = Boolean(payload.paper || payload.brokerId === "paper");
+  if (!paper && !error && !rawId && !(price > 0) && /PEND|TRANSIT|OPEN/i.test(status)) {
+    return (state.orders || []).find(
+      (row) =>
+        row.copyUserId === payload.copyUserId &&
+        String(row.symbol || "") === String(payload.symbol || "") &&
+        String(row.side || "") === String(payload.side || "") &&
+        Number(row.qty || 0) === Number(payload.qty || 0),
+    ) || null;
+  }
+  const id = `copy:${payload.copyUserId}:${rawId || `rej${Date.now()}`}`;
   const reason = error
     ? String(error?.message || error || "Copy was not sent")
     : `Sent to ${name}'s broker`;
@@ -3534,7 +3553,7 @@ export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
     product: payload.product || "MIS",
     type: String(payload.type || "MARKET").toUpperCase(),
     status,
-    price: Number(live?.price || payload.price || 0),
+    price,
     strategy: payload.strategy || "",
     correlationId: String(payload.correlationId || live?.correlationId || ""),
     brokerId: payload.brokerId || "dhan",

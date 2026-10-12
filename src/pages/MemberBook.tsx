@@ -334,9 +334,19 @@ function OrderCard({ row }: { row: DeskOrder }) {
 
 function uniqueOrders(rows: DeskOrder[]) {
   const seen = new Set<string>();
+  const contracts = new Set<string>();
   return rows.filter((row) => {
     if (!row?.id || seen.has(row.id)) return false;
     seen.add(row.id);
+    const pendingZero =
+      /PEND|TRANSIT|OPEN/i.test(String(row.status || "")) &&
+      !(Number(row.price) > 0) &&
+      !row.live;
+    if (pendingZero) {
+      const key = `${String(row.symbol || "").toUpperCase()}|${row.side}|${row.qty}`;
+      if (contracts.has(key)) return false;
+      contracts.add(key);
+    }
     return true;
   });
 }

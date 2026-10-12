@@ -27,7 +27,10 @@ const {
   persistAdminBrokerSecrets,
   purgeMemberDesksExcept,
   applyMemberDhanOrderStatuses,
+  dropGhostMemberOrders,
+  isLocalGhostOrder,
   memberWorkingDhanCopies,
+  optionContractKey,
   recordMemberCopyFill,
   saveClientSettings,
   saveMemberStaticIp,
@@ -1002,4 +1005,54 @@ test("a Kotak user's trade login stays on that user and is not returned on the p
   assert.equal(row.brokerSession.mpin, "654321");
   assert.equal(row.brokerSession.totpSecret, "GEZDGNBVGY3TQOJQ");
   assert.equal(JSON.stringify(row.account).includes("YIX14"), false);
+});
+
+test("ghost PENDING SELL @ 0 is not the user broker book", () => {
+  assert.equal(optionContractKey("NIFTY-Oct2026-22450-CE"), "NIFTY 22450 CE");
+  assert.equal(optionContractKey("NIFTY 22450 CE"), "NIFTY 22450 CE");
+  assert.equal(isLocalGhostOrder({ id: "moabc", status: "PENDING", price: 0, live: false, brokerId: "dhan" }), true);
+  assert.equal(isLocalGhostOrder({ id: "ord-1", status: "PENDING", price: 129, live: true, brokerId: "dhan" }), false);
+  const member = { id: "u-ghost-book", name: "Ghost Book", email: "ghostbook@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  installMemberBroker({ user: member, brokerId: "dhan", clientId: "110022450", accessToken: "ghost-token" });
+  for (let i = 0; i < 10; i += 1) {
+    recordMemberCopyFill({
+      userId: member.id,
+      payload: { symbol: "NIFTY-Oct2026-22450-CE", side: "SELL", qty: 65, price: 0, strategy: algo.name, brokerId: "dhan" },
+      live: { status: "PENDING" },
+    });
+  }
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(
+    desk.orders.some((row) => row.side === "SELL" && !(Number(row.price) > 0) && String(row.symbol).includes("22450")),
+    false,
+  );
+  const updates = applyMemberDhanOrderStatuses(member.id, [
+    {
+      orderId: "ord-ce-fill",
+      tradingSymbol: "NIFTY 22450 CE",
+      transactionType: "BUY",
+      quantity: 65,
+      averageTradedPrice: 62.45,
+      orderStatus: "TRADED",
+      createTime: "2026-10-12 12:30:26",
+    },
+    {
+      orderId: "ord-pe-pend",
+      tradingSymbol: "NIFTY 22450 PE",
+      transactionType: "BUY",
+      quantity: 65,
+      averageTradedPrice: 129,
+      orderStatus: "PENDING",
+      createTime: "2026-10-12 13:20:55",
+    },
+  ]);
+  assert.ok(updates.some((row) => row.id === "ord-ce-fill"));
+  assert.ok(updates.some((row) => row.id === "ord-pe-pend"));
+  const live = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(live.orders.filter((row) => row.symbol === "NIFTY 22450 PE" && row.status === "PENDING").length, 1);
+  assert.equal(live.orders[0].price, 129);
+  assert.ok((live.orderHistory || []).some((row) => row.id === "ord-ce-fill" && row.status === "FILLED" && row.price === 62.45));
+  assert.equal(live.orders.some((row) => /Oct2026/.test(String(row.symbol))), false);
+  dropGhostMemberOrders({ orders: [{ id: "mo1", status: "PENDING", price: 0, live: false }] });
 });
