@@ -19,13 +19,11 @@ import {
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
 import {
   credsAfterInstall,
-  describeBrokerInstall,
-  describeBrokerSave,
   hintsFromInstall,
   installValueForSubmit,
   tradingTokenArrived,
 } from "../lib/formSecrets";
-import { cn, formatInr, formatIst, formatIstDate, formatPlanTerm } from "../lib/format";
+import { cn, formatInr, formatIstDate, formatPlanTerm } from "../lib/format";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -128,9 +126,7 @@ export function MemberPlans() {
           setDesk(next);
           setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
           if (tradingTokenArrived(before, next.install)) {
-            const hint = next.install?.tokenHint ? ` · ${next.install.tokenHint}` : "";
-            const when = next.install?.tokenUpdatedAt ? ` · ${formatIst(next.install.tokenUpdatedAt)}` : "";
-            setCredNote(`Trading token saved${hint}${when}. Live copy will use this token.`);
+            setCredNote("Trading token saved. Live copy will use this token.");
             return;
           }
         } catch {
@@ -197,7 +193,13 @@ export function MemberPlans() {
       );
       setCreds({ clientId: String(result.install?.accountId || clientId || "").trim() });
       await load();
-      setCredNote(describeBrokerSave(result.install, desk.brokerId));
+      setCredNote(
+        desk.brokerId === "upstox"
+          ? result.install?.installed
+            ? "Upstox credentials saved. Live copy will use this token."
+            : "Upstox credentials saved."
+          : "Broker credentials saved.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not install broker token");
     } finally {
@@ -400,7 +402,7 @@ export function MemberPlans() {
             : selectedBroker.virtual
               ? "Virtual paper"
               : selectedBroker.installed
-                ? `Token saved${selectedBroker.accountId ? ` · ${selectedBroker.accountId}` : ""}`
+                ? "Token saved"
                 : selectedBroker.oauthReady
                   ? "API key and secret saved · generate today's token"
                   : "Needs this broker's ID and token"}
@@ -414,19 +416,6 @@ export function MemberPlans() {
             }}
           >
             <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
-            <p className="mt-1 text-xs text-slate-400">
-              {desk.install?.help || "Install the broker client ID and access token for this account. Admin Users shows the same saved values."}
-            </p>
-            <p
-              className={`mt-2 text-xs font-semibold ${
-                desk.install?.installed ? "text-slate-500" : "text-amber-700"
-              }`}
-            >
-              {describeBrokerInstall(desk.install, desk.brokerId)}
-              {desk.install?.installed && desk.install.tokenUpdatedAt
-                ? ` · updated ${formatIst(desk.install.tokenUpdatedAt)}`
-                : ""}
-            </p>
             <div className="mt-3">
               <BrokerInstallFields
                 fields={desk.install?.fields || []}
