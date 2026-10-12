@@ -407,11 +407,17 @@
   text-align: center;
 }
 
+.t2s-app-downloads {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .t2s-apk-download {
   display: flex;
   width: 100%;
   height: 46px;
-  margin-top: 12px;
+  margin-top: 0;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -422,6 +428,8 @@
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .t2s-apk-download:hover {

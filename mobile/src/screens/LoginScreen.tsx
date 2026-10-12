@@ -182,8 +182,8 @@ export function LoginScreen() {
       return;
     }
 
-    if (!identifier.trim()) {
-      Alert.alert("Email", "Enter your Gmail or mobile.");
+    if (!identifier.trim() || !identifier.includes("@")) {
+      Alert.alert("Email", "Enter your email id.");
       return;
     }
 
@@ -304,14 +304,14 @@ export function LoginScreen() {
           ) : (
             <>
               <Field
-                label={page === "signin" ? "Email" : "Gmail or mobile"}
+                label="Email id"
                 value={identifier}
                 onChangeText={(value) => {
                   setIdentifier(value);
                   setSentTo("");
                   setOtp("");
                 }}
-                placeholder="Enter your email"
+                placeholder="Enter your email id"
                 autoCapitalize="none"
               />
               {sentTo ? (
@@ -324,7 +324,7 @@ export function LoginScreen() {
                 />
               ) : null}
               {page === "signin" && !sentTo ? (
-                <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secret />
+                <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password (default 123456)" secret />
               ) : null}
               {page === "reset" && sentTo ? (
                 <>

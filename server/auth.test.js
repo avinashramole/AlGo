@@ -43,6 +43,8 @@ const {
   adminCreateMember,
   adminUpdateUser,
   verifyOtp,
+  resetMemberPasswordsToDefault,
+  INITIAL_CLIENT_PASSWORD,
 } = await import("./auth.js");
 
 test("resolveUserRole treats only the trades2smart admin email as admin", () => {
@@ -594,6 +596,24 @@ test("a broken accounts file is not replaced with the seed list", () => {
     fs.writeFileSync(usersFile, before);
     listPublicUsers();
   }
+});
+
+test("admin-created members sign in with email and default password 123456", () => {
+  assert.equal(INITIAL_CLIENT_PASSWORD, "123456");
+  const email = `email.login.${Date.now()}@gmail.com`;
+  const client = adminCreateMember({
+    name: "Email Login",
+    email,
+    mobile: "9843210088",
+  });
+  assert.equal(client.email, email);
+  const session = loginWithPassword(email, "123456");
+  assert.equal(session.user.email, email);
+  assert.equal(session.user.role, "user");
+  const reset = resetMemberPasswordsToDefault({ force: true });
+  assert.ok(reset.changed >= 1);
+  const again = loginWithPassword(email, "123456");
+  assert.equal(again.user.id, client.id);
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {

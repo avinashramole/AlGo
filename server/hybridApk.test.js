@@ -48,6 +48,9 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(main, /HashRouter/);
   assert.match(build, /cap sync android/);
   assert.match(login, /data-android-apk="download"/);
+  assert.match(login, /data-ios-app="install"/);
+  assert.match(login, /123456/);
+  assert.match(cap, /iosScheme:\s*"https"/);
   const shell = fs.readFileSync(path.join(root, "src/components/layout/AppShell.tsx"), "utf8");
   const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
   const hybridSrc = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");

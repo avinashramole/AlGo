@@ -1,0 +1,22 @@
+{
+  "name": "Trade 2 Smart",
+  "short_name": "T2S",
+  "description": "Trade 2 Smart desk. Sign in with your email id.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#fd6b01",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/t2s-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

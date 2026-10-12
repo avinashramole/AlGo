@@ -656,7 +656,7 @@ export function loginWithPassword(identifier, password) {
   reloadUsers();
   const user = findUser(identifier || "");
   if (!user?.password || !checkPassword(password, user.password)) {
-    throw fail("Wrong Gmail / mobile or password. New users: Sign up first.", 401);
+    throw fail("Wrong email or password. Sign in with your email id.", 401);
   }
   return issueSession(user);
 }
@@ -976,17 +976,54 @@ export function deleteRegisteredUser(id, { actorId } = {}) {
   return { ok: true, id: userId };
 }
 
-export const INITIAL_CLIENT_PASSWORD = "1234";
+export const INITIAL_CLIENT_PASSWORD = "123456";
+export const MEMBER_PASSWORD_RESET_STAMP = "email-123456-v1";
+
+function memberLoginEmail(email, mobile) {
+  const next = normalizeEmail(email);
+  if (next.includes("@")) return next;
+  const digits = normalizeMobile(mobile);
+  return isMobile(digits) ? `${digits}@t2s.app` : "";
+}
+
+export function resetMemberPasswordsToDefault({ force = false } = {}) {
+  if (!force && process.env.NODE_TEST_CONTEXT) return { changed: 0, skipped: true };
+  const stampFile =
+    process.env.T2S_PASSWORD_RESET_FILE || path.join(path.dirname(USERS_FILE), "member-password-reset.json");
+  if (!force) {
+    try {
+      const row = JSON.parse(fs.readFileSync(stampFile, "utf8"));
+      if (row?.stamp === MEMBER_PASSWORD_RESET_STAMP) return { changed: 0, skipped: true };
+    } catch {
+      /* first deploy after email-login default */
+    }
+  }
+  reloadUsers();
+  let changed = 0;
+  for (const user of store.users) {
+    if (resolveUserRole(user) === "admin") continue;
+    const email = memberLoginEmail(user.email, user.mobile);
+    if (email && !normalizeEmail(user.email).includes("@")) user.email = email;
+    user.password = hashPassword(INITIAL_CLIENT_PASSWORD);
+    changed += 1;
+  }
+  persist();
+  writeFileAtomic(
+    stampFile,
+    `${JSON.stringify({ stamp: MEMBER_PASSWORD_RESET_STAMP, changed, at: new Date().toISOString() }, null, 2)}\n`,
+  );
+  return { changed };
+}
 
 export function adminCreateMember(patch = {}) {
   reloadUsers();
   const name = String(patch.name || "").trim();
   if (name.length < 2) throw fail("Enter the client name.");
   const mobile = normalizeMobile(patch.mobile);
-  if (!isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile. That number is the client portal login.");
-  const email = normalizeEmail(patch.email);
-  if (email && !email.includes("@")) throw fail("Enter a valid email, or leave it blank.");
-  if (email && store.byEmail.get(email)) throw fail("That email is already on another account.");
+  if (!isMobile(mobile)) throw fail("Enter a 10-digit Indian mobile.");
+  const email = memberLoginEmail(patch.email, mobile);
+  if (!email.includes("@")) throw fail("Enter the client email. That email is the client portal login.");
+  if (store.byEmail.get(email)) throw fail("That email is already on another account.");
   if (store.byMobile.get(mobile)) throw fail("That mobile is already on another account.");
   const nowIso = new Date().toISOString();
   const user = {

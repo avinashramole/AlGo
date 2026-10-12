@@ -127,7 +127,7 @@ test("saveClient keeps a current 6-digit Kotak TOTP", () => {
   assert.equal(secrets.brokerTotpSecret, "654321");
 });
 
-test("createClient provisions a member who signs in with mobile and 1234", () => {
+test("createClient provisions a member who signs in with email and 123456", () => {
   const row = createClient({
     name: "Ramesh Kumar",
     mobile: "9123456789",
@@ -148,8 +148,9 @@ test("createClient provisions a member who signs in with mobile and 1234", () =>
   assert.equal(row.accountId, "master");
   assert.equal(row.subscriptionMode, "copy");
   assert.equal(row.subscriptionUntil, "2026-10-09");
-  const session = loginWithPassword("9123456789", "1234");
+  const session = loginWithPassword("ramesh@gmail.com", "123456");
   assert.equal(session.user.role, "user");
+  assert.equal(session.user.email, "ramesh@gmail.com");
   assert.equal(session.user.mobile, "9123456789");
   assert.equal(process.env.DHAN_LIVE, undefined);
 });

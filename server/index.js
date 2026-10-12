@@ -13,7 +13,7 @@ import { ensureReplayBars } from "./indexHistory.js";
 import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { brandedReportFile, deskToProposalReport, loadBacktestReport } from "./backtestReport.js";
-import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
+import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, resetMemberPasswordsToDefault, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, catalogViewerForUser, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
@@ -1490,6 +1490,12 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
+  try {
+    const reset = resetMemberPasswordsToDefault();
+    if (reset.changed) console.log(`Member logins reset to email + default password (${reset.changed} users).`);
+  } catch (error) {
+    console.log(`Member password reset skipped: ${error.message || error}`);
+  }
   startUpstoxDailyTokenScheduler();
   startMemberDailyBookScheduler();
   if (skipLiveAlgos()) {

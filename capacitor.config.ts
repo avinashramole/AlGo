@@ -6,9 +6,14 @@ const config: CapacitorConfig = {
   webDir: "dist",
   server: {
     androidScheme: "https",
+    iosScheme: "https",
   },
   android: {
     allowMixedContent: true,
+  },
+  ios: {
+    scheme: "t2salgo",
+    contentInset: "automatic",
   },
   plugins: {
     SplashScreen: {

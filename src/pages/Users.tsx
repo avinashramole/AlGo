@@ -626,6 +626,11 @@ function AddClientModal({
     event.preventDefault();
     setBusy(true);
     setError("");
+    if (!String(email || "").includes("@")) {
+      setError("Enter the client email. That email is the login user name.");
+      setBusy(false);
+      return;
+    }
     try {
       const result = await createClient({
         name,
@@ -710,10 +715,11 @@ function AddClientModal({
                   onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
                   placeholder="9xxxxxxxxx"
                 />
-                <span className="desk-help font-normal text-[11px] text-slate-500">Client portal login number · initial password 1234</span>
+                <span className="desk-help font-normal text-[11px] text-slate-500">Saved on the user record. Login uses email, not this number.</span>
               </Field>
               <Field label="Email">
-                <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="client@email.com" />
+                <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="client@email.com" required />
+                <span className="desk-help font-normal text-[11px] text-slate-500">Client portal login · default password 123456</span>
               </Field>
               <Field label="Client ID">
                 <input className={inputClass} value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="Broker client ID" />

@@ -38,7 +38,7 @@ function channelOf(value: string): "gmail" | "mobile" {
 function socialHint(provider: SocialProvider) {
   if (provider === "microsoft") return "Enter your Microsoft email (Outlook / Hotmail / Live) first.";
   if (provider === "apple") return "Enter your Apple ID email (iCloud / me.com) first.";
-  return "Enter your email or username first.";
+  return "Enter your email id first.";
 }
 
 export function Login() {
@@ -117,7 +117,7 @@ export function Login() {
         return false;
       }
     } else if (!identifier.trim()) {
-      setError(provider ? socialHint(provider) : purpose === "login" ? "Enter your email. We will send a 6-digit login code there." : "Enter your email or username first.");
+      setError(provider ? socialHint(provider) : purpose === "login" ? "Enter your email. We will send a 6-digit login code there." : "Enter your email id first.");
       return false;
     }
     if (purpose === "login" && !identifier.includes("@")) {
@@ -258,8 +258,8 @@ export function Login() {
       return;
     }
 
-    if (!identifier.trim()) {
-      setError("Enter your Gmail or mobile.");
+    if (!identifier.trim() || !identifier.includes("@")) {
+      setError("Enter your email id.");
       return;
     }
 
@@ -413,14 +413,14 @@ export function Login() {
                 <>
                   <Field
                     icon={page === "signin" ? "mail" : "user"}
-                    label={page === "signin" ? "Email" : "Email or Username"}
+                    label="Email id"
                     value={identifier}
                     onChange={(value) => {
                       setIdentifier(value);
                       setSentTo("");
                       setCode("");
                     }}
-                    placeholder="Enter your email"
+                    placeholder="Enter your email id"
                     autoComplete="username"
                   />
                   {sentTo ? (
@@ -439,7 +439,7 @@ export function Login() {
                       label="Password"
                       value={password}
                       onChange={setPassword}
-                      placeholder="Enter your password"
+                      placeholder="Password (default 123456)"
                       secret
                       autoComplete="current-password"
                     />
@@ -546,10 +546,24 @@ export function Login() {
                 </>
               )}
             </button>
-            <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
-              <Smartphone size={18} />
-              Download Android App
-            </a>
+            <p className="t2s-hint">Sign in with your email id. Default password is 123456.</p>
+            <div className="t2s-app-downloads">
+              <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
+                <Smartphone size={18} />
+                Download Android App
+              </a>
+              <button
+                type="button"
+                className="t2s-apk-download"
+                data-ios-app="install"
+                onClick={() => {
+                  setHint("iPhone: open this site in Safari → Share → Add to Home Screen. Same email login as the website.");
+                }}
+              >
+                <Smartphone size={18} />
+                Install iPhone App
+              </button>
+            </div>
           </div>
         </section>
       </div>
