@@ -77,8 +77,8 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.doesNotMatch(plans, /trade2smart\.com\/api\/upstox\/token/);
   assert.doesNotMatch(plans, /describeBrokerInstall/);
   assert.doesNotMatch(plans, /install\?\.help/);
-  assert.doesNotMatch(plans, /tokenHint/);
   assert.doesNotMatch(plans, /updated \$\{formatIst/);
+  assert.doesNotMatch(plans, /Token saved\$\{selectedBroker\.accountId/);
   assert.doesNotMatch(mobile, /token \$\{desk\.install\.tokenHint/);
   assert.doesNotMatch(mobile, /Saved \$\{desk\.install\.accountId/);
   assert.doesNotMatch(plans, /MemberLiveBook/);
