@@ -285,24 +285,12 @@ export function MemberPlans() {
     <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold">Algo Strategies</h1>
-        <p className="text-sm text-slate-400">
-          My plan: enroll monthly, quarterly, or yearly. After you pay, tap I have paid. Live copy starts only after the desk confirms payment and you install your own broker token.
-        </p>
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
 
       <section className="card p-4">
         <div className="text-sm font-bold">Subscriptions</div>
-        <p className="mt-1 text-xs text-slate-400">
-          Choose monthly, quarterly, or yearly. Longer terms are discounted so you pay less than repeating the monthly
-          price. Pay the listed amount to the desk GPay / PhonePe number
-          {payments?.ready ? ` ${payments.mobileMasked}` : ""}. Closing without payment returns the button to Enroll.
-        </p>
-        {payments?.ready ? (
-          <p className="mt-2 text-xs text-slate-500">
-            Payments go to <span className="font-semibold">{payments.payeeName}</span> · {payments.mobileMasked} · UPI {payments.upiId}
-          </p>
-        ) : (
+        {payments?.ready ? null : (
           <p className="mt-2 text-xs font-semibold text-amber-700">Admin has not set a GPay / PhonePe mobile yet.</p>
         )}
         <div className="mt-3 space-y-3">
