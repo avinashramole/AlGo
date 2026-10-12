@@ -405,7 +405,8 @@ export function memberExitPayload(pos = {}, extras = {}) {
     price: firstPositive(extras.price, pos.ltp, pos.avg, pos.buyPrice, pos.entry),
     product: pos.product || "MIS",
     type: "MARKET",
-    role: extras.role || "exit",
+    role: extras.role || pos.role || "exit",
+    exitReason: extras.exitReason || pos.exitReason || extras.role || pos.role || "",
     strategy,
     brokerId: pos.brokerId && pos.brokerId !== "paper" ? pos.brokerId : extras.brokerId || "dhan",
     securityId: pos.securityId,
@@ -422,7 +423,8 @@ export function dispatchMemberExitCopies(pos, algo = {}, { enqueueLiveOrder } = 
   if (!pos || pos.copyUserId) return;
   const strategy = String(pos.strategy || algo?.name || "").trim();
   if (!strategy || !pos.symbol) return;
-  const payload = memberExitPayload(pos, { strategy, role: "exit" });
+  const role = pos.role === "sl" || pos.exitReason === "sl" ? "sl" : pos.role === "target" || pos.exitReason === "target" ? "target" : "exit";
+  const payload = memberExitPayload(pos, { strategy, role, exitReason: pos.exitReason || role });
   if (!(Number(payload.qty) > 0) || !payload.symbol) return;
   dispatchMemberCopies(payload, algo || {}, { enqueueLiveOrder });
 }

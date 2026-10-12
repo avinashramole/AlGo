@@ -25,4 +25,18 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   const orders = tabs.indexOf("Orders");
   const reports = tabs.lastIndexOf("Reports");
   assert.ok(position >= 0 && orders > position && reports > orders);
+  const reportsPage = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
+  const ordersPage = fs.readFileSync(path.join(root, "src/pages/Orders.tsx"), "utf8");
+  const book = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");
+  assert.match(reportsPage, /data-profit-people="true"/);
+  assert.match(reportsPage, />Name</);
+  assert.match(reportsPage, />Email</);
+  assert.match(reportsPage, />Mobile</);
+  assert.match(reportsPage, />Broker</);
+  assert.match(reportsPage, />Position</);
+  assert.match(ordersPage, /Reason: \{displayOrderReason/);
+  assert.match(book, /Reason: \{displayOrderReason/);
+  assert.match(book, /ProfitOwnerCard/);
+  const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
+  assert.match(liveBook, /Reason: \{displayOrderReason/);
 });

@@ -681,6 +681,7 @@ app.get("/api/positions/desk", async (_req, res) => {
     );
     desk.adminBrokerId = own.adminBrokerId;
     desk.adminBrokerName = own.adminBrokerName;
+    if (desk.master) desk.master.brokerName = own.adminBrokerName || desk.master.brokerName;
     const loaded = await Promise.all(
       (desk.clients || []).map(async (client) => [client.id, await readMemberBrokerPnl(client.id)]),
     );

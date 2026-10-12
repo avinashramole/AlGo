@@ -2,6 +2,7 @@ import { useState } from "react";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
+import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "FAILED", "CANCELLED"] as const;
@@ -93,9 +94,9 @@ export function Orders({ embedded = false }: { embedded?: boolean }) {
                     <div className="mt-1 text-[11px] text-slate-400">
                       {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
                     </div>
-                    {row.reason ? (
-                      <div className={cn("mt-1 text-[11px]", row.status === "REJECTED" || row.status === "FAILED" ? "text-down" : "text-slate-400")}>
-                        {row.reason}
+                    {displayOrderReason(row) ? (
+                      <div className={cn("mt-1 text-[11px] font-semibold", reasonTone(row))}>
+                        Reason: {displayOrderReason(row)}
                       </div>
                     ) : null}
                     {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
@@ -154,9 +155,9 @@ export function Orders({ embedded = false }: { embedded?: boolean }) {
                         <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                         <td className="px-4 py-3">
                           <StatusBadge status={row.status} />
-                          {row.reason ? (
-                            <div className={cn("mt-1 text-[10px]", row.status === "REJECTED" || row.status === "FAILED" ? "text-down" : "text-slate-400")}>
-                              {row.reason}
+                          {displayOrderReason(row) ? (
+                            <div className={cn("mt-1 text-[10px] font-semibold", reasonTone(row))}>
+                              Reason: {displayOrderReason(row)}
                             </div>
                           ) : null}
                         </td>
@@ -190,6 +191,13 @@ export function Orders({ embedded = false }: { embedded?: boolean }) {
       </section>
     </div>
   );
+}
+
+function reasonTone(row: { status?: string; role?: string; reason?: string; exitReason?: string }) {
+  const text = displayOrderReason(row);
+  if (isExitHitReason(text)) return "text-brand-500";
+  if (row.status === "REJECTED" || row.status === "FAILED") return "text-down";
+  return "text-slate-500";
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

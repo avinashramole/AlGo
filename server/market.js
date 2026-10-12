@@ -27,6 +27,7 @@ import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
+import { exitReasonLabel, exitRoleFromReason, keepExitReason } from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
@@ -848,7 +849,11 @@ function fanOutFilledTarget(row) {
   if (orderFeedStatus(row.status) !== "FILLED") return;
   armed.copied = true;
   const algo = (state.algos || []).find((item) => strategyKey(item.name) === key) || {};
-  dispatchMemberExitCopies(armed.position || {}, algo, { enqueueLiveOrder: enqueueLiveAlgoOrder });
+  dispatchMemberExitCopies(
+    { ...(armed.position || {}), role: "target", exitReason: "target" },
+    algo,
+    { enqueueLiveOrder: enqueueLiveAlgoOrder },
+  );
 }
 
 export function armLiveTarget({ algo, open, target, mark, mode }) {
@@ -952,6 +957,8 @@ export function queueLivePositionExit(pos) {
     expiry: pos.expiry,
     kind: pos.kind || (pos.option ? "option" : undefined),
     exchangeSegment: exchangeSegmentFor(pos.symbol),
+    role: pos.role || pos.exitReason || "exit",
+    exitReason: pos.exitReason || pos.role || "",
   });
 }
 
@@ -3538,7 +3545,9 @@ export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
     copyUserId: String(payload.copyUserId),
     copyUserName: name,
     securityId: String(payload.securityId || live?.securityId || ""),
-    reason,
+    reason: exitReasonLabel(payload) || reason,
+    role: payload.role || exitRoleFromReason(payload.exitReason || ""),
+    exitReason: exitReasonLabel(payload) || payload.exitReason || "",
     createdAt: new Date().toISOString(),
   };
   const existing = (state.orders || []).find((row) => String(row.id) === id && row.copyUserId === order.copyUserId);
@@ -3606,7 +3615,12 @@ export function placeOrder(payload) {
       if (fill > 0) existing.price = fill;
       const filledQty = Number(live.filledQty || 0);
       if (filledQty > 0) existing.filledQty = filledQty;
-      if (live.reason || live.raw) existing.reason = liveRejectReason(live, existing.reason);
+      if (live.reason || live.raw) existing.reason = keepExitReason(existing.reason, liveRejectReason(live, existing.reason));
+      if (payload.role) existing.role = payload.role;
+      if (exitReasonLabel(payload) || payload.exitReason) {
+        existing.exitReason = exitReasonLabel(payload) || payload.exitReason;
+        existing.reason = keepExitReason(existing.reason, existing.exitReason);
+      }
       if (isPaper || live) fanOutAdminOrderCopies({ ...payload, strategy: existing.strategy }, existing);
       return existing;
     }
@@ -3657,13 +3671,17 @@ export function placeOrder(payload) {
     sim: !live && !isPaper,
     paper: isPaper,
     securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
-    reason: live
-      ? liveRejectReason(live, `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`)
-      : demoDhan
-        ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
-        : brokerId === "paper"
-          ? "Paper fill at live LTP"
-          : "Desk fill at LTP",
+    reason:
+      exitReasonLabel(payload) ||
+      (live
+        ? liveRejectReason(live, `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`)
+        : demoDhan
+          ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
+          : brokerId === "paper"
+            ? "Paper fill at live LTP"
+            : "Desk fill at LTP"),
+    role: payload.role || "",
+    exitReason: exitReasonLabel(payload) || payload.exitReason || "",
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
@@ -3788,7 +3806,7 @@ function rememberClosedFromPosition(pos, extra = {}) {
   return closed;
 }
 
-export function squareOff(id) {
+export function squareOff(id, extras = {}) {
   const index = state.positions.findIndex((item) => item.id === id);
   if (index < 0) return { error: "Position not found" };
   const pos = state.positions[index];
@@ -3822,6 +3840,9 @@ export function squareOff(id) {
     sim: !pos.paper,
     live: false,
     paper: Boolean(pos.paper || pos.brokerId === "paper"),
+    role: extras.role || pos.role || extras.exitReason || "",
+    exitReason: exitReasonLabel({ ...pos, ...extras }) || extras.exitReason || "",
+    reason: exitReasonLabel({ ...pos, ...extras }) || "",
     createdAt: new Date().toISOString(),
   };
   state.orders.unshift(order);
@@ -3839,9 +3860,13 @@ export function squareOff(id) {
   if (isPaperRow(pos)) markPaperToMarket();
   if (order.strategy) {
     const algo = (state.algos || []).find((row) => String(row.name || "") === String(order.strategy || ""));
-    dispatchMemberExitCopies({ ...pos, strategy: order.strategy, qty: pos.qty }, algo || {}, {
-      enqueueLiveOrder: enqueueLiveAlgoOrder,
-    });
+    dispatchMemberExitCopies(
+      { ...pos, strategy: order.strategy, qty: pos.qty, role: order.role, exitReason: order.exitReason || extras.exitReason },
+      algo || {},
+      {
+        enqueueLiveOrder: enqueueLiveAlgoOrder,
+      },
+    );
   }
   return { ok: true, order, pnl };
 }
@@ -3863,7 +3888,9 @@ export function replaceDhanOrders(rows) {
       createdAt: existing?.createdAt || row.createdAt || new Date().toISOString(),
       price: mergeDhanOrderPrice(row, existing),
       filledQty: Number(row.filledQty || existing?.filledQty || 0),
-      reason: String(row.reason || existing?.reason || ""),
+      reason: keepExitReason(existing?.reason, row.reason),
+      role: existing?.role || row.role || "",
+      exitReason: keepExitReason(existing?.exitReason || existing?.reason, row.exitReason || row.reason),
       strategy: resolveOrderStrategy(row, {
         previous,
         orders: previous,

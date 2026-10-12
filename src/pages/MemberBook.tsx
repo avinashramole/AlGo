@@ -3,7 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
 import { tabFromParams } from "../lib/bookTabs";
-import { cn, formatInr, formatIst, formatNumber, formatRupee } from "../lib/format";
+import { ProfitOwnerCard } from "../components/desk/ProfitOwner";
+import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
+import { cn, formatIst, formatNumber } from "../lib/format";
 
 type View = "positions" | "orders" | "reports";
 type PositionTab = "open" | "closed";
@@ -95,6 +97,13 @@ function MemberBook({ view }: { view: View }) {
           ]}
           wide
         />
+        <ProfitOwnerCard
+          name={desk?.owner?.name}
+          email={desk?.owner?.email}
+          mobile={desk?.owner?.mobile}
+          brokerName={desk?.owner?.brokerName}
+          position={desk?.owner?.position || "User"}
+        />
         <div className="grid grid-cols-2 gap-2">
           <div className="card p-3">
             <div className="text-[11px] font-semibold text-slate-400">Total P&L</div>
@@ -174,47 +183,15 @@ function MemberBook({ view }: { view: View }) {
     );
   }
 
-  const maxDaily = Math.max(1, ...(report?.daily || []).map((row) => Math.abs(row.pnl)));
   return (
     <div className="space-y-3" data-member-book="reports">
-      <div className="grid grid-cols-3 gap-2">
-        <div className="card p-3 text-center">
-          <div className="text-xl font-extrabold">{report?.trades || 0}</div>
-          <div className="text-[11px] text-slate-400">Total trades</div>
-        </div>
-        <div className="card p-3 text-center">
-          <div className="text-xl font-extrabold">{report?.winRate || 0}%</div>
-          <div className="text-[11px] text-slate-400">Win rate</div>
-        </div>
-        <div className="card p-3 text-center">
-          <Money value={report?.netPnl || 0} className="block text-lg" />
-          <div className="text-[11px] text-slate-400">Net P&L</div>
-        </div>
-      </div>
-      <PhoneCard className="p-4">
-        <div className="mb-3 text-sm font-bold">P&L history</div>
-        <div className="flex h-28 items-end gap-1">
-          {(report?.daily || []).slice(-14).map((row) => (
-            <div key={row.date} className="flex h-full flex-1 flex-col justify-end" title={`${row.date} ${formatInr(row.pnl)}`}>
-              <div
-                className={cn("w-full rounded-sm", row.pnl >= 0 ? "bg-up" : "bg-down")}
-                style={{ height: `${Math.max(8, (Math.abs(row.pnl) / maxDaily) * 100)}%` }}
-              />
-            </div>
-          ))}
-          {!(report?.daily || []).length ? <p className="text-xs text-slate-400">No daily P&L yet.</p> : null}
-        </div>
-      </PhoneCard>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="card p-3">
-          <div className="text-[11px] text-slate-400">Gross profit</div>
-          <div className="mt-1 text-sm font-extrabold text-up">{formatRupee(Math.max(0, report?.grossPnl || 0))}</div>
-        </div>
-        <div className="card p-3">
-          <div className="text-[11px] text-slate-400">Gross loss</div>
-          <div className="mt-1 text-sm font-extrabold text-down">{formatRupee(Math.min(0, report?.realizedPnl || 0))}</div>
-        </div>
-      </div>
+      <ProfitOwnerCard
+        name={desk?.owner?.name}
+        email={desk?.owner?.email}
+        mobile={desk?.owner?.mobile}
+        brokerName={desk?.owner?.brokerName}
+        position={desk?.owner?.position || "User"}
+      />
     </div>
   );
 }
@@ -248,7 +225,11 @@ function OrderCard({ row }: { row: DeskOrder }) {
             {row.side} {row.qty} @ {formatNumber(row.price)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
-          {row.reason ? <div className="mt-1 text-[11px] text-down">Reason: {row.reason}</div> : null}
+          {displayOrderReason(row) ? (
+            <div className={cn("mt-1 text-[11px] font-semibold", isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : "text-down")}>
+              Reason: {displayOrderReason(row)}
+            </div>
+          ) : null}
         </div>
         <StatusPill label={status || "ORDER"} tone={tone} />
       </div>

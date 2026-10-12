@@ -13,6 +13,7 @@ import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 import { firstCandleNameAliases } from "./niftyVwap/config.js";
 import { markContractToMarket } from "./positionMark.js";
+import { exitReasonLabel } from "./exitReason.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1662,7 +1663,9 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     brokerId,
     paper: Boolean(paper),
     live: Boolean(live?.orderId) && !paper,
-    reason: error ? String(error.message || error) : String(live?.reason || ""),
+    reason: exitReasonLabel(payload) || (error ? String(error.message || error) : String(live?.reason || "")),
+    role: payload.role || "",
+    exitReason: exitReasonLabel(payload) || payload.exitReason || "",
     securityId: payload.securityId ? String(payload.securityId) : "",
     createdAt: now,
   };
@@ -1853,7 +1856,16 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   const unrealized = Number(report.unrealizedPnl || 0);
   const balance = round2(desk.wallet.balance || 0);
   const autoTrade = brokerId !== "paper" && desk.tradeMode === "real";
+  const brokerName =
+    (catalog.find((row) => row.id === brokerId) || {}).name || (brokerId === "paper" ? "Paper" : brokerId);
   return {
+    owner: {
+      name: user.name || "",
+      email: user.email || "",
+      mobile: user.mobile || "",
+      brokerName,
+      position: "User",
+    },
     wallet: {
       balance,
       mtm: unrealized,

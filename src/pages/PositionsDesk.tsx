@@ -8,13 +8,17 @@ import { cn, formatNumber } from "../lib/format";
 type ModeFilter = "all" | "paper" | "real";
 type SegmentFilter = "all" | "indian" | "crypto";
 
-  const emptyDesk: PositionsDeskSnapshot = {
+const emptyDesk: PositionsDeskSnapshot = {
   master: {
     id: "master",
-    name: "Master",
+    name: "Admin",
+    email: "",
+    mobile: "",
+    brokerName: "Admin",
+    position: "Admin",
     kind: "master",
-    title: "Master",
-    subtitle: "PRIMARY MASTER ACCOUNT",
+    title: "Admin",
+    subtitle: "Admin",
     tradeMode: "paper",
     positions: [],
     mtm: 0,
@@ -439,9 +443,16 @@ function LedgerCard({
             {ledger.kind === "master" ? <Crown size={16} /> : <span className="text-sm font-bold">{initial}</span>}
           </div>
           <div>
-            <div className="text-sm font-bold">{ledger.title}</div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{ledger.subtitle}</div>
-            <div className={cn("text-xs font-semibold", moneyClass(Number(ledger.balance) || 0))}>
+            <div className="text-sm font-bold">{ledger.name || ledger.title}</div>
+            <div className="mt-1 grid gap-x-4 gap-y-1 text-[11px] text-slate-500 sm:grid-cols-2">
+              <div>Email {ledger.email || "—"}</div>
+              <div>Mobile {ledger.mobile || "—"}</div>
+              <div>Broker {ledger.brokerName || "—"}</div>
+              <div className="font-bold uppercase tracking-[0.12em] text-slate-600">
+                Position {ledger.position || (ledger.kind === "master" ? "Admin" : "User")}
+              </div>
+            </div>
+            <div className={cn("mt-1 text-xs font-semibold", moneyClass(Number(ledger.balance) || 0))}>
               Balance {rupee(Number(ledger.balance) || 0)}
             </div>
           </div>

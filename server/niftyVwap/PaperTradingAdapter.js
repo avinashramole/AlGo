@@ -10,7 +10,7 @@ export function PaperTradingAdapter({ placeOrder, squareOff } = {}) {
       });
     },
     exit(position) {
-      return squareOff(position.id);
+      return squareOff(position.id, { role: position.role, exitReason: position.exitReason || position.role });
     },
   };
 }

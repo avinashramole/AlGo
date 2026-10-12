@@ -17,7 +17,7 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
     },
     exit(position) {
       if ((position?.paper || position?.brokerId === "paper") && position?.id && typeof squareOff === "function") {
-        return squareOff(position.id);
+        return squareOff(position.id, { role: position.role, exitReason: position.exitReason || position.role });
       }
       if (typeof queueLiveOrder === "function") {
         const queued = queueLiveOrder({
@@ -35,6 +35,8 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
           strategy: position.strategy,
           brokerId: position.brokerId || "dhan",
           cancelArmedTarget: true,
+          role: position.role || position.exitReason || "exit",
+          exitReason: position.exitReason || position.role || "",
         });
         if (queued && typeof queued === "object") {
           const isQueued = queued.queued !== false && queued.duplicate !== true;

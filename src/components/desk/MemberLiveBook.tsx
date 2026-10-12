@@ -1,5 +1,6 @@
 import { SideBadge } from "./Badges";
 import type { DeskOrder, DeskReport, MemberPosition } from "../../api/client";
+import { displayOrderReason, isExitHitReason } from "../../lib/exitReason";
 import { cn, formatInr, formatIst, formatNumber } from "../../lib/format";
 
 export function MemberLiveBook({
@@ -97,7 +98,11 @@ export function MemberLiveBook({
                   )}
                 >
                   {row.status}
-                  {row.reason ? <div className="mt-1 font-medium normal-case text-down">{row.reason}</div> : null}
+                  {displayOrderReason(row) ? (
+                    <div className={cn("mt-1 font-medium normal-case", isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : "text-down")}>
+                      Reason: {displayOrderReason(row)}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -134,7 +139,11 @@ export function MemberLiveBook({
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                 <td className="px-4 py-3 text-xs font-bold uppercase">
                   {row.status}
-                  {row.reason ? <div className="mt-1 font-medium normal-case text-down">{row.reason}</div> : null}
+                  {displayOrderReason(row) ? (
+                    <div className={cn("mt-1 font-medium normal-case", isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : "text-down")}>
+                      Reason: {displayOrderReason(row)}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}

@@ -528,12 +528,17 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
     masterBook.brokerMtm = masterBook.mtm;
   }
   const adminBalance = Number.isFinite(Number(adminFunds)) ? round2(adminFunds) : 0;
+  const admin = (users || []).find((row) => row?.role === "admin") || {};
   const master = {
     id: "master",
-    name: "Master",
+    name: admin.name || "Admin",
+    email: admin.email || "",
+    mobile: admin.mobile || "",
+    brokerName: "Admin",
+    position: "Admin",
     kind: "master",
-    title: "Master",
-    subtitle: "PRIMARY MASTER ACCOUNT",
+    title: admin.name || "Admin",
+    subtitle: "Admin",
     tradeMode: masterBook.positions.some((row) => !row.paper) ? "real" : "paper",
     ...masterBook,
     balance: adminBalance,
@@ -543,9 +548,13 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
     return {
       id: client.id,
       name: client.name,
+      email: client.email || "",
+      mobile: client.mobile || "",
+      brokerName: client.brokerName || "",
+      position: "User",
       kind: "client",
       title: client.name,
-      subtitle: "CLIENT ACCOUNT",
+      subtitle: "User",
       tradeMode: client.tradeMode,
       ...ledgerBook(book.positions, book.closedTrades),
       balance: round2(client.margin || 0),

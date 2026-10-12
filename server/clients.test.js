@@ -449,8 +449,10 @@ test("position desk lists master first and a live ledger per member", () => {
     [{ id: "m1", symbol: "NIFTY 24600 CE", type: "BUY", qty: 65, avg: 100, ltp: 110, pnl: 650, product: "MIS", brokerId: "dhan" }],
     [{ pnl: 200 }],
   );
-  assert.equal(desk.master.title, "Master");
-  assert.equal(desk.master.subtitle, "PRIMARY MASTER ACCOUNT");
+  assert.equal(desk.master.title, "Trade2Smart");
+  assert.equal(desk.master.subtitle, "Admin");
+  assert.equal(desk.master.position, "Admin");
+  assert.equal(desk.master.email, "trades2smart@gmail.com");
   assert.equal(desk.master.open, 1);
   assert.equal(desk.master.positions[0].buyQty, 65);
   assert.equal(desk.master.positions[0].netQty, 65);
@@ -462,7 +464,10 @@ test("position desk lists master first and a live ledger per member", () => {
   assert.equal(desk.master.realized, 200);
   assert.equal(desk.clients.some((row) => row.name === "Avinash"), false);
   const arpit = desk.clients.find((row) => row.id === "u-arpit");
-  assert.equal(arpit.subtitle, "CLIENT ACCOUNT");
+  assert.equal(arpit.subtitle, "User");
+  assert.equal(arpit.position, "User");
+  assert.equal(arpit.email, "arpit@gmail.com");
+  assert.ok(String(arpit.mobile || "").trim());
   assert.equal(arpit.open, 0);
   assert.equal(desk.openPositions, 1);
   assert.equal(desk.masterMtm, 850);

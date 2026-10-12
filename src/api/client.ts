@@ -84,6 +84,8 @@ export type DeskOrder = {
   brokerId?: string;
   brokerName?: string;
   reason?: string;
+  role?: string;
+  exitReason?: string;
   createdAt?: string;
   copyUserId?: string;
   copyUserName?: string;
@@ -1085,7 +1087,16 @@ export type MemberCopyAlert = {
   createdAt?: string;
 };
 
+export type ProfitOwner = {
+  name: string;
+  email?: string;
+  mobile?: string;
+  brokerName?: string;
+  position: "Admin" | "User";
+};
+
 export type MemberDesk = {
+  owner?: ProfitOwner;
   wallet: MemberWallet;
   brokerId: string;
   tradeMode?: "paper" | "real";
@@ -1311,6 +1322,10 @@ export type LedgerPosition = {
 export type PositionLedger = {
   id: string;
   name: string;
+  email?: string;
+  mobile?: string;
+  brokerName?: string;
+  position?: "Admin" | "User";
   kind: "master" | "client";
   title: string;
   subtitle: string;

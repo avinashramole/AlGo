@@ -204,10 +204,21 @@ test("live exit queues a SELL and does not call paper squareOff", () => {
     queueLiveOrder: (row) => queued.push(row),
     squareOff: () => ({ ok: true, paper: true }),
   });
-  const result = live.exit({ id: "dhan-pos-1", symbol: "NIFTY 24500 CE", qty: 65, option: "CE", strike: 24500, brokerId: "dhan" });
+  const result = live.exit({
+    id: "dhan-pos-1",
+    symbol: "NIFTY 24500 CE",
+    qty: 65,
+    option: "CE",
+    strike: 24500,
+    brokerId: "dhan",
+    role: "target",
+    exitReason: "target",
+  });
   assert.equal(result.queued, true);
   assert.equal(queued[0].side, "SELL");
   assert.equal(queued[0].brokerId, "dhan");
+  assert.equal(queued[0].role, "target");
+  assert.equal(queued[0].exitReason, "target");
 });
 
 test("SL only ratchets upward", () => {

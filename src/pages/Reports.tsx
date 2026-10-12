@@ -1,14 +1,35 @@
+import { useEffect, useState } from "react";
 import { SideBadge } from "../components/desk/Badges";
-import { downloadDeskReport } from "../api/client";
+import { downloadDeskReport, getPositionsDesk, type PositionLedger } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { catchDeskError } from "../lib/liveSite";
-import { cn, formatInr, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
+import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 
 export function Reports({ embedded = false }: { embedded?: boolean }) {
+  const { user } = useAuth();
   const { data } = useMarket();
   const report = data.report;
-  const maxDaily = Math.max(1, ...(report?.daily || []).map((row) => Math.abs(row.pnl)));
+  const [ledgers, setLedgers] = useState<PositionLedger[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void getPositionsDesk()
+        .then((desk) => {
+          if (!alive) return;
+          setLedgers([desk.master, ...(desk.clients || [])].filter(Boolean));
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const id = window.setInterval(load, 4000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const download = (format: "pdf" | "xlsx") => {
     void downloadDeskReport(format).catch((error) => {
@@ -55,55 +76,42 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
           </button>
         </div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Realized P&L" value={formatInr(report.realizedPnl)} signed={report.realizedPnl} />
-        <Stat label="Unrealized P&L" value={formatInr(report.unrealizedPnl)} signed={report.unrealizedPnl} />
-        <Stat label="Charges" value={`₹${formatNumber(report.charges)}`} />
-        <Stat label="Net P&L" value={formatInr(report.netPnl)} signed={report.netPnl} />
-      </div>
-      <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Closed trades" value={String(report.trades)} />
-        <Stat label="Win rate" value={`${report.winRate}%`} />
-        <Stat label="Wins / losses" value={`${report.wins} / ${report.losses}`} />
-        <Stat label="Turnover" value={`₹${formatNumber(report.turnover, 0)}`} />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <section className="card p-4">
-          <div className="mb-3 text-sm font-bold">Daily P&L</div>
-          <div className="space-y-2">
-            {(report.daily || []).map((row) => (
-              <div key={row.date}>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span className="font-semibold">{row.date}</span>
-                  <span className={row.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(row.pnl)}</span>
-                </div>
-                <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div
-                    className={cn("h-2 rounded-full", row.pnl >= 0 ? "bg-up" : "bg-down")}
-                    style={{ width: `${Math.max(6, (Math.abs(row.pnl) / maxDaily) * 100)}%` }}
-                  />
-                </div>
-              </div>
+      <section className="card overflow-x-auto p-0" data-profit-people="true">
+        <div className="px-4 pt-4 text-sm font-bold">Profit</div>
+        <table className="mt-2 w-full min-w-[720px] text-left text-sm">
+          <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-3 font-semibold">Email</th>
+              <th className="px-4 py-3 font-semibold">Mobile</th>
+              <th className="px-4 py-3 font-semibold">Broker</th>
+              <th className="px-4 py-3 font-semibold">Position</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(ledgers.length ? ledgers : [
+              {
+                id: "self",
+                name: user?.name || "Admin",
+                email: user?.email || "",
+                mobile: user?.mobile || "",
+                brokerName: brokerName(data.brokers, data.activeBrokerId),
+                position: user?.role === "user" ? "User" : "Admin",
+              } as PositionLedger,
+            ]).map((row) => (
+              <tr key={row.id} className="soft-row">
+                <td className="px-4 py-3 font-semibold">{row.name || row.title}</td>
+                <td className="px-4 py-3">{row.email || "—"}</td>
+                <td className="px-4 py-3">{formatMobile(row.mobile)}</td>
+                <td className="px-4 py-3">{row.brokerName || "—"}</td>
+                <td className="px-4 py-3 font-bold uppercase tracking-wide">
+                  {row.position || (row.kind === "master" ? "Admin" : "User")}
+                </td>
+              </tr>
             ))}
-          </div>
-        </section>
-        <section className="card p-4">
-          <div className="mb-3 text-sm font-bold">By strategy</div>
-          <div className="space-y-2">
-            {(report.byStrategy || []).map((row) => (
-              <div key={row.name} className="flex items-center justify-between rounded-lg bg-[var(--bg)] px-3 py-2 text-sm">
-                <div>
-                  <div className="font-semibold">{row.name}</div>
-                  <div className="text-[11px] text-slate-400">
-                    {row.trades} trades · {row.winRate}% win
-                  </div>
-                </div>
-                <div className={cn("font-bold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+          </tbody>
+        </table>
+      </section>
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Trade book</div>
         <table className="mt-2 w-full min-w-[860px] text-left text-sm">
@@ -139,15 +147,6 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
           </tbody>
         </table>
       </section>
-    </div>
-  );
-}
-
-function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {
-  return (
-    <div className="card p-4">
-      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
-      <div className={cn("mt-1 text-2xl font-bold", signed != null && (signed >= 0 ? "text-up" : "text-down"))}>{value}</div>
     </div>
   );
 }

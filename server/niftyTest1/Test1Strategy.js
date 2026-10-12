@@ -80,7 +80,12 @@ export const Test1Strategy = {
       algo.lastSignal = "EXIT TARGET AT BROKER";
       return { action: "exit-pending", reason: "target" };
     }
-    const closed = adapter.exit({ ...open, ltp: trailMark });
+    const closed = adapter.exit({
+      ...open,
+      ltp: trailMark,
+      role: reason === "sl" ? "sl" : reason === "target" ? "target" : "exit",
+      exitReason: reason,
+    });
     if (closed?.error) {
       TradeLogger.record("exit-failed", { reason: closed.error, strategy: algo.name });
       return { action: "exit-failed", reason: closed.error };
