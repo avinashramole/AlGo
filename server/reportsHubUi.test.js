@@ -39,7 +39,8 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(ordersPage, /book === "paper"/);
   assert.match(ordersPage, /isLiveBrokerTrade/);
   assert.match(book, /Reason: \{displayOrderReason/);
-  assert.match(book, /ProfitOwnerCard/);
+  assert.doesNotMatch(book, /ProfitOwnerCard/);
+  assert.doesNotMatch(book, /data-profit-owner/);
   assert.match(book, /data-paper-tab="true"/);
   assert.match(book, /data-member-book="paper"/);
   assert.match(hub, /data-paper-tab="true"/);

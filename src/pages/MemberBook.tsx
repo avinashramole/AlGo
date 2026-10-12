@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
 import { tabFromParams } from "../lib/bookTabs";
-import { ProfitOwnerCard } from "../components/desk/ProfitOwner";
 import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber } from "../lib/format";
 import { hasPaperActivity, isLiveBrokerTrade, memberIsPaperTrade } from "../lib/paperBook";
@@ -125,13 +124,6 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
             { id: "closed", label: `Closed (${closed.length})` },
           ]}
           wide
-        />
-        <ProfitOwnerCard
-          name={desk?.owner?.name}
-          email={desk?.owner?.email}
-          mobile={desk?.owner?.mobile}
-          brokerName={desk?.owner?.brokerName}
-          position={desk?.owner?.position || "User"}
         />
         <div className="grid grid-cols-2 gap-2">
           <div className="card p-3">
@@ -280,13 +272,39 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
 
   return (
     <div className="space-y-3" data-member-book="reports">
-      <ProfitOwnerCard
-        name={desk?.owner?.name}
-        email={desk?.owner?.email}
-        mobile={desk?.owner?.mobile}
-        brokerName={desk?.owner?.brokerName}
-        position={desk?.owner?.position || "User"}
-      />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="card p-3">
+          <div className="text-[11px] font-semibold text-slate-400">Realized P&L</div>
+          <Money value={report?.realizedPnl || 0} className="mt-1 block text-lg" />
+        </div>
+        <div className="card p-3">
+          <div className="text-[11px] font-semibold text-slate-400">Unrealized MTM</div>
+          <Money value={report?.unrealizedPnl || 0} className="mt-1 block text-lg" />
+        </div>
+        <div className="card p-3">
+          <div className="text-[11px] font-semibold text-slate-400">Net P&L</div>
+          <Money value={report?.netPnl || 0} className="mt-1 block text-lg" />
+        </div>
+        <div className="card p-3">
+          <div className="text-[11px] font-semibold text-slate-400">Win rate</div>
+          <div className="mt-1 text-lg font-bold">{report?.winRate || 0}%</div>
+        </div>
+      </div>
+      {(report?.daily || []).length ? (
+        <section className="card p-4">
+          <div className="mb-2 text-sm font-bold">Daily P&L</div>
+          <div className="space-y-2">
+            {(report?.daily || []).map((row) => (
+              <div key={row.date} className="flex justify-between text-sm">
+                <span className="font-semibold">{row.date}</span>
+                <Money value={row.pnl} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <EmptyState title="No daily P&L yet" text="Closed trades update this report." />
+      )}
     </div>
   );
 }
