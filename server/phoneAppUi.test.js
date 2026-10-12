@@ -21,11 +21,16 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(home, /data-home-overview="phone"/);
   assert.match(home, /Hello,/);
   assert.match(home, /\{tape\}/);
-  assert.match(home, /data-home-shortcuts="algos-orders-positions"/);
+  assert.match(home, /data-home-shortcuts="algos-positions-orders"/);
   assert.doesNotMatch(home, /Active Strategies/);
   assert.doesNotMatch(home, /Position and Orders/);
+  assert.match(home, /label="Algos"/);
+  assert.match(home, /label="Position"/);
   assert.match(home, /label="Orders"/);
-  assert.match(home, /label="Positions"/);
+  const algos = home.indexOf('label="Algos"');
+  const position = home.indexOf('label="Position"');
+  const orders = home.indexOf('label="Orders"');
+  assert.ok(algos >= 0 && algos < position && position < orders);
   assert.doesNotMatch(home, /Waiting for the next quote/);
   assert.doesNotMatch(home, /quote\?\.symbol/);
   assert.match(adminHome, /tape=\{<TickerStrip/);

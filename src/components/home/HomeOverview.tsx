@@ -39,10 +39,10 @@ export function HomeOverview({
         <MetricTile label="Today's P&L" value={formatRupee(pnl)} signed={pnl} />
       </div>
 
-      <div className="grid grid-cols-3 gap-2" data-home-shortcuts="algos-orders-positions">
+      <div className="grid grid-cols-3 gap-2" data-home-shortcuts="algos-positions-orders">
         <QuickLink to={algosTo} label="Algos" icon={Cpu} />
+        <QuickLink to={positionsTo} label="Position" icon={Wallet} />
         <QuickLink to={ordersTo} label="Orders" icon={Layers} />
-        <QuickLink to={positionsTo} label="Positions" icon={Wallet} />
       </div>
     </div>
   );
