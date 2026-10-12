@@ -283,6 +283,23 @@ export function closedTradesToday(rows = [], now = new Date()) {
   return (rows || []).filter((row) => row && istDayKey(row.closedAt) === today);
 }
 
+function isSimClosed(row) {
+  return Boolean(row?.sim) && !row?.paper && String(row?.brokerId || "").toLowerCase() !== "paper" && row?.live !== true;
+}
+
+export function lastTradingDayKeys(now = new Date(), count = 5) {
+  const keys = [];
+  const cursor = new Date(now.getTime());
+  let guard = 0;
+  while (keys.length < Math.max(1, Number(count) || 5) && guard < 21) {
+    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "short" }).format(cursor);
+    if (weekday !== "Sat" && weekday !== "Sun") keys.push(istDayKey(cursor.toISOString()));
+    cursor.setTime(cursor.getTime() - 24 * 60 * 60 * 1000);
+    guard += 1;
+  }
+  return keys.reverse();
+}
+
 function pushGroup(map, key, patch) {
   if (!map[key]) map[key] = { ...patch, trades: 0, wins: 0, pnl: 0 };
   const row = map[key];
@@ -292,7 +309,7 @@ function pushGroup(map, key, patch) {
   return row;
 }
 
-export function buildReport(state) {
+export function buildReport(state, now = new Date()) {
   const closed = Array.isArray(state.closedTrades) ? state.closedTrades : [];
   const orders = Array.isArray(state.orders) ? state.orders : [];
   const positions = Array.isArray(state.positions) ? state.positions : [];
@@ -322,23 +339,22 @@ export function buildReport(state) {
     if (!byBroker[key]) byBroker[key] = { id: key, trades: 0, wins: 0, pnl: 0 };
     byBroker[key].unrealized = round2((byBroker[key].unrealized || 0) + Number(row.pnl || 0));
   }
+  const todayKey = istDayKey(now.toISOString());
   const dailyMap = {};
-  for (let i = 6; i >= 0; i -= 1) {
-    const date = new Date(Date.UTC(2026, 7, 18) - i * 86400000);
-    const key = istDayKey(date.toISOString());
+  for (const key of lastTradingDayKeys(now, 5)) {
     dailyMap[key] = { date: key, pnl: 0, trades: 0 };
   }
   for (const row of closed) {
+    if (isSimClosed(row)) continue;
     const key = istDayKey(row.closedAt);
-    if (!dailyMap[key]) dailyMap[key] = { date: key, pnl: 0, trades: 0 };
+    if (!dailyMap[key] || key > todayKey) continue;
     dailyMap[key].pnl = round2(dailyMap[key].pnl + Number(row.pnl || 0));
     dailyMap[key].trades += 1;
   }
-  const todayKey = istDayKey(new Date().toISOString());
   if (dailyMap[todayKey]) dailyMap[todayKey].unrealized = unrealized;
 
   return {
-    date: istDayKey(new Date().toISOString()),
+    date: todayKey,
     realizedPnl: realized,
     unrealizedPnl: unrealized,
     grossPnl: round2(realized + unrealized),

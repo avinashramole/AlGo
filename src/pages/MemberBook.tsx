@@ -294,7 +294,8 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
       </div>
       {(report?.daily || []).length ? (
         <section className="card p-4">
-          <div className="mb-2 text-sm font-bold">Daily P&L</div>
+          <div className="mb-1 text-sm font-bold">Daily P&L</div>
+          <div className="mb-2 text-xs text-slate-400">Last 5 trading days</div>
           <div className="space-y-2">
             {(report?.daily || []).map((row) => (
               <div key={row.date} className="flex justify-between text-sm">

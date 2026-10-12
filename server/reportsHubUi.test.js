@@ -35,6 +35,9 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(reportsPage, />Mobile</);
   assert.match(reportsPage, />Broker</);
   assert.match(reportsPage, />Position</);
+  assert.match(reportsPage, /data-daily-pnl="true"/);
+  assert.match(reportsPage, /Last 5 trading days/);
+  assert.match(book, /Last 5 trading days/);
   assert.match(ordersPage, /Reason: \{displayOrderReason/);
   assert.match(ordersPage, /book === "paper"/);
   assert.match(ordersPage, /isLiveBrokerTrade/);

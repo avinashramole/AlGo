@@ -113,6 +113,21 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
           </tbody>
         </table>
       </section>
+      <section className="card p-4" data-daily-pnl="true">
+        <div className="mb-1 text-sm font-bold">Daily P&L</div>
+        <div className="mb-2 text-xs text-slate-400">Last 5 trading days</div>
+        <div className="space-y-2">
+          {(report.daily || []).map((row) => (
+            <div key={row.date} className="flex justify-between text-sm">
+              <span className="font-semibold">
+                {row.date}
+                {row.trades ? ` · ${row.trades} trades` : ""}
+              </span>
+              <span className={row.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(row.pnl)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Trade book</div>
         <table className="mt-2 w-full min-w-[860px] text-left text-sm">
