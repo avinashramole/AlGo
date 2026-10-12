@@ -324,7 +324,7 @@ export function LoginScreen() {
                 />
               ) : null}
               {page === "signin" && !sentTo ? (
-                <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password (default 123456)" secret />
+                <Field label="Password" value={password} onChangeText={setPassword} placeholder="Enter your password" secret />
               ) : null}
               {page === "reset" && sentTo ? (
                 <>

@@ -439,7 +439,7 @@ export function Login() {
                       label="Password"
                       value={password}
                       onChange={setPassword}
-                      placeholder="Password (default 123456)"
+                      placeholder="Enter your password"
                       secret
                       autoComplete="current-password"
                     />
@@ -546,7 +546,6 @@ export function Login() {
                 </>
               )}
             </button>
-            <p className="t2s-hint">Sign in with your email id. Default password is 123456.</p>
             <div className="t2s-app-downloads">
               <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
                 <Smartphone size={18} />
