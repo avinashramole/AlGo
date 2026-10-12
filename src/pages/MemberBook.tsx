@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
-import { tabFromParams } from "./ReportsHub";
+import { tabFromParams } from "../lib/bookTabs";
 import { cn, formatInr, formatIst, formatNumber, formatRupee } from "../lib/format";
 
 type View = "positions" | "orders" | "reports";

@@ -1,16 +1,9 @@
 import { useSearchParams } from "react-router-dom";
+import { tabFromParams } from "../lib/bookTabs";
 import { cn } from "../lib/format";
 import { Orders } from "./Orders";
 import { PositionsDesk } from "./PositionsDesk";
 import { Reports } from "./Reports";
-
-export type BookTab = "positions" | "orders" | "reports";
-
-export function tabFromParams(value: string | null): BookTab {
-  if (value === "orders") return "orders";
-  if (value === "reports") return "reports";
-  return "positions";
-}
 
 export function ReportsHub() {
   const [params, setParams] = useSearchParams();
