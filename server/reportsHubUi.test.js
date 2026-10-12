@@ -51,3 +51,18 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
   assert.match(liveBook, /Reason: \{displayOrderReason/);
 });
+
+test("User Algos page keeps enroll and broker, not Daily P&L or broker books", () => {
+  const plans = fs.readFileSync(path.join(root, "src/pages/MemberPlans.tsx"), "utf8");
+  const mobile = fs.readFileSync(path.join(root, "mobile/src/screens/MemberPlansScreen.tsx"), "utf8");
+  assert.match(plans, /Algo Strategies/);
+  assert.match(plans, /Subscriptions/);
+  assert.match(plans, /Broker selection/);
+  assert.doesNotMatch(plans, /MemberLiveBook/);
+  assert.doesNotMatch(plans, /Daily P&L/);
+  assert.doesNotMatch(plans, /Order book/);
+  assert.doesNotMatch(plans, /Order history/);
+  assert.doesNotMatch(plans, /Trade book/);
+  assert.doesNotMatch(plans, /Open positions/);
+  assert.doesNotMatch(mobile, /desk\?\.positions/);
+});

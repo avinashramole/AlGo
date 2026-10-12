@@ -258,12 +258,6 @@ export function MemberPlansScreen() {
           </Text>
         </Card>
       ))}
-      {(desk?.positions || []).map((row) => (
-        <Card key={row.id}>
-          <Text style={styles.name}>{row.symbol}</Text>
-          <Text style={{ color: row.pnl >= 0 ? colors.up : colors.down, fontWeight: "800" }}>{formatInr(row.pnl)}</Text>
-        </Card>
-      ))}
     </ScrollView>
   );
 }

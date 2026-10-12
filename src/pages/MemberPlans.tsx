@@ -17,7 +17,6 @@ import {
   type UpiLinks,
 } from "../api/client";
 import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
-import { MemberLiveBook } from "../components/desk/MemberLiveBook";
 import {
   credsAfterInstall,
   describeBrokerInstall,
@@ -275,8 +274,6 @@ export function MemberPlans() {
     );
   }
 
-  const report = desk.report;
-  const maxDaily = Math.max(1, ...(report?.daily || []).map((row) => Math.abs(row.pnl)));
   const brokerName = (id?: string) => desk.brokers.find((row) => row.id === id)?.name || id || "Paper";
   const payReady = Boolean(payments?.ready || desk.payments.ready);
 
@@ -501,41 +498,6 @@ export function MemberPlans() {
           <p className="mt-1 text-xs text-slate-500">Pick a monthly, quarterly, or yearly term above and complete payment. MTM for that strategy shows here after you pay.</p>
         </section>
       )}
-
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Realized P&L" value={formatInr(report.realizedPnl)} signed={report.realizedPnl} />
-        <Stat label="Unrealized MTM" value={formatInr(report.unrealizedPnl)} signed={report.unrealizedPnl} />
-        <Stat label="Net P&L" value={formatInr(report.netPnl)} signed={report.netPnl} />
-        <Stat label="Win rate" value={`${report.winRate}%`} />
-      </div>
-
-      <section className="card p-4">
-        <div className="mb-3 text-sm font-bold">Daily P&L</div>
-        <div className="space-y-2">
-          {(report.daily || []).map((row) => (
-            <div key={row.date}>
-              <div className="mb-1 flex justify-between text-xs">
-                <span className="font-semibold">{row.date}</span>
-                <span className={row.pnl >= 0 ? "text-up" : "text-down"}>{formatInr(row.pnl)}</span>
-              </div>
-              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
-                <div
-                  className={cn("h-2 rounded-full", row.pnl >= 0 ? "bg-up" : "bg-down")}
-                  style={{ width: `${Math.max(6, (Math.abs(row.pnl) / maxDaily) * 100)}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <MemberLiveBook
-        positions={desk.positions}
-        orders={desk.orders || []}
-        orderHistory={desk.orderHistory || []}
-        tradeBook={report.tradeBook}
-        brokerName={brokerName}
-      />
 
       {checkout ? (
         <div className="desk-overlay">
