@@ -713,6 +713,15 @@ function AlgoCard({
               <span className="rounded bg-[var(--card-muted)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                 {positionLabel}
               </span>
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
+                  algo.clientVisible === false ? "bg-slate-200 text-slate-500" : "bg-emerald-50 text-up",
+                )}
+                data-client-visible={algo.clientVisible === false ? "hidden" : "visible"}
+              >
+                {algo.clientVisible === false ? "Hidden" : "Visible"}
+              </span>
             </div>
             {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
@@ -976,10 +985,13 @@ function AlgoCard({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
-        <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold">
-          <Users size={15} />
-          Map clients
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold">
+            <Users size={15} />
+            Map clients
+          </button>
+          <ClientVisibleToggle algo={algo} />
+        </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy} onClick={onExit} className="h-10 rounded-xl px-3 text-sm font-semibold text-down disabled:opacity-60">
             Exit position
@@ -1027,6 +1039,52 @@ function AlgoCard({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ClientVisibleToggle({ algo }: { algo: AlgoStrategy }) {
+  const { refresh } = useMarket();
+  const [busy, setBusy] = useState(false);
+  const visible = algo.clientVisible !== false;
+
+  const setVisible = async (next: boolean) => {
+    if (next === visible || busy) return;
+    setBusy(true);
+    try {
+      await updateAlgo(algo.id, { clientVisible: next });
+      await refresh();
+    } catch (err) {
+      window.alert(catchDeskError(err, "Could not change strategy visibility"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex overflow-hidden rounded-xl border border-[var(--border)]" data-strategy-visibility="true">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void setVisible(true)}
+        className={cn(
+          "h-10 px-3 text-xs font-extrabold uppercase disabled:opacity-60",
+          visible ? "bg-emerald-50 text-up" : "text-slate-400",
+        )}
+      >
+        Visible
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void setVisible(false)}
+        className={cn(
+          "h-10 px-3 text-xs font-extrabold uppercase disabled:opacity-60",
+          !visible ? "bg-slate-200 text-slate-600" : "text-slate-400",
+        )}
+      >
+        Hidden
+      </button>
+    </div>
   );
 }
 

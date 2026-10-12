@@ -56,7 +56,11 @@ test("normalizeAlgo keeps mapped clients and mapping scope", () => {
   );
   assert.deepEqual(saved.mappedClientIds, ["u-arpit", "u-ramesh"]);
   assert.equal(saved.mappingScope, "clients");
+  assert.equal(saved.clientVisible, true);
   assert.equal(saved.enabled, false);
+  const hidden = normalizeAlgo({ clientVisible: false }, saved);
+  assert.equal(hidden.clientVisible, false);
+  assert.deepEqual(hidden.mappedClientIds, ["u-arpit", "u-ramesh"]);
 });
 
 test("mappedClientIdsForMembers keeps only clients that still exist", () => {

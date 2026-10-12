@@ -130,6 +130,16 @@ test("member catalog shows only strategies admin mapped to that user", () => {
   const enrolled = listCatalog(algos, [], { userId: user.id, role: "user", enrolledStrategyIds: ["a5"] });
   assert.ok(enrolled.strategies.some((row) => row.id === "a5"));
   assert.equal(strategyVisibleToMember(algos[2], { userId: user.id, role: "user" }), false);
+  assert.equal(strategyVisibleToMember({ ...algos[0], clientVisible: false }, { userId: user.id, role: "user" }), false);
+  const hiddenCatalog = listCatalog(algos.map((row) => ({ ...row, clientVisible: row.id === "a4" ? false : true })), [], {
+    userId: user.id,
+    role: "user",
+  });
+  assert.equal(hiddenCatalog.strategies.some((row) => row.id === "a4"), false);
+  assert.throws(
+    () => enrollStrategy({ user, algo: { ...algos[0], clientVisible: false }, channel: "gpay" }),
+    /not assigned/,
+  );
   assert.throws(
     () => enrollStrategy({ user, algo: algos[1], channel: "gpay" }),
     /not assigned/,

@@ -386,11 +386,17 @@ export function mappedClientIdsForMembers(ids, memberIds) {
   return mappingIds(ids).filter((id) => allow.has(id));
 }
 
+function clientVisibleValue(input = {}, existing = {}) {
+  if (input.clientVisible != null) return Boolean(input.clientVisible);
+  if (existing.clientVisible != null) return Boolean(existing.clientVisible);
+  return true;
+}
+
 function mappingFields(input = {}, existing = {}) {
   const scopeRaw = input.mappingScope != null ? input.mappingScope : existing.mappingScope;
   const mappingScope = ["master", "clients", "both"].includes(String(scopeRaw || "")) ? String(scopeRaw) : "both";
   const mappedClientIds = mappingIds(input.mappedClientIds != null ? input.mappedClientIds : existing.mappedClientIds);
-  return { mappingScope, mappedClientIds };
+  return { mappingScope, mappedClientIds, clientVisible: clientVisibleValue(input, existing) };
 }
 
 function withMapping(next, input, existing) {

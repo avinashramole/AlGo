@@ -21,6 +21,9 @@ test("Multi-Index Reversal settings expose four indices and locked defaults", ()
   assert.match(algoPage, /data-start-paper="true"/);
   assert.match(algoPage, /Start paper/);
   assert.match(algoPage, /Start live/);
+  assert.match(algoPage, /data-strategy-visibility="true"/);
+  assert.match(algoPage, /data-client-visible/);
+  assert.match(algoPage, /clientVisible: next/);
   assert.match(builder, /data-mir-timeframe=\{mir \? "true"/);
   assert.match(builder, /MULTI_INDEX_SCRIPTS/);
   assert.match(builder, /MULTI_INDEX_TIMEFRAMES/);

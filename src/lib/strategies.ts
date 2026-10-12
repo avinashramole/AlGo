@@ -108,6 +108,7 @@ export type AlgoStrategy = {
   maxTradesPerDay?: number;
   mappingScope?: "master" | "clients" | "both";
   mappedClientIds?: string[];
+  clientVisible?: boolean;
   runMode?: "live" | "paper" | "backtest";
   lastBacktest?: null | {
     ranAt?: string;

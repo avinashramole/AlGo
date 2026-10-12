@@ -256,10 +256,11 @@ function enrolledStrategySet(value) {
   return new Set((Array.isArray(value) ? value : []).map((id) => String(id || "").trim()).filter(Boolean));
 }
 
-/** Admin mapping (Map clients / Mapped strategy) is the only way a member sees a strategy. */
+/** Admin Visible/Hidden plus mapping decides which strategies a member can see. */
 export function strategyVisibleToMember(algo, viewer) {
   if (!algo) return false;
   if (!viewer || viewer.role === "admin" || !viewer.userId) return true;
+  if (algo.clientVisible === false) return false;
   const userId = String(viewer.userId);
   const scope = ["master", "clients", "both"].includes(String(algo.mappingScope || ""))
     ? String(algo.mappingScope)
