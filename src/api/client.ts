@@ -1162,13 +1162,6 @@ export function getMemberDesk() {
   return request<MemberDesk>("/member/desk");
 }
 
-export function saveMemberIp(staticIp: string) {
-  return request<{ ok: boolean; staticIp: string }>("/member/ip", {
-    method: "POST",
-    body: JSON.stringify({ staticIp }),
-  });
-}
-
 export function selectMemberBroker(brokerId: string) {
   return request<{
     brokerId: string;

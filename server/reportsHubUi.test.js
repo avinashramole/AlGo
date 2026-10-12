@@ -73,9 +73,12 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   const setup = fs.readFileSync(path.join(root, "src/components/desk/MemberAccountSetup.tsx"), "utf8");
   assert.match(setup, /data-broker-select="true"/);
   assert.doesNotMatch(setup, /sm:grid-cols-2 lg:grid-cols-3/);
+  assert.doesNotMatch(setup, /Save IP/);
+  assert.doesNotMatch(setup, /saveMemberIp/);
   const profile = fs.readFileSync(path.join(root, "src/pages/Profile.tsx"), "utf8");
   const memberSettings = fs.readFileSync(path.join(root, "src/pages/MemberSettings.tsx"), "utf8");
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
+  assert.doesNotMatch(memberSettings, /Broker, IP/);
   assert.doesNotMatch(profile, /MemberAccountSetup/);
   assert.match(profile, /data-member-profile="identity"/);
   assert.match(profile, /Broker name/);

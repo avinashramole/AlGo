@@ -93,7 +93,7 @@ test("member cards include Crude Oil and India VIX when the selected broker retu
   assert.equal(crude.change, 24.5);
   assert.equal(crude.changePct, 0.4);
   assert.equal(crude.prevClose, 6100);
-  assert.equal(crude.vwap, 6116.4);
+  assert.equal(crude.vwap, undefined);
   assert.equal(crude.lot, 100);
   assert.equal(rows.find((row) => row.symbol === "INDIA VIX").price, 12.75);
 });
@@ -112,13 +112,13 @@ test("member cards use Natural Gas and Copper futures as live rates and drop MID
   assert.equal(gas.change, 4.3);
   assert.equal(gas.changePct, 1.4);
   assert.equal(gas.prevClose, 308.1);
-  assert.equal(gas.vwap, 310.2);
+  assert.equal(gas.vwap, undefined);
   assert.equal(copper.price, 918.6);
   assert.equal(copper.lot, 2500);
   assert.equal(copper.change, 7.4);
   assert.equal(copper.changePct, 0.81);
   assert.equal(copper.prevClose, 911.2);
-  assert.equal(copper.vwap, 914.5);
+  assert.equal(copper.vwap, undefined);
   assert.equal(rows.some((row) => String(row.symbol).includes("MIDCP")), false);
 });
 
@@ -141,12 +141,12 @@ test("member board always keeps a Crude Oil card even when LTP is missing", () =
   assert.equal(rows.find((row) => row.symbol === "NIFTY 50").price, 25100);
 });
 
-test("cardsFromMemberQuotes keeps VWAP and never copies security ids onto the member board", () => {
+test("cardsFromMemberQuotes never copies admin-only fields onto the member board", () => {
   const rows = cardsFromMemberQuotes("u-cards", [
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 24000, close: 23900, vwap: 24111, securityId: 13 },
   ]);
   assert.equal(rows[0].price, 24000);
-  assert.equal(rows[0].vwap, 24111);
+  assert.equal(rows[0].vwap, undefined);
   assert.equal(rows[0].securityId, undefined);
 });
 

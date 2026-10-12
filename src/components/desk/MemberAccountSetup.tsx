@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   getMemberDesk,
   installMemberBroker,
-  saveMemberIp,
   selectMemberBroker,
   type MemberDesk,
 } from "../../api/client";
@@ -30,7 +29,6 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   const [email, setEmail] = useState(user?.email || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
   const [creds, setCreds] = useState<Record<string, string>>({});
-  const [staticIp, setStaticIp] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -48,7 +46,6 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
       .then((next) => {
         if (!alive) return;
         setDesk(next);
-        setStaticIp((current) => current || next.staticIp || "");
         setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
       })
       .catch(() => undefined);
@@ -121,33 +118,17 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
     }
   };
 
-  const saveIp = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy("ip");
-    setError("");
-    setNote("");
-    try {
-      const saved = await saveMemberIp(staticIp.trim());
-      setStaticIp(saved.staticIp || "");
-      setNote(saved.staticIp ? `Static IP saved · ${saved.staticIp}` : "Static IP cleared.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save IP");
-    } finally {
-      setBusy("");
-    }
-  };
-
   return (
     <section className="card space-y-2 p-3">
       <div>
         <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
           {showProfile ? "Gmail account" : "Account"}
         </div>
-        <h2 className="text-sm font-extrabold">{showProfile ? "Update profile, add broker, add IP" : "Broker and IP"}</h2>
+        <h2 className="text-sm font-extrabold">{showProfile ? "Update profile and add broker" : "Broker"}</h2>
         <p className="desk-help mt-1 text-xs leading-5 text-slate-500">
           {showProfile
-            ? "Save your name and mobile, install the broker this account will trade on, and store the static IP that broker should use."
-            : "Pick the broker, save that login, and store the static IP that broker should use."}
+            ? "Save your name and mobile, then install the broker this account will trade on."
+            : "Pick the broker and save that login. Admin assigns the order IP."}
         </p>
       </div>
       {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-down">{error}</p> : null}
@@ -227,25 +208,6 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
           </form>
         ) : null}
       </div>
-
-      <form onSubmit={saveIp} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-        <div className="text-sm font-bold">IP address</div>
-        <p className="desk-help mt-1 text-xs text-slate-500">
-          Login IP {user?.loginIp || "appears after this Gmail sign-in"}. Add the static IP your broker account should use.
-        </p>
-        <label className="mt-3 block text-xs font-semibold">
-          Static IP
-          <input
-            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal"
-            value={staticIp}
-            placeholder="150.129.129.108"
-            onChange={(event) => setStaticIp(event.target.value)}
-          />
-        </label>
-        <button type="submit" disabled={busy === "ip"} className="mt-3 h-10 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60">
-          {busy === "ip" ? "Saving..." : "Save IP"}
-        </button>
-      </form>
     </section>
   );
 }

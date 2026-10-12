@@ -2730,8 +2730,6 @@ export function deskFeed() {
 
 export function memberIndexQuote(row) {
   if (!row?.symbol) return null;
-  const vwap =
-    Number(row.futureVwap) > 0 ? Number(row.futureVwap) : Number(row.vwap) > 0 ? Number(row.vwap) : 0;
   return {
     symbol: row.symbol,
     name: row.name || row.symbol,
@@ -2742,8 +2740,6 @@ export function memberIndexQuote(row) {
     spark: Array.isArray(row.spark) ? row.spark.slice(-8) : [],
     future: Number(row.future) > 0 ? Number(row.future) : Number(row.price) || 0,
     futureExpiry: row.futureExpiry || "",
-    vwap,
-    futureVwap: vwap,
     lot: Number(row.lot) || 0,
   };
 }

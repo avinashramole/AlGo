@@ -12,7 +12,7 @@ export function MemberSettings() {
       <div>
         <h1 className="text-xl font-bold">Settings</h1>
         <p className="text-sm text-slate-400">
-          Broker, IP, theme, and account options live here. Profile shows only name, email, mobile, and broker name.
+          Broker, theme, and account options live here. Profile shows only name, email, mobile, and broker name.
         </p>
       </div>
       <MemberAccountSetup showProfile={false} />

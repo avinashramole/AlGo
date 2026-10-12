@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { memberIndexQuote } from "./market.js";
 
-test("memberIndexQuote keeps VWAP like Nifty and drops security ids", () => {
+test("memberIndexQuote drops VWAP and security ids", () => {
   const vix = memberIndexQuote({ symbol: "INDIA VIX", name: "VIX", price: 13.2, change: 0.1, changePct: 0.76 });
   assert.equal(vix.symbol, "INDIA VIX");
   assert.equal(vix.price, 13.2);
-  assert.equal(vix.vwap, 0);
+  assert.equal(vix.vwap, undefined);
   const row = memberIndexQuote({
     symbol: "NIFTY 50",
     name: "NIFTY",
@@ -24,12 +24,12 @@ test("memberIndexQuote keeps VWAP like Nifty and drops security ids", () => {
   assert.equal(row.symbol, "NIFTY 50");
   assert.equal(row.future, 23866.1);
   assert.equal(row.lot, 65);
-  assert.equal(row.vwap, 23901.64);
-  assert.equal(row.futureVwap, 23901.64);
+  assert.equal(row.vwap, undefined);
+  assert.equal(row.futureVwap, undefined);
   assert.equal(row.securityId, undefined);
 });
 
-test("memberIndexQuote keeps Crude Oil cards with Nifty fields", () => {
+test("memberIndexQuote keeps Crude Oil cards without VWAP", () => {
   const row = memberIndexQuote({
     symbol: "CRUDEOIL",
     name: "CRUDE OIL",
@@ -44,8 +44,7 @@ test("memberIndexQuote keeps Crude Oil cards with Nifty fields", () => {
   assert.equal(row.symbol, "CRUDEOIL");
   assert.equal(row.future, 6128);
   assert.equal(row.lot, 100);
-  assert.equal(row.vwap, 6116.4);
-  assert.equal(row.futureVwap, 6116.4);
+  assert.equal(row.vwap, undefined);
   assert.equal(row.change, 18.4);
   assert.equal(row.changePct, 0.3);
 });
