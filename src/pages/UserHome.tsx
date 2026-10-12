@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { getMemberDesk, getMemberQuotes, type MemberCopyAlert, type MemberDesk, type MemberIndexQuote } from "../api/client";
+import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api/client";
 import { HomeOverview } from "../components/home/HomeOverview";
 import { DeskTape, TapeCell } from "../components/dashboard/DeskTape";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
 import { useAuth } from "../context/AuthContext";
-import { formatInr, formatIst } from "../lib/format";
+import { formatInr } from "../lib/format";
 
 export function UserHome() {
   const { user } = useAuth();
@@ -61,25 +61,7 @@ export function UserHome() {
           Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
         </p>
       ) : null}
-
-      <CopyAlerts alerts={(desk?.alerts || []).slice(0, 3)} />
     </div>
-  );
-}
-
-function CopyAlerts({ alerts }: { alerts: MemberCopyAlert[] }) {
-  if (!alerts.length) {
-    return <p className="mt-3 text-xs text-slate-400">No copied orders today.</p>;
-  }
-  return (
-    <ul className="mt-3 space-y-2">
-      {alerts.map((row) => (
-        <li key={row.id} className="rounded-lg bg-[var(--bg)] px-3 py-2 text-xs leading-5 text-slate-600 dark:text-slate-300">
-          <div className="font-semibold text-slate-800 dark:text-slate-100">{row.text}</div>
-          <div className="text-[11px] text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
-        </li>
-      ))}
-    </ul>
   );
 }
 

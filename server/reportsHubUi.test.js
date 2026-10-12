@@ -88,4 +88,9 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.match(alerts, /function isTradeAlert/);
   assert.match(alerts, /filter\(\(row\) => !isTradeAlert\(row\)\)/);
   assert.doesNotMatch(alerts, /No copied orders today/);
+  const userHome = fs.readFileSync(path.join(root, "src/pages/UserHome.tsx"), "utf8");
+  const mobileHome = fs.readFileSync(path.join(root, "mobile/src/screens/HomeScreen.tsx"), "utf8");
+  assert.doesNotMatch(userHome, /CopyAlerts/);
+  assert.doesNotMatch(userHome, /desk\?\.alerts/);
+  assert.doesNotMatch(mobileHome, /Copied order alerts/);
 });

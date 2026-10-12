@@ -27,6 +27,9 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(home, /quote\?\.symbol/);
   assert.match(adminHome, /tape=\{<TickerStrip/);
   assert.match(userHome, /tape=\{<MemberIndexBoard/);
+  assert.doesNotMatch(userHome, /CopyAlerts/);
+  assert.doesNotMatch(userHome, /Copied BUY/);
+  assert.doesNotMatch(userHome, /desk\?\.alerts/);
   assert.doesNotMatch(userHome, /hidden md:block/);
   assert.doesNotMatch(adminHome, /quote=/);
   assert.doesNotMatch(userHome, /quote=/);
