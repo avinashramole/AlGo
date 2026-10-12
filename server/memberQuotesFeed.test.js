@@ -84,24 +84,41 @@ test("member Upstox quotes are fetched with the member token, not the admin feed
 
 test("member cards include Crude Oil and India VIX when the selected broker returns them", () => {
   const rows = cardsFromMemberQuotes("u-vix-crude", [
-    { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6124.5, close: 6100 },
+    { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6124.5, close: 6100, vwap: 6116.4 },
     { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index", ltp: 12.75, close: 12.4 },
   ]);
-  assert.equal(rows.find((row) => row.symbol === "CRUDEOIL").price, 6124.5);
+  const crude = rows.find((row) => row.symbol === "CRUDEOIL");
+  assert.equal(crude.price, 6124.5);
+  assert.equal(crude.future, 6124.5);
+  assert.equal(crude.change, 24.5);
+  assert.equal(crude.changePct, 0.4);
+  assert.equal(crude.prevClose, 6100);
+  assert.equal(crude.vwap, 6116.4);
+  assert.equal(crude.lot, 100);
   assert.equal(rows.find((row) => row.symbol === "INDIA VIX").price, 12.75);
 });
 
 test("member cards use Natural Gas and Copper futures as live rates and drop MIDCPNIFTY", () => {
   const rows = cardsFromMemberQuotes("u-ng-copper", [
-    { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 312.4, close: 308.1 },
-    { symbol: "COPPER FUT", parent: "COPPER", kind: "future", ltp: 918.6, close: 911.2 },
+    { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 312.4, close: 308.1, vwap: 310.2 },
+    { symbol: "COPPER FUT", parent: "COPPER", kind: "future", ltp: 918.6, close: 911.2, vwap: 914.5 },
     { symbol: "MIDCPNIFTY", parent: "MIDCPNIFTY", kind: "index", ltp: 13459.45, close: 13400 },
   ]);
-  assert.equal(rows.find((row) => row.symbol === "NATURALGAS").price, 312.4);
-  assert.equal(rows.find((row) => row.symbol === "NATURALGAS").future, 312.4);
-  assert.equal(rows.find((row) => row.symbol === "NATURALGAS").lot, 1250);
-  assert.equal(rows.find((row) => row.symbol === "COPPER").price, 918.6);
-  assert.equal(rows.find((row) => row.symbol === "COPPER").lot, 2500);
+  const gas = rows.find((row) => row.symbol === "NATURALGAS");
+  const copper = rows.find((row) => row.symbol === "COPPER");
+  assert.equal(gas.price, 312.4);
+  assert.equal(gas.future, 312.4);
+  assert.equal(gas.lot, 1250);
+  assert.equal(gas.change, 4.3);
+  assert.equal(gas.changePct, 1.4);
+  assert.equal(gas.prevClose, 308.1);
+  assert.equal(gas.vwap, 310.2);
+  assert.equal(copper.price, 918.6);
+  assert.equal(copper.lot, 2500);
+  assert.equal(copper.change, 7.4);
+  assert.equal(copper.changePct, 0.81);
+  assert.equal(copper.prevClose, 911.2);
+  assert.equal(copper.vwap, 914.5);
   assert.equal(rows.some((row) => String(row.symbol).includes("MIDCP")), false);
 });
 
@@ -114,12 +131,12 @@ test("member board always keeps a Crude Oil card even when LTP is missing", () =
   assert.equal(rows.find((row) => row.symbol === "NIFTY 50").price, 25100);
 });
 
-test("cardsFromMemberQuotes never copies admin-only fields onto the member board", () => {
+test("cardsFromMemberQuotes keeps VWAP and never copies security ids onto the member board", () => {
   const rows = cardsFromMemberQuotes("u-cards", [
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 24000, close: 23900, vwap: 24111, securityId: 13 },
   ]);
   assert.equal(rows[0].price, 24000);
-  assert.equal(rows[0].vwap, undefined);
+  assert.equal(rows[0].vwap, 24111);
   assert.equal(rows[0].securityId, undefined);
 });
 

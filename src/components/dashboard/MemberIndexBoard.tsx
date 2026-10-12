@@ -1,4 +1,4 @@
-import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteTone } from "../../lib/format";
+import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteDayChange, quoteTone, vwapTone } from "../../lib/format";
 import { MEMBER_TAPE_UNDERLYINGS } from "../../lib/markets";
 import type { MemberIndexQuote } from "../../api/client";
 import { DeskTape, TapeCell } from "./DeskTape";
@@ -11,6 +11,11 @@ const REQUIRED = [
   })),
   { symbol: "INDIA VIX", name: "VIX", lot: 0 },
 ];
+
+function cardVwap(item: { future?: number; price: number; vwap?: number; futureVwap?: number }) {
+  const vwap = Number(item.futureVwap || item.vwap);
+  return vwap > 0 ? vwap : 0;
+}
 
 function withRequiredCards(indices: MemberIndexQuote[]) {
   const bySymbol = new Map(indices.map((row) => [row.symbol, row]));
@@ -26,6 +31,8 @@ function withRequiredCards(indices: MemberIndexQuote[]) {
         spark: [],
         future: 0,
         futureExpiry: "",
+        vwap: 0,
+        futureVwap: 0,
         lot: card.lot,
       }
     );
@@ -44,21 +51,36 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
   return (
     <DeskTape kicker="Market tape" extra="Tap lot" testId="member-tape">
       {withRequiredCards(indices).map((item) => {
-        const tone = quoteTone(item.change);
+        const day = quoteDayChange(item);
+        const tone = quoteTone(day.change);
         const showDeriv = item.symbol !== "INDIA VIX";
+        const vwap = cardVwap(item);
+        const futureLtp = item.future || item.price;
+        const tapeLabel = indexTapeLabel(item.symbol);
         return (
           <TapeCell
             key={item.symbol}
             title={`${item.name || item.symbol}${item.lot ? ` · ${item.lot}` : ""}`}
             value={formatQuote(item.price)}
-            detail={`${formatChange(item.change)} (${formatPct(item.changePct)}) · ${indexTapeLabel(item.symbol)}`}
+            detail={
+              <span className="flex items-center justify-between gap-3">
+                <span>
+                  {formatChange(day.change)} ({formatPct(day.changePct)})
+                </span>
+                <span className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</span>
+              </span>
+            }
             tone={tone}
           >
             {showDeriv ? (
-              <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
+              <div className="mt-2 grid grid-cols-3 gap-1 text-[10px]">
                 <div>
                   <div className="uppercase tracking-wide text-slate-400">Fut</div>
-                  <div className={cn("px font-bold", tone)}>{formatQuote(item.future || item.price)}</div>
+                  <div className={cn("px font-bold", tone)}>{formatQuote(futureLtp)}</div>
+                </div>
+                <div>
+                  <div className="uppercase tracking-wide text-slate-400">Vwap</div>
+                  <div className={cn("px font-bold", vwapTone(vwap, futureLtp))}>{vwap ? formatQuote(vwap) : "—"}</div>
                 </div>
                 <div>
                   <div className="uppercase tracking-wide text-slate-400">Lot</div>

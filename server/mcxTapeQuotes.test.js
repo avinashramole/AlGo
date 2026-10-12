@@ -7,15 +7,24 @@ import { UNDERLYINGS } from "./optionChain.js";
 
 test("Market tape paints live Natural Gas and Copper futures like Crude", () => {
   applyLiveQuotes([
-    { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 312.4, prevClose: 308.1, securityId: "570750" },
-    { symbol: "COPPER FUT", parent: "COPPER", kind: "future", ltp: 918.6, prevClose: 911.2, securityId: "574829" },
+    { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 312.4, prevClose: 308.1, vwap: 310.2, securityId: "570750" },
+    { symbol: "COPPER FUT", parent: "COPPER", kind: "future", ltp: 918.6, prevClose: 911.2, vwap: 914.5, securityId: "574829" },
   ]);
   const gas = snapshot().indices.find((row) => row.symbol === "NATURALGAS");
   const copper = snapshot().indices.find((row) => row.symbol === "COPPER");
   assert.equal(gas.price, 312.4);
   assert.equal(gas.future, 312.4);
+  assert.equal(gas.change, 4.3);
+  assert.equal(gas.changePct, 1.4);
+  assert.equal(gas.prevClose, 308.1);
+  assert.equal(gas.vwap, 310.2);
+  assert.equal(gas.futureVwap, 310.2);
   assert.equal(copper.price, 918.6);
   assert.equal(copper.future, 918.6);
+  assert.equal(copper.change, 7.4);
+  assert.equal(copper.changePct, 0.81);
+  assert.equal(copper.prevClose, 911.2);
+  assert.equal(copper.vwap, 914.5);
   assert.equal(gas.name, "NATURAL GAS");
 });
 

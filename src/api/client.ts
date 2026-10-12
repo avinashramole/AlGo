@@ -1141,6 +1141,8 @@ export type MemberIndexQuote = {
   spark?: number[];
   future?: number;
   futureExpiry?: string;
+  vwap?: number;
+  futureVwap?: number;
   lot?: number;
 };
 

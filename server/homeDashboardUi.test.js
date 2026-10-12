@@ -53,6 +53,9 @@ test("user market tape drops MIDCPNIFTY and keeps Natural Gas and Copper", () =>
   assert.match(feed, /symbol: "NATURALGAS"/);
   assert.match(feed, /symbol: "COPPER"/);
   assert.doesNotMatch(feed, /MIDCPNIFTY/);
+  assert.match(board, /grid-cols-3/);
+  assert.match(board, /Vwap/);
+  assert.match(board, /quoteDayChange/);
 });
 
 test("Home chart candles refresh every 15s, not every 2s", () => {

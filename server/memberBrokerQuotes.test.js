@@ -175,15 +175,32 @@ test("Upstox Natural Gas and Copper futures are picked without mini contracts", 
   assert.equal(pickMcxSearchHit("NATURALGAS", rows), "MCX_FO|570750");
   assert.equal(pickMcxSearchHit("COPPER", rows), "MCX_FO|574829");
   const gas = mcxQuoteFromPayload("NATURALGAS", {
-    data: { "MCX_FO:570750": { last_price: 312.4, instrument_token: "MCX_FO|NATURALGAS26OCTFUT", ohlc: { close: 308.1 } } },
+    data: {
+      "MCX_FO:570750": {
+        last_price: 312.4,
+        instrument_token: "MCX_FO|NATURALGAS26OCTFUT",
+        average_price: 310.2,
+        ohlc: { close: 308.1 },
+      },
+    },
   });
   const copper = mcxQuoteFromPayload("COPPER", {
-    data: { "MCX_FO:574829": { last_price: 918.6, instrument_token: "MCX_FO|COPPER26OCTFUT", ohlc: { close: 911.2 } } },
+    data: {
+      "MCX_FO:574829": {
+        last_price: 918.6,
+        instrument_token: "MCX_FO|COPPER26OCTFUT",
+        vwap: 914.5,
+        ohlc: { close: 911.2 },
+      },
+    },
   });
   assert.equal(gas.symbol, "NATURALGAS");
   assert.equal(gas.ltp, 312.4);
+  assert.equal(gas.close, 308.1);
+  assert.equal(gas.vwap, 310.2);
   assert.equal(copper.symbol, "COPPER");
   assert.equal(copper.ltp, 918.6);
+  assert.equal(copper.vwap, 914.5);
 });
 
 test("Kotak Natural Gas quote reads the MCX future LTP", () => {
@@ -193,6 +210,7 @@ test("Kotak Natural Gas quote reads the MCX future LTP", () => {
         ts: "NATURALGAS27OCT26FUT",
         lp: "312.40",
         c: "308.10",
+        average_price: "310.20",
       },
     },
   });
@@ -200,6 +218,7 @@ test("Kotak Natural Gas quote reads the MCX future LTP", () => {
   assert.equal(quote.kind, "future");
   assert.equal(quote.ltp, 312.4);
   assert.equal(quote.close, 308.1);
+  assert.equal(quote.vwap, 310.2);
 });
 
 test("Zerodha quote payload maps NSE/BSE index keys", () => {

@@ -63,6 +63,7 @@ export function cardsFromMemberQuotes(userId, quotes = []) {
     const futureRaw = Number(futureQuote?.ltp || 0);
     const price = priceRaw > 0 ? priceRaw : futureRaw;
     const day = dayChangeFromQuote(price, indexQuote || futureQuote || {}, prevMap[card.symbol]);
+    const vwapRaw = Number(futureQuote?.vwap || indexQuote?.vwap);
     if (day.prevClose > 0) prevMap[card.symbol] = day.prevClose;
     if (price > 0) sparkMap[card.symbol] = pushSpark(sparkMap[card.symbol], price);
     return memberIndexQuote({
@@ -75,6 +76,8 @@ export function cardsFromMemberQuotes(userId, quotes = []) {
       spark: sparkMap[card.symbol] || [],
       future: futureRaw > 0 ? round2(futureRaw) : price > 0 ? round2(price) : 0,
       futureExpiry: futureQuote?.expiry || "",
+      vwap: vwapRaw > 0 ? round2(vwapRaw) : 0,
+      futureVwap: vwapRaw > 0 ? round2(vwapRaw) : 0,
       lot: card.lot,
     });
   });

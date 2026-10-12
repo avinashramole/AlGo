@@ -148,7 +148,9 @@ export function mcxQuoteFromPayload(root, payload) {
     if (!blob.includes(want) || isMcxMiniBlob(want, blob)) continue;
     const inner = row.v && typeof row.v === "object" ? row.v : row;
     const last = pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price);
-    const next = quoteRow(instrument, last, pickPrevClose(inner, last), pickSignedNumber(inner.net_change, inner.netChange));
+    const next = quoteRow(instrument, last, pickPrevClose(inner, last), pickSignedNumber(inner.net_change, inner.netChange), {
+      vwap: pickVwap(inner),
+    });
     if (next) {
       next.expiry = String(inner.expiry || row.expiry || "").slice(0, 10);
       return next;
@@ -220,7 +222,9 @@ export function quotesFromKotakPayload(payload) {
     if (!row) continue;
     const last = pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lp);
     const prev = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close);
-    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change, row.chg));
+    const next = quoteRow(spec, last, prev, pickSignedNumber(row.change, row.per_change, row.chg), {
+      vwap: pickVwap(row),
+    });
     if (next) quotes.push(next);
   }
   return quotes;
@@ -279,7 +283,9 @@ function kotakMcxQuoteRow(instrument, row) {
   const spec = typeof instrument === "string" ? mcxInstrumentOf(instrument) : instrument;
   const last = kotakCrudeLtp(row);
   const close = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close, row.prevClose);
-  const next = quoteRow(spec, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
+  const next = quoteRow(spec, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change), {
+    vwap: pickVwap(row),
+  });
   if (next) {
     next.expiry = String(row.expiry || row.exp || expiryFromKotakMcxBlob(spec.symbol, kotakRowBlob(row))).slice(0, 10);
   }
@@ -321,11 +327,24 @@ async function kotakCrudeLookupCodes(fetchImpl) {
   return master.codes || [];
 }
 
-function quoteRow(instrument, ltp, close, netChange) {
+function pickVwap(inner = {}) {
+  return pickNumber(
+    inner.average_price,
+    inner.averagePrice,
+    inner.avg_price,
+    inner.vwap,
+    inner.average,
+    inner.ohlc?.average_price,
+    inner.ohlc?.vwap,
+  );
+}
+
+function quoteRow(instrument, ltp, close, netChange, extras = {}) {
   const price = Number(ltp);
   if (!Number.isFinite(price) || price <= 0) return null;
   const prev = Number(close);
   const net = Number(netChange);
+  const vwap = Number(extras.vwap);
   return {
     symbol: instrument.symbol,
     parent: instrument.parent,
@@ -334,6 +353,7 @@ function quoteRow(instrument, ltp, close, netChange) {
     close: Number.isFinite(prev) && prev > 0 ? prev : 0,
     prevClose: Number.isFinite(prev) && prev > 0 ? prev : 0,
     netChange: Number.isFinite(net) ? net : undefined,
+    vwap: Number.isFinite(vwap) && vwap > 0 ? vwap : undefined,
     expiry: "",
   };
 }
@@ -399,7 +419,9 @@ export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close } = {}) {
     const inner = row.v && typeof row.v === "object" ? row.v : row;
     const last = typeof ltp === "function" ? ltp(inner) : pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price);
     const prev = typeof close === "function" ? close(inner) : pickPrevClose(inner, last);
-    const next = quoteRow(instrument, last, prev, pickSignedNumber(inner.net_change, inner.netChange, inner.v?.net_change));
+    const next = quoteRow(instrument, last, prev, pickSignedNumber(inner.net_change, inner.netChange, inner.v?.net_change), {
+      vwap: pickVwap(inner),
+    });
     if (next) quotes.push(next);
   }
   return quotes;
@@ -435,7 +457,9 @@ export function quotesFromAngelPayload(payload) {
     const row = list.find((item) => String(item?.symbolToken || item?.symboltoken || "") === spec.token);
     if (!row) continue;
     const last = pickNumber(row.ltp, row.last_price);
-    const next = quoteRow(instrument, last, pickPrevClose(row, last), pickSignedNumber(row.netChange, row.net_change));
+    const next = quoteRow(instrument, last, pickPrevClose(row, last), pickSignedNumber(row.netChange, row.net_change), {
+      vwap: pickVwap(row),
+    });
     if (next) quotes.push(next);
   }
   return quotes;
