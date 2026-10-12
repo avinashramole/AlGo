@@ -8,6 +8,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const home = fs.readFileSync(path.join(root, "src/components/home/HomeOverview.tsx"), "utf8");
+  const adminHome = fs.readFileSync(path.join(root, "src/pages/Dashboard.tsx"), "utf8");
+  const userHome = fs.readFileSync(path.join(root, "src/pages/UserHome.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(root, "src/components/layout/MobileNav.tsx"), "utf8");
   const login = fs.readFileSync(path.join(root, "src/pages/Login.tsx"), "utf8");
   const book = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");
@@ -16,6 +18,10 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(home, /data-home-overview="phone"/);
   assert.match(home, /Hello,/);
   assert.match(home, /Active Strategies/);
+  assert.doesNotMatch(home, /Waiting for the next quote/);
+  assert.doesNotMatch(home, /quote\?\.symbol/);
+  assert.doesNotMatch(adminHome, /quote=/);
+  assert.doesNotMatch(userHome, /quote=/);
   assert.match(nav, /label: "Algos"/);
   assert.match(nav, /label: "Position and Orders"/);
   assert.match(nav, /label: "Profile"/);

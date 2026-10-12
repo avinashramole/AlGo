@@ -1,14 +1,7 @@
 import { Cpu, FileText, Layers, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
-import { cn, formatChange, formatInr, formatPct, formatQuote, formatRupee } from "../../lib/format";
+import { cn, formatInr, formatRupee } from "../../lib/format";
 import { MetricTile, QuickLink, SectionHead, StatusPill } from "../phone/PhoneUi";
-
-export type HomeQuote = {
-  symbol: string;
-  price: number;
-  change: number;
-  changePct: number;
-};
 
 export type HomeStrategy = {
   id: string;
@@ -22,7 +15,6 @@ export type HomeStrategy = {
 
 export function HomeOverview({
   name,
-  quote,
   capital,
   available,
   pnl,
@@ -33,7 +25,6 @@ export function HomeOverview({
   strategies,
 }: {
   name?: string;
-  quote?: HomeQuote | null;
   capital: number;
   available: number;
   pnl: number;
@@ -44,7 +35,6 @@ export function HomeOverview({
   strategies: HomeStrategy[];
 }) {
   const first = String(name || "trader").split(/\s+/)[0];
-  const tone = quote && quote.change > 0 ? "text-up" : quote && quote.change < 0 ? "text-down" : "text-[var(--text)]";
 
   return (
     <div className="space-y-3" data-home-overview="phone">
@@ -52,22 +42,6 @@ export function HomeOverview({
         <div className="text-lg font-extrabold tracking-tight">Hello, {first}</div>
         <div className="text-xs text-slate-400">Welcome back!</div>
       </div>
-
-      <section className="card p-4">
-        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
-          {quote?.symbol || "NIFTY"}
-        </div>
-        <div className={cn("mt-1 text-2xl font-extrabold leading-none", tone)}>
-          {quote ? formatQuote(quote.price) : "—"}
-        </div>
-        {quote ? (
-          <div className={cn("mt-1 text-xs font-semibold", tone)}>
-            {formatChange(quote.change)} ({formatPct(quote.changePct)})
-          </div>
-        ) : (
-          <div className="mt-1 text-xs text-slate-400">Waiting for the next quote</div>
-        )}
-      </section>
 
       <div className="grid grid-cols-3 gap-2">
         <MetricTile label="Total capital" value={formatRupee(capital, 0)} />

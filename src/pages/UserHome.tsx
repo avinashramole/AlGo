@@ -33,7 +33,6 @@ export function UserHome() {
   }, []);
 
   const report = desk?.report;
-  const nifty = indices.find((row) => row.symbol === "NIFTY 50" || row.symbol === "NIFTY") || indices[0];
   const balance = memberBalance(desk);
   const available = Number(desk?.wallet.balance) || 0;
   const pnl = Number(report?.netPnl || desk?.wallet.mtm || 0);
@@ -53,7 +52,6 @@ export function UserHome() {
     <div className="space-y-3">
       <HomeOverview
         name={user?.name}
-        quote={nifty ? { symbol: nifty.symbol, price: nifty.price, change: nifty.change, changePct: nifty.changePct } : null}
         capital={balance}
         available={available}
         pnl={pnl}
