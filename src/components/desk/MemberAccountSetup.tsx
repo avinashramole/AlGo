@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   getMemberDesk,
   installMemberBroker,
+  requestMemberUpstoxToken,
   selectMemberBroker,
   type MemberDesk,
 } from "../../api/client";
@@ -9,10 +10,9 @@ import { useAuth } from "../../context/AuthContext";
 import { isAdminUser } from "../../lib/roles";
 import {
   credsAfterInstall,
-  describeBrokerInstall,
-  describeBrokerSave,
   hintsFromInstall,
   installValueForSubmit,
+  tradingTokenArrived,
 } from "../../lib/formSecrets";
 import { BrokerInstallFields } from "./BrokerInstallFields";
 
@@ -32,12 +32,24 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [tokenWait, setTokenWait] = useState(false);
+  const tokenWaitGen = useRef(0);
 
   useEffect(() => {
     setName(user?.name || "");
     setEmail(user?.email || "");
     setMobile(user?.mobile || "");
   }, [user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upstox") === "connected") {
+      setNote("Upstox trading access token saved. Live copy will use this token.");
+    }
+    if (params.get("upstox") === "error") {
+      setError(params.get("message") || "Upstox login failed");
+    }
+  }, []);
 
   useEffect(() => {
     if (isAdminUser(user)) return;
@@ -51,6 +63,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
       .catch(() => undefined);
     return () => {
       alive = false;
+      tokenWaitGen.current += 1;
     };
   }, [user]);
 
@@ -110,11 +123,68 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
       const next = await getMemberDesk();
       setDesk(next);
       setCreds({ clientId: String(result.install?.accountId || clientId || "").trim() });
-      setNote(describeBrokerSave(result.install, desk.brokerId));
+      setNote(desk.brokerId === "upstox" ? "Upstox credentials saved." : "Broker credentials saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save broker");
     } finally {
       setBusy("");
+    }
+  };
+
+  const waitForTradingToken = async (
+    before: { tokenHint?: string; tokenUpdatedAt?: string; installed?: boolean } | null,
+    gen: number,
+  ) => {
+    setTokenWait(true);
+    const deadline = Date.now() + 90_000;
+    try {
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        if (gen !== tokenWaitGen.current) return;
+        try {
+          const next = await getMemberDesk();
+          if (gen !== tokenWaitGen.current) return;
+          setDesk(next);
+          setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
+          if (tradingTokenArrived(before, next.install)) {
+            setNote("Trading token saved. Live copy will use this token.");
+            return;
+          }
+        } catch {
+          /* keep waiting through a transient desk error */
+        }
+      }
+      if (gen !== tokenWaitGen.current) return;
+      setNote("Still waiting for today's trading token. Approve the Upstox app or WhatsApp notification.");
+    } finally {
+      if (gen === tokenWaitGen.current) setTokenWait(false);
+    }
+  };
+
+  const requestUpstoxToken = async () => {
+    const gen = ++tokenWaitGen.current;
+    setBusy("upstox-token");
+    setError("");
+    setNote("");
+    const before = desk?.install
+      ? {
+          tokenHint: desk.install.tokenHint,
+          tokenUpdatedAt: desk.install.tokenUpdatedAt,
+          installed: desk.install.installed,
+        }
+      : null;
+    try {
+      const result = await requestMemberUpstoxToken();
+      if (gen !== tokenWaitGen.current) return;
+      setNote(result.message || "Asked Upstox for today's trading token. Approve in the Upstox app.");
+      if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
+      setBusy("");
+      await waitForTradingToken(before, gen);
+    } catch (err) {
+      if (gen !== tokenWaitGen.current) return;
+      setError(err instanceof Error ? err.message : "Could not request Upstox trading token");
+    } finally {
+      if (gen === tokenWaitGen.current) setBusy("");
     }
   };
 
@@ -192,9 +262,6 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
         ) : null}
         {desk && desk.brokerId !== "paper" ? (
           <form className="mt-3" onSubmit={saveBroker}>
-            {desk.install?.installed ? null : (
-              <p className="mb-2 text-xs text-slate-500">{describeBrokerInstall(desk.install, desk.brokerId)}</p>
-            )}
             <BrokerInstallFields
               fields={desk.install?.fields || []}
               values={creds}
@@ -202,9 +269,22 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
               disabled={busy === "broker"}
               onChange={(id, value) => setCreds((current) => ({ ...current, [id]: value }))}
             />
-            <button type="submit" disabled={busy === "broker"} className="mt-3 h-10 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
-              {busy === "broker" ? "Saving..." : "Save broker"}
-            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="submit" disabled={busy === "broker"} className="h-10 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
+                {busy === "broker" ? "Saving..." : "Save broker"}
+              </button>
+              {desk.brokerId === "upstox" ? (
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void requestUpstoxToken()}
+                  className="h-10 rounded-lg border border-brand-500 px-4 text-sm font-semibold text-brand-500 disabled:opacity-60"
+                  data-upstox-token="true"
+                >
+                  {busy === "upstox-token" ? "Asking Upstox..." : tokenWait ? "Waiting for token..." : "Get today's trading token"}
+                </button>
+              ) : null}
+            </div>
           </form>
         ) : null}
       </div>

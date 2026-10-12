@@ -4,10 +4,7 @@ import {
   claimEnrollmentPaid,
   enrollStrategy,
   getMemberDesk,
-  installMemberBroker,
   listEnrollments,
-  requestMemberUpstoxToken,
-  selectMemberBroker,
   strategyCatalog,
   type CatalogStrategy,
   type Enrollment,
@@ -16,13 +13,6 @@ import {
   type PlanTerm,
   type UpiLinks,
 } from "../api/client";
-import { BrokerInstallFields } from "../components/desk/BrokerInstallFields";
-import {
-  credsAfterInstall,
-  hintsFromInstall,
-  installValueForSubmit,
-  tradingTokenArrived,
-} from "../lib/formSecrets";
 import { cn, formatInr, formatIstDate, formatPlanTerm, formatRupee } from "../lib/format";
 import { bestPlanSave, planOffer } from "../lib/planPrice";
 
@@ -42,12 +32,8 @@ export function MemberPlans() {
     links: UpiLinks | null;
     payments: PaymentPublic;
   } | null>(null);
-  const [creds, setCreds] = useState<Record<string, string>>({});
-  const [credNote, setCredNote] = useState("");
-  const [tokenWait, setTokenWait] = useState(false);
   const [utr, setUtr] = useState("");
   const loadGen = useRef(0);
-  const tokenWaitGen = useRef(0);
 
   const load = useCallback(async () => {
     const gen = ++loadGen.current;
@@ -58,7 +44,6 @@ export function MemberPlans() {
       setStrategies(catalog.strategies || []);
       setPayments(catalog.payments);
       setEnrollments(mine.enrollments || []);
-      setCreds((current) => credsAfterInstall(nextDesk.install, current, { keepTyped: true }));
       setError("");
     } catch (err) {
       if (gen !== loadGen.current) return;
@@ -72,7 +57,6 @@ export function MemberPlans() {
       void getMemberDesk()
         .then((next) => {
           setDesk(next);
-          setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
         })
         .catch(() => undefined);
     }, 2000);
@@ -82,131 +66,8 @@ export function MemberPlans() {
     return () => {
       window.clearInterval(deskId);
       window.clearInterval(fullId);
-      tokenWaitGen.current += 1;
     };
   }, [load]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("upstox") === "connected") {
-      setCredNote("Upstox trading access token saved. Live copy will use this token.");
-    }
-    if (params.get("upstox") === "error") {
-      setError(params.get("message") || "Upstox login failed");
-    }
-  }, []);
-
-  const pickBroker = async (brokerId: string) => {
-    setBusy(brokerId);
-    setError("");
-    setCredNote("");
-    setCreds({});
-    try {
-      await selectMemberBroker(brokerId);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not select broker");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const waitForTradingToken = async (
-    before: { tokenHint?: string; tokenUpdatedAt?: string; installed?: boolean } | null,
-    gen: number,
-  ) => {
-    setTokenWait(true);
-    const deadline = Date.now() + 90_000;
-    try {
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        if (gen !== tokenWaitGen.current) return;
-        try {
-          const next = await getMemberDesk();
-          if (gen !== tokenWaitGen.current) return;
-          setDesk(next);
-          setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
-          if (tradingTokenArrived(before, next.install)) {
-            setCredNote("Trading token saved. Live copy will use this token.");
-            return;
-          }
-        } catch {
-          /* keep waiting through a transient desk error */
-        }
-      }
-      if (gen !== tokenWaitGen.current) return;
-      setCredNote(
-        "Still waiting for today's trading token. Approve the Upstox app or WhatsApp notification. This page updates when the token arrives.",
-      );
-    } finally {
-      if (gen === tokenWaitGen.current) setTokenWait(false);
-    }
-  };
-
-  const requestUpstoxToken = async () => {
-    const gen = ++tokenWaitGen.current;
-    setBusy("upstox-token");
-    setError("");
-    setCredNote("");
-    const before = desk?.install
-      ? {
-          tokenHint: desk.install.tokenHint,
-          tokenUpdatedAt: desk.install.tokenUpdatedAt,
-          installed: desk.install.installed,
-        }
-      : null;
-    try {
-      const result = await requestMemberUpstoxToken();
-      if (gen !== tokenWaitGen.current) return;
-      setCredNote(result.message || "Asked Upstox for today's trading token. Approve in the Upstox app.");
-      if (result.loginUrl) window.open(result.loginUrl, "_blank", "noopener,noreferrer");
-      setBusy("");
-      await waitForTradingToken(before, gen);
-    } catch (err) {
-      if (gen !== tokenWaitGen.current) return;
-      setError(err instanceof Error ? err.message : "Could not request Upstox trading token");
-    } finally {
-      if (gen === tokenWaitGen.current) setBusy("");
-    }
-  };
-
-  const saveCredentials = async () => {
-    if (!desk || desk.brokerId === "paper") return;
-    setBusy("creds");
-    setError("");
-    setCredNote("");
-    try {
-      const hints = hintsFromInstall(desk.install);
-      const clientId = installValueForSubmit({ id: "clientId" }, creds, hints);
-      const result = await installMemberBroker({
-        brokerId: desk.brokerId,
-        clientId,
-        apiKey: installValueForSubmit({ id: "apiKey", secret: true }, creds, hints),
-        accessToken: installValueForSubmit({ id: "accessToken", secret: true }, creds, hints),
-        sessionToken: installValueForSubmit({ id: "sessionToken", secret: true }, creds, hints),
-        mobile: installValueForSubmit({ id: "mobile", secret: true }, creds, hints),
-        mpin: installValueForSubmit({ id: "mpin", secret: true }, creds, hints),
-        totpSecret: installValueForSubmit({ id: "totpSecret", secret: true }, creds, hints),
-      });
-      loadGen.current += 1;
-      setDesk((current) =>
-        current ? { ...current, brokerId: result.brokerId || current.brokerId, install: result.install } : current,
-      );
-      setCreds({ clientId: String(result.install?.accountId || clientId || "").trim() });
-      await load();
-      setCredNote(
-        desk.brokerId === "upstox"
-          ? result.install?.installed
-            ? "Upstox credentials saved. Live copy will use this token."
-            : "Upstox credentials saved."
-          : "Broker credentials saved.",
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not install broker token");
-    } finally {
-      setBusy("");
-    }
-  };
 
   const termFor = (id: string): PlanTerm => terms[id] || "monthly";
   const feeFor = (row: CatalogStrategy, term: PlanTerm) => planOffer(row, term).price;
@@ -270,15 +131,13 @@ export function MemberPlans() {
         <div className="card p-8 text-center">
           <div className="text-base font-bold">{error ? "No strategies yet" : "Plan report is loading"}</div>
           <p className="mt-1 text-sm text-slate-400">
-            {error ? "Enroll a plan to start. If this stays empty, check your connection." : "Your subscriptions and broker will show here."}
+            {error ? "Enroll a plan to start. If this stays empty, check your connection." : "Your subscriptions will show here."}
           </p>
         </div>
       </div>
     );
   }
 
-  const brokerName = (id?: string) => desk.brokers.find((row) => row.id === id)?.name || id || "Paper";
-  const selectedBroker = desk.brokers.find((row) => row.id === desk.brokerId);
   const payReady = Boolean(payments?.ready || desk.payments.ready);
 
   return (
@@ -370,92 +229,6 @@ export function MemberPlans() {
           })}
           {!strategies.length ? <p className="text-xs text-slate-400">No strategies assigned to this account yet.</p> : null}
         </div>
-      </section>
-
-      <section className="card p-4">
-        <div className="text-sm font-bold">Broker selection</div>
-        <p className="mt-1 text-xs text-slate-400">
-          Save more than one broker. The selected broker is the default: quotes, orders, balance, MTM, and P&L use that login.
-          Selecting DHAN does not overwrite UPSTOX. Paper stays on this plan book only. Saving a token does not start desk LIVE.
-        </p>
-        <p className="mt-2 text-xs font-semibold text-slate-500">
-          {desk.copyReady
-            ? `Live copy ready · ${brokerName(desk.brokerId)} uses your token on each master signal`
-            : desk.autoTrade
-              ? `Broker selected · live copy starts after admin confirms payment and your token is installed`
-              : "Virtual paper book · copies stay on this plan book"}
-        </p>
-        <label className="mt-3 block text-xs font-semibold">
-          Broker
-          <select
-            data-broker-select="true"
-            className="mt-1 h-11 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
-            value={desk.brokerId}
-            disabled={Boolean(busy)}
-            onChange={(event) => void pickBroker(event.target.value)}
-          >
-            {desk.brokers.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="mt-2 text-xs text-slate-500">
-          {!selectedBroker
-            ? "Pick a broker from the list."
-            : selectedBroker.virtual
-              ? "Virtual paper"
-              : selectedBroker.installed
-                ? "Token saved"
-                : selectedBroker.oauthReady
-                  ? "API key and secret saved · generate today's token"
-                  : "Needs this broker's ID and token"}
-        </p>
-        {desk.brokerId !== "paper" ? (
-          <form
-            className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveCredentials();
-            }}
-          >
-            <div className="text-sm font-bold">{desk.brokerId === "upstox" ? "Upstox trading credentials" : desk.brokerId === "kotak" ? "Kotak Neo trade session" : "Client ID and access token"}</div>
-            <div className="mt-3">
-              <BrokerInstallFields
-                fields={desk.install?.fields || []}
-                values={creds}
-                hints={hintsFromInstall(desk.install)}
-                disabled={busy === "creds"}
-                onChange={(id, value) => setCreds((current) => ({ ...current, [id]: value }))}
-              />
-            </div>
-            {credNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{credNote}</p> : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="submit"
-                disabled={busy === "creds"}
-                className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                {busy === "creds" ? "Saving..." : desk.brokerId === "upstox" ? "Save API key and secret" : desk.brokerId === "kotak" ? "Save Kotak Neo session" : "Save client ID and access token"}
-              </button>
-              {desk.brokerId === "upstox" ? (
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={() => void requestUpstoxToken()}
-                  className="h-10 rounded-xl border border-brand-500 px-4 text-xs font-semibold text-brand-500 disabled:opacity-50"
-                >
-                  {busy === "upstox-token"
-                    ? "Asking Upstox..."
-                    : tokenWait
-                      ? "Waiting for token..."
-                      : "Get today's trading token"}
-                </button>
-              ) : null}
-            </div>
-          </form>
-        ) : null}
       </section>
 
       {desk.plans.length ? (

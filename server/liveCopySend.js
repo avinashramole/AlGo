@@ -32,7 +32,7 @@ export async function sendMemberCopyOrder(payload = {}, fetchImpl = fetch) {
       const error = new Error(
         asked.ok
           ? "Approve today's Upstox trading token in the Upstox app / WhatsApp. After you approve, the next copy uses it."
-          : "This member has no Upstox trading token. Save API key + API secret on My plan, then tap Get today's trading token.",
+          : "This member has no Upstox trading token. Save API key + API secret on Settings, then tap Get today's trading token.",
       );
       error.status = 401;
       throw error;

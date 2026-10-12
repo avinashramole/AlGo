@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   abandonEnrollment,
   claimEnrollmentPaid,
   enrollStrategy,
   getMemberDesk,
-  installMemberBroker,
   listEnrollments,
-  selectMemberBroker,
   strategyCatalog,
   type CatalogStrategy,
   type Enrollment,
@@ -25,10 +23,6 @@ export function MemberPlansScreen() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [busy, setBusy] = useState("");
   const [terms, setTerms] = useState<Record<string, PlanTerm>>({});
-  const [clientId, setClientId] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [tokenFocused, setTokenFocused] = useState(false);
   const loadGen = useRef(0);
 
   const load = useCallback(() => {
@@ -39,7 +33,6 @@ export function MemberPlansScreen() {
         setDesk(nextDesk);
         setStrategies(catalog.strategies || []);
         setEnrollments(mine.enrollments || []);
-        setClientId(nextDesk.install?.accountId || "");
       })
       .catch((err) => {
         if (gen !== loadGen.current) return;
@@ -98,7 +91,7 @@ export function MemberPlansScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>My plan</Text>
-      <Text style={styles.muted}>Subscriptions and your broker token. I have paid waits for admin before live copy starts.</Text>
+      <Text style={styles.muted}>Subscriptions. I have paid waits for admin before live copy starts.</Text>
       <Card>
         <Text style={styles.label}>Subscriptions</Text>
         <Text style={styles.muted}>
@@ -150,100 +143,6 @@ export function MemberPlansScreen() {
           );
         })}
       </Card>
-      <Card>
-        <Text style={styles.label}>Broker</Text>
-        <Text style={styles.muted}>
-          Paper is virtual. Live brokers use your own API key and access token for copy trades. Saving a token does not start desk LIVE.
-        </Text>
-        <Text style={styles.muted}>
-          {desk?.copyReady
-            ? `Live copy ready · ${desk.brokerId} uses your token`
-            : desk?.autoTrade
-              ? "Broker selected · waiting for admin payment confirm and token"
-              : "Virtual paper book · not live"}
-        </Text>
-        <View style={styles.selectBox}>
-          {(desk?.brokers || []).map((row) => (
-            <Pressable
-              key={row.id}
-              style={[styles.selectRow, row.selected && styles.selectRowOn]}
-              onPress={() => {
-                setClientId("");
-                setApiKey("");
-                setAccessToken("");
-                void selectMemberBroker(row.id)
-                  .then(load)
-                  .catch((err) => Alert.alert("Broker", err instanceof Error ? err.message : "Could not select"));
-              }}
-            >
-              <Text style={[styles.selectText, row.selected && styles.selectTextOn]}>
-                {row.name}
-                {row.virtual ? " · paper" : row.live ? " · live" : ""}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        {desk && desk.brokerId !== "paper" ? (
-          <View style={{ marginTop: 12, gap: 8 }}>
-            <Text style={styles.muted}>
-              {desk.install?.installed ? "Token saved" : "Install client ID and access token. This does not start LIVE."}
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={clientId}
-              onChangeText={setClientId}
-              placeholder="Client ID"
-              autoCapitalize="none"
-            />
-            <TextInput
-              style={styles.input}
-              value={apiKey}
-              onChangeText={setApiKey}
-              placeholder={desk.install?.apiKeyHint || "API key"}
-              autoCapitalize="none"
-              secureTextEntry
-            />
-            <TextInput
-              style={styles.input}
-              value={tokenFocused || accessToken ? accessToken : desk.install?.tokenHint ? "••••••••" : ""}
-              onChangeText={setAccessToken}
-              onFocus={() => setTokenFocused(true)}
-              onBlur={() => setTokenFocused(false)}
-              placeholder={desk.install?.tokenHint || "Access token"}
-              autoCapitalize="none"
-              secureTextEntry
-            />
-            <Pressable
-              style={styles.btn}
-              disabled={busy === "creds"}
-              onPress={() => {
-                const nextToken = accessToken.trim() && accessToken !== "••••••••" ? accessToken.trim() : "";
-                void installMemberBroker({
-                  brokerId: desk.brokerId,
-                  clientId: clientId || desk.install?.accountId,
-                  apiKey,
-                  accessToken: nextToken,
-                })
-                  .then((result) => {
-                    loadGen.current += 1;
-                    setAccessToken("");
-                    setApiKey("");
-                    setClientId(result.install?.accountId || clientId);
-                    setDesk((current) =>
-                      current
-                        ? { ...current, brokerId: result.brokerId || current.brokerId, install: result.install }
-                        : current,
-                    );
-                    load();
-                  })
-                  .catch((err) => Alert.alert("Broker token", err instanceof Error ? err.message : "Could not save"));
-              }}
-            >
-              <Text style={styles.btnText}>{busy === "creds" ? "Saving..." : "Save client ID and access token"}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </Card>
       {(desk?.plans || []).map((row) => (
         <Card key={row.strategyId}>
           <Text style={styles.name}>{row.strategyName}</Text>
@@ -276,7 +175,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "800" },
   muted: { color: colors.muted, fontSize: 12, marginTop: 4 },
   label: { fontSize: 12, fontWeight: "800", color: colors.muted, textTransform: "uppercase" },
-  input: { marginTop: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontWeight: "700" },
   btn: { marginTop: 10, backgroundColor: colors.brand, borderRadius: 12, padding: 12, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "800" },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
@@ -284,11 +182,6 @@ const styles = StyleSheet.create({
   chipOn: { borderColor: colors.brand, backgroundColor: "#e8f1ff" },
   chipText: { fontWeight: "700", fontSize: 12, color: colors.muted },
   chipTextOn: { color: colors.brand },
-  selectBox: { marginTop: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 12, overflow: "hidden" },
-  selectRow: { paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  selectRowOn: { backgroundColor: "#e8f1ff" },
-  selectText: { fontWeight: "700", fontSize: 14, color: colors.muted },
-  selectTextOn: { color: colors.brand },
   name: { fontWeight: "800", fontSize: 16 },
   paid: { color: colors.up, fontWeight: "800", marginTop: 8 },
   waiting: { color: "#b45309", fontWeight: "800", marginTop: 8 },

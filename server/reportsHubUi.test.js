@@ -65,7 +65,7 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(liveBook, />Strategy</);
 });
 
-test("User Algos page keeps enroll and broker, not Daily P&L or broker books", () => {
+test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () => {
   const plans = fs.readFileSync(path.join(root, "src/pages/MemberPlans.tsx"), "utf8");
   const mobile = fs.readFileSync(path.join(root, "mobile/src/screens/MemberPlansScreen.tsx"), "utf8");
   assert.match(plans, /Algo Strategies/);
@@ -82,8 +82,10 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.match(enroll, /payYearly/);
   assert.doesNotMatch(enroll, /3× quarterly/);
   assert.match(plans, /No strategies assigned to this account yet/);
-  assert.match(plans, /Broker selection/);
-  assert.match(plans, /data-broker-select="true"/);
+  assert.doesNotMatch(plans, /Broker selection/);
+  assert.doesNotMatch(plans, /data-broker-select="true"/);
+  assert.doesNotMatch(plans, /Get today's trading token/);
+  assert.doesNotMatch(plans, /data-upstox-token/);
   assert.doesNotMatch(plans, /Store API key/);
   assert.doesNotMatch(plans, /trade2smart\.com\/api\/upstox\/token/);
   assert.doesNotMatch(plans, /describeBrokerInstall/);
@@ -106,9 +108,15 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.doesNotMatch(mobile, /desk\?\.positions/);
   const setup = fs.readFileSync(path.join(root, "src/components/desk/MemberAccountSetup.tsx"), "utf8");
   assert.match(setup, /data-broker-select="true"/);
+  assert.match(setup, /data-upstox-token="true"/);
+  assert.match(setup, /Get today's trading token/);
   assert.doesNotMatch(setup, /sm:grid-cols-2 lg:grid-cols-3/);
   assert.doesNotMatch(setup, /Save IP/);
   assert.doesNotMatch(setup, /saveMemberIp/);
+  const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
+  assert.match(index, /\/settings\?upstox=connected/);
+  assert.match(index, /\/settings\?upstox=error/);
+  assert.doesNotMatch(index, /\/plans\?upstox=/);
   const profile = fs.readFileSync(path.join(root, "src/pages/Profile.tsx"), "utf8");
   const memberSettings = fs.readFileSync(path.join(root, "src/pages/MemberSettings.tsx"), "utf8");
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");

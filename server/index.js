@@ -418,9 +418,9 @@ app.get("/api/upstox/callback", async (req, res) => {
       user_id: minted.userId,
       expires_at: minted.expiresAt,
     });
-    res.redirect(302, "/plans?upstox=connected");
+    res.redirect(302, "/settings?upstox=connected");
   } catch (error) {
-    res.redirect(302, `/plans?upstox=error&message=${encodeURIComponent(error.message || "Upstox login failed")}`);
+    res.redirect(302, `/settings?upstox=error&message=${encodeURIComponent(error.message || "Upstox login failed")}`);
   }
 });
 
