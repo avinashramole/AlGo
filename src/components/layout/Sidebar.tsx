@@ -35,7 +35,7 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/users", label: "Users", icon: Users, admin: true },
   { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User },
-  { to: "/settings", label: "Settings", icon: Settings, admin: true },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {

@@ -10,7 +10,6 @@ import {
   Sun,
   UserRound,
 } from "lucide-react";
-import { isGmailMember, MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -68,7 +67,7 @@ export function Profile() {
 
       <PhoneCard>
         <SettingsRow icon={UserRound} label="My Account" detail={user?.email || formatMobile(user?.mobile)} />
-        <SettingsRow icon={Building2} label="Broker Connections" to={admin ? "/brokers" : "/plans"} detail={admin ? "Desk brokers" : "Install your token on My plan"} />
+        <SettingsRow icon={Building2} label="Broker Connections" to={admin ? "/brokers" : "/settings"} detail={admin ? "Desk brokers" : "Broker and IP on Settings"} />
         <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to={admin ? "/algo" : "/plans"} />
         <SettingsRow icon={CreditCard} label="Subscription Plan" to={admin ? "/users?tab=enrollments" : "/plans"} />
         <SettingsRow icon={Headphones} label="Support" to="/notifications" />
@@ -79,19 +78,12 @@ export function Profile() {
           detail={theme === "light" ? "Light" : "Dark"}
           onClick={toggleTheme}
         />
-        {admin ? (
-          <>
-            <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
-            <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" />
-          </>
-        ) : null}
+        {admin ? <SettingsRow icon={UserRound} label="Users & IP" to="/users" /> : null}
+        <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail={admin ? "Desk settings" : "Broker and IP"} />
         <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
       </PhoneCard>
 
-      <MemberAccountSetup />
-
-      {isGmailMember(user) ? null : (
-        <section className="card p-3">
+      <section className="card p-3">
           <div className="mb-2 text-sm font-bold">Edit profile</div>
           <form onSubmit={onSave} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="block text-xs font-semibold">
@@ -119,7 +111,6 @@ export function Profile() {
             </button>
           </form>
         </section>
-      )}
     </div>
   );
 }

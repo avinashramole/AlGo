@@ -21,6 +21,7 @@ const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
 const UserIpManager = lazyPage(() => import("./pages/UserIpManager"), "UserIpManager");
 const Settings = lazyPage(() => import("./pages/Settings"), "Settings");
+const MemberSettings = lazyPage(() => import("./pages/MemberSettings"), "MemberSettings");
 const Notifications = lazyPage(() => import("./pages/Notifications"), "Notifications");
 const Chat = lazyPage(() => import("./pages/Chat"), "Chat");
 
@@ -52,6 +53,11 @@ function RoleReports() {
   return isAdminUser(user) ? <ReportsHub /> : <MemberReports />;
 }
 
+function RoleSettings() {
+  const { user } = useAuth();
+  return isAdminUser(user) ? <Settings /> : <MemberSettings />;
+}
+
 export default function App() {
   const { user } = useAuth();
 
@@ -81,7 +87,7 @@ export default function App() {
           <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
           <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
           <Route path="users" element={<AdminOnly><UserIpManager /></AdminOnly>} />
-          <Route path="settings" element={<AdminOnly><Settings /></AdminOnly>} />
+          <Route path="settings" element={<RoleSettings />} />
           <Route path="settings/ips" element={<Navigate to="/users?tab=ips" replace />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="chat" element={<AdminOnly><Chat /></AdminOnly>} />

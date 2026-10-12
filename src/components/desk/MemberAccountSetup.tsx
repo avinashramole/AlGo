@@ -42,7 +42,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   }, [user]);
 
   useEffect(() => {
-    if (!isGmailMember(user)) return;
+    if (isAdminUser(user)) return;
     let alive = true;
     void getMemberDesk()
       .then((next) => {
@@ -57,7 +57,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
     };
   }, [user]);
 
-  if (!isGmailMember(user)) return null;
+  if (!user || isAdminUser(user)) return null;
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
@@ -141,9 +141,11 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
     <section className="card space-y-2 p-3">
       <div>
         <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Gmail account</div>
-        <h2 className="text-sm font-extrabold">Update profile, add broker, add IP</h2>
+        <h2 className="text-sm font-extrabold">{showProfile ? "Update profile, add broker, add IP" : "Broker and IP"}</h2>
         <p className="desk-help mt-1 text-xs leading-5 text-slate-500">
-          Save your name and mobile, install the broker this Gmail account will trade on, and store the static IP that broker should use.
+          {showProfile
+            ? "Save your name and mobile, install the broker this account will trade on, and store the static IP that broker should use."
+            : "Pick the broker, save that login, and store the static IP that broker should use."}
         </p>
       </div>
       {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-down">{error}</p> : null}
