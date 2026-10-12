@@ -12,6 +12,7 @@ export function HomeOverview({
   ordersTo,
   positionsTo,
   tape,
+  showShortcuts = true,
 }: {
   name?: string;
   capital: number;
@@ -21,6 +22,7 @@ export function HomeOverview({
   ordersTo: string;
   positionsTo: string;
   tape?: ReactNode;
+  showShortcuts?: boolean;
 }) {
   const first = String(name || "trader").split(/\s+/)[0];
 
@@ -39,11 +41,13 @@ export function HomeOverview({
         <MetricTile label="Today's P&L" value={formatRupee(pnl)} signed={pnl} />
       </div>
 
-      <div className="grid grid-cols-3 gap-2" data-home-shortcuts="algos-positions-orders">
-        <QuickLink to={algosTo} label="Algos" icon={Cpu} />
-        <QuickLink to={positionsTo} label="Position" icon={Wallet} />
-        <QuickLink to={ordersTo} label="Orders" icon={Layers} />
-      </div>
+      {showShortcuts ? (
+        <div className="grid grid-cols-3 gap-2" data-home-shortcuts="algos-positions-orders">
+          <QuickLink to={algosTo} label="Algos" icon={Cpu} />
+          <QuickLink to={positionsTo} label="Position" icon={Wallet} />
+          <QuickLink to={ordersTo} label="Orders" icon={Layers} />
+        </div>
+      ) : null}
     </div>
   );
 }

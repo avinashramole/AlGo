@@ -575,6 +575,10 @@ html.t2s-hybrid .t2s-mobile-nav.md\:hidden {
   display: block !important;
 }
 
+html.t2s-hybrid [data-user-home] [data-home-shortcuts] {
+  display: none !important;
+}
+
 html.t2s-hybrid .t2s-desktop-only {
   display: none !important;
 }

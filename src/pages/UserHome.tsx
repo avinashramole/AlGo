@@ -5,6 +5,7 @@ import { DeskTape, TapeCell } from "../components/dashboard/DeskTape";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
 import { useAuth } from "../context/AuthContext";
 import { formatInr } from "../lib/format";
+import { isNativeHybrid } from "../lib/hybrid";
 
 export function UserHome() {
   const { user } = useAuth();
@@ -38,7 +39,7 @@ export function UserHome() {
   const pnl = Number(report?.netPnl || desk?.wallet.mtm || 0);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-user-home="true">
       <HomeOverview
         name={user?.name}
         capital={balance}
@@ -47,6 +48,7 @@ export function UserHome() {
         algosTo="/plans"
         ordersTo="/reports?tab=orders"
         positionsTo="/reports?tab=positions"
+        showShortcuts={!isNativeHybrid()}
         tape={<MemberIndexBoard indices={indices} note={quoteNote} />}
       />
 
