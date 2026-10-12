@@ -140,7 +140,9 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   return (
     <section className="card space-y-2 p-3">
       <div>
-        <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Gmail account</div>
+        <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+          {showProfile ? "Gmail account" : "Account"}
+        </div>
         <h2 className="text-sm font-extrabold">{showProfile ? "Update profile, add broker, add IP" : "Broker and IP"}</h2>
         <p className="desk-help mt-1 text-xs leading-5 text-slate-500">
           {showProfile
