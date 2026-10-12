@@ -4,6 +4,7 @@ import { getPositionsDesk, type LedgerPosition, type PositionLedger, type Positi
 import { PortfolioSummary } from "../components/dashboard/PortfolioSummary";
 import { useMarket } from "../context/MarketContext";
 import { cn, formatNumber } from "../lib/format";
+import { isLiveBrokerTrade, isPaperTrade, isSimTrade } from "../lib/paperBook";
 
 type ModeFilter = "all" | "paper" | "real";
 type SegmentFilter = "all" | "indian" | "crypto";
@@ -49,6 +50,7 @@ function moneyClass(value: number) {
 }
 
 function matchesMode(row: LedgerPosition, accountMode: "paper" | "real", mode: ModeFilter) {
+  if (isSimTrade(row)) return false;
   if (mode === "all") return true;
   if (mode === "paper") return row.paper || accountMode === "paper";
   return !row.paper && accountMode === "real";
@@ -83,10 +85,13 @@ function asLiveLedgerPosition(row: {
   product?: string;
   strategy?: string;
   brokerId?: string;
+  paper?: boolean;
+  sim?: boolean;
 }): LedgerPosition {
   const type = row.type === "SELL" ? "SELL" : "BUY";
   const qty = Math.abs(Number(row.qty) || 0);
   const avg = Number(row.avg) || 0;
+  const paper = Boolean(row.paper || row.brokerId === "paper");
   return {
     id: String(row.id || ""),
     symbol: String(row.symbol || ""),
@@ -100,7 +105,8 @@ function asLiveLedgerPosition(row: {
     ltp: Number(row.ltp) || avg,
     realized: 0,
     mtm: Number(row.pnl) || 0,
-    paper: row.brokerId === "paper",
+    paper,
+    sim: Boolean(row.sim) && !paper,
     segment: /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(row.symbol || "")) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
     closed: false,
@@ -120,6 +126,7 @@ function asClosedLiveLedgerPosition(row: {
   strategy?: string;
   brokerId?: string;
   paper?: boolean;
+  sim?: boolean;
   buyQty?: number;
   buyPrice?: number;
   sellQty?: number;
@@ -145,16 +152,17 @@ function asClosedLiveLedgerPosition(row: {
     realized: pnl,
     mtm: pnl,
     paper: Boolean(row.paper || row.brokerId === "paper"),
+    sim: Boolean(row.sim) && !Boolean(row.paper || row.brokerId === "paper"),
     segment: /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(row.symbol || "")) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
     closed: true,
   };
 }
 
-export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
+export function PositionsDesk({ embedded = false, book }: { embedded?: boolean; book?: "live" | "paper" }) {
   const { data, refresh, closePosition } = useMarket();
   const [desk, setDesk] = useState<PositionsDeskSnapshot>(emptyDesk);
-  const [mode, setMode] = useState<ModeFilter>("all");
+  const [mode, setMode] = useState<ModeFilter>(book === "paper" ? "paper" : book === "live" ? "real" : "all");
   const [segment, setSegment] = useState<SegmentFilter>("all");
   const [busy, setBusy] = useState("");
   const [loading, setLoading] = useState(false);
@@ -178,6 +186,11 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
   }, [loadDesk]);
 
   useEffect(() => {
+    if (book === "paper") setMode("paper");
+    if (book === "live") setMode("real");
+  }, [book]);
+
+  useEffect(() => {
     const id = window.setInterval(() => {
       void loadDesk();
     }, 2000);
@@ -194,24 +207,32 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
-  const liveMaster = useMemo(() => (data.positions || []).map(asLiveLedgerPosition), [data.positions]);
+  const keepSnap = (row: { paper?: boolean; brokerId?: string; sim?: boolean }) =>
+    book === "paper" ? isPaperTrade(row) : book === "live" ? isLiveBrokerTrade(row) : !isSimTrade(row);
+  const liveMaster = useMemo(
+    () => (data.positions || []).filter(keepSnap).map(asLiveLedgerPosition),
+    [data.positions, book],
+  );
   const liveClosed = useMemo(
-    () => (data.closedTrades || []).map(asClosedLiveLedgerPosition),
-    [data.closedTrades],
+    () => (data.closedTrades || []).filter(keepSnap).map(asClosedLiveLedgerPosition),
+    [data.closedTrades, book],
   );
 
   const ledgers = useMemo(() => {
     const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number; realized: number; unrealized: number }> = [];
-    const useBrokerMtm = Number.isFinite(desk.master.brokerMtm);
+    const useBrokerMtm = Number.isFinite(desk.master.brokerMtm) && book !== "paper";
+    const keepLedger = (row: LedgerPosition) =>
+      book === "paper" ? isPaperTrade(row) : book === "live" ? isLiveBrokerTrade(row) : !isSimTrade(row);
+    const masterSource = (desk.master.positions || []).filter(keepLedger);
     const closedById = new Map<string, LedgerPosition>();
     const closedSource = useBrokerMtm
-      ? (desk.master.positions || []).filter(isClosedLedger)
-      : [...(desk.master.positions || []).filter(isClosedLedger), ...liveClosed];
+      ? masterSource.filter(isClosedLedger)
+      : [...masterSource.filter(isClosedLedger), ...liveClosed];
     for (const row of closedSource) {
       closedById.set(row.id, row);
     }
     const closedMaster = [...closedById.values()];
-    const deskOpen = (desk.master.positions || []).filter((row) => !isClosedLedger(row));
+    const deskOpen = masterSource.filter((row) => !isClosedLedger(row));
     const liveIds = new Set(liveMaster.map((row) => String(row.id || "")));
     const extraDesk = deskOpen.filter((row) => !liveIds.has(String(row.id || "")));
     const openMaster = liveMaster.length ? [...liveMaster, ...extraDesk] : deskOpen;
@@ -248,7 +269,7 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
       });
     }
     return rows;
-  }, [desk, mode, segment, liveMaster, liveClosed]);
+  }, [desk, mode, segment, liveMaster, liveClosed, book]);
 
   const masterBlock = ledgers.find((row) => row.ledger.kind === "master");
   const clientBlocks = ledgers.filter((row) => row.ledger.kind === "client");
@@ -298,11 +319,13 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
         </div>
         )}
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {book ? null : (
           <ChipGroup>
             <Chip label="All modes" on={mode === "all"} onClick={() => setMode("all")} />
             <Chip label="Paper" on={mode === "paper"} onClick={() => setMode("paper")} />
             <Chip label="Real" on={mode === "real"} onClick={() => setMode("real")} />
           </ChipGroup>
+          )}
           <ChipGroup>
             <Chip label="All" on={segment === "all"} onClick={() => setSegment("all")} />
             <Chip label="Indian" on={segment === "indian"} onClick={() => setSegment("indian")} />

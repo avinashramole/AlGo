@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
@@ -6,8 +6,9 @@ import { tabFromParams } from "../lib/bookTabs";
 import { ProfitOwnerCard } from "../components/desk/ProfitOwner";
 import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber } from "../lib/format";
+import { hasPaperActivity, isLiveBrokerTrade, memberIsPaperTrade } from "../lib/paperBook";
 
-type View = "positions" | "orders" | "reports";
+type View = "positions" | "orders" | "reports" | "paper";
 type PositionTab = "open" | "closed";
 type OrderTab = "all" | "pending" | "completed" | "rejected";
 
@@ -21,7 +22,17 @@ export function MemberPositions() {
 
 export function MemberReports() {
   const [params, setParams] = useSearchParams();
-  const tab = tabFromParams(params.get("tab"));
+  const [showPaper, setShowPaper] = useState(() => params.get("tab") === "paper");
+  const tab = tabFromParams(params.get("tab"), showPaper);
+  const onDesk = useCallback((next: MemberDesk | null) => {
+    setShowPaper(Boolean(next && hasPaperActivity({
+      orders: [...(next.orders || []), ...(next.orderHistory || [])],
+      positions: next.positions,
+      closedTrades: next.report?.tradeBook,
+      tradeMode: next.tradeMode,
+      brokerId: next.brokerId,
+    })));
+  }, []);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -41,6 +52,16 @@ export function MemberReports() {
           >
             Orders
           </button>
+          {showPaper ? (
+            <button
+              type="button"
+              data-paper-tab="true"
+              onClick={() => setParams({ tab: "paper" }, { replace: true })}
+              className={cn(tab === "paper" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+            >
+              Paper
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setParams({ tab: "reports" }, { replace: true })}
@@ -50,12 +71,12 @@ export function MemberReports() {
           </button>
         </div>
       </div>
-      <MemberBook view={tab} />
+      <MemberBook view={tab} onDesk={onDesk} />
     </div>
   );
 }
 
-function MemberBook({ view }: { view: View }) {
+function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk | null) => void }) {
   const [desk, setDesk] = useState<MemberDesk | null>(null);
   const [query, setQuery] = useState("");
   const [positionTab, setPositionTab] = useState<PositionTab>("open");
@@ -78,9 +99,17 @@ function MemberBook({ view }: { view: View }) {
     };
   }, []);
 
-  const positions = desk?.positions || [];
-  const closed = desk?.report?.tradeBook || [];
-  const orders = useMemo(() => uniqueOrders([...(desk?.orders || []), ...(desk?.orderHistory || [])]), [desk]);
+  useEffect(() => {
+    onDesk?.(desk);
+  }, [desk, onDesk]);
+
+  const allOrders = useMemo(() => uniqueOrders([...(desk?.orders || []), ...(desk?.orderHistory || [])]), [desk]);
+  const paper = view === "paper";
+  const keep = (row: { paper?: boolean; brokerId?: string; sim?: boolean; live?: boolean }) =>
+    paper ? memberIsPaperTrade(row, desk) : isLiveBrokerTrade(row) && !memberIsPaperTrade(row, desk);
+  const positions = (desk?.positions || []).filter(keep);
+  const closed = (desk?.report?.tradeBook || []).filter(keep);
+  const orders = allOrders.filter(keep);
   const report = desk?.report;
   const openPnl = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   const yesterday = (report?.daily || []).slice(-2, -1)[0]?.pnl || 0;
@@ -122,7 +151,7 @@ function MemberBook({ view }: { view: View }) {
               ))}
             </div>
           ) : (
-            <EmptyState title="No open positions" text="Copied live trades will show here." />
+            <EmptyState title="No open positions" text="Live broker positions will show here." />
           )
         ) : closed.length ? (
           <div className="space-y-2">
@@ -177,7 +206,73 @@ function MemberBook({ view }: { view: View }) {
             ))}
           </div>
         ) : (
-          <EmptyState title="No orders" text="Copied broker orders will appear in this book." />
+          <EmptyState title="No orders" text="Live broker orders will appear in this book." />
+        )}
+      </div>
+    );
+  }
+
+  if (view === "paper") {
+    const filtered = orders.filter((row) => matchesOrder(row, orderTab, query));
+    return (
+      <div className="space-y-3" data-member-book="paper" data-paper-book="true">
+        <p className="text-sm text-slate-400">Virtual paper fills at the live LTP. These rows are not sent to the broker.</p>
+        <Segmented
+          value={positionTab}
+          onChange={setPositionTab}
+          options={[
+            { id: "open", label: `Open (${positions.length})` },
+            { id: "closed", label: `Closed (${closed.length})` },
+          ]}
+          wide
+        />
+        {positionTab === "open" ? (
+          positions.length ? (
+            <div className="space-y-2">
+              {positions.map((row) => (
+                <PositionCard key={row.id} row={row} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No paper positions" text="Start paper trading to see virtual positions here." />
+          )
+        ) : closed.length ? (
+          <div className="space-y-2">
+            {closed.map((row) => (
+              <PhoneCard key={row.id} className="p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-bold">{row.symbol}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-400">
+                      Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
+                    </div>
+                  </div>
+                  <Money value={row.pnl} className="text-sm" />
+                </div>
+              </PhoneCard>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No paper closes" text="Squared-off paper trades will show here." />
+        )}
+        <FilterChips
+          value={orderTab}
+          onChange={setOrderTab}
+          options={[
+            { id: "all", label: "All" },
+            { id: "pending", label: "Pending" },
+            { id: "completed", label: "Completed" },
+            { id: "rejected", label: "Rejected" },
+          ]}
+        />
+        {filtered.length ? (
+          <div className="space-y-2">
+            {filtered.map((row) => (
+              <OrderCard key={row.id} row={row} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No paper orders" text="Paper trading orders will appear here." />
         )}
       </div>
     );

@@ -15,6 +15,7 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(hub, /data-reports-tabs="position-order-reports"/);
   assert.match(tabsFile, /if \(value === "orders"\) return "orders";/);
   assert.match(tabsFile, /if \(value === "reports"\) return "reports";/);
+  assert.match(tabsFile, /if \(value === "paper" && allowPaper\) return "paper";/);
   assert.match(tabsFile, /return "positions";/);
   assert.match(app, /Navigate to="\/reports\?tab=orders"/);
   assert.match(app, /Navigate to="\/reports\?tab=positions"/);
@@ -35,8 +36,18 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(reportsPage, />Broker</);
   assert.match(reportsPage, />Position</);
   assert.match(ordersPage, /Reason: \{displayOrderReason/);
+  assert.match(ordersPage, /book === "paper"/);
+  assert.match(ordersPage, /isLiveBrokerTrade/);
   assert.match(book, /Reason: \{displayOrderReason/);
   assert.match(book, /ProfitOwnerCard/);
+  assert.match(book, /data-paper-tab="true"/);
+  assert.match(book, /data-member-book="paper"/);
+  assert.match(hub, /data-paper-tab="true"/);
+  assert.match(hub, /book="live"/);
+  assert.match(hub, /PaperTrading/);
+  const paperPage = fs.readFileSync(path.join(root, "src/pages/PaperTrading.tsx"), "utf8");
+  assert.match(paperPage, /data-paper-book="true"/);
+  assert.match(paperPage, /book="paper"/);
   const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
   assert.match(liveBook, /Reason: \{displayOrderReason/);
 });

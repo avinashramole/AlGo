@@ -89,6 +89,9 @@ export type DeskOrder = {
   createdAt?: string;
   copyUserId?: string;
   copyUserName?: string;
+  paper?: boolean;
+  sim?: boolean;
+  live?: boolean;
 };
 
 export type DeskReport = {
@@ -128,6 +131,8 @@ export type DeskReport = {
     brokerId?: string;
     closedAt?: string;
     status?: string;
+    paper?: boolean;
+    sim?: boolean;
   }>;
 };
 
@@ -341,6 +346,7 @@ export type Snapshot = {
     securityId?: string;
     live?: boolean;
     paper?: boolean;
+    sim?: boolean;
   }>;
   closedTrades?: Array<{
     id: string;
@@ -357,6 +363,7 @@ export type Snapshot = {
     closedAt?: string;
     paper?: boolean;
     live?: boolean;
+    sim?: boolean;
   }>;
   orders: DeskOrder[];
   report?: DeskReport;
@@ -1053,6 +1060,9 @@ export type MemberPosition = {
   pnl: number;
   brokerId?: string;
   strategy?: string;
+  paper?: boolean;
+  sim?: boolean;
+  live?: boolean;
 };
 
 export type MemberBrokerInstall = {
@@ -1314,6 +1324,7 @@ export type LedgerPosition = {
   realized: number;
   mtm: number;
   paper: boolean;
+  sim?: boolean;
   segment: "indian" | "crypto";
   strategy?: string;
   closed?: boolean;

@@ -1,13 +1,23 @@
 import { useSearchParams } from "react-router-dom";
+import { useMarket } from "../context/MarketContext";
 import { tabFromParams } from "../lib/bookTabs";
+import { hasPaperActivity } from "../lib/paperBook";
 import { cn } from "../lib/format";
 import { Orders } from "./Orders";
+import { PaperTrading } from "./PaperTrading";
 import { PositionsDesk } from "./PositionsDesk";
 import { Reports } from "./Reports";
 
 export function ReportsHub() {
   const [params, setParams] = useSearchParams();
-  const tab = tabFromParams(params.get("tab"));
+  const { data } = useMarket();
+  const showPaper = hasPaperActivity({
+    orders: data.orders,
+    positions: data.positions,
+    closedTrades: data.closedTrades,
+    algos: data.algos,
+  });
+  const tab = tabFromParams(params.get("tab"), showPaper);
 
   return (
     <div className="space-y-2">
@@ -28,6 +38,16 @@ export function ReportsHub() {
           >
             Orders
           </button>
+          {showPaper ? (
+            <button
+              type="button"
+              data-paper-tab="true"
+              onClick={() => setParams({ tab: "paper" }, { replace: true })}
+              className={cn(tab === "paper" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+            >
+              Paper
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setParams({ tab: "reports" }, { replace: true })}
@@ -37,7 +57,15 @@ export function ReportsHub() {
           </button>
         </div>
       </div>
-      {tab === "orders" ? <Orders embedded /> : tab === "reports" ? <Reports embedded /> : <PositionsDesk embedded />}
+      {tab === "orders" ? (
+        <Orders embedded book="live" />
+      ) : tab === "reports" ? (
+        <Reports embedded />
+      ) : tab === "paper" ? (
+        <PaperTrading embedded />
+      ) : (
+        <PositionsDesk embedded book="live" />
+      )}
     </div>
   );
 }

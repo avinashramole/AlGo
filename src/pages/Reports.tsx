@@ -6,6 +6,7 @@ import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { catchDeskError } from "../lib/liveSite";
 import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
+import { isLiveBrokerTrade } from "../lib/paperBook";
 
 export function Reports({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
@@ -129,7 +130,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
             </tr>
           </thead>
           <tbody>
-            {(report.tradeBook || []).map((row) => (
+            {(report.tradeBook || []).filter((row) => isLiveBrokerTrade(row)).map((row) => (
               <tr key={row.id} className="soft-row">
                 <td className="px-4 py-3 text-xs text-slate-500">{formatIst(row.closedAt)}</td>
                 <td className="px-4 py-3 font-semibold">{row.symbol}</td>

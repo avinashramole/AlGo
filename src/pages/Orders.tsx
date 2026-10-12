@@ -4,14 +4,15 @@ import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
+import { isLiveBrokerTrade, isPaperTrade } from "../lib/paperBook";
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "FAILED", "CANCELLED"] as const;
 
-export function Orders({ embedded = false }: { embedded?: boolean }) {
+export function Orders({ embedded = false, book = "live" }: { embedded?: boolean; book?: "live" | "paper" }) {
   const { data, cancel } = useMarket();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("ALL");
   const [busy, setBusy] = useState("");
-  const orders = data.orders || [];
+  const orders = (data.orders || []).filter((row) => (book === "paper" ? isPaperTrade(row) : isLiveBrokerTrade(row)));
   const rows = orders.filter((row) => filter === "ALL" || row.status === filter);
   const counts = {
     ALL: orders.length,
@@ -185,7 +186,11 @@ export function Orders({ embedded = false }: { embedded?: boolean }) {
           </>
         ) : (
           <div className="p-8 text-center text-sm text-slate-400">
-            {hasDhanQuotes(data) ? "No live Dhan or paper orders" : "No orders in this view"}
+            {book === "paper"
+              ? "No paper orders"
+              : hasDhanQuotes(data)
+                ? "No live broker orders"
+                : "No orders in this view"}
           </div>
         )}
       </section>
