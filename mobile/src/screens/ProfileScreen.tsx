@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { getMemberDesk } from "../api";
 import { useAuth } from "../AuthContext";
 import { Card } from "../components/Ui";
 import { colors, formatMobile } from "../theme";
@@ -9,6 +10,7 @@ export function ProfileScreen() {
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
+  const [brokerName, setBrokerName] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -16,6 +18,20 @@ export function ProfileScreen() {
     setEmail(user?.email || "");
     setMobile(user?.mobile || "");
   }, [user]);
+
+  useEffect(() => {
+    if (user?.role === "admin") return;
+    let alive = true;
+    void getMemberDesk()
+      .then((desk) => {
+        if (!alive) return;
+        setBrokerName(desk.owner?.brokerName || desk.brokerId || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [user?.role]);
 
   const onSave = async () => {
     setBusy(true);
@@ -40,8 +56,8 @@ export function ProfileScreen() {
       <Card>
         <Row label="Name" value={user?.name || "—"} />
         <Row label="Email" value={user?.email || "Not added"} />
-        <Row label="Role" value={user?.role === "admin" ? "Admin" : "Member"} />
         <Row label="Mobile no" value={formatMobile(user?.mobile)} />
+        <Row label="Broker name" value={brokerName || "—"} />
       </Card>
       <Text style={styles.edit}>Edit profile</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" />

@@ -513,6 +513,7 @@ export type MemberBrokerInstall = {
 };
 
 export type MemberDesk = {
+  owner?: { name?: string; email?: string; mobile?: string; brokerName?: string };
   wallet: { balance: number; mtm: number; equity: number };
   brokerId: string;
   tradeMode?: "paper" | "real";

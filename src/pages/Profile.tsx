@@ -10,6 +10,7 @@ import {
   Sun,
   UserRound,
 } from "lucide-react";
+import { getMemberDesk } from "../api/client";
 import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -23,6 +24,7 @@ export function Profile() {
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
+  const [brokerName, setBrokerName] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -35,6 +37,21 @@ export function Profile() {
     setEmail(user?.email || "");
     setMobile(user?.mobile || "");
   }, [user]);
+
+  useEffect(() => {
+    if (admin) return;
+    let alive = true;
+    void getMemberDesk()
+      .then((desk) => {
+        if (!alive) return;
+        const named = desk.owner?.brokerName || desk.brokers?.find((row) => row.id === desk.brokerId)?.name || desk.brokerId || "";
+        setBrokerName(named);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [admin]);
 
   const onSave = async (event: FormEvent) => {
     event.preventDefault();
@@ -58,59 +75,74 @@ export function Profile() {
           <div className="min-w-0">
             <div className="truncate text-lg font-extrabold">{user?.name || "Trader"}</div>
             <div className="truncate text-sm text-slate-400">{user?.email || formatMobile(user?.mobile)}</div>
-            <div className="mt-1 text-[11px] font-semibold uppercase text-slate-400">
-              {admin ? "Admin" : "Member"} · {user?.desk || "Index Options"}
-            </div>
           </div>
         </div>
       </PhoneCard>
 
-      <PhoneCard>
-        <SettingsRow icon={UserRound} label="My Account" detail={user?.email || formatMobile(user?.mobile)} />
-        <SettingsRow icon={Building2} label="Broker Connections" to={admin ? "/brokers" : "/settings"} detail={admin ? "Desk brokers" : "Broker and IP on Settings"} />
-        <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to={admin ? "/algo" : "/plans"} />
-        <SettingsRow icon={CreditCard} label="Subscription Plan" to={admin ? "/users?tab=enrollments" : "/plans"} />
-        <SettingsRow icon={Headphones} label="Support" to="/notifications" />
-        <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
-        <SettingsRow
-          icon={theme === "light" ? Moon : Sun}
-          label="Theme"
-          detail={theme === "light" ? "Light" : "Dark"}
-          onClick={toggleTheme}
-        />
-        {admin ? <SettingsRow icon={UserRound} label="Users & IP" to="/users" /> : null}
-        <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail={admin ? "Desk settings" : "Broker and IP"} />
-        <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
+      <PhoneCard data-member-profile="identity">
+        <IdentityRow label="Name" value={user?.name || "—"} />
+        <IdentityRow label="Email" value={user?.email || "Not added"} />
+        <IdentityRow label="Mobile no" value={formatMobile(user?.mobile)} />
+        {!admin ? <IdentityRow label="Broker name" value={brokerName || "—"} /> : null}
       </PhoneCard>
 
+      {admin ? (
+        <PhoneCard>
+          <SettingsRow icon={UserRound} label="My Account" detail={user?.email || formatMobile(user?.mobile)} />
+          <SettingsRow icon={Building2} label="Broker Connections" to="/brokers" detail="Desk brokers" />
+          <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/algo" />
+          <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
+          <SettingsRow icon={Headphones} label="Support" to="/notifications" />
+          <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
+          <SettingsRow
+            icon={theme === "light" ? Moon : Sun}
+            label="Theme"
+            detail={theme === "light" ? "Light" : "Dark"}
+            onClick={toggleTheme}
+          />
+          <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
+          <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Desk settings" />
+          <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
+        </PhoneCard>
+      ) : null}
+
       <section className="card p-3">
-          <div className="mb-2 text-sm font-bold">Edit profile</div>
-          <form onSubmit={onSave} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <label className="block text-xs font-semibold">
-              Name
-              <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={name} onChange={(event) => setName(event.target.value)} />
-            </label>
-            <label className="block text-xs font-semibold">
-              Email
-              <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
-            </label>
-            <label className="block text-xs font-semibold">
-              Mobile no
-              <input
-                className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal"
-                value={mobile}
-                inputMode="numeric"
-                maxLength={10}
-                onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="98xxxxxxxx"
-              />
-            </label>
-            {note ? <p className="text-xs font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
-            <button type="submit" disabled={busy} className="h-8 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60 sm:col-span-3">
-              {busy ? "Saving..." : "Save profile"}
-            </button>
-          </form>
-        </section>
+        <div className="mb-2 text-sm font-bold">Edit profile</div>
+        <form onSubmit={onSave} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <label className="block text-xs font-semibold">
+            Name
+            <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label className="block text-xs font-semibold">
+            Email
+            <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+          </label>
+          <label className="block text-xs font-semibold">
+            Mobile no
+            <input
+              className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal"
+              value={mobile}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
+              placeholder="98xxxxxxxx"
+            />
+          </label>
+          {note ? <p className="text-xs font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
+          <button type="submit" disabled={busy} className="h-8 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60 sm:col-span-3">
+            {busy ? "Saving..." : "Save profile"}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function IdentityRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3 last:border-b-0">
+      <span className="text-sm text-slate-400">{label}</span>
+      <span className="text-right text-sm font-semibold">{value || "—"}</span>
     </div>
   );
 }
