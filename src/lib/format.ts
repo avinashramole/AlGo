@@ -113,11 +113,10 @@ export function indexTapeLabel(symbol: string, date = new Date()) {
   return isIndexTapeOpen(symbol, date) ? "Live" : "Last";
 }
 
-export function tapeLotLine(rows: Array<{ label: string; lot: number }>) {
-  return `Lot · ${rows
-    .filter((row) => Number(row.lot) > 0)
-    .map((row) => `${row.label} ${row.lot}`)
-    .join(" · ")}`;
+export function tapeScriptTitle(name: string, lot?: number) {
+  const label = String(name || "").trim();
+  const size = Number(lot) || 0;
+  return size > 0 ? `${label} · ${size}` : label;
 }
 
 export function tapeSessionLabel(symbols: string[], date = new Date()) {

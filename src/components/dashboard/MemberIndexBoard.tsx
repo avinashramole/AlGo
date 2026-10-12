@@ -1,4 +1,4 @@
-import { cn, formatQuote, quoteDayChange, quoteTone, tapeLotLine, tapeSessionLabel } from "../../lib/format";
+import { cn, formatQuote, quoteDayChange, quoteTone, tapeScriptTitle, tapeSessionLabel } from "../../lib/format";
 import { MEMBER_TAPE_UNDERLYINGS } from "../../lib/markets";
 import type { MemberIndexQuote } from "../../api/client";
 import { DeskTape, TapeCell } from "./DeskTape";
@@ -47,7 +47,6 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
     <DeskTape
       kicker="Market tape"
       extra={tapeSessionLabel(cards.map((row) => row.symbol))}
-      meta={tapeLotLine(MEMBER_TAPE_UNDERLYINGS)}
       testId="member-tape"
     >
       {cards.map((item) => {
@@ -58,7 +57,7 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
         return (
           <TapeCell
             key={item.symbol}
-            title={item.name || item.symbol}
+            title={tapeScriptTitle(item.name || item.symbol, item.lot)}
             value={formatQuote(item.price)}
             detail={<TapeTodayChange change={day.change} changePct={day.changePct} />}
             tone={tone}

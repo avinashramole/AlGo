@@ -53,7 +53,8 @@ test("user market tape drops MIDCPNIFTY and keeps Natural Gas and Copper", () =>
   assert.match(feed, /symbol: "NATURALGAS"/);
   assert.match(feed, /symbol: "COPPER"/);
   assert.doesNotMatch(feed, /MIDCPNIFTY/);
-  assert.match(board, /tapeLotLine/);
+  assert.match(board, /tapeScriptTitle/);
+  assert.doesNotMatch(board, /tapeLotLine/);
   assert.match(board, />Fut</);
   assert.doesNotMatch(board, /Vwap/);
   assert.match(board, /quoteDayChange/);

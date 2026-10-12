@@ -1,4 +1,4 @@
-import { cn, formatQuote, quoteDayChange, quoteTone, tapeLotLine, vwapTone } from "../../lib/format";
+import { cn, formatQuote, quoteDayChange, quoteTone, tapeScriptTitle, vwapTone } from "../../lib/format";
 import { chainIdFromIndex, OPTION_UNDERLYINGS } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 import { DeskTape } from "./DeskTape";
@@ -28,7 +28,7 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
       return {
         key: row.id,
         chainId: row.id,
-        title: row.label,
+        title: tapeScriptTitle(row.label, row.lot),
         symbol: quote?.symbol || row.label,
         lot: row.lot,
         price: Number(quote?.price || 0),
@@ -62,7 +62,6 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
     <DeskTape
       kicker="Market tape"
       extra={data.dhanFeed?.live ? "LIVE FEED" : "LAST QUOTE"}
-      meta={tapeLotLine(underlyings)}
       testId="option-lots"
     >
       {tape.map((item) => {
