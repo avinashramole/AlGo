@@ -59,6 +59,7 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.match(plans, /Algo Strategies/);
   assert.match(plans, /Subscriptions/);
   assert.match(plans, /Broker selection/);
+  assert.match(plans, /data-broker-select="true"/);
   assert.doesNotMatch(plans, /MemberLiveBook/);
   assert.doesNotMatch(plans, /Daily P&L/);
   assert.doesNotMatch(plans, /Order book/);
@@ -66,4 +67,11 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.doesNotMatch(plans, /Trade book/);
   assert.doesNotMatch(plans, /Open positions/);
   assert.doesNotMatch(mobile, /desk\?\.positions/);
+  const setup = fs.readFileSync(path.join(root, "src/components/desk/MemberAccountSetup.tsx"), "utf8");
+  assert.match(setup, /data-broker-select="true"/);
+  assert.doesNotMatch(setup, /sm:grid-cols-2 lg:grid-cols-3/);
+  const alerts = fs.readFileSync(path.join(root, "src/pages/Notifications.tsx"), "utf8");
+  assert.match(alerts, /function isTradeAlert/);
+  assert.match(alerts, /filter\(\(row\) => !isTradeAlert\(row\)\)/);
+  assert.doesNotMatch(alerts, /No copied orders today/);
 });

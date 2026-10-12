@@ -31,6 +31,11 @@ function AdminNotifications() {
   );
 }
 
+function isTradeAlert(row: MemberCopyAlert) {
+  const kind = String(row.kind || "copy_order").toLowerCase();
+  return kind === "copy_order" || kind === "copy_rejected";
+}
+
 function MemberNotifications() {
   const [alerts, setAlerts] = useState<MemberCopyAlert[]>([]);
 
@@ -40,7 +45,7 @@ function MemberNotifications() {
       void getMemberDesk()
         .then((desk) => {
           if (!alive) return;
-          setAlerts(desk.alerts || []);
+          setAlerts((desk.alerts || []).filter((row) => !isTradeAlert(row)));
         })
         .catch(() => undefined);
     };
@@ -56,11 +61,11 @@ function MemberNotifications() {
     <div className="desk-page mx-auto max-w-2xl space-y-2">
       <h1 className="text-xl font-bold">Alerts</h1>
       <p className="desk-help text-sm text-slate-500">
-        When Copy is on, each admin desk order is copied to your broker account and listed here. Alerts clear at 8:00 AM IST with the live book.
+        Account and token notices show here. Copied trade fills stay on Position & Orders, not this book.
       </p>
       {!alerts.length ? (
         <div className="card px-4 py-8 text-center text-sm text-slate-400">
-          No copied orders today. After admin places an order, the same contract appears here and on Home.
+          No alerts today.
         </div>
       ) : null}
       {alerts.map((item) => (

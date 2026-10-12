@@ -15,7 +15,6 @@ import {
   hintsFromInstall,
   installValueForSubmit,
 } from "../../lib/formSecrets";
-import { cn } from "../../lib/format";
 import { BrokerInstallFields } from "./BrokerInstallFields";
 
 export function isGmailMember(user?: { email?: string; authProvider?: string; role?: "admin" | "user" } | null) {
@@ -181,28 +180,31 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
       <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
         <div className="text-sm font-bold">Add broker</div>
         <p className="desk-help mt-1 text-xs text-slate-500">Pick the broker, then save that broker’s client ID and access token.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {(desk?.brokers || []).map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              disabled={Boolean(busy)}
-              onClick={() => void pickBroker(row.id)}
-              className={cn(
-                "rounded-xl border px-3 py-3 text-left",
-                row.selected ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--card)]",
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-extrabold">{row.name}</span>
-                {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Selected</span> : null}
-              </div>
-              <div className="mt-1 text-[11px] text-slate-500">
-                {row.virtual ? "Virtual paper" : row.installed ? "Token saved" : "Add this broker"}
-              </div>
-            </button>
-          ))}
-        </div>
+        <label className="mt-3 block text-xs font-semibold">
+          Broker
+          <select
+            data-broker-select="true"
+            className="mt-1 h-11 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+            value={desk?.brokerId || "paper"}
+            disabled={Boolean(busy)}
+            onChange={(event) => void pickBroker(event.target.value)}
+          >
+            {(desk?.brokers || []).map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {desk ? (
+          <p className="mt-2 text-xs text-slate-500">
+            {desk.brokers.find((row) => row.id === desk.brokerId)?.virtual
+              ? "Virtual paper"
+              : desk.brokers.find((row) => row.id === desk.brokerId)?.installed
+                ? "Token saved"
+                : "Add this broker"}
+          </p>
+        ) : null}
         {desk && desk.brokerId !== "paper" ? (
           <form className="mt-3" onSubmit={saveBroker}>
             {desk.install?.installed ? null : (

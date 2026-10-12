@@ -275,6 +275,7 @@ export function MemberPlans() {
   }
 
   const brokerName = (id?: string) => desk.brokers.find((row) => row.id === id)?.name || id || "Paper";
+  const selectedBroker = desk.brokers.find((row) => row.id === desk.brokerId);
   const payReady = Boolean(payments?.ready || desk.payments.ready);
 
   return (
@@ -383,34 +384,33 @@ export function MemberPlans() {
               ? `Broker selected · live copy starts after admin confirms payment and your token is installed`
               : "Virtual paper book · copies stay on this plan book"}
         </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {desk.brokers.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              disabled={Boolean(busy)}
-              onClick={() => void pickBroker(row.id)}
-              className={cn(
-                "rounded-xl border px-3 py-3 text-left",
-                row.selected ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-[var(--border)] bg-[var(--bg)]",
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-extrabold">{row.name}</span>
-                {row.selected ? <span className="text-[10px] font-extrabold uppercase text-brand-500">Default</span> : null}
-              </div>
-              <div className="mt-1 text-[11px] text-slate-500">
-                {row.virtual
-                  ? "Virtual paper"
-                  : row.installed
-                    ? `Token saved${row.accountId ? ` · ${row.accountId}` : ""}`
-                    : row.oauthReady
-                      ? "API key and secret saved · generate today's token"
-                      : "Needs this broker's ID and token"}
-              </div>
-            </button>
-          ))}
-        </div>
+        <label className="mt-3 block text-xs font-semibold">
+          Broker
+          <select
+            data-broker-select="true"
+            className="mt-1 h-11 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+            value={desk.brokerId}
+            disabled={Boolean(busy)}
+            onChange={(event) => void pickBroker(event.target.value)}
+          >
+            {desk.brokers.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="mt-2 text-xs text-slate-500">
+          {!selectedBroker
+            ? "Pick a broker from the list."
+            : selectedBroker.virtual
+              ? "Virtual paper"
+              : selectedBroker.installed
+                ? `Token saved${selectedBroker.accountId ? ` · ${selectedBroker.accountId}` : ""}`
+                : selectedBroker.oauthReady
+                  ? "API key and secret saved · generate today's token"
+                  : "Needs this broker's ID and token"}
+        </p>
         {desk.brokerId !== "paper" ? (
           <form
             className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3"

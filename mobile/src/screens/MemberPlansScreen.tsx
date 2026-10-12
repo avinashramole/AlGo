@@ -162,11 +162,11 @@ export function MemberPlansScreen() {
               ? "Broker selected · waiting for admin payment confirm and token"
               : "Virtual paper book · not live"}
         </Text>
-        <View style={styles.wrap}>
+        <View style={styles.selectBox}>
           {(desk?.brokers || []).map((row) => (
             <Pressable
               key={row.id}
-              style={[styles.chip, row.selected && styles.chipOn]}
+              style={[styles.selectRow, row.selected && styles.selectRowOn]}
               onPress={() => {
                 setClientId("");
                 setApiKey("");
@@ -176,7 +176,7 @@ export function MemberPlansScreen() {
                   .catch((err) => Alert.alert("Broker", err instanceof Error ? err.message : "Could not select"));
               }}
             >
-              <Text style={[styles.chipText, row.selected && styles.chipTextOn]}>
+              <Text style={[styles.selectText, row.selected && styles.selectTextOn]}>
                 {row.name}
                 {row.virtual ? " · paper" : row.live ? " · live" : ""}
               </Text>
@@ -287,6 +287,11 @@ const styles = StyleSheet.create({
   chipOn: { borderColor: colors.brand, backgroundColor: "#e8f1ff" },
   chipText: { fontWeight: "700", fontSize: 12, color: colors.muted },
   chipTextOn: { color: colors.brand },
+  selectBox: { marginTop: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 12, overflow: "hidden" },
+  selectRow: { paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  selectRowOn: { backgroundColor: "#e8f1ff" },
+  selectText: { fontWeight: "700", fontSize: 14, color: colors.muted },
+  selectTextOn: { color: colors.brand },
   name: { fontWeight: "800", fontSize: 16 },
   paid: { color: colors.up, fontWeight: "800", marginTop: 8 },
   waiting: { color: "#b45309", fontWeight: "800", marginTop: 8 },
