@@ -4,20 +4,31 @@ import { cn } from "../../lib/format";
 export function DeskTape({
   kicker,
   extra,
+  meta,
   testId,
   children,
 }: {
   kicker: string;
   extra?: ReactNode;
+  meta?: ReactNode;
   testId?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="card overflow-x-auto p-0" data-desk-tape={testId || kicker.toLowerCase().replace(/\s+/g, "-")}>
+    <section
+      className="card overflow-x-auto p-0"
+      data-desk-tape={testId || kicker.toLowerCase().replace(/\s+/g, "-")}
+      {...(testId === "option-lots" ? { "data-market-tape": "option-lots" } : {})}
+    >
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
         <div className="desk-kicker">{kicker}</div>
         {extra ? <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">{extra}</div> : null}
       </div>
+      {meta ? (
+        <div className="border-b border-[var(--border)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400" data-tape-lots="true">
+          {meta}
+        </div>
+      ) : null}
       <div className="tape-strip">{children}</div>
     </section>
   );

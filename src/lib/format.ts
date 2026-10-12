@@ -113,6 +113,20 @@ export function indexTapeLabel(symbol: string, date = new Date()) {
   return isIndexTapeOpen(symbol, date) ? "Live" : "Last";
 }
 
+export function tapeLotLine(rows: Array<{ label: string; lot: number }>) {
+  return `Lot · ${rows
+    .filter((row) => Number(row.lot) > 0)
+    .map((row) => `${row.label} ${row.lot}`)
+    .join(" · ")}`;
+}
+
+export function tapeSessionLabel(symbols: string[], date = new Date()) {
+  const labels = [...new Set((symbols || []).map((symbol) => indexTapeLabel(symbol, date)))];
+  if (!labels.length) return "Last";
+  if (labels.length === 1) return labels[0];
+  return labels.join(" · ");
+}
+
 export function hasDhanQuotes(data?: {
   dhanFeed?: { live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };
   optionMeta?: { source?: string };

@@ -11,14 +11,21 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   const options = fs.readFileSync(path.join(root, "src/pages/Options.tsx"), "utf8");
   const markets = fs.readFileSync(path.join(root, "src/lib/markets.ts"), "utf8");
 
-  assert.match(tape, /data-market-tape="option-lots"/);
-  assert.match(tape, /\$\{row\.label\} · \$\{row\.lot\}/);
   assert.match(tape, /OPTION_UNDERLYINGS\.map/);
-  assert.match(tape, />Lot</);
+  assert.match(tape, /tapeLotLine/);
+  assert.doesNotMatch(tape, /\$\{row\.label\} · \$\{row\.lot\}/);
+  assert.doesNotMatch(tape, />Lot</);
   assert.match(tape, /TapeTodayChange/);
+  const deskTape = fs.readFileSync(path.join(root, "src/components/dashboard/DeskTape.tsx"), "utf8");
+  assert.match(deskTape, /data-market-tape/);
+  assert.match(deskTape, /data-tape-lots="true"/);
   const memberTape = fs.readFileSync(path.join(root, "src/components/dashboard/MemberIndexBoard.tsx"), "utf8");
   const today = fs.readFileSync(path.join(root, "src/components/dashboard/TapeTodayChange.tsx"), "utf8");
   assert.match(memberTape, /TapeTodayChange/);
+  assert.match(memberTape, /tapeLotLine/);
+  assert.match(memberTape, /tapeSessionLabel/);
+  assert.doesNotMatch(memberTape, /· \$\{item\.lot\}/);
+  assert.doesNotMatch(memberTape, />Lot</);
   assert.match(today, /data-today-change="true"/);
   assert.match(today, />Today</);
   assert.match(today, /quoteTone/);

@@ -1,4 +1,4 @@
-import { cn, formatQuote, indexTapeLabel, quoteDayChange, quoteTone } from "../../lib/format";
+import { cn, formatQuote, quoteDayChange, quoteTone, tapeLotLine, tapeSessionLabel } from "../../lib/format";
 import { MEMBER_TAPE_UNDERLYINGS } from "../../lib/markets";
 import type { MemberIndexQuote } from "../../api/client";
 import { DeskTape, TapeCell } from "./DeskTape";
@@ -42,39 +42,31 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
     );
   }
 
+  const cards = withRequiredCards(indices);
   return (
-    <DeskTape kicker="Market tape" extra="Tap lot" testId="member-tape">
-      {withRequiredCards(indices).map((item) => {
+    <DeskTape
+      kicker="Market tape"
+      extra={tapeSessionLabel(cards.map((row) => row.symbol))}
+      meta={tapeLotLine(MEMBER_TAPE_UNDERLYINGS)}
+      testId="member-tape"
+    >
+      {cards.map((item) => {
         const day = quoteDayChange(item);
         const tone = quoteTone(day.change);
         const showDeriv = item.symbol !== "INDIA VIX";
         const futureLtp = item.future || item.price;
-        const tapeLabel = indexTapeLabel(item.symbol);
         return (
           <TapeCell
             key={item.symbol}
-            title={`${item.name || item.symbol}${item.lot ? ` · ${item.lot}` : ""}`}
+            title={item.name || item.symbol}
             value={formatQuote(item.price)}
-            detail={
-              <div>
-                <div className="flex justify-end">
-                  <span className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</span>
-                </div>
-                <TapeTodayChange change={day.change} changePct={day.changePct} />
-              </div>
-            }
+            detail={<TapeTodayChange change={day.change} changePct={day.changePct} />}
             tone={tone}
           >
             {showDeriv ? (
-              <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
-                <div>
-                  <div className="uppercase tracking-wide text-slate-400">Fut</div>
-                  <div className={cn("px font-bold", tone)}>{formatQuote(futureLtp)}</div>
-                </div>
-                <div>
-                  <div className="uppercase tracking-wide text-slate-400">Lot</div>
-                  <div className="font-bold">{item.lot || "—"}</div>
-                </div>
+              <div className="mt-2 text-[10px]">
+                <div className="uppercase tracking-wide text-slate-400">Fut</div>
+                <div className={cn("px font-bold", tone)}>{formatQuote(futureLtp)}</div>
               </div>
             ) : null}
           </TapeCell>
