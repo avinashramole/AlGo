@@ -45,9 +45,15 @@ export const TrailingStopManager = {
     return stop;
   },
   hitStop(mark, stop) {
-    return Number(mark) <= Number(stop);
+    return Number(stop) > 0 && Number(mark) <= Number(stop);
   },
   hitTarget(mark, target) {
-    return Number(mark) >= Number(target);
+    return Number(target) > 0 && Number(mark) + 1e-9 >= Number(target);
+  },
+  reachedTarget({ mark, target, entry, targetPct } = {}) {
+    if (this.hitTarget(mark, target)) return true;
+    const pct = Number(targetPct);
+    if (!(pct > 0)) return false;
+    return profitPct(entry, mark) + 1e-9 >= pct;
   },
 };

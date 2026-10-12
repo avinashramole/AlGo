@@ -1,5 +1,6 @@
 import { liveExitPrice } from "../executionSpeed.js";
 import { OptionStrikeSelector } from "../niftyVwap/OptionStrikeSelector.js";
+import { TrailingStopManager } from "../niftyVwap/TrailingStopManager.js";
 import { sessionBars, lastBarVwapReversal, aggregateSessionBars } from "../niftyVwap/VwapSignalEngine.js";
 import { niftyVwapHedgeConfig } from "./config.js";
 import { formatHedgeLevels, hedgePreviewTrade } from "./hedgePreview.js";
@@ -242,7 +243,14 @@ export const NiftyVwapHedgeStrategy = {
           ticked: primaryPos.ticked === true,
         }) || Number(primaryPos.ltp || primaryPos.avg);
       const dip = mark;
-      if (mark >= state.primaryTargetPrice) {
+      if (
+        TrailingStopManager.reachedTarget({
+          mark: Math.max(Number(mark) || 0, Number(primaryPos.ltp) || 0),
+          target: state.primaryTargetPrice,
+          entry: state.primaryEntryPrice || primaryPos.avg,
+          targetPct: config.primaryTargetPct,
+        })
+      ) {
         if (input.targetResting || state.pendingRole === "exit" || pendingExitFor(orders, pending, algo.name, primaryPos)) {
           algo.lastSignal = "EXIT PRIMARY AT BROKER";
           return { action: "exit-pending", reason: "primary-target" };

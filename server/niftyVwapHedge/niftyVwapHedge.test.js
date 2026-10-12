@@ -158,6 +158,18 @@ test("primary +40% closes the CE and returns to IDLE", () => {
   assert.equal(hedgeState(algo).phase, PHASE.IDLE);
 });
 
+test("primary +40% still exits when stored TGT was pushed higher", () => {
+  const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge TGT pct" });
+  const book = bookAdapter();
+  tick(algo, book);
+  hedgeState(algo).primaryTargetPrice = 196;
+  book.positions[0].ltp = 140;
+  const done = tick(algo, book, { ceLtp: 140 });
+  assert.equal(done.action, "exit-primary");
+  assert.equal(book.exits.length, 1);
+  assert.equal(book.positions.length, 0);
+});
+
 test("primary +40% queues one SELL and does not fire again while that order is pending", () => {
   const algo = defaultNiftyVwapHedgeAlgo({ name: "Hedge TGT Pending" });
   const book = bookAdapter({ queueExits: true });

@@ -156,6 +156,10 @@ test("trailing activates at +10% and steps +3% as in the spec", () => {
   assert.equal(TrailingStopManager.nextStop({ ...args, mark: 238 }), 198);
   assert.equal(TrailingStopManager.nextStop({ ...args, mark: 244 }), 204);
   assert.equal(TrailingStopManager.hitTarget(280, 280), true);
+  assert.equal(TrailingStopManager.hitTarget(280, 0), false);
+  assert.equal(TrailingStopManager.reachedTarget({ mark: 140, target: 140, entry: 100, targetPct: 40 }), true);
+  assert.equal(TrailingStopManager.reachedTarget({ mark: 140, target: 196, entry: 100, targetPct: 40 }), true);
+  assert.equal(TrailingStopManager.reachedTarget({ mark: 139, target: 196, entry: 100, targetPct: 40 }), false);
 });
 
 test("strategy trail activates at +10% and holds the ratchet", () => {
@@ -340,7 +344,9 @@ test("40% target exit", () => {
     positions: book.positions,
     adapter: book.adapter,
   });
+  assert.equal(exit.action, "exit");
   assert.equal(exit.reason, "target");
+  assert.equal(book.exits.length, 1);
 });
 
 test("5-candle VWAP exit", () => {
@@ -1663,6 +1669,172 @@ test("live exit keeps the contract id so the broker send does not wait on a look
 test("first candle 20% SL is 80 and 40% target is 140 on a 100 fill", () => {
   assert.equal(TrailingStopManager.initialStop(100, 20), 80);
   assert.equal(TrailingStopManager.targetPrice(100, 40), 140);
+});
+
+test("first candle sends a market exit when the option is up 40%", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "TGT 40 send" });
+  const book = bookAdapter();
+  const entry = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 100,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(entry.action, "entry");
+  assert.equal(algo.vwapState.fillPrice, 100);
+  assert.equal(algo.vwapState.targetPrice, 140);
+  book.positions[0].ltp = 140;
+  book.positions[0].ticked = true;
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(90, 100), bar(1, 120)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 120,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hit.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 1);
+  assert.equal(book.exits[0].ltp, 140);
+});
+
+test("first candle still exits at +40% when avg is missing so LTP cannot rewrite TGT", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "TGT 40 no avg" });
+  const book = bookAdapter();
+  const entry = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 100,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(entry.action, "entry");
+  assert.equal(algo.vwapState.fillPrice, 100);
+  assert.equal(algo.vwapState.targetPrice, 140);
+  book.positions[0].avg = 0;
+  book.positions[0].ltp = 140;
+  book.positions[0].ticked = true;
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(90, 100), bar(1, 140)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 140,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hit.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 1);
+});
+
+test("first candle retries the target exit after a stuck EXIT PENDING flag", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "TGT retry" });
+  const book = bookAdapter();
+  NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 100,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  algo.vwapState.exitQueued = true;
+  book.positions[0].ltp = 140;
+  book.positions[0].ticked = true;
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(90, 100), bar(1, 140)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 140,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hit.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 1);
+});
+
+test("first candle exits on +40% even if stored TGT was pushed higher", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "TGT 40 pct" });
+  const book = bookAdapter();
+  NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 100,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  algo.vwapState.targetPrice = 196;
+  book.positions[0].ltp = 140;
+  book.positions[0].ticked = true;
+  const hit = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + 2 * BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [firstBar(24500, 24540), bar(1, 24580)],
+    ceBars: [firstBar(90, 100), bar(1, 140)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 140,
+    peLtp: 90,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hit.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(hit.reason, "target");
+  assert.equal(book.exits.length, 1);
 });
 
 test("first candle no-trade line prints the Nifty future candle", () => {

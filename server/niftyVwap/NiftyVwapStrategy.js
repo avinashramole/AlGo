@@ -75,6 +75,18 @@ function holdLevelsText(open, state, mark) {
   return `HOLD${head ? ` ${head}` : ""}${levels ? ` · ${levels}` : ""}`;
 }
 
+function bookedFillPrice(open, state) {
+  const avg = Number(open?.avg);
+  if (avg > 0) return avg;
+  const stored = Number(state?.fillPrice);
+  return stored > 0 ? stored : 0;
+}
+
+function targetHitMark(trailMark, open, fill) {
+  const marks = [Number(trailMark), Number(open?.ltp)].filter((px) => px > 0 && isSaneOptionLtp(px, fill));
+  return marks.length ? Math.max(...marks) : 0;
+}
+
 function brokerConfirmPx(open = {}) {
   if (open.ticked === true && Number(open.ltp) > 0) return Number(open.ltp);
   if (Number(open.avg) > 0) return Number(open.avg);
@@ -131,16 +143,26 @@ export const NiftyVwapStrategy = {
         state.trailActive = true;
       }
     }
-    if (state.exitQueued || pendingExitOnBook(orders, open, algo.name)) {
+    if (pendingExitOnBook(orders, open, algo.name)) {
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending" };
     }
+    if (state.exitQueued) state.exitQueued = false;
     const against = open.option === "PE" ? signal.againstPe : signal.againstCe;
     state.consecutiveAgainst = against;
+    const tgtMark = targetHitMark(trailMark, open, state.fillPrice);
     let reason = "";
     if (TrailingStopManager.hitStop(stopMark, state.stopPrice)) reason = "sl";
-    else if (TrailingStopManager.hitTarget(trailMark, state.targetPrice)) reason = "target";
-    else if (config.useVwapExit !== false && against >= config.vwapExitCandles) reason = "vwap-exit";
+    else if (
+      TrailingStopManager.reachedTarget({
+        mark: tgtMark || trailMark,
+        target: state.targetPrice,
+        entry: state.fillPrice,
+        targetPct: config.targetPct,
+      })
+    ) {
+      reason = "target";
+    } else if (config.useVwapExit !== false && against >= config.vwapExitCandles) reason = "vwap-exit";
     else if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) reason = "eod";
     if (reason === "sl") {
       const brokerPx = brokerConfirmPx(open);
@@ -407,12 +429,8 @@ export const NiftyVwapStrategy = {
     const open = PositionManager.openFor(input.positions, algo.name, state);
     if (open) {
       state.buyPhase = "open";
-      const fill = Number(open.avg || open.ltp);
-      const staleFill =
-        fill > 0 &&
-        Number(state.fillPrice) > 0 &&
-        Math.abs(fill - Number(state.fillPrice)) / Math.max(fill, Number(state.fillPrice)) > 0.15;
-      if (fill > 0 && (!state.fillPrice || (staleFill && state.trailActive !== true))) {
+      const fill = bookedFillPrice(open, state);
+      if (fill > 0 && !Number(state.fillPrice)) {
         const leg = PositionManager.niftyOptionLeg(open) || {};
         PositionManager.markFill(
           state,
