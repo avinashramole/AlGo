@@ -100,12 +100,7 @@ export function MemberPlansScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Text style={styles.title}>My plan</Text>
-      <Text style={styles.muted}>Subscriptions, MTM, and your broker token. I have paid waits for admin before live copy starts.</Text>
-      <Card>
-        <Text style={styles.label}>Wallet</Text>
-        <Text style={styles.price}>{formatInr(desk?.wallet.balance || 0)}</Text>
-        <Text style={styles.muted}>MTM {formatInr(desk?.wallet.mtm || 0)} · Equity {formatInr(desk?.wallet.equity || 0)}</Text>
-      </Card>
+      <Text style={styles.muted}>Subscriptions and your broker token. I have paid waits for admin before live copy starts.</Text>
       <Card>
         <Text style={styles.label}>Subscriptions</Text>
         <Text style={styles.muted}>
@@ -278,7 +273,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "800" },
   muted: { color: colors.muted, fontSize: 12, marginTop: 4 },
   label: { fontSize: 12, fontWeight: "800", color: colors.muted, textTransform: "uppercase" },
-  price: { fontSize: 24, fontWeight: "800", marginTop: 6 },
   input: { marginTop: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontWeight: "700" },
   btn: { marginTop: 10, backgroundColor: colors.brand, borderRadius: 12, padding: 12, alignItems: "center" },
   btnText: { color: "#fff", fontWeight: "800" },

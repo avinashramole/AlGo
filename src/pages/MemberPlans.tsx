@@ -267,7 +267,7 @@ export function MemberPlans() {
         <div className="card p-8 text-center">
           <div className="text-base font-bold">{error ? "No strategies yet" : "Plan report is loading"}</div>
           <p className="mt-1 text-sm text-slate-400">
-            {error ? "Enroll a plan to start. If this stays empty, check your connection." : "Your subscriptions, MTM, and broker will show here."}
+            {error ? "Enroll a plan to start. If this stays empty, check your connection." : "Your subscriptions and broker will show here."}
           </p>
         </div>
       </div>
@@ -287,12 +287,6 @@ export function MemberPlans() {
         </p>
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-down">{error}</div> : null}
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <Stat label="Wallet balance" value={formatInr(desk.wallet.balance)} signed={desk.wallet.balance} />
-        <Stat label="Open MTM" value={formatInr(desk.wallet.mtm)} signed={desk.wallet.mtm} />
-        <Stat label="Equity" value={formatInr(desk.wallet.equity)} signed={desk.wallet.equity} />
-      </div>
 
       <section className="card p-4">
         <div className="text-sm font-bold">Subscriptions</div>
@@ -541,15 +535,6 @@ export function MemberPlans() {
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Stat({ label, value, signed }: { label: string; value: string; signed?: number }) {
-  return (
-    <div className="card p-4">
-      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
-      <div className={cn("mt-1 text-2xl font-bold", signed != null && (signed >= 0 ? "text-up" : "text-down"))}>{value}</div>
     </div>
   );
 }

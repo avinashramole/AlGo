@@ -79,6 +79,11 @@ test("User Algos page keeps enroll and broker, not Daily P&L or broker books", (
   assert.doesNotMatch(plans, /Order history/);
   assert.doesNotMatch(plans, /Trade book/);
   assert.doesNotMatch(plans, /Open positions/);
+  assert.doesNotMatch(plans, /Wallet balance/);
+  assert.doesNotMatch(plans, /Open MTM/);
+  assert.doesNotMatch(plans, />Equity</);
+  assert.doesNotMatch(mobile, /Wallet/);
+  assert.doesNotMatch(mobile, /Equity/);
   assert.doesNotMatch(mobile, /desk\?\.positions/);
   const setup = fs.readFileSync(path.join(root, "src/components/desk/MemberAccountSetup.tsx"), "utf8");
   assert.match(setup, /data-broker-select="true"/);
