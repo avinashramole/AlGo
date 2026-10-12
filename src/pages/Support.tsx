@@ -5,7 +5,7 @@ const SUPPORT_EMAIL = "support@trade2smart.com";
 
 export function Support() {
   return (
-    <div className="desk-page mx-auto max-w-2xl space-y-3" data-support-page="true">
+    <div className="desk-page mx-auto max-w-2xl space-y-2" data-support-page="true">
       <div>
         <h1 className="text-xl font-bold">Support</h1>
         <p className="text-sm text-slate-400">Email Trade 2 Smart for desk help.</p>

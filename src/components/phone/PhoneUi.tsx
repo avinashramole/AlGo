@@ -172,7 +172,7 @@ export function SettingsRow({
       </span>
       <span className="min-w-0 flex-1 text-left">
         <span className={cn("block text-sm font-bold", danger && "text-down")}>{label}</span>
-        {detail ? <span className="block truncate text-[11px] text-slate-400">{detail}</span> : null}
+        {detail ? <span className="block truncate text-xs text-slate-400">{detail}</span> : null}
       </span>
       {danger ? null : <ChevronRight size={16} className="text-slate-300" />}
     </>

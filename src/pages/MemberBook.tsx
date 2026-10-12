@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
@@ -127,15 +127,9 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
           ]}
           wide
         />
-        <div className="grid grid-cols-2 gap-2">
-          <div className="card p-3">
-            <div className="text-[11px] font-semibold text-slate-400">Total P&L</div>
-            <Money value={positionTab === "open" ? openPnl : report?.realizedPnl || 0} className="mt-1 block text-lg" />
-          </div>
-          <div className="card p-3">
-            <div className="text-[11px] font-semibold text-slate-400">Yesterday's P&L</div>
-            <Money value={yesterday} className="mt-1 block text-lg" />
-          </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label="Total P&L" value={<Money value={positionTab === "open" ? openPnl : report?.realizedPnl || 0} />} />
+          <Stat label="Yesterday's P&L" value={<Money value={yesterday} />} />
         </div>
         {positionTab === "open" ? (
           positions.length ? (
@@ -150,14 +144,14 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
         ) : closed.length ? (
           <div className="space-y-2">
             {closed.map((row) => (
-              <PhoneCard key={row.id} className="p-3">
+              <PhoneCard key={row.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-bold">{row.symbol}</div>
-                    <div className="mt-0.5 text-[11px] text-slate-400">
+                    <div className="mt-0.5 text-xs text-slate-400">
                       Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
-                    {row.product ? <div className="mt-0.5 text-[11px] text-slate-400">{row.product}</div> : null}
+                    {row.product ? <div className="mt-0.5 text-xs text-slate-400">{row.product}</div> : null}
                     <BookMeta row={row} />
                   </div>
                   <Money value={row.pnl} className="text-sm" />
@@ -234,11 +228,11 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
         ) : closed.length ? (
           <div className="space-y-2">
             {closed.map((row) => (
-              <PhoneCard key={row.id} className="p-3">
+              <PhoneCard key={row.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-bold">{row.symbol}</div>
-                    <div className="mt-0.5 text-[11px] text-slate-400">
+                    <div className="mt-0.5 text-xs text-slate-400">
                       Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
                     <BookMeta row={row} />
@@ -276,23 +270,11 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
 
   return (
     <div className="space-y-3" data-member-book="reports">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="card p-3">
-          <div className="text-[11px] font-semibold text-slate-400">Realized P&L</div>
-          <Money value={report?.realizedPnl || 0} className="mt-1 block text-lg" />
-        </div>
-        <div className="card p-3">
-          <div className="text-[11px] font-semibold text-slate-400">Unrealized MTM</div>
-          <Money value={report?.unrealizedPnl || 0} className="mt-1 block text-lg" />
-        </div>
-        <div className="card p-3">
-          <div className="text-[11px] font-semibold text-slate-400">Net P&L</div>
-          <Money value={report?.netPnl || 0} className="mt-1 block text-lg" />
-        </div>
-        <div className="card p-3">
-          <div className="text-[11px] font-semibold text-slate-400">Win rate</div>
-          <div className="mt-1 text-lg font-bold">{report?.winRate || 0}%</div>
-        </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="Realized P&L" value={<Money value={report?.realizedPnl || 0} />} />
+        <Stat label="Unrealized MTM" value={<Money value={report?.unrealizedPnl || 0} />} />
+        <Stat label="Net P&L" value={<Money value={report?.netPnl || 0} />} />
+        <Stat label="Win rate" value={`${report?.winRate || 0}%`} />
       </div>
       <section className="card p-4">
         <div className="mb-1 text-sm font-bold">Daily P&L</div>
@@ -317,7 +299,7 @@ function BookMeta({
 }) {
   const afterExit = displayOrderReason(row) || "—";
   return (
-    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]" data-book-meta="strategy-exit">
+    <div className="mt-2 grid grid-cols-2 gap-2 text-xs" data-book-meta="strategy-exit">
       <div>
         <div className="uppercase tracking-wide text-slate-400">Strategy</div>
         <div className="font-semibold text-slate-600">{row.strategy || "—"}</div>
@@ -334,11 +316,11 @@ function BookMeta({
 
 function PositionCard({ row }: { row: MemberPosition }) {
   return (
-    <PhoneCard className="p-3">
+    <PhoneCard className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-bold">{row.symbol}</div>
-          <div className="mt-0.5 text-[11px] text-slate-400">
+          <div className="mt-0.5 text-xs text-slate-400">
             {row.type} · {row.qty} qty · Avg {formatNumber(row.avg)} · LTP {formatNumber(row.ltp)}
           </div>
           <BookMeta row={row} />
@@ -353,19 +335,28 @@ function OrderCard({ row }: { row: DeskOrder }) {
   const status = String(row.status || "").toUpperCase();
   const tone = /REJECT|FAIL/.test(status) ? "down" : /FILL|TRADE|COMPLETE/.test(status) ? "up" : /PEND|OPEN|PARTIAL|TRANSIT/.test(status) ? "paper" : "muted";
   return (
-    <PhoneCard className="p-3">
+    <PhoneCard className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-bold">{row.symbol}</div>
-          <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+          <div className="mt-0.5 text-xs font-semibold text-slate-500">
             {row.side} {row.qty} @ {formatNumber(row.price)}
           </div>
-          <div className="mt-1 text-[11px] text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
+          <div className="mt-1 text-xs text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
           <BookMeta row={row} />
         </div>
         <StatusPill label={status || "ORDER"} tone={tone} />
       </div>
     </PhoneCard>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="card p-4">
+      <div className="text-[11px] font-semibold uppercase text-slate-400">{label}</div>
+      <div className="mt-1 text-2xl font-bold">{value}</div>
+    </div>
   );
 }
 

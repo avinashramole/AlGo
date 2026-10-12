@@ -71,7 +71,7 @@ function MemberNotifications() {
       {alerts.map((item) => (
         <div key={item.id} className="card px-4 py-3 text-sm">
           <div className="font-semibold">{item.text}</div>
-          <div className="mt-1 text-[11px] text-slate-400">
+          <div className="mt-1 text-xs text-slate-400">
             {item.createdAt ? formatIst(item.createdAt) : ""}
             {item.status ? ` · ${item.status}` : ""}
           </div>

@@ -68,7 +68,7 @@ export function Profile() {
   };
 
   return (
-    <div className="desk-page mx-auto max-w-3xl space-y-3">
+    <div className="desk-page mx-auto max-w-2xl space-y-2">
       <PhoneCard className="p-4">
         <div className="flex items-center gap-3">
           <Avatar name={user?.name} size="lg" />
@@ -106,21 +106,21 @@ export function Profile() {
         </PhoneCard>
       ) : null}
 
-      <section className="card p-3">
+      <section className="card p-4">
         <div className="mb-2 text-sm font-bold">Edit profile</div>
-        <form onSubmit={onSave} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="block text-xs font-semibold">
+        <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="block text-sm font-semibold">
             Name
-            <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={name} onChange={(event) => setName(event.target.value)} />
           </label>
-          <label className="block text-xs font-semibold">
+          <label className="block text-sm font-semibold">
             Email
-            <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
           </label>
-          <label className="block text-xs font-semibold">
+          <label className="block text-sm font-semibold">
             Mobile no
             <input
-              className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-normal"
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal"
               value={mobile}
               inputMode="numeric"
               maxLength={10}
@@ -128,8 +128,8 @@ export function Profile() {
               placeholder="98xxxxxxxx"
             />
           </label>
-          {note ? <p className="text-xs font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
-          <button type="submit" disabled={busy} className="h-8 rounded-lg bg-brand-500 text-xs font-semibold text-white disabled:opacity-60 sm:col-span-3">
+          {note ? <p className="text-sm font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
+          <button type="submit" disabled={busy} className="h-10 rounded-lg bg-brand-500 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-3">
             {busy ? "Saving..." : "Save profile"}
           </button>
         </form>

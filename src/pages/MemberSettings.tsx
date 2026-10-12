@@ -8,7 +8,7 @@ export function MemberSettings() {
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   return (
-    <div className="desk-page mx-auto max-w-3xl space-y-3">
+    <div className="mx-auto max-w-2xl space-y-2">
       <div>
         <h1 className="text-xl font-bold">Settings</h1>
         <p className="text-sm text-slate-400">

@@ -475,12 +475,12 @@ export function MemberPlans() {
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <div className="text-[11px] uppercase text-slate-400">Realized</div>
-                  <div className={row.realizedPnl >= 0 ? "font-bold text-up" : "font-bold text-down"}>{formatInr(row.realizedPnl)}</div>
+                  <div className="text-[11px] font-semibold uppercase text-slate-400">Realized</div>
+                  <div className={row.realizedPnl >= 0 ? "text-xl font-extrabold text-up" : "text-xl font-extrabold text-down"}>{formatInr(row.realizedPnl)}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase text-slate-400">MTM</div>
-                  <div className={row.unrealizedPnl >= 0 ? "font-bold text-up" : "font-bold text-down"}>{formatInr(row.unrealizedPnl)}</div>
+                  <div className="text-[11px] font-semibold uppercase text-slate-400">MTM</div>
+                  <div className={row.unrealizedPnl >= 0 ? "text-xl font-extrabold text-up" : "text-xl font-extrabold text-down"}>{formatInr(row.unrealizedPnl)}</div>
                 </div>
               </div>
             </article>
@@ -495,7 +495,7 @@ export function MemberPlans() {
 
       {checkout ? (
         <div className="desk-overlay">
-          <div className="desk-sheet desk-sheet-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xl">
+          <div className="desk-sheet desk-sheet-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
             <h3 className="text-lg font-extrabold">Deposit {formatInr(checkout.enrollment.amount)}</h3>
             <p className="mt-1 text-sm text-slate-500">
               Pay this {formatPlanTerm(checkout.enrollment.term).toLowerCase()} amount to the admin GPay or PhonePe number for{" "}

@@ -59,13 +59,15 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
             key={item.symbol}
             title={tapeScriptTitle(item.name || item.symbol, item.lot)}
             value={formatQuote(item.price)}
-            detail={<TapeTodayChange change={day.change} changePct={day.changePct} />}
             tone={tone}
           >
+            <TapeTodayChange change={day.change} changePct={day.changePct} />
             {showDeriv ? (
-              <div className="mt-2 text-[10px]">
-                <div className="uppercase tracking-wide text-slate-400">Fut</div>
-                <div className={cn("px font-bold", tone)}>{formatQuote(futureLtp)}</div>
+              <div className="mt-2 grid grid-cols-1 gap-1 text-[10px]">
+                <div>
+                  <div className="uppercase tracking-wide text-slate-400">Fut</div>
+                  <div className={cn("px font-bold", tone)}>{formatQuote(futureLtp)}</div>
+                </div>
               </div>
             ) : null}
           </TapeCell>

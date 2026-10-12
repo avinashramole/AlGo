@@ -119,12 +119,12 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   };
 
   return (
-    <section className="card space-y-2 p-3">
+    <section className="card space-y-3 p-4">
       <div>
-        <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+        <div className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">
           {showProfile ? "Gmail account" : "Account"}
         </div>
-        <h2 className="text-sm font-extrabold">{showProfile ? "Update profile and add broker" : "Broker"}</h2>
+        <h2 className="text-base font-extrabold">{showProfile ? "Update profile and add broker" : "Broker"}</h2>
         <p className="desk-help mt-1 text-xs leading-5 text-slate-500">
           {showProfile
             ? "Save your name and mobile, then install the broker this account will trade on."
@@ -135,20 +135,20 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
       {note ? <p className="text-xs font-semibold text-slate-500">{note}</p> : null}
 
       {showProfile ? (
-        <form onSubmit={saveProfile} className="grid grid-cols-1 gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2 sm:grid-cols-3">
-          <div className="text-xs font-bold sm:col-span-3">Profile</div>
-          <label className="block text-xs font-semibold">
+        <form onSubmit={saveProfile} className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-3">
+          <div className="text-sm font-bold sm:col-span-3">Profile</div>
+          <label className="block text-sm font-semibold">
             Name
-            <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-normal" value={name} onChange={(event) => setName(event.target.value)} />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal" value={name} onChange={(event) => setName(event.target.value)} />
           </label>
-          <label className="block text-xs font-semibold">
+          <label className="block text-sm font-semibold">
             Gmail
-            <input className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
+            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@gmail.com" />
           </label>
-          <label className="block text-xs font-semibold">
+          <label className="block text-sm font-semibold">
             Mobile
             <input
-              className="mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 text-xs font-normal"
+              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal"
               value={mobile}
               inputMode="numeric"
               maxLength={10}
@@ -156,7 +156,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
               onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 10))}
             />
           </label>
-          <button type="submit" disabled={busy === "profile"} className="h-8 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white disabled:opacity-60 sm:col-span-3">
+          <button type="submit" disabled={busy === "profile"} className="h-10 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-3">
             {busy === "profile" ? "Saving..." : "Save profile"}
           </button>
         </form>
@@ -202,7 +202,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
               disabled={busy === "broker"}
               onChange={(id, value) => setCreds((current) => ({ ...current, [id]: value }))}
             />
-            <button type="submit" disabled={busy === "broker"} className="mt-3 h-10 rounded-lg bg-brand-500 px-4 text-xs font-semibold text-white disabled:opacity-60">
+            <button type="submit" disabled={busy === "broker"} className="mt-3 h-10 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60">
               {busy === "broker" ? "Saving..." : "Save broker"}
             </button>
           </form>
