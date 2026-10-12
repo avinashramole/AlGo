@@ -38,7 +38,8 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(ordersPage, /Reason: \{displayOrderReason/);
   assert.match(ordersPage, /book === "paper"/);
   assert.match(ordersPage, /isLiveBrokerTrade/);
-  assert.match(book, /Reason: \{displayOrderReason/);
+  assert.match(book, /After exit/);
+  assert.match(book, /data-book-meta="strategy-exit"/);
   assert.doesNotMatch(book, /ProfitOwnerCard/);
   assert.doesNotMatch(book, /data-profit-owner/);
   assert.match(book, /data-paper-tab="true"/);
@@ -50,7 +51,8 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(paperPage, /data-paper-book="true"/);
   assert.match(paperPage, /book="paper"/);
   const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
-  assert.match(liveBook, /Reason: \{displayOrderReason/);
+  assert.match(liveBook, /After exit/);
+  assert.match(liveBook, />Strategy</);
 });
 
 test("User Algos page keeps enroll and broker, not Daily P&L or broker books", () => {

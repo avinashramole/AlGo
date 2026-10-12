@@ -128,6 +128,9 @@ export type DeskReport = {
     pnl: number;
     product?: string;
     strategy?: string;
+    role?: string;
+    reason?: string;
+    exitReason?: string;
     brokerId?: string;
     closedAt?: string;
     status?: string;
@@ -1060,6 +1063,9 @@ export type MemberPosition = {
   pnl: number;
   brokerId?: string;
   strategy?: string;
+  role?: string;
+  reason?: string;
+  exitReason?: string;
   paper?: boolean;
   sim?: boolean;
   live?: boolean;

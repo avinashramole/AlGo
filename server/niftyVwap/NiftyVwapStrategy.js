@@ -168,6 +168,8 @@ export const NiftyVwapStrategy = {
       const brokerPx = brokerConfirmPx(open);
       if (brokerPx > Number(state.stopPrice) && trailMark / Math.max(brokerPx, trailMark) < 0.7 && open.ticked !== true) {
         reason = "";
+      } else if (state.trailActive) {
+        reason = "trail";
       }
     }
     if (!reason) {
@@ -181,7 +183,7 @@ export const NiftyVwapStrategy = {
     const closed = adapter.exit({
       ...open,
       ltp: trailMark,
-      role: reason === "sl" ? "sl" : reason === "target" ? "target" : "exit",
+      role: reason === "trail" ? "trail" : reason === "sl" ? "sl" : reason === "target" ? "target" : "exit",
       exitReason: reason,
     });
     if (closed?.error) {

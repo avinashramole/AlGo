@@ -74,6 +74,8 @@ export function MemberLiveBook({
               <th className="px-4 py-3 font-semibold">Side</th>
               <th className="px-4 py-3 text-right font-semibold">Qty</th>
               <th className="px-4 py-3 text-right font-semibold">Price</th>
+              <th className="px-4 py-3 font-semibold">Strategy</th>
+              <th className="px-4 py-3 font-semibold">After exit</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -87,6 +89,15 @@ export function MemberLiveBook({
                 </td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
+                <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
+                <td
+                  className={cn(
+                    "px-4 py-3 text-xs font-semibold",
+                    isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : displayOrderReason(row) ? "text-down" : "text-slate-400",
+                  )}
+                >
+                  {displayOrderReason(row) || "—"}
+                </td>
                 <td
                   className={cn(
                     "px-4 py-3 text-xs font-bold uppercase",
@@ -98,11 +109,6 @@ export function MemberLiveBook({
                   )}
                 >
                   {row.status}
-                  {displayOrderReason(row) ? (
-                    <div className={cn("mt-1 font-medium normal-case", isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : "text-down")}>
-                      Reason: {displayOrderReason(row)}
-                    </div>
-                  ) : null}
                 </td>
               </tr>
             ))}
@@ -124,6 +130,8 @@ export function MemberLiveBook({
               <th className="px-4 py-3 font-semibold">Side</th>
               <th className="px-4 py-3 text-right font-semibold">Qty</th>
               <th className="px-4 py-3 text-right font-semibold">Price</th>
+              <th className="px-4 py-3 font-semibold">Strategy</th>
+              <th className="px-4 py-3 font-semibold">After exit</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -137,14 +145,16 @@ export function MemberLiveBook({
                 </td>
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
-                <td className="px-4 py-3 text-xs font-bold uppercase">
-                  {row.status}
-                  {displayOrderReason(row) ? (
-                    <div className={cn("mt-1 font-medium normal-case", isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : "text-down")}>
-                      Reason: {displayOrderReason(row)}
-                    </div>
-                  ) : null}
+                <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
+                <td
+                  className={cn(
+                    "px-4 py-3 text-xs font-semibold",
+                    isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : displayOrderReason(row) ? "text-down" : "text-slate-400",
+                  )}
+                >
+                  {displayOrderReason(row) || "—"}
                 </td>
+                <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
               </tr>
             ))}
           </tbody>
@@ -165,6 +175,8 @@ export function MemberLiveBook({
               <th className="px-4 py-3 text-right font-semibold">Entry</th>
               <th className="px-4 py-3 text-right font-semibold">Exit</th>
               <th className="px-4 py-3 text-right font-semibold">P&L</th>
+              <th className="px-4 py-3 font-semibold">Strategy</th>
+              <th className="px-4 py-3 font-semibold">After exit</th>
               <th className="px-4 py-3 font-semibold">Broker</th>
             </tr>
           </thead>
@@ -181,6 +193,15 @@ export function MemberLiveBook({
                 <td className="px-4 py-3 text-right">{formatNumber(row.exit)}</td>
                 <td className={cn("px-4 py-3 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>
                   {formatInr(row.pnl)}
+                </td>
+                <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
+                <td
+                  className={cn(
+                    "px-4 py-3 text-xs font-semibold",
+                    isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : displayOrderReason(row) ? "text-down" : "text-slate-400",
+                  )}
+                >
+                  {displayOrderReason(row) || "—"}
                 </td>
                 <td className="px-4 py-3">{nameOf(row.brokerId)}</td>
               </tr>

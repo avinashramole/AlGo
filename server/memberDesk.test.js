@@ -28,6 +28,7 @@ const {
   purgeMemberDesksExcept,
   applyMemberDhanOrderStatuses,
   dropGhostMemberOrders,
+  dropStaleLiveWorking,
   isLocalGhostOrder,
   memberWorkingDhanCopies,
   optionContractKey,
@@ -1055,4 +1056,62 @@ test("ghost PENDING SELL @ 0 is not the user broker book", () => {
   assert.ok((live.orderHistory || []).some((row) => row.id === "ord-ce-fill" && row.status === "FILLED" && row.price === 62.45));
   assert.equal(live.orders.some((row) => /Oct2026/.test(String(row.symbol))), false);
   dropGhostMemberOrders({ orders: [{ id: "mo1", status: "PENDING", price: 0, live: false }] });
+});
+
+test("empty broker book clears leftover live pending on the user login", () => {
+  const member = { id: "u-shantai-clear", name: "Shantai Infotech", email: "shantai.clear@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  installMemberBroker({ user: member, brokerId: "dhan", clientId: "1100111", accessToken: "shantai-token" });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: { symbol: "NIFTY 22450 PE", side: "BUY", qty: 65, price: 129, strategy: "NIFTY 5m first candle", brokerId: "dhan" },
+    live: { orderId: "ord-stale-pending", status: "PENDING", price: 129 },
+  });
+  const open = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(open.orders.some((row) => row.id === "ord-stale-pending" && row.status === "PENDING"), true);
+  applyMemberDhanOrderStatuses(member.id, []);
+  const cleared = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.equal(cleared.orders.some((row) => row.status === "PENDING"), false);
+  assert.equal(cleared.orders.length, 0);
+});
+
+test("local mo pending is dropped from the user book and broker rows keep strategy plus exit", () => {
+  assert.equal(
+    dropStaleLiveWorking({
+      orders: [{ id: "moabc", status: "PENDING", price: 22, live: false, brokerId: "dhan" }],
+    }),
+    true,
+  );
+  const member = { id: "u-shantai-meta", name: "Shantai Infotech", email: "shantai.meta@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  installMemberBroker({ user: member, brokerId: "dhan", clientId: "1100222", accessToken: "shantai-meta-token" });
+  recordMemberCopyFill({
+    userId: member.id,
+    payload: {
+      symbol: "NIFTY 22500 CE",
+      side: "SELL",
+      qty: 65,
+      price: 40,
+      strategy: "NIFTY 5m first candle",
+      role: "trail",
+      exitReason: "trail",
+      brokerId: "dhan",
+    },
+    live: { orderId: "ord-trail-exit", status: "TRADED", price: 40 },
+  });
+  applyMemberDhanOrderStatuses(member.id, [
+    {
+      orderId: "ord-trail-exit",
+      tradingSymbol: "NIFTY 22500 CE",
+      transactionType: "SELL",
+      quantity: 65,
+      averageTradedPrice: 40,
+      orderStatus: "TRADED",
+    },
+  ]);
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  const exit = (desk.orderHistory || []).find((row) => row.id === "ord-trail-exit");
+  assert.equal(exit.strategy, "NIFTY 5m first candle");
+  assert.equal(exit.exitReason, "TRAILING SL HIT");
+  assert.equal(desk.orders.some((row) => row.status === "PENDING"), false);
 });

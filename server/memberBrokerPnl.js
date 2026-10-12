@@ -1,3 +1,4 @@
+import { optionContractKey, overlayMemberCopyMeta } from "./memberDesk.js";
 import { isOptionContract, isSaneOptionLtp } from "./positionMark.js";
 
 const CACHE_MS = 2000;
@@ -411,6 +412,9 @@ export function applyBrokerBookToReport(report, book) {
       product: brokerProduct(filled.product),
       pnl: Number(filled.realized != null ? filled.realized : filled.pnl || 0),
       strategy: String(filled.strategy || ""),
+      role: String(filled.role || ""),
+      exitReason: String(filled.exitReason || ""),
+      reason: String(filled.reason || filled.exitReason || ""),
       brokerId: String(filled.brokerId || "dhan"),
       closedAt: filled.closedAt || filled.updatedAt || new Date().toISOString(),
       status: "CLOSED",
@@ -479,34 +483,68 @@ export function overlayDeskLiveMtm(desk) {
   return desk;
 }
 
+function copyLocals(desk) {
+  return [
+    ...(desk?.positions || []),
+    ...(desk?.closedTrades || []),
+    ...(desk?.orders || []),
+    ...(desk?.orderHistory || []),
+    ...(desk?.report?.tradeBook || []),
+  ].filter((row) => row && (row.strategy || row.role || row.exitReason || row.reason));
+}
+
+function matchCopyLocal(locals, row) {
+  const want = optionContractKey(row?.symbol);
+  return (locals || []).find((item) => optionContractKey(item.symbol) === want);
+}
+
 export function applyBrokerPnl(desk, pnl) {
   if (!desk || !pnl) return desk;
   const realized = round2(pnl.realizedPnl);
   const unrealized = round2(pnl.unrealizedPnl);
   if (!Number.isFinite(realized) || !Number.isFinite(unrealized)) return desk;
+  const locals = copyLocals(desk);
   const report = desk.report && typeof desk.report === "object" ? desk.report : {};
+  if (Array.isArray(pnl.closed)) {
+    pnl = {
+      ...pnl,
+      closed: pnl.closed.map((row) => overlayMemberCopyMeta(row, matchCopyLocal(locals, row))),
+    };
+  }
   desk.report = applyBrokerBookToReport(report, pnl);
+  if (Array.isArray(desk.report?.tradeBook)) {
+    desk.report.tradeBook = desk.report.tradeBook.map((row) => overlayMemberCopyMeta(row, matchCopyLocal(locals, row)));
+  }
   if (Array.isArray(pnl.open)) {
     const paper = (desk.positions || []).filter((row) => row?.paper || row?.brokerId === "paper");
     desk.positions = [
       ...paper,
-      ...pnl.open.map((row) => ({
-        id: String(row.id || ""),
-        symbol: String(row.symbol || ""),
-        type: String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
-        qty: Number(row.qty) || 0,
-        avg: Number(row.avg || row.entry || row.buyPrice || 0),
-        ltp: Number(row.ltp || row.avg || 0),
-        pnl: Number(row.pnl || row.unrealized || 0),
-        product: row.product || "MIS",
-        strategy: row.strategy || "",
-        brokerId: row.brokerId || desk.brokerId,
-        live: true,
-        paper: false,
-      })),
+      ...pnl.open.map((row) => {
+        const local = matchCopyLocal(locals, row);
+        const next = overlayMemberCopyMeta(row, local);
+        return {
+          id: String(next.id || row.id || ""),
+          symbol: String(next.symbol || row.symbol || ""),
+          type: String(next.type || next.side || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+          qty: Number(next.qty || row.qty) || 0,
+          avg: Number(next.avg || next.entry || row.avg || row.entry || row.buyPrice || 0),
+          ltp: Number(next.ltp || row.ltp || row.avg || 0),
+          pnl: Number(next.pnl || row.unrealized || 0),
+          product: next.product || row.product || "MIS",
+          strategy: next.strategy || "",
+          role: next.role || "",
+          exitReason: next.exitReason || "",
+          reason: next.reason || "",
+          brokerId: next.brokerId || row.brokerId || desk.brokerId,
+          live: true,
+          paper: false,
+        };
+      }),
     ];
   }
-  desk.orders = (desk.orders || []).filter((row) => row?.paper || row?.live || Number(row?.price) > 0);
+  desk.orders = (desk.orders || []).filter(
+    (row) => row?.paper || row?.brokerId === "paper" || (row?.live && !/^mo/i.test(String(row.id || ""))),
+  );
   const balance = round2(desk.wallet?.balance || 0);
   desk.wallet = {
     ...(desk.wallet || {}),

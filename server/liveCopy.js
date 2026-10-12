@@ -423,7 +423,14 @@ export function dispatchMemberExitCopies(pos, algo = {}, { enqueueLiveOrder } = 
   if (!pos || pos.copyUserId) return;
   const strategy = String(pos.strategy || algo?.name || "").trim();
   if (!strategy || !pos.symbol) return;
-  const role = pos.role === "sl" || pos.exitReason === "sl" ? "sl" : pos.role === "target" || pos.exitReason === "target" ? "target" : "exit";
+  const tagged = String(pos.role || pos.exitReason || "").toLowerCase();
+  const role = tagged === "trail" || tagged === "trailing" || tagged === "trailing-sl"
+    ? "trail"
+    : tagged === "sl"
+      ? "sl"
+      : tagged === "target" || tagged === "tgt"
+        ? "target"
+        : "exit";
   const payload = memberExitPayload(pos, { strategy, role, exitReason: pos.exitReason || role });
   if (!(Number(payload.qty) > 0) || !payload.symbol) return;
   dispatchMemberCopies(payload, algo || {}, { enqueueLiveOrder });

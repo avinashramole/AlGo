@@ -156,6 +156,7 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
                       Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
                     {row.product ? <div className="mt-0.5 text-[11px] text-slate-400">{row.product}</div> : null}
+                    <BookMeta row={row} />
                   </div>
                   <Money value={row.pnl} className="text-sm" />
                 </div>
@@ -238,6 +239,7 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
                     <div className="mt-0.5 text-[11px] text-slate-400">
                       Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
+                    <BookMeta row={row} />
                   </div>
                   <Money value={row.pnl} className="text-sm" />
                 </div>
@@ -309,6 +311,28 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
   );
 }
 
+function BookMeta({
+  row,
+}: {
+  row: { strategy?: string; role?: string; reason?: string; exitReason?: string };
+}) {
+  const afterExit = displayOrderReason(row) || "—";
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]" data-book-meta="strategy-exit">
+      <div>
+        <div className="uppercase tracking-wide text-slate-400">Strategy</div>
+        <div className="font-semibold text-slate-600">{row.strategy || "—"}</div>
+      </div>
+      <div>
+        <div className="uppercase tracking-wide text-slate-400">After exit</div>
+        <div className={cn("font-semibold", isExitHitReason(afterExit) ? "text-brand-500" : afterExit === "—" ? "text-slate-500" : "text-down")}>
+          {afterExit}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PositionCard({ row }: { row: MemberPosition }) {
   return (
     <PhoneCard className="p-3">
@@ -318,7 +342,7 @@ function PositionCard({ row }: { row: MemberPosition }) {
           <div className="mt-0.5 text-[11px] text-slate-400">
             {row.type} · {row.qty} qty · Avg {formatNumber(row.avg)} · LTP {formatNumber(row.ltp)}
           </div>
-          {row.strategy ? <div className="mt-1 text-[11px] text-slate-400">{row.strategy}</div> : null}
+          <BookMeta row={row} />
         </div>
         <Money value={row.pnl} className="text-sm" />
       </div>
@@ -338,11 +362,7 @@ function OrderCard({ row }: { row: DeskOrder }) {
             {row.side} {row.qty} @ {formatNumber(row.price)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
-          {displayOrderReason(row) ? (
-            <div className={cn("mt-1 text-[11px] font-semibold", isExitHitReason(displayOrderReason(row)) ? "text-brand-500" : "text-down")}>
-              Reason: {displayOrderReason(row)}
-            </div>
-          ) : null}
+          <BookMeta row={row} />
         </div>
         <StatusPill label={status || "ORDER"} tone={tone} />
       </div>

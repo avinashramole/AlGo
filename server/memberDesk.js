@@ -13,7 +13,7 @@ import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 import { firstCandleNameAliases } from "./niftyVwap/config.js";
 import { markContractToMarket } from "./positionMark.js";
-import { exitReasonLabel } from "./exitReason.js";
+import { exitReasonLabel, keepExitReason } from "./exitReason.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1327,8 +1327,8 @@ export function mapMemberOrderStatus(status, { error, paper, live } = {}) {
   if (error) return "REJECTED";
   if (paper || !live) return "FILLED";
   const raw = String(status || live.status || "PENDING").toUpperCase();
-  if (raw === "TRANSIT" || raw === "OPEN") return "PENDING";
-  if (raw === "TRADED") return "FILLED";
+  if (raw === "TRANSIT" || raw === "OPEN" || raw === "TRIGGER PENDING") return "PENDING";
+  if (raw === "TRADED" || raw === "COMPLETE" || raw === "COMPLETED") return "FILLED";
   if (raw === "PART_TRADED") return "PARTIAL";
   if (raw === "REJECTED" || raw === "REJECT" || raw === "REJECTION") return "REJECTED";
   if (raw === "FAIL" || raw === "FAILURE") return "FAILED";
@@ -1382,6 +1382,24 @@ export function memberWorkingDhanCopies() {
     const clientId = String(slot.accountId || (desk.brokerId === "dhan" ? desk.accountId : "") || "").trim();
     if (!token || !clientId) continue;
     out.push({ userId, token, clientId });
+  }
+  return out;
+}
+
+export function memberLiveCopyAccounts() {
+  const out = [];
+  for (const userId of Object.keys(store)) {
+    if (!userId || userId === "admin") continue;
+    const desk = store[userId] || {};
+    const brokerId = String(desk.brokerId || "").trim().toLowerCase();
+    if (brokerId !== "dhan" && brokerId !== "upstox") continue;
+    const slot = brokerAccountForLiveCopy(userId, brokerId);
+    if (slot.leftoverToken) continue;
+    const token = String(slot.brokerToken || desk.brokerToken || "").trim();
+    const clientId = String(slot.accountId || desk.accountId || "").trim();
+    if (!token) continue;
+    if (brokerId === "dhan" && !clientId) continue;
+    out.push({ userId, brokerId, token, clientId });
   }
   return out;
 }
@@ -1447,73 +1465,120 @@ export function reconcileCopyAlerts(desk) {
   return changed;
 }
 
-/** Replace a stored PENDING copy with the status on that member's Dhan order book. */
+export function overlayMemberCopyMeta(row, local) {
+  if (!row) return row;
+  if (!local) return row;
+  const strategy = String(row.strategy || local.strategy || "").trim();
+  const role = String(row.role || local.role || "").trim();
+  const exitReason = exitReasonLabel(local) || exitReasonLabel(row) || local.exitReason || row.exitReason || "";
+  const reason = keepExitReason(local.reason || local.exitReason, row.reason);
+  const price = Number(row.price) > 0 ? Number(row.price) : Number(local.price || 0);
+  const qty = Number(row.qty) > 0 ? Number(row.qty) : Number(local.qty || 0);
+  return {
+    ...row,
+    symbol: String(row.symbol || local.symbol || "").trim(),
+    side: row.side || local.side,
+    qty,
+    strategy,
+    role,
+    exitReason,
+    reason,
+    price,
+    createdAt: row.createdAt || local.createdAt || "",
+  };
+}
+
+function findCopyMeta(locals, row) {
+  const id = String(row?.id || "");
+  if (id) {
+    const byId = (locals || []).find((item) => String(item.id) === id);
+    if (byId) return byId;
+  }
+  return (locals || []).find(
+    (item) =>
+      optionContractKey(item.symbol) === optionContractKey(row?.symbol) &&
+      String(item.side || "").toUpperCase() === String(row?.side || "").toUpperCase() &&
+      Number(item.qty || 0) === Number(row?.qty || 0),
+  );
+}
+
+export function isBrokerLiveWorking(row = {}) {
+  if (row.paper || String(row.brokerId || "").toLowerCase() === "paper") return false;
+  if (!isWorkingMemberOrder(row.status)) return false;
+  const id = String(row.id || "");
+  return Boolean(row.live && id && !/^mo/i.test(id));
+}
+
+export function dropStaleLiveWorking(desk) {
+  if (!desk) return false;
+  desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
+  const before = desk.orders.length;
+  desk.orders = desk.orders.filter((row) => {
+    if (row?.paper || String(row.brokerId || "").toLowerCase() === "paper") return true;
+    if (!isWorkingMemberOrder(row?.status)) return true;
+    return isBrokerLiveWorking(row);
+  });
+  return desk.orders.length !== before;
+}
+
+/** Replace the live working book with the member's broker order book. */
 export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
   if (!userId) return [];
   const desk = loadDesk(userId);
   const list = Array.isArray(brokerOrders) ? brokerOrders : [];
-  const byId = new Map();
   const mapped = [];
   for (const row of list) {
-    const id = String(row?.orderId || row?.dhanOrderId || row?.order_id || row?.id || "").trim();
-    if (id) byId.set(id, row);
     const next = asMemberBrokerOrder(row, String(desk.brokerId || "dhan"));
     if (next) mapped.push(next);
   }
+  const locals = [...(desk.orders || []), ...(desk.orderHistory || [])].filter((row) => !row?.paper);
+  const paper = (desk.orders || []).filter((row) => row?.paper || String(row.brokerId || "").toLowerCase() === "paper");
   const updates = [];
-  const working = [];
-  const seen = new Set();
-  for (const order of desk.orders || []) {
-    const broker = byId.get(String(order.id || ""));
-    if (!broker || !isWorkingMemberOrder(order.status)) {
-      if (!isLocalGhostOrder(order)) working.push(order);
-      continue;
-    }
-    const status = mapMemberOrderStatus(broker.orderStatus || broker.status, { live: broker });
-    const reason = brokerOrderReason(broker) || String(order.reason || "");
-    const filledQty = Number(broker.filledQty || broker.tradedQuantity || order.filledQty || 0);
-    const nextPrice = brokerOrderPrice(broker);
-    const same =
-      status === String(order.status || "").toUpperCase() &&
-      reason === String(order.reason || "") &&
-      !(status === "FILLED" && filledQty !== Number(order.filledQty || 0));
-    if (same) {
-      working.push({ ...order, live: true, price: nextPrice > 0 ? nextPrice : Number(order.price || 0) });
-      seen.add(String(order.id));
-      continue;
-    }
-    const updated = {
-      ...order,
-      status,
-      reason,
-      live: true,
-      filledQty: status === "FILLED" ? Number(order.qty) || filledQty : filledQty,
-      price: nextPrice > 0 ? nextPrice : Number(order.price || 0),
-    };
-    updates.push({ id: String(order.id), status, reason: updated.reason, filledQty: updated.filledQty });
-    if (isWorkingMemberOrder(status)) {
-      working.push(updated);
-      seen.add(String(order.id));
-      continue;
-    }
-    if (isTerminalMemberOrder(status)) dropUnfilledMemberPosition(desk, updated);
-    if (isStoredHistoryMemberOrder(status)) desk.orderHistory.unshift(updated);
-    seen.add(String(order.id));
-  }
+  const working = [...paper];
+  const seen = new Set(paper.map((row) => String(row.id)));
   for (const row of mapped) {
-    if (seen.has(row.id)) continue;
-    const existingHistory = (desk.orderHistory || []).some((item) => String(item.id) === row.id);
-    if (existingHistory) continue;
-    updates.push({ id: row.id, status: row.status, reason: row.reason, filledQty: row.filledQty });
-    if (isWorkingMemberOrder(row.status)) working.push(row);
-    else if (isStoredHistoryMemberOrder(row.status)) desk.orderHistory.unshift(row);
-    seen.add(row.id);
+    const local = findCopyMeta(locals, row);
+    const next = overlayMemberCopyMeta(row, local);
+    if (isWorkingMemberOrder(next.status)) {
+      const prev = locals.find((item) => String(item.id) === String(next.id));
+      const same =
+        prev &&
+        String(prev.status || "").toUpperCase() === next.status &&
+        String(prev.reason || "") === String(next.reason || "") &&
+        !(next.status === "FILLED" && Number(next.filledQty || 0) !== Number(prev.filledQty || 0));
+      if (!same) updates.push({ id: next.id, status: next.status, reason: next.reason, filledQty: next.filledQty });
+      working.push(next);
+      seen.add(String(next.id));
+      continue;
+    }
+    if (isTerminalMemberOrder(next.status)) dropUnfilledMemberPosition(desk, { ...next, strategy: next.strategy || local?.strategy });
+    const existingHistory = (desk.orderHistory || []).find((item) => String(item.id) === next.id);
+    if (existingHistory) {
+      const same =
+        String(existingHistory.status || "").toUpperCase() === next.status &&
+        String(existingHistory.reason || "") === String(next.reason || "");
+      if (!same) {
+        Object.assign(existingHistory, next);
+        updates.push({ id: next.id, status: next.status, reason: next.reason, filledQty: next.filledQty });
+      }
+    } else if (isStoredHistoryMemberOrder(next.status)) {
+      desk.orderHistory.unshift(next);
+      updates.push({ id: next.id, status: next.status, reason: next.reason, filledQty: next.filledQty });
+    }
+    seen.add(String(next.id));
   }
+  const droppedStale = (desk.orders || []).some(
+    (row) =>
+      isWorkingMemberOrder(row.status) &&
+      !row.paper &&
+      String(row.brokerId || "").toLowerCase() !== "paper" &&
+      !seen.has(String(row.id)),
+  );
   desk.orders = working;
   const ghostsDropped = dropGhostMemberOrders(desk);
   desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
   const alertsChanged = reconcileCopyAlerts(desk);
-  if (!updates.length && !alertsChanged && !ghostsDropped) return [];
+  if (!updates.length && !alertsChanged && !ghostsDropped && !droppedStale) return [];
   persist();
   return updates;
 }
@@ -1719,7 +1784,7 @@ function asMemberBrokerOrder(row = {}, brokerId = "dhan") {
     sim: false,
     reason: brokerOrderReason(row),
     securityId: String(row.securityId || row.security_id || ""),
-    createdAt: row.createTime || row.orderTimestamp || row.createdAt || new Date().toISOString(),
+    createdAt: row.createTime || row.orderTimestamp || row.createdAt || "",
   };
 }
 
@@ -1820,6 +1885,9 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
       qty,
       price: price || Number(payload.price || 0),
       strategy: order.strategy,
+      role: order.role,
+      exitReason: order.exitReason,
+      reason: order.reason,
       brokerId,
       paper,
       openedAt: now,
@@ -1851,6 +1919,9 @@ function applyMemberPosition(desk, fill) {
         pnl,
         product: open.product || "MIS",
         strategy: fill.strategy,
+        role: fill.role || "",
+        exitReason: fill.exitReason || "",
+        reason: fill.reason || fill.exitReason || "",
         brokerId: fill.brokerId,
         paper: Boolean(fill.paper),
         live: !fill.paper,
@@ -1925,7 +1996,8 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   if (!user?.id) throw fail("Sign in first.", 401);
   const desk = loadDesk(user.id);
   const ghostsDropped = dropGhostMemberOrders(desk);
-  if (ghostsDropped || reconcileCopyAlerts(desk)) persist();
+  const staleDropped = dropStaleLiveWorking(desk);
+  if (ghostsDropped || staleDropped || reconcileCopyAlerts(desk)) persist();
   const brokerId = knownBroker(desk.brokerId) ? desk.brokerId : "paper";
   const own = {
     positions: Array.isArray(desk.positions) ? desk.positions : [],

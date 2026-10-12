@@ -514,18 +514,43 @@ export async function fetchMemberDhanOrders(token, clientId) {
   return dhanGet("/orders", token, clientId, { lane: "member", attempts: 1, timeoutMs: 8000 });
 }
 
+export async function fetchMemberUpstoxOrders(token) {
+  const { ipv4Request } = await import("./ipv4.js");
+  const res = await ipv4Request("https://api.upstox.com/v2/order/retrieve-all", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+    timeoutMs: 8000,
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    throw new Error(json?.errors?.[0]?.message || json?.message || `Upstox orders ${res.status}`);
+  }
+  return json?.data || json || [];
+}
+
 const memberOrderSyncAt = new Map();
 const memberOrderSyncJob = new Map();
 
 export async function syncMemberDhanOrders(userId = "") {
-  const { memberWorkingDhanCopies, applyMemberDhanOrderStatuses } = await import("./memberDesk.js");
+  const { memberLiveCopyAccounts, applyMemberDhanOrderStatuses } = await import("./memberDesk.js");
   const { refreshCopyOrdersFromBroker } = await import("./market.js");
   const wanted = String(userId || "").trim();
-  const targets = memberWorkingDhanCopies().filter((row) => !wanted || row.userId === wanted);
+  const targets = memberLiveCopyAccounts().filter((row) => !wanted || row.userId === wanted);
   for (const target of targets) {
     if (Date.now() < quoteBackoffUntil) break;
     try {
-      const raw = await fetchMemberDhanOrders(target.token, target.clientId);
+      const raw =
+        target.brokerId === "upstox"
+          ? await fetchMemberUpstoxOrders(target.token)
+          : await fetchMemberDhanOrders(target.token, target.clientId);
       const changed = applyMemberDhanOrderStatuses(target.userId, asList(raw));
       if (changed.length) refreshCopyOrdersFromBroker(target.userId, changed);
     } catch (error) {
