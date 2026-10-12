@@ -937,6 +937,19 @@ export function sessionUser(token, { reload = false } = {}) {
   return null;
 }
 
+export function setLoginPassword(sessionToken, { password, confirm } = {}) {
+  reloadUsers();
+  const user = userFromToken(sessionToken);
+  if (!user) throw fail("Sign in first.", 401);
+  const next = String(password || "").trim();
+  const again = String(confirm ?? password ?? "").trim();
+  if (next.length < 6) throw fail("Password must be at least 6 characters.");
+  if (next !== again) throw fail("Passwords do not match.");
+  user.password = hashPassword(next);
+  persist();
+  return { ok: true, user: publicUser(user) };
+}
+
 export function updateProfile(sessionToken, { name, email, mobile } = {}) {
   reloadUsers();
   const user = userFromToken(sessionToken);

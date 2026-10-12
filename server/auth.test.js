@@ -40,6 +40,7 @@ const {
   sessionUser,
   upsertGoogleUser,
   updateProfile,
+  setLoginPassword,
   adminCreateMember,
   adminUpdateUser,
   verifyOtp,
@@ -632,6 +633,35 @@ test("member stored as Shantai Infotech can sign in with Gmail and 123456", () =
   const again = loginWithPassword("shantai.infotech@gmail.com", "123456");
   assert.equal(again.user.id, client.id);
   assert.throws(() => loginWithPassword("shantai.infotech@gmail.com", "wrong-pass"), /Wrong email or password/);
+});
+
+test("member can set a Settings password and still sign in with Google or that password", () => {
+  const email = `settings.pass.${Date.now()}@gmail.com`;
+  const client = adminCreateMember({
+    name: "Settings Pass",
+    email,
+    mobile: "9876505566",
+  });
+  const session = loginWithPassword(email, "123456");
+  assert.throws(() => setLoginPassword("", { password: "secret12", confirm: "secret12" }), /Sign in first/);
+  assert.throws(() => setLoginPassword(session.token, { password: "short", confirm: "short" }), /6 characters/);
+  assert.throws(() => setLoginPassword(session.token, { password: "secret12", confirm: "other12" }), /do not match/);
+  const saved = setLoginPassword(session.token, { password: "secret12", confirm: "secret12" });
+  assert.equal(saved.ok, true);
+  assert.equal(saved.user.id, client.id);
+  assert.equal(saved.user.hasPassword, true);
+  assert.equal(JSON.stringify(saved).includes("secret12"), false);
+  assert.throws(() => loginWithPassword(email, "123456"), /Wrong email or password/);
+  const withPass = loginWithPassword(email, "secret12");
+  assert.equal(withPass.user.id, client.id);
+  const google = upsertGoogleUser({
+    email,
+    name: "Settings Pass",
+    googleId: `gid-settings-${Date.now()}`,
+  });
+  assert.equal(google.user.id, client.id);
+  const still = loginWithPassword(email, "secret12");
+  assert.equal(still.user.id, client.id);
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {

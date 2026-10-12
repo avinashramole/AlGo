@@ -21,6 +21,7 @@ import {
   recordLoginIp,
   requestToken,
   sessionUser,
+  setLoginPassword,
   updateProfile,
   verifyOtp,
 } from "./auth.js";
@@ -223,6 +224,17 @@ export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
       res.json(saved);
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message || "Could not update profile" });
+    }
+  });
+
+  app.post("/api/me/password", (req, res) => {
+    try {
+      const token = readToken(req);
+      const saved = setLoginPassword(token, req.body || {});
+      keepSession(res, req, token);
+      res.json(saved);
+    } catch (error) {
+      res.status(error.status || 400).json({ error: error.message || "Could not save password" });
     }
   });
 }

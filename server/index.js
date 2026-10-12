@@ -229,6 +229,7 @@ function deskGuard(req, res, next) {
   req.authUser = user;
   if (
     pathname === "/api/me" ||
+    pathname === "/api/me/password" ||
     pathname === "/api/strategies/catalog" ||
     pathname.startsWith("/api/subscriptions") ||
     pathname.startsWith("/api/member")

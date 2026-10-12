@@ -1257,6 +1257,14 @@ export function updateProfile(token: string, payload: { name: string; email?: st
   });
 }
 
+export function setLoginPassword(token: string, payload: { password: string; confirm: string }) {
+  return request<{ ok: boolean; user: AuthUser }>("/me/password", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ token, ...payload }),
+  });
+}
+
 export function getGmailStatus() {
   return request<{ connected: boolean; user?: string }>("/auth/gmail");
 }

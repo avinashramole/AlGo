@@ -10,6 +10,7 @@ import {
   requestOtp as requestOtpApi,
   resetPassword as resetPasswordApi,
   signup as signupApi,
+  setLoginPassword as setLoginPasswordApi,
   updateProfile as updateProfileApi,
   verifyOtp as verifyOtpApi,
   type AuthUser,
@@ -56,6 +57,7 @@ type AuthContextValue = {
   enableThumb: () => Promise<void>;
   loginThumb: () => Promise<void>;
   updateProfile: (payload: { name: string; email?: string; mobile?: string }) => Promise<void>;
+  changePassword: (payload: { password: string; confirm: string }) => Promise<void>;
   applyUser: (next: AuthUser) => void;
   refreshMe: () => Promise<void>;
   hasThumb: boolean;
@@ -491,6 +493,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           persistUser(result.user);
           setUser(result.user);
         }
+      },
+      changePassword: async (payload: { password: string; confirm: string }) => {
+        const token = readToken();
+        const result = await setLoginPasswordApi(token, payload);
+        persistUser(result.user);
+        setUser(result.user);
       },
       applyUser,
       refreshMe,

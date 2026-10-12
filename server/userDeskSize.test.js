@@ -30,6 +30,7 @@ test("User desk uses the same type and padding sizes as the admin desk", () => {
   assert.doesNotMatch(settings, /to="\/brokers"/);
   assert.match(memberSettings, /max-w-2xl/);
   assert.match(memberSettings, /text-xl font-bold/);
+  assert.match(memberSettings, /h-10 w-full rounded-lg/);
   assert.doesNotMatch(memberSettings, /desk-page/);
 
   assert.match(profile, /h-10 w-full rounded-lg/);
