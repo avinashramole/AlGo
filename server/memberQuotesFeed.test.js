@@ -122,6 +122,16 @@ test("member cards use Natural Gas and Copper futures as live rates and drop MID
   assert.equal(rows.some((row) => String(row.symbol).includes("MIDCP")), false);
 });
 
+test("member MCX cards keep a wide today change versus yesterday close", () => {
+  const rows = cardsFromMemberQuotes("u-ng-wide", [
+    { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 390, close: 300 },
+  ]);
+  const gas = rows.find((row) => row.symbol === "NATURALGAS");
+  assert.equal(gas.change, 90);
+  assert.equal(gas.changePct, 30);
+  assert.equal(gas.prevClose, 300);
+});
+
 test("member board always keeps a Crude Oil card even when LTP is missing", () => {
   const rows = cardsFromMemberQuotes("u-crude-empty", [
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100, close: 25000 },

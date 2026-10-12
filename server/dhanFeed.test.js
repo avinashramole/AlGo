@@ -237,6 +237,58 @@ test("flattenQuotes keeps net change and an explicit previous close", () => {
   assert.equal(quotes[0].netChange, -84.2);
 });
 
+test("flattenQuotes keeps MCX day change from change and a wide prev close", () => {
+  const quotes = flattenQuotes(
+    {
+      data: {
+        MCX_COMM: {
+          570750: { last_price: 390, change: 90, ohlc: { close: 300 } },
+          565899: { last_price: 6124.5, ohlc: { close: 6100 } },
+        },
+      },
+    },
+    [
+      { symbol: "NATURALGAS FUT", parent: "NATURALGAS", segment: "MCX_COMM", securityId: 570750, kind: "future" },
+      { symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", segment: "MCX_COMM", securityId: 565899, kind: "future" },
+    ],
+  );
+  const gas = quotes.find((row) => row.parent === "NATURALGAS");
+  const crude = quotes.find((row) => row.parent === "CRUDEOIL");
+  assert.equal(gas.ltp, 390);
+  assert.equal(gas.prevClose, 300);
+  assert.equal(gas.netChange, 90);
+  assert.equal(crude.prevClose, 6100);
+});
+
+test("MCX tape fetches the full quote when OHLC has LTP but no day change", async () => {
+  const seen = [];
+  const quotes = await fetchDhanTapeQuotes({
+    accessToken: "member-dhan-quote-token",
+    clientId: "1100333",
+    fetchQuotes: async (path, body) => {
+      seen.push({ path, segments: Object.keys(body || {}) });
+      if (body?.MCX_COMM && path === "/marketfeed/ohlc") {
+        return { data: { MCX_COMM: { 565899: { last_price: 6124.5 } } } };
+      }
+      if (body?.MCX_COMM && path === "/marketfeed/quote") {
+        return { data: { MCX_COMM: { 565899: { last_price: 6124.5, change: 24.5, ohlc: { close: 6100 } } } } };
+      }
+      if (path === "/marketfeed/ohlc") {
+        return { data: { IDX_I: { 13: { last_price: 23326.8, ohlc: { close: 23200 } } } } };
+      }
+      throw new Error(`unexpected ${path} ${JSON.stringify(body)}`);
+    },
+  });
+  assert.equal(
+    seen.some((row) => row.path === "/marketfeed/quote" && row.segments.includes("MCX_COMM")),
+    true,
+  );
+  const crude = quotes.find((row) => row.parent === "CRUDEOIL");
+  assert.equal(crude.ltp, 6124.5);
+  assert.equal(crude.prevClose, 6100);
+  assert.equal(crude.netChange, 24.5);
+});
+
 test("member Dhan tape prefers OHLC so yesterday close is present", async () => {
   const seen = [];
   const quotes = await fetchDhanTapeQuotes({

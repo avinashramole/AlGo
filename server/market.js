@@ -2194,11 +2194,11 @@ function emptyDeskIndex(symbol, name) {
   });
 }
 
-function sanePrevClose(ltp, prev, { loose = false } = {}) {
+function sanePrevClose(ltp, prev, { loose = false, maxMove } = {}) {
   const close = Number(prev);
   if (!(close > 0) || !(ltp > 0)) return null;
-  const maxMove = loose ? 0.35 : 0.08;
-  if (Math.abs(ltp - close) / close > maxMove) return null;
+  const cap = Number(maxMove) > 0 ? Number(maxMove) : loose ? 0.35 : 0.08;
+  if (Math.abs(ltp - close) / close > cap) return null;
   return round2(close);
 }
 
@@ -4715,7 +4715,9 @@ function updateLiveCandle(price) {
 
 function dayChange(index, quote, ltp) {
   const storedPrev = Number(index.prevClose) > 0 ? Number(index.prevClose) : 0;
-  const day = dayChangeFromQuote(ltp, quote, storedPrev);
+  const day = dayChangeFromQuote(ltp, quote, storedPrev, {
+    maxPct: isMcxDeskIndex(index.symbol) ? 0.6 : 0.2,
+  });
   if (day.prevClose > 0) return day;
   return {
     change: Number(index.change) || 0,
@@ -4784,7 +4786,10 @@ export function applyLiveQuotes(quotes) {
       continue;
     }
     if (index && Number(quote.prevClose) > 0 && !(Number.isFinite(ltp) && ltp > 0)) {
-      const prev = sanePrevClose(index.price, quote.prevClose);
+      const prev = sanePrevClose(index.price, quote.prevClose, {
+        loose: isMcxDeskIndex(index.symbol),
+        maxMove: isMcxDeskIndex(index.symbol) ? 0.6 : undefined,
+      });
       if (prev) {
         index.prevClose = prev;
         index.change = round2(index.price - prev);

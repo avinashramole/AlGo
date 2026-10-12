@@ -43,7 +43,7 @@ import { chooseDeskExpiry, dhanOrderQuantity, dropExpired, exchangeSegmentFor, g
 import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import { adminBookFromDhan } from "./memberBrokerPnl.js";
-import { looksLikePrevClose } from "./quoteDayChange.js";
+import { looksLikePrevClose, MCX_PREV_CLOSE_MAX } from "./quoteDayChange.js";
 import { crossBuyLimit, needsScripMasterLookup } from "./executionSpeed.js";
 import {
   canAutoGenerate,
@@ -660,17 +660,40 @@ export function memberQuoteInstruments() {
   return indices.concat(futs);
 }
 
+function quoteHasDayChange(row) {
+  return Number(row?.prevClose) > 0 || (row?.netChange != null && Number.isFinite(Number(row.netChange)) && Number(row.netChange) !== 0);
+}
+
+function mergeTapeQuotes(base = [], extra = []) {
+  const byId = new Map(base.map((row) => [`${row.segment}:${row.securityId}`, { ...row }]));
+  for (const row of extra) {
+    const key = `${row.segment}:${row.securityId}`;
+    const prev = byId.get(key) || {};
+    byId.set(key, { ...prev, ...row, prevClose: Number(row.prevClose) > 0 ? row.prevClose : prev.prevClose, netChange: row.netChange ?? prev.netChange });
+  }
+  return [...byId.values()];
+}
+
+function mcxTapeNeedsQuote(body, quotes) {
+  if (!body?.MCX_COMM) return false;
+  return !quotes.some((row) => String(row.segment || "").toUpperCase() === "MCX_COMM" && quoteHasDayChange(row));
+}
+
 async function pullMemberTapeBody(pull, body, instruments) {
   let lastError;
+  let best = [];
   for (const path of ["/marketfeed/ohlc", "/marketfeed/quote", "/marketfeed/ltp"]) {
     try {
       const payload = await pull(path, body);
       const batch = flattenQuotes(payload, instruments);
-      if (batch.length) return batch;
+      if (!batch.length) continue;
+      best = mergeTapeQuotes(best, batch);
+      if (!mcxTapeNeedsQuote(body, best) || path !== "/marketfeed/ohlc") return best;
     } catch (error) {
       lastError = error;
     }
   }
+  if (best.length) return best;
   if (lastError) throw lastError;
   return [];
 }
@@ -717,11 +740,13 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
       );
       const ltp = Number.isFinite(ltpRaw) && ltpRaw > 0 ? ltpRaw : close;
       if (!Number.isFinite(ltp) || ltp <= 0) continue;
-      const prevClose = looksLikePrevClose(ltp, prevCloseRaw)
+      const maxPct = quoteFamily(instrument.segment) === "mcx" ? MCX_PREV_CLOSE_MAX : 0.2;
+      const prevClose = looksLikePrevClose(ltp, prevCloseRaw, { maxPct })
         ? prevCloseRaw
-        : looksLikePrevClose(ltp, close)
+        : looksLikePrevClose(ltp, close, { maxPct })
           ? close
           : 0;
+      const netChange = quote.net_change ?? quote.netChange ?? quote.change ?? quote.ch;
       quotes.push({
         symbol: instrument.symbol,
         parent: instrument.parent || instrument.symbol,
@@ -736,7 +761,7 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
         close,
         prevClose: prevClose || undefined,
         vwap: Number(quote.average_price ?? quote.averagePrice ?? quote.vwap),
-        netChange: quote.net_change ?? quote.netChange,
+        netChange,
         volume: Number(quote.volume ?? quote.vol),
       });
     }
@@ -1218,7 +1243,7 @@ export function parseFeedPackets(buffer, instruments = liveInstruments()) {
           if (avg > 0) quote.vwap = avg;
           if (open > 0) quote.open = open;
           if (close > 0) quote.close = close;
-          if (looksLikePrevClose(ltp, close)) quote.prevClose = close;
+          if (looksLikePrevClose(ltp, close, { maxPct: quoteFamily(instrument.segment) === "mcx" ? MCX_PREV_CLOSE_MAX : 0.2 })) quote.prevClose = close;
           if (high > 0) quote.high = high;
           if (low > 0) quote.low = low;
         }

@@ -92,7 +92,9 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
               </div>
               <div className={cn("px mt-1 text-lg font-extrabold leading-none", tone)}>{formatQuote(item.price)}</div>
               <div className={cn("mt-1 text-[11px] font-semibold", tone || "text-slate-400")}>
-                {formatChange(day.change)} ({formatPct(day.changePct)})
+                <span className={tone || "text-slate-400"}>
+                  {formatChange(day.change)} ({formatPct(day.changePct)})
+                </span>
               </div>
               {showDeriv ? (
                 <div className="mt-2 grid grid-cols-3 gap-1 text-[10px]">

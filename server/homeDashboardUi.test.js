@@ -56,6 +56,7 @@ test("user market tape drops MIDCPNIFTY and keeps Natural Gas and Copper", () =>
   assert.match(board, /grid-cols-3/);
   assert.match(board, /Vwap/);
   assert.match(board, /quoteDayChange/);
+  assert.match(board, /quoteTone/);
 });
 
 test("Home chart candles refresh every 15s, not every 2s", () => {

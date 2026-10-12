@@ -62,7 +62,9 @@ export function cardsFromMemberQuotes(userId, quotes = []) {
     const priceRaw = Number(indexQuote?.ltp || (MCX_SPOT_FROM_FUT.has(card.symbol) ? futureQuote?.ltp : 0));
     const futureRaw = Number(futureQuote?.ltp || 0);
     const price = priceRaw > 0 ? priceRaw : futureRaw;
-    const day = dayChangeFromQuote(price, indexQuote || futureQuote || {}, prevMap[card.symbol]);
+    const day = dayChangeFromQuote(price, indexQuote || futureQuote || {}, prevMap[card.symbol], {
+      maxPct: MCX_SPOT_FROM_FUT.has(card.symbol) ? 0.6 : 0.2,
+    });
     const vwapRaw = Number(futureQuote?.vwap || indexQuote?.vwap);
     if (day.prevClose > 0) prevMap[card.symbol] = day.prevClose;
     if (price > 0) sparkMap[card.symbol] = pushSpark(sparkMap[card.symbol], price);

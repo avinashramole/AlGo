@@ -28,6 +28,24 @@ test("Market tape paints live Natural Gas and Copper futures like Crude", () => 
   assert.equal(gas.name, "NATURAL GAS");
 });
 
+test("MCX cards keep today's change after an LTP-only tick", () => {
+  applyLiveQuotes([{ symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6124.5, prevClose: 6100 }]);
+  applyLiveQuotes([{ symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6130 }]);
+  const crude = snapshot().indices.find((row) => row.symbol === "CRUDEOIL");
+  assert.equal(crude.price, 6130);
+  assert.equal(crude.prevClose, 6100);
+  assert.equal(crude.change, 30);
+  assert.ok(crude.change > 0);
+});
+
+test("Natural Gas still shows a large day change versus yesterday close", () => {
+  applyLiveQuotes([{ symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 390, prevClose: 300 }]);
+  const gas = snapshot().indices.find((row) => row.symbol === "NATURALGAS");
+  assert.equal(gas.prevClose, 300);
+  assert.equal(gas.change, 90);
+  assert.equal(gas.changePct, 30);
+});
+
 test("scrip master keeps NATURALGAS and COPPER futures and drops minis", async () => {
   const csv = [
     "SEM_EXM_EXCH_ID,SEM_SEGMENT,SEM_SMST_SECURITY_ID,SEM_INSTRUMENT_NAME,SEM_EXPIRY_CODE,SEM_TRADING_SYMBOL,SEM_LOT_UNITS,SEM_CUSTOM_SYMBOL,SEM_EXPIRY_DATE,SEM_STRIKE_PRICE,SEM_OPTION_TYPE,SEM_TICK_SIZE,SEM_EXPIRY_FLAG,SEM_EXCH_INSTRUMENT_TYPE,SEM_SERIES,SM_SYMBOL_NAME",

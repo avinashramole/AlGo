@@ -64,7 +64,7 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
             value={formatQuote(item.price)}
             detail={
               <span className="flex items-center justify-between gap-3">
-                <span>
+                <span className={tone || "text-slate-400"}>
                   {formatChange(day.change)} ({formatPct(day.changePct)})
                 </span>
                 <span className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</span>
