@@ -395,12 +395,66 @@ function reloadUsers() {
   if (next !== store) store = next;
 }
 
+function emailLocalPart(email) {
+  const value = normalizeEmail(email);
+  const at = value.indexOf("@");
+  return at > 0 ? value.slice(0, at) : value;
+}
+
+function nameTokens(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function memberMatchesLoginEmail(user, email) {
+  if (!user || resolveUserRole(user) === "admin") return false;
+  const wanted = normalizeEmail(email);
+  if (!wanted.includes("@")) return false;
+  const stored = normalizeEmail(user.email);
+  if (stored && stored === wanted) return true;
+  const wantedLocal = emailLocalPart(wanted);
+  const storedLocal = emailLocalPart(stored);
+  if (storedLocal && storedLocal === wantedLocal) return true;
+  const tokens = nameTokens(user.name);
+  const mailTokens = wantedLocal.split(/[._+-]+/).filter(Boolean);
+  if (mailTokens.length < 2) return false;
+  for (let i = 0; i <= tokens.length - mailTokens.length; i += 1) {
+    if (mailTokens.every((part, j) => tokens[i + j] === part)) return true;
+  }
+  return tokens.join("") === mailTokens.join("");
+}
+
+function findUserByLoginEmail(email) {
+  const wanted = normalizeEmail(email);
+  const exact = store.byEmail.get(wanted);
+  if (exact) return exact;
+  const matches = store.users.filter((row) => memberMatchesLoginEmail(row, wanted));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function adoptMemberLoginEmail(user, identifier) {
+  const email = normalizeEmail(identifier);
+  if (!user || !email.includes("@") || resolveUserRole(user) === "admin") return false;
+  const current = normalizeEmail(user.email);
+  if (current === email) return false;
+  const taken = store.byEmail.get(email);
+  if (taken && taken.id !== user.id) return false;
+  const placeholder = !current.includes("@") || current.endsWith("@t2s.app") || emailLocalPart(current) === emailLocalPart(email);
+  if (!placeholder && !memberMatchesLoginEmail(user, email)) return false;
+  user.email = email;
+  return true;
+}
+
 export function findUser(identifier) {
   const raw = String(identifier || "").trim();
   const email = normalizeEmail(raw);
   const mobile = normalizeMobile(raw);
   if (email === "demo") return store.byEmail.get(SOLE_ADMIN_EMAIL) || null;
-  if (isGmail(email) || email.includes("@")) return store.byEmail.get(email) || null;
+  if (isGmail(email) || email.includes("@")) return findUserByLoginEmail(email);
   if (isMobile(mobile)) return store.byMobile.get(mobile) || null;
   return store.byEmail.get(email) || null;
 }
@@ -655,9 +709,11 @@ function consumeOtp(channel, identifier, otp, purpose) {
 export function loginWithPassword(identifier, password) {
   reloadUsers();
   const user = findUser(identifier || "");
-  if (!user?.password || !checkPassword(password, user.password)) {
+  const secret = String(password || "").trim();
+  if (!user?.password || !checkPassword(secret, user.password)) {
     throw fail("Wrong email or password. Sign in with your email id.", 401);
   }
+  adoptMemberLoginEmail(user, identifier);
   return issueSession(user);
 }
 
@@ -977,7 +1033,7 @@ export function deleteRegisteredUser(id, { actorId } = {}) {
 }
 
 export const INITIAL_CLIENT_PASSWORD = "123456";
-export const MEMBER_PASSWORD_RESET_STAMP = "email-123456-v1";
+export const MEMBER_PASSWORD_RESET_STAMP = "email-123456-v2";
 
 function memberLoginEmail(email, mobile) {
   const next = normalizeEmail(email);

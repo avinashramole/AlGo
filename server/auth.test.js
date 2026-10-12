@@ -45,6 +45,7 @@ const {
   verifyOtp,
   resetMemberPasswordsToDefault,
   INITIAL_CLIENT_PASSWORD,
+  MEMBER_PASSWORD_RESET_STAMP,
 } = await import("./auth.js");
 
 test("resolveUserRole treats only the trades2smart admin email as admin", () => {
@@ -600,6 +601,7 @@ test("a broken accounts file is not replaced with the seed list", () => {
 
 test("admin-created members sign in with email and default password 123456", () => {
   assert.equal(INITIAL_CLIENT_PASSWORD, "123456");
+  assert.equal(MEMBER_PASSWORD_RESET_STAMP, "email-123456-v2");
   const email = `email.login.${Date.now()}@gmail.com`;
   const client = adminCreateMember({
     name: "Email Login",
@@ -614,6 +616,22 @@ test("admin-created members sign in with email and default password 123456", () 
   assert.ok(reset.changed >= 1);
   const again = loginWithPassword(email, "123456");
   assert.equal(again.user.id, client.id);
+});
+
+test("member stored as Shantai Infotech can sign in with Gmail and 123456", () => {
+  const client = adminCreateMember({
+    name: "Shantai Infotech",
+    email: "shantai@t2s.app",
+    mobile: "9876504455",
+  });
+  assert.equal(client.email, "shantai@t2s.app");
+  const session = loginWithPassword("shantai.infotech@gmail.com", "123456");
+  assert.equal(session.user.id, client.id);
+  assert.equal(session.user.name, "Shantai Infotech");
+  assert.equal(session.user.email, "shantai.infotech@gmail.com");
+  const again = loginWithPassword("shantai.infotech@gmail.com", "123456");
+  assert.equal(again.user.id, client.id);
+  assert.throws(() => loginWithPassword("shantai.infotech@gmail.com", "wrong-pass"), /Wrong email or password/);
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {
