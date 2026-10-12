@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { connectGmail, getGmailStatus } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
@@ -88,10 +87,7 @@ export function Settings() {
         </form>
         {mailNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{mailNote}</p> : null}
       </section>
-      <Link to="/brokers" className="inline-flex h-10 items-center rounded-xl bg-brand-50 px-4 text-sm font-semibold text-brand-500">
-        Open broker hub
-      </Link>
-      <button type="button" onClick={logout} className="ml-2 h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
+      <button type="button" onClick={logout} className="h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
         Log out
       </button>
     </div>

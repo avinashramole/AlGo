@@ -46,9 +46,6 @@ export function SettingsScreen() {
       <Pressable style={styles.link} onPress={() => void onThumb()} disabled={busy}>
         <Text style={styles.linkText}>{busy ? "Please wait..." : hasThumb ? "Reset thumb on this phone" : "Enable thumb on this phone"}</Text>
       </Pressable>
-      <Pressable style={styles.link} onPress={() => navigation.navigate("Brokers")}>
-        <Text style={styles.linkText}>Open broker hub</Text>
-      </Pressable>
       <Pressable style={styles.out} onPress={() => void logout()}>
         <Text style={styles.outText}>Log out</Text>
       </Pressable>
