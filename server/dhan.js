@@ -746,7 +746,7 @@ export function flattenQuotes(payload, instruments = liveInstruments()) {
         : looksLikePrevClose(ltp, close, { maxPct })
           ? close
           : 0;
-      const netChange = quote.net_change ?? quote.netChange ?? quote.change ?? quote.ch;
+      const netChange = quote.net_change ?? quote.netChange ?? quote.change ?? quote.ch ?? quote.change_abs ?? quote.absolute_change;
       quotes.push({
         symbol: instrument.symbol,
         parent: instrument.parent || instrument.symbol,

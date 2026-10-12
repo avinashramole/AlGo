@@ -122,6 +122,19 @@ test("member cards use Natural Gas and Copper futures as live rates and drop MID
   assert.equal(rows.some((row) => String(row.symbol).includes("MIDCP")), false);
 });
 
+test("member MCX LTP-only ticks still show today change from the admin desk prev close", () => {
+  const rows = cardsFromMemberQuotes(
+    "u-mcx-desk-prev",
+    [{ symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 3033.3 }],
+    [{ symbol: "NATURALGAS", prevClose: 2990, change: 43.3, changePct: 1.45 }],
+  );
+  const gas = rows.find((row) => row.symbol === "NATURALGAS");
+  assert.equal(gas.price, 3033.3);
+  assert.equal(gas.prevClose, 2990);
+  assert.equal(gas.change, 43.3);
+  assert.equal(gas.changePct, 1.45);
+});
+
 test("member MCX cards keep a wide today change versus yesterday close", () => {
   const rows = cardsFromMemberQuotes("u-ng-wide", [
     { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 390, close: 300 },

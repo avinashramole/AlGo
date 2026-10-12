@@ -22,6 +22,8 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.match(today, /data-today-change="true"/);
   assert.match(today, />Today</);
   assert.match(today, /quoteTone/);
+  assert.match(today, /bg-emerald-50/);
+  assert.match(today, /bg-rose-50/);
   assert.match(markets, /\{ id: "NIFTY", label: "NIFTY", lot: 65 \}/);
   assert.match(markets, /\{ id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 \}/);
   assert.match(markets, /\{ id: "FINNIFTY", label: "FINNIFTY", lot: 60 \}/);

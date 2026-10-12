@@ -53,18 +53,35 @@ function matchesCard(quote, card) {
   return keys.has(String(quote.parent || "")) || keys.has(String(quote.symbol || ""));
 }
 
-export function cardsFromMemberQuotes(userId, quotes = []) {
+function deskCard(deskIndices, card) {
+  return (deskIndices || []).find((row) => matchesCard({ symbol: row.symbol, parent: row.symbol }, card));
+}
+
+export function cardsFromMemberQuotes(userId, quotes = [], deskIndices = []) {
   const sparkMap = sparks.get(userId) || {};
   const prevMap = prevCloses.get(userId) || {};
   const rows = CARDS.map((card) => {
     const indexQuote = quotes.find((row) => row.kind !== "future" && matchesCard(row, card));
     const futureQuote = quotes.find((row) => row.kind === "future" && matchesCard(row, card));
+    const desk = deskCard(deskIndices, card);
     const priceRaw = Number(indexQuote?.ltp || (MCX_SPOT_FROM_FUT.has(card.symbol) ? futureQuote?.ltp : 0));
     const futureRaw = Number(futureQuote?.ltp || 0);
     const price = priceRaw > 0 ? priceRaw : futureRaw;
-    const day = dayChangeFromQuote(price, indexQuote || futureQuote || {}, prevMap[card.symbol], {
-      maxPct: MCX_SPOT_FROM_FUT.has(card.symbol) ? 0.6 : 0.2,
-    });
+    const seed = indexQuote || futureQuote || {};
+    const day = dayChangeFromQuote(
+      price,
+      {
+        ...seed,
+        prevClose: Number(seed.prevClose) || Number(desk?.prevClose) || 0,
+        close: Number(seed.close) || Number(desk?.prevClose) || 0,
+        open: Number(seed.open) || Number(desk?.open) || 0,
+        netChange: seed.netChange != null ? seed.netChange : desk?.change,
+      },
+      prevMap[card.symbol] || Number(desk?.prevClose) || 0,
+      {
+        maxPct: MCX_SPOT_FROM_FUT.has(card.symbol) ? 0.6 : 0.2,
+      },
+    );
     const vwapRaw = Number(futureQuote?.vwap || indexQuote?.vwap);
     if (day.prevClose > 0) prevMap[card.symbol] = day.prevClose;
     if (price > 0) sparkMap[card.symbol] = pushSpark(sparkMap[card.symbol], price);
@@ -178,7 +195,7 @@ async function kotakLiveBoard(user, secrets, { fetchQuotes, now }) {
       return kotakQuoteBoard(now, { reason: "Kotak Neo did not return index quotes yet." });
     }
     const payload = {
-      indices: cardsFromMemberQuotes(user.id, quotes),
+      indices: cardsFromMemberQuotes(user.id, quotes, memberQuotes().indices),
       source: "kotak",
       brokerId: "kotak",
       brokerName: brokerNameOf("kotak"),
@@ -232,7 +249,7 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now =
       quotes = [];
     }
     const payload = {
-      indices: cardsFromMemberQuotes(user.id, quotes),
+      indices: cardsFromMemberQuotes(user.id, quotes, memberQuotes().indices),
       source: "member",
       brokerId,
       brokerName: brokerNameOf(brokerId),

@@ -24,11 +24,19 @@ export function formatChange(value: number, digits = 2) {
 export function quoteDayChange(item: { price?: number; change?: number; changePct?: number; prevClose?: number }) {
   const price = Number(item?.price) || 0;
   const prev = Number(item?.prevClose) || 0;
-  if (price > 0 && prev > 0) {
+  const apiChange = Number(item?.change);
+  const apiPct = Number(item?.changePct);
+  if (price > 0 && prev > 0 && prev !== price) {
     const change = price - prev;
     return { change, changePct: (change / prev) * 100 };
   }
-  return { change: Number(item?.change) || 0, changePct: Number(item?.changePct) || 0 };
+  if (Number.isFinite(apiChange) && apiChange !== 0) {
+    return {
+      change: apiChange,
+      changePct: Number.isFinite(apiPct) && apiPct !== 0 ? apiPct : prev > 0 ? (apiChange / prev) * 100 : 0,
+    };
+  }
+  return { change: Number.isFinite(apiChange) ? apiChange : 0, changePct: Number.isFinite(apiPct) ? apiPct : 0 };
 }
 
 export function formatMobile(value?: string) {
