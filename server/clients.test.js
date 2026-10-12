@@ -919,7 +919,7 @@ test("deleteClient removes a member and refuses the desk admin", () => {
   assert.throws(() => deleteClient("admin", { actorId: "u-arpit" }), /admin/);
   savePaymentSettings({ mobile: "9876543210", amount: 499, payeeName: "Desk" });
   const user = listPublicUsers().find((row) => row.id === "u-arpit");
-  enrollStrategy({ user, algo: { id: "a4", name: "NIFTY VWAP ATM" }, channel: "gpay" });
+  enrollStrategy({ user, algo: { id: "a4", name: "NIFTY VWAP ATM", mappedClientIds: [user.id], mappingScope: "both" }, channel: "gpay" });
   recordMemberCopyFill({
     userId: "u-arpit",
     payload: { symbol: "NIFTY 24600 CE", side: "BUY", qty: 65, price: 12, strategy: "NIFTY VWAP ATM" },

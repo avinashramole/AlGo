@@ -367,7 +367,7 @@ export function MemberPlans() {
               </article>
             );
           })}
-          {!strategies.length ? <p className="text-xs text-slate-400">No strategies published yet.</p> : null}
+          {!strategies.length ? <p className="text-xs text-slate-400">No strategies assigned to this account yet.</p> : null}
         </div>
       </section>
 

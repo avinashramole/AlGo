@@ -42,7 +42,7 @@ const crude = createAlgo({
 function payMember(user, strategy) {
   const enrolled = enrollStrategy({
     user,
-    algo: strategy,
+    algo: { ...strategy, mappingScope: strategy.mappingScope || "both", mappedClientIds: [user.id, ...(strategy.mappedClientIds || [])] },
     channel: "gpay",
     admins: [{ role: "admin", mobile: "9876543210", name: "Avinash" }],
   });

@@ -48,7 +48,7 @@ savePaymentSettings({
 });
 
 const user = { id: "u-member", name: "Desk Member", email: "member.desk@gmail.com", role: "user" };
-const algo = { id: "a4", name: "NIFTY VWAP ATM" };
+const algo = { id: "a4", name: "NIFTY VWAP ATM", mappedClientIds: ["u-member"], mappingScope: "both" };
 
 test("a member can save a static IP on their own desk", () => {
   const saved = saveMemberStaticIp({ user, staticIp: "203.0.113.44" });

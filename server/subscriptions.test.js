@@ -21,6 +21,7 @@ const {
   listCatalog,
   listEnrollments,
   markEnrollmentPaid,
+  strategyVisibleToMember,
   planWindow,
   publicPayments,
   savePaymentSettings,
@@ -80,8 +81,8 @@ test("catalogStrategy only exposes titles and fee, not live trading fields", () 
 });
 
 test("enrollStrategy asks for GPay/PhonePe and records a pending member", () => {
-  const algo = { id: "a4", name: "NIFTY VWAP ATM" };
   const user = { id: "u1", name: "Desk Member", email: "member.desk@gmail.com", role: "user" };
+  const algo = { id: "a4", name: "NIFTY VWAP ATM", mappedClientIds: [user.id], mappingScope: "both" };
   const result = enrollStrategy({ user, algo, channel: "gpay" });
   assert.equal(result.enrollment.status, "pending");
   assert.equal(result.enrollment.amount, 499);
@@ -109,9 +110,30 @@ test("listCatalog returns every admin strategy title", () => {
   );
 });
 
+test("member catalog shows only strategies admin mapped to that user", () => {
+  const user = { id: "u-map", role: "user" };
+  const algos = [
+    { id: "a4", name: "NIFTY VWAP ATM", mappingScope: "both", mappedClientIds: [user.id] },
+    { id: "a5", name: "NIFTY 15m VWAP reversal", mappingScope: "both", mappedClientIds: ["other"] },
+    { id: "a6", name: "TEST1", mappingScope: "master", mappedClientIds: [user.id] },
+    { id: "a12", name: "CRUDE OIL", mappingScope: "clients", mappedClientIds: [] },
+  ];
+  const catalog = listCatalog(algos, [], { userId: user.id, role: "user" });
+  assert.deepEqual(catalog.strategies.map((row) => row.name), ["NIFTY VWAP ATM"]);
+  const byDesk = listCatalog(algos, [], { userId: user.id, role: "user", mappedStrategy: "CRUDE OIL" });
+  assert.deepEqual(byDesk.strategies.map((row) => row.name).sort(), ["CRUDE OIL", "NIFTY VWAP ATM"]);
+  const enrolled = listCatalog(algos, [], { userId: user.id, role: "user", enrolledStrategyIds: ["a5"] });
+  assert.ok(enrolled.strategies.some((row) => row.id === "a5"));
+  assert.equal(strategyVisibleToMember(algos[2], { userId: user.id, role: "user" }), false);
+  assert.throws(
+    () => enrollStrategy({ user, algo: algos[1], channel: "gpay" }),
+    /not assigned/,
+  );
+});
+
 test("unpaid enroll reverts to a fresh Enroll instead of staying Pay now", () => {
-  const algo = { id: "a6", name: "NIFTY 15m VWAP hedge" };
   const user = { id: "u-abandon", name: "Desk Member", email: "member.abandon@gmail.com", role: "user" };
+  const algo = { id: "a6", name: "NIFTY 15m VWAP hedge", mappedClientIds: [user.id], mappingScope: "both" };
   const pending = enrollStrategy({ user, algo, channel: "gpay", term: "quarterly" });
   assert.equal(pending.enrollment.status, "pending");
   assert.equal(pending.enrollment.term, "quarterly");
@@ -127,8 +149,8 @@ test("unpaid enroll reverts to a fresh Enroll instead of staying Pay now", () =>
 });
 
 test("paid monthly quarterly and yearly enrollments expose start and end dates", () => {
-  const algo = { id: "a7", name: "NIFTY VWAP ATM" };
   const user = { id: "u-terms", name: "Desk Member", email: "member.terms@gmail.com", role: "user" };
+  const algo = { id: "a7", name: "NIFTY VWAP ATM", mappedClientIds: [user.id], mappingScope: "both" };
   const monthly = enrollStrategy({ user, algo, channel: "gpay", term: "monthly" });
   const paidMonthly = markEnrollmentPaid({ user, enrollmentId: monthly.enrollment.id });
   assert.equal(paidMonthly.status, "paid");
@@ -139,7 +161,7 @@ test("paid monthly quarterly and yearly enrollments expose start and end dates",
   const monthWindow = planWindow({ startedAt: paidMonthly.startedAt, term: "monthly" });
   assert.equal(paidMonthly.endsAt, monthWindow.endsAt);
 
-  const other = { id: "a8", name: "NIFTY 15m VWAP reversal" };
+  const other = { id: "a8", name: "NIFTY 15m VWAP reversal", mappedClientIds: [user.id], mappingScope: "both" };
   const yearly = enrollStrategy({ user, algo: other, channel: "phonepe", term: "yearly" });
   assert.equal(yearly.enrollment.amount, feeForTerm(499, "yearly"));
   const paidYearly = markEnrollmentPaid({ user, enrollmentId: yearly.enrollment.id });
@@ -149,8 +171,8 @@ test("paid monthly quarterly and yearly enrollments expose start and end dates",
 });
 
 test("member claim waits for admin verify before the plan is active", () => {
-  const algo = { id: "a-claim", name: "NIFTY VWAP ATM" };
   const member = { id: "u-claim", name: "Desk Member", email: "member.claim@gmail.com", role: "user" };
+  const algo = { id: "a-claim", name: "NIFTY VWAP ATM", mappedClientIds: [member.id], mappingScope: "both" };
   const admin = { id: "admin", name: "Avinash", role: "admin" };
   const pending = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
   const claimed = claimEnrollmentPaid({ user: member, enrollmentId: pending.enrollment.id, utr: "123456789012" });
@@ -170,9 +192,9 @@ test("member claim waits for admin verify before the plan is active", () => {
 });
 
 test("enrollment history for a deleted strategy is removed and a live strategy stays", () => {
-  const gone = { id: "gone-ema", name: "ema" };
-  const live = { id: "a8", name: "NIFTY 15m VWAP reversal" };
   const member = { id: "u-shantai", name: "Shantai Infotech", email: "shantai@t2s.app", role: "user" };
+  const gone = { id: "gone-ema", name: "ema", mappedClientIds: [member.id], mappingScope: "both" };
+  const live = { id: "a8", name: "NIFTY 15m VWAP reversal", mappedClientIds: [member.id], mappingScope: "both" };
   savePaymentSettings({ mobile: "9876543210", amount: 999, payeeName: "Trade2Smart", upiId: "9876543210@ybl" });
   const oldPlan = enrollStrategy({ user: member, algo: gone, channel: "gpay", term: "monthly" });
   markEnrollmentPaid({ user: { id: "admin", role: "admin" }, enrollmentId: oldPlan.enrollment.id });
@@ -188,8 +210,8 @@ test("enrollment history for a deleted strategy is removed and a live strategy s
 });
 
 test("admin can delete a member subscription and a member cannot", () => {
-  const algo = { id: "a9", name: "NIFTY VWAP ATM" };
   const member = { id: "u-del", name: "Desk Member", email: "member.del@gmail.com", role: "user" };
+  const algo = { id: "a9", name: "NIFTY VWAP ATM", mappedClientIds: [member.id], mappingScope: "both" };
   const admin = { id: "admin", name: "Avinash", role: "admin" };
   const pending = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
   const paid = markEnrollmentPaid({ user: member, enrollmentId: pending.enrollment.id });

@@ -53,7 +53,7 @@ savePaymentSettings({
 
 const member = { id: "u-view", name: "View Member", email: "view.member@gmail.com", role: "user" };
 const admin = { id: "admin", name: "Trade2Smart", role: "admin" };
-const algo = { id: "a4", name: "NIFTY VWAP ATM" };
+const algo = { id: "a4", name: "NIFTY VWAP ATM", mappedClientIds: ["u-view"], mappingScope: "both" };
 
 test("getClientDetail returns profile, subscription, transaction, and P&L", () => {
   saveClientSettings("u-view", { brokerId: "dhan", tradeMode: "real" });

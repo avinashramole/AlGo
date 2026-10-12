@@ -25,9 +25,19 @@ test("deleting a strategy removes its admin book, user book, and member plan", (
   const admin = { id: "admin", name: "Admin", email: "trades2smart@gmail.com", role: "admin" };
 
   savePaymentSettings({ mobile: "9876543210", amount: 999, payeeName: "Trade2Smart", upiId: "9876543210@ybl" });
-  const enrolled = enrollStrategy({ user: member, algo: gone, channel: "gpay", term: "monthly" });
+  const enrolled = enrollStrategy({
+    user: member,
+    algo: { ...gone, mappedClientIds: [member.id], mappingScope: "both" },
+    channel: "gpay",
+    term: "monthly",
+  });
   markEnrollmentPaid({ user: admin, enrollmentId: enrolled.enrollment.id });
-  const other = enrollStrategy({ user: member, algo: keep, channel: "gpay", term: "monthly" });
+  const other = enrollStrategy({
+    user: member,
+    algo: { ...keep, mappedClientIds: [member.id], mappingScope: "both" },
+    channel: "gpay",
+    term: "monthly",
+  });
   markEnrollmentPaid({ user: admin, enrollmentId: other.enrollment.id });
 
   installMemberBroker({

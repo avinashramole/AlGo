@@ -193,11 +193,51 @@ export function catalogStrategy(algo, settings = payments) {
   };
 }
 
-export function listCatalog(algos = [], admins = []) {
+function sameStrategyName(left, right) {
+  return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
+}
+
+function enrolledStrategySet(value) {
+  if (value instanceof Set) return value;
+  return new Set((Array.isArray(value) ? value : []).map((id) => String(id || "").trim()).filter(Boolean));
+}
+
+/** Admin mapping (Map clients / Mapped strategy) is the only way a member sees a strategy. */
+export function strategyVisibleToMember(algo, viewer) {
+  if (!algo) return false;
+  if (!viewer || viewer.role === "admin" || !viewer.userId) return true;
+  const userId = String(viewer.userId);
+  const scope = ["master", "clients", "both"].includes(String(algo.mappingScope || ""))
+    ? String(algo.mappingScope)
+    : "both";
+  if (scope !== "master") {
+    const mappedIds = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [];
+    if (mappedIds.some((id) => String(id) === userId)) return true;
+    const mapped = String(viewer.mappedStrategy || "").trim();
+    if (mapped && (sameStrategyName(mapped, algo.name) || mapped === String(algo.id || ""))) return true;
+  }
+  return enrolledStrategySet(viewer.enrolledStrategyIds).has(String(algo.id || ""));
+}
+
+export function catalogViewerForUser(user, { mappedStrategy, enrollments } = {}) {
+  if (!user?.id) return null;
+  const enrolledStrategyIds = (Array.isArray(enrollments) ? enrollments : [])
+    .filter((row) => row && (row.status === "paid" || row.status === "claimed" || row.active))
+    .map((row) => row.strategyId);
+  return {
+    userId: user.id,
+    role: user.role,
+    mappedStrategy: String(mappedStrategy || "").trim(),
+    enrolledStrategyIds,
+  };
+}
+
+export function listCatalog(algos = [], admins = [], viewer) {
   const pub = publicPayments(admins);
+  const rows = (Array.isArray(algos) ? algos : []).filter((row) => strategyVisibleToMember(row, viewer));
   return {
     payments: pub,
-    strategies: (Array.isArray(algos) ? algos : []).map((row) => catalogStrategy(row, payments)).filter(Boolean),
+    strategies: rows.map((row) => catalogStrategy(row, payments)).filter(Boolean),
   };
 }
 
@@ -234,9 +274,15 @@ export function listEnrollments({ userId, admin } = {}) {
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 }
 
-export function enrollStrategy({ user, algo, channel, term, admins } = {}) {
+export function enrollStrategy({ user, algo, channel, term, admins, mappedStrategy } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   if (!algo?.id) throw fail("Strategy not found.", 404);
+  if (user.role !== "admin") {
+    const mine = enrollments.filter((row) => row.userId === user.id);
+    if (!strategyVisibleToMember(algo, catalogViewerForUser(user, { mappedStrategy, enrollments: mine }))) {
+      throw fail("This strategy is not assigned to your account.", 403);
+    }
+  }
   const pub = publicPayments(admins);
   if (!pub.ready) throw fail("Admin has not set a GPay / PhonePe mobile yet. Ask the desk to add it in Settings.");
   const wanted = channel === "phonepe" ? "phonepe" : "gpay";

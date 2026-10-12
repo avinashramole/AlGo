@@ -15,7 +15,7 @@ import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBu
 import { brandedReportFile, deskToProposalReport, loadBacktestReport } from "./backtestReport.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
-import { abandonEnrollment, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
+import { abandonEnrollment, catalogViewerForUser, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
 import { awaitMemberCopySends } from "./liveCopy.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { sendMemberCopyOrder } from "./liveCopySend.js";
@@ -253,7 +253,9 @@ app.get("/api/strategies/catalog", (req, res) => {
     res.status(401).json({ error: "Sign in first." });
     return;
   }
-  res.json(listCatalog(listAlgos(), listPublicUsers()));
+  const mappedStrategy = user.role === "admin" ? "" : peekClientSecrets(user.id).mappedStrategy;
+  const enrollments = user.role === "admin" ? [] : listEnrollments({ userId: user.id });
+  res.json(listCatalog(listAlgos(), listPublicUsers(), catalogViewerForUser(user, { mappedStrategy, enrollments })));
 });
 
 app.get("/api/subscriptions", (req, res) => {
@@ -271,7 +273,15 @@ app.post("/api/subscriptions/enroll", (req, res) => {
     const user = sessionUser(readToken(req));
     if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
     const algo = getAlgo(req.body?.strategyId);
-    res.status(201).json(enrollStrategy({ user, algo, channel: req.body?.channel, term: req.body?.term, admins: listPublicUsers() }));
+    const mappedStrategy = user.role === "admin" ? "" : peekClientSecrets(user.id).mappedStrategy;
+    res.status(201).json(enrollStrategy({
+      user,
+      algo,
+      channel: req.body?.channel,
+      term: req.body?.term,
+      admins: listPublicUsers(),
+      mappedStrategy,
+    }));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not enroll" });
   }
