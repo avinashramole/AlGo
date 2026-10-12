@@ -1,6 +1,7 @@
-import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteDayChange, quoteTone, vwapTone } from "../../lib/format";
+import { cn, formatQuote, indexTapeLabel, quoteDayChange, quoteTone, vwapTone } from "../../lib/format";
 import { chainIdFromIndex, OPTION_UNDERLYINGS } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
+import { TapeTodayChange } from "./TapeTodayChange";
 
 function cardVwap(item: { future?: number; price: number; vwap?: number; futureVwap?: number }) {
   const vwap = Number(item.futureVwap || item.vwap);
@@ -91,11 +92,7 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
                 <div className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</div>
               </div>
               <div className={cn("px mt-1 text-lg font-extrabold leading-none", tone)}>{formatQuote(item.price)}</div>
-              <div className={cn("mt-1 text-[11px] font-semibold", tone || "text-slate-400")}>
-                <span className={tone || "text-slate-400"}>
-                  {formatChange(day.change)} ({formatPct(day.changePct)})
-                </span>
-              </div>
+              <TapeTodayChange change={day.change} changePct={day.changePct} />
               {showDeriv ? (
                 <div className="mt-2 grid grid-cols-3 gap-1 text-[10px]">
                   <div>

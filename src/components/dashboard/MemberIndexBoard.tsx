@@ -1,7 +1,8 @@
-import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteDayChange, quoteTone } from "../../lib/format";
+import { cn, formatQuote, indexTapeLabel, quoteDayChange, quoteTone } from "../../lib/format";
 import { MEMBER_TAPE_UNDERLYINGS } from "../../lib/markets";
 import type { MemberIndexQuote } from "../../api/client";
 import { DeskTape, TapeCell } from "./DeskTape";
+import { TapeTodayChange } from "./TapeTodayChange";
 
 const REQUIRED = [
   ...MEMBER_TAPE_UNDERLYINGS.map((row) => ({
@@ -55,12 +56,12 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
             title={`${item.name || item.symbol}${item.lot ? ` · ${item.lot}` : ""}`}
             value={formatQuote(item.price)}
             detail={
-              <span className="flex items-center justify-between gap-3">
-                <span className={tone || "text-slate-400"}>
-                  {formatChange(day.change)} ({formatPct(day.changePct)})
-                </span>
-                <span className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</span>
-              </span>
+              <div>
+                <div className="flex justify-end">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400">{tapeLabel}</span>
+                </div>
+                <TapeTodayChange change={day.change} changePct={day.changePct} />
+              </div>
             }
             tone={tone}
           >

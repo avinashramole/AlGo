@@ -375,7 +375,7 @@ main > .desk-page {
 }
 
 .tape-cell {
-  min-width: 9.5rem;
+  min-width: 10.5rem;
   padding: 0.65rem 0.9rem;
   border-right: 1px solid var(--border);
 }

@@ -18,6 +18,7 @@ export function dayChangeFromQuote(price, quote = {}, storedPrev = 0, options = 
   const p = Number(price) || 0;
   const explicitPrev = Number(quote.prevClose || 0);
   const close = Number(quote.close || 0);
+  const open = Number(quote.open || 0);
   const net = quote.netChange != null && quote.netChange !== "" ? Number(quote.netChange) : null;
   const maxPct = Number(options.maxPct) > 0 ? Number(options.maxPct) : 0.2;
   const ok = (value) => looksLikePrevClose(p, value, { maxPct });
@@ -27,6 +28,7 @@ export function dayChangeFromQuote(price, quote = {}, storedPrev = 0, options = 
   else if (ok(storedPrev)) prev = Number(storedPrev);
   else if (ok(close)) prev = close;
   else if (Number(storedPrev) > 0 && storedPrev !== p) prev = Number(storedPrev);
+  else if (ok(open)) prev = open;
   if (!(p > 0) || !(prev > 0)) return { change: 0, changePct: 0, prevClose: prev || Number(storedPrev) || 0 };
   const change = round2(p - prev);
   return { change, changePct: round2((change / prev) * 100), prevClose: round2(prev) };

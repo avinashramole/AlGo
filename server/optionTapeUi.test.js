@@ -15,6 +15,13 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.match(tape, /\$\{row\.label\} · \$\{row\.lot\}/);
   assert.match(tape, /OPTION_UNDERLYINGS\.map/);
   assert.match(tape, />Lot</);
+  assert.match(tape, /TapeTodayChange/);
+  const memberTape = fs.readFileSync(path.join(root, "src/components/dashboard/MemberIndexBoard.tsx"), "utf8");
+  const today = fs.readFileSync(path.join(root, "src/components/dashboard/TapeTodayChange.tsx"), "utf8");
+  assert.match(memberTape, /TapeTodayChange/);
+  assert.match(today, /data-today-change="true"/);
+  assert.match(today, />Today</);
+  assert.match(today, /quoteTone/);
   assert.match(markets, /\{ id: "NIFTY", label: "NIFTY", lot: 65 \}/);
   assert.match(markets, /\{ id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 \}/);
   assert.match(markets, /\{ id: "FINNIFTY", label: "FINNIFTY", lot: 60 \}/);

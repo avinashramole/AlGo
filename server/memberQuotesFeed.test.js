@@ -175,6 +175,11 @@ test("day change is live LTP versus yesterday close, not zero when close is miss
   assert.deepEqual(dayChangeFromQuote(23326.8, { netChange: -84.2 }), { change: -84.2, changePct: -0.36, prevClose: 23411 });
   assert.deepEqual(dayChangeFromQuote(23326.8, {}, 23210.4), { change: 116.4, changePct: 0.5, prevClose: 23210.4 });
   assert.deepEqual(dayChangeFromQuote(23326.8, { close: 23326.8 }), { change: 0, changePct: 0, prevClose: 0 });
+  assert.deepEqual(dayChangeFromQuote(3033.3, { open: 2990 }, 0, { maxPct: 0.6 }), {
+    change: 43.3,
+    changePct: 1.45,
+    prevClose: 2990,
+  });
   assert.deepEqual(dayChangeFromQuote(23329, { close: 23328.9 }, 23414.3), { change: -85.3, changePct: -0.36, prevClose: 23414.3 });
 });
 
