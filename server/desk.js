@@ -283,8 +283,30 @@ export function closedTradesToday(rows = [], now = new Date()) {
   return (rows || []).filter((row) => row && istDayKey(row.closedAt) === today);
 }
 
-function isSimClosed(row) {
-  return Boolean(row?.sim) && !row?.paper && String(row?.brokerId || "").toLowerCase() !== "paper" && row?.live !== true;
+export function isSimClosed(row) {
+  if (!row || row.paper || String(row.brokerId || "").toLowerCase() === "paper") return false;
+  if (row.live === true) return false;
+  if (row.sim) return true;
+  const id = String(row.id || "");
+  if (/^t[1-5]$/.test(id) || /^o[1-9]$|^o10$/.test(id)) return true;
+  const key = istDayKey(row.closedAt);
+  return /^2026-08-1[2-8]$/.test(key);
+}
+
+export function buildDailyPnl(closed = [], now = new Date()) {
+  const todayKey = istDayKey(now.toISOString());
+  const dailyMap = {};
+  for (const key of lastTradingDayKeys(now, 5)) {
+    dailyMap[key] = { date: key, pnl: 0, trades: 0 };
+  }
+  for (const row of closed || []) {
+    if (isSimClosed(row)) continue;
+    const key = istDayKey(row.closedAt);
+    if (!dailyMap[key] || key > todayKey) continue;
+    dailyMap[key].pnl = round2(dailyMap[key].pnl + Number(row.pnl || 0));
+    dailyMap[key].trades += 1;
+  }
+  return Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function lastTradingDayKeys(now = new Date(), count = 5) {
@@ -340,18 +362,9 @@ export function buildReport(state, now = new Date()) {
     byBroker[key].unrealized = round2((byBroker[key].unrealized || 0) + Number(row.pnl || 0));
   }
   const todayKey = istDayKey(now.toISOString());
-  const dailyMap = {};
-  for (const key of lastTradingDayKeys(now, 5)) {
-    dailyMap[key] = { date: key, pnl: 0, trades: 0 };
-  }
-  for (const row of closed) {
-    if (isSimClosed(row)) continue;
-    const key = istDayKey(row.closedAt);
-    if (!dailyMap[key] || key > todayKey) continue;
-    dailyMap[key].pnl = round2(dailyMap[key].pnl + Number(row.pnl || 0));
-    dailyMap[key].trades += 1;
-  }
-  if (dailyMap[todayKey]) dailyMap[todayKey].unrealized = unrealized;
+  const daily = buildDailyPnl(closed, now);
+  const todayRow = daily.find((row) => row.date === todayKey);
+  if (todayRow) todayRow.unrealized = unrealized;
 
   return {
     date: todayKey,
@@ -380,7 +393,7 @@ export function buildReport(state, now = new Date()) {
     bySymbol: Object.values(bySymbol)
       .map((row) => ({ ...row, winRate: row.trades ? Math.round((row.wins / row.trades) * 100) : 0 }))
       .sort((a, b) => b.pnl - a.pnl),
-    daily: Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date)),
+    daily,
     tradeBook: closed
       .slice()
       .sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt)))

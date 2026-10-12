@@ -1,3 +1,4 @@
+import { buildDailyPnl } from "./desk.js";
 import { optionContractKey, overlayMemberCopyMeta } from "./memberDesk.js";
 import { isOptionContract, isSaneOptionLtp } from "./positionMark.js";
 
@@ -420,6 +421,7 @@ export function applyBrokerBookToReport(report, book) {
       status: "CLOSED",
     };
   });
+  const tradeBook = brokerBook.length ? [...paperBook, ...brokerBook] : report.tradeBook;
   return {
     ...report,
     realizedPnl: realized,
@@ -430,7 +432,8 @@ export function applyBrokerBookToReport(report, book) {
     brokerPnl: true,
     brokerPnlSource: book.source || "",
     trades: brokerBook.length ? brokerBook.length + paperBook.length : report.trades,
-    tradeBook: brokerBook.length ? [...paperBook, ...brokerBook] : report.tradeBook,
+    tradeBook,
+    daily: buildDailyPnl(tradeBook),
   };
 }
 

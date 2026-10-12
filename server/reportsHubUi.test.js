@@ -37,7 +37,14 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(reportsPage, />Position</);
   assert.match(reportsPage, /data-daily-pnl="true"/);
   assert.match(reportsPage, /Last 5 trading days/);
+  assert.match(reportsPage, /liveDailyPnl/);
   assert.match(book, /Last 5 trading days/);
+  assert.match(book, /liveDailyPnl/);
+  const dailyPnl = fs.readFileSync(path.join(root, "src/lib/dailyPnl.ts"), "utf8");
+  assert.match(dailyPnl, /lastTradingDayKeys/);
+  assert.match(dailyPnl, /2026-08-1\[2-8\]/);
+  assert.doesNotMatch(reportsPage, /\{ \(report\.daily \|\| \[\]\)\.map/);
+  assert.doesNotMatch(book, /\{ \(report\?\.daily \|\| \[\]\)\.map/);
   assert.match(ordersPage, /Reason: \{displayOrderReason/);
   assert.match(ordersPage, /book === "paper"/);
   assert.match(ordersPage, /isLiveBrokerTrade/);

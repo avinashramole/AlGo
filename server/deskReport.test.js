@@ -51,3 +51,21 @@ test("Daily P&L keeps a real 5-day week and drops simulated seed trades", () => 
   assert.equal(report.daily.some((row) => row.date.startsWith("2026-08")), false);
   assert.equal(report.daily.some((row) => row.date === "2026-10-20"), false);
 });
+
+test("Daily P&L drops untagged August 2026 seed rows", () => {
+  const now = new Date("2026-10-12T08:30:00.000Z");
+  const report = buildReport(
+    {
+      closedTrades: [
+        { id: "t1", symbol: "NIFTY 24450 CE", pnl: 1521, brokerId: "dhan", closedAt: "2026-08-18T04:35:00.000Z" },
+        { id: "ghost", symbol: "NIFTY 24500 CE", pnl: 80, brokerId: "dhan", closedAt: "2026-08-12T04:35:00.000Z" },
+      ],
+      positions: [],
+      orders: [],
+    },
+    now,
+  );
+  assert.equal(report.daily.length, 5);
+  assert.equal(report.daily.every((row) => row.pnl === 0 && row.trades === 0), true);
+  assert.equal(report.daily.some((row) => row.date.startsWith("2026-08")), false);
+});

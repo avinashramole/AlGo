@@ -8,6 +8,7 @@ import {
   type ClientRow,
 } from "../../api/client";
 import { SideBadge } from "../desk/Badges";
+import { liveDailyPnl } from "../../lib/dailyPnl";
 import { cn, formatInr, formatIst, formatIstDate, formatMobile, formatNumber, formatPlanTerm } from "../../lib/format";
 
 export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () => void }) {
@@ -61,7 +62,8 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
 
   const client = detail?.client || row;
   const report = detail?.report;
-  const maxDaily = Math.max(1, ...(report?.daily || []).map((item) => Math.abs(item.pnl)));
+  const daily = liveDailyPnl(report?.daily, report?.tradeBook);
+  const maxDaily = Math.max(1, ...daily.map((item) => Math.abs(item.pnl)));
 
   return (
     <div className="desk-overlay z-40">
@@ -203,7 +205,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
               <section>
                 <h3 className="mb-2 text-sm font-bold">Daily trades and P&L</h3>
                 <div className="space-y-2 rounded-xl border border-[var(--border)] p-3">
-                  {(report?.daily || []).map((item) => (
+                  {daily.map((item) => (
                     <div key={item.date}>
                       <div className="mb-1 flex justify-between text-xs">
                         <span className="font-semibold">

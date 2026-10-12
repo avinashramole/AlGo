@@ -5,6 +5,7 @@ import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from
 import { tabFromParams } from "../lib/bookTabs";
 import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber } from "../lib/format";
+import { liveDailyPnl } from "../lib/dailyPnl";
 import { hasPaperActivity, isLiveBrokerTrade, memberIsPaperTrade } from "../lib/paperBook";
 
 type View = "positions" | "orders" | "reports" | "paper";
@@ -110,8 +111,9 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
   const closed = (desk?.report?.tradeBook || []).filter(keep);
   const orders = allOrders.filter(keep);
   const report = desk?.report;
+  const daily = liveDailyPnl(report?.daily, closed);
   const openPnl = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
-  const yesterday = (report?.daily || []).slice(-2, -1)[0]?.pnl || 0;
+  const yesterday = daily.slice(-2, -1)[0]?.pnl || 0;
 
   if (view === "positions") {
     return (
@@ -292,22 +294,18 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
           <div className="mt-1 text-lg font-bold">{report?.winRate || 0}%</div>
         </div>
       </div>
-      {(report?.daily || []).length ? (
-        <section className="card p-4">
-          <div className="mb-1 text-sm font-bold">Daily P&L</div>
-          <div className="mb-2 text-xs text-slate-400">Last 5 trading days</div>
-          <div className="space-y-2">
-            {(report?.daily || []).map((row) => (
-              <div key={row.date} className="flex justify-between text-sm">
-                <span className="font-semibold">{row.date}</span>
-                <Money value={row.pnl} />
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <EmptyState title="No daily P&L yet" text="Closed trades update this report." />
-      )}
+      <section className="card p-4">
+        <div className="mb-1 text-sm font-bold">Daily P&L</div>
+        <div className="mb-2 text-xs text-slate-400">Last 5 trading days</div>
+        <div className="space-y-2">
+          {daily.map((row) => (
+            <div key={row.date} className="flex justify-between text-sm">
+              <span className="font-semibold">{row.date}</span>
+              <Money value={row.pnl} />
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

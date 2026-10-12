@@ -197,6 +197,8 @@ test("admin report uses the broker MTM and realized P&L", () => {
   assert.equal(report.trades, 1);
   assert.equal(report.tradeBook[0].symbol, "NIFTY 23050 CE");
   assert.equal(report.tradeBook[0].pnl, -237.25);
+  assert.equal(report.daily.length, 5);
+  assert.equal(report.daily.some((row) => String(row.date).startsWith("2026-08")), false);
 });
 
 test("live quote MTM replaces stale broker unrealized and keeps realized", () => {

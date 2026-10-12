@@ -6,12 +6,14 @@ import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { catchDeskError } from "../lib/liveSite";
 import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
+import { liveDailyPnl } from "../lib/dailyPnl";
 import { isLiveBrokerTrade } from "../lib/paperBook";
 
 export function Reports({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const { data } = useMarket();
   const report = data.report;
+  const daily = liveDailyPnl(report?.daily, report?.tradeBook);
   const [ledgers, setLedgers] = useState<PositionLedger[]>([]);
 
   useEffect(() => {
@@ -117,7 +119,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
         <div className="mb-1 text-sm font-bold">Daily P&L</div>
         <div className="mb-2 text-xs text-slate-400">Last 5 trading days</div>
         <div className="space-y-2">
-          {(report.daily || []).map((row) => (
+          {daily.map((row) => (
             <div key={row.date} className="flex justify-between text-sm">
               <span className="font-semibold">
                 {row.date}
