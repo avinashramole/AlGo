@@ -20,9 +20,21 @@ export const INDEX_INSTRUMENTS = [
   { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index" },
 ];
 
-export const CRUDE_INSTRUMENT = { symbol: "CRUDEOIL", parent: "CRUDEOIL", kind: "future" };
+export const MCX_INSTRUMENTS = [
+  { symbol: "CRUDEOIL", parent: "CRUDEOIL", kind: "future" },
+  { symbol: "NATURALGAS", parent: "NATURALGAS", kind: "future" },
+  { symbol: "COPPER", parent: "COPPER", kind: "future" },
+];
 
-export const CARD_INSTRUMENTS = INDEX_INSTRUMENTS.concat(CRUDE_INSTRUMENT);
+export const CRUDE_INSTRUMENT = MCX_INSTRUMENTS[0];
+
+export const CARD_INSTRUMENTS = INDEX_INSTRUMENTS.concat(MCX_INSTRUMENTS);
+
+const MCX_MINI_MARK = {
+  CRUDEOIL: "CRUDEOILM",
+  NATURALGAS: "NATURALGASM",
+  COPPER: "COPPERM",
+};
 
 const UPSTOX_KEYS = {
   "NIFTY 50": "NSE_INDEX|Nifty 50",
@@ -62,8 +74,18 @@ export function frontMonthFutCode(root, ymd) {
   return `${root}${match[1].slice(-2)}${MONTHS[Number(match[2]) - 1]}FUT`;
 }
 
-export function crudeInstrumentKey(brokerId, ymd = upcomingExpiries("CRUDEOIL", 1)[0]) {
-  const code = frontMonthFutCode("CRUDEOIL", ymd);
+function mcxInstrumentOf(root) {
+  const id = String(root || "").toUpperCase();
+  return MCX_INSTRUMENTS.find((row) => row.symbol === id) || { symbol: id, parent: id, kind: "future" };
+}
+
+function isMcxMiniBlob(root, blob) {
+  const mini = MCX_MINI_MARK[String(root || "").toUpperCase()];
+  return mini ? String(blob || "").includes(mini) : false;
+}
+
+export function mcxInstrumentKey(root, brokerId, ymd = upcomingExpiries(root, 1)[0]) {
+  const code = frontMonthFutCode(root, ymd);
   if (!code) return "";
   const id = String(brokerId || "").toLowerCase();
   if (id === "upstox") return `MCX_FO|${code}`;
@@ -71,20 +93,33 @@ export function crudeInstrumentKey(brokerId, ymd = upcomingExpiries("CRUDEOIL", 
   return "";
 }
 
-export function crudeInstrumentKeys(brokerId, dates = upcomingExpiries("CRUDEOIL", 3)) {
-  return [...new Set((dates || []).map((ymd) => crudeInstrumentKey(brokerId, ymd)).filter(Boolean))];
+export function crudeInstrumentKey(brokerId, ymd = upcomingExpiries("CRUDEOIL", 1)[0]) {
+  return mcxInstrumentKey("CRUDEOIL", brokerId, ymd);
 }
 
-export function pickCrudeSearchHit(rows = []) {
+export function mcxInstrumentKeys(root, brokerId, dates = upcomingExpiries(root, 3)) {
+  return [...new Set((dates || []).map((ymd) => mcxInstrumentKey(root, brokerId, ymd)).filter(Boolean))];
+}
+
+export function crudeInstrumentKeys(brokerId, dates = upcomingExpiries("CRUDEOIL", 3)) {
+  return mcxInstrumentKeys("CRUDEOIL", brokerId, dates);
+}
+
+export function pickMcxSearchHit(root, rows = []) {
+  const want = String(root || "").toUpperCase();
   const list = Array.isArray(rows) ? rows : [];
   const hits = list.filter((row) => {
     const blob = `${row.trading_symbol || ""} ${row.tradingsymbol || ""} ${row.name || ""} ${row.underlying_symbol || ""} ${row.instrument_type || ""} ${row.instrument_key || ""}`.toUpperCase();
-    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
+    if (!blob.includes(want) || isMcxMiniBlob(want, blob)) return false;
     const type = String(row.instrument_type || row.instrumentType || "").toUpperCase();
     return type === "FUT" || /\bFUT\b/.test(blob);
   });
   hits.sort((a, b) => String(a.expiry || a.expiry_date || "").localeCompare(String(b.expiry || b.expiry_date || "")));
   return String(hits[0]?.instrument_key || hits[0]?.instrumentKey || "").trim();
+}
+
+export function pickCrudeSearchHit(rows = []) {
+  return pickMcxSearchHit("CRUDEOIL", rows);
 }
 
 export function rowsFromUpstoxInstrumentText(text) {
@@ -101,23 +136,29 @@ export function rowsFromUpstoxInstrumentText(text) {
   return [];
 }
 
-export function crudeQuoteFromPayload(payload) {
+export function mcxQuoteFromPayload(root, payload) {
+  const instrument = mcxInstrumentOf(root);
+  const want = instrument.symbol;
   const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
   if (!data || typeof data !== "object") return null;
   const entries = Array.isArray(data) ? data.map((row, index) => [String(index), row]) : Object.entries(data);
   for (const [key, row] of entries) {
     if (!row || typeof row !== "object") continue;
     const blob = `${key} ${row.instrument_token || ""} ${row.instrument_key || ""} ${row.trading_symbol || ""} ${row.n || ""}`.toUpperCase();
-    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) continue;
+    if (!blob.includes(want) || isMcxMiniBlob(want, blob)) continue;
     const inner = row.v && typeof row.v === "object" ? row.v : row;
     const last = pickNumber(inner.last_price, inner.lastPrice, inner.ltp, inner.lp, inner.last_traded_price);
-    const next = quoteRow(CRUDE_INSTRUMENT, last, pickPrevClose(inner, last), pickSignedNumber(inner.net_change, inner.netChange));
+    const next = quoteRow(instrument, last, pickPrevClose(inner, last), pickSignedNumber(inner.net_change, inner.netChange));
     if (next) {
       next.expiry = String(inner.expiry || row.expiry || "").slice(0, 10);
       return next;
     }
   }
   return null;
+}
+
+export function crudeQuoteFromPayload(payload) {
+  return mcxQuoteFromPayload("CRUDEOIL", payload);
 }
 
 const KOTAK_QUOTE_BASES = [
@@ -191,24 +232,32 @@ export function kotakNeoFutCode(root, ymd) {
   return `${root}${match[3]}${MONTHS[Number(match[2]) - 1]}${match[1].slice(-2)}FUT`;
 }
 
-export function kotakCrudeSymbols(dates = upcomingExpiries("CRUDEOIL", 2)) {
+export function kotakMcxSymbols(root, dates = upcomingExpiries(root, 2)) {
   const neo = [];
   const kite = [];
+  const name = String(root || "").toUpperCase();
   for (const ymd of dates || []) {
-    const neoCode = kotakNeoFutCode("CRUDEOIL", ymd);
-    const kiteCode = frontMonthFutCode("CRUDEOIL", ymd);
+    const neoCode = kotakNeoFutCode(name, ymd);
+    const kiteCode = frontMonthFutCode(name, ymd);
     if (neoCode) neo.push(neoCode);
     if (kiteCode) kite.push(kiteCode);
   }
-  return [...new Set([...neo, ...kite, "CRUDEOIL"])];
+  return [...new Set([...neo, ...kite, name])];
+}
+
+export function kotakCrudeSymbols(dates = upcomingExpiries("CRUDEOIL", 2)) {
+  return kotakMcxSymbols("CRUDEOIL", dates);
 }
 
 function kotakRowBlob(row = {}) {
   return `${row.trading_symbol || ""} ${row.tradingsymbol || ""} ${row.display_symbol || ""} ${row.exchange_token || ""} ${row.pTrdSymbol || ""} ${row.instrument_token || ""} ${row.ts || ""} ${row.n || ""} ${row.symbol || ""} ${row._key || ""}`.toUpperCase();
 }
 
-function expiryFromKotakCrudeBlob(blob = "") {
-  const neo = String(blob || "").toUpperCase().match(/CRUDEOIL(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})FUT/);
+function expiryFromKotakMcxBlob(root, blob = "") {
+  const want = String(root || "").toUpperCase();
+  const neo = String(blob || "")
+    .toUpperCase()
+    .match(new RegExp(`${want}(\\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\\d{2})FUT`));
   if (neo) {
     const month = MONTHS.indexOf(neo[2]) + 1;
     if (month < 1) return "";
@@ -217,31 +266,42 @@ function expiryFromKotakCrudeBlob(blob = "") {
   return "";
 }
 
+function expiryFromKotakCrudeBlob(blob = "") {
+  return expiryFromKotakMcxBlob("CRUDEOIL", blob);
+}
+
 function kotakCrudeLtp(row = {}) {
   return pickNumber(row.ltp, row.last_traded_price, row.last_price, row.lastPrice, row.lp);
 }
 
-function kotakCrudeQuoteRow(row) {
+function kotakMcxQuoteRow(instrument, row) {
   if (!row) return null;
+  const spec = typeof instrument === "string" ? mcxInstrumentOf(instrument) : instrument;
   const last = kotakCrudeLtp(row);
   const close = pickNumber(row.ohlc?.close, row.close, row.c, row.prev_close, row.prevClose);
-  const next = quoteRow(CRUDE_INSTRUMENT, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
+  const next = quoteRow(spec, last, close, pickSignedNumber(row.change, row.per_change, row.chg, row.net_change));
   if (next) {
-    next.expiry = String(row.expiry || row.exp || expiryFromKotakCrudeBlob(kotakRowBlob(row))).slice(0, 10);
+    next.expiry = String(row.expiry || row.exp || expiryFromKotakMcxBlob(spec.symbol, kotakRowBlob(row))).slice(0, 10);
   }
   return next;
 }
 
-export function quoteFromKotakCrude(payload, requested = "") {
+function kotakCrudeQuoteRow(row) {
+  return kotakMcxQuoteRow(CRUDE_INSTRUMENT, row);
+}
+
+export function quoteFromKotakMcx(instrument, payload, requested = "") {
+  const spec = typeof instrument === "string" ? mcxInstrumentOf(instrument) : instrument;
+  const wantRoot = spec.symbol;
   const rows = flattenKotakQuoteRows(payload);
   const hits = rows.filter((item) => {
     const blob = kotakRowBlob(item);
-    if (!blob.includes("CRUDEOIL") || blob.includes("CRUDEOILM")) return false;
+    if (!blob.includes(wantRoot) || isMcxMiniBlob(wantRoot, blob)) return false;
     const kind = `${item?.instrument_type || ""} ${item?.exchange_token || ""} ${blob}`.toUpperCase();
     if (/\b(CE|PE)\b/.test(kind) && !/FUT/.test(kind)) return false;
     return true;
   });
-  const named = kotakCrudeQuoteRow(hits[0]);
+  const named = kotakMcxQuoteRow(spec, hits[0]);
   if (named) return named;
   const want = String(requested || "").toUpperCase();
   if (!want) return null;
@@ -249,7 +309,11 @@ export function quoteFromKotakCrude(payload, requested = "") {
     const blob = kotakRowBlob(item);
     return blob.includes(want) || (rows.length === 1 && kotakCrudeLtp(item) > 0);
   });
-  return kotakCrudeQuoteRow(tokenHit);
+  return kotakMcxQuoteRow(spec, tokenHit);
+}
+
+export function quoteFromKotakCrude(payload, requested = "") {
+  return quoteFromKotakMcx(CRUDE_INSTRUMENT, payload, requested);
 }
 
 async function kotakCrudeLookupCodes(fetchImpl) {
@@ -409,13 +473,17 @@ async function fetchUpstoxQuotes({ accessToken, fetchImpl }) {
     const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(keys)}`, { headers });
     quotes = quotesFromUpstoxPayload(payload);
   }
-  return quotes.concat(await fetchUpstoxCrude({ accessToken, fetchImpl }));
+  return quotes.concat(await fetchUpstoxMcxAll({ accessToken, fetchImpl }));
 }
 
-const UPSTOX_CRUDE_SEARCH = [
-  "https://api.upstox.com/v2/instruments/search?query=CRUDEOIL&exchanges=MCX&segments=FUT&instrument_types=FUT&expiry=current_month",
-  "https://api.upstox.com/v2/search/instruments?query=CRUDEOIL%20FUT&exchanges=MCX&segments=FUT",
-];
+function upstoxMcxSearchUrls(root) {
+  const q = encodeURIComponent(root);
+  const qFut = encodeURIComponent(`${root} FUT`);
+  return [
+    `https://api.upstox.com/v2/instruments/search?query=${q}&exchanges=MCX&segments=FUT&instrument_types=FUT&expiry=current_month`,
+    `https://api.upstox.com/v2/search/instruments?query=${qFut}&exchanges=MCX&segments=FUT`,
+  ];
+}
 
 const UPSTOX_MCX_INSTRUMENTS = [
   "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json",
@@ -467,32 +535,32 @@ async function fetchUpstoxInstrumentRows(fetchImpl) {
   return [];
 }
 
-async function fetchUpstoxCrude({ accessToken, fetchImpl }) {
+async function fetchUpstoxMcx({ accessToken, fetchImpl, root }) {
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
   const keys = [];
-  for (const url of UPSTOX_CRUDE_SEARCH) {
+  for (const url of upstoxMcxSearchUrls(root)) {
     try {
       const found = await readJson(fetchImpl, url, { headers });
-      const key = pickCrudeSearchHit(found?.data || found);
+      const key = pickMcxSearchHit(root, found?.data || found);
       if (key) keys.push(key);
     } catch {
       /* try the public MCX instrument list, then constructed keys */
     }
   }
   try {
-    const key = pickCrudeSearchHit(await fetchUpstoxInstrumentRows(fetchImpl));
+    const key = pickMcxSearchHit(root, await fetchUpstoxInstrumentRows(fetchImpl));
     if (key) keys.push(key);
   } catch {
     /* constructed tradingsymbol keys are last */
   }
-  keys.push(...crudeInstrumentKeys("upstox"));
+  keys.push(...mcxInstrumentKeys(root, "upstox"));
   const seen = new Set();
   for (const key of keys) {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     try {
       const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(key)}`, { headers });
-      const quote = crudeQuoteFromPayload(payload) || quotesFromKeyedPayload(payload?.data || payload, { CRUDEOIL: key })[0];
+      const quote = mcxQuoteFromPayload(root, payload) || quotesFromKeyedPayload(payload?.data || payload, { [root]: key })[0];
       if (quote) return [quote];
     } catch {
       /* next key */
@@ -501,22 +569,33 @@ async function fetchUpstoxCrude({ accessToken, fetchImpl }) {
   return [];
 }
 
+async function fetchUpstoxMcxAll({ accessToken, fetchImpl }) {
+  const batches = await Promise.all(
+    MCX_INSTRUMENTS.map((row) => fetchUpstoxMcx({ accessToken, fetchImpl, root: row.symbol })),
+  );
+  return batches.flat();
+}
+
 async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
   const query = INDEX_INSTRUMENTS.map((row) => `i=${encodeURIComponent(ZERODHA_KEYS[row.symbol])}`).join("&");
   const payload = await readJson(fetchImpl, `https://api.kite.trade/quote?${query}`, {
     headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` },
   });
   const quotes = quotesFromZerodhaPayload(payload);
-  const crudeKey = crudeInstrumentKey("zerodha");
-  if (!crudeKey) return quotes;
-  try {
-    const extra = await readJson(fetchImpl, `https://api.kite.trade/quote?i=${encodeURIComponent(crudeKey)}`, {
-      headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` },
-    });
-    return quotes.concat(quotesFromKeyedPayload(extra?.data || extra, { CRUDEOIL: crudeKey }));
-  } catch {
-    return quotes;
+  const extras = [];
+  for (const instrument of MCX_INSTRUMENTS) {
+    const key = mcxInstrumentKey(instrument.symbol, "zerodha");
+    if (!key) continue;
+    try {
+      const extra = await readJson(fetchImpl, `https://api.kite.trade/quote?i=${encodeURIComponent(key)}`, {
+        headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` },
+      });
+      extras.push(...quotesFromKeyedPayload(extra?.data || extra, { [instrument.symbol]: key }));
+    } catch {
+      /* next MCX future */
+    }
   }
+  return quotes.concat(extras);
 }
 
 async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
@@ -525,25 +604,29 @@ async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
     headers: { Authorization: `${apiKey}:${accessToken}` },
   });
   const quotes = quotesFromFyersPayload(payload);
-  const crudeKey = crudeInstrumentKey("fyers");
-  if (!crudeKey) return quotes;
-  try {
-    const extra = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(crudeKey)}`, {
-      headers: { Authorization: `${apiKey}:${accessToken}` },
-    });
-    const keyed = {};
-    for (const row of extra?.d || []) {
-      if (row?.n) keyed[row.n] = row;
+  const extras = [];
+  for (const instrument of MCX_INSTRUMENTS) {
+    const key = mcxInstrumentKey(instrument.symbol, "fyers");
+    if (!key) continue;
+    try {
+      const extra = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(key)}`, {
+        headers: { Authorization: `${apiKey}:${accessToken}` },
+      });
+      const keyed = {};
+      for (const row of extra?.d || []) {
+        if (row?.n) keyed[row.n] = row;
+      }
+      extras.push(
+        ...quotesFromKeyedPayload(keyed, { [instrument.symbol]: key }, {
+          ltp: (row) => pickNumber(row.lp, row.last_price, row.ltp),
+          close: (row) => pickPrevClose(row.v && typeof row.v === "object" ? { ...row, ...row.v } : row, pickNumber(row.lp, row.last_price, row.ltp)),
+        }),
+      );
+    } catch {
+      /* next MCX future */
     }
-    return quotes.concat(
-      quotesFromKeyedPayload(keyed, { CRUDEOIL: crudeKey }, {
-        ltp: (row) => pickNumber(row.lp, row.last_price, row.ltp),
-        close: (row) => pickPrevClose(row.v && typeof row.v === "object" ? { ...row, ...row.v } : row, pickNumber(row.lp, row.last_price, row.ltp)),
-      }),
-    );
-  } catch {
-    return quotes;
   }
+  return quotes.concat(extras);
 }
 
 async function fetchKotakNeo(fetchImpl, token, neo) {
@@ -572,15 +655,20 @@ async function fetchKotakQuotes({ accessToken, apiKey, fetchImpl }) {
   } catch {
     quotes = [];
   }
-  const codes = [...new Set([...(await kotakCrudeLookupCodes(fetchImpl)), ...kotakCrudeSymbols()])];
-  for (const code of codes) {
-    try {
-      const crude = quoteFromKotakCrude(await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`), code);
-      if (!crude) continue;
-      quotes = quotes.filter((row) => row.symbol !== "CRUDEOIL").concat(crude);
-      break;
-    } catch {
-      /* the next crude contract; index quotes stay */
+  for (const instrument of MCX_INSTRUMENTS) {
+    const codes =
+      instrument.symbol === "CRUDEOIL"
+        ? [...new Set([...(await kotakCrudeLookupCodes(fetchImpl)), ...kotakMcxSymbols(instrument.symbol)])]
+        : kotakMcxSymbols(instrument.symbol);
+    for (const code of codes) {
+      try {
+        const extra = quoteFromKotakMcx(instrument, await fetchKotakNeo(fetchImpl, token, `mcx_fo|${code}`), code);
+        if (!extra) continue;
+        quotes = quotes.filter((row) => row.symbol !== instrument.symbol).concat(extra);
+        break;
+      } catch {
+        /* the next MCX contract; index quotes stay */
+      }
     }
   }
   return quotes;

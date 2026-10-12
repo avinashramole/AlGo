@@ -1,10 +1,10 @@
 import { cn, formatChange, formatPct, formatQuote, indexTapeLabel, quoteTone } from "../../lib/format";
-import { OPTION_UNDERLYINGS } from "../../lib/markets";
+import { MEMBER_TAPE_UNDERLYINGS } from "../../lib/markets";
 import type { MemberIndexQuote } from "../../api/client";
 import { DeskTape, TapeCell } from "./DeskTape";
 
 const REQUIRED = [
-  ...OPTION_UNDERLYINGS.map((row) => ({
+  ...MEMBER_TAPE_UNDERLYINGS.map((row) => ({
     symbol: row.id === "NIFTY" ? "NIFTY 50" : row.id,
     name: row.label,
     lot: row.lot,

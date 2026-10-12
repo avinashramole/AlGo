@@ -91,6 +91,20 @@ test("member cards include Crude Oil and India VIX when the selected broker retu
   assert.equal(rows.find((row) => row.symbol === "INDIA VIX").price, 12.75);
 });
 
+test("member cards use Natural Gas and Copper futures as live rates and drop MIDCPNIFTY", () => {
+  const rows = cardsFromMemberQuotes("u-ng-copper", [
+    { symbol: "NATURALGAS FUT", parent: "NATURALGAS", kind: "future", ltp: 312.4, close: 308.1 },
+    { symbol: "COPPER FUT", parent: "COPPER", kind: "future", ltp: 918.6, close: 911.2 },
+    { symbol: "MIDCPNIFTY", parent: "MIDCPNIFTY", kind: "index", ltp: 13459.45, close: 13400 },
+  ]);
+  assert.equal(rows.find((row) => row.symbol === "NATURALGAS").price, 312.4);
+  assert.equal(rows.find((row) => row.symbol === "NATURALGAS").future, 312.4);
+  assert.equal(rows.find((row) => row.symbol === "NATURALGAS").lot, 1250);
+  assert.equal(rows.find((row) => row.symbol === "COPPER").price, 918.6);
+  assert.equal(rows.find((row) => row.symbol === "COPPER").lot, 2500);
+  assert.equal(rows.some((row) => String(row.symbol).includes("MIDCP")), false);
+});
+
 test("member board always keeps a Crude Oil card even when LTP is missing", () => {
   const rows = cardsFromMemberQuotes("u-crude-empty", [
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100, close: 25000 },

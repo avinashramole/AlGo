@@ -43,6 +43,18 @@ test("Market info widgets render DeskTape cells", () => {
   }
 });
 
+test("user market tape drops MIDCPNIFTY and keeps Natural Gas and Copper", () => {
+  const board = fs.readFileSync(path.join(root, "src/components/dashboard/MemberIndexBoard.tsx"), "utf8");
+  const markets = fs.readFileSync(path.join(root, "src/lib/markets.ts"), "utf8");
+  const feed = fs.readFileSync(path.join(root, "server/memberQuotesFeed.js"), "utf8");
+  assert.match(markets, /MEMBER_TAPE_UNDERLYINGS = OPTION_UNDERLYINGS.filter\(\(row\) => row.id !== "MIDCPNIFTY"\)/);
+  assert.match(board, /MEMBER_TAPE_UNDERLYINGS/);
+  assert.doesNotMatch(board, /OPTION_UNDERLYINGS/);
+  assert.match(feed, /symbol: "NATURALGAS"/);
+  assert.match(feed, /symbol: "COPPER"/);
+  assert.doesNotMatch(feed, /MIDCPNIFTY/);
+});
+
 test("Home chart candles refresh every 15s, not every 2s", () => {
   const chart = fs.readFileSync(path.join(root, "src/components/dashboard/PriceChart.tsx"), "utf8");
   assert.match(chart, /setInterval\(\(\) => void load\(\), 15000\)/);

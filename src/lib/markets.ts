@@ -9,6 +9,8 @@ export const OPTION_UNDERLYINGS = [
   { id: "COPPER", label: "COPPER", lot: 2500 },
 ];
 
+export const MEMBER_TAPE_UNDERLYINGS = OPTION_UNDERLYINGS.filter((row) => row.id !== "MIDCPNIFTY");
+
 export function chainIdFromIndex(symbol: string) {
   const compact = String(symbol || "")
     .toUpperCase()

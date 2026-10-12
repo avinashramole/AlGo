@@ -12,12 +12,16 @@ const sparks = new Map();
 const prevCloses = new Map();
 const inflight = new Map();
 
+const MCX_SPOT_FROM_FUT = new Set(["CRUDEOIL", "NATURALGAS", "COPPER"]);
+
 const CARDS = [
   { symbol: "NIFTY 50", name: "NIFTY", keys: ["NIFTY 50", "NIFTY", "NIFTY FUT"], lot: 65 },
   { symbol: "BANKNIFTY", name: "BANKNIFTY", keys: ["BANKNIFTY", "BANK NIFTY", "BANKNIFTY FUT"], lot: 30 },
   { symbol: "FINNIFTY", name: "FINNIFTY", keys: ["FINNIFTY", "FINNIFTY FUT"], lot: 60 },
   { symbol: "SENSEX", name: "SENSEX", keys: ["SENSEX", "SENSEX FUT"], lot: 20 },
   { symbol: "CRUDEOIL", name: "CRUDE OIL", keys: ["CRUDEOIL", "CRUDE OIL", "CRUDEOIL FUT"], lot: 100 },
+  { symbol: "NATURALGAS", name: "NATURAL GAS", keys: ["NATURALGAS", "NATURAL GAS", "NATGAS", "NATURALGAS FUT"], lot: 1250 },
+  { symbol: "COPPER", name: "COPPER", keys: ["COPPER", "COPPER FUT"], lot: 2500 },
   { symbol: "INDIA VIX", name: "VIX", keys: ["INDIA VIX", "INDIAVIX", "VIX"], lot: 0 },
 ];
 
@@ -55,7 +59,7 @@ export function cardsFromMemberQuotes(userId, quotes = []) {
   const rows = CARDS.map((card) => {
     const indexQuote = quotes.find((row) => row.kind !== "future" && matchesCard(row, card));
     const futureQuote = quotes.find((row) => row.kind === "future" && matchesCard(row, card));
-    const priceRaw = Number(indexQuote?.ltp || (card.symbol === "CRUDEOIL" ? futureQuote?.ltp : 0));
+    const priceRaw = Number(indexQuote?.ltp || (MCX_SPOT_FROM_FUT.has(card.symbol) ? futureQuote?.ltp : 0));
     const futureRaw = Number(futureQuote?.ltp || 0);
     const price = priceRaw > 0 ? priceRaw : futureRaw;
     const day = dayChangeFromQuote(price, indexQuote || futureQuote || {}, prevMap[card.symbol]);

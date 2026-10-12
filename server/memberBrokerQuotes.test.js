@@ -8,10 +8,14 @@ import {
   kotakCrudeSymbols,
   kotakMcxMasterUrls,
   kotakNeoFutCode,
+  mcxInstrumentKey,
+  mcxQuoteFromPayload,
   pickCrudeSearchHit,
+  pickMcxSearchHit,
   parseKotakMcxCrudeMaster,
   pickKotakCrudeFutCodes,
   quoteFromKotakCrude,
+  quoteFromKotakMcx,
   resetKotakMcxMasterCache,
   quotesFromAngelPayload,
   quotesFromFyersPayload,
@@ -56,6 +60,13 @@ test("front-month Crude key is isolated from the index batch", () => {
   assert.equal(frontMonthFutCode("CRUDEOIL", "2026-10-16"), "CRUDEOIL26OCTFUT");
   assert.equal(crudeInstrumentKey("upstox", "2026-10-16"), "MCX_FO|CRUDEOIL26OCTFUT");
   assert.equal(crudeInstrumentKey("zerodha", "2026-10-16"), "MCX:CRUDEOIL26OCTFUT");
+});
+
+test("front-month Natural Gas and Copper keys follow the Crude MCX pattern", () => {
+  assert.equal(frontMonthFutCode("NATURALGAS", "2026-10-27"), "NATURALGAS26OCTFUT");
+  assert.equal(frontMonthFutCode("COPPER", "2026-10-30"), "COPPER26OCTFUT");
+  assert.equal(mcxInstrumentKey("NATURALGAS", "upstox", "2026-10-27"), "MCX_FO|NATURALGAS26OCTFUT");
+  assert.equal(mcxInstrumentKey("COPPER", "zerodha", "2026-10-30"), "MCX:COPPER26OCTFUT");
 });
 
 test("Kotak Neo Crude symbols include the MCX expiry-day code", () => {
@@ -152,6 +163,43 @@ test("Crude LTP can be read from a numeric Upstox instrument key", () => {
   });
   assert.equal(quote.symbol, "CRUDEOIL");
   assert.equal(quote.ltp, 6124.5);
+});
+
+test("Upstox Natural Gas and Copper futures are picked without mini contracts", () => {
+  const rows = [
+    { tradingsymbol: "NATURALGASM26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|mini-ng", expiry: "2026-10-27" },
+    { tradingsymbol: "NATURALGAS26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|570750", expiry: "2026-10-27" },
+    { tradingsymbol: "COPPERM26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|mini-cu", expiry: "2026-10-30" },
+    { tradingsymbol: "COPPER26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|574829", expiry: "2026-10-30" },
+  ];
+  assert.equal(pickMcxSearchHit("NATURALGAS", rows), "MCX_FO|570750");
+  assert.equal(pickMcxSearchHit("COPPER", rows), "MCX_FO|574829");
+  const gas = mcxQuoteFromPayload("NATURALGAS", {
+    data: { "MCX_FO:570750": { last_price: 312.4, instrument_token: "MCX_FO|NATURALGAS26OCTFUT", ohlc: { close: 308.1 } } },
+  });
+  const copper = mcxQuoteFromPayload("COPPER", {
+    data: { "MCX_FO:574829": { last_price: 918.6, instrument_token: "MCX_FO|COPPER26OCTFUT", ohlc: { close: 911.2 } } },
+  });
+  assert.equal(gas.symbol, "NATURALGAS");
+  assert.equal(gas.ltp, 312.4);
+  assert.equal(copper.symbol, "COPPER");
+  assert.equal(copper.ltp, 918.6);
+});
+
+test("Kotak Natural Gas quote reads the MCX future LTP", () => {
+  const quote = quoteFromKotakMcx("NATURALGAS", {
+    data: {
+      "mcx_fo|NATURALGAS27OCT26FUT": {
+        ts: "NATURALGAS27OCT26FUT",
+        lp: "312.40",
+        c: "308.10",
+      },
+    },
+  });
+  assert.equal(quote.symbol, "NATURALGAS");
+  assert.equal(quote.kind, "future");
+  assert.equal(quote.ltp, 312.4);
+  assert.equal(quote.close, 308.1);
 });
 
 test("Zerodha quote payload maps NSE/BSE index keys", () => {
@@ -387,6 +435,53 @@ test("fetchMemberBrokerQuotes calls Upstox with the member Bearer token", async 
   assert.equal(seen[0].auth, "Bearer upstox-member-token");
   assert.equal(quotes[0].ltp, 25111.25);
   assert.equal(String(JSON.stringify(quotes)).includes("upstox-member-token"), false);
+});
+
+test("fetchMemberBrokerQuotes resolves Natural Gas and Copper from the public MCX instrument file", async () => {
+  resetUpstoxInstrumentCache();
+  const quotes = await fetchMemberBrokerQuotes({
+    brokerId: "upstox",
+    accessToken: "upstox-member-token",
+    clientId: "UPX1",
+    fetchImpl: async (url) => {
+      if (String(url).includes("instruments/exchange/MCX.json")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              { tradingsymbol: "NATURALGAS26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|570750", expiry: "2026-10-27" },
+              { tradingsymbol: "COPPER26OCTFUT", instrument_type: "FUT", instrument_key: "MCX_FO|574829", expiry: "2026-10-30" },
+            ]),
+        };
+      }
+      if (String(url).includes("MCX_FO%7C570750") || String(url).includes("MCX_FO|570750")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: { "MCX_FO:570750": { last_price: 312.4, instrument_token: "MCX_FO|570750" } } }),
+        };
+      }
+      if (String(url).includes("MCX_FO%7C574829") || String(url).includes("MCX_FO|574829")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: { "MCX_FO:574829": { last_price: 918.6, instrument_token: "MCX_FO|574829" } } }),
+        };
+      }
+      if (String(url).includes("/instruments/search") || String(url).includes("/search/instruments")) {
+        return { ok: false, status: 404, text: async () => JSON.stringify({ message: "not found" }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { "NSE_INDEX:Nifty 50": { last_price: 25111 } } }),
+      };
+    },
+  });
+  assert.equal(quotes.find((row) => row.symbol === "NIFTY 50").ltp, 25111);
+  assert.equal(quotes.find((row) => row.symbol === "NATURALGAS").ltp, 312.4);
+  assert.equal(quotes.find((row) => row.symbol === "COPPER").ltp, 918.6);
 });
 
 test("fetchMemberBrokerQuotes resolves Crude from the public MCX instrument file", async () => {
