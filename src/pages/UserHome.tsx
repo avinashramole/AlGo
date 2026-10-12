@@ -58,11 +58,6 @@ export function UserHome() {
         <TapeCell title="P&L" value={formatInr(report?.realizedPnl || 0)} tone={(report?.realizedPnl || 0) >= 0 ? "text-up" : "text-down"} />
         <TapeCell title="Net P&L" value={formatInr(report?.netPnl || 0)} tone={(report?.netPnl || 0) >= 0 ? "text-up" : "text-down"} />
       </DeskTape>
-      {desk?.brokerId === "kotak" && !Number.isFinite(Number(desk.wallet.brokerBalance)) ? (
-        <p className="text-xs text-slate-500">
-          Balance, MTM, and P&L use this Kotak account after the trade login (mobile, MPIN, and TOTP) or the Neo sid and today's session token are saved on Profile.
-        </p>
-      ) : null}
     </div>
   );
 }

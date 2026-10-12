@@ -58,6 +58,9 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const hybridSrc = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
   assert.match(shell, /data-mobile-app="responsive"/);
   assert.match(css, /html\.t2s-hybrid aside\.desk-chrome/);
+  assert.match(css, /html\.t2s-hybrid \.tape-strip/);
+  assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /button:not\(\.tape-cell\)/);
   assert.match(css, /html\.t2s-hybrid \[data-user-home\] \[data-home-shortcuts\]/);
   const userHome = fs.readFileSync(path.join(root, "src/pages/UserHome.tsx"), "utf8");
   assert.match(userHome, /showShortcuts=\{!isNativeHybrid\(\)\}/);
