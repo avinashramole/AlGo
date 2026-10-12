@@ -43,8 +43,8 @@ export function Dashboard() {
         available={available}
         pnl={pnl}
         algosTo="/algo"
-        ordersTo="/orders"
-        positionsTo="/positions"
+        ordersTo="/reports?tab=orders"
+        positionsTo="/reports?tab=positions"
         reportsTo="/reports"
         strategies={strategies}
       />

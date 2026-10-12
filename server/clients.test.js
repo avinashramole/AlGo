@@ -576,6 +576,40 @@ test("master account MTM uses the broker loss when the local book is empty", () 
   assert.equal(desk.master.positions[0].closed, true);
 });
 
+test("master desk shows the live Dhan open position when MTM is moving", () => {
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [],
+    [],
+    {
+      realizedPnl: 0,
+      unrealizedPnl: 845,
+      mtm: 845,
+      closed: [],
+      open: [
+        {
+          id: "dhan-pos-22500pe-MIS",
+          symbol: "NIFTY 22500 PE",
+          side: "BUY",
+          type: "BUY",
+          qty: 65,
+          avg: 111.45,
+          ltp: 156,
+          pnl: 2895.75,
+          product: "MIS",
+          brokerId: "dhan",
+          strategy: "NIFTY",
+        },
+      ],
+    },
+  );
+  assert.equal(desk.master.open, 1);
+  assert.equal(desk.master.positions[0].symbol, "NIFTY 22500 PE");
+  assert.equal(desk.master.positions[0].closed, false);
+  assert.equal(desk.master.positions[0].strategy, "NIFTY");
+  assert.equal(desk.master.brokerMtm, 845);
+});
+
 test("client MTM uses each user's broker book instead of the local copy loss", () => {
   const desk = applyBrokerBooksToDesk(
     {

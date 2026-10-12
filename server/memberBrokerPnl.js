@@ -293,6 +293,21 @@ export function applyBrokerBookToReport(report, book) {
   const realized = round2(book.realizedPnl);
   const unrealized = round2(book.unrealizedPnl);
   const net = round2(realized + unrealized);
+  const closed = Array.isArray(book.closed) ? book.closed : [];
+  const paperBook = (Array.isArray(report.tradeBook) ? report.tradeBook : []).filter((row) => row?.paper || row?.brokerId === "paper");
+  const brokerBook = closed.map((row) => ({
+    id: String(row.id || ""),
+    symbol: String(row.symbol || ""),
+    side: String(row.side || row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+    qty: Number(row.qty) || 0,
+    entry: Number(row.entry || row.avg || 0),
+    exit: Number(row.exit || row.ltp || 0),
+    pnl: Number(row.realized != null ? row.realized : row.pnl || 0),
+    strategy: String(row.strategy || ""),
+    brokerId: String(row.brokerId || "dhan"),
+    closedAt: row.closedAt || row.updatedAt || new Date().toISOString(),
+    status: "CLOSED",
+  }));
   return {
     ...report,
     realizedPnl: realized,
@@ -302,6 +317,8 @@ export function applyBrokerBookToReport(report, book) {
     netPnl: net,
     brokerPnl: true,
     brokerPnlSource: book.source || "",
+    trades: brokerBook.length ? brokerBook.length + paperBook.length : report.trades,
+    tradeBook: brokerBook.length ? [...paperBook, ...brokerBook] : report.tradeBook,
   };
 }
 

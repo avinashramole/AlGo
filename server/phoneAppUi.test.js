@@ -17,12 +17,14 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(home, /Hello,/);
   assert.match(home, /Active Strategies/);
   assert.match(nav, /label: "Algos"/);
-  assert.match(nav, /label: "Orders"/);
-  assert.match(nav, /label: "Reports"/);
+  assert.match(nav, /label: "Position and Orders"/);
   assert.match(nav, /label: "Profile"/);
+  assert.doesNotMatch(nav, /to: "\/orders"/);
   assert.match(login, /t2s-auth-tabs/);
   assert.match(login, /Login with Google/);
   assert.match(book, /data-member-book="orders"/);
-  assert.match(app, /MemberOrders/);
-  assert.match(app, /RoleOrders/);
+  assert.match(book, /Position and Orders/);
+  assert.match(app, /MemberReports/);
+  assert.match(app, /RoleReports/);
+  assert.match(app, /Navigate to="\/reports\?tab=orders"/);
 });

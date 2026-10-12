@@ -9,8 +9,7 @@ export function isAdminUser(user?: Pick<AuthUser, "role"> | null) {
 export const adminNav = [
   { to: "/", label: "Home" },
   { to: "/algo", label: "Algos" },
-  { to: "/orders", label: "Orders" },
-  { to: "/reports", label: "Reports" },
+  { to: "/reports", label: "Position and Orders" },
   { to: "/options", label: "Option Chain" },
   { to: "/brokers", label: "Brokers" },
   { to: "/analytics", label: "Analytics" },
@@ -23,9 +22,7 @@ export const adminNav = [
 export const userNav = [
   { to: "/", label: "Home" },
   { to: "/plans", label: "Algos" },
-  { to: "/orders", label: "Orders" },
-  { to: "/positions", label: "Live Positions" },
-  { to: "/reports", label: "Reports" },
+  { to: "/reports", label: "Position and Orders" },
   { to: "/notifications", label: "Alerts" },
   { to: "/profile", label: "Profile" },
 ] as const;
@@ -39,9 +36,9 @@ const extraTitles = [
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algos" },
-  { to: "/orders", label: "Orders" },
-  { to: "/positions", label: "Live Positions" },
-  { to: "/portfolio", label: "Reports" },
+  { to: "/orders", label: "Position and Orders" },
+  { to: "/positions", label: "Position and Orders" },
+  { to: "/portfolio", label: "Position and Orders" },
   { to: "/settings/ips", label: "User & IP Manager" },
 ] as const;
 
@@ -67,5 +64,6 @@ export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, p
   const clean = normalizePath(path);
   if (isAdminUser(user)) return true;
   if (clean === "/subscriptions" || clean.startsWith("/subscriptions/")) return true;
+  if (clean === "/orders" || clean === "/positions" || clean === "/portfolio") return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
 }

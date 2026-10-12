@@ -2383,7 +2383,10 @@ function liveDesk() {
   const algos = state.algos || [];
   const { ids, names } = strategySets(algos);
   const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });
-  const onDesk = (row) => !rowIsMissingStrategy(row, ids, names);
+  const onDesk = (row) => {
+    if ((row?.live || row?.brokerId === "dhan") && !row?.copyUserId && !isPaperRow(row)) return true;
+    return !rowIsMissingStrategy(row, ids, names);
+  };
   const orders = (state.orders || []).filter(keep).map(withActualName).filter(onDesk);
   const positions = (state.positions || []).filter(keep).map(withActualName).filter(onDesk);
   const closedTrades = (state.closedTrades || []).filter(keep).map(withActualName).filter(onDesk);

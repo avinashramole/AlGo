@@ -6,12 +6,19 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("Reports hub opens Position first, then Orders, then Reports", () => {
+test("Reports hub is Position and Orders with Position, Orders, then Reports tabs", () => {
   const hub = fs.readFileSync(path.join(root, "src/pages/ReportsHub.tsx"), "utf8");
+  const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
+  const side = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
+  assert.match(hub, /Position and Orders/);
   assert.match(hub, /data-reports-tabs="position-order-reports"/);
   assert.match(hub, /if \(value === "orders"\) return "orders";/);
   assert.match(hub, /if \(value === "reports"\) return "reports";/);
   assert.match(hub, /return "positions";/);
+  assert.match(app, /Navigate to="\/reports\?tab=orders"/);
+  assert.match(app, /Navigate to="\/reports\?tab=positions"/);
+  assert.match(side, /label: "Position and Orders"/);
+  assert.doesNotMatch(side, /to: "\/orders"/);
   const tabs = hub.split("desk-tabs")[1] || "";
   const position = tabs.indexOf("Position");
   const orders = tabs.indexOf("Orders");

@@ -387,6 +387,22 @@ function isPaperLedgerRow(row) {
   return Boolean(row?.paper || row?.brokerId === "paper");
 }
 
+function ledgerKey(row = {}) {
+  const id = String(row.id || "").trim();
+  if (id) return `id:${id}`;
+  return `${String(row.symbol || "").toUpperCase()}|${String(row.product || "MIS").toUpperCase()}|${row.closed ? "closed" : "open"}`;
+}
+
+function withLocalStrategy(row = {}, locals = []) {
+  if (String(row.strategy || "").trim()) return row;
+  const symbol = String(row.symbol || "").toUpperCase();
+  const hit = (locals || []).find((item) => {
+    if (item?.securityId && row.securityId && String(item.securityId) === String(row.securityId)) return true;
+    return symbol && String(item?.symbol || "").toUpperCase() === symbol && String(item?.strategy || "").trim();
+  });
+  return hit?.strategy ? { ...row, strategy: hit.strategy } : row;
+}
+
 function asBrokerClosedLeg(row = {}) {
   const realized = round2(row.realized);
   const leg = asClosedLedgerPosition({ ...row, pnl: Number.isFinite(Number(row.realized)) ? row.realized : row.pnl });
@@ -477,12 +493,22 @@ export function listPositionDesk(users = [], masterPositions = [], masterClosed 
   const localClosed = useBroker ? (masterClosed || []).filter(isPaperLedgerRow) : masterClosed;
   const masterBook = ledgerBook(masterPositions, localClosed);
   if (useBroker) {
-    const brokerClosed = (brokerBook.closed || []).map(asBrokerClosedLeg);
+    const locals = [...(masterPositions || []), ...(masterClosed || [])];
+    const brokerOpen = (brokerBook.open || []).map((row) => asBrokerOpenLeg(withLocalStrategy(row, locals)));
+    const brokerClosed = (brokerBook.closed || []).map((row) => asBrokerClosedLeg(withLocalStrategy(row, locals)));
     const paperMtm = ledgerBook(
       (masterPositions || []).filter(isPaperLedgerRow),
       (masterClosed || []).filter(isPaperLedgerRow),
     ).mtm;
-    masterBook.positions = [...masterBook.positions, ...brokerClosed];
+    const seen = new Set(masterBook.positions.map((row) => ledgerKey(row)));
+    const extraOpen = brokerOpen.filter((row) => {
+      const key = ledgerKey(row);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    masterBook.positions = [...masterBook.positions, ...extraOpen, ...brokerClosed];
+    masterBook.open = masterBook.positions.filter((row) => !row.closed).length;
     masterBook.mtm = round2(paperMtm + Number(brokerBook.mtm));
     masterBook.realized = round2(brokerBook.realizedPnl);
     masterBook.unrealized = round2(Number(brokerBook.unrealizedPnl || 0) + paperMtm);

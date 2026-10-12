@@ -203,7 +203,9 @@ export function PositionsDesk({ embedded = false }: { embedded?: boolean }) {
     }
     const closedMaster = [...closedById.values()];
     const deskOpen = (desk.master.positions || []).filter((row) => !isClosedLedger(row));
-    const openMaster = liveMaster.length ? liveMaster : deskOpen;
+    const liveIds = new Set(liveMaster.map((row) => String(row.id || "")));
+    const extraDesk = deskOpen.filter((row) => !liveIds.has(String(row.id || "")));
+    const openMaster = liveMaster.length ? [...liveMaster, ...extraDesk] : deskOpen;
     const masterPositions = [...openMaster, ...closedMaster];
     const localMtm = masterPositions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);
     const localRealized = closedMaster.reduce((sum, row) => sum + Number(row.realized || row.mtm || 0), 0);

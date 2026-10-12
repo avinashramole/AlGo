@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Cpu, FileText, Home, Layers, User } from "lucide-react";
+import { Cpu, FileText, Home, User } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { isNativeHybrid } from "../../lib/hybrid";
@@ -10,8 +10,7 @@ const tabs: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean
   { to: "/", label: "Home", icon: Home },
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
-  { to: "/orders", label: "Orders", icon: Layers },
-  { to: "/reports", label: "Reports", icon: FileText },
+  { to: "/reports", label: "Position and Orders", icon: FileText },
   { to: "/profile", label: "Profile", icon: User },
 ];
 
@@ -27,7 +26,7 @@ export function MobileNav() {
         isNativeHybrid() ? "" : "md:hidden",
       )}
     >
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-4">
         {visible.map((item) => (
           <NavLink
             key={item.to}

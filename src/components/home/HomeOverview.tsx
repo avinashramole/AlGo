@@ -79,7 +79,7 @@ export function HomeOverview({
         <QuickLink to={algosTo} label="Algos" icon={Cpu} />
         <QuickLink to={ordersTo} label="Orders" icon={Layers} />
         <QuickLink to={positionsTo} label="Positions" icon={Wallet} />
-        <QuickLink to={reportsTo} label="Reports" icon={FileText} />
+        <QuickLink to={reportsTo} label="Position and Orders" icon={FileText} />
       </div>
 
       <SectionHead title="Active Strategies" action="View all" to={algosTo} />

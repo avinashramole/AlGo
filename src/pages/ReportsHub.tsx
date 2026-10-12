@@ -4,9 +4,9 @@ import { Orders } from "./Orders";
 import { PositionsDesk } from "./PositionsDesk";
 import { Reports } from "./Reports";
 
-type ReportsTab = "positions" | "orders" | "reports";
+export type BookTab = "positions" | "orders" | "reports";
 
-function tabFromParams(value: string | null): ReportsTab {
+export function tabFromParams(value: string | null): BookTab {
   if (value === "orders") return "orders";
   if (value === "reports") return "reports";
   return "positions";
@@ -19,7 +19,7 @@ export function ReportsHub() {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-bold">Reports</h1>
+        <h1 className="text-lg font-bold">Position and Orders</h1>
         <div className="desk-tabs" data-reports-tabs="position-order-reports">
           <button
             type="button"

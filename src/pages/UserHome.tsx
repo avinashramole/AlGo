@@ -58,8 +58,8 @@ export function UserHome() {
         available={available}
         pnl={pnl}
         algosTo="/plans"
-        ordersTo="/orders"
-        positionsTo="/positions"
+        ordersTo="/reports?tab=orders"
+        positionsTo="/reports?tab=positions"
         reportsTo="/reports"
         strategies={strategies}
       />

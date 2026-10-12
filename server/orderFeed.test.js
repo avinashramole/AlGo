@@ -187,3 +187,26 @@ test("a resent SELL keeps the strategy of the BUY on that contract", () => {
   ]);
   assert.equal(snapshot().orders.find((row) => row.id === "sell-22400-again")?.strategy, "NIFTY 5m first candle");
 });
+
+test("a live Nifty fill stays on the order book even without a matching strategy name", () => {
+  const stamp = new Date().toISOString();
+  replaceDhanOrders([
+    {
+      id: "nifty-live-fill",
+      symbol: "NIFTY 22500 PE",
+      side: "BUY",
+      qty: 65,
+      price: 111.45,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      strategy: "NIFTY mystery",
+      createdAt: stamp,
+    },
+  ]);
+  const row = snapshot().orders.find((item) => item.id === "nifty-live-fill");
+  assert.equal(row?.status, "FILLED");
+  assert.equal(row?.symbol, "NIFTY 22500 PE");
+  assert.equal(row?.qty, 65);
+});

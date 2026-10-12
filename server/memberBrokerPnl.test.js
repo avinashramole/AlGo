@@ -114,12 +114,32 @@ test("admin day P&L comes from Dhan trades when positions are flat", () => {
 test("admin report uses the broker MTM and realized P&L", () => {
   const report = applyBrokerBookToReport(
     { realizedPnl: -2492.75, unrealizedPnl: 0, grossPnl: -2492.75, charges: 40, netPnl: -2532.75 },
-    { realizedPnl: -237.25, unrealizedPnl: 12.5, mtm: -224.75, source: "dhan" },
+    {
+      realizedPnl: -237.25,
+      unrealizedPnl: 12.5,
+      mtm: -224.75,
+      source: "dhan",
+      closed: [
+        {
+          id: "dhan-closed-11",
+          symbol: "NIFTY 23050 CE",
+          side: "BUY",
+          qty: 65,
+          entry: 140.3,
+          exit: 136.65,
+          realized: -237.25,
+          brokerId: "dhan",
+        },
+      ],
+    },
   );
   assert.equal(report.realizedPnl, -237.25);
   assert.equal(report.unrealizedPnl, 12.5);
   assert.equal(report.netPnl, -224.75);
   assert.equal(report.charges, 0);
+  assert.equal(report.trades, 1);
+  assert.equal(report.tradeBook[0].symbol, "NIFTY 23050 CE");
+  assert.equal(report.tradeBook[0].pnl, -237.25);
 });
 
 test("live quote MTM replaces stale broker unrealized and keeps realized", () => {

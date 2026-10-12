@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
+import { tabFromParams } from "./ReportsHub";
 import { cn, formatInr, formatIst, formatNumber, formatRupee } from "../lib/format";
 
 type View = "positions" | "orders" | "reports";
@@ -16,7 +18,39 @@ export function MemberPositions() {
 }
 
 export function MemberReports() {
-  return <MemberBook view="reports" />;
+  const [params, setParams] = useSearchParams();
+  const tab = tabFromParams(params.get("tab"));
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-bold">Position and Orders</h1>
+        <div className="desk-tabs" data-reports-tabs="position-order-reports">
+          <button
+            type="button"
+            onClick={() => setParams({ tab: "positions" }, { replace: true })}
+            className={cn(tab === "positions" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+          >
+            Position
+          </button>
+          <button
+            type="button"
+            onClick={() => setParams({ tab: "orders" }, { replace: true })}
+            className={cn(tab === "orders" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+          >
+            Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => setParams({ tab: "reports" }, { replace: true })}
+            className={cn(tab === "reports" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+          >
+            Reports
+          </button>
+        </div>
+      </div>
+      <MemberBook view={tab} />
+    </div>
+  );
 }
 
 function MemberBook({ view }: { view: View }) {
