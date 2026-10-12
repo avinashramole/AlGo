@@ -37,6 +37,9 @@ test("savePaymentSettings requires a GPay/PhonePe mobile", () => {
   });
   assert.equal(row.mobile, "9876543210");
   assert.equal(row.amount, 499);
+  assert.equal(row.terms.monthly, 499);
+  assert.equal(row.terms.quarterly, feeForTerm(499, "quarterly"));
+  assert.equal(row.terms.yearly, feeForTerm(499, "yearly"));
 });
 
 test("buildUpiLinks create GPay and PhonePe intents to the admin VPA", () => {
@@ -71,7 +74,9 @@ test("catalogStrategy only exposes titles and fee, not live trading fields", () 
   );
   assert.equal(row.name, "NIFTY VWAP ATM");
   assert.equal(row.enrollFee, 799);
-  assert.deepEqual(row.terms, { monthly: 799, quarterly: 2397, yearly: 9588 });
+  assert.deepEqual(row.terms, { monthly: 799, quarterly: feeForTerm(799, "quarterly"), yearly: feeForTerm(799, "yearly") });
+  assert.equal(row.terms.quarterly < 799 * 3, true);
+  assert.equal(row.terms.yearly < 799 * 12, true);
   assert.deepEqual(Object.keys(row).sort(), ["enrollFee", "id", "name", "terms"]);
   assert.equal(row.enabled, undefined);
   assert.equal(row.brokerId, undefined);
@@ -219,4 +224,22 @@ test("admin can delete a member subscription and a member cannot", () => {
   const removed = deleteEnrollment({ user: admin, enrollmentId: paid.id });
   assert.equal(removed.id, paid.id);
   assert.equal(listEnrollments({ userId: member.id }).some((row) => row.id === paid.id), false);
+});
+
+test("admin can set discounted monthly quarterly and yearly plan prices", () => {
+  const row = savePaymentSettings({
+    mobile: "9876543210",
+    monthly: 2999,
+    quarterly: 6999,
+    yearly: 11999,
+    payeeName: "Avinash",
+    upiId: "9876543210@ybl",
+  });
+  assert.deepEqual(row.terms, { monthly: 2999, quarterly: 6999, yearly: 11999 });
+  const catalog = catalogStrategy({ id: "a-price", name: "NIFTY VWAP ATM" }, row);
+  assert.deepEqual(catalog.terms, { monthly: 2999, quarterly: 6999, yearly: 11999 });
+  assert.equal(catalog.enrollFee, 2999);
+  assert.equal(feeForTerm(2999, "quarterly", row.terms), 6999);
+  assert.ok(6999 < 2999 * 3);
+  assert.ok(11999 < 2999 * 12);
 });

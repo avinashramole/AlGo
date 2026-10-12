@@ -15,7 +15,7 @@ import {
   type PlanTerm,
 } from "../api";
 import { Card } from "../components/Ui";
-import { colors, formatInr, formatIstDate, formatPlanTerm } from "../theme";
+import { colors, formatInr, formatIstDate, formatNumber, formatPlanTerm, planOffer } from "../theme";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -54,8 +54,6 @@ export function MemberPlansScreen() {
   }, [load]);
 
   const termFor = (id: string): PlanTerm => terms[id] || "monthly";
-  const feeFor = (row: CatalogStrategy, term: PlanTerm) =>
-    row.terms?.[term] ?? row.enrollFee * ({ monthly: 1, quarterly: 3, yearly: 12 }[term]);
   const activeFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "paid" && row.active !== false);
   const claimedFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "claimed");
 
@@ -124,18 +122,25 @@ export function MemberPlansScreen() {
               ) : (
                 <>
                   <View style={styles.wrap}>
-                    {TERMS.map((term) => (
-                      <Pressable
-                        key={term}
-                        style={[styles.chip, selected === term && styles.chipOn]}
-                        onPress={() => setTerms((currentTerms) => ({ ...currentTerms, [row.id]: term }))}
-                      >
-                        <Text style={[styles.chipText, selected === term && styles.chipTextOn]}>
-                          {formatPlanTerm(term)} {formatInr(feeFor(row, term))}
-                        </Text>
-                      </Pressable>
-                    ))}
+                    {TERMS.map((term) => {
+                      const offer = planOffer(row, term);
+                      return (
+                        <Pressable
+                          key={term}
+                          style={[styles.chip, selected === term && styles.chipOn]}
+                          onPress={() => setTerms((currentTerms) => ({ ...currentTerms, [row.id]: term }))}
+                        >
+                          <Text style={[styles.chipText, selected === term && styles.chipTextOn]}>
+                            {formatPlanTerm(term)} {formatInr(offer.price)}
+                            {offer.save > 0 ? ` · save ₹${formatNumber(offer.save)}` : ""}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
+                  {planOffer(row, "yearly").save > 0 ? (
+                    <Text style={styles.paid}>Yearly saves ₹{formatNumber(planOffer(row, "yearly").save)} versus 12 monthly payments.</Text>
+                  ) : null}
                   <Pressable style={styles.btn} disabled={Boolean(busy) || !desk?.payments.ready} onPress={() => void enroll(row)}>
                     <Text style={styles.btnText}>{busy === row.id ? "Opening..." : "Enroll"}</Text>
                   </Pressable>

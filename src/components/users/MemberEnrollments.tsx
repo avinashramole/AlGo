@@ -10,12 +10,16 @@ import {
   type WalletTopup,
 } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
+import { formatRupee } from "../../lib/format";
+import { DEFAULT_PLAN_PRICES, TERM_MONTHS, type PlanTerm } from "../../lib/planPrice";
 
 export function MemberEnrollments() {
   const { user, applyUser } = useAuth();
   const [payMobile, setPayMobile] = useState("");
   const [payUpi, setPayUpi] = useState("");
-  const [payAmount, setPayAmount] = useState("999");
+  const [payMonthly, setPayMonthly] = useState(String(DEFAULT_PLAN_PRICES.monthly));
+  const [payQuarterly, setPayQuarterly] = useState(String(DEFAULT_PLAN_PRICES.quarterly));
+  const [payYearly, setPayYearly] = useState(String(DEFAULT_PLAN_PRICES.yearly));
   const [payName, setPayName] = useState("Trade2Smart");
   const [payNote, setPayNote] = useState("");
   const [payBusy, setPayBusy] = useState(false);
@@ -28,7 +32,10 @@ export function MemberEnrollments() {
       .then((row) => {
         setPayMobile(row.payments.mobile || "");
         setPayUpi(row.payments.upiId || "");
-        setPayAmount(String(row.payments.amount || 999));
+        const monthly = row.payments.terms?.monthly || row.payments.amount || DEFAULT_PLAN_PRICES.monthly;
+        setPayMonthly(String(monthly));
+        setPayQuarterly(String(row.payments.terms?.quarterly || Math.round(monthly * (DEFAULT_PLAN_PRICES.quarterly / DEFAULT_PLAN_PRICES.monthly))));
+        setPayYearly(String(row.payments.terms?.yearly || Math.round(monthly * (DEFAULT_PLAN_PRICES.yearly / DEFAULT_PLAN_PRICES.monthly))));
         setPayName(row.payments.payeeName || "Trade2Smart");
       })
       .catch(() => undefined);
@@ -47,13 +54,18 @@ export function MemberEnrollments() {
     void savePaymentSettings({
       mobile: payMobile,
       upiId: payUpi,
-      amount: Number(payAmount),
+      amount: Number(payMonthly),
+      monthly: Number(payMonthly),
+      quarterly: Number(payQuarterly),
+      yearly: Number(payYearly),
       payeeName: payName,
     })
       .then(async (row) => {
         setPayMobile(row.payments.mobile);
         setPayUpi(row.payments.upiId);
-        setPayAmount(String(row.payments.amount));
+        setPayMonthly(String(row.payments.terms?.monthly || row.payments.amount));
+        setPayQuarterly(String(row.payments.terms?.quarterly || ""));
+        setPayYearly(String(row.payments.terms?.yearly || ""));
         setPayName(row.payments.payeeName);
         if (user?.id && row.payments.mobile) {
           try {
@@ -73,8 +85,8 @@ export function MemberEnrollments() {
     <section className="card p-3 sm:p-4">
       <div className="text-sm font-bold">Member enrollments</div>
       <p className="desk-help mt-1 text-xs text-slate-400">
-        Members pay this monthly amount — or 3× quarterly / 12× yearly — to your GPay or PhonePe mobile when they tap
-        Enroll. After a member taps I have paid, confirm the transfer here. Live copy starts only after you confirm.
+        Edit monthly, quarterly, and yearly plan prices. Longer terms stay discounted so members see the saving versus
+        paying month by month. After a member taps I have paid, confirm the transfer here.
       </p>
       <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={onSave}>
         <input
@@ -95,14 +107,45 @@ export function MemberEnrollments() {
           onChange={(event) => setPayUpi(event.target.value)}
           placeholder="UPI ID (optional)"
         />
-        <input
-          className="h-10 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm"
-          value={payAmount}
-          onChange={(event) => setPayAmount(event.target.value)}
-          placeholder="Amount ₹"
-        />
+        <label className="block text-xs font-semibold sm:col-span-2">
+          Monthly
+          <input
+            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal"
+            value={payMonthly}
+            onChange={(event) => {
+              const value = event.target.value;
+              setPayMonthly(value);
+              const monthly = Number(value);
+              if (Number.isFinite(monthly) && monthly >= 1) {
+                setPayQuarterly(String(Math.round(monthly * (DEFAULT_PLAN_PRICES.quarterly / DEFAULT_PLAN_PRICES.monthly))));
+                setPayYearly(String(Math.round(monthly * (DEFAULT_PLAN_PRICES.yearly / DEFAULT_PLAN_PRICES.monthly))));
+              }
+            }}
+            placeholder="Monthly ₹"
+          />
+        </label>
+        <label className="block text-xs font-semibold">
+          Quarterly
+          <input
+            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal"
+            value={payQuarterly}
+            onChange={(event) => setPayQuarterly(event.target.value)}
+            placeholder="Quarterly ₹"
+          />
+          <span className="mt-1 block font-normal text-slate-500">{adminTermHint(payMonthly, payQuarterly, "quarterly")}</span>
+        </label>
+        <label className="block text-xs font-semibold">
+          Yearly
+          <input
+            className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal"
+            value={payYearly}
+            onChange={(event) => setPayYearly(event.target.value)}
+            placeholder="Yearly ₹"
+          />
+          <span className="mt-1 block font-normal text-slate-500">{adminTermHint(payMonthly, payYearly, "yearly")}</span>
+        </label>
         <button type="submit" disabled={payBusy} className="h-10 rounded-xl bg-brand-500 text-sm font-semibold text-white sm:col-span-2">
-          {payBusy ? "Saving..." : "Save payment number"}
+          {payBusy ? "Saving..." : "Save plan prices"}
         </button>
       </form>
       {payNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{payNote}</p> : null}
@@ -160,4 +203,14 @@ export function MemberEnrollments() {
       ) : null}
     </section>
   );
+}
+
+function adminTermHint(monthlyText: string, priceText: string, term: PlanTerm) {
+  const monthly = Number(monthlyText);
+  const price = Number(priceText);
+  if (!(monthly >= 1) || !(price >= 1) || term === "monthly") return "";
+  const full = monthly * TERM_MONTHS[term];
+  const save = Math.max(0, full - price);
+  if (save <= 0) return `${TERM_MONTHS[term]} months at monthly rate ${formatRupee(full, 0)}`;
+  return `${TERM_MONTHS[term]} months at monthly rate ${formatRupee(full, 0)} · save ${formatRupee(save, 0)}`;
 }

@@ -54,6 +54,24 @@ export function formatPlanTerm(term?: string) {
   return { monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" }[key] || "Monthly";
 }
 
+export const DEFAULT_PLAN_PRICES = { monthly: 2999, quarterly: 6999, yearly: 11999 } as const;
+
+export function planFee(row: { enrollFee?: number; terms?: Partial<Record<"monthly" | "quarterly" | "yearly", number>> }, term: "monthly" | "quarterly" | "yearly") {
+  const priced = Number(row.terms?.[term]);
+  if (Number.isFinite(priced) && priced > 0) return Math.round(priced);
+  const monthly = Number(row.enrollFee) > 0 ? Math.round(Number(row.enrollFee)) : DEFAULT_PLAN_PRICES.monthly;
+  if (term === "monthly") return monthly;
+  return Math.round(monthly * (DEFAULT_PLAN_PRICES[term] / DEFAULT_PLAN_PRICES.monthly));
+}
+
+export function planOffer(row: { enrollFee?: number; terms?: Partial<Record<"monthly" | "quarterly" | "yearly", number>> }, term: "monthly" | "quarterly" | "yearly") {
+  const months = { monthly: 1, quarterly: 3, yearly: 12 }[term];
+  const monthly = planFee(row, "monthly");
+  const price = planFee(row, term);
+  const full = monthly * months;
+  return { price, full, save: Math.max(0, full - price), months, perMonth: Math.round(price / months) };
+}
+
 export function formatInr(value: number) {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}₹${formatNumber(Math.abs(value), 2)}`;

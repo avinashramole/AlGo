@@ -23,7 +23,8 @@ import {
   installValueForSubmit,
   tradingTokenArrived,
 } from "../lib/formSecrets";
-import { cn, formatInr, formatIstDate, formatPlanTerm } from "../lib/format";
+import { cn, formatInr, formatIstDate, formatPlanTerm, formatRupee } from "../lib/format";
+import { bestPlanSave, planOffer } from "../lib/planPrice";
 
 const TERMS: PlanTerm[] = ["monthly", "quarterly", "yearly"];
 
@@ -208,7 +209,7 @@ export function MemberPlans() {
   };
 
   const termFor = (id: string): PlanTerm => terms[id] || "monthly";
-  const feeFor = (row: CatalogStrategy, term: PlanTerm) => row.terms?.[term] ?? row.enrollFee * ({ monthly: 1, quarterly: 3, yearly: 12 }[term]);
+  const feeFor = (row: CatalogStrategy, term: PlanTerm) => planOffer(row, term).price;
   const activeFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "paid" && row.active !== false);
   const claimedFor = (id: string) => enrollments.find((row) => row.strategyId === id && row.status === "claimed");
 
@@ -293,9 +294,9 @@ export function MemberPlans() {
       <section className="card p-4">
         <div className="text-sm font-bold">Subscriptions</div>
         <p className="mt-1 text-xs text-slate-400">
-          Choose a term and pay the listed amount to the desk GPay / PhonePe number
+          Choose monthly, quarterly, or yearly. Longer terms are discounted so you pay less than repeating the monthly
+          price. Pay the listed amount to the desk GPay / PhonePe number
           {payments?.ready ? ` ${payments.mobileMasked}` : ""}. Closing without payment returns the button to Enroll.
-          Live trades use your token and size after an admin confirms the payment.
         </p>
         {payments?.ready ? (
           <p className="mt-2 text-xs text-slate-500">
@@ -342,22 +343,38 @@ export function MemberPlans() {
                   )}
                 </div>
                 {!current && !waiting ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {TERMS.map((term) => (
-                      <button
-                        key={term}
-                        type="button"
-                        onClick={() => setTerms((currentTerms) => ({ ...currentTerms, [row.id]: term }))}
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase",
-                          selected === term
-                            ? "border-brand-500 bg-brand-50 text-brand-500"
-                            : "border-[var(--border)] text-slate-500",
-                        )}
-                      >
-                        {formatPlanTerm(term)} {formatInr(feeFor(row, term))}
-                      </button>
-                    ))}
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {TERMS.map((term) => {
+                        const offer = planOffer(row, term);
+                        return (
+                          <button
+                            key={term}
+                            type="button"
+                            onClick={() => setTerms((currentTerms) => ({ ...currentTerms, [row.id]: term }))}
+                            className={cn(
+                              "rounded-xl border px-3 py-2 text-left",
+                              selected === term
+                                ? "border-brand-500 bg-brand-50 text-brand-500"
+                                : "border-[var(--border)] text-slate-500",
+                            )}
+                          >
+                            <div className="text-[11px] font-extrabold uppercase">{formatPlanTerm(term)}</div>
+                            <div className="text-sm font-extrabold">{formatInr(offer.price)}</div>
+                            {offer.save > 0 ? (
+                              <div className="text-[11px] font-semibold text-up">Save {formatRupee(offer.save)}</div>
+                            ) : (
+                              <div className="text-[11px] font-semibold text-slate-400">{formatRupee(offer.perMonth, 0)}/mo</div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {bestPlanSave(row) > 0 ? (
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Yearly saves {formatRupee(bestPlanSave(row))} versus 12 monthly payments.
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </article>

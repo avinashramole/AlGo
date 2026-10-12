@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAYMENTS_FILE = process.env.T2S_PAYMENTS_FILE || path.join(__dirname, "data", "payments.json");
 const ENROLL_FILE = process.env.T2S_ENROLL_FILE || path.join(__dirname, "data", "enrollments.json");
-const DEFAULT_AMOUNT = 999;
+const DEFAULT_AMOUNT = 2999;
 export const PLAN_TERMS = ["monthly", "quarterly", "yearly"];
+export const DEFAULT_PLAN_PRICES = { monthly: 2999, quarterly: 6999, yearly: 11999 };
 
 function addCalendarMonths(date, months) {
   const next = new Date(date.getTime());
@@ -28,10 +29,56 @@ export function termMonths(value) {
   return { monthly: 1, quarterly: 3, yearly: 12 }[normalizePlanTerm(value)];
 }
 
-export function feeForTerm(base, term) {
+export function feeForTerm(base, term, terms) {
+  const wanted = normalizePlanTerm(term);
+  const listed = Number(terms?.[wanted]);
+  if (Number.isFinite(listed) && listed >= 1) return Math.round(listed);
   const monthly = Number(base);
   if (!Number.isFinite(monthly) || monthly < 1) return 0;
-  return Math.round(monthly) * termMonths(term);
+  if (wanted === "monthly") return Math.round(monthly);
+  const ratio = DEFAULT_PLAN_PRICES[wanted] / DEFAULT_PLAN_PRICES.monthly;
+  return Math.round(Math.round(monthly) * ratio);
+}
+
+export function fullTermPrice(monthly, term) {
+  const base = Number(monthly);
+  if (!Number.isFinite(base) || base < 1) return 0;
+  return Math.round(base) * termMonths(term);
+}
+
+export function normalizePlanPrices(row = {}) {
+  const stored = row.terms && typeof row.terms === "object" ? row.terms : {};
+  const amount = Number(row.amount);
+  const legacyDefault = !Number.isFinite(Number(stored.monthly)) && amount === 999;
+  const monthly = Number(stored.monthly) >= 1
+    ? Math.round(Number(stored.monthly))
+    : Number.isFinite(amount) && amount >= 1 && !legacyDefault
+      ? Math.round(amount)
+      : DEFAULT_PLAN_PRICES.monthly;
+  return {
+    monthly,
+    quarterly: Number(stored.quarterly) >= 1 ? Math.round(Number(stored.quarterly)) : feeForTerm(monthly, "quarterly"),
+    yearly: Number(stored.yearly) >= 1 ? Math.round(Number(stored.yearly)) : feeForTerm(monthly, "yearly"),
+  };
+}
+
+export function scalePlanPrices(terms, monthly) {
+  const nextMonthly = Number(monthly);
+  const from = Number(terms?.monthly);
+  if (!Number.isFinite(nextMonthly) || nextMonthly < 1) return normalizePlanPrices({ terms });
+  if (!Number.isFinite(from) || from < 1 || from === nextMonthly) {
+    return { ...normalizePlanPrices({ terms, amount: nextMonthly }), monthly: Math.round(nextMonthly) };
+  }
+  const scale = nextMonthly / from;
+  return {
+    monthly: Math.round(nextMonthly),
+    quarterly: Number(terms.quarterly) >= 1
+      ? Math.max(1, Math.round(Number(terms.quarterly) * scale))
+      : feeForTerm(nextMonthly, "quarterly"),
+    yearly: Number(terms.yearly) >= 1
+      ? Math.max(1, Math.round(Number(terms.yearly) * scale))
+      : feeForTerm(nextMonthly, "yearly"),
+  };
 }
 
 export function planWindow({ startedAt, term } = {}) {
@@ -95,11 +142,12 @@ function writeJson(file, payload) {
 function loadPayments() {
   const row = readJson(PAYMENTS_FILE, {});
   const mobile = normalizePayMobile(row.mobile);
-  const amount = Number(row.amount);
+  const terms = normalizePlanPrices(row);
   return {
     mobile: isMobile(mobile) ? mobile : "",
     upiId: String(row.upiId || "").trim().toLowerCase(),
-    amount: Number.isFinite(amount) && amount > 0 ? Math.round(amount) : DEFAULT_AMOUNT,
+    amount: terms.monthly,
+    terms,
     payeeName: String(row.payeeName || "Trade2Smart").trim() || "Trade2Smart",
   };
 }
@@ -129,22 +177,31 @@ export function publicPayments(admins = []) {
     mobile: ready ? mobile : "",
     mobileMasked: ready ? `${mobile.slice(0, 2)}••••${mobile.slice(-2)}` : "",
     upiId: ready ? (payments.upiId || `${mobile}@ybl`) : "",
-    amount: payments.amount,
+    amount: (payments.terms || normalizePlanPrices(payments)).monthly,
+    terms: { ...normalizePlanPrices(payments) },
     payeeName,
   };
 }
 
-export function savePaymentSettings({ mobile, upiId, amount, payeeName } = {}) {
+export function savePaymentSettings({ mobile, upiId, amount, payeeName, monthly, quarterly, yearly, terms } = {}) {
   const nextMobile = normalizePayMobile(mobile);
   if (!isMobile(nextMobile)) throw fail("Enter the 10-digit GPay / PhonePe mobile that should receive enrollments.");
-  const nextAmount = Number(amount);
-  if (!Number.isFinite(nextAmount) || nextAmount < 1) throw fail("Enrollment amount must be at least ₹1.");
+  const nextTerms = normalizePlanPrices({
+    amount,
+    terms: {
+      monthly: monthly ?? terms?.monthly ?? amount,
+      quarterly: quarterly ?? terms?.quarterly,
+      yearly: yearly ?? terms?.yearly,
+    },
+  });
+  if (nextTerms.monthly < 1) throw fail("Enrollment amount must be at least ₹1.");
   const nextUpi = String(upiId || "").trim().toLowerCase();
   if (nextUpi && !nextUpi.includes("@")) throw fail("UPI ID must look like 98xxxxxxxx@ybl or name@okicici.");
   payments = {
     mobile: nextMobile,
     upiId: nextUpi,
-    amount: Math.round(nextAmount),
+    amount: nextTerms.monthly,
+    terms: nextTerms,
     payeeName: String(payeeName || "Trade2Smart").trim() || "Trade2Smart",
   };
   persistPayments();
@@ -179,17 +236,14 @@ export function buildUpiLinks({ vpa, payeeName, amount, note } = {}) {
 
 export function catalogStrategy(algo, settings = payments) {
   if (!algo) return null;
+  const desk = normalizePlanPrices(settings);
   const fee = Number(algo.enrollFee);
-  const monthly = Number.isFinite(fee) && fee > 0 ? Math.round(fee) : settings.amount;
+  const terms = Number.isFinite(fee) && fee > 0 ? scalePlanPrices(desk, fee) : desk;
   return {
     id: algo.id,
     name: algo.name || "Strategy",
-    enrollFee: monthly,
-    terms: {
-      monthly,
-      quarterly: feeForTerm(monthly, "quarterly"),
-      yearly: feeForTerm(monthly, "yearly"),
-    },
+    enrollFee: terms.monthly,
+    terms,
   };
 }
 
@@ -288,7 +342,7 @@ export function enrollStrategy({ user, algo, channel, term, admins, mappedStrate
   const wanted = channel === "phonepe" ? "phonepe" : "gpay";
   const wantedTerm = normalizePlanTerm(term);
   const catalog = catalogStrategy(algo, payments);
-  const amount = feeForTerm(catalog.enrollFee, wantedTerm);
+  const amount = feeForTerm(catalog.enrollFee, wantedTerm, catalog.terms);
   const activePaid = enrollments.find((row) => row.userId === user.id && row.strategyId === algo.id && enrollmentActive(row));
   if (activePaid) {
     return { enrollment: publicEnroll(activePaid), payments: pub, links: null, already: true };

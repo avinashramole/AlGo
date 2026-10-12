@@ -922,6 +922,7 @@ export type PaymentPublic = {
   mobileMasked?: string;
   upiId?: string;
   amount: number;
+  terms?: Record<PlanTerm, number>;
   payeeName?: string;
 };
 
@@ -989,12 +990,28 @@ export function deleteEnrollment(id: string) {
   return request<{ enrollment: Enrollment }>(`/subscriptions/${id}`, { method: "DELETE" });
 }
 
+export type PaymentSettings = {
+  mobile: string;
+  upiId: string;
+  amount: number;
+  terms?: Record<PlanTerm, number>;
+  payeeName: string;
+};
+
 export function getPaymentSettings() {
-  return request<{ payments: { mobile: string; upiId: string; amount: number; payeeName: string } }>("/payments");
+  return request<{ payments: PaymentSettings }>("/payments");
 }
 
-export function savePaymentSettings(payload: { mobile: string; upiId?: string; amount: number; payeeName?: string }) {
-  return request<{ ok: boolean; payments: { mobile: string; upiId: string; amount: number; payeeName: string } }>("/payments", {
+export function savePaymentSettings(payload: {
+  mobile: string;
+  upiId?: string;
+  amount: number;
+  payeeName?: string;
+  monthly?: number;
+  quarterly?: number;
+  yearly?: number;
+}) {
+  return request<{ ok: boolean; payments: PaymentSettings }>("/payments", {
     method: "POST",
     body: JSON.stringify(payload),
   });
