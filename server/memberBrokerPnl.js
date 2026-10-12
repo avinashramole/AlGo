@@ -83,6 +83,77 @@ export function brokerPnlFromUpstoxRows(raw) {
   );
 }
 
+export function brokerProduct(value) {
+  const raw = String(value || "MIS").trim().toUpperCase();
+  if (!raw) return "MIS";
+  if (raw === "I" || raw === "INTRA" || raw === "INTRADAY") return "INTRADAY";
+  if (raw === "M" || raw === "MIS" || raw === "MARGIN") return "MIS";
+  if (raw === "C" || raw === "CNC" || raw === "DELIVERY") return "CNC";
+  if (raw === "N" || raw === "NRML" || raw === "NORMAL") return "NRML";
+  return raw;
+}
+
+function qtyOf(row, keys) {
+  return Math.abs(firstFinite(row, keys) || 0);
+}
+
+function dhanSymbol(row = {}) {
+  return String(row.tradingSymbol || row.trading_symbol || row.symbol || row.securityId || row.security_id || "");
+}
+
+function closedBookKey(row = {}) {
+  return `${String(row.symbol || "").toUpperCase()}|${brokerProduct(row.product)}`;
+}
+
+function withClosedSides(row = {}) {
+  const qty = Math.abs(Number(row.qty) || 0);
+  const buyQty = Math.abs(Number(row.buyQty) || 0) || qty;
+  const sellQty = Math.abs(Number(row.sellQty) || 0) || qty;
+  const entry = Number(row.entry || row.buyPrice || row.buyAvg || row.avg || 0);
+  const exit = Number(row.exit || row.sellPrice || row.sellAvg || row.ltp || 0);
+  return {
+    ...row,
+    qty: qty || Math.max(buyQty, sellQty),
+    buyQty,
+    sellQty,
+    buyPrice: Number(row.buyPrice || row.buyAvg || entry || 0),
+    sellPrice: Number(row.sellPrice || row.sellAvg || exit || 0),
+    entry: entry || Number(row.buyPrice || 0),
+    exit: exit || Number(row.sellPrice || 0),
+    product: brokerProduct(row.product),
+  };
+}
+
+function mergeClosedFromTrades(positionClosed = [], tradeClosed = []) {
+  const trades = new Map((tradeClosed || []).map((row) => [closedBookKey(row), row]));
+  const used = new Set();
+  const closed = (positionClosed || []).map((row) => {
+    const next = withClosedSides(row);
+    if (next.qty && next.entry && next.exit && next.buyQty && next.sellQty) return next;
+    const hit = trades.get(closedBookKey(next)) || trades.get(`${String(next.symbol || "").toUpperCase()}|${brokerProduct(next.product || "MIS")}`);
+    if (!hit) return next;
+    used.add(closedBookKey(hit));
+    return withClosedSides({
+      ...next,
+      qty: next.qty || hit.qty,
+      entry: next.entry || hit.entry,
+      exit: next.exit || hit.exit,
+      buyQty: next.buyQty || hit.qty,
+      sellQty: next.sellQty || hit.qty,
+      buyPrice: next.buyPrice || hit.entry,
+      sellPrice: next.sellPrice || hit.exit,
+      buyAvg: next.buyAvg || hit.entry,
+      sellAvg: next.sellAvg || hit.exit,
+    });
+  });
+  for (const row of tradeClosed || []) {
+    const key = closedBookKey(row);
+    if (used.has(key) || closed.some((item) => closedBookKey(item) === key)) continue;
+    closed.push(withClosedSides(row));
+  }
+  return closed;
+}
+
 export function dhanMasterBook(raw) {
   const pnl = brokerPnlFromDhanRows(raw);
   if (!pnl) return null;
@@ -92,27 +163,37 @@ export function dhanMasterBook(raw) {
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const kind = String(row.positionType || row.position_type || "").toUpperCase();
-    const net = Number(row.netQty);
+    const net = firstFinite(row, ["netQty", "net_qty"]);
     const closedLeg = kind === "CLOSED" || net === 0;
     const realized = firstFinite(row, ["realizedProfit", "realized_profit", "realised"]);
     const unrealized = firstFinite(row, ["unrealizedProfit", "unrealized_profit", "unrealised"]);
     if (realized == null && unrealized == null) continue;
+    const product = brokerProduct(row.productType || row.product_type || row.product);
+    const symbol = dhanSymbol(row);
+    const ltp = firstFinite(row, ["lastTradedPrice", "last_traded_price", "ltp", "close"]) || 0;
+    const buyQty = qtyOf(row, ["buyQty", "buy_qty", "dayBuyQty", "day_buy_qty", "dayBuyQuantity", "buyQuantity"]);
+    const sellQty = qtyOf(row, ["sellQty", "sell_qty", "daySellQty", "day_sell_qty", "daySellQuantity", "sellQuantity"]);
+    const buyAvg = firstFinite(row, ["buyAvg", "buy_avg", "dayBuyAvg", "day_buy_avg", "buyAvgPrice", "buyPrice", "costPrice", "cost_price"]) || 0;
+    const sellAvg = firstFinite(row, ["sellAvg", "sell_avg", "daySellAvg", "day_sell_avg", "sellAvgPrice", "sellPrice"]) || 0;
     if (!closedLeg) {
-      const qty = Math.abs(net);
-      const type = kind === "SHORT" || net < 0 ? "SELL" : "BUY";
-      const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
-      const ltp = Number(row.lastTradedPrice || row.ltp || avg);
+      const qty = Math.abs(net || 0) || Math.max(buyQty, sellQty);
+      const type = kind === "SHORT" || Number(net) < 0 ? "SELL" : "BUY";
+      const avg = Number(row.costPrice || row.cost_price || (type === "BUY" ? buyAvg : sellAvg) || 0);
       open.push({
-        id: `dhan-pos-${row.securityId || row.tradingSymbol || open.length}-${row.productType || "MIS"}`,
-        symbol: String(row.tradingSymbol || row.securityId || ""),
+        id: `dhan-pos-${row.securityId || row.security_id || symbol || open.length}-${product}`,
+        symbol,
         side: type,
         type,
         qty,
         avg,
-        ltp,
+        ltp: ltp || avg,
+        buyQty: type === "BUY" ? qty : 0,
+        buyPrice: type === "BUY" ? avg : 0,
+        sellQty: type === "SELL" ? qty : 0,
+        sellPrice: type === "SELL" ? avg : 0,
         pnl: round2((realized || 0) + (unrealized || 0)),
         realized: round2(realized || 0),
-        product: row.productType || "MIS",
+        product,
         brokerId: "dhan",
         live: true,
         paper: false,
@@ -121,22 +202,28 @@ export function dhanMasterBook(raw) {
       continue;
     }
     if ((realized || 0) === 0 && (unrealized || 0) === 0) continue;
-    const buyQty = Math.abs(Number(row.buyQty || row.dayBuyQty) || 0);
-    const sellQty = Math.abs(Number(row.sellQty || row.daySellQty) || 0);
-    const buyAvg = Number(row.buyAvg || row.dayBuyAvg || 0);
-    const sellAvg = Number(row.sellAvg || row.daySellAvg || 0);
     const short = sellQty > buyQty;
+    const qty = Math.max(buyQty, sellQty);
+    const entry = short ? sellAvg || buyAvg : buyAvg || sellAvg;
+    const exit = short ? buyAvg || sellAvg : sellAvg || buyAvg || ltp;
     closed.push({
-      id: `dhan-closed-${row.securityId || row.tradingSymbol || closed.length}-${row.productType || "MIS"}`,
-      symbol: String(row.tradingSymbol || row.securityId || ""),
+      id: `dhan-closed-${row.securityId || row.security_id || symbol || closed.length}-${product}`,
+      symbol,
       side: short ? "SELL" : "BUY",
       type: short ? "SELL" : "BUY",
-      qty: Math.max(buyQty, sellQty),
-      entry: short ? sellAvg || buyAvg : buyAvg || sellAvg,
-      exit: short ? buyAvg || sellAvg : sellAvg || buyAvg,
+      qty,
+      entry,
+      exit,
+      ltp: ltp || exit,
+      buyQty,
+      sellQty,
+      buyPrice: buyAvg,
+      sellPrice: sellAvg,
+      buyAvg,
+      sellAvg,
       pnl: round2((realized || 0) + (unrealized || 0)),
       realized: round2(realized || 0),
-      product: row.productType || "MIS",
+      product,
       brokerId: "dhan",
       live: true,
       paper: false,
@@ -208,13 +295,13 @@ export function dhanPnlFromTrades(raw) {
   const groups = new Map();
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
-    const qty = Math.abs(Number(row.tradedQuantity || row.filledQty || row.quantity || 0));
-    const price = Number(row.tradedPrice || row.avgTradedPrice || row.price || 0);
+    const qty = Math.abs(Number(row.tradedQuantity || row.traded_quantity || row.filledQty || row.quantity || 0));
+    const price = Number(row.tradedPrice || row.traded_price || row.avgTradedPrice || row.price || 0);
     if (!qty || !Number.isFinite(price) || price <= 0) continue;
     const side = String(row.transactionType || row.transaction_type || row.side || "BUY").toUpperCase();
-    const symbol = String(row.tradingSymbol || row.securityId || "");
-    const key = `${row.securityId || symbol}|${row.productType || "MIS"}`;
-    const group = groups.get(key) || { symbol, buyQty: 0, buyValue: 0, sellQty: 0, sellValue: 0, product: row.productType || "MIS" };
+    const symbol = dhanSymbol(row);
+    const key = `${row.securityId || symbol}|${brokerProduct(row.productType || row.product_type || row.product)}`;
+    const group = groups.get(key) || { symbol, buyQty: 0, buyValue: 0, sellQty: 0, sellValue: 0, product: brokerProduct(row.productType || row.product_type || row.product) };
     if (side === "SELL") {
       group.sellQty += qty;
       group.sellValue += qty * price;
@@ -241,9 +328,13 @@ export function dhanPnlFromTrades(raw) {
       qty: matched,
       entry: round2(buyAvg),
       exit: round2(sellAvg),
+      buyQty: matched,
+      sellQty: matched,
+      buyPrice: round2(buyAvg),
+      sellPrice: round2(sellAvg),
       pnl,
       realized: pnl,
-      product: group.product,
+      product: brokerProduct(group.product),
       brokerId: "dhan",
       live: true,
       paper: false,
@@ -261,6 +352,13 @@ export function adminBookFromDhan(positionsRaw, tradesRaw) {
     fromPositions &&
       (fromPositions.closed.length || fromPositions.open.length || fromPositions.realizedPnl || fromPositions.unrealizedPnl),
   );
+  if (positionHas && fromTrades?.closed?.length) {
+    return {
+      ...fromPositions,
+      closed: mergeClosedFromTrades(fromPositions.closed, fromTrades.closed),
+      open: fromPositions.open || [],
+    };
+  }
   if (positionHas) return fromPositions;
   if (fromTrades && (fromTrades.realizedPnl || fromTrades.closed.length)) {
     const unrealized = round2(fromPositions?.unrealizedPnl || 0);
@@ -269,7 +367,7 @@ export function adminBookFromDhan(positionsRaw, tradesRaw) {
       unrealizedPnl: unrealized,
       mtm: round2(fromTrades.realizedPnl + unrealized),
       source: "dhan",
-      closed: fromTrades.closed,
+      closed: (fromTrades.closed || []).map(withClosedSides),
       open: fromPositions?.open || [],
     };
   }
@@ -295,19 +393,27 @@ export function applyBrokerBookToReport(report, book) {
   const net = round2(realized + unrealized);
   const closed = Array.isArray(book.closed) ? book.closed : [];
   const paperBook = (Array.isArray(report.tradeBook) ? report.tradeBook : []).filter((row) => row?.paper || row?.brokerId === "paper");
-  const brokerBook = closed.map((row) => ({
-    id: String(row.id || ""),
-    symbol: String(row.symbol || ""),
-    side: String(row.side || row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
-    qty: Number(row.qty) || 0,
-    entry: Number(row.entry || row.avg || 0),
-    exit: Number(row.exit || row.ltp || 0),
-    pnl: Number(row.realized != null ? row.realized : row.pnl || 0),
-    strategy: String(row.strategy || ""),
-    brokerId: String(row.brokerId || "dhan"),
-    closedAt: row.closedAt || row.updatedAt || new Date().toISOString(),
-    status: "CLOSED",
-  }));
+  const brokerBook = closed.map((row) => {
+    const filled = withClosedSides(row);
+    return {
+      id: String(filled.id || ""),
+      symbol: String(filled.symbol || ""),
+      side: String(filled.side || filled.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+      qty: Number(filled.qty) || 0,
+      entry: Number(filled.entry || filled.buyPrice || filled.avg || 0),
+      exit: Number(filled.exit || filled.sellPrice || filled.ltp || 0),
+      buyQty: Number(filled.buyQty) || 0,
+      buyPrice: Number(filled.buyPrice) || 0,
+      sellQty: Number(filled.sellQty) || 0,
+      sellPrice: Number(filled.sellPrice) || 0,
+      product: brokerProduct(filled.product),
+      pnl: Number(filled.realized != null ? filled.realized : filled.pnl || 0),
+      strategy: String(filled.strategy || ""),
+      brokerId: String(filled.brokerId || "dhan"),
+      closedAt: filled.closedAt || filled.updatedAt || new Date().toISOString(),
+      status: "CLOSED",
+    };
+  });
   return {
     ...report,
     realizedPnl: realized,
@@ -359,18 +465,9 @@ export function applyBrokerPnl(desk, pnl) {
   if (!desk || !pnl) return desk;
   const realized = round2(pnl.realizedPnl);
   const unrealized = round2(pnl.unrealizedPnl);
-  const gross = round2(realized + unrealized);
+  if (!Number.isFinite(realized) || !Number.isFinite(unrealized)) return desk;
   const report = desk.report && typeof desk.report === "object" ? desk.report : {};
-  desk.report = {
-    ...report,
-    realizedPnl: realized,
-    unrealizedPnl: unrealized,
-    grossPnl: gross,
-    charges: 0,
-    netPnl: gross,
-    brokerPnl: true,
-    brokerPnlSource: pnl.source || "",
-  };
+  desk.report = applyBrokerBookToReport(report, pnl);
   const balance = round2(desk.wallet?.balance || 0);
   desk.wallet = {
     ...(desk.wallet || {}),
@@ -579,8 +676,12 @@ async function fetchBrokerPnl(userId) {
   const creds = await withKotakTradeLogin(await memberBrokerCredentials(userId));
   if (!creds) return null;
   if (creds.brokerId === "dhan") {
-    const { fetchMemberDhanPositions } = await import("./dhan.js");
-    return dhanMasterBook(await fetchMemberDhanPositions(creds.token, creds.clientId));
+    const { fetchMemberDhanPositions, fetchMemberDhanTrades } = await import("./dhan.js");
+    const [positionsRaw, tradesRaw] = await Promise.all([
+      fetchMemberDhanPositions(creds.token, creds.clientId),
+      fetchMemberDhanTrades(creds.token, creds.clientId).catch(() => null),
+    ]);
+    return adminBookFromDhan(positionsRaw, tradesRaw);
   }
   if (creds.brokerId === "kotak") {
     return kotakMasterBook(await kotakTradePost(creds, "/quick/user/positions", {}));

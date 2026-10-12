@@ -116,6 +116,10 @@ export type DeskReport = {
     qty: number;
     entry: number;
     exit: number;
+    buyQty?: number;
+    buyPrice?: number;
+    sellQty?: number;
+    sellPrice?: number;
     pnl: number;
     product?: string;
     strategy?: string;

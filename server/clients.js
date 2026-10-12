@@ -264,22 +264,31 @@ export function isCryptoSymbol(symbol) {
   return /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(symbol || ""));
 }
 
+function ledgerProduct(value) {
+  const raw = String(value || "MIS").trim().toUpperCase();
+  if (raw === "I" || raw === "INTRA" || raw === "INTRADAY") return "INTRADAY";
+  if (raw === "M" || raw === "MARGIN") return "MIS";
+  if (raw === "C" || raw === "DELIVERY") return "CNC";
+  if (raw === "N" || raw === "NORMAL") return "NRML";
+  return raw || "MIS";
+}
+
 export function asLedgerPosition(row = {}) {
   const type = String(row.type || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
   const qty = Math.abs(Number(row.qty) || 0);
-  const avg = Number(row.avg) || 0;
+  const avg = Number(row.avg || row.buyPrice || row.sellPrice || row.entry || 0);
   const ltp = Number(row.ltp) || avg;
   const marked = Number(row.pnl);
   const mtm = Number.isFinite(marked) ? marked : (ltp - avg) * qty * (type === "SELL" ? -1 : 1);
   return {
     id: String(row.id || ""),
     symbol: String(row.symbol || ""),
-    product: String(row.product || "MIS").toUpperCase(),
+    product: ledgerProduct(row.product),
     type,
-    buyQty: type === "BUY" ? qty : 0,
-    buyPrice: type === "BUY" ? avg : 0,
-    sellQty: type === "SELL" ? qty : 0,
-    sellPrice: type === "SELL" ? avg : 0,
+    buyQty: Math.abs(Number(row.buyQty) || 0) || (type === "BUY" ? qty : 0),
+    buyPrice: Number(row.buyPrice || (type === "BUY" ? avg : 0)) || 0,
+    sellQty: Math.abs(Number(row.sellQty) || 0) || (type === "SELL" ? qty : 0),
+    sellPrice: Number(row.sellPrice || (type === "SELL" ? avg : 0)) || 0,
     netQty: type === "SELL" ? -qty : qty,
     ltp,
     realized: round2(row.realized),
@@ -293,9 +302,13 @@ export function asLedgerPosition(row = {}) {
 
 export function asClosedLedgerPosition(row = {}) {
   const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
-  const qty = Math.abs(Number(row.qty) || 0);
-  const entry = Number(row.entry ?? row.avg ?? 0);
-  const exit = Number(row.exit ?? row.ltp ?? entry);
+  const buyQty = Math.abs(Number(row.buyQty) || 0);
+  const sellQty = Math.abs(Number(row.sellQty) || 0);
+  const qty = Math.abs(Number(row.qty) || 0) || Math.max(buyQty, sellQty);
+  const entry = Number(row.entry ?? row.buyPrice ?? row.buyAvg ?? row.avg ?? 0);
+  const exit = Number(row.exit ?? row.sellPrice ?? row.sellAvg ?? row.ltp ?? entry);
+  const buyPrice = Number(row.buyPrice ?? row.buyAvg ?? (type === "SELL" ? exit : entry)) || 0;
+  const sellPrice = Number(row.sellPrice ?? row.sellAvg ?? (type === "SELL" ? entry : exit)) || 0;
   const marked = Number(row.pnl);
   const realized = Number.isFinite(marked)
     ? round2(marked)
@@ -303,14 +316,14 @@ export function asClosedLedgerPosition(row = {}) {
   return {
     id: String(row.id || ""),
     symbol: String(row.symbol || ""),
-    product: String(row.product || "MIS").toUpperCase(),
+    product: ledgerProduct(row.product),
     type,
-    buyQty: qty,
-    buyPrice: type === "BUY" ? entry : exit,
-    sellQty: qty,
-    sellPrice: type === "BUY" ? exit : entry,
+    buyQty: buyQty || qty,
+    buyPrice,
+    sellQty: sellQty || qty,
+    sellPrice,
     netQty: 0,
-    ltp: exit,
+    ltp: Number(row.ltp) || exit || sellPrice,
     realized,
     mtm: realized,
     paper: Boolean(row.paper || row.brokerId === "paper"),

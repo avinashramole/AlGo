@@ -123,8 +123,9 @@ function MemberBook({ view }: { view: View }) {
                   <div>
                     <div className="text-sm font-bold">{row.symbol}</div>
                     <div className="mt-0.5 text-[11px] text-slate-400">
-                      {row.side} · {row.qty} · {formatNumber(row.entry)} → {formatNumber(row.exit)}
+                      Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
+                    {row.product ? <div className="mt-0.5 text-[11px] text-slate-400">{row.product}</div> : null}
                   </div>
                   <Money value={row.pnl} className="text-sm" />
                 </div>
@@ -225,7 +226,7 @@ function PositionCard({ row }: { row: MemberPosition }) {
         <div>
           <div className="text-sm font-bold">{row.symbol}</div>
           <div className="mt-0.5 text-[11px] text-slate-400">
-            {row.type} · {row.qty} qty · LTP {formatNumber(row.ltp)}
+            {row.type} · {row.qty} qty · Avg {formatNumber(row.avg)} · LTP {formatNumber(row.ltp)}
           </div>
           {row.strategy ? <div className="mt-1 text-[11px] text-slate-400">{row.strategy}</div> : null}
         </div>

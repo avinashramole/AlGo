@@ -505,6 +505,72 @@ test("admin balance stays separate from each user balance", () => {
   }
 });
 
+test("a client closed Dhan row keeps buy and sell qty and price", () => {
+  const closed = asClosedLedgerPosition({
+    id: "dhan-closed-pe",
+    symbol: "NIFTY26O1322650PE",
+    side: "BUY",
+    qty: 0,
+    buyQty: 65,
+    sellQty: 65,
+    buyPrice: 137.5,
+    sellPrice: 299.85,
+    ltp: 299.85,
+    pnl: 10543,
+    realized: 10543,
+    product: "I",
+    brokerId: "dhan",
+  });
+  assert.equal(closed.product, "INTRADAY");
+  assert.equal(closed.buyQty, 65);
+  assert.equal(closed.sellQty, 65);
+  assert.equal(closed.buyPrice, 137.5);
+  assert.equal(closed.sellPrice, 299.85);
+  assert.equal(closed.ltp, 299.85);
+  assert.equal(closed.realized, 10543);
+
+  const desk = applyBrokerBooksToDesk(
+    {
+      masterMtm: 0,
+      master: { mtm: 0 },
+      clients: [{ id: "u-shantai", kind: "client", tradeMode: "real", positions: [], mtm: 0, realized: 0, open: 0 }],
+      clientMtm: 0,
+      totalMtm: 0,
+    },
+    {
+      "u-shantai": {
+        realizedPnl: 10543,
+        unrealizedPnl: 0,
+        mtm: 10543,
+        closed: [
+          {
+            id: "dhan-closed-pe",
+            symbol: "NIFTY26O1322650PE",
+            buyQty: 65,
+            sellQty: 65,
+            buyPrice: 137.5,
+            sellPrice: 299.85,
+            ltp: 299.85,
+            realized: 10543,
+            pnl: 10543,
+            product: "I",
+            brokerId: "dhan",
+            closed: true,
+          },
+        ],
+        open: [],
+      },
+    },
+  );
+  const row = desk.clients[0].positions[0];
+  assert.equal(row.symbol, "NIFTY26O1322650PE");
+  assert.equal(row.product, "INTRADAY");
+  assert.equal(row.buyQty, 65);
+  assert.equal(row.sellQty, 65);
+  assert.equal(row.buyPrice, 137.5);
+  assert.equal(row.sellPrice, 299.85);
+});
+
 test("closed trades stay on the position desk with live P&L and MTM", () => {
   const closed = asClosedLedgerPosition({
     id: "t-close",
@@ -714,6 +780,11 @@ test("client MTM uses each user's broker book instead of the local copy loss", (
   assert.equal(live.unrealized, 108);
   assert.equal(live.positions.some((row) => row.mtm === -2492.75), false);
   assert.equal(live.positions.reduce((sum, row) => sum + row.mtm, 0), 308);
+  const closed = live.positions.find((row) => row.closed);
+  assert.equal(closed.buyQty, 65);
+  assert.equal(closed.sellQty, 65);
+  assert.equal(closed.buyPrice, 140);
+  assert.equal(closed.sellPrice, 143);
   assert.equal(paper.mtm, -10);
   assert.equal(desk.clientMtm, 298);
   assert.equal(desk.totalMtm, 60.75);

@@ -86,6 +86,11 @@ test("a closed admin Dhan book keeps the broker loss when nothing is open", () =
   assert.equal(book.closed.length, 1);
   assert.equal(book.closed[0].symbol, "NIFTY-Sep2026-23050-CE");
   assert.equal(book.closed[0].realized, -237.25);
+  assert.equal(book.closed[0].buyQty, 65);
+  assert.equal(book.closed[0].sellQty, 65);
+  assert.equal(book.closed[0].buyPrice, 140.3);
+  assert.equal(book.closed[0].sellPrice, 136.65);
+  assert.equal(book.closed[0].product, "INTRADAY");
   const day = withAdminBrokerPnl({
     positions: [],
     closedTrades: [],
@@ -96,6 +101,58 @@ test("a closed admin Dhan book keeps the broker loss when nothing is open", () =
   });
   assert.equal(day.totalPnl, -237.25);
   assert.equal(day.pnlByBroker.dhan, -237.25);
+});
+
+test("a Dhan closed row with only P&L and LTP picks up buy/sell from trades", () => {
+  const book = adminBookFromDhan(
+    [
+      {
+        positionType: "CLOSED",
+        netQty: 0,
+        tradingSymbol: "NIFTY26O1322650PE",
+        productType: "I",
+        lastTradedPrice: 299.85,
+        realizedProfit: 10543,
+        unrealizedProfit: 0,
+      },
+    ],
+    [
+      { tradingSymbol: "NIFTY26O1322650PE", transactionType: "BUY", tradedQuantity: 65, tradedPrice: 137.5, productType: "I" },
+      { tradingSymbol: "NIFTY26O1322650PE", transactionType: "SELL", tradedQuantity: 65, tradedPrice: 299.85, productType: "I" },
+    ],
+  );
+  assert.equal(book.closed[0].symbol, "NIFTY26O1322650PE");
+  assert.equal(book.closed[0].product, "INTRADAY");
+  assert.equal(book.closed[0].buyQty, 65);
+  assert.equal(book.closed[0].sellQty, 65);
+  assert.equal(book.closed[0].buyPrice, 137.5);
+  assert.equal(book.closed[0].sellPrice, 299.85);
+  assert.equal(book.closed[0].qty, 65);
+  assert.equal(book.closed[0].realized, 10543);
+});
+
+test("snake_case Dhan closed legs keep buy and sell qty and price", () => {
+  const book = dhanMasterBook([
+    {
+      position_type: "CLOSED",
+      net_qty: 0,
+      trading_symbol: "NIFTY26O1322650PE",
+      product_type: "I",
+      buy_qty: 65,
+      sell_qty: 65,
+      buy_avg: 137.5,
+      sell_avg: 299.85,
+      last_traded_price: 299.85,
+      realized_profit: 10543,
+      unrealized_profit: 0,
+    },
+  ]);
+  assert.equal(book.closed[0].buyQty, 65);
+  assert.equal(book.closed[0].sellQty, 65);
+  assert.equal(book.closed[0].buyPrice, 137.5);
+  assert.equal(book.closed[0].sellPrice, 299.85);
+  assert.equal(book.closed[0].ltp, 299.85);
+  assert.equal(book.closed[0].product, "INTRADAY");
 });
 
 test("admin day P&L comes from Dhan trades when positions are flat", () => {

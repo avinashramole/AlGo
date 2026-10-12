@@ -116,6 +116,11 @@ function asClosedLiveLedgerPosition(row: {
   strategy?: string;
   brokerId?: string;
   paper?: boolean;
+  buyQty?: number;
+  buyPrice?: number;
+  sellQty?: number;
+  sellPrice?: number;
+  ltp?: number;
 }): LedgerPosition {
   const type = String(row.type || row.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
   const qty = Math.abs(Number(row.qty) || 0);
@@ -127,12 +132,12 @@ function asClosedLiveLedgerPosition(row: {
     symbol: String(row.symbol || ""),
     product: String(row.product || "MIS").toUpperCase(),
     type,
-    buyQty: qty,
-    buyPrice: type === "BUY" ? entry : exit,
-    sellQty: qty,
-    sellPrice: type === "BUY" ? exit : entry,
+    buyQty: Math.abs(Number(row.buyQty) || 0) || qty,
+    buyPrice: Number(row.buyPrice || (type === "BUY" ? entry : exit)) || 0,
+    sellQty: Math.abs(Number(row.sellQty) || 0) || qty,
+    sellPrice: Number(row.sellPrice || (type === "BUY" ? exit : entry)) || 0,
     netQty: 0,
-    ltp: exit,
+    ltp: Number(row.ltp) || exit,
     realized: pnl,
     mtm: pnl,
     paper: Boolean(row.paper || row.brokerId === "paper"),
@@ -474,10 +479,10 @@ function LedgerCard({
                 <tr key={row.id} className="soft-row">
                   <td className="px-4 py-3 font-semibold">{row.symbol}</td>
                   <td className="px-4 py-3 text-slate-500">{row.product}</td>
-                  <td className="px-4 py-3 text-right">{row.buyQty || "—"}</td>
-                  <td className="px-4 py-3 text-right">{row.buyQty ? formatNumber(row.buyPrice) : "—"}</td>
-                  <td className="px-4 py-3 text-right">{row.sellQty || "—"}</td>
-                  <td className="px-4 py-3 text-right">{row.sellQty ? formatNumber(row.sellPrice) : "—"}</td>
+                  <td className="px-4 py-3 text-right">{Number(row.buyQty) > 0 ? row.buyQty : "—"}</td>
+                  <td className="px-4 py-3 text-right">{Number(row.buyPrice) > 0 ? formatNumber(row.buyPrice) : "—"}</td>
+                  <td className="px-4 py-3 text-right">{Number(row.sellQty) > 0 ? row.sellQty : "—"}</td>
+                  <td className="px-4 py-3 text-right">{Number(row.sellPrice) > 0 ? formatNumber(row.sellPrice) : "—"}</td>
                   <td className="px-4 py-3 text-right font-semibold">{row.netQty}</td>
                   <td className="px-4 py-3 text-right">{formatNumber(row.ltp)}</td>
                   <td className={cn("px-4 py-3 text-right", moneyClass(row.realized))}>{rupee(row.realized)}</td>
