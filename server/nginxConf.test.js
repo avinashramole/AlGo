@@ -121,6 +121,14 @@ test("website deploy installs npm packages before tsc", () => {
   assert.match(src, /@capacitor\/browser/);
 });
 
+test("website deploy hard-resets to origin/branch instead of a stale sparse pull", () => {
+  const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
+  assert.match(src, /git reset --hard "origin\/\$BRANCH"/);
+  assert.match(src, /raw.githubusercontent.com\/avinashramole\/AlGo\/main\/deploy\/update-website.sh/);
+  assert.match(src, /dist\/version.json/);
+  assert.doesNotMatch(src, /git pull origin "\$BRANCH" \|\| true/);
+});
+
 test("install-t2s-service still restarts t2s if the nginx writer fails", () => {
   const src = fs.readFileSync(path.join(deployDir, "install-t2s-service.sh"), "utf8");
   assert.match(src, /if ! python3 .*write_nginx_trade2smart\.py/s);

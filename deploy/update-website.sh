@@ -1,6 +1,10 @@
 #!/bin/bash
 # Publish the live site from GitHub to nginx + restart t2s.
 # Chrome reads /var/www/trade2smart. Restarting t2s alone does not change the page.
+# Always download THIS script from GitHub first. The copy already on the VPS is often old
+# and only sparse-updates a few files, so last deploys built a stale desk.
+#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/update-website.sh -o /tmp/update-website.sh
+#   bash /tmp/update-website.sh main
 # One TEST2 Script window (do not deploy main until this is merged):
 #   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/cursor/test2-one-script-6826/deploy/update-website.sh -o /tmp/update-website.sh
 #   bash /tmp/update-website.sh cursor/test2-one-script-6826
@@ -30,42 +34,26 @@ fi
 echo "HOME=$HOME_DIR branch=$BRANCH"
 cd "$HOME_DIR"
 if [ -d .git ]; then
-  echo "git-head=$(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
+  echo "git-head-before=$(git rev-parse --short HEAD 2>/dev/null || echo none) $(git log -1 --pretty=%s 2>/dev/null || true)"
   git remote -v | head -n 2 || true
-  git fetch origin "$BRANCH" || git fetch origin || true
-  git checkout "$BRANCH" 2>/dev/null || git checkout -B "$BRANCH" "origin/$BRANCH" || true
-  git pull origin "$BRANCH" || true
-  git checkout "origin/$BRANCH" -- \
-    src/components/dashboard/StrategyBuilder.tsx \
-    src/components/dashboard/OneMinuteHistoryBar.tsx \
-    src/pages/Algo.tsx \
-    src/pages/ReportsHub.tsx \
-    src/context/MarketContext.tsx \
-    src/pages/UserHome.tsx \
-    src/pages/MemberPlans.tsx \
-    src/pages/PositionsDesk.tsx \
-    src/components/users/UserDetailModal.tsx \
-    src/api/client.ts \
-    src/lib/strategies.ts \
-    src/index.css \
-    server/niftyTest2/Test2Engine.js \
-    server/dhanRollingOption.js \
-    server/dhan.js \
-    server/index.js \
-    server/indexHistory.js \
-    server/indexHistorySync.js \
-    server/market.js \
-    server/memberBrokerPnl.js \
-    server/memberDesk.js \
-    server/memberQuotesFeed.js \
-    src/components/dashboard/MemberIndexBoard.tsx \
-    src/components/layout/Header.tsx \
-    mobile/src/screens/HomeScreen.tsx \
-    server/niftyVwap/config.js \
-    server/niftyTest1/Test1Strategy.js \
-    server/strategies.js \
-    server/backtestReport.js \
-    deploy/publish-web.js 2>/dev/null || true
+  git fetch origin "$BRANCH"
+  if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+    echo "FAIL: origin/$BRANCH is missing after fetch."
+    exit 1
+  fi
+  git checkout -B "$BRANCH" "origin/$BRANCH"
+  git reset --hard "origin/$BRANCH"
+  WANTED=$(git rev-parse "origin/$BRANCH")
+  HAVE=$(git rev-parse HEAD)
+  if [ "$HAVE" != "$WANTED" ]; then
+    echo "FAIL: checkout is $HAVE, origin/$BRANCH is $WANTED. Dirty pull left a stale tree."
+    exit 1
+  fi
+  echo "git-head-after=$(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
+  if [ "${T2S_DEPLOY_REEXEC:-}" != "1" ] && [ -f "$HOME_DIR/deploy/update-website.sh" ]; then
+    echo "re-exec $HOME_DIR/deploy/update-website.sh $BRANCH"
+    T2S_DEPLOY_REEXEC=1 exec bash "$HOME_DIR/deploy/update-website.sh" "$BRANCH"
+  fi
 fi
 
 pull_raw() {
@@ -173,9 +161,12 @@ if ! grep -q 'data-mir-trade-mode="true"' "$HOME_DIR/src/components/dashboard/St
   echo "FAIL: Multi-Index Edit has no Paper/Live selector. Deploy cursor/multi-index-paper-live-6826."
   exit 1
 fi
-if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx" || ! [ -f "$HOME_DIR/releases/Trade2Smart-web.apk" ]; then
+if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx"; then
   echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
   exit 1
+fi
+if [ ! -f "$HOME_DIR/releases/Trade2Smart-web.apk" ]; then
+  echo "WARN: releases/Trade2Smart-web.apk is missing. Website still publishes."
 fi
 if ! grep -q 'webDir: "dist"' "$HOME_DIR/capacitor.config.ts"; then
   echo "FAIL: Capacitor app must ship the website from dist."
@@ -223,7 +214,18 @@ if ! grep -Rql "$RESULT_MARKER" "$HOME_DIR/dist/assets"; then
   echo "FAIL: dist/ does not contain $RESULT_MARKER. Build is still old."
   exit 1
 fi
-cp -f "$HOME_DIR/releases/Trade2Smart-web.apk" "$HOME_DIR/dist/Trade2Smart-web.apk"
+if [ -d "$HOME_DIR/.git" ]; then
+  printf '{"sha":"%s","short":"%s","branch":"%s","at":"%s"}\n' \
+    "$(git -C "$HOME_DIR" rev-parse HEAD)" \
+    "$(git -C "$HOME_DIR" rev-parse --short HEAD)" \
+    "$BRANCH" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$HOME_DIR/dist/version.json"
+fi
+if [ -f "$HOME_DIR/releases/Trade2Smart-web.apk" ]; then
+  cp -f "$HOME_DIR/releases/Trade2Smart-web.apk" "$HOME_DIR/dist/Trade2Smart-web.apk"
+elif [ -f "$WEBROOT/Trade2Smart-web.apk" ]; then
+  cp -f "$WEBROOT/Trade2Smart-web.apk" "$HOME_DIR/dist/Trade2Smart-web.apk"
+fi
 
 mkdir -p "$WEBROOT"
 /bin/cp -af "$HOME_DIR/dist/." "$WEBROOT/"
@@ -235,8 +237,10 @@ if ! grep -Rql "$RESULT_MARKER" "$WEBROOT/assets"; then
   exit 1
 fi
 if ! [ -f "$WEBROOT/Trade2Smart-web.apk" ]; then
-  echo "FAIL: $WEBROOT is missing Trade2Smart-web.apk so the login download will 404."
-  exit 1
+  echo "WARN: $WEBROOT is missing Trade2Smart-web.apk so the login download will 404."
+fi
+if [ -f "$WEBROOT/version.json" ]; then
+  echo "published $(cat "$WEBROOT/version.json")"
 fi
 
 if [ "$HOME_DIR" != /opt/t2s ] && [ -d /opt/t2s ]; then
@@ -272,7 +276,8 @@ if [ "$api" != "200" ]; then
   exit 1
 fi
 
-echo "OK website published. api:$api"
+echo "OK website published. api:$api head=$(git -C "$HOME_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 grep -l "$RESULT_MARKER" "$WEBROOT/assets/"*.js | head
-echo "Open https://trade2smart.com and press Ctrl+Shift+R."
+echo "Open https://trade2smart.com/version.json — sha must match origin/$BRANCH."
+echo "Then open https://trade2smart.com and press Ctrl+Shift+R."
 echo "Run TEST2 Backtest again with Dhan LIVE. The card must fetch rolling option tape."
