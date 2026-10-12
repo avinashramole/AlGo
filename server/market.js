@@ -2738,7 +2738,7 @@ export function memberIndexQuote(row) {
     changePct: Number(row.changePct) || 0,
     prevClose: Number(row.prevClose) > 0 ? Number(row.prevClose) : 0,
     spark: Array.isArray(row.spark) ? row.spark.slice(-8) : [],
-    future: Number(row.future) > 0 ? Number(row.future) : Number(row.price) || 0,
+    future: Number(row.future) > 0 ? Number(row.future) : 0,
     futureExpiry: row.futureExpiry || "",
     lot: Number(row.lot) || 0,
   };

@@ -48,7 +48,7 @@ function MemberHome() {
             <View style={styles.deskRow}>
               <View>
                 <Text style={styles.tiny}>FUTURE</Text>
-                <Text style={styles.deskVal}>{formatNumber(item.future || item.price)}</Text>
+                <Text style={styles.deskVal}>{Number(item.future) > 0 ? formatNumber(item.future) : "—"}</Text>
                 <Text style={styles.tiny}>{item.futureExpiry || ""}</Text>
               </View>
               <View>
@@ -159,11 +159,11 @@ export function HomeScreen() {
                   <View style={styles.deskRow}>
                     <View>
                       <Text style={styles.tiny}>FUT</Text>
-                      <Text style={styles.deskVal}>{(item.future || item.price) > 0 ? formatNumber(item.future || item.price) : "—"}</Text>
+                      <Text style={styles.deskVal}>{Number(item.future) > 0 ? formatNumber(item.future) : "—"}</Text>
                     </View>
                     <View>
                       <Text style={styles.tiny}>VWAP</Text>
-                      <Text style={[styles.deskVal, { color: vwapColor(Number(item.futureVwap || item.vwap), item.future || item.price) }]}>
+                      <Text style={[styles.deskVal, { color: vwapColor(Number(item.futureVwap || item.vwap), Number(item.future) || Number(item.price)) }]}>
                         {Number(item.futureVwap || item.vwap) > 0 ? formatNumber(Number(item.futureVwap || item.vwap)) : "—"}
                       </Text>
                     </View>

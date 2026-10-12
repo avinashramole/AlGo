@@ -5,6 +5,7 @@ import {
   crudeQuoteFromPayload,
   fetchMemberBrokerQuotes,
   frontMonthFutCode,
+  indexFutureKey,
   kotakCrudeSymbols,
   kotakMcxMasterUrls,
   kotakNeoFutCode,
@@ -54,6 +55,12 @@ test("Upstox quote payload maps index LTP without using a Dhan token", () => {
   assert.equal(nifty.kind, "index");
   assert.equal(bank.ltp, 52100.5);
   assert.equal(quotes.find((row) => row.symbol === "INDIA VIX").ltp, 12.8);
+});
+
+test("index future keys stay off the index batch", () => {
+  assert.equal(indexFutureKey("NIFTY", "upstox", "2026-10-01"), "NSE_FO|NIFTY26OCTFUT");
+  assert.equal(indexFutureKey("BANKNIFTY", "zerodha", "2026-10-01"), "NFO:BANKNIFTY26OCTFUT");
+  assert.equal(indexFutureKey("SENSEX", "fyers", "2026-10-01"), "BSE:SENSEX26OCTFUT");
 });
 
 test("front-month Crude key is isolated from the index batch", () => {

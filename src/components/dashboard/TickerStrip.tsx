@@ -35,7 +35,7 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
         change: Number(quote?.change || 0),
         changePct: Number(quote?.changePct || 0),
         prevClose: Number(quote?.prevClose || 0),
-        future: Number(quote?.future || quote?.price || 0),
+        future: Number(quote?.future || 0),
         vwap: Number(quote?.futureVwap || quote?.vwap || 0),
         selectable: Boolean(onSelect),
       };
@@ -69,7 +69,7 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
         const tone = quoteTone(day.change);
         const showDeriv = item.chainId !== "";
         const vwap = cardVwap(item);
-        const futureLtp = item.future || item.price;
+        const futureLtp = Number(item.future) > 0 ? Number(item.future) : 0;
         const selected = Boolean(onSelect && item.chainId && item.chainId === selectedId);
         return (
           <button

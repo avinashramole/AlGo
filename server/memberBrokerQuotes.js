@@ -20,6 +20,13 @@ export const INDEX_INSTRUMENTS = [
   { symbol: "INDIA VIX", parent: "INDIA VIX", kind: "index" },
 ];
 
+export const INDEX_FUTURE_INSTRUMENTS = [
+  { symbol: "NIFTY FUT", parent: "NIFTY 50", root: "NIFTY", kind: "future" },
+  { symbol: "BANKNIFTY FUT", parent: "BANKNIFTY", root: "BANKNIFTY", kind: "future" },
+  { symbol: "FINNIFTY FUT", parent: "FINNIFTY", root: "FINNIFTY", kind: "future" },
+  { symbol: "SENSEX FUT", parent: "SENSEX", root: "SENSEX", kind: "future" },
+];
+
 export const MCX_INSTRUMENTS = [
   { symbol: "CRUDEOIL", parent: "CRUDEOIL", kind: "future" },
   { symbol: "NATURALGAS", parent: "NATURALGAS", kind: "future" },
@@ -72,6 +79,39 @@ export function frontMonthFutCode(root, ymd) {
   const match = String(ymd || "").match(/^(\d{4})-(\d{2})/);
   if (!match) return "";
   return `${root}${match[1].slice(-2)}${MONTHS[Number(match[2]) - 1]}FUT`;
+}
+
+export function indexFutureKey(root, brokerId, ymd) {
+  const code = frontMonthFutCode(root, ymd);
+  if (!code) return "";
+  const id = String(brokerId || "").toLowerCase();
+  const sensex = String(root || "").toUpperCase() === "SENSEX";
+  if (id === "upstox") return `${sensex ? "BSE_FO" : "NSE_FO"}|${code}`;
+  if (id === "zerodha") return `${sensex ? "BFO" : "NFO"}:${code}`;
+  if (id === "fyers") return `${sensex ? "BSE" : "NSE"}:${code}`;
+  return "";
+}
+
+function frontMonthYmds(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit" }).formatToParts(now);
+  const year = Number(parts.find((row) => row.type === "year")?.value);
+  const month = Number(parts.find((row) => row.type === "month")?.value);
+  if (!year || !month) return [];
+  return [0, 1].map((offset) => {
+    const next = new Date(Date.UTC(year, month - 1 + offset, 1));
+    return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  });
+}
+
+export function indexFutureKeyMap(brokerId, now) {
+  const keys = {};
+  for (const row of INDEX_FUTURE_INSTRUMENTS) {
+    for (const ymd of frontMonthYmds(now)) {
+      const key = indexFutureKey(row.root, brokerId, ymd);
+      if (key && !keys[row.symbol]) keys[row.symbol] = key;
+    }
+  }
+  return keys;
 }
 
 function mcxInstrumentOf(root) {
@@ -400,7 +440,7 @@ function pickPrevClose(inner = {}, last = 0) {
   return prev > 0 ? prev : 0;
 }
 
-export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close } = {}) {
+export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close, instruments = CARD_INSTRUMENTS } = {}) {
   const bag = data && typeof data === "object" ? data : {};
   const byNorm = new Map();
   for (const [rawKey, row] of Object.entries(bag)) {
@@ -411,7 +451,7 @@ export function quotesFromKeyedPayload(data, keyBySymbol, { ltp, close } = {}) {
     if (row.n) byNorm.set(normKey(row.n), row);
   }
   const quotes = [];
-  for (const instrument of CARD_INSTRUMENTS) {
+  for (const instrument of instruments) {
     const key = keyBySymbol[instrument.symbol];
     if (!key) continue;
     const row = byNorm.get(normKey(key));
@@ -483,21 +523,32 @@ async function readJson(fetchImpl, url, options) {
   return json;
 }
 
+function parseIndexFutures(payload, brokerId, parseOpts) {
+  const keys = indexFutureKeyMap(brokerId);
+  if (!Object.keys(keys).length) return [];
+  const rows = Array.isArray(payload?.d) ? payload.d : [];
+  const fromList = Object.fromEntries(rows.filter((row) => row?.n).map((row) => [row.n, row]));
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : Object.keys(fromList).length ? fromList : payload;
+  return quotesFromKeyedPayload(data, keys, { ...parseOpts, instruments: INDEX_FUTURE_INSTRUMENTS });
+}
+
 async function fetchUpstoxQuotes({ accessToken, fetchImpl }) {
-  const keys = INDEX_INSTRUMENTS.map((row) => UPSTOX_KEYS[row.symbol]).filter(Boolean).join(",");
+  const futKeys = Object.values(indexFutureKeyMap("upstox"));
+  const keys = INDEX_INSTRUMENTS.map((row) => UPSTOX_KEYS[row.symbol]).filter(Boolean).concat(futKeys).join(",");
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
   let quotes = [];
+  let payload = null;
   try {
-    const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(keys)}`, { headers });
+    payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(keys)}`, { headers });
     quotes = quotesFromUpstoxPayload(payload);
   } catch {
     quotes = [];
   }
   if (!quotes.length) {
-    const payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(keys)}`, { headers });
+    payload = await readJson(fetchImpl, `https://api.upstox.com/v2/market-quote/ltp?instrument_key=${encodeURIComponent(keys)}`, { headers });
     quotes = quotesFromUpstoxPayload(payload);
   }
-  return quotes.concat(await fetchUpstoxMcxAll({ accessToken, fetchImpl }));
+  return quotes.concat(parseIndexFutures(payload, "upstox"), await fetchUpstoxMcxAll({ accessToken, fetchImpl }));
 }
 
 function upstoxMcxSearchUrls(root) {
@@ -601,11 +652,14 @@ async function fetchUpstoxMcxAll({ accessToken, fetchImpl }) {
 }
 
 async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
-  const query = INDEX_INSTRUMENTS.map((row) => `i=${encodeURIComponent(ZERODHA_KEYS[row.symbol])}`).join("&");
+  const futKeys = Object.values(indexFutureKeyMap("zerodha"));
+  const query = INDEX_INSTRUMENTS.map((row) => `i=${encodeURIComponent(ZERODHA_KEYS[row.symbol])}`)
+    .concat(futKeys.map((key) => `i=${encodeURIComponent(key)}`))
+    .join("&");
   const payload = await readJson(fetchImpl, `https://api.kite.trade/quote?${query}`, {
     headers: { "X-Kite-Version": "3", Authorization: `token ${apiKey}:${accessToken}` },
   });
-  const quotes = quotesFromZerodhaPayload(payload);
+  const quotes = quotesFromZerodhaPayload(payload).concat(parseIndexFutures(payload, "zerodha"));
   const extras = [];
   for (const instrument of MCX_INSTRUMENTS) {
     const key = mcxInstrumentKey(instrument.symbol, "zerodha");
@@ -623,11 +677,12 @@ async function fetchZerodhaQuotes({ accessToken, apiKey, fetchImpl }) {
 }
 
 async function fetchFyersQuotes({ accessToken, apiKey, fetchImpl }) {
-  const symbols = INDEX_INSTRUMENTS.map((row) => FYERS_KEYS[row.symbol]).join(",");
+  const futKeys = Object.values(indexFutureKeyMap("fyers"));
+  const symbols = INDEX_INSTRUMENTS.map((row) => FYERS_KEYS[row.symbol]).concat(futKeys).join(",");
   const payload = await readJson(fetchImpl, `https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(symbols)}`, {
     headers: { Authorization: `${apiKey}:${accessToken}` },
   });
-  const quotes = quotesFromFyersPayload(payload);
+  const quotes = quotesFromFyersPayload(payload).concat(parseIndexFutures(payload, "fyers"));
   const extras = [];
   for (const instrument of MCX_INSTRUMENTS) {
     const key = mcxInstrumentKey(instrument.symbol, "fyers");

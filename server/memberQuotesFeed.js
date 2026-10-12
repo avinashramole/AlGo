@@ -64,9 +64,12 @@ export function cardsFromMemberQuotes(userId, quotes = [], deskIndices = []) {
     const indexQuote = quotes.find((row) => row.kind !== "future" && matchesCard(row, card));
     const futureQuote = quotes.find((row) => row.kind === "future" && matchesCard(row, card));
     const desk = deskCard(deskIndices, card);
-    const priceRaw = Number(indexQuote?.ltp || (MCX_SPOT_FROM_FUT.has(card.symbol) ? futureQuote?.ltp : 0));
+    const isMcx = MCX_SPOT_FROM_FUT.has(card.symbol);
+    const priceRaw = Number(indexQuote?.ltp || (isMcx ? futureQuote?.ltp : 0));
     const futureRaw = Number(futureQuote?.ltp || 0);
-    const price = priceRaw > 0 ? priceRaw : futureRaw;
+    const deskPrice = Number(desk?.price || 0);
+    const deskFuture = Number(desk?.future || 0);
+    const price = priceRaw > 0 ? priceRaw : isMcx ? futureRaw : deskPrice;
     const seed = indexQuote || futureQuote || {};
     const day = dayChangeFromQuote(
       price,
@@ -93,7 +96,7 @@ export function cardsFromMemberQuotes(userId, quotes = [], deskIndices = []) {
       changePct: day.changePct,
       prevClose: day.prevClose,
       spark: sparkMap[card.symbol] || [],
-      future: futureRaw > 0 ? round2(futureRaw) : price > 0 ? round2(price) : 0,
+      future: futureRaw > 0 ? round2(futureRaw) : isMcx && price > 0 ? round2(price) : deskFuture > 0 ? round2(deskFuture) : 0,
       futureExpiry: futureQuote?.expiry || "",
       vwap: vwapRaw > 0 ? round2(vwapRaw) : 0,
       futureVwap: vwapRaw > 0 ? round2(vwapRaw) : 0,

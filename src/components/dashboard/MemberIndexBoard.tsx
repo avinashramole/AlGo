@@ -53,7 +53,7 @@ export function MemberIndexBoard({ indices, note }: { indices: MemberIndexQuote[
         const day = quoteDayChange(item);
         const tone = quoteTone(day.change);
         const showDeriv = item.symbol !== "INDIA VIX";
-        const futureLtp = item.future || item.price;
+        const futureLtp = Number(item.future) > 0 ? Number(item.future) : 0;
         return (
           <TapeCell
             key={item.symbol}

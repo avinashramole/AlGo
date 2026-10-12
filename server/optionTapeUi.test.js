@@ -16,6 +16,8 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.doesNotMatch(tape, /tapeLotLine/);
   assert.doesNotMatch(tape, />Lot</);
   assert.match(tape, /TapeTodayChange/);
+  assert.doesNotMatch(tape, /item\.future \|\| item\.price/);
+  assert.doesNotMatch(tape, /quote\?\.future \|\| quote\?\.price/);
   const deskTape = fs.readFileSync(path.join(root, "src/components/dashboard/DeskTape.tsx"), "utf8");
   assert.match(deskTape, /data-market-tape/);
   const format = fs.readFileSync(path.join(root, "src/lib/format.ts"), "utf8");

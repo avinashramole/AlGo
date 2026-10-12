@@ -6,6 +6,7 @@ test("memberIndexQuote drops VWAP and security ids", () => {
   const vix = memberIndexQuote({ symbol: "INDIA VIX", name: "VIX", price: 13.2, change: 0.1, changePct: 0.76 });
   assert.equal(vix.symbol, "INDIA VIX");
   assert.equal(vix.price, 13.2);
+  assert.equal(vix.future, 0);
   assert.equal(vix.vwap, undefined);
   const row = memberIndexQuote({
     symbol: "NIFTY 50",

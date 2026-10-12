@@ -145,6 +145,32 @@ test("member MCX cards keep a wide today change versus yesterday close", () => {
   assert.equal(gas.prevClose, 300);
 });
 
+test("member NSE cards keep spot and futures on separate prices", () => {
+  const rows = cardsFromMemberQuotes(
+    "u-nifty-split",
+    [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25111.25, close: 25000 }],
+    [{ symbol: "NIFTY 50", price: 25110, future: 25140.5 }],
+  );
+  const nifty = rows.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.price, 25111.25);
+  assert.equal(nifty.future, 25140.5);
+  const own = cardsFromMemberQuotes("u-nifty-own-fut", [
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25111.25, close: 25000 },
+    { symbol: "NIFTY FUT", parent: "NIFTY 50", kind: "future", ltp: 25138.4 },
+  ]);
+  assert.equal(own.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
+  assert.equal(own.find((row) => row.symbol === "NIFTY 50").future, 25138.4);
+});
+
+test("member NSE cards do not copy spot onto Fut when futures are missing", () => {
+  const rows = cardsFromMemberQuotes("u-nifty-nofut", [
+    { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25111.25, close: 25000 },
+  ]);
+  const nifty = rows.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.price, 25111.25);
+  assert.equal(nifty.future, 0);
+});
+
 test("member board always keeps a Crude Oil card even when LTP is missing", () => {
   const rows = cardsFromMemberQuotes("u-crude-empty", [
     { symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 25100, close: 25000 },
