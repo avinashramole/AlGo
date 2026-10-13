@@ -1250,9 +1250,32 @@ function brokerChoiceNote(row, { selected, saved, virtual }) {
   return `Default broker. Quotes, orders, balance, MTM, and P&L use this login${saved.accountId ? ` · ${saved.accountId}` : ""}. ${detail}`;
 }
 
+function memberBrokerRows(selectedId = "paper") {
+  const seen = new Set();
+  const rows = [];
+  const add = (row) => {
+    const id = String(row?.id || "").trim().toLowerCase();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    const listed = CLIENT_BROKERS.find((item) => item.id === id) || {};
+    const extra = catalog.find((item) => item.id === id) || {};
+    rows.push({
+      id,
+      name: listed.name || extra.name || id.toUpperCase(),
+      vendor: extra.vendor || listed.name || id.toUpperCase(),
+      color: listed.color || extra.color || "#64748b",
+      segments: listed.segments || extra.segments || ["All segments"],
+    });
+  };
+  for (const row of CLIENT_BROKERS) add(row);
+  for (const row of catalog) add(row);
+  add({ id: selectedId });
+  return rows;
+}
+
 export function memberBrokerCatalog(selectedId = "paper", desk = {}) {
   const accounts = publicBrokerAccounts(desk);
-  return catalog.map((row) => {
+  return memberBrokerRows(selectedId).map((row) => {
     const virtual = row.id === "paper";
     const live = deskBrokerLive(row.id);
     const selected = row.id === selectedId;
@@ -2020,7 +2043,8 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   const balance = round2(desk.wallet.balance || 0);
   const autoTrade = brokerId !== "paper" && desk.tradeMode === "real";
   const brokerName =
-    (catalog.find((row) => row.id === brokerId) || {}).name || (brokerId === "paper" ? "Paper" : brokerId);
+    (CLIENT_BROKERS.find((row) => row.id === brokerId) || catalog.find((row) => row.id === brokerId) || {}).name ||
+    (brokerId === "paper" ? "Paper" : brokerId);
   return {
     owner: {
       name: user.name || "",
@@ -2062,7 +2086,7 @@ export function saveMemberStaticIp({ user, staticIp } = {}) {
 export function selectMemberBroker({ user, brokerId } = {}) {
   if (!user?.id) throw fail("Sign in first.", 401);
   const wanted = String(brokerId || "").trim().toLowerCase();
-  if (!catalog.some((row) => row.id === wanted)) throw fail("Unknown broker.");
+  if (!knownBroker(wanted)) throw fail("Unknown broker.");
   const desk = loadDesk(user.id);
   switchDeskBroker(desk, wanted);
   desk.tradeMode = wanted === "paper" ? "paper" : "real";

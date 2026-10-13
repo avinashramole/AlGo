@@ -355,7 +355,9 @@ app.get("/api/member/quotes", async (req, res) => {
 app.get("/api/member/desk", async (req, res) => {
   try {
     const user = memberAuth(req);
-    await requestMemberOrderSync(user.id);
+    await requestMemberOrderSync(user.id).catch((error) => {
+      console.log(`member order sync skipped: ${error?.message || error}`);
+    });
     const snap = safeSnapshot() || {};
     dropEnrollmentsWithoutStrategies(listAlgos());
     const desk = getMemberDesk({

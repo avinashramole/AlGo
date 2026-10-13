@@ -16,6 +16,25 @@ import {
 } from "../../lib/formSecrets";
 import { BrokerInstallFields } from "./BrokerInstallFields";
 
+export const MEMBER_BROKER_CHOICES = [
+  { id: "dhan", name: "DHAN" },
+  { id: "upstox", name: "UPSTOX" },
+  { id: "zerodha", name: "ZERODHA" },
+  { id: "kotak", name: "KOTAK" },
+  { id: "angelone", name: "ANGELONE" },
+  { id: "aliceblue", name: "ALICEBLUE" },
+  { id: "sharekhan", name: "SHAREKHAN" },
+  { id: "fyers", name: "FYERS" },
+  { id: "groww", name: "GROWW" },
+  { id: "incred", name: "INCRED" },
+  { id: "motilal", name: "MOTILAL" },
+  { id: "choice", name: "CHOICE" },
+  { id: "delta", name: "DELTA" },
+  { id: "coindcx", name: "COINDCX" },
+  { id: "binance", name: "BINANCE" },
+  { id: "paper", name: "PAPER" },
+] as const;
+
 export function isGmailMember(user?: { email?: string; authProvider?: string; role?: "admin" | "user" } | null) {
   if (!user || isAdminUser(user)) return false;
   const email = String(user.email || "").trim().toLowerCase();
@@ -60,7 +79,10 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
         setDesk(next);
         setCreds((current) => credsAfterInstall(next.install, current, { keepTyped: true }));
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        if (!alive) return;
+        setError(err instanceof Error ? err.message : "Could not load brokers");
+      });
     return () => {
       alive = false;
       tokenWaitGen.current += 1;
@@ -239,14 +261,15 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
           Broker
           <select
             data-broker-select="true"
-            className="mt-1 h-11 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+            className="mt-1 h-11 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]"
             value={desk?.brokerId || "paper"}
             disabled={Boolean(busy)}
             onChange={(event) => void pickBroker(event.target.value)}
           >
-            {(desk?.brokers || []).map((row) => (
+            {(desk?.brokers?.length ? desk.brokers : MEMBER_BROKER_CHOICES).map((row) => (
               <option key={row.id} value={row.id}>
                 {row.name}
+                {row.id === (desk?.brokerId || "paper") || ("selected" in row && row.selected) ? " · Active" : ""}
               </option>
             ))}
           </select>
@@ -256,10 +279,12 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
             {desk.brokers.find((row) => row.id === desk.brokerId)?.virtual
               ? "Virtual paper"
               : desk.brokers.find((row) => row.id === desk.brokerId)?.installed
-                ? "Token saved"
-                : "Add this broker"}
+                ? "Token saved · Active"
+                : "Active · add this broker"}
           </p>
-        ) : null}
+        ) : (
+          <p className="mt-2 text-xs text-slate-500">Active broker shows in the list. Pick one to use it.</p>
+        )}
         {desk && desk.brokerId !== "paper" ? (
           <form className="mt-3" onSubmit={saveBroker}>
             <BrokerInstallFields

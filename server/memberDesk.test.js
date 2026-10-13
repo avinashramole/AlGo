@@ -74,6 +74,25 @@ test("selectMemberBroker stores the chosen broker without secrets", () => {
   selectMemberBroker({ user, brokerId: "dhan" });
 });
 
+test("member broker list includes every client broker and keeps the active one selected", () => {
+  const member = { id: "u-broker-list", name: "Broker List", email: "broker.list@t2s.app", role: "user" };
+  const desk = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.ok(desk.brokers.length >= 8);
+  assert.ok(desk.brokers.some((row) => row.id === "dhan"));
+  assert.ok(desk.brokers.some((row) => row.id === "upstox"));
+  assert.ok(desk.brokers.some((row) => row.id === "sharekhan"));
+  assert.ok(desk.brokers.some((row) => row.id === "paper"));
+  assert.equal(desk.brokers.filter((row) => row.selected).length, 1);
+  const picked = selectMemberBroker({ user: member, brokerId: "sharekhan" });
+  assert.equal(picked.brokerId, "sharekhan");
+  assert.equal(picked.brokers.find((row) => row.id === "sharekhan")?.selected, true);
+  const next = getMemberDesk({ user: member, enrollments: [], quote: () => 0 });
+  assert.equal(next.brokerId, "sharekhan");
+  assert.equal(next.owner.brokerName, "SHAREKHAN");
+  assert.equal(next.brokers.find((row) => row.id === "sharekhan")?.selected, true);
+  assert.ok(next.brokers.find((row) => row.id === next.brokerId));
+});
+
 test("paid plan report includes monthly start and end dates", () => {
   const enrolled = enrollStrategy({
     user,
