@@ -1039,6 +1039,7 @@ export type MemberBrokerChoice = {
 export type MemberWallet = {
   balance: number;
   brokerBalance?: number;
+  brokerUsed?: number;
   brokerBalanceSource?: string;
   mtm: number;
   equity: number;

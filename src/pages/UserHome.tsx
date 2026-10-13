@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getMemberDesk, type MemberDesk } from "../api/client";
 import { UserHomeBoard } from "../components/home/UserHomeBoard";
 import { useAuth } from "../context/AuthContext";
+import { memberDeskFunds } from "../lib/memberFunds";
 
 export function UserHome() {
   const { user } = useAuth();
@@ -26,8 +27,7 @@ export function UserHome() {
   }, []);
 
   const report = desk?.report;
-  const balance = memberBalance(desk);
-  const available = Number(desk?.wallet.balance) || 0;
+  const funds = memberDeskFunds(desk);
   const pnl = Number(report?.netPnl || desk?.wallet.mtm || 0);
   const plan = (desk?.plans || [])[0];
 
@@ -35,8 +35,8 @@ export function UserHome() {
     <div className="space-y-3" data-user-home="true">
       <UserHomeBoard
         name={user?.name}
-        capital={balance}
-        available={available}
+        capital={funds.capital}
+        available={funds.available}
         pnl={pnl}
         plan={plan ? { name: plan.strategyName, status: plan.status, term: plan.term, endsAt: plan.endsAt } : null}
         algosTo="/plans"
@@ -45,8 +45,3 @@ export function UserHome() {
   );
 }
 
-function memberBalance(desk: MemberDesk | null) {
-  const broker = Number(desk?.wallet.brokerBalance);
-  if (Number.isFinite(broker)) return broker;
-  return Number(desk?.wallet.balance) || 0;
-}

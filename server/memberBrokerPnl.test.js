@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, overlayDeskLiveMtm, overlayLiveUnrealized, upstoxAvailableBalance, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
+import { adminBookFromDhan, applyBrokerBalance, applyBrokerBookToReport, applyBrokerPnl, applyKotakTradeSession, attachMemberBrokerPnl, brokerPnlFromDhanRows, brokerPnlFromUpstoxRows, dhanAvailableBalance, dhanFundsSnapshot, dhanMasterBook, dhanPnlFromTrades, kotakAvailableBalance, kotakFundsSnapshot, kotakLimitHeaderSets, kotakMasterBook, kotakNeedsTradeLogin, kotakTradeSession, overlayDeskLiveMtm, overlayLiveUnrealized, upstoxAvailableBalance, upstoxFundsSnapshot, upstoxMasterBook, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 
 function localDesk() {
   return {
@@ -407,8 +407,26 @@ test("broker available balance is the user balance and leaves the wallet topup a
   assert.equal(upstoxAvailableBalance({ data: { equity: { available_margin: 4200.25 }, commodity: { available_margin: 800 } } }), 4200.25);
   const desk = localDesk();
   desk.wallet.balance = 2500;
-  applyBrokerBalance(desk, { balance: 15234.5, source: "dhan" });
+  applyBrokerBalance(desk, { balance: 15234.5, used: 900, source: "dhan" });
   assert.equal(desk.wallet.balance, 2500);
   assert.equal(desk.wallet.brokerBalance, 15234.5);
+  assert.equal(desk.wallet.brokerUsed, 900);
   assert.equal(desk.wallet.brokerBalanceSource, "dhan");
+});
+
+test("Upstox with no positions is free margin, not 100% used", () => {
+  const snap = upstoxFundsSnapshot({
+    data: { equity: { available_margin: 18450.5, used_margin: 0 }, commodity: { available_margin: 0, used_margin: 0 } },
+  });
+  assert.equal(snap.balance, 18450.5);
+  assert.equal(snap.used, 0);
+  assert.equal(snap.source, "upstox");
+  const dhan = dhanFundsSnapshot({ availabelBalance: 15234.5, utilizedAmount: 0 });
+  assert.equal(dhan.used, 0);
+  const kotak = kotakFundsSnapshot({ Category: "ALL", Net: 5000, MarginUsed: 0 });
+  assert.equal(kotak.balance, 5000);
+  assert.equal(kotak.used, 0);
+  const used = upstoxFundsSnapshot({ data: { equity: { available_margin: 8000, used_margin: 2000 } } });
+  assert.equal(used.balance, 8000);
+  assert.equal(used.used, 2000);
 });

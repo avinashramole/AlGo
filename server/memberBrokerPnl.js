@@ -949,14 +949,51 @@ export function kotakMasterBook(raw) {
   };
 }
 
-export function upstoxAvailableBalance(body) {
+export function upstoxFundsSnapshot(body) {
   const data = body?.data && typeof body.data === "object" ? body.data : body || {};
-  const equity = finite(data.equity?.available_margin);
-  const commodity = finite(data.commodity?.available_margin);
-  if (equity == null && commodity == null) return null;
-  if (equity != null && equity > 0) return round2(equity);
-  if (commodity != null) return round2(commodity);
-  return round2(equity || 0);
+  const segments = [data.equity, data.commodity, data].filter((row) => row && typeof row === "object");
+  let best = null;
+  for (const seg of segments) {
+    const available = finite(seg.available_margin);
+    const used = finite(seg.used_margin);
+    if (available == null && used == null) continue;
+    const availN = available || 0;
+    const usedN = used || 0;
+    const total = availN + usedN;
+    if (!best || total > best.total) best = { available: availN, used: usedN, total };
+  }
+  if (!best) return null;
+  return { balance: round2(best.available), used: round2(best.used), source: "upstox" };
+}
+
+export function upstoxAvailableBalance(body) {
+  const snap = upstoxFundsSnapshot(body);
+  return snap ? snap.balance : null;
+}
+
+export function dhanFundsSnapshot(funds) {
+  const available = dhanAvailableBalance(funds);
+  if (available == null) return null;
+  const used = firstFinite(funds, ["utilizedAmount", "usedMargin"]) || 0;
+  return { balance: available, used: round2(used), source: "dhan" };
+}
+
+export function kotakFundsSnapshot(body) {
+  const available = kotakAvailableBalance(body);
+  if (available == null) return null;
+  const rows = kotakLimitRows(body);
+  const usable = rows.filter((row) => !kotakPnlLimitCategory(kotakLimitCategory(row)));
+  const preferred = usable.filter((row) => kotakPreferredLimitCategory(kotakLimitCategory(row)));
+  const pool = preferred.length ? preferred : usable;
+  let used = 0;
+  for (const row of pool) {
+    const hit = kotakMoneyField(row, ["MarginUsed", "marginUsed"]);
+    if (hit != null) {
+      used = hit;
+      break;
+    }
+  }
+  return { balance: available, used: round2(used), source: "kotak" };
 }
 
 async function upstoxFunds(token) {
@@ -984,8 +1021,7 @@ async function fetchBrokerBalance(userId) {
   if (!creds) return null;
   if (creds.brokerId === "dhan") {
     const { fetchMemberDhanFunds } = await import("./dhan.js");
-    const available = dhanAvailableBalance(await fetchMemberDhanFunds(creds.token, creds.clientId));
-    return available == null ? null : { balance: available, source: "dhan" };
+    return dhanFundsSnapshot(await fetchMemberDhanFunds(creds.token, creds.clientId));
   }
   if (creds.brokerId === "kotak") {
     const sets = kotakLimitHeaderSets(creds);
@@ -994,10 +1030,10 @@ async function fetchBrokerBalance(userId) {
     for (const set of sets) {
       try {
         const hosts = set.headers.Auth ? KOTAK_TRADE_HOSTS : ["https://mis.kotaksecurities.com"];
-        const available = kotakAvailableBalance(
+        const snap = kotakFundsSnapshot(
           await kotakTradePost(creds, "/quick/user/limits", { seg: "ALL", exch: "ALL", prod: "ALL" }, set.headers, hosts),
         );
-        if (available != null) return { balance: available, source: "kotak" };
+        if (snap) return snap;
       } catch (error) {
         last = error;
       }
@@ -1005,8 +1041,7 @@ async function fetchBrokerBalance(userId) {
     if (last) throw last;
     return null;
   }
-  const available = upstoxAvailableBalance(await upstoxFunds(creds.token));
-  return available == null ? null : { balance: available, source: "upstox" };
+  return upstoxFundsSnapshot(await upstoxFunds(creds.token));
 }
 
 export async function readMemberBrokerBalance(userId) {
@@ -1035,9 +1070,11 @@ export async function readMemberBrokerBalance(userId) {
 export function applyBrokerBalance(desk, balance) {
   if (!desk || !balance || !Number.isFinite(Number(balance.balance))) return desk;
   const wallet = desk.wallet && typeof desk.wallet === "object" ? desk.wallet : {};
+  const used = Number(balance.used);
   desk.wallet = {
     ...wallet,
     brokerBalance: round2(balance.balance),
+    brokerUsed: Number.isFinite(used) ? round2(Math.max(0, used)) : 0,
     brokerBalanceSource: String(balance.source || ""),
   };
   return desk;
