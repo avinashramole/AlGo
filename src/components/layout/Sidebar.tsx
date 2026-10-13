@@ -52,7 +52,7 @@ export function Sidebar() {
   return (
     <aside className={cn("desk-chrome fixed inset-y-0 left-0 z-30 w-56 flex-col py-3", isNativeHybrid() ? "hidden" : "hidden md:flex")}>
       <NavLink to="/" end className="mb-4 flex items-center gap-2.5 px-3" title="Trade 2 Smart">
-        <BrandMark variant="emblem" size="md" />
+        <BrandMark variant="emblem" size="lg" />
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-extrabold tracking-tight text-white">Trade 2 Smart</span>
           <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test2HoldStyle } from "./niftyVwap/config.js";
+import { loadFullBrandLogo, pdfImageXObject, pdfWatermarkOps } from "./pdfBrandLogo.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_DIR = process.env.T2S_BACKTEST_REPORT_DIR || path.join(__dirname, "data", "backtests");
@@ -830,32 +831,64 @@ function makePdfDoc(report) {
 
 export function renderBacktestPdf(report) {
   const pages = makePdfDoc(report);
-  const firstPage = 3;
+  let logo = null;
+  try {
+    logo = loadFullBrandLogo();
+  } catch {
+    logo = null;
+  }
+  const image = logo ? pdfImageXObject(logo) : null;
+  const firstPage = image ? 4 : 3;
   const kids = pages.map((_, i) => `${firstPage + i * 2} 0 R`).join(" ");
   const objects = [
-    "",
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    `<< /Type /Pages /Count ${pages.length} /Kids [${kids}] >>`,
+    null,
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+    Buffer.from(`<< /Type /Pages /Count ${pages.length} /Kids [${kids}] >>`),
   ];
+  if (image) {
+    objects.push(
+      Buffer.concat([
+        Buffer.from(`${image.dict}\nstream\n`),
+        image.stream,
+        Buffer.from("\nendstream"),
+      ]),
+    );
+  }
+  const resources = image
+    ? `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> /XObject << /Im1 3 0 R >> /ExtGState << /GS1 << /ca 0.10 /CA 0.10 >> >> >>`
+    : `/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >>`;
   for (let i = 0; i < pages.length; i += 1) {
     const contentId = firstPage + i * 2 + 1;
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Rotate 0 /Contents ${contentId} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>`,
+      Buffer.from(
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Rotate 0 /Contents ${contentId} 0 R ${resources} >>`,
+      ),
     );
-    const stream = pages[i].join("\n");
-    objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+    const ops = image ? [...pdfWatermarkOps(PAGE_W, PAGE_H, logo), ...pages[i]] : pages[i];
+    const stream = Buffer.from(ops.join("\n"));
+    objects.push(
+      Buffer.concat([
+        Buffer.from(`<< /Length ${stream.length} >>\nstream\n`),
+        stream,
+        Buffer.from("\nendstream"),
+      ]),
+    );
   }
-  let pdf = "%PDF-1.4\n";
+  const chunks = [Buffer.from("%PDF-1.4\n")];
   const offsets = [0];
+  let size = chunks[0].length;
   for (let i = 1; i < objects.length; i += 1) {
-    offsets[i] = Buffer.byteLength(pdf);
-    pdf += `${i} 0 obj\n${objects[i]}\nendobj\n`;
+    offsets[i] = size;
+    const obj = Buffer.concat([Buffer.from(`${i} 0 obj\n`), objects[i], Buffer.from("\nendobj\n")]);
+    chunks.push(obj);
+    size += obj.length;
   }
-  const xref = Buffer.byteLength(pdf);
-  pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
-  for (let i = 1; i < objects.length; i += 1) pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
-  pdf += `trailer << /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return Buffer.from(pdf, "utf8");
+  const xref = size;
+  let trailer = `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objects.length; i += 1) trailer += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  trailer += `trailer << /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  chunks.push(Buffer.from(trailer));
+  return Buffer.concat(chunks);
 }
 
 export function reportDownloadName(report, format) {

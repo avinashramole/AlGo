@@ -26,6 +26,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(login, /BrandMark/);
   const brand = fs.readFileSync(path.join(root, "src/components/BrandMark.tsx"), "utf8");
   assert.match(brand, /t2s-logo\.png/);
+  assert.match(brand, /t2s-emblem\.png/);
   const auth = fs.readFileSync(path.join(root, "server/auth.js"), "utf8");
   assert.match(auth, /googleAppReturnHtml/);
   assert.match(auth, /shouldReturnToApp/);

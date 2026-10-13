@@ -1,6 +1,7 @@
 import { Image, StyleSheet } from "react-native";
 
-const logo = require("../../assets/t2s-logo.png");
+const full = require("../../assets/t2s-logo.png");
+const inner = require("../../assets/t2s-emblem.png");
 
 export function BrandMark({
   variant = "stacked",
@@ -9,12 +10,12 @@ export function BrandMark({
   theme?: "dark" | "light";
 }) {
   if (variant === "emblem" || variant === "horizontal") {
-    return <Image source={logo} style={styles.emblem} resizeMode="contain" />;
+    return <Image source={inner} style={styles.emblem} resizeMode="contain" />;
   }
-  return <Image source={logo} style={styles.lockup} resizeMode="contain" />;
+  return <Image source={full} style={styles.lockup} resizeMode="contain" />;
 }
 
 const styles = StyleSheet.create({
   lockup: { width: "100%", maxWidth: 280, height: 280, marginBottom: 12 },
-  emblem: { width: 40, height: 40 },
+  emblem: { width: 72, height: 46 },
 });

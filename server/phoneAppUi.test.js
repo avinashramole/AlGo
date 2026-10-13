@@ -22,6 +22,11 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(mobileProfile, /label="Role"/);
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
 
+  const brand = fs.readFileSync(path.join(root, "src/components/BrandMark.tsx"), "utf8");
+  const sidebar = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
+  assert.match(brand, /\/t2s-emblem\.png/);
+  assert.match(brand, /\/t2s-logo\.png/);
+  assert.match(sidebar, /variant="emblem"/);
   assert.match(home, /data-home-overview="phone"/);
   assert.match(home, /Hello,/);
   assert.match(home, /\{tape\}/);
@@ -102,7 +107,6 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(nav, /to: "\/broker"/);
   assert.match(book, /data-member-report-download="pdf"/);
   assert.match(book, /downloadMemberReport/);
-  const sidebar = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
   const header = fs.readFileSync(path.join(root, "src/components/layout/Header.tsx"), "utf8");
   assert.match(sidebar, /label: "Profile", icon: User, admin: true/);
   assert.match(sidebar, /to: "\/settings", label: "Settings", icon: Settings \}/);

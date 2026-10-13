@@ -9,6 +9,14 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-bt-"));
 process.env.T2S_BACKTEST_REPORT_DIR = dir;
 
 const { T2S_STANDARD_BRAND_REPORT, brandedReportFile, buildBacktestReport, clearBacktestReport, deskToProposalReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
+const { loadFullBrandLogo } = await import("./pdfBrandLogo.js");
+
+test("full T2S logo is decoded for the PDF watermark", () => {
+  const logo = loadFullBrandLogo();
+  assert.ok(logo.width >= 200);
+  assert.ok(logo.height >= 200);
+  assert.equal(logo.rgb.length, logo.width * logo.height * 3);
+});
 
 test("backtest report builds PDF and Excel from the trade book", () => {
   const algo = { id: "a14", name: "TEST2", kind: "nifty-test2", symbol: "NIFTY", holdStyle: "btst", summary: "TEST2 BTST" };
@@ -82,6 +90,11 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /Win rate/);
   assert.match(pdf.toString("latin1"), /ROM/);
   assert.match(pdf.toString("latin1"), /Helvetica-Bold/);
+  assert.match(pdf.toString("latin1"), /\/XObject << \/Im1 3 0 R >>/);
+  assert.match(pdf.toString("latin1"), /\/Subtype \/Image/);
+  assert.match(pdf.toString("latin1"), /\/DeviceRGB/);
+  assert.match(pdf.toString("latin1"), /\/Im1 Do/);
+  assert.match(pdf.toString("latin1"), /\/ca 0\.10/);
   assert.match(pdf.toString("latin1"), /0\.992 0\.420 0\.004/);
   assert.match(pdf.toString("latin1"), /0\.000 0\.059 0\.161/);
   assert.match(pdf.toString("latin1"), /0\.000 0\.059 0\.161 rg\n0\.00 555\.00/);
@@ -172,8 +185,12 @@ test("TEST2 PDF and Excel print enter, square-off, premiums and hedge SL", () =>
   assert.match(pdf, /premium >= 200/);
   assert.match(pdf, /premium >= 20/);
   assert.match(pdf, /Hedge SL 20%/);
-  assert.equal(pdf.includes("·"), false);
-  assert.equal(pdf.includes("≥"), false);
+  const pdfText = [...pdf.matchAll(/stream\n([\s\S]*?)\nendstream/g)]
+    .map((row) => row[1])
+    .filter((body) => body.includes("/F1 ") || body.includes("/F2 "))
+    .join("\n");
+  assert.equal(pdfText.includes("·"), false);
+  assert.equal(pdfText.includes("≥"), false);
   const zip = renderBacktestExcel(report).toString("latin1");
   assert.match(zip, /Enter IST/);
   assert.match(zip, /09:31/);
