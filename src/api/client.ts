@@ -1641,6 +1641,48 @@ export function syncOneMinuteHistory(payload: { years?: number; from?: string; t
   });
 }
 
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Could not read the report"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function shareNativeFile(blob: Blob, filename: string) {
+  const [{ Filesystem, Directory }, { Share }] = await Promise.all([
+    import("@capacitor/filesystem"),
+    import("@capacitor/share"),
+  ]);
+  const written = await Filesystem.writeFile({
+    path: filename,
+    data: await blobToBase64(blob),
+    directory: Directory.Cache,
+  });
+  await Share.share({
+    title: filename,
+    url: written.uri,
+    dialogTitle: "Save or share report",
+  });
+}
+
+function clickDownloadLink(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallback: string) {
   let response: Response;
   try {
@@ -1663,12 +1705,15 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   const blob = await response.blob();
   const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
   const filename = match?.[1] || `t2s-proposal.${format === "pdf" ? "pdf" : "xlsx"}`;
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
+  if (isNativeHybrid()) {
+    try {
+      await shareNativeFile(blob, filename);
+      return;
+    } catch (error) {
+      console.log(`native report share skipped: ${(error as Error)?.message || error}`);
+    }
+  }
+  clickDownloadLink(blob, filename);
 }
 
 export function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {

@@ -45,6 +45,10 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(hybrid, /isLocalDeskHost/);
   assert.match(hybrid, /\$\{LIVE_DESK_ORIGIN\}\/api/);
   assert.match(client, /apiBase\(\)/);
+  assert.match(client, /shareNativeFile/);
+  assert.match(client, /@capacitor\/filesystem/);
+  assert.match(client, /@capacitor\/share/);
+  assert.match(client, /Directory.Cache/);
   assert.match(main, /HashRouter/);
   assert.match(build, /cap sync android/);
   assert.match(login, /data-android-apk="download"/);
@@ -57,6 +61,12 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
   const hybridSrc = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
   assert.match(shell, /data-mobile-app="responsive"/);
+  const loginCss = fs.readFileSync(path.join(root, "src/login.css"), "utf8");
+  const styles = fs.readFileSync(path.join(root, "android/app/src/main/res/values/styles.xml"), "utf8");
+  assert.match(loginCss, /html\.t2s-hybrid \.t2s-app-downloads/);
+  assert.match(loginCss, /#fff8f1/);
+  assert.match(styles, /Theme.AppCompat.Light.NoActionBar/);
+  assert.match(styles, /navigationBarColor/);
   assert.match(css, /html\.t2s-hybrid aside\.desk-chrome/);
   assert.match(css, /html\.t2s-hybrid \.tape-strip/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);

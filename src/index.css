@@ -601,6 +601,7 @@ html.t2s-hybrid body,
 html.t2s-hybrid #root {
   max-width: 100vw;
   overflow-x: hidden;
+  background: #ffffff;
 }
 
 html.t2s-hybrid aside.desk-chrome {
