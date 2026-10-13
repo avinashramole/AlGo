@@ -158,3 +158,58 @@ test("a pending SELL on the book blocks a second close of the same contract", ()
   assert.equal(queued.some((row) => row.side === "SELL" && !row.copyUserId), false);
   replaceDhanOrders([]);
 });
+
+test("leftover PENDING SELLs from earlier SL hits do not block a new SL close", () => {
+  replaceDhanBook([
+    {
+      id: "crude-open-1",
+      symbol: "CRUDEOIL 6100 CE",
+      type: "BUY",
+      qty: 100,
+      avg: 90,
+      ltp: 80,
+      strategy: "CRUDE OIL",
+      brokerId: "dhan",
+      option: "CE",
+      strike: 6100,
+      live: true,
+      openedAt: "2026-08-21T04:00:00.000Z",
+    },
+  ]);
+  replaceDhanOrders(
+    Array.from({ length: 10 }, (_, i) => ({
+      id: `old-sl-${i}`,
+      symbol: "CRUDEOIL 6100 CE",
+      side: "SELL",
+      status: "PENDING",
+      qty: 100,
+      price: 0,
+      strategy: "CRUDE OIL",
+      brokerId: "dhan",
+      option: "CE",
+      strike: 6100,
+      securityId: "sec-crude-6100-ce",
+      createdAt: "2026-08-21T03:50:00.000Z",
+    })),
+  );
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "CRUDE OIL",
+    side: "SELL",
+    symbol: "CRUDEOIL 6100 CE",
+    qty: 100,
+    option: "CE",
+    strike: 6100,
+    kind: "option",
+    brokerId: "dhan",
+    securityId: "sec-crude-6100-ce",
+    role: "sl",
+    exitReason: "sl",
+  });
+  assert.equal(result.queued, true);
+  assert.notEqual(result.duplicate, true);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.some((row) => row.side === "SELL" && row.role === "sl"), true);
+  replaceDhanBook([]);
+  replaceDhanOrders([]);
+});

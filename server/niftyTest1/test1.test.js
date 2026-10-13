@@ -396,3 +396,55 @@ test("TEST1 buys ATM Crude Oil when that script is selected", () => {
   assert.equal(book.places[0].lotSize, 100);
   assert.equal(book.places[0].qty, 100);
 });
+
+test("TEST1 SL still exits after leftover pending SELLs", () => {
+  const ce = bar(50, 59, { high: 60, low: 50, time: T0930 });
+  const algo = defaultNiftyTest1Algo({ enabled: true });
+  const book = bookAdapter();
+  Test1Strategy.tick({
+    algo,
+    now: T0930 + BAR,
+    feedLive: true,
+    minutesToClose: 300,
+    ceBars: [ce],
+    peBars: [bar(40, 39, { high: 41, low: 38, time: T0930 })],
+    ceLtp: 62,
+    peLtp: 39,
+    spot: 22700,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  book.positions[0].openedAt = new Date(T0930 + BAR).toISOString();
+  algo.vwapState.lastEntryAt = T0930 + BAR;
+  const leftovers = Array.from({ length: 10 }, (_, i) => ({
+    id: `old-t1-${i}`,
+    side: "SELL",
+    status: "PENDING",
+    symbol: book.positions[0].symbol,
+    option: book.positions[0].option,
+    strike: book.positions[0].strike,
+    strategy: algo.name,
+    price: 0,
+    createdAt: new Date(T0930 - 60_000).toISOString(),
+  }));
+  const sl = Test1Strategy.tick({
+    algo,
+    now: T0930 + BAR + 60_000,
+    feedLive: true,
+    minutesToClose: 300,
+    ceBars: [ce],
+    peBars: [],
+    ceLtp: 49.5,
+    peLtp: 39,
+    spot: 22700,
+    step: 50,
+    expiry: "2026-08-27",
+    orders: leftovers,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(sl.action, "exit");
+  assert.equal(sl.reason, "sl");
+});

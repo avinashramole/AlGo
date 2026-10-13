@@ -1,3 +1,4 @@
+import { pendingExitOnBook } from "../pendingExit.js";
 import { multiIndexReversalConfig } from "./config.js";
 import { evaluateEntry, lastCompletedBar, lossPct, positionPnl, premiumValue, sameIntervalBar } from "./signals.js";
 import { isLotMultiple, reversalQty, strikeForIndexOffset } from "./strikes.js";
@@ -14,15 +15,8 @@ function owned(positions = [], name) {
   );
 }
 
-function pendingExit(orders = [], open, name) {
-  return (orders || []).some((row) => {
-    if (String(row.strategy || "") !== String(name || "")) return false;
-    if (String(row.side || "").toUpperCase() !== "SELL") return false;
-    const status = String(row.status || "").toUpperCase();
-    if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
-    if (open?.securityId && row.securityId && String(open.securityId) === String(row.securityId)) return true;
-    return Boolean(open?.symbol && row.symbol && open.symbol === row.symbol);
-  });
+function pendingExit(orders = [], open, name, state = {}) {
+  return pendingExitOnBook(orders, open, name, state);
 }
 
 function pickLeg(positions, option, name) {
@@ -373,7 +367,7 @@ export const MultiIndexReversalStrategy = {
   exitOne(input, open, reason) {
     const algo = input.algo;
     const state = mirState(algo);
-    if (pendingExit(input.orders, open, algo.name)) {
+    if (pendingExit(input.orders, open, algo.name, state)) {
       transition(state, PHASE.EXIT_PENDING, reason);
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending" };
@@ -402,7 +396,7 @@ export const MultiIndexReversalStrategy = {
     transition(state, PHASE.EXIT_PENDING, reason);
     const results = [];
     for (const row of open) {
-      if (pendingExit(input.orders, row, name)) continue;
+      if (pendingExit(input.orders, row, name, state)) continue;
       const closed = input.adapter.exit(row);
       results.push(closed);
       if (closed?.ok && Number.isFinite(Number(closed.pnl))) {

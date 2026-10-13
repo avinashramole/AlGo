@@ -1,4 +1,5 @@
 import { liveExitPrice } from "../executionSpeed.js";
+import { isLeftoverWorkingSell, pendingExitOnBook } from "../pendingExit.js";
 import { OptionStrikeSelector } from "../niftyVwap/OptionStrikeSelector.js";
 import { TrailingStopManager } from "../niftyVwap/TrailingStopManager.js";
 import { sessionBars, lastBarVwapReversal, aggregateSessionBars } from "../niftyVwap/VwapSignalEngine.js";
@@ -57,8 +58,15 @@ function sameHedgeContract(left = {}, right = {}) {
   return false;
 }
 
-function pendingExitFor(orders, pending, algoName, position) {
-  return pendingSells(orders, pending, algoName).some((row) => sameHedgeContract(row, position || {}));
+function pendingExitFor(orders, pending, algoName, position, state = {}) {
+  if (pendingExitOnBook(orders, position, algoName, state)) return true;
+  return (pending || []).some(
+    (row) =>
+      row.strategy === algoName &&
+      (row.side === "SELL" ? "SELL" : "BUY") === "SELL" &&
+      sameHedgeContract(row, position || {}) &&
+      !isLeftoverWorkingSell(row, position, state),
+  );
 }
 
 function totalLots(positions, lotSize) {
@@ -112,7 +120,7 @@ export const NiftyVwapHedgeStrategy = {
     const open = owned(positions, algo.name);
     const results = [];
     for (const row of open) {
-      if (pendingExitFor(orders, pending, algo.name, row)) continue;
+      if (pendingExitFor(orders, pending, algo.name, row, state)) continue;
       const closed = adapter.exit(row);
       if (closed?.duplicate || closed?.queued === false) continue;
       if (closed?.ok && Number.isFinite(Number(closed.pnl))) {
@@ -251,7 +259,7 @@ export const NiftyVwapHedgeStrategy = {
           targetPct: config.primaryTargetPct,
         })
       ) {
-        if (input.targetResting || state.pendingRole === "exit" || pendingExitFor(orders, pending, algo.name, primaryPos)) {
+        if (input.targetResting || state.pendingRole === "exit" || pendingExitFor(orders, pending, algo.name, primaryPos, state)) {
           algo.lastSignal = "EXIT PRIMARY AT BROKER";
           return { action: "exit-pending", reason: "primary-target" };
         }

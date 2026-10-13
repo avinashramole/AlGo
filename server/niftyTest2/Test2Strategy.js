@@ -1,4 +1,5 @@
 import { exchangeSegmentFor } from "../optionChain.js";
+import { isLeftoverWorkingSell } from "../pendingExit.js";
 import { niftyTest2Config } from "../niftyVwap/config.js";
 import { hmToMinutes, istWallTime, sessionKeyIST } from "../niftyVwap/VwapSignalEngine.js";
 import { TradeLogger } from "../niftyVwap/TradeLogger.js";
@@ -32,14 +33,16 @@ function sameContract(left = {}, right = {}) {
   return Boolean(left.symbol && right.symbol && left.symbol === right.symbol);
 }
 
-function pendingSame(orders = [], payload) {
+function pendingSame(orders = [], payload, open = {}) {
   return (orders || []).some((row) => {
     if (row?.copyUserId) return false;
     if (String(row.strategy || "") !== String(payload.strategy || "")) return false;
     if (String(row.side || "").toUpperCase() !== String(payload.side || "").toUpperCase()) return false;
     const status = String(row.status || "").toUpperCase();
     if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
-    return sameContract(row, payload);
+    if (!sameContract(row, payload)) return false;
+    if (String(payload.side || "").toUpperCase() === "SELL" && isLeftoverWorkingSell(row, open)) return false;
+    return true;
   });
 }
 
@@ -223,7 +226,7 @@ export const Test2Strategy = {
       if (!(fill > 0) || !(mark > 0)) continue;
       const sl = fill * (1 - config.hedgeSlPct / 100);
       if (mark > sl) continue;
-      if (pendingSame(orders, { strategy: algo.name, side: "SELL", symbol: open.symbol, securityId: open.securityId })) continue;
+      if (pendingSame(orders, { strategy: algo.name, side: "SELL", symbol: open.symbol, securityId: open.securityId }, open)) continue;
       adapter.place({
         symbol: open.symbol,
         side: "SELL",

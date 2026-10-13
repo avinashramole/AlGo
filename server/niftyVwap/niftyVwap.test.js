@@ -2762,3 +2762,181 @@ test("crude max trades input is kept, and one signal places one order", () => {
   assert.equal(third.reason, "max-trades");
   assert.equal(capBook.places.length, 2);
 });
+
+test("crude 10% SL still exits after 10 leftover pending SELLs", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE SL after 10", initialSlPct: 10, maxTradesPerDay: 10 });
+  const book = bookAdapter();
+  const bar = firstBar(6100, 6120);
+  const input = {
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [bar],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  };
+  assert.equal(NiftyVwapStrategy.tick(input).action, "entry");
+  const open = book.positions[0];
+  open.openedAt = new Date(T0_0900 + BAR).toISOString();
+  open.ltp = 80;
+  open.ticked = true;
+  algo.vwapState.lastEntryAt = T0_0900 + BAR;
+  algo.vwapState.sessionTrades = 10;
+  const leftovers = Array.from({ length: 10 }, (_, i) => ({
+    id: `old-sl-${i}`,
+    side: "SELL",
+    status: "PENDING",
+    symbol: open.symbol,
+    option: open.option,
+    strike: open.strike,
+    strategy: algo.name,
+    price: 0,
+    qty: open.qty,
+    createdAt: new Date(T0_0900 - 60_000).toISOString(),
+  }));
+  const sl = NiftyVwapStrategy.tick({
+    ...input,
+    now: T0_0900 + BAR + 20_000,
+    ceLtp: 80,
+    peLtp: 60,
+    orders: leftovers,
+    positions: book.positions,
+  });
+  assert.equal(sl.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(sl.reason, "sl");
+  assert.equal(book.exits.length, 1);
+  assert.equal(book.exits[0].role, "sl");
+});
+
+test("first candle SL uses a sane chain print when the tick is still at fill", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "SL chain mark", initialSlPct: 20 });
+  const book = bookAdapter();
+  NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 100,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  book.positions[0].ltp = 100;
+  book.positions[0].ticked = true;
+  const sl = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + 20_000,
+    feedLive: true,
+    minutesToClose: 359,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 79,
+    peLtp: 96,
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(sl.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(sl.reason, "sl");
+});
+
+test("VWAP and reversal still send SL when leftover pending SELLs sit on the book", () => {
+  const leftoversFor = (algo, open) =>
+    Array.from({ length: 10 }, (_, i) => ({
+      id: `old-${algo.name}-${i}`,
+      side: "SELL",
+      status: "PENDING",
+      symbol: open.symbol,
+      option: open.option,
+      strike: open.strike,
+      strategy: algo.name,
+      price: 0,
+      createdAt: new Date(T0 - 60_000).toISOString(),
+    }));
+
+  const vwap = defaultNiftyVwapAlgo({ name: "VWAP SL leftovers" });
+  const vwapBook = bookAdapter();
+  const now = T0 + 6 * BAR;
+  NiftyVwapStrategy.tick({
+    algo: vwap,
+    now,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars: risingFutures(6),
+    ceBars: optionAboveVwap(6, "CE"),
+    peBars: optionAboveVwap(6, "PE"),
+    spot: 24600,
+    ceLtp: 200,
+    peLtp: 90,
+    positions: vwapBook.positions,
+    adapter: vwapBook.adapter,
+  });
+  vwapBook.positions[0].openedAt = new Date(now).toISOString();
+  vwap.vwapState.lastEntryAt = now;
+  const vwapSl = NiftyVwapStrategy.tick({
+    algo: vwap,
+    now: now + BAR,
+    feedLive: true,
+    minutesToClose: 110,
+    futuresBars: risingFutures(7),
+    ceBars: optionAboveVwap(7, "CE"),
+    peBars: optionAboveVwap(7, "PE"),
+    spot: 24600,
+    ceLtp: 150,
+    peLtp: 90,
+    orders: leftoversFor(vwap, vwapBook.positions[0]),
+    positions: vwapBook.positions,
+    adapter: vwapBook.adapter,
+  });
+  assert.equal(vwapSl.action, "exit");
+  assert.equal(vwapSl.reason, "sl");
+
+  const reversal = defaultNiftyVwapReversalAlgo({ name: "Rev SL leftovers" });
+  const revBook = bookAdapter();
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
+  const revNow = T0 + 2 * BAR15;
+  NiftyVwapStrategy.tick({
+    algo: reversal,
+    now: revNow,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars,
+    spot: 24540,
+    ceLtp: 100,
+    peLtp: 90,
+    positions: revBook.positions,
+    adapter: revBook.adapter,
+  });
+  assert.ok(revBook.positions[0]);
+  revBook.positions[0].openedAt = new Date(revNow).toISOString();
+  reversal.vwapState.lastEntryAt = revNow;
+  const revSl = NiftyVwapStrategy.tick({
+    algo: reversal,
+    now: revNow + 2 * BAR15,
+    feedLive: true,
+    minutesToClose: 80,
+    futuresBars: [...futuresBars, bar15(2, 24540, 24560, { high: 24570, low: 24530 })],
+    ceLtp: 84,
+    peLtp: 80,
+    orders: leftoversFor(reversal, revBook.positions[0]),
+    positions: revBook.positions,
+    adapter: revBook.adapter,
+  });
+  assert.equal(revSl.action, "exit");
+  assert.equal(revSl.reason, "sl");
+});
+

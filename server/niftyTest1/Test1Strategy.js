@@ -1,5 +1,6 @@
 import { exchangeSegmentFor } from "../optionChain.js";
 import { liveExitPrice } from "../executionSpeed.js";
+import { pendingExitOnBook } from "../pendingExit.js";
 import { niftyTest1Config } from "../niftyVwap/config.js";
 import { OptionStrikeSelector } from "../niftyVwap/OptionStrikeSelector.js";
 import { PositionManager, runtimeState, resetSession } from "../niftyVwap/PositionManager.js";
@@ -16,19 +17,6 @@ function round2(value) {
 function fillFromResult(result, fallbackPrice) {
   const price = Number(result?.avg || result?.price || result?.ltp || fallbackPrice);
   return price > 0 ? price : 0;
-}
-
-function pendingExitOnBook(orders = [], open, strategyName) {
-  return (orders || []).some((row) => {
-    if (row?.copyUserId) return false;
-    if (String(row.strategy || "") !== String(strategyName || "")) return false;
-    if (String(row.side || "").toUpperCase() !== "SELL") return false;
-    const status = String(row.status || "").toUpperCase();
-    if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
-    if (open?.securityId && row.securityId && String(open.securityId) === String(row.securityId)) return true;
-    if (open?.symbol && row.symbol && open.symbol === row.symbol) return true;
-    return false;
-  });
 }
 
 function targetFromEntry(entry, signal, config) {
@@ -64,10 +52,11 @@ export const Test1Strategy = {
       ticked: open.ticked === true,
     });
     const trailMark = live || Number(mark);
-    if (state.exitQueued || pendingExitOnBook(orders, open, algo.name)) {
+    if (pendingExitOnBook(orders, open, algo.name, state)) {
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending" };
     }
+    if (state.exitQueued) state.exitQueued = false;
     let reason = "";
     if (TrailingStopManager.hitStop(trailMark, state.stopPrice)) reason = "sl";
     else if (TrailingStopManager.hitTarget(trailMark, state.targetPrice)) reason = "target";

@@ -27,6 +27,7 @@ import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
+import { isLeftoverWorkingSell } from "./pendingExit.js";
 import { exitReasonLabel, exitRoleFromReason, keepExitReason } from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
@@ -658,14 +659,23 @@ function sameWorkingBookOrder(payload) {
   const side = liveOrderSide(payload);
   const brokerId = orderBrokerId(payload);
   const copyUserId = String(payload?.copyUserId || "");
-  return (state.orders || []).some(
+  const open = (state.positions || []).find(
     (row) =>
+      Number(row.qty) > 0 &&
       String(row?.copyUserId || "") === copyUserId &&
-      orderBrokerId(row) === brokerId &&
-      liveOrderSide(row) === side &&
-      orderIsWorking(row) &&
       sameLiveContract(payload, row),
   );
+  const algo = (state.algos || []).find((item) => item.name === realStrategyName(payload?.strategy));
+  const entryState = algo?.vwapState || algo?.test1State || algo?.mirState || algo?.hedgeState || {};
+  return (state.orders || []).some((row) => {
+    if (String(row?.copyUserId || "") !== copyUserId) return false;
+    if (orderBrokerId(row) !== brokerId) return false;
+    if (liveOrderSide(row) !== side) return false;
+    if (!orderIsWorking(row)) return false;
+    if (!sameLiveContract(payload, row)) return false;
+    if (side === "SELL" && isLeftoverWorkingSell(row, open, entryState)) return false;
+    return true;
+  });
 }
 
 function strategyBuyUnresolved(strategyName) {

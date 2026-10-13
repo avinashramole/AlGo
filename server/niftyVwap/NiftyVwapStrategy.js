@@ -1,4 +1,5 @@
 import { liveExitPrice } from "../executionSpeed.js";
+import { pendingExitOnBook } from "../pendingExit.js";
 import { isSaneOptionLtp } from "../positionMark.js";
 import { exchangeSegmentFor } from "../optionChain.js";
 import { optionEngineConfig } from "./config.js";
@@ -87,24 +88,20 @@ function targetHitMark(trailMark, open, fill) {
   return marks.length ? Math.max(...marks) : 0;
 }
 
+function stopHitMark(trailMark, open, fill, chain) {
+  const marks = [Number(trailMark), Number(chain)];
+  const tick = Number(open?.ltp);
+  if (tick > 0 && (open?.ticked === true || Math.abs(tick - Number(fill || 0)) > 0.05)) marks.push(tick);
+  const broker = Number(open?.brokerLtp);
+  if (broker > 0) marks.push(broker);
+  const sane = marks.filter((px) => px > 0 && isSaneOptionLtp(px, fill));
+  return sane.length ? Math.min(...sane) : Number(trailMark) || 0;
+}
+
 function brokerConfirmPx(open = {}) {
   if (open.ticked === true && Number(open.ltp) > 0) return Number(open.ltp);
   if (Number(open.avg) > 0) return Number(open.avg);
   return Number(open.ltp) || 0;
-}
-
-function pendingExitOnBook(orders = [], open, strategyName) {
-  return (orders || []).some((row) => {
-    if (row?.copyUserId) return false;
-    if (String(row.strategy || "") !== String(strategyName || "")) return false;
-    if (String(row.side || "").toUpperCase() !== "SELL") return false;
-    const status = String(row.status || "").toUpperCase();
-    if (["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status)) return false;
-    if (open?.securityId && row.securityId && String(open.securityId) === String(row.securityId)) return true;
-    if (open?.symbol && row.symbol && open.symbol === row.symbol) return true;
-    if (open?.option && row.option && open.option === row.option && Number(open.strike) === Number(row.strike)) return true;
-    return false;
-  });
 }
 
 export const NiftyVwapStrategy = {
@@ -122,7 +119,7 @@ export const NiftyVwapStrategy = {
       if (config.signalMode === "first-candle") algo.lastSignal = holdLevelsText(open, state, 0);
       return { action: "hold", reason: "wait-mark" };
     }
-    const stopMark = trailMark;
+    const stopMark = stopHitMark(trailMark, open, state.fillPrice, mark);
     const nextStop =
       config.useTrail === false
         ? Number(state.stopPrice || TrailingStopManager.initialStop(state.fillPrice, config.initialSlPct))
@@ -143,7 +140,7 @@ export const NiftyVwapStrategy = {
         state.trailActive = true;
       }
     }
-    if (pendingExitOnBook(orders, open, algo.name)) {
+    if (pendingExitOnBook(orders, open, algo.name, state)) {
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending" };
     }
@@ -164,12 +161,15 @@ export const NiftyVwapStrategy = {
       reason = "target";
     } else if (config.useVwapExit !== false && against >= config.vwapExitCandles) reason = "vwap-exit";
     else if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) reason = "eod";
+    if (reason === "sl" && state.trailActive) reason = "trail";
     if (reason === "sl") {
       const brokerPx = brokerConfirmPx(open);
-      if (brokerPx > Number(state.stopPrice) && trailMark / Math.max(brokerPx, trailMark) < 0.7 && open.ticked !== true) {
+      if (
+        !isSaneOptionLtp(stopMark, state.fillPrice) &&
+        brokerPx > Number(state.stopPrice) &&
+        open.ticked !== true
+      ) {
         reason = "";
-      } else if (state.trailActive) {
-        reason = "trail";
       }
     }
     if (!reason) {
