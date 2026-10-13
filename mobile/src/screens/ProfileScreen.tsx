@@ -3,7 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { getMemberDesk } from "../api";
 import { useAuth } from "../AuthContext";
 import { Card } from "../components/Ui";
-import { colors, formatMobile } from "../theme";
+import { colors } from "../theme";
 
 export function ProfileScreen() {
   const { user, updateProfile, logout } = useAuth();
@@ -51,14 +51,8 @@ export function ProfileScreen() {
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{(user?.name || "T").slice(0, 1).toUpperCase()}</Text>
         </View>
-        <Text style={styles.name}>{user?.name || "Trader"}</Text>
+        <Text style={styles.name}>Profile</Text>
       </View>
-      <Card>
-        <Row label="Name" value={user?.name || "—"} />
-        <Row label="Email" value={user?.email || "Not added"} />
-        <Row label="Mobile no" value={formatMobile(user?.mobile)} />
-        <Row label="Broker name" value={brokerName || "—"} />
-      </Card>
       <Text style={styles.edit}>Edit profile</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" />
       <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder="Email" />
@@ -66,6 +60,11 @@ export function ProfileScreen() {
       <Pressable style={styles.save} onPress={() => void onSave()} disabled={busy}>
         <Text style={styles.saveText}>{busy ? "Saving..." : "Save profile"}</Text>
       </Pressable>
+      {user?.role !== "admin" ? (
+        <Card>
+          <Row label="Broker name" value={brokerName || "—"} />
+        </Card>
+      ) : null}
       <Pressable style={styles.out} onPress={() => void logout()}>
         <Text style={styles.outText}>Log out</Text>
       </Pressable>

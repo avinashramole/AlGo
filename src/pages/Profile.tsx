@@ -16,7 +16,6 @@ import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { isAdminUser } from "../lib/roles";
-import { formatMobile } from "../lib/format";
 
 export function Profile() {
   const { user, updateProfile, refreshMe, logout } = useAuth();
@@ -74,42 +73,13 @@ export function Profile() {
         <div className="flex items-center gap-3">
           <Avatar name={user?.name} size="lg" />
           <div className="min-w-0">
-            <div className="truncate text-lg font-extrabold">{user?.name || "Trader"}</div>
-            <div className="truncate text-sm text-slate-400">{user?.email || formatMobile(user?.mobile)}</div>
+            <div className="truncate text-lg font-extrabold">Profile</div>
+            <div className="text-sm text-slate-400">Edit name, email, and mobile no here.</div>
           </div>
         </div>
       </PhoneCard>
 
-      <PhoneCard data-member-profile="identity">
-        <IdentityRow label="Name" value={user?.name || "—"} />
-        <IdentityRow label="Email" value={user?.email || "Not added"} />
-        <IdentityRow label="Mobile no" value={formatMobile(user?.mobile)} />
-        {!admin ? <IdentityRow label="Broker name" value={brokerName || "—"} /> : null}
-      </PhoneCard>
-
-      {!admin ? <LoginPasswordCard /> : null}
-
-      {admin ? (
-        <PhoneCard>
-          <SettingsRow icon={UserRound} label="My Account" detail={user?.email || formatMobile(user?.mobile)} />
-          <SettingsRow icon={Building2} label="Broker Connections" to="/brokers" detail="Desk brokers" />
-          <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/algo" />
-          <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
-          <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
-          <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
-          <SettingsRow
-            icon={theme === "light" ? Moon : Sun}
-            label="Theme"
-            detail={theme === "light" ? "Light" : "Dark"}
-            onClick={toggleTheme}
-          />
-          <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
-          <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Desk settings" />
-          <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
-        </PhoneCard>
-      ) : null}
-
-      <section className="card p-4">
+      <section className="card p-4" data-member-profile="identity">
         <div className="mb-2 text-sm font-bold">Edit profile</div>
         <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block text-sm font-semibold">
@@ -137,15 +107,37 @@ export function Profile() {
           </button>
         </form>
       </section>
-    </div>
-  );
-}
 
-function IdentityRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3 last:border-b-0">
-      <span className="text-sm text-slate-400">{label}</span>
-      <span className="text-right text-sm font-semibold">{value || "—"}</span>
+      {!admin ? (
+        <PhoneCard data-member-profile="broker">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <span className="text-sm text-slate-400">Broker name</span>
+            <span className="text-right text-sm font-semibold">{brokerName || "—"}</span>
+          </div>
+        </PhoneCard>
+      ) : null}
+
+      {!admin ? <LoginPasswordCard /> : null}
+
+      {admin ? (
+        <PhoneCard>
+          <SettingsRow icon={UserRound} label="My Account" detail="Saved from Edit profile" />
+          <SettingsRow icon={Building2} label="Broker Connections" to="/brokers" detail="Desk brokers" />
+          <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/algo" />
+          <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
+          <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
+          <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
+          <SettingsRow
+            icon={theme === "light" ? Moon : Sun}
+            label="Theme"
+            detail={theme === "light" ? "Light" : "Dark"}
+            onClick={toggleTheme}
+          />
+          <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
+          <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Desk settings" />
+          <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
+        </PhoneCard>
+      ) : null}
     </div>
   );
 }
