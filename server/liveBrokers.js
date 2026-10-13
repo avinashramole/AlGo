@@ -59,7 +59,7 @@ export const LIVE_BROKER_CATALOG = [
       { id: "sessionToken", label: "API secret", secret: true, placeholder: "Developer app API secret" },
       { id: "accessToken", label: "Trading access token", secret: true, placeholder: "Filled after Get today's token" },
     ],
-    help: "Upstox needs a daily trading access token, not the Analytics token. Save API key + API secret, then Get today's trading token and approve the Upstox app notification.",
+    help: "Upstox needs a daily trading access token, not the Analytics token. Save API key + API secret, then tap Gets Token and approve the Upstox app notification.",
   },
   {
     id: "fyers",

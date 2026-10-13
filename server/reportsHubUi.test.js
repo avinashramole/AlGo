@@ -85,6 +85,7 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(plans, /No strategies assigned to this account yet/);
   assert.doesNotMatch(plans, /Broker selection/);
   assert.doesNotMatch(plans, /data-broker-select="true"/);
+  assert.doesNotMatch(plans, /Gets Token/);
   assert.doesNotMatch(plans, /Get today's trading token/);
   assert.doesNotMatch(plans, /data-upstox-token/);
   assert.doesNotMatch(plans, /Store API key/);
@@ -113,7 +114,8 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(setup, /desk\?\.brokers\?\.length \? desk\.brokers : MEMBER_BROKER_CHOICES/);
   assert.match(setup, / · Active/);
   assert.match(setup, /data-upstox-token="true"/);
-  assert.match(setup, /Get today's trading token/);
+  assert.match(setup, /Gets Token/);
+  assert.doesNotMatch(setup, /Get today's trading token/);
   assert.doesNotMatch(setup, /sm:grid-cols-2 lg:grid-cols-3/);
   assert.doesNotMatch(setup, /Save IP/);
   assert.doesNotMatch(setup, /saveMemberIp/);

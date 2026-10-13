@@ -146,8 +146,8 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
   if (flags.hasTradingToken) return bits.join(" · ");
   if (flags.oauthReady) {
     return bits.length
-      ? `${bits.join(" · ")}. No trading token yet — tap Get today's trading token.`
-      : "API key and secret saved. No trading token yet — tap Get today's trading token.";
+      ? `${bits.join(" · ")}. No trading token yet — tap Gets Token.`
+      : "API key and secret saved. No trading token yet — tap Gets Token.";
   }
   if (bits.length) {
     return `${bits.join(" · ")}. ${
@@ -164,7 +164,7 @@ export function describeBrokerSave(install?: InstallHints | null, brokerId = "")
   const { flags, bits } = installBits(install, id);
   const saved = bits.length ? bits.join(" · ") : "Credentials";
   if (id === "upstox" && flags.oauthReady && !flags.hasTradingToken) {
-    return `${saved} saved on this account. Tap Get today's trading token next. Desk LIVE was not started.`;
+    return `${saved} saved on this account. Tap Gets Token next. Desk LIVE was not started.`;
   }
   if (flags.hasTradingToken) {
     return `${saved} saved on this account. Live copy now uses this token. Desk LIVE was not started.`;

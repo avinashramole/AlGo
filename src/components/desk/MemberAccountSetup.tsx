@@ -306,7 +306,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
                   className="h-10 rounded-lg border border-brand-500 px-4 text-sm font-semibold text-brand-500 disabled:opacity-60"
                   data-upstox-token="true"
                 >
-                  {busy === "upstox-token" ? "Asking Upstox..." : tokenWait ? "Waiting for token..." : "Get today's trading token"}
+                  {busy === "upstox-token" ? "Asking Upstox..." : tokenWait ? "Waiting for token..." : "Gets Token"}
                 </button>
               ) : null}
             </div>
