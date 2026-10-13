@@ -11,7 +11,7 @@ const tabs: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
   { to: "/reports", label: "Position & Orders", icon: FileText },
-  { to: "/profile", label: "Profile", icon: User },
+  { to: "/profile", label: "Profile", icon: User, admin: true },
 ];
 
 export function MobileNav() {
@@ -26,7 +26,7 @@ export function MobileNav() {
         isNativeHybrid() ? "" : "md:hidden",
       )}
     >
-      <div className="grid grid-cols-4">
+      <div className={visible.length === 3 ? "grid grid-cols-3" : "grid grid-cols-4"}>
         {visible.map((item) => (
           <NavLink
             key={item.to}

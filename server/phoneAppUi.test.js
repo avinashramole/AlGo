@@ -57,8 +57,17 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(userHome, /quote=/);
   assert.match(nav, /label: "Algos"/);
   assert.match(nav, /label: "Position & Orders"/);
-  assert.match(nav, /label: "Profile"/);
+  assert.match(nav, /label: "Profile", icon: User, admin: true/);
   assert.doesNotMatch(nav, /to: "\/orders"/);
+  const sidebar = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
+  const header = fs.readFileSync(path.join(root, "src/components/layout/Header.tsx"), "utf8");
+  assert.match(sidebar, /label: "Profile", icon: User, admin: true/);
+  assert.match(header, /data-profile-shortcut="true"/);
+  assert.match(header, /data-profile-menu="true"/);
+  assert.match(header, /\/profile#login-password/);
+  assert.match(roles, /to: "\/notifications", label: "Alerts"/);
+  const userNavBlock = roles.slice(roles.indexOf("export const userNav"), roles.indexOf("export function navForUser"));
+  assert.doesNotMatch(userNavBlock, /\/profile/);
   assert.match(login, /t2s-auth-tabs/);
   assert.match(login, /Login with Google/);
   assert.match(book, /data-member-book="orders"/);

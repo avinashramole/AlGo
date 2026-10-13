@@ -34,7 +34,7 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
   { to: "/users", label: "Users", icon: Users, admin: true },
   { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
-  { to: "/profile", label: "Profile", icon: User },
+  { to: "/profile", label: "Profile", icon: User, admin: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

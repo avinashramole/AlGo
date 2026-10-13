@@ -11,6 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { getMemberDesk } from "../api/client";
+import { LoginPasswordCard } from "../components/desk/LoginPasswordCard";
 import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -85,6 +86,8 @@ export function Profile() {
         <IdentityRow label="Mobile no" value={formatMobile(user?.mobile)} />
         {!admin ? <IdentityRow label="Broker name" value={brokerName || "—"} /> : null}
       </PhoneCard>
+
+      {!admin ? <LoginPasswordCard /> : null}
 
       {admin ? (
         <PhoneCard>

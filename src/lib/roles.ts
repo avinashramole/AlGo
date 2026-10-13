@@ -35,7 +35,6 @@ export const userNav = [
   { to: "/plans", label: "Algos" },
   { to: "/reports", label: "Position & Orders" },
   { to: "/notifications", label: "Alerts" },
-  { to: "/profile", label: "Profile" },
 ] as const;
 
 export function navForUser(user?: Pick<AuthUser, "role"> | null) {
@@ -43,6 +42,8 @@ export function navForUser(user?: Pick<AuthUser, "role"> | null) {
 }
 
 const extraTitles = [
+  { to: "/profile", label: "Profile" },
+  { to: "/settings", label: "Settings" },
   { to: "/notifications", label: "Notifications" },
   { to: "/support", label: "Support" },
   { to: "/subscriptions", label: "My plan" },
@@ -76,6 +77,8 @@ export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, p
   const clean = normalizePath(path);
   if (isAdminUser(user)) return true;
   if (clean === "/subscriptions" || clean.startsWith("/subscriptions/")) return true;
+  if (clean === "/profile" || clean.startsWith("/profile/")) return true;
+  if (clean === "/settings" || clean.startsWith("/settings/")) return true;
   if (clean === "/support" || clean.startsWith("/support/")) return true;
   if (clean === "/orders" || clean === "/positions" || clean === "/portfolio") return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
