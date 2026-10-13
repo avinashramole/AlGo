@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api/client";
-import { HomeOverview } from "../components/home/HomeOverview";
-import { DeskTape, TapeCell } from "../components/dashboard/DeskTape";
 import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
+import { UserHomeBoard } from "../components/home/UserHomeBoard";
 import { useAuth } from "../context/AuthContext";
-import { formatInr } from "../lib/format";
-import { isNativeHybrid } from "../lib/hybrid";
 
 export function UserHome() {
   const { user } = useAuth();
@@ -37,27 +34,19 @@ export function UserHome() {
   const balance = memberBalance(desk);
   const available = Number(desk?.wallet.balance) || 0;
   const pnl = Number(report?.netPnl || desk?.wallet.mtm || 0);
+  const plan = (desk?.plans || [])[0];
 
   return (
     <div className="space-y-3" data-user-home="true">
-      <HomeOverview
+      <UserHomeBoard
         name={user?.name}
         capital={balance}
         available={available}
         pnl={pnl}
+        plan={plan ? { name: plan.strategyName, status: plan.status, term: plan.term, endsAt: plan.endsAt } : null}
         algosTo="/plans"
-        ordersTo="/reports?tab=orders"
-        positionsTo="/reports?tab=positions"
-        showShortcuts={!isNativeHybrid()}
         tape={<MemberIndexBoard indices={indices} note={quoteNote} />}
       />
-
-      <DeskTape kicker="P&L" extra="Live" testId="member-pnl">
-        <TapeCell title="Balance" value={formatInr(balance)} tone={balance >= 0 ? "text-up" : "text-down"} />
-        <TapeCell title="MTM" value={formatInr(desk?.wallet.mtm || 0)} tone={(desk?.wallet.mtm || 0) >= 0 ? "text-up" : "text-down"} />
-        <TapeCell title="P&L" value={formatInr(report?.realizedPnl || 0)} tone={(report?.realizedPnl || 0) >= 0 ? "text-up" : "text-down"} />
-        <TapeCell title="Net P&L" value={formatInr(report?.netPnl || 0)} tone={(report?.netPnl || 0) >= 0 ? "text-up" : "text-down"} />
-      </DeskTape>
     </div>
   );
 }
@@ -67,4 +56,3 @@ function memberBalance(desk: MemberDesk | null) {
   if (Number.isFinite(broker)) return broker;
   return Number(desk?.wallet.balance) || 0;
 }
-

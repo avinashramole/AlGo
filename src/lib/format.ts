@@ -58,6 +58,22 @@ export function formatRupee(value: number, digits = 2) {
   return `${sign}₹${formatNumber(Math.abs(n), digits)}`;
 }
 
+export function greetingIst(date = new Date()) {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      hour12: false,
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .find((part) => part.type === "hour")?.value,
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export function formatIstClock(date = new Date()) {
   const clock = date.toLocaleTimeString("en-IN", {
     timeZone: "Asia/Kolkata",

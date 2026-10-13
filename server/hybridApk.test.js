@@ -61,9 +61,11 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(css, /html\.t2s-hybrid \.tape-strip/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /button:not\(\.tape-cell\)/);
-  assert.match(css, /html\.t2s-hybrid \[data-user-home\] \[data-home-shortcuts\]/);
   const userHome = fs.readFileSync(path.join(root, "src/pages/UserHome.tsx"), "utf8");
-  assert.match(userHome, /showShortcuts=\{!isNativeHybrid\(\)\}/);
+  const memberHome = fs.readFileSync(path.join(root, "src/components/home/UserHomeBoard.tsx"), "utf8");
+  assert.match(userHome, /UserHomeBoard/);
+  assert.match(memberHome, /data-home-workspace="algos-tape"/);
+  assert.doesNotMatch(memberHome, /display: none/);
   assert.match(hybridSrc, /markHybridDocument/);
   const activity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(activity, /BridgeActivity/);
