@@ -46,9 +46,11 @@ function keepSession(res, req, token) {
   res.setHeader("Set-Cookie", sessionCookie(token, req));
 }
 
-export function attachLoginRoutes(app, { healthService = "t2s-api" } = {}) {
+export function attachLoginRoutes(app, { healthService = "t2s-api", healthExtra } = {}) {
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, service: healthService, time: new Date().toISOString() });
+    const extra =
+      typeof healthExtra === "function" ? healthExtra() : healthExtra && typeof healthExtra === "object" ? healthExtra : {};
+    res.json({ ok: true, service: healthService, time: new Date().toISOString(), ...extra });
   });
 
   app.get("/api/auth/google/status", (req, res) => {

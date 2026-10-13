@@ -276,6 +276,29 @@ if [ "$api" != "200" ]; then
   exit 1
 fi
 
+echo "Auto-start admin Dhan data feed (same as Brokers → Start data feed)"
+feed_live=0
+for _try in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sleep 3
+  start_body=$(curl -sS --max-time 20 -X POST http://127.0.0.1:4000/api/internal/start-data-feed || echo '{}')
+  health_body=$(curl -sS --max-time 3 http://127.0.0.1:4000/api/health || echo '{}')
+  echo "data-feed-try=$_try start=$start_body health=$health_body"
+  if echo "$health_body" | grep -q '"dhanLive":true'; then
+    feed_live=1
+    break
+  fi
+  if echo "$start_body" | grep -q '"live":true'; then
+    feed_live=1
+    break
+  fi
+done
+if [ "$feed_live" = "1" ]; then
+  echo "OK admin data feed is live. Start data feed click was not required."
+else
+  echo "WARN data feed is not live yet. t2s will keep retrying in the background."
+  journalctl -u t2s -n 30 --no-pager || true
+fi
+
 echo "OK website published. api:$api head=$(git -C "$HOME_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 grep -l "$RESULT_MARKER" "$WEBROOT/assets/"*.js | head
 echo "Open https://trade2smart.com/version.json — sha must match origin/$BRANCH."

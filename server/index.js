@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureAdminDataFeedRunning, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, scheduleAdminDataFeedWatchdog, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureReplayBars } from "./indexHistory.js";
 import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
@@ -85,6 +85,7 @@ import {
   attachProcessGuards,
   httpErrorHandler,
   sendReadyPage,
+  isLoopbackRequest,
   skipDhanBoot,
   skipLiveAlgos,
   withTimeout,
@@ -202,7 +203,7 @@ function safeSnapshot() {
   }
 }
 
-attachLoginRoutes(app);
+attachLoginRoutes(app, { healthExtra: () => ({ dhanLive: isDhanLive() }) });
 
 function readToken(req) {
   return requestToken(req);
@@ -213,6 +214,7 @@ function deskGuard(req, res, next) {
   if (
     !pathname.startsWith("/api") ||
     pathname === "/api/health" ||
+    pathname === "/api/internal/start-data-feed" ||
     pathname === "/api/login" ||
     pathname.startsWith("/api/auth/google") ||
     pathname.startsWith("/api/auth/otp") ||
@@ -799,6 +801,23 @@ app.post("/api/brokers/dhan/feed", async (_req, res) => {
       tokenHint: result.tokenHint,
       account: publicBrokers().brokers.find((item) => item.id === "dhan"),
       snapshot: snapshot(),
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start the Dhan data feed" });
+  }
+});
+
+app.post("/api/internal/start-data-feed", async (req, res) => {
+  if (!isLoopbackRequest(req)) {
+    res.status(403).json({ error: "localhost only" });
+    return;
+  }
+  try {
+    const result = await ensureAdminDataFeedRunning("deploy");
+    res.json({
+      ok: Boolean(result.live),
+      live: Boolean(result.live),
+      reason: result.reason || (result.live ? "started" : "not-live"),
     });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not start the Dhan data feed" });
@@ -1565,7 +1584,7 @@ async function bootBackground() {
       console.log(`Dhan BUY/SELL uses this PC public IPv4: ${publicIp}`);
       console.log("Ignore Vite Network 192.168.x — that is home Wi-Fi only. Dhan does not use it.");
     }
-    const booted = await withTimeout(bootDhanFromEnv(), 60_000, "Dhan boot timed out after 60s");
+    const booted = await withTimeout(bootDhanFromEnv(), 90_000, "Dhan boot timed out after 90s");
     if (booted) {
       console.log("Dhan live feed started (saved token or PIN + TOTP)");
     } else if (process.env.DHAN_ACCESS_TOKEN) {
@@ -1574,5 +1593,6 @@ async function bootBackground() {
   } catch (error) {
     console.log(`Startup extra step failed (API is still running): ${error.message || error}`);
   }
+  scheduleAdminDataFeedWatchdog();
   startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
 }

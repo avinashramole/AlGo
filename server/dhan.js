@@ -117,6 +117,9 @@ let futureInstruments = [];
 let lastTickAt = 0;
 const lastTickAtByFamily = { nse: 0, mcx: 0 };
 let keepAlivePromise = null;
+let startFeedPromise = null;
+let adminFeedEnsurePromise = null;
+let adminFeedWatchdogTimer = null;
 let savedTokenRejected = false;
 let lastKeepAliveAt = 0;
 let credentialsBlockedUntil = persistedBackoff.credentialsBlockedUntil;
@@ -2577,14 +2580,70 @@ export async function saveDhanAccessToken({ accessToken: token, clientId: id, lo
 }
 
 export async function startDhanFeedFromSavedToken() {
-  const { session, token, id } = savedDhanAccess();
-  if (!token || !id) {
-    const error = new Error("Access token is not saved. Paste it on Brokers first. Starting the feed does not delete a saved token.");
-    error.status = 400;
-    throw error;
-  }
-  markDhanAutoStart(true);
-  return startDhanLive({ accessToken: token, clientId: id, loginId: session.loginId || id });
+  if (startFeedPromise) return startFeedPromise;
+  startFeedPromise = (async () => {
+    const { session, token, id } = savedDhanAccess();
+    if (!token || !id) {
+      const error = new Error("Access token is not saved. Paste it on Brokers first. Starting the feed does not delete a saved token.");
+      error.status = 400;
+      throw error;
+    }
+    markDhanAutoStart(true);
+    return startDhanLive({ accessToken: token, clientId: id, loginId: session.loginId || id });
+  })().finally(() => {
+    startFeedPromise = null;
+  });
+  return startFeedPromise;
+}
+
+/** Same action as Brokers → Start data feed. VPS boot and deploy keep retrying this. */
+export async function ensureAdminDataFeedRunning(reason = "boot") {
+  if (adminFeedEnsurePromise) return adminFeedEnsurePromise;
+  adminFeedEnsurePromise = (async () => {
+    const bootLike = reason === "boot" || reason === "deploy";
+    if (bootLike) armDataFeedOnBoot();
+    if (isDhanLive()) return { live: true, started: false, reason: "already-live" };
+    const session = loadDhanSession();
+    if (!bootLike && dhanFeedWasStopped(session)) {
+      return { live: false, started: false, reason: "feed-stopped" };
+    }
+    const { token, id } = savedDhanAccess();
+    if (!token || !id) {
+      console.log(`Dhan data feed auto-start (${reason}): saved token or client id is missing.`);
+      return { live: false, started: false, reason: "no-token" };
+    }
+    try {
+      await startDhanFeedFromSavedToken();
+      console.log(`Dhan data feed auto-started (${reason}). Brokers → Start data feed was not required.`);
+      return { live: isDhanLive(), started: true, reason: "started" };
+    } catch (error) {
+      console.log(`Dhan data feed auto-start (${reason}) failed: ${error.message || error}`);
+      if (isDhanAuthExpiredError(error) && canAutoGenerate()) {
+        savedTokenRejected = true;
+        try {
+          await keepDhanTokenFresh("auth");
+        } catch (renewError) {
+          console.log(`Dhan data feed auto-renew (${reason}) failed: ${renewError.message || renewError}`);
+        }
+      }
+      return { live: isDhanLive(), started: false, reason: "start-failed", error };
+    }
+  })().finally(() => {
+    adminFeedEnsurePromise = null;
+  });
+  return adminFeedEnsurePromise;
+}
+
+export function scheduleAdminDataFeedWatchdog() {
+  if (adminFeedWatchdogTimer) return;
+  const tick = (reason) => {
+    void ensureAdminDataFeedRunning(reason).catch((err) => {
+      console.warn("[dhan] admin data feed watchdog:", err?.message || err);
+    });
+  };
+  tick("boot");
+  adminFeedWatchdogTimer = setInterval(() => tick("watchdog"), 12_000);
+  if (typeof adminFeedWatchdogTimer.unref === "function") adminFeedWatchdogTimer.unref();
 }
 
 async function startDhanWithRetry(token, id, attempts = 4) {
@@ -2631,7 +2690,7 @@ export async function connectSavedDhan() {
   let startError = null;
   if (!feedStopped && token && id) {
     try {
-      await startDhanWithRetry(token, id, 2);
+      await startDhanWithRetry(token, id, 4);
       started = true;
       savedTokenRejected = false;
     } catch (error) {
@@ -2680,17 +2739,23 @@ export async function bootDhanFromEnv() {
   keepAliveBackoffUntil = Math.max(keepAliveBackoffUntil, persisted.generateBackoffUntil);
   credentialsBlockedUntil = Math.max(credentialsBlockedUntil, persisted.credentialsBlockedUntil);
 
-  const { session, token, id } = savedDhanAccess();
+  const { token, id } = savedDhanAccess();
   const savedStatus = dhanTokenStatus();
   setDhanFeed({
     ...savedStatus,
-    live: false,
-    source: "idle",
+    live: isDhanLive(),
+    source: isDhanLive() ? "rest" : "idle",
     error: null,
     tokenHint: savedStatus.tokenHint,
     clientId: savedStatus.clientId || id || null,
   });
   armDataFeedOnBoot();
+  const started = await ensureAdminDataFeedRunning("boot");
+  if (started.live) {
+    console.log("Dhan saved access token kept. Restart turned the data feed back on and did not replace the token.");
+    scheduleTokenKeepAlive();
+    return true;
+  }
   const connected = await connectSavedDhan();
   if (connected.live) {
     console.log(
@@ -2701,7 +2766,7 @@ export async function bootDhanFromEnv() {
     scheduleTokenKeepAlive();
     return true;
   }
-  const stopped = dhanFeedWasStopped(session);
+  const stopped = dhanFeedWasStopped(loadDhanSession());
   console.log(
     stopped
       ? "Dhan saved access token kept. Stop data feed left the feed off. Restart did not remove the token."

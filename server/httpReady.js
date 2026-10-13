@@ -15,6 +15,11 @@ export function skipDhanBoot(env = process.env) {
   return /^(1|true|yes)$/i.test(String(env.T2S_SKIP_DHAN_BOOT || ""));
 }
 
+export function isLoopbackRequest(req) {
+  const ip = String(req?.socket?.remoteAddress || req?.ip || "").replace(/^::ffff:/i, "");
+  return ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
+}
+
 export function skipLiveAlgos(env = process.env) {
   return /^(1|true|yes)$/i.test(String(env.T2S_SKIP_LIVE_ALGOS || ""));
 }

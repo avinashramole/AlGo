@@ -9,6 +9,7 @@ import {
   attachHttpServerGuards,
   httpErrorHandler,
   sendReadyPage,
+  isLoopbackRequest,
   skipDhanBoot,
   skipLiveAlgos,
   loginGatePort,
@@ -37,6 +38,13 @@ test("skipDhanBoot reads T2S_SKIP_DHAN_BOOT", () => {
 test("skipLiveAlgos reads T2S_SKIP_LIVE_ALGOS", () => {
   assert.equal(skipLiveAlgos({}), false);
   assert.equal(skipLiveAlgos({ T2S_SKIP_LIVE_ALGOS: "1" }), true);
+});
+
+test("isLoopbackRequest accepts only localhost", () => {
+  assert.equal(isLoopbackRequest({ socket: { remoteAddress: "127.0.0.1" } }), true);
+  assert.equal(isLoopbackRequest({ socket: { remoteAddress: "::1" } }), true);
+  assert.equal(isLoopbackRequest({ socket: { remoteAddress: "::ffff:127.0.0.1" } }), true);
+  assert.equal(isLoopbackRequest({ socket: { remoteAddress: "203.0.113.9" } }), false);
 });
 
 test("loginGatePort defaults to 3999", () => {
