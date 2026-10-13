@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
-import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import type { SocialProvider } from "../api/client";
 import { PreviewDeskBanner } from "../lib/deskHost";
@@ -327,6 +326,9 @@ export function Login() {
       </header>
       <div className="t2s-login-main">
         <aside className="t2s-login-hero">
+          <div className="t2s-login-scene" aria-hidden>
+            <img src="/login-hero-bg.jpg" alt="" />
+          </div>
           <BrandMark variant="stacked" size="lg" className="t2s-hero-logo" />
           <div className="t2s-hero-copy">
             <h1>
@@ -342,7 +344,6 @@ export function Login() {
             <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" />
             <HeroPoint icon={<Cpu size={18} />} title="AI Powered Insights" text="Smarter strategies for better trades" />
           </ul>
-          <LoginHeroArt />
         </aside>
 
         <section className="t2s-login-panel">
