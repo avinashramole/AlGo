@@ -2,7 +2,7 @@ import { Activity, Cpu } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn, formatPct, formatPlanTerm, formatRupee, greetingIst } from "../../lib/format";
-import { Avatar, StatusPill } from "../phone/PhoneUi";
+import { StatusPill } from "../phone/PhoneUi";
 
 export type UserHomePlan = {
   name: string;
@@ -40,16 +40,11 @@ export function UserHomeBoard({
 
   return (
     <div className="space-y-4" data-home-overview="member">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-lg font-extrabold tracking-tight">
-            {greetingIst()}, {first}!
-          </div>
-          <div className="text-xs text-slate-400">Trade2Smart. Stay Disciplined.</div>
+      <div>
+        <div className="truncate text-lg font-extrabold tracking-tight">
+          {greetingIst()}, {first}!
         </div>
-        <Link to="/profile" className="shrink-0 rounded-full" title="Profile" data-profile-home="true">
-          <Avatar name={name} size="sm" />
-        </Link>
+        <div className="text-xs text-slate-400">Trade2Smart. Stay Disciplined.</div>
       </div>
 
       <section className="space-y-2">

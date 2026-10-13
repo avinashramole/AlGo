@@ -154,8 +154,7 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(app, /<RoleSettings \/>/);
   assert.doesNotMatch(app, /AdminOnly><Settings/);
   const side = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
-  assert.match(side, /to: "\/settings", label: "Settings"/);
-  assert.doesNotMatch(side, /to: "\/settings", label: "Settings", icon: Settings, admin: true/);
+  assert.match(side, /to: "\/settings", label: "Settings", icon: Settings, admin: true/);
   const alerts = fs.readFileSync(path.join(root, "src/pages/Notifications.tsx"), "utf8");
   assert.match(alerts, /function isTradeAlert/);
   assert.match(alerts, /filter\(\(row\) => !isTradeAlert\(row\)\)/);

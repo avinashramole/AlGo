@@ -166,11 +166,12 @@ export function Header() {
             type="button"
             onClick={() => setOpen((value) => !value)}
             className="flex items-center gap-1.5 rounded-full"
-            title="Profile"
+            title={admin ? "Profile" : "Settings"}
             data-profile-shortcut="true"
+            data-settings-shortcut={admin ? undefined : "true"}
           >
             <Avatar name={user?.name} size="sm" />
-            {!admin ? <span className="hidden text-xs font-bold md:inline">Profile</span> : null}
+            {!admin ? <span className="hidden text-xs font-bold md:inline">Settings</span> : null}
           </button>
           {open ? (
             <div

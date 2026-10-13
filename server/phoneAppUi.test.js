@@ -77,9 +77,13 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const sidebar = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
   const header = fs.readFileSync(path.join(root, "src/components/layout/Header.tsx"), "utf8");
   assert.match(sidebar, /label: "Profile", icon: User, admin: true/);
+  assert.match(sidebar, /label: "Settings", icon: Settings, admin: true/);
   assert.match(header, /data-profile-shortcut="true"/);
+  assert.match(header, /data-settings-shortcut=\{admin \? undefined : "true"\}/);
   assert.match(header, /data-profile-menu="true"/);
   assert.match(header, /\/profile#login-password/);
+  assert.match(header, />Settings</);
+  assert.doesNotMatch(memberHome, /data-profile-home/);
   assert.match(roles, /to: "\/notifications", label: "Alerts"/);
   const userNavBlock = roles.slice(roles.indexOf("export const userNav"), roles.indexOf("export function navForUser"));
   assert.doesNotMatch(userNavBlock, /\/profile/);
