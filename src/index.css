@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --bg: #f4f6fb;
+  --bg: #ffffff;
   --card: #ffffff;
-  --card-muted: #f7f9fc;
+  --card-muted: #ffffff;
   --border: #e6ebf3;
   --text: #0f2744;
   --muted: #6b7386;
@@ -26,6 +26,14 @@
   --navy: #071833;
   --accent: #fd6b01;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.32);
+}
+
+html:not(.dark),
+html:not(.dark) body,
+html:not(.dark) #root,
+html:not(.dark) [data-user-desk],
+html:not(.dark) .desk-header {
+  background: #ffffff;
 }
 
 html.t2s-user-desk:not(.dark) {
