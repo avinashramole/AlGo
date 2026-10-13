@@ -378,7 +378,7 @@ export const NiftyVwapStrategy = {
     state.feedOk = input.feedLive !== false;
     const minutesToClose = Number.isFinite(input.minutesToClose) ? input.minutesToClose : istMinutesToClose(now);
 
-    if (input.feedLive === false && !PositionManager.openFor(input.positions, algo.name, state)) {
+    if (input.feedLive === false && !PositionManager.openFor(input.positions, algo.name, state, config.symbol)) {
       TradeLogger.record("feed-down", { message: "Market data disconnected — entries paused", strategy: algo.name });
       algo.lastSignal = "FEED DOWN";
       return { action: "feed-down" };
@@ -433,12 +433,12 @@ export const NiftyVwapStrategy = {
       });
     }
 
-    const open = PositionManager.openFor(input.positions, algo.name, state);
+    const open = PositionManager.openFor(input.positions, algo.name, state, config.symbol);
     if (open) {
       state.buyPhase = "open";
       const fill = bookedFillPrice(open, state);
       if (fill > 0 && !Number(state.fillPrice)) {
-        const leg = PositionManager.niftyOptionLeg(open) || {};
+        const leg = PositionManager.optionLeg(open) || PositionManager.niftyOptionLeg(open) || {};
         PositionManager.markFill(
           state,
           fill,
@@ -450,8 +450,12 @@ export const NiftyVwapStrategy = {
           option: open.option || leg.option,
           symbol: open.symbol,
         });
+        if (!Number(state.lastEntryAt)) {
+          const opened = Date.parse(String(open.openedAt || open.createdAt || ""));
+          state.lastEntryAt = Number.isFinite(opened) && opened > 0 ? opened : now;
+        }
       }
-      const leg = PositionManager.niftyOptionLeg(open);
+      const leg = PositionManager.optionLeg(open) || PositionManager.niftyOptionLeg(open) || {};
       const mark = Number(
         (leg?.option || open.option) === "PE" ? input.peLtp || open.ltp : input.ceLtp || open.ltp || open.avg,
       );

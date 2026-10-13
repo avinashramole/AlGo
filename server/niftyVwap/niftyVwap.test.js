@@ -1061,13 +1061,28 @@ test("parseOptionContract reads Dhan hyphen symbols and skips BANKNIFTY", () => 
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "NIFTY-SEP2026-24500-CE", qty: 65, type: "BUY" }), true);
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "BANKNIFTY 52000 CE", qty: 65, type: "BUY" }), false);
   assert.equal(PositionManager.isOpenNiftyOption({ symbol: "CRUDEOIL 6100 CE", qty: 100, type: "BUY" }), false);
+  assert.equal(PositionManager.isOpenOption({ symbol: "CRUDEOIL 6100 CE", qty: 100, type: "BUY" }, "CRUDEOIL"), true);
+  assert.equal(PositionManager.isOpenOption({ symbol: "NIFTY 24500 CE", qty: 65, type: "BUY" }, "NIFTY"), true);
 });
 
-test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", () => {
+test("one NIFTY option at a time — untagged Dhan fill is tracked, not a second BUY", () => {
   const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24550, low: 24470 })];
   const now = T0 + 2 * BAR15;
   const algo = defaultNiftyVwapReversalAlgo({ name: "Rev Second Lot" });
   const book = bookAdapter();
+  const broker = {
+    id: "dhan-pos-1",
+    symbol: "NIFTY-SEP2026-24500-CE",
+    type: "BUY",
+    qty: 65,
+    avg: 98,
+    ltp: 100,
+    option: "CE",
+    strike: 24500,
+    strategy: "",
+    brokerId: "dhan",
+    live: true,
+  };
   const blocked = NiftyVwapStrategy.tick({
     algo,
     now,
@@ -1079,24 +1094,14 @@ test("one NIFTY option at a time — untagged Dhan fill blocks a second BUY", ()
     expiry: "2026-08-27",
     ceLtp: 100,
     peLtp: 90,
-    positions: [
-      {
-        id: "dhan-pos-1",
-        symbol: "NIFTY-SEP2026-24500-CE",
-        type: "BUY",
-        qty: 65,
-        avg: 98,
-        ltp: 100,
-        strategy: "",
-        brokerId: "dhan",
-        live: true,
-      },
-    ],
+    positions: [broker],
     adapter: book.adapter,
   });
   assert.equal(book.places.length, 0);
-  assert.equal(blocked.reason, "already-open");
-  assert.equal(algo.lastSignal, "");
+  assert.equal(blocked.action, "hold");
+  assert.equal(Number(algo.vwapState.fillPrice), 98);
+  assert.ok(Number(algo.vwapState.stopPrice) > 0);
+  assert.ok(Number(algo.vwapState.targetPrice) > Number(algo.vwapState.fillPrice));
 });
 
 test("in-flight timeout does not punch a second lot while a NIFTY option is still open", () => {
@@ -2761,6 +2766,125 @@ test("crude max trades input is kept, and one signal places one order", () => {
   });
   assert.equal(third.reason, "max-trades");
   assert.equal(capBook.places.length, 2);
+});
+
+test("default rule: broker option is tracked, SL exits, then a new entry can fire", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE broker first", initialSlPct: 10, maxTradesPerDay: 5 });
+  const book = bookAdapter();
+  const broker = {
+    id: "dhan-crude-1",
+    symbol: "CRUDEOIL 6100 CE",
+    type: "BUY",
+    qty: 100,
+    avg: 90,
+    ltp: 80,
+    option: "CE",
+    strike: 6100,
+    strategy: "",
+    brokerId: "dhan",
+    openedAt: new Date(T0_0900 + BAR).toISOString(),
+    ticked: true,
+  };
+  const hold = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + 10_000,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 80,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: [broker],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.equal(hold.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(hold.reason, "sl");
+  assert.equal(book.exits.length, 1);
+  assert.equal(book.exits[0].role, "sl");
+  PositionManager.clearOpen(algo.vwapState);
+  algo.vwapState.lastEntryBarTime = 0;
+  algo.vwapState.sentSignalBarTime = 0;
+  const nextBar = T0_0900 + 2 * BAR;
+  const again = NiftyVwapStrategy.tick({
+    algo,
+    now: nextBar + BAR,
+    feedLive: true,
+    minutesToClose: 780,
+    futuresBars: [{ time: nextBar, open: 6100, high: 6130, low: 6090, close: 6120, volume: 10 }],
+    ceBars: [{ time: nextBar, open: 80, high: 95, low: 78, close: 90, volume: 5 }],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: [],
+    adapter: book.adapter,
+  });
+  assert.equal(again.action, "entry", String(algo.lastSignal || ""));
+  assert.equal(book.places.length, 1);
+});
+
+test("first candle tracks an untagged broker PE and exits at TGT before a new BUY", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "NIFTY broker first" });
+  const book = bookAdapter();
+  const broker = {
+    id: "dhan-nifty-1",
+    symbol: "NIFTY 22650 PE",
+    type: "BUY",
+    qty: 65,
+    avg: 100,
+    ltp: 140,
+    option: "PE",
+    strike: 22650,
+    strategy: "",
+    ticked: true,
+    openedAt: new Date(T0_0900 + BAR).toISOString(),
+  };
+  const tgt = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + 20_000,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(90, 100)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 100,
+    peLtp: 140,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [broker],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.equal(tgt.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(tgt.reason, "target");
+  PositionManager.clearOpen(algo.vwapState);
+  algo.vwapState.lastEntryBarTime = 0;
+  const next = T0_0900 + 2 * BAR;
+  const entry = NiftyVwapStrategy.tick({
+    algo,
+    now: next + BAR,
+    feedLive: true,
+    minutesToClose: 350,
+    futuresBars: [{ time: next, open: 24500, high: 24580, low: 24490, close: 24540, volume: 1000 }],
+    ceBars: [{ time: next, open: 90, high: 140, low: 88, close: 120, volume: 500 }],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 120,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    adapter: book.adapter,
+  });
+  assert.equal(entry.action, "entry", String(algo.lastSignal || ""));
 });
 
 test("crude 10% SL still exits after 10 leftover pending SELLs", () => {

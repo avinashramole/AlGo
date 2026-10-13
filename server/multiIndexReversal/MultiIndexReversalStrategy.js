@@ -1,4 +1,5 @@
 import { pendingExitOnBook } from "../pendingExit.js";
+import { PositionManager } from "../niftyVwap/PositionManager.js";
 import { multiIndexReversalConfig } from "./config.js";
 import { evaluateEntry, lastCompletedBar, lossPct, positionPnl, premiumValue, sameIntervalBar } from "./signals.js";
 import { isLotMultiple, reversalQty, strikeForIndexOffset } from "./strikes.js";
@@ -9,18 +10,21 @@ function fillFrom(result, fallback) {
   return px > 0 ? px : 0;
 }
 
-function owned(positions = [], name) {
-  return (positions || []).filter(
-    (row) => Number(row.qty) > 0 && row.strategy === name && String(row.type || "BUY").toUpperCase() !== "CLOSED",
+function owned(positions = [], name, symbol) {
+  const rows = (positions || []).filter(
+    (row) => Number(row.qty) > 0 && String(row.type || "BUY").toUpperCase() !== "CLOSED",
   );
+  const tagged = rows.filter((row) => row.strategy === name);
+  if (tagged.length) return tagged;
+  return rows.filter((row) => !row.strategy && PositionManager.isOpenOption(row, symbol));
 }
 
 function pendingExit(orders = [], open, name, state = {}) {
   return pendingExitOnBook(orders, open, name, state);
 }
 
-function pickLeg(positions, option, name) {
-  return owned(positions, name).find((row) => String(row.option || "").toUpperCase() === option) || null;
+function pickLeg(positions, option, name, symbol) {
+  return owned(positions, name, symbol).find((row) => String(row.option || "").toUpperCase() === option) || null;
 }
 
 function chargesFor(state, lots, brokerage) {
@@ -34,8 +38,8 @@ function combinedTargetAmount(state, config) {
   return round2(basis * (Number(config.combinedTargetPct) / 100));
 }
 
-function combinedNet(state, positions, name) {
-  const open = owned(positions, name);
+function combinedNet(state, positions, name, symbol) {
+  const open = owned(positions, name, symbol);
   const unrealized = open.reduce((sum, row) => sum + positionPnl(row.avg, row.ltp || row.avg, row.qty), 0);
   return round2(Number(state.realizedPnl || 0) + unrealized - Number(state.charges || 0));
 }
@@ -149,7 +153,21 @@ export const MultiIndexReversalStrategy = {
     const positions = input.positions || [];
     const orders = input.orders || [];
     const name = algo.name || config.name;
-    const open = owned(positions, name);
+    const symbol = config.symbol;
+    const open = owned(positions, name, symbol);
+    if (open[0] && !state.originalAvg) {
+      const row = open[0];
+      const option = String(row.option || "").toUpperCase() === "PE" ? "PE" : "CE";
+      attachOriginal(
+        state,
+        option,
+        Number(row.strike) || 0,
+        Number(row.qty) || config.qty,
+        Number(row.avg || row.ltp),
+        row.id,
+        config,
+      );
+    }
     if (input.feedLive === false && !open.length) {
       algo.lastSignal = "FEED DOWN";
       return { action: "feed-down" };
@@ -167,7 +185,7 @@ export const MultiIndexReversalStrategy = {
     }
 
     if (state.phase === PHASE.CE_ACTIVE || state.phase === PHASE.PE_ACTIVE) {
-      const original = pickLeg(positions, state.originalOption, name) || open[0];
+      const original = pickLeg(positions, state.originalOption, name, symbol) || open[0];
       if (!original) {
         resetCycle(state, "original-closed", now);
         algo.lastSignal = "CYCLE CLOSED";
@@ -178,7 +196,7 @@ export const MultiIndexReversalStrategy = {
         return this.exitOne(input, original, "initial-target");
       }
       const invested = premiumValue(state.originalAvg || original.avg, state.originalQty || original.qty);
-      if (config.maxCycleLossPct > 0 && combinedNet(state, positions, name) <= -round2(invested * config.maxCycleLossPct / 100)) {
+      if (config.maxCycleLossPct > 0 && combinedNet(state, positions, name, symbol) <= -round2(invested * config.maxCycleLossPct / 100)) {
         return this.emergencyExit({ ...input, reason: "max-cycle-loss" });
       }
       const loss = lossPct(state.originalAvg || original.avg, mark);
@@ -195,7 +213,7 @@ export const MultiIndexReversalStrategy = {
 
     if (state.phase === PHASE.COMBINED_POSITION_ACTIVE) {
       const target = combinedTargetAmount(state, config);
-      const net = combinedNet(state, positions, name);
+      const net = combinedNet(state, positions, name, symbol);
       if (config.maxCycleLossPct > 0) {
         const invested = premiumValue(state.originalAvg, state.originalQty);
         if (net <= -round2(invested * config.maxCycleLossPct / 100)) {
@@ -392,7 +410,8 @@ export const MultiIndexReversalStrategy = {
     const algo = input.algo;
     const state = mirState(algo);
     const name = algo.name;
-    const open = owned(input.positions, name);
+    const symbol = (input.config || multiIndexReversalConfig(algo)).symbol;
+    const open = owned(input.positions, name, symbol);
     transition(state, PHASE.EXIT_PENDING, reason);
     const results = [];
     for (const row of open) {
@@ -403,12 +422,12 @@ export const MultiIndexReversalStrategy = {
         state.realizedPnl = round2(Number(state.realizedPnl || 0) + Number(closed.pnl));
       }
     }
-    if (owned(input.positions, name).length && results.every((row) => row?.queued || row?.duplicate)) {
+    if (owned(input.positions, name, symbol).length && results.every((row) => row?.queued || row?.duplicate)) {
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending", results };
     }
     transition(state, PHASE.RECONCILING, reason);
-    if (!owned(input.positions, name).length) {
+    if (!owned(input.positions, name, symbol).length) {
       transition(state, PHASE.COMPLETED, reason);
       resetCycle(state, reason, input.now);
     }

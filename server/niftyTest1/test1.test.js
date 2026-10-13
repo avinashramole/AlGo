@@ -397,6 +397,42 @@ test("TEST1 buys ATM Crude Oil when that script is selected", () => {
   assert.equal(book.places[0].qty, 100);
 });
 
+test("TEST1 tracks a broker option and exits SL before a new BUY", () => {
+  const algo = defaultNiftyTest1Algo({ enabled: true });
+  const book = bookAdapter();
+  const broker = {
+    id: "dhan-t1",
+    symbol: "NIFTY 22700 CE",
+    type: "BUY",
+    qty: 65,
+    avg: 62,
+    ltp: 49,
+    option: "CE",
+    strike: 22700,
+    strategy: "",
+    ticked: true,
+    openedAt: new Date(T0930 + BAR).toISOString(),
+  };
+  const sl = Test1Strategy.tick({
+    algo,
+    now: T0930 + BAR + 60_000,
+    feedLive: true,
+    minutesToClose: 300,
+    ceBars: [bar(50, 59, { high: 60, low: 50, time: T0930 })],
+    peBars: [],
+    ceLtp: 49,
+    peLtp: 39,
+    spot: 22700,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [broker],
+    adapter: book.adapter,
+  });
+  assert.equal(book.places.length, 0);
+  assert.equal(sl.action, "exit");
+  assert.equal(sl.reason, "sl");
+});
+
 test("TEST1 SL still exits after leftover pending SELLs", () => {
   const ce = bar(50, 59, { high: 60, low: 50, time: T0930 });
   const algo = defaultNiftyTest1Algo({ enabled: true });

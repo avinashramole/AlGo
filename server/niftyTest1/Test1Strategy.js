@@ -243,7 +243,7 @@ export const Test1Strategy = {
     resetSession(state, sessionKeyIST(now));
     state.feedOk = input.feedLive !== false;
     const minutesToClose = Number.isFinite(input.minutesToClose) ? input.minutesToClose : 0;
-    if (input.feedLive === false && !PositionManager.openFor(input.positions, algo.name, state)) {
+    if (input.feedLive === false && !PositionManager.openFor(input.positions, algo.name, state, config.symbol)) {
       algo.lastSignal = "FEED DOWN";
       return { action: "feed-down" };
     }
@@ -257,15 +257,29 @@ export const Test1Strategy = {
       minBodyPct: config.minBodyPct,
       maxWickPct: config.maxWickPct,
     });
-    const open = PositionManager.openFor(input.positions, algo.name, state);
+    const open = PositionManager.openFor(input.positions, algo.name, state, config.symbol);
     if (open) {
       if (!state.fillPrice) {
-        applySignalLevels(state, Number(open.avg || open.ltp), signal.barTime ? signal : { ...signal, low: state.signalLow || open.avg, body: state.signalBody, range: state.signalRange }, config);
+        const fill = Number(open.avg || open.ltp);
+        if (signal.barTime && Number(signal.low) > 0) {
+          applySignalLevels(state, fill, signal, config);
+        } else {
+          PositionManager.markFill(
+            state,
+            fill,
+            TrailingStopManager.initialStop(fill, 20),
+            targetFromEntry(fill, { body: fill * 0.2, range: fill * 0.2 }, config) || TrailingStopManager.targetPrice(fill, 40),
+          );
+        }
         PositionManager.lockContract(state, {
           strike: open.strike,
           option: open.option,
           symbol: open.symbol,
         });
+        if (!Number(state.lastEntryAt)) {
+          const opened = Date.parse(String(open.openedAt || open.createdAt || ""));
+          state.lastEntryAt = Number.isFinite(opened) && opened > 0 ? opened : now;
+        }
       } else if (Number(open.avg) > 0 && Number(open.avg) !== Number(state.fillPrice)) {
         applySignalLevels(state, Number(open.avg), {
           open: state.signalOpen,

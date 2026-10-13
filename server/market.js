@@ -1265,10 +1265,19 @@ function test2LegMatch(leg, row) {
   return Boolean(leg.symbol && symbol && symbol === String(leg.symbol));
 }
 
+function optionAlgoSymbol(algo) {
+  if (isCrudeFirstCandleAlgo(algo)) return "CRUDEOIL";
+  if (isNiftyTest1Algo(algo)) return niftyTest1Config(algo).symbol || "NIFTY";
+  if (isNiftyTest2Algo(algo)) return niftyTest2Config(algo).symbol || "NIFTY";
+  if (isMultiIndexReversalAlgo(algo)) return String(algo.symbol || "NIFTY");
+  return "NIFTY";
+}
+
 function positionsForStrategyName(algo, mode) {
   const vs = runtimeState(algo);
   const t2 = isNiftyTest2Algo(algo) ? algo.test2State || {} : null;
   const legs = Array.isArray(t2?.legs) ? t2.legs : [];
+  const symbol = optionAlgoSymbol(algo);
   const mine = (row) => {
     const tagged = realStrategyName(row.strategy) || row.strategy;
     if (tagged && tagged !== algo.name) return false;
@@ -1277,6 +1286,7 @@ function positionsForStrategyName(algo, mode) {
     if (t2 && (t2.entered || t2.entryDate || legs.length) && Number(row.qty) > 0) {
       if (legs.some((leg) => test2LegMatch(leg, row))) return true;
     }
+    if (PositionManager.isOpenOption(row, symbol)) return true;
     return false;
   };
   const rows = state.positions || [];
@@ -1291,11 +1301,12 @@ function minutesUntilIst(closeMinutes, date = new Date()) {
 
 function positionsForNiftyVwap(algo, mode) {
   const vs = runtimeState(algo);
+  const symbol = optionAlgoSymbol(algo);
   const mine = (row) => {
     if (row.strategy && row.strategy !== algo.name) return false;
     if (row.strategy === algo.name) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
-    if (PositionManager.isOpenNiftyOption(row)) return true;
+    if (PositionManager.isOpenOption(row, symbol)) return true;
     return false;
   };
   const rows = state.positions || [];
@@ -1310,6 +1321,7 @@ function positionsForHedge(algo, mode) {
     if (tagged && tagged !== algo.name) return false;
     if (tagged === algo.name) return true;
     const hs = algo.hedgeState || {};
+    if (!tagged && PositionManager.isOpenOption(row, "NIFTY")) return true;
     const active = hs.inFlight || (hs.phase && hs.phase !== "IDLE") || hs.primarySide;
     if (!active || tagged || !PositionManager.isOpenNiftyOption(row)) return false;
     if (row.option && hs.hedgeSide && row.option === hs.hedgeSide) return true;
