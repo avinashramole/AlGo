@@ -13,10 +13,8 @@ export function isUserDesk(user?: Pick<AuthUser, "role"> | null) {
 }
 
 export function markUserDeskDocument(user?: Pick<AuthUser, "role"> | null) {
-  if (typeof document === "undefined") return false;
-  const on = isUserDesk(user);
-  document.documentElement.classList.toggle(USER_DESK_CLASS, on);
-  return on;
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle(USER_DESK_CLASS, isUserDesk(user));
 }
 
 export const adminNav = [

@@ -18,7 +18,9 @@ export function AppShell() {
   }, [user]);
   useEffect(() => {
     markUserDeskDocument(user);
-    return () => markUserDeskDocument(null);
+    return () => {
+      markUserDeskDocument(null);
+    };
   }, [user]);
 
   const phone = isNativeHybrid();
