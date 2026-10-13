@@ -37,6 +37,11 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const memberHome = fs.readFileSync(path.join(root, "src/components/home/UserHomeBoard.tsx"), "utf8");
   assert.match(memberHome, /data-home-overview="member"/);
   assert.match(memberHome, /greetingIst\(\)/);
+  const formatSrc = fs.readFileSync(path.join(root, "src/lib/format.ts"), "utf8");
+  assert.match(formatSrc, /return "Good Morning"/);
+  assert.match(formatSrc, /return "Good Afternoon"/);
+  assert.match(formatSrc, /return "Good Evening"/);
+  assert.doesNotMatch(formatSrc, /Good evening/);
   assert.match(memberHome, /Trade2Smart\. Stay Disciplined/);
   assert.match(memberHome, /Portfolio Overview/);
   assert.match(memberHome, /Capital Utilization/);

@@ -69,9 +69,9 @@ export function greetingIst(date = new Date()) {
       .formatToParts(date)
       .find((part) => part.type === "hour")?.value,
   );
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
 }
 
 export function formatIstClock(date = new Date()) {
