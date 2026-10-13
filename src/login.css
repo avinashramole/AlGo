@@ -45,28 +45,6 @@ html:has(.t2s-login) #root {
   display: none !important;
 }
 
-.t2s-login-top {
-  display: flex;
-  justify-content: flex-end;
-  flex: 0 0 auto;
-  width: min(1200px, calc(100% - 24px));
-  margin: 0 auto;
-  padding: 12px 0 0;
-}
-
-.t2s-create-pill {
-  height: 40px;
-  padding: 0 16px;
-  border: 1.5px solid var(--orange);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--navy);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.t2s-create-pill:focus-visible,
 .t2s-auth-tabs button:focus-visible,
 .t2s-submit:focus-visible,
 .t2s-alt-btn:focus-visible,
@@ -74,11 +52,6 @@ html:has(.t2s-login) #root {
 .t2s-forgot:focus-visible {
   outline: 3px solid rgba(255, 105, 0, 0.35);
   outline-offset: 2px;
-}
-
-.t2s-create-pill b {
-  color: var(--orange);
-  font-weight: 800;
 }
 
 .t2s-login-main {
@@ -630,8 +603,7 @@ html:has(.t2s-login) #root {
 }
 
 @media (max-width: 480px) {
-  .t2s-login-main,
-  .t2s-login-top {
+  .t2s-login-main {
     width: min(1200px, calc(100% - 16px));
   }
 
@@ -678,7 +650,6 @@ html.t2s-hybrid .t2s-login {
 html.t2s-hybrid .t2s-login-hero,
 html.t2s-hybrid .t2s-hero-stage,
 html.t2s-hybrid .t2s-benefits,
-html.t2s-hybrid .t2s-login-top,
 html.t2s-hybrid .t2s-login-watermark,
 html.t2s-hybrid .t2s-app-downloads,
 html.t2s-hybrid .t2s-download-label,
@@ -761,8 +732,7 @@ html.t2s-hybrid .t2s-login-card {
 }
 
 @media (min-width: 1440px) {
-  .t2s-login-main,
-  .t2s-login-top {
+  .t2s-login-main {
     width: min(1360px, calc(100% - 48px));
   }
 
