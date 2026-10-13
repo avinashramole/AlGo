@@ -145,6 +145,8 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(login, /LoginHeroArt/);
   const loginHero = fs.readFileSync(path.join(root, "src/components/LoginHeroArt.tsx"), "utf8");
   assert.match(loginHero, /t2s-hero-stage/);
+  assert.match(loginHero, /login-devices\.webp/);
+  assert.doesNotMatch(loginHero, /t2s-laptop/);
   assert.doesNotMatch(login, /login-hero-bg/);
   const loginCss = fs.readFileSync(path.join(root, "src/login.css"), "utf8");
   assert.match(loginCss, /login-page-bg\.jpg/);
