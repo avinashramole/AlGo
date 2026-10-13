@@ -3,8 +3,6 @@ import {
   Apple,
   ArrowRight,
   Award,
-  BarChart3,
-  Cpu,
   Eye,
   EyeOff,
   Headphones,
@@ -12,11 +10,9 @@ import {
   Mail,
   Phone,
   Shield,
-  ShieldCheck,
   Smartphone,
   User,
   Users,
-  Zap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BrandMark } from "../components/BrandMark";
@@ -327,21 +323,6 @@ export function Login() {
       </header>
       <div className="t2s-login-main">
         <aside className="t2s-login-hero">
-          <BrandMark variant="stacked" size="lg" className="t2s-hero-logo" />
-          <div className="t2s-hero-copy">
-            <h1>
-              Trade <span className="t2s-accent">Smarter.</span>
-              <br />
-              Grow <span className="t2s-accent">Better.</span>
-            </h1>
-            <p>Advanced Tools. Real-time Data. Smarter Decisions.</p>
-          </div>
-          <ul className="t2s-hero-points">
-            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market Data" text="Live data & advanced analytics" />
-            <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" />
-            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" />
-            <HeroPoint icon={<Cpu size={18} />} title="AI Powered Insights" text="Smarter strategies for better trades" />
-          </ul>
           <LoginHeroArt />
         </aside>
 
@@ -585,26 +566,6 @@ export function Login() {
         </div>
       </footer>
     </div>
-  );
-}
-
-function HeroPoint({
-  icon,
-  title,
-  text,
-}: {
-  icon: ReactNode;
-  title: string;
-  text: string;
-}) {
-  return (
-    <li>
-      <span className="t2s-point-icon">{icon}</span>
-      <span>
-        <strong>{title}</strong>
-        <small>{text}</small>
-      </span>
-    </li>
   );
 }
 

@@ -10,8 +10,9 @@
   --gold: #ff6900;
   box-sizing: border-box;
   position: relative;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -29,6 +30,8 @@
 html:has(.t2s-login),
 html:has(.t2s-login) body,
 html:has(.t2s-login) #root {
+  height: 100%;
+  overflow: hidden;
   background-color: #f7f9fc;
 }
 
@@ -45,9 +48,10 @@ html:has(.t2s-login) #root {
 .t2s-login-top {
   display: flex;
   justify-content: flex-end;
+  flex: 0 0 auto;
   width: min(1200px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 20px 0 0;
+  padding: 12px 0 0;
 }
 
 .t2s-create-pill {
@@ -83,8 +87,9 @@ html:has(.t2s-login) #root {
   gap: 8px;
   width: min(1200px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 8px 0 16px;
+  padding: 0;
   flex: 1;
+  min-height: 0;
 }
 
 .t2s-login-hero {
@@ -172,17 +177,21 @@ html:has(.t2s-login) #root {
 }
 
 .t2s-hero-stage {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  margin-top: 8px;
+  height: 100%;
+  margin: 0;
 }
 
 .t2s-hero-devices {
   display: block;
-  width: min(108%, 720px);
-  max-width: none;
+  width: auto;
+  max-width: 100%;
   height: auto;
-  margin-left: auto;
+  max-height: 72vh;
+  object-fit: contain;
   pointer-events: none;
   user-select: none;
 }
@@ -554,7 +563,7 @@ html:has(.t2s-login) #root {
 }
 
 .t2s-benefits {
-  display: grid;
+  display: none;
   grid-template-columns: 1fr;
   gap: 16px;
   width: 100%;
@@ -587,7 +596,7 @@ html:has(.t2s-login) #root {
 }
 
 .t2s-legal {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 10px;
   width: 100%;
@@ -697,25 +706,41 @@ html.t2s-hybrid .t2s-login-card {
 @media (min-width: 768px) {
   .t2s-login-hero {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    justify-content: center;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
   }
 
   .t2s-login-main {
-    grid-template-columns: minmax(0, 1.1fr) minmax(340px, 400px);
-    align-items: start;
-    gap: 28px;
-    padding: 8px 0 28px;
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 400px);
+    align-items: center;
+    gap: 20px;
   }
 
-  .t2s-hero-stage {
+  .t2s-benefits,
+  .t2s-legal {
     display: none;
   }
 
-  .t2s-benefits {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 22px 32px;
+  .t2s-login-panel {
+    height: 100%;
+    padding: 0;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .t2s-login-card {
+    max-height: calc(100dvh - 72px);
+    overflow: auto;
+    padding: 20px 22px 16px;
+  }
+
+  .t2s-login-avatar {
+    width: 88px;
+    height: 88px;
+    margin-bottom: 8px;
   }
 }
 
@@ -725,44 +750,23 @@ html.t2s-hybrid .t2s-login-card {
   }
 
   .t2s-login-main {
-    grid-template-columns: minmax(0, 1.25fr) minmax(380px, 420px);
-    gap: 40px;
+    grid-template-columns: minmax(0, 1.45fr) minmax(360px, 400px);
+    gap: 28px;
+    width: min(1280px, calc(100% - 40px));
   }
 
-  .t2s-hero-stage {
-    display: block;
-  }
-
-  .t2s-login-hero {
-    min-height: 680px;
-  }
-
-  .t2s-login-panel {
-    padding: 8px 0 0;
-    justify-content: flex-end;
-  }
-
-  .t2s-benefits {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 20px;
-    padding: 22px 48px;
-  }
-
-  .t2s-legal {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 48px 20px;
+  .t2s-hero-devices {
+    max-height: 78vh;
   }
 }
 
 @media (min-width: 1440px) {
   .t2s-login-main,
   .t2s-login-top {
-    width: min(1280px, calc(100% - 48px));
+    width: min(1360px, calc(100% - 48px));
   }
 
-  .t2s-hero-copy h1 {
-    font-size: 56px;
+  .t2s-hero-devices {
+    max-height: 82vh;
   }
 }
