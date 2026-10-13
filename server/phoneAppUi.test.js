@@ -134,6 +134,14 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(loginPassword, /scrollIntoView/);
   assert.match(login, /t2s-auth-tabs/);
   assert.match(login, /Login with Google/);
+  assert.match(login, /Welcome Back!/);
+  assert.match(login, /Sign in to your Trade2Smart account/);
+  assert.match(login, /New to Trade2Smart\?/);
+  assert.match(login, /Create Account/);
+  assert.match(login, /or continue with/);
+  assert.match(login, /Download our App/);
+  assert.match(login, /AI Powered Insights/);
+  assert.match(login, /t2s-create-pill/);
   assert.match(book, /data-member-book="orders"/);
   assert.match(book, /data-member-positions-page="true"/);
   assert.match(book, /data-member-orders-page="true"/);

@@ -1,7 +1,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
+  Apple,
+  ArrowRight,
   Award,
   BarChart3,
+  Cpu,
   Eye,
   EyeOff,
   Headphones,
@@ -282,12 +285,12 @@ export function Login() {
   const title = page === "signup" ? "Create Account" : page === "reset" ? "Reset password" : "Welcome Back!";
   const sub =
     page === "signup"
-      ? ""
+      ? "Register your Trade2Smart account"
       : page === "reset"
         ? "Enter the code we sent, then choose a new password"
         : sentTo
           ? "Enter the 6-digit code we emailed you"
-          : "";
+          : "Sign in to your Trade2Smart account";
   const submitLabel =
     loading
       ? "Please wait..."
@@ -304,9 +307,27 @@ export function Login() {
   return (
     <div className="t2s-login">
       <PreviewDeskBanner />
+      <header className="t2s-login-top">
+        {page === "signin" ? (
+          <button type="button" className="t2s-create-pill" onClick={openSignup}>
+            New to Trade2Smart? <b>Create Account</b>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="t2s-create-pill"
+            onClick={() => {
+              setPage("signin");
+              resetNotice();
+            }}
+          >
+            Have an account? <b>Login</b>
+          </button>
+        )}
+      </header>
       <div className="t2s-login-main">
         <aside className="t2s-login-hero">
-          <LoginHeroArt />
+          <BrandMark variant="stacked" size="lg" className="t2s-hero-logo" />
           <div className="t2s-hero-copy">
             <h1>
               Trade <span className="t2s-accent">Smarter.</span>
@@ -316,16 +337,18 @@ export function Login() {
             <p>Advanced Tools. Real-time Data. Smarter Decisions.</p>
           </div>
           <ul className="t2s-hero-points">
-            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market" text="Live data & advanced analytics" tone="gold" />
-            <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" tone="gold" />
-            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" tone="gold" />
+            <HeroPoint icon={<BarChart3 size={18} />} title="Real-time Market Data" text="Live data & advanced analytics" />
+            <HeroPoint icon={<ShieldCheck size={18} />} title="Secure & Safe" text="Bank-grade security & data protection" />
+            <HeroPoint icon={<Zap size={18} />} title="Fast Execution" text="Instant order execution with accuracy" />
+            <HeroPoint icon={<Cpu size={18} />} title="AI Powered Insights" text="Smarter strategies for better trades" />
           </ul>
+          <LoginHeroArt />
         </aside>
 
         <section className="t2s-login-panel">
           <div className="t2s-login-card">
             <div className="t2s-login-avatar">
-              <BrandMark variant="stacked" size="md" className="t2s-login-logo" />
+              <BrandMark variant="stacked" size="sm" className="t2s-login-logo" />
             </div>
             {page === "reset" ? (
               <>
@@ -485,22 +508,23 @@ export function Login() {
               <Notice error={error} hint={hint} devOtp={devOtp} />
               <button type="submit" disabled={loading} className="t2s-submit">
                 {submitLabel}
+                {page === "signin" && !sentTo && !loading ? <ArrowRight size={18} /> : null}
               </button>
             </form>
 
             {page === "signin" && !sentTo ? (
               <>
                 <div className="t2s-or" role="separator">
-                  <span>or</span>
+                  <span>or continue with</span>
                 </div>
                 <div className="t2s-alt">
-                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
-                    <Mail size={18} />
-                    Email me a login code
-                  </button>
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onGoogle()}>
                     <GoogleIcon />
                     Login with Google
+                  </button>
+                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
+                    <Mail size={18} />
+                    Email me a login code
                   </button>
                 </div>
               </>
@@ -520,32 +544,7 @@ export function Login() {
               </>
             ) : null}
 
-            <button
-              type="button"
-              className="t2s-switch"
-              onClick={() => {
-                if (page === "signin") {
-                  openSignup();
-                  return;
-                }
-                setPage("signin");
-                resetNotice();
-              }}
-            >
-              {page === "signup" ? (
-                <>
-                  Have an account? <b>Login</b>
-                </>
-              ) : page === "reset" ? (
-                <>
-                  Remembered it? <b>Login</b>
-                </>
-              ) : (
-                <>
-                  Don&apos;t have an account? <b>Register</b>
-                </>
-              )}
-            </button>
+            <p className="t2s-download-label">Download our App</p>
             <div className="t2s-app-downloads">
               <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
                 <Smartphone size={18} />
@@ -559,21 +558,12 @@ export function Login() {
                   setHint("iPhone: open this site in Safari → Share → Add to Home Screen. Same email login as the website.");
                 }}
               >
-                <Smartphone size={18} />
-                Install iPhone App
+                <Apple size={18} />
+                Download iPhone App
               </button>
             </div>
           </div>
         </section>
-      </div>
-
-      <div className="t2s-login-watermark" aria-hidden>
-        <BullMark />
-        <p>
-          Trade Smarter
-          <br />
-          Trade Together
-        </p>
       </div>
 
       <section className="t2s-benefits">
@@ -602,16 +592,14 @@ function HeroPoint({
   icon,
   title,
   text,
-  tone,
 }: {
   icon: ReactNode;
   title: string;
   text: string;
-  tone: "blue" | "gold";
 }) {
   return (
     <li>
-      <span className={`t2s-point-icon t2s-point-${tone}`}>{icon}</span>
+      <span className="t2s-point-icon">{icon}</span>
       <span>
         <strong>{title}</strong>
         <small>{text}</small>
@@ -710,21 +698,6 @@ function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: 
       {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
       {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
     </>
-  );
-}
-
-function BullMark() {
-  return (
-    <svg viewBox="0 0 240 120" width="240" height="120">
-      <path
-        fill="currentColor"
-        d="M18 88c22-6 38-28 52-28 10 0 16 10 28 10 14 0 20-18 36-18 18 0 28 22 46 22 12 0 22-10 34-16 4 14 8 26 8 36H18c0-8 0-16 0-6z"
-      />
-      <path
-        fill="currentColor"
-        d="M168 46c8-18 28-28 40-22 4 2 8 8 6 14-8-4-22-2-30 10-2-2-8-4-16-2zM46 58c10-16 28-18 38-8-12 2-22 10-28 20-6-4-10-8-10-12z"
-      />
-    </svg>
   );
 }
 
