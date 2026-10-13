@@ -6,6 +6,19 @@ export function isAdminUser(user?: Pick<AuthUser, "role"> | null) {
   return user?.role === "admin";
 }
 
+export const USER_DESK_CLASS = "t2s-user-desk";
+
+export function isUserDesk(user?: Pick<AuthUser, "role"> | null) {
+  return Boolean(user) && !isAdminUser(user);
+}
+
+export function markUserDeskDocument(user?: Pick<AuthUser, "role"> | null) {
+  if (typeof document === "undefined") return false;
+  const on = isUserDesk(user);
+  document.documentElement.classList.toggle(USER_DESK_CLASS, on);
+  return on;
+}
+
 export const adminNav = [
   { to: "/", label: "Home" },
   { to: "/algo", label: "Algos" },

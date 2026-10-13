@@ -38,6 +38,16 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(userHome, /Kotak account after the trade login/);
   assert.doesNotMatch(userHome, /Neo sid and today's session token/);
   assert.match(userHome, /data-user-home="true"/);
+  const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
+  const shell = fs.readFileSync(path.join(root, "src/components/layout/AppShell.tsx"), "utf8");
+  const roles = fs.readFileSync(path.join(root, "src/lib/roles.ts"), "utf8");
+  assert.match(roles, /t2s-user-desk/);
+  assert.match(roles, /export function markUserDeskDocument/);
+  assert.match(shell, /markUserDeskDocument/);
+  assert.match(shell, /data-user-desk=\{userDesk \? "true" : undefined\}/);
+  assert.match(css, /html\.t2s-user-desk:not\(\.dark\)/);
+  assert.match(css, /html\.t2s-user-desk:not\(\.dark\)[\s\S]*--bg: #ffffff/);
+  assert.match(css, /html\.t2s-user-desk:not\(\.dark\)[\s\S]*\[data-user-desk\]/);
   assert.match(userHome, /showShortcuts=\{!isNativeHybrid\(\)\}/);
   assert.doesNotMatch(userHome, /CopyAlerts/);
   assert.doesNotMatch(userHome, /Copied BUY/);

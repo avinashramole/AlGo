@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { loadClientList } from "../../lib/clientsCache";
 import { PreviewDeskBanner } from "../../lib/deskHost";
-import { isAdminUser } from "../../lib/roles";
+import { isAdminUser, isUserDesk, markUserDeskDocument } from "../../lib/roles";
 import { isNativeHybrid } from "../../lib/hybrid";
 import { cn } from "../../lib/format";
 import { Header } from "./Header";
@@ -12,13 +12,22 @@ import { Sidebar } from "./Sidebar";
 
 export function AppShell() {
   const { user } = useAuth();
+  const userDesk = isUserDesk(user);
   useEffect(() => {
     if (isAdminUser(user)) void loadClientList();
+  }, [user]);
+  useEffect(() => {
+    markUserDeskDocument(user);
+    return () => markUserDeskDocument(null);
   }, [user]);
 
   const phone = isNativeHybrid();
   return (
-    <div className="h-[100dvh] overflow-hidden bg-[var(--bg)]" data-mobile-app="responsive">
+    <div
+      className="h-[100dvh] overflow-hidden bg-[var(--bg)]"
+      data-mobile-app="responsive"
+      data-user-desk={userDesk ? "true" : undefined}
+    >
       <PreviewDeskBanner />
       <Sidebar />
       <div className={cn("t2s-shell-main flex h-[100dvh] flex-col pl-0", !phone && "md:pl-56")}>

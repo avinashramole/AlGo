@@ -28,6 +28,20 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.32);
 }
 
+html.t2s-user-desk:not(.dark) {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --card-muted: #ffffff;
+}
+
+html.t2s-user-desk:not(.dark),
+html.t2s-user-desk:not(.dark) body,
+html.t2s-user-desk:not(.dark) #root,
+html.t2s-user-desk:not(.dark) [data-user-desk],
+html.t2s-user-desk:not(.dark) .desk-header {
+  background: #ffffff;
+}
+
 /* Keep Tailwind brand utilities on the T2S logo orange even if JIT is stale. */
 .bg-brand-50,
 .bg-brand-50\/70,
