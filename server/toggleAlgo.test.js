@@ -7,7 +7,7 @@ import test from "node:test";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
-const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, dropClientFromStrategies, getAlgo, listAlgos, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
+const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, dropClientFromStrategies, getAlgo, listAlgos, queueLiveAlgoOrder, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
 const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
@@ -94,6 +94,59 @@ test("a started strategy stays LIVE after the saved file is reloaded", () => {
     assert.equal(again.status, "LIVE");
   } finally {
     deleteAlgo(created.id);
+    setDhanFeed({ live: false });
+  }
+});
+
+test("stopping NIFTY live drops queued BUY orders and blocks new ones", () => {
+  setDhanFeed({ live: true });
+  const stamp = Date.now();
+  const name = `NIFTY stop no fire ${stamp}`;
+  const created = createAlgo({ name, kind: "nifty-first-candle", runMode: "live" });
+  drainPendingLiveAlgoOrders();
+  try {
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    const queued = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22300 CE",
+      option: "CE",
+      strike: 22300,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(queued.queued, true);
+    const stopped = toggleAlgo(created.id, { enabled: false });
+    assert.equal(stopped.enabled, false);
+    assert.equal(stopped.holdDailyLive, true);
+    assert.equal(stopped.status, "PAUSED");
+    const leftover = drainPendingLiveAlgoOrders().filter((row) => row.strategy === name && row.side === "BUY");
+    assert.equal(leftover.length, 0);
+    const again = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22300 CE",
+      option: "CE",
+      strike: 22300,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(again.queued, false);
+    assert.equal(again.blocked, true);
+    assert.equal(drainPendingLiveAlgoOrders().filter((row) => row.strategy === name).length, 0);
+    const stored = JSON.parse(fs.readFileSync(process.env.T2S_ALGOS_FILE, "utf8"));
+    const reloaded = hydrateAlgos(stored, seedAlgos());
+    const held = reloaded.algos.find((row) => row.id === created.id);
+    assert.equal(held.enabled, false);
+    assert.equal(held.holdDailyLive, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
     setDhanFeed({ live: false });
   }
 });

@@ -541,6 +541,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
       hedgeState: existing.hedgeState,
+      holdDailyLive: creating ? false : Boolean(existing.holdDailyLive),
       enabled: creating ? false : Boolean(existing.enabled),
       status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
     };
@@ -643,6 +644,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
       vwapState: existing.vwapState,
+      holdDailyLive: creating ? false : Boolean(existing.holdDailyLive),
       enabled: creating ? false : Boolean(existing.enabled),
       status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
     };
@@ -853,6 +855,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
       vwapState: existing.vwapState,
+      holdDailyLive: creating ? false : Boolean(existing.holdDailyLive),
       enabled: creating ? false : Boolean(existing.enabled),
       status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
     };

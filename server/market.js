@@ -585,7 +585,26 @@ export function peekOptionChain(symbol) {
   return optionChainCache.get(String(symbol || "").toUpperCase()) || null;
 }
 
+export function liveBuyAllowedForStrategy(strategy) {
+  const name = String(strategy || "").trim();
+  if (!name) return true;
+  const algo = (state.algos || []).find((row) => String(row.name || "") === name);
+  if (!algo) return true;
+  return Boolean(algo.enabled);
+}
+
+export function dropStoppedStrategyLiveEntries(queued = pendingLiveAlgoOrders) {
+  for (let i = queued.length - 1; i >= 0; i -= 1) {
+    const row = queued[i];
+    if (liveOrderSide(row) !== "BUY") continue;
+    if (liveBuyAllowedForStrategy(row.strategy)) continue;
+    queued.splice(i, 1);
+  }
+  return queued;
+}
+
 export function drainPendingLiveAlgoOrders() {
+  dropStoppedStrategyLiveEntries();
   return pendingLiveAlgoOrders.splice(0, pendingLiveAlgoOrders.length);
 }
 
@@ -665,6 +684,9 @@ function strategyBuyUnresolved(strategyName) {
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
+  if (side === "BUY" && !liveBuyAllowedForStrategy(strategy)) {
+    return { ok: true, queued: false, status: "PAUSED", blocked: true };
+  }
   const role = String(payload?.role || "");
   const brokerId = orderBrokerId(payload);
   const allowHedge = payload?.allowHedge === true && role === "hedge";
@@ -2854,8 +2876,13 @@ export function toggleAlgo(id, patch = {}) {
     }
   }
   algo.enabled = wantEnabled;
-  if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
+  if (stopping) {
+    algo.holdDailyLive = true;
+    cancelPendingForStrategy(algo.name, { buysOnly: true });
+    if (isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
+  }
   if (starting) {
+    algo.holdDailyLive = false;
     resetStrategyOrders(algo);
     if (!isNiftyTest2Algo(algo) || niftyTest2Config(algo).holdStyle === "intraday") dropPreviousIntradayBook(algo);
     algo.lastPaperAt = 0;

@@ -114,6 +114,17 @@ test("daily LIVE does not arm on boot, after hours, weekends, or without Dhan LI
   assert.equal(noFeed.lastArmedYmd, "");
 });
 
+test("daily LIVE does not arm a hedge or reversal the user stopped", () => {
+  const paused = desk().map((row) =>
+    row.id === "a5" || row.id === "a6" ? { ...row, enabled: false, status: "PAUSED", holdDailyLive: true } : row,
+  );
+  const result = applyHedgeDailyLive(paused, { now: FRI_0920, feedLive: true });
+  assert.equal(result.armedIds.includes("a5"), false);
+  assert.equal(result.armedIds.includes("a6"), false);
+  assert.equal(result.algos.find((row) => row.id === "a5").enabled, false);
+  assert.equal(result.algos.find((row) => row.id === "a6").enabled, false);
+});
+
 test("daily LIVE does not re-arm the same IST day after a pause", () => {
   const first = applyHedgeDailyLive(desk(), { now: FRI_0920, feedLive: true });
   const paused = first.algos.map((row) =>
@@ -247,6 +258,16 @@ test("first candle daily LIVE does not arm on boot, after hours, weekends, or wi
   assert.equal(noFeed.reason, "dhan-not-live");
   assert.equal(noFeed.algos.find((row) => row.id === "a10").enabled, false);
   assert.equal(noFeed.lastArmedYmd, "");
+});
+
+test("first candle daily LIVE does not arm a strategy the user stopped", () => {
+  const paused = desk().map((row) =>
+    row.id === "a10" ? { ...row, enabled: false, status: "PAUSED", holdDailyLive: true } : row,
+  );
+  const result = applyFirstCandleDailyLive(paused, { now: FRI_0900, feedLive: true });
+  assert.equal(result.armedIds.includes("a10"), false);
+  assert.equal(result.algos.find((row) => row.id === "a10").enabled, false);
+  assert.equal(result.algos.find((row) => row.id === "a10").status, "PAUSED");
 });
 
 test("first candle daily LIVE does not re-arm the same IST day after a pause", () => {
