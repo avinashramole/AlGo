@@ -33,7 +33,8 @@ export const adminNav = [
 export const userNav = [
   { to: "/", label: "Home" },
   { to: "/plans", label: "Algos" },
-  { to: "/reports", label: "Position & Orders" },
+  { to: "/positions", label: "Position" },
+  { to: "/orders", label: "Orders" },
   { to: "/support", label: "Support" },
   { to: "/profile#login-password", label: "Password" },
   { to: "/settings", label: "Settings" },
@@ -51,9 +52,10 @@ const extraTitles = [
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algos" },
-  { to: "/orders", label: "Position & Orders" },
-  { to: "/positions", label: "Position & Orders" },
-  { to: "/portfolio", label: "Position & Orders" },
+  { to: "/orders", label: "Orders" },
+  { to: "/positions", label: "Position" },
+  { to: "/portfolio", label: "Position" },
+  { to: "/reports", label: "Position" },
   { to: "/tape", label: "Market tape" },
   { to: "/broker", label: "Add broker" },
   { to: "/settings/ips", label: "User & IP Manager" },
@@ -85,7 +87,7 @@ export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, p
   if (clean === "/settings" || clean.startsWith("/settings/")) return true;
   if (clean === "/support" || clean.startsWith("/support/")) return true;
   if (clean === "/notifications" || clean.startsWith("/notifications/")) return true;
-  if (clean === "/orders" || clean === "/positions" || clean === "/portfolio") return true;
+  if (clean === "/orders" || clean === "/positions" || clean === "/portfolio" || clean === "/reports") return true;
   if (clean === "/tape" || clean === "/broker") return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
 }

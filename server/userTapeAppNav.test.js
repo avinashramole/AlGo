@@ -31,6 +31,14 @@ test("user home opens a dedicated tape page and APK splits Position, Orders, Bro
   assert.match(nav, /label: "Orders"/);
   assert.match(nav, /label: "Broker"/);
   assert.match(nav, /data-apk-logout="true"/);
-  assert.match(nav, /label: "Position & Orders"/);
+  assert.match(nav, /to: "\/positions"/);
+  assert.match(nav, /to: "\/orders"/);
+  assert.match(nav, /label: "Position & Orders", icon: FileText, admin: true/);
+  assert.match(book, /data-member-positions-page="true"/);
+  assert.match(book, /data-member-orders-page="true"/);
   assert.match(book, /data-member-report-download="pdf"/);
+  const positionsBlock = book.slice(book.indexOf("export function MemberPositions"), book.indexOf("export function MemberReports"));
+  const ordersBlock = book.slice(book.indexOf("export function MemberOrders"), book.indexOf("export function MemberPositions"));
+  assert.match(positionsBlock, /data-member-report-download="pdf"/);
+  assert.doesNotMatch(ordersBlock, /data-member-report-download="pdf"/);
 });

@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Briefcase, Building2, Cpu, FileText, Home, LogOut, User } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { isNativeHybrid } from "../../lib/hybrid";
 import { isAdminUser } from "../../lib/roles";
@@ -10,26 +10,44 @@ const tabs: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean
   { to: "/", label: "Home", icon: Home },
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
-  { to: "/reports", label: "Position & Orders", icon: FileText },
+  { to: "/reports", label: "Position & Orders", icon: FileText, admin: true },
+  { to: "/positions", label: "Position", icon: Briefcase, member: true },
+  { to: "/orders", label: "Orders", icon: FileText, member: true },
   { to: "/profile", label: "Profile", icon: User, admin: true },
 ];
 
-const apkMemberTabs: Array<{ to: string; label: string; icon: LucideIcon; tab?: string }> = [
+const apkMemberTabs: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/reports?tab=positions", label: "Position", icon: Briefcase, tab: "positions" },
-  { to: "/reports?tab=orders", label: "Orders", icon: FileText, tab: "orders" },
+  { to: "/positions", label: "Position", icon: Briefcase },
+  { to: "/orders", label: "Orders", icon: FileText },
   { to: "/broker", label: "Broker", icon: Building2 },
 ];
 
-function reportsTabActive(pathname: string, search: string, tab: string) {
-  if (pathname !== "/reports") return false;
-  const current = new URLSearchParams(search).get("tab") || "positions";
-  return current === tab;
+function NavItems({ items }: { items: Array<{ to: string; label: string; icon: LucideIcon }> }) {
+  return (
+    <>
+      {items.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.to === "/"}
+          className={({ isActive }) =>
+            cn(
+              "flex min-h-12 max-w-full flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] font-semibold leading-tight",
+              isActive ? "text-brand-500" : "text-slate-400",
+            )
+          }
+        >
+          <item.icon size={18} />
+          {item.label}
+        </NavLink>
+      ))}
+    </>
+  );
 }
 
 export function MobileNav() {
   const { user, logout } = useAuth();
-  const location = useLocation();
   const admin = isAdminUser(user);
   const apkMember = isNativeHybrid() && !admin;
   const visible = tabs.filter((item) => (admin ? !item.member : !item.admin));
@@ -41,25 +59,7 @@ export function MobileNav() {
         data-apk-nav="member"
       >
         <div className="grid grid-cols-5">
-          {apkMemberTabs.map((item) => {
-            const active = item.tab
-              ? reportsTabActive(location.pathname, location.search, item.tab)
-              : location.pathname === item.to;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/"}
-                className={cn(
-                  "flex min-h-12 max-w-full flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] font-semibold leading-tight",
-                  active ? "text-brand-500" : "text-slate-400",
-                )}
-              >
-                <item.icon size={18} />
-                {item.label}
-              </NavLink>
-            );
-          })}
+          <NavItems items={apkMemberTabs} />
           <button
             type="button"
             data-apk-logout="true"
@@ -82,22 +82,7 @@ export function MobileNav() {
       )}
     >
       <div className={visible.length === 3 ? "grid grid-cols-3" : "grid grid-cols-4"}>
-        {visible.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              cn(
-                "flex min-h-12 max-w-full flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] font-semibold leading-tight",
-                isActive ? "text-brand-500" : "text-slate-400",
-              )
-            }
-          >
-            <item.icon size={18} />
-            {item.label}
-          </NavLink>
-        ))}
+        <NavItems items={visible} />
       </div>
     </nav>
   );

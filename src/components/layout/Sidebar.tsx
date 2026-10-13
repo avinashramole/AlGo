@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Briefcase,
   Building2,
   Cpu,
   FileText,
@@ -28,7 +29,9 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/", label: "Home", icon: Home },
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
-  { to: "/reports", label: "Position & Orders", icon: FileText },
+  { to: "/reports", label: "Position & Orders", icon: FileText, admin: true },
+  { to: "/positions", label: "Position", icon: Briefcase, member: true },
+  { to: "/orders", label: "Orders", icon: FileText, member: true },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },

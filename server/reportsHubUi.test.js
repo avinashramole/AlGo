@@ -19,8 +19,9 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(tabsFile, /return "positions";/);
   assert.match(app, /Navigate to="\/reports\?tab=orders"/);
   assert.match(app, /Navigate to="\/reports\?tab=positions"/);
-  assert.match(side, /label: "Position & Orders"/);
-  assert.doesNotMatch(side, /to: "\/orders"/);
+  assert.match(side, /label: "Position & Orders", icon: FileText, admin: true/);
+  assert.match(side, /to: "\/positions", label: "Position"/);
+  assert.match(side, /to: "\/orders", label: "Orders"/);
   const tabs = hub.split("desk-tabs")[1] || "";
   const position = tabs.indexOf("Position");
   const orders = tabs.indexOf("Orders");

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { downloadMemberReport, getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { catchDeskError } from "../lib/liveSite";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
-import { tabFromParams } from "../lib/bookTabs";
 import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
@@ -14,17 +13,18 @@ type PositionTab = "open" | "closed";
 type OrderTab = "all" | "pending" | "completed" | "rejected";
 
 export function MemberOrders() {
-  return <MemberBook view="orders" />;
+  return (
+    <div className="space-y-2" data-member-orders-page="true">
+      <h1 className="text-lg font-bold">Orders</h1>
+      <MemberBook view="orders" />
+    </div>
+  );
 }
 
 export function MemberPositions() {
-  return <MemberBook view="positions" />;
-}
-
-export function MemberReports() {
   const [params, setParams] = useSearchParams();
   const [showPaper, setShowPaper] = useState(() => params.get("tab") === "paper");
-  const tab = tabFromParams(params.get("tab"), showPaper);
+  const paper = showPaper && params.get("tab") === "paper";
   const onDesk = useCallback((next: MemberDesk | null) => {
     setShowPaper(Boolean(next && hasPaperActivity({
       orders: [...(next.orders || []), ...(next.orderHistory || [])],
@@ -34,47 +34,52 @@ export function MemberReports() {
       brokerId: next.brokerId,
     })));
   }, []);
+  const downloadPdf = () => {
+    void downloadMemberReport("pdf").catch((error) => {
+      window.alert(catchDeskError(error, "Could not download your trade report"));
+    });
+  };
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-member-positions-page="true">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-bold">Position & Orders</h1>
-        <div className="desk-tabs" data-reports-tabs="position-order-reports">
-          <button
-            type="button"
-            onClick={() => setParams({ tab: "positions" }, { replace: true })}
-            className={cn(tab === "positions" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
-          >
-            Position
-          </button>
-          <button
-            type="button"
-            onClick={() => setParams({ tab: "orders" }, { replace: true })}
-            className={cn(tab === "orders" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
-          >
-            Orders
-          </button>
+        <h1 className="text-lg font-bold">{paper ? "Paper" : "Position"}</h1>
+        <div className="flex flex-wrap items-center gap-2">
           {showPaper ? (
             <button
               type="button"
               data-paper-tab="true"
-              onClick={() => setParams({ tab: "paper" }, { replace: true })}
-              className={cn(tab === "paper" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+              onClick={() => setParams(paper ? {} : { tab: "paper" }, { replace: true })}
+              className={cn(
+                "h-10 rounded-xl px-4 text-sm font-semibold",
+                paper ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400",
+              )}
             >
               Paper
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setParams({ tab: "reports" }, { replace: true })}
-            className={cn(tab === "reports" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
-          >
-            Reports
-          </button>
+          {paper ? null : (
+            <button
+              type="button"
+              data-member-report-download="pdf"
+              onClick={downloadPdf}
+              className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+            >
+              Download PDF
+            </button>
+          )}
         </div>
       </div>
-      <MemberBook view={tab} onDesk={onDesk} />
+      <MemberBook view={paper ? "paper" : "positions"} onDesk={onDesk} />
     </div>
   );
+}
+
+export function MemberReports() {
+  const [params] = useSearchParams();
+  const tab = params.get("tab");
+  if (tab === "orders") return <Navigate to="/orders" replace />;
+  if (tab === "paper") return <Navigate to="/positions?tab=paper" replace />;
+  return <Navigate to="/positions" replace />;
 }
 
 function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk | null) => void }) {
@@ -269,24 +274,8 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
     );
   }
 
-  const downloadPdf = () => {
-    void downloadMemberReport("pdf").catch((error) => {
-      window.alert(catchDeskError(error, "Could not download your trade report"));
-    });
-  };
-
   return (
     <div className="space-y-3" data-member-book="reports">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          data-member-report-download="pdf"
-          onClick={downloadPdf}
-          className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
-        >
-          Download PDF
-        </button>
-      </div>
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Realized P&L" value={<Money value={report?.realizedPnl || 0} />} />
         <Stat label="Unrealized MTM" value={<Money value={report?.unrealizedPnl || 0} />} />
