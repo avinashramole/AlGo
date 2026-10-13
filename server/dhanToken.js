@@ -268,7 +268,6 @@ export function msUntilDailyRenewal(from = Date.now(), hour = TOKEN_RENEW_HOUR_I
 }
 
 const TOKEN_STILL_GOOD_MS = 20 * 60 * 1000;
-const DAILY_RESET_WINDOW_MS = 3 * 60 * 1000;
 
 export function msUntilTokenKeepAlive(session = {}, from = Date.now()) {
   const expiry = Date.parse(resolveTokenExpiry(session) || "");
@@ -286,11 +285,6 @@ export function msUntilTokenKeepAlive(session = {}, from = Date.now()) {
     wait = Math.min(wait, Math.max(5_000, expiry - from - 5 * 60 * 1000));
   }
   return wait;
-}
-
-function insideDailyResetWindow(now = Date.now()) {
-  const reset = lastDailyResetAt(now);
-  return now >= reset && now - reset <= DAILY_RESET_WINDOW_MS;
 }
 
 /**
@@ -350,9 +344,9 @@ export function keepAlivePlan({
   }
   const tokenStillGood = Number.isFinite(remainingMs) && remainingMs > TOKEN_STILL_GOOD_MS;
   const userAsked = reason === "save" || reason === "api" || reason === "auth";
-  // A healthy restart keeps a JWT that still has more than 20 minutes, even inside the 8:00 IST window.
-  // A short or dead JWT is not stuck on "reuse" — boot falls through and mints when PIN + TOTP exist.
-  if (tokenStillGood && needsFresh && !userAsked && (reason === "boot" || !insideDailyResetWindow(now))) {
+  // A healthy restart keeps a JWT that still has more than 20 minutes. The 8:00 IST
+  // schedule/watchdog still mints after that, even if the timer fires after the 3-minute window.
+  if (tokenStillGood && needsFresh && !userAsked && (reason === "boot" || reason === "retry")) {
     if (reason === "boot") return { action: "reuse", because: "restart-keeps-token" };
     return { action: "wait", because: "restart-keeps-token" };
   }

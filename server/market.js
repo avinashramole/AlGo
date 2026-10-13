@@ -590,13 +590,32 @@ export function liveBuyAllowedForStrategy(strategy) {
   if (!name) return true;
   const algo = (state.algos || []).find((row) => String(row.name || "") === name);
   if (!algo) return true;
-  return Boolean(algo.enabled);
+  return Boolean(algo.enabled && algo.runMode === "live");
+}
+
+function paperOnlyMemberCopies(payload = {}) {
+  return liveOrderSide(payload) === "BUY" && !liveBuyAllowedForStrategy(payload.strategy);
+}
+
+function memberCopiesForOrder(payload = {}, algo = {}) {
+  const copies = memberCopyPayloads(payload, algo || {});
+  if (!paperOnlyMemberCopies(payload)) return copies;
+  return copies.map((copy) => ({
+    ...copy,
+    paper: true,
+    brokerId: "paper",
+    leftoverSlot: false,
+    copyBlocked: "",
+    account: undefined,
+    brokerSession: undefined,
+  }));
 }
 
 export function dropStoppedStrategyLiveEntries(queued = pendingLiveAlgoOrders) {
   for (let i = queued.length - 1; i >= 0; i -= 1) {
     const row = queued[i];
     if (liveOrderSide(row) !== "BUY") continue;
+    if (row?.paper || orderBrokerId(row) === "paper") continue;
     if (liveBuyAllowedForStrategy(row.strategy)) continue;
     queued.splice(i, 1);
   }
@@ -684,7 +703,8 @@ function strategyBuyUnresolved(strategyName) {
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
-  if (side === "BUY" && !liveBuyAllowedForStrategy(strategy)) {
+  const paperFill = payload?.paper === true || orderBrokerId(payload) === "paper";
+  if (side === "BUY" && !liveBuyAllowedForStrategy(strategy) && !paperFill) {
     return { ok: true, queued: false, status: "PAUSED", blocked: true };
   }
   const role = String(payload?.role || "");
@@ -753,7 +773,7 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
     price: order.price || payload.price,
   };
   const algo = liveCopyAlgo(next);
-  const copies = memberCopyPayloads(next, algo);
+  const copies = memberCopiesForOrder(next, algo);
   if (!copies.length) {
     const mapped = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0;
     console.log(
@@ -938,9 +958,11 @@ export function queueLiveAlgoOrder(payload) {
     last = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
   if (!payload.skipMemberCopy) {
-    const algo = liveCopyAlgo(deskStamped);
-    for (const copy of memberCopyPayloads(deskStamped, algo || {})) {
-      last = enqueueLiveAlgoOrder(copy);
+    if (!paperOnlyMemberCopies(deskStamped)) {
+      const algo = liveCopyAlgo(deskStamped);
+      for (const copy of memberCopiesForOrder(deskStamped, algo || {})) {
+        last = enqueueLiveAlgoOrder(copy);
+      }
     }
   }
   if (typeof onLiveBookChange === "function") onLiveBookChange();
@@ -2876,10 +2898,10 @@ export function toggleAlgo(id, patch = {}) {
     }
   }
   algo.enabled = wantEnabled;
-  if (stopping) {
-    algo.holdDailyLive = true;
+  if (stopping || algo.runMode === "paper") {
+    if (stopping) algo.holdDailyLive = true;
     cancelPendingForStrategy(algo.name, { buysOnly: true });
-    if (isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
+    if (stopping && isNiftyTestAlgo(algo)) algo.lastSignal = "NO SIGNAL";
   }
   if (starting) {
     algo.holdDailyLive = false;
@@ -2957,9 +2979,16 @@ export function dropClientFromStrategies(userId) {
 export function updateAlgo(id, payload) {
   const index = state.algos.findIndex((item) => item.id === id);
   if (index < 0) return { error: "Strategy not found" };
-  const next = normalizeAlgo(payload || {}, state.algos[index]);
+  const previous = state.algos[index];
+  const next = normalizeAlgo(payload || {}, previous);
   next.mappedClientIds = mappedClientIdsForMembers(next.mappedClientIds, memberIds());
   next.id = id;
+  const leftLive = previous.runMode === "live" && next.runMode !== "live";
+  if (next.runMode === "paper" || next.runMode === "backtest") next.brokerId = "paper";
+  if (leftLive) {
+    next.holdDailyLive = true;
+    cancelPendingForStrategy(next.name || previous.name, { buysOnly: true });
+  }
   state.algos[index] = next;
   state.notifications.unshift(`Strategy updated: ${next.name}`);
   persistAlgos();

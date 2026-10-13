@@ -406,7 +406,17 @@ test("keepAlivePlan keeps a long-lived JWT on restart and still mints at 8:00 IS
       remainingMs: remaining,
       now: tenThirty,
     }),
-    { action: "wait", because: "restart-keeps-token" },
+    { action: "mint", because: "daily-reset" },
+  );
+  assert.deepEqual(
+    keepAlivePlan({
+      reason: "schedule",
+      canAutoGenerate: true,
+      needsFresh: true,
+      remainingMs: remaining,
+      now: tenThirty,
+    }),
+    { action: "mint", because: "daily-reset" },
   );
   assert.deepEqual(
     keepAlivePlan({

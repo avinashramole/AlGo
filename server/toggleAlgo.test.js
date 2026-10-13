@@ -98,6 +98,81 @@ test("a started strategy stays LIVE after the saved file is reloaded", () => {
   }
 });
 
+test("paper or stopped strategies keep admin and user BUY on paper only", () => {
+  setDhanFeed({ live: true });
+  const stamp = Date.now();
+  const name = `Paper only ${stamp}`;
+  const created = createAlgo({ name, kind: "nifty-first-candle", runMode: "live" });
+  drainPendingLiveAlgoOrders();
+  try {
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    const live = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22300 CE",
+      option: "CE",
+      strike: 22300,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(live.queued, true);
+    const paper = updateAlgo(created.id, { runMode: "paper" });
+    assert.equal(paper.runMode, "paper");
+    assert.equal(paper.brokerId, "paper");
+    assert.equal(paper.holdDailyLive, true);
+    const leftover = drainPendingLiveAlgoOrders().filter((row) => row.strategy === name && row.side === "BUY" && row.brokerId !== "paper");
+    assert.equal(leftover.length, 0);
+    const again = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22300 CE",
+      option: "CE",
+      strike: 22300,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(again.queued, false);
+    assert.equal(again.blocked, true);
+    const paperCopy = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22300 CE",
+      option: "CE",
+      strike: 22300,
+      brokerId: "paper",
+      paper: true,
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(paperCopy.queued, true);
+    const stopped = toggleAlgo(created.id, { enabled: false });
+    assert.equal(stopped.enabled, false);
+    const afterStop = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22300 CE",
+      option: "CE",
+      strike: 22300,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(afterStop.queued, false);
+    assert.equal(afterStop.blocked, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
 test("stopping NIFTY live drops queued BUY orders and blocks new ones", () => {
   setDhanFeed({ live: true });
   const stamp = Date.now();

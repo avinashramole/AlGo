@@ -2326,8 +2326,8 @@ function ensureTokenWatchdog() {
       }
       if (!canAutoGenerate()) return;
       const session = loadDhanSession();
-      if (!needsFreshAccessToken(session)) return;
-      if (tokenMsRemaining() > 20 * 60 * 1000) return;
+      const remaining = tokenMsRemaining();
+      if (!needsFreshAccessToken(session) && remaining > 20 * 60 * 1000) return;
       void keepDhanTokenFresh("watchdog").catch((err) => {
         console.warn("[dhan] token watchdog:", err?.message || err);
       });

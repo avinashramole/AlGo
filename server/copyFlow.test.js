@@ -12,7 +12,7 @@ process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
 const { enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
-const { createAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook } = await import("./market.js");
+const { createAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, toggleAlgo } = await import("./market.js");
 
 savePaymentSettings({
   mobile: "9876543210",
@@ -22,6 +22,7 @@ savePaymentSettings({
 });
 
 const admin = { id: "admin", name: "Avinash", role: "admin" };
+setDhanFeed({ live: true });
 const nifty = createAlgo({
   id: "a-flow-nifty",
   name: "NIFTY VWAP ATM",
@@ -38,6 +39,8 @@ const crude = createAlgo({
   mappingScope: "both",
   mappedClientIds: [],
 });
+toggleAlgo(nifty.id, { enabled: true });
+toggleAlgo(crude.id, { enabled: true });
 
 function payMember(user, strategy) {
   const enrolled = enrollStrategy({
