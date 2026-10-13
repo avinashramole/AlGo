@@ -1,23 +1,18 @@
 import { useEffect, useState } from "react";
-import { getMemberDesk, getMemberQuotes, type MemberDesk, type MemberIndexQuote } from "../api/client";
-import { MemberIndexBoard } from "../components/dashboard/MemberIndexBoard";
+import { getMemberDesk, type MemberDesk } from "../api/client";
 import { UserHomeBoard } from "../components/home/UserHomeBoard";
 import { useAuth } from "../context/AuthContext";
 
 export function UserHome() {
   const { user } = useAuth();
-  const [indices, setIndices] = useState<MemberIndexQuote[]>([]);
-  const [quoteNote, setQuoteNote] = useState("");
   const [desk, setDesk] = useState<MemberDesk | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = () => {
-      void Promise.all([getMemberQuotes(), getMemberDesk()])
-        .then(([quotes, nextDesk]) => {
+      void getMemberDesk()
+        .then((nextDesk) => {
           if (!alive) return;
-          setIndices(quotes.indices || []);
-          setQuoteNote(quotes.reason || "");
           setDesk(nextDesk);
         })
         .catch(() => undefined);
@@ -45,7 +40,6 @@ export function UserHome() {
         pnl={pnl}
         plan={plan ? { name: plan.strategyName, status: plan.status, term: plan.term, endsAt: plan.endsAt } : null}
         algosTo="/plans"
-        tape={<MemberIndexBoard indices={indices} note={quoteNote} />}
       />
     </div>
   );

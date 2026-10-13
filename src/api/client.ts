@@ -1682,6 +1682,10 @@ export function downloadDeskReport(format: "pdf" | "xlsx") {
   return downloadBrandedFile("/report/download", format, "Could not download the branded proposal report.");
 }
 
+export function downloadMemberReport(format: "pdf" | "xlsx" = "pdf") {
+  return downloadBrandedFile("/member/report/download", format, "Could not download your trade report.");
+}
+
 export function selectOptionChain(symbol: string, expiry?: string) {
   return request<{ snapshot: Snapshot }>(`/option-chain/select`, {
     method: "POST",

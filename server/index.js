@@ -352,33 +352,50 @@ app.get("/api/member/quotes", async (req, res) => {
   }
 });
 
+async function memberDeskPayload(user) {
+  await requestMemberOrderSync(user.id).catch((error) => {
+    console.log(`member order sync skipped: ${error?.message || error}`);
+  });
+  const snap = safeSnapshot() || {};
+  dropEnrollmentsWithoutStrategies(listAlgos());
+  const desk = getMemberDesk({
+    user,
+    enrollments: listEnrollments({ userId: user.id, admin: false }),
+    algos: listAlgos(),
+    quote: quoteSymbol,
+    admins: listPublicUsers(),
+    ownBookOnly: true,
+    liveBook: {
+      positions: snap.positions || [],
+      orders: snap.orders || [],
+      closedTrades: snap.closedTrades || [],
+    },
+  });
+  await attachMemberBrokerPnl(desk, user.id);
+  await attachMemberBrokerBalance(desk, user.id);
+  overlayDeskLiveMtm(desk);
+  return desk;
+}
+
 app.get("/api/member/desk", async (req, res) => {
   try {
-    const user = memberAuth(req);
-    await requestMemberOrderSync(user.id).catch((error) => {
-      console.log(`member order sync skipped: ${error?.message || error}`);
-    });
-    const snap = safeSnapshot() || {};
-    dropEnrollmentsWithoutStrategies(listAlgos());
-    const desk = getMemberDesk({
-      user,
-      enrollments: listEnrollments({ userId: user.id, admin: false }),
-      algos: listAlgos(),
-      quote: quoteSymbol,
-      admins: listPublicUsers(),
-      ownBookOnly: true,
-      liveBook: {
-        positions: snap.positions || [],
-        orders: snap.orders || [],
-        closedTrades: snap.closedTrades || [],
-      },
-    });
-    await attachMemberBrokerPnl(desk, user.id);
-    await attachMemberBrokerBalance(desk, user.id);
-    overlayDeskLiveMtm(desk);
-    res.json(desk);
+    res.json(await memberDeskPayload(memberAuth(req)));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not load member desk" });
+  }
+});
+
+app.get("/api/member/report/download", async (req, res) => {
+  try {
+    const user = memberAuth(req);
+    const desk = await memberDeskPayload(user);
+    const report = deskToProposalReport(desk.report || {}, { title: "My trade report" });
+    const file = brandedReportFile(report, req.query.format);
+    res.setHeader("Content-Type", file.type);
+    res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+    res.send(file.body);
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not download your trade report" });
   }
 });
 

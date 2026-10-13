@@ -11,6 +11,8 @@ function lazyPage<M extends Record<string, ComponentType>>(loader: () => Promise
 
 const Dashboard = lazyPage(() => import("./pages/Dashboard"), "Dashboard");
 const UserHome = lazyPage(() => import("./pages/UserHome"), "UserHome");
+const MemberTape = lazyPage(() => import("./pages/MemberTape"), "MemberTape");
+const MemberBroker = lazyPage(() => import("./pages/MemberBroker"), "MemberBroker");
 const Profile = lazyPage(() => import("./pages/Profile"), "Profile");
 const MemberPlans = lazyPage(() => import("./pages/MemberPlans"), "MemberPlans");
 const MemberReports = lazyPage(() => import("./pages/MemberBook"), "MemberReports");
@@ -59,6 +61,11 @@ function RoleSettings() {
   return isAdminUser(user) ? <Settings /> : <MemberSettings />;
 }
 
+function RoleBroker() {
+  const { user } = useAuth();
+  return isAdminUser(user) ? <Navigate to="/brokers" replace /> : <MemberBroker />;
+}
+
 export default function App() {
   const { user } = useAuth();
 
@@ -74,6 +81,8 @@ export default function App() {
           }
         >
           <Route index element={<RoleHome />} />
+          <Route path="tape" element={<MemberTape />} />
+          <Route path="broker" element={<RoleBroker />} />
           <Route path="profile" element={<Profile />} />
           <Route path="subscriptions" element={<Navigate to="/plans" replace />} />
           <Route path="plans" element={<MemberPlans />} />

@@ -1,5 +1,4 @@
 import { Activity, Cpu } from "lucide-react";
-import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn, formatPct, formatPlanTerm, formatRupee, greetingIst } from "../../lib/format";
 import { StatusPill } from "../phone/PhoneUi";
@@ -18,7 +17,6 @@ export function UserHomeBoard({
   pnl,
   plan,
   algosTo,
-  tape,
 }: {
   name?: string;
   capital: number;
@@ -26,7 +24,6 @@ export function UserHomeBoard({
   pnl: number;
   plan?: UserHomePlan | null;
   algosTo: string;
-  tape?: ReactNode;
 }) {
   const first = String(name || "Investor").split(/\s+/)[0];
   const used = Math.max(0, capital - available);
@@ -83,23 +80,8 @@ export function UserHomeBoard({
         <h2 className="text-sm font-extrabold">Trading Workspace</h2>
         <div className="grid grid-cols-2 gap-2" data-home-workspace="algos-tape">
           <WorkspaceLink to={algosTo} icon={Cpu} title="Algorithmic Strategies" detail="Manage & monitor strategies" />
-          <button
-            type="button"
-            onClick={() => document.getElementById("market-tape")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="card flex flex-col items-start gap-2 p-4 text-left"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-500">
-              <Activity size={18} />
-            </span>
-            <span className="text-sm font-extrabold">Market tape</span>
-            <span className="text-xs text-slate-400">Live market activity</span>
-          </button>
+          <WorkspaceLink to="/tape" icon={Activity} title="Market tape" detail="Live market activity" />
         </div>
-      </section>
-
-      <section id="market-tape" className="space-y-2 scroll-mt-16">
-        <h2 className="text-sm font-extrabold">Market tape</h2>
-        {tape}
       </section>
     </div>
   );

@@ -259,4 +259,12 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(reports, /data-report-download="pdf"/);
   assert.match(reports, /data-report-download="xlsx"/);
   assert.equal(reports.includes("Download CSV"), false);
+  const book = fs.readFileSync(path.join(root, "src", "pages", "MemberBook.tsx"), "utf8");
+  const index = fs.readFileSync(path.join(root, "server", "index.js"), "utf8");
+  const client = fs.readFileSync(path.join(root, "src", "api", "client.ts"), "utf8");
+  assert.match(book, /data-member-report-download="pdf"/);
+  assert.match(client, /downloadMemberReport/);
+  assert.match(client, /\/member\/report\/download/);
+  assert.match(index, /\/api\/member\/report\/download/);
+  assert.match(index, /title: "My trade report"/);
 });

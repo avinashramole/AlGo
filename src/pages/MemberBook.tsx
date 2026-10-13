@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
+import { downloadMemberReport, getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
+import { catchDeskError } from "../lib/liveSite";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
 import { tabFromParams } from "../lib/bookTabs";
 import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
@@ -268,8 +269,24 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
     );
   }
 
+  const downloadPdf = () => {
+    void downloadMemberReport("pdf").catch((error) => {
+      window.alert(catchDeskError(error, "Could not download your trade report"));
+    });
+  };
+
   return (
     <div className="space-y-3" data-member-book="reports">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          data-member-report-download="pdf"
+          onClick={downloadPdf}
+          className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+        >
+          Download PDF
+        </button>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Realized P&L" value={<Money value={report?.realizedPnl || 0} />} />
         <Stat label="Unrealized MTM" value={<Money value={report?.unrealizedPnl || 0} />} />

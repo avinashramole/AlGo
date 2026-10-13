@@ -54,6 +54,8 @@ const extraTitles = [
   { to: "/orders", label: "Position & Orders" },
   { to: "/positions", label: "Position & Orders" },
   { to: "/portfolio", label: "Position & Orders" },
+  { to: "/tape", label: "Market tape" },
+  { to: "/broker", label: "Add broker" },
   { to: "/settings/ips", label: "User & IP Manager" },
 ] as const;
 
@@ -84,5 +86,6 @@ export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, p
   if (clean === "/support" || clean.startsWith("/support/")) return true;
   if (clean === "/notifications" || clean.startsWith("/notifications/")) return true;
   if (clean === "/orders" || clean === "/positions" || clean === "/portfolio") return true;
+  if (clean === "/tape" || clean === "/broker") return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
 }

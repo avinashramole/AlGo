@@ -31,7 +31,7 @@ test("Market info widgets render DeskTape cells", () => {
     "src/components/dashboard/AISignal.tsx",
     "src/components/dashboard/RecentSignals.tsx",
     "src/components/dashboard/MemberIndexBoard.tsx",
-    "src/pages/UserHome.tsx",
+    "src/pages/MemberTape.tsx",
     "src/pages/Analytics.tsx",
     "src/pages/Markets.tsx",
   ];
