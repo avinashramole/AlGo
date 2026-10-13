@@ -1,11 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
-  Bell,
   Building2,
   Cpu,
   FileText,
+  Headphones,
   Home,
+  KeyRound,
   Layers,
   MessageSquare,
   Moon,
@@ -28,14 +29,15 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
   { to: "/reports", label: "Position & Orders", icon: FileText },
-  { to: "/notifications", label: "Alerts", icon: Bell, member: true },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },
   { to: "/users", label: "Users", icon: Users, admin: true },
   { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User, admin: true },
-  { to: "/settings", label: "Settings", icon: Settings, admin: true },
+  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/support", label: "Support", icon: Headphones, member: true },
+  { to: "/profile#login-password", label: "Password", icon: KeyRound, member: true },
 ];
 
 export function Sidebar() {

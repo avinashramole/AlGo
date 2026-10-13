@@ -1,4 +1,4 @@
-import { Bell, Headphones, KeyRound, LogOut, MessageSquare, Moon, Search, Settings, Sun, Users } from "lucide-react";
+import { Bell, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
@@ -161,57 +161,34 @@ export function Header() {
         <button type="button" onClick={toggleTheme} className="t2s-desktop-only icon-btn hidden md:flex" title="Theme">
           {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
         </button>
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="flex items-center gap-1.5 rounded-full"
-            title={admin ? "Profile" : "Settings"}
-            data-profile-shortcut="true"
-            data-settings-shortcut={admin ? undefined : "true"}
-          >
-            <Avatar name={user?.name} size="sm" />
-            {!admin ? <span className="hidden text-xs font-bold md:inline">Settings</span> : null}
-          </button>
-          {open ? (
-            <div
-              className="absolute right-0 top-12 z-30 w-[min(18rem,calc(100vw-1.5rem))] rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-lg"
-              data-profile-menu="true"
-            >
-              <div className="mb-3 text-sm font-extrabold">Profile</div>
-              <div className="space-y-2 text-sm">
-                <p><span className="text-slate-400">Name</span><br /><span className="font-semibold">{user?.name || "—"}</span></p>
-                <p><span className="text-slate-400">Email</span><br /><span className="font-semibold">{user?.email || "Not added"}</span></p>
-                <p><span className="text-slate-400">Mobile no</span><br /><span className="font-semibold">{formatMobile(user?.mobile)}</span></p>
-                {!admin && memberFeed?.brokerName ? (
-                  <p><span className="text-slate-400">Broker name</span><br /><span className="font-semibold">{memberFeed.brokerName}</span></p>
-                ) : null}
-              </div>
-              <Link to="/profile" onClick={() => setOpen(false)} className="mt-4 flex h-10 items-center justify-center rounded-xl bg-brand-50 text-sm font-semibold text-brand-500">
-                Open profile
-              </Link>
-              {!admin ? (
-                <div className="mt-2 space-y-1">
-                  <Link to="/profile#login-password" onClick={() => setOpen(false)} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold hover:bg-[var(--bg)]">
-                    <KeyRound size={16} /> Password
-                  </Link>
-                  <Link to="/settings" onClick={() => setOpen(false)} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold hover:bg-[var(--bg)]">
-                    <Settings size={16} /> Settings
-                  </Link>
-                  <Link to="/support" onClick={() => setOpen(false)} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold hover:bg-[var(--bg)]">
-                    <Headphones size={16} /> Support
-                  </Link>
-                  <button type="button" onClick={toggleTheme} className="flex h-10 w-full items-center gap-2 rounded-xl px-3 text-sm font-semibold hover:bg-[var(--bg)]">
-                    {theme === "light" ? <Moon size={16} /> : <Sun size={16} />} Theme
-                  </button>
+        {admin ? (
+          <div className="relative" ref={menuRef}>
+            <button type="button" onClick={() => setOpen((value) => !value)} className="rounded-full" title="Profile" data-profile-shortcut="true">
+              <Avatar name={user?.name} size="sm" />
+            </button>
+            {open ? (
+              <div className="absolute right-0 top-12 z-30 w-[min(18rem,calc(100vw-1.5rem))] rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-lg" data-profile-menu="true">
+                <div className="mb-3 text-sm font-extrabold">Profile</div>
+                <div className="space-y-2 text-sm">
+                  <p><span className="text-slate-400">Name</span><br /><span className="font-semibold">{user?.name || "—"}</span></p>
+                  <p><span className="text-slate-400">Email</span><br /><span className="font-semibold">{user?.email || "Not added"}</span></p>
+                  <p><span className="text-slate-400">Mobile no</span><br /><span className="font-semibold">{formatMobile(user?.mobile)}</span></p>
                 </div>
-              ) : null}
-              <button type="button" onClick={logout} className="mt-2 flex h-10 w-full items-center justify-center rounded-xl bg-rose-50 text-sm font-semibold text-down">
-                Log out
-              </button>
-            </div>
-          ) : null}
-        </div>
+                <Link to="/profile" onClick={() => setOpen(false)} className="mt-4 flex h-10 items-center justify-center rounded-xl bg-brand-50 text-sm font-semibold text-brand-500">
+                  Open profile
+                </Link>
+                <button type="button" onClick={logout} className="mt-2 flex h-10 w-full items-center justify-center rounded-xl bg-rose-50 text-sm font-semibold text-down">
+                  Log out
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <Link to="/profile" className="flex items-center gap-1.5 rounded-full" title="Profile" data-profile-shortcut="true">
+            <Avatar name={user?.name} size="sm" />
+            <span className="hidden text-xs font-bold md:inline">Profile</span>
+          </Link>
+        )}
         <button type="button" onClick={logout} className="t2s-desktop-only icon-btn hidden md:flex" title="Log out">
           <LogOut size={17} />
         </button>

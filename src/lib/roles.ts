@@ -34,7 +34,9 @@ export const userNav = [
   { to: "/", label: "Home" },
   { to: "/plans", label: "Algos" },
   { to: "/reports", label: "Position & Orders" },
-  { to: "/notifications", label: "Alerts" },
+  { to: "/settings", label: "Settings" },
+  { to: "/support", label: "Support" },
+  { to: "/profile#login-password", label: "Password" },
 ] as const;
 
 export function navForUser(user?: Pick<AuthUser, "role"> | null) {
@@ -80,6 +82,7 @@ export function isAllowedPath(user: Pick<AuthUser, "role"> | null | undefined, p
   if (clean === "/profile" || clean.startsWith("/profile/")) return true;
   if (clean === "/settings" || clean.startsWith("/settings/")) return true;
   if (clean === "/support" || clean.startsWith("/support/")) return true;
+  if (clean === "/notifications" || clean.startsWith("/notifications/")) return true;
   if (clean === "/orders" || clean === "/positions" || clean === "/portfolio") return true;
   return userNav.some((item) => (item.to === "/" ? clean === "/" : clean === item.to || clean.startsWith(`${item.to}/`)));
 }

@@ -1,14 +1,21 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { catchDeskError } from "../../lib/liveSite";
 
 export function LoginPasswordCard() {
   const { changePassword } = useAuth();
+  const location = useLocation();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (location.hash !== "#login-password") return;
+    document.getElementById("login-password")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [location.hash]);
 
   const savePassword = async (event: FormEvent) => {
     event.preventDefault();
