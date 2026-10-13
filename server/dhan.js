@@ -59,6 +59,7 @@ import {
   loadDhanSession,
   loadTokenBackoff,
   markDhanAutoStart,
+  armDataFeedOnBoot,
   needsFreshAccessToken,
   dhanFeedWasStopped,
   ensureSessionHasPickedToken,
@@ -2689,6 +2690,7 @@ export async function bootDhanFromEnv() {
     tokenHint: savedStatus.tokenHint,
     clientId: savedStatus.clientId || id || null,
   });
+  armDataFeedOnBoot();
   const connected = await connectSavedDhan();
   if (connected.live) {
     console.log(

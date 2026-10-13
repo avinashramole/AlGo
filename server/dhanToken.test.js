@@ -32,6 +32,7 @@ import {
   dhanFeedWasStopped,
   feedResumesOnBoot,
   markDhanAutoStart,
+  armDataFeedOnBoot,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -776,7 +777,7 @@ test("an empty patch and a truncated session file keep the saved admin access to
   }
 });
 
-test("a saved token resumes the data feed until Stop data feed latches it off", () => {
+test("a saved token resumes the data feed and VPS restart arms Start data feed", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-dhan-feed-"));
   const prevSession = process.env.T2S_DHAN_SESSION_FILE;
   const prevRoot = process.env.T2S_ENV_ROOT;
@@ -802,6 +803,13 @@ test("a saved token resumes the data feed until Stop data feed latches it off", 
     assert.equal(loadDhanSession().feedStopped, true);
     assert.equal(loadDhanSession().accessToken, "admin-access-token-keep");
 
+    markDhanAutoStart(false);
+    assert.equal(loadDhanSession().feedStopped, true);
+    const armed = armDataFeedOnBoot();
+    assert.equal(armed.feedStopped, false);
+    assert.equal(armed.autoStart, true);
+    assert.equal(feedResumesOnBoot(armed), true);
+
     markDhanAutoStart(true);
     const resumed = loadDhanSession();
     assert.equal(resumed.accessToken, "admin-access-token-keep");
@@ -810,6 +818,8 @@ test("a saved token resumes the data feed until Stop data feed latches it off", 
     assert.equal(feedResumesOnBoot(resumed), true);
     assert.equal(feedResumesOnBoot({ accessToken: "", autoStart: true }), false);
     assert.equal(feedResumesOnBoot({ accessToken: "kept", autoStart: false }), true);
+    const dhanSrc = fs.readFileSync(new URL("./dhan.js", import.meta.url), "utf8");
+    assert.match(dhanSrc, /armDataFeedOnBoot\(\)/);
   } finally {
     if (prevSession === undefined) delete process.env.T2S_DHAN_SESSION_FILE;
     else process.env.T2S_DHAN_SESSION_FILE = prevSession;

@@ -409,17 +409,23 @@ export function pickSavedDhanAccess({ session = {}, desk = {}, env = {} } = {}) 
   };
 }
 
-/** Stop data feed is the only latch that keeps the quote feed off across restart. */
+/** Stop data feed pauses quotes in this process. A VPS restart / deploy turns them back on. */
 export function dhanFeedWasStopped(session = {}) {
   return session?.feedStopped === true;
 }
 
 /**
- * A saved token resumes the quote feed on boot unless Stop data feed set feedStopped.
- * autoStart false from an older save does not keep the feed off.
+ * A saved token resumes the quote feed on boot. autoStart false from an older save
+ * does not keep the feed off. Stop data feed is cleared by armDataFeedOnBoot().
  */
 export function feedResumesOnBoot(session = {}) {
   return Boolean(String(session?.accessToken || "").trim()) && !dhanFeedWasStopped(session);
+}
+
+/** Deploy / systemd restart always arms Start data feed before the saved token connects. */
+export function armDataFeedOnBoot() {
+  markDhanAutoStart(true);
+  return loadDhanSession();
 }
 
 /** Copy the newest saved admin token into the session file and the admin desk without minting or starting LIVE. */
