@@ -1,23 +1,24 @@
 .t2s-login {
-  --bg: #ffffff;
+  --bg: #f7f9fc;
   --card: #ffffff;
   --border: #e6ebf3;
-  --text: #0f2744;
-  --muted: #6b7386;
-  --navy: #071833;
-  --blue: #fd6b01;
-  --orange: #fd6b01;
-  --gold: #fd6b01;
+  --text: #08254b;
+  --muted: #64748b;
+  --navy: #08254b;
+  --blue: #ff6900;
+  --orange: #ff6900;
+  --gold: #ff6900;
   box-sizing: border-box;
   position: relative;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   color-scheme: light;
   color: var(--text);
-  background: #ffffff;
+  background: var(--bg);
   font-family: Inter, system-ui, sans-serif;
 }
 
@@ -31,34 +32,38 @@
   display: none !important;
 }
 
-.t2s-login-scene {
-  display: none;
-}
-
 .t2s-login-top {
   display: flex;
   justify-content: flex-end;
-  width: min(1240px, calc(100% - 24px));
+  width: min(1200px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 18px 0 0;
-  position: relative;
-  z-index: 2;
+  padding: 20px 0 0;
 }
 
 .t2s-create-pill {
   height: 40px;
   padding: 0 16px;
-  border: 1.5px solid #fd6b01;
+  border: 1.5px solid var(--orange);
   border-radius: 999px;
   background: #fff;
-  color: #0f2744;
+  color: var(--navy);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
+.t2s-create-pill:focus-visible,
+.t2s-auth-tabs button:focus-visible,
+.t2s-submit:focus-visible,
+.t2s-alt-btn:focus-visible,
+.t2s-apk-download:focus-visible,
+.t2s-forgot:focus-visible {
+  outline: 3px solid rgba(255, 105, 0, 0.35);
+  outline-offset: 2px;
+}
+
 .t2s-create-pill b {
-  color: #fd6b01;
+  color: var(--orange);
   font-weight: 800;
 }
 
@@ -66,12 +71,10 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  width: min(1240px, calc(100% - 24px));
+  width: min(1200px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 8px 0 8px;
+  padding: 8px 0 16px;
   flex: 1;
-  position: relative;
-  z-index: 2;
 }
 
 .t2s-login-hero {
@@ -86,17 +89,17 @@
 
 .t2s-hero-copy h1 {
   margin: 22px 0 12px;
-  font-size: 56px;
-  line-height: 1.02;
+  font-size: clamp(34px, 4.6vw, 52px);
+  line-height: 1.05;
   font-weight: 800;
   letter-spacing: -0.045em;
-  color: #0b1b33;
+  color: var(--navy);
 }
 
 .t2s-hero-copy p {
-  margin: 0 0 28px;
+  margin: 0 0 26px;
   max-width: 440px;
-  color: #7b8494;
+  color: var(--muted);
   font-size: 16px;
   line-height: 1.55;
 }
@@ -148,7 +151,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  color: #fd6b01;
+  color: var(--orange);
   background: #fff1e6;
 }
 
@@ -161,8 +164,18 @@
 .t2s-hero-stage {
   position: relative;
   width: 100%;
-  min-height: 260px;
-  margin-top: 4px;
+  min-height: 280px;
+  margin-top: 18px;
+}
+
+.t2s-hero-wash {
+  position: absolute;
+  right: -8%;
+  top: 0;
+  width: min(640px, 100%);
+  height: 220px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .t2s-quote {
@@ -216,20 +229,21 @@
   position: relative;
   display: flex;
   align-items: flex-end;
-  justify-content: center;
+  justify-content: flex-end;
   min-height: 248px;
-  padding: 56px 48px 0 24px;
+  padding: 64px 8px 0 0;
+  z-index: 1;
 }
 
 .t2s-laptop {
-  width: min(100%, 380px);
+  width: min(100%, 400px);
 }
 
 .t2s-laptop-lid {
   border-radius: 16px 16px 0 0;
   background: #111827;
   padding: 12px 12px 0;
-  box-shadow: 0 18px 40px rgba(15, 39, 68, 0.18);
+  box-shadow: 0 18px 40px rgba(8, 37, 75, 0.18);
 }
 
 .t2s-laptop-screen {
@@ -274,15 +288,22 @@
 
 .t2s-phone {
   position: absolute;
-  right: 8px;
+  right: 4px;
   bottom: 10px;
-  width: 104px;
+  width: 108px;
   padding: 18px 10px 12px;
   border-radius: 22px;
   background: #0b1220;
   color: #fff;
   border: 3px solid #1f2937;
-  box-shadow: 0 16px 28px rgba(15, 39, 68, 0.28);
+  box-shadow: 0 16px 28px rgba(8, 37, 75, 0.28);
+}
+
+.t2s-phone-spark {
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin-top: 8px;
 }
 
 .t2s-phone-notch {
@@ -341,11 +362,11 @@
 .t2s-login-card {
   width: 100%;
   max-width: 420px;
-  padding: 8px 8px 8px;
+  padding: 28px 26px 22px;
   border-radius: 24px;
   background: var(--card);
-  border: 0;
-  box-shadow: none;
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 48px rgba(8, 37, 75, 0.08);
   text-align: center;
 }
 
@@ -366,19 +387,19 @@
 .t2s-auth-tabs button {
   flex: 1;
   height: 44px;
-  border: 1.5px solid #fd6b01;
+  border: 1.5px solid var(--orange);
   border-radius: 999px;
   background: #fff;
-  color: #fd6b01;
+  color: var(--orange);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
 
 .t2s-auth-tabs button.on {
-  background: #fd6b01;
+  background: var(--orange);
   color: #fff;
-  box-shadow: 0 8px 18px rgba(253, 107, 1, 0.28);
+  box-shadow: 0 8px 18px rgba(255, 105, 0, 0.28);
 }
 
 .t2s-login-avatar {
@@ -441,7 +462,7 @@
 
 .t2s-field-box:focus-within {
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px rgba(253, 107, 1, 0.16);
+  box-shadow: 0 0 0 4px rgba(255, 105, 0, 0.16);
 }
 
 .t2s-field-box svg {
@@ -529,12 +550,12 @@
   gap: 8px;
   border: 0;
   border-radius: 999px;
-  background: #fd6b01;
+  background: var(--orange);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(253, 107, 1, 0.32);
+  box-shadow: 0 10px 24px rgba(255, 105, 0, 0.32);
 }
 
 .t2s-submit:disabled {
@@ -702,9 +723,9 @@
   grid-template-columns: 1fr;
   gap: 16px;
   width: 100%;
-  margin: 24px 0 0;
+  margin: 12px 0 0;
   padding: 22px 24px;
-  background: #071833;
+  background: var(--navy);
   color: #fff;
 }
 
@@ -715,8 +736,8 @@
 }
 
 .t2s-benefit .t2s-point-icon {
-  background: rgba(253, 107, 1, 0.16);
-  color: #fd6b01;
+  background: rgba(255, 105, 0, 0.16);
+  color: var(--orange);
 }
 
 .t2s-benefit strong {
@@ -737,7 +758,7 @@
   width: 100%;
   margin: 0;
   padding: 14px 24px calc(18px + env(safe-area-inset-bottom));
-  background: #071833;
+  background: var(--navy);
   color: #9aa3b5;
   font-size: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -766,9 +787,8 @@
 
 @media (max-width: 480px) {
   .t2s-login-main,
-  .t2s-benefits,
-  .t2s-legal {
-    width: min(1180px, calc(100% - 16px));
+  .t2s-login-top {
+    width: min(1200px, calc(100% - 16px));
   }
 
   .t2s-login-card {
@@ -812,7 +832,7 @@ html.t2s-hybrid .t2s-login {
 }
 
 html.t2s-hybrid .t2s-login-hero,
-html.t2s-hybrid .t2s-login-scene,
+html.t2s-hybrid .t2s-hero-stage,
 html.t2s-hybrid .t2s-benefits,
 html.t2s-hybrid .t2s-login-top,
 html.t2s-hybrid .t2s-login-watermark,
@@ -839,61 +859,48 @@ html.t2s-hybrid .t2s-login-card {
   padding: 20px 16px 16px;
 }
 
-@media (min-width: 960px) {
-  .t2s-login-main {
-    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 400px);
-    align-items: start;
-    gap: 24px;
-    padding: 4px 0 32px;
-  }
-
+@media (min-width: 768px) {
   .t2s-login-hero {
-    position: relative;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     min-width: 0;
-    min-height: 720px;
-    padding-top: 4px;
-    overflow: visible;
   }
 
-  .t2s-login-scene {
+  .t2s-login-main {
+    grid-template-columns: minmax(0, 1.1fr) minmax(340px, 400px);
+    align-items: start;
+    gap: 28px;
+    padding: 8px 0 28px;
+  }
+
+  .t2s-hero-stage {
+    display: none;
+  }
+
+  .t2s-benefits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 22px 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .t2s-login-main {
+    grid-template-columns: minmax(0, 1.25fr) minmax(380px, 420px);
+    gap: 40px;
+  }
+
+  .t2s-hero-stage {
     display: block;
-    position: absolute;
-    inset: 70px -6% 0 -18%;
-    overflow: hidden;
-    pointer-events: none;
-    z-index: 0;
   }
 
-  .t2s-login-scene img {
-    display: block;
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: auto;
-    top: auto;
-    width: 168%;
-    height: auto;
-    transform: none;
-    object-fit: contain;
-  }
-
-  .t2s-hero-logo,
-  .t2s-hero-copy,
-  .t2s-hero-points {
-    position: relative;
-    z-index: 1;
+  .t2s-login-hero {
+    min-height: 680px;
   }
 
   .t2s-login-panel {
     padding: 8px 0 0;
     justify-content: flex-end;
-  }
-
-  .t2s-login-card {
-    background: #fff;
   }
 
   .t2s-benefits {
@@ -907,5 +914,16 @@ html.t2s-hybrid .t2s-login-card {
     align-items: center;
     justify-content: space-between;
     padding: 14px 48px 20px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .t2s-login-main,
+  .t2s-login-top {
+    width: min(1280px, calc(100% - 48px));
+  }
+
+  .t2s-hero-copy h1 {
+    font-size: 56px;
   }
 }
