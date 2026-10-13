@@ -40,6 +40,11 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(memberHome, /Trade2Smart\. Stay Disciplined/);
   assert.match(memberHome, /Portfolio Overview/);
   assert.match(memberHome, /Capital Utilization/);
+  assert.match(memberHome, /data-capital-use="true"/);
+  assert.match(memberHome, /data-capital-bar="used-free"/);
+  assert.match(memberHome, /bg-down/);
+  assert.match(memberHome, /bg-up/);
+  assert.match(memberHome, /% used/);
   assert.match(memberHome, /Your Subscription Plan/);
   assert.match(memberHome, /Trading Workspace/);
   assert.match(memberHome, /Algorithmic Strategies/);
@@ -49,7 +54,6 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(memberHome, /getElementById\("market-tape"\)/);
   assert.doesNotMatch(memberHome, /href="#market-tape"/);
   assert.doesNotMatch(memberHome, /id="market-tape"/);
-  assert.match(memberHome, /bg-brand-500/);
   assert.match(userHome, /UserHomeBoard/);
   assert.doesNotMatch(userHome, /MemberIndexBoard/);
   assert.doesNotMatch(userHome, /getMemberQuotes/);

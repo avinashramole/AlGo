@@ -27,7 +27,9 @@ export function UserHomeBoard({
 }) {
   const first = String(name || "Investor").split(/\s+/)[0];
   const used = Math.max(0, capital - available);
+  const free = Math.max(0, available);
   const utilized = capital > 0 ? Math.min(100, (used / capital) * 100) : 0;
+  const unused = Math.max(0, 100 - utilized);
   const ret = capital > 0 ? (pnl / capital) * 100 : 0;
   const active = Boolean(plan?.name) && !/abandon|cancel|expired/i.test(String(plan?.status || ""));
   const planName = plan?.name || "No plan yet";
@@ -54,17 +56,23 @@ export function UserHomeBoard({
         </div>
       </section>
 
-      <section className="card space-y-2 p-4">
+      <section className="card space-y-2 p-4" data-capital-use="true">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-extrabold">Capital Utilization</h2>
-          <span className="text-sm font-extrabold">{Math.round(utilized)}%</span>
+          <span className="text-sm font-extrabold text-down">{Math.round(utilized)}% used</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div className="h-full rounded-full bg-brand-500" style={{ width: `${utilized}%` }} />
+        <div className="flex h-3 overflow-hidden rounded-full" data-capital-bar="used-free">
+          <div className="h-full bg-down" style={{ width: `${utilized}%` }} title={`Used ${Math.round(utilized)}%`} />
+          <div className="h-full bg-up" style={{ width: `${unused}%` }} title={`Free ${Math.round(unused)}%`} />
         </div>
-        <p className="text-xs text-slate-400">
-          {formatRupee(used, 0)} utilized out of {formatRupee(capital, 0)}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
+          <span className="text-down">
+            Used {formatRupee(used, 0)} · {Math.round(utilized)}%
+          </span>
+          <span className="text-up">
+            Free {formatRupee(free, 0)} · {Math.round(unused)}%
+          </span>
+        </div>
       </section>
 
       <section className="card space-y-1 p-4">
