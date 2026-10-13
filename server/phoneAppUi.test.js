@@ -136,13 +136,13 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(login, /Login with Google/);
   assert.match(login, /Welcome Back!/);
   assert.match(login, /Sign in to your Trade2Smart account/);
-  assert.match(login, /New to Trade2Smart\?/);
+  assert.doesNotMatch(login, /New to Trade2Smart\?/);
+  assert.doesNotMatch(login, /t2s-create-pill/);
   assert.match(login, /Create Account/);
   assert.match(login, /or continue with/);
   assert.match(login, /Download our App/);
   assert.doesNotMatch(login, /AI Powered Insights/);
   assert.doesNotMatch(login, /Trade Smarter/);
-  assert.match(login, /t2s-create-pill/);
   assert.match(login, /LoginHeroArt/);
   const loginHero = fs.readFileSync(path.join(root, "src/components/LoginHeroArt.tsx"), "utf8");
   assert.match(loginHero, /t2s-hero-stage/);

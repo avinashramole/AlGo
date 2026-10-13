@@ -303,24 +303,6 @@ export function Login() {
   return (
     <div className="t2s-login">
       <PreviewDeskBanner />
-      <header className="t2s-login-top">
-        {page === "signin" ? (
-          <button type="button" className="t2s-create-pill" onClick={openSignup}>
-            New to Trade2Smart? <b>Create Account</b>
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="t2s-create-pill"
-            onClick={() => {
-              setPage("signin");
-              resetNotice();
-            }}
-          >
-            Have an account? <b>Login</b>
-          </button>
-        )}
-      </header>
       <div className="t2s-login-main">
         <aside className="t2s-login-hero">
           <LoginHeroArt />
