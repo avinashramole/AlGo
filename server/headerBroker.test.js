@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { adminLiveTape, headerBrokerLabel } from "../src/lib/headerBroker.ts";
+import { brokerSelectLabel, canActivateBroker } from "../src/lib/brokers.ts";
 
 test("admin header uses the selected broker, not a hard-coded Dhan label", () => {
   assert.equal(headerBrokerLabel({ brokerId: "dhan", live: true, hasQuotes: true }), "DHAN LIVE");
@@ -29,6 +30,15 @@ test("admin live chip keeps Dhan when Kotak is only the order broker", () => {
   assert.equal(tape.live, true);
   assert.equal(tape.lastTickAt, 1_700_000_000_000);
   assert.equal(headerBrokerLabel(tape), "DHAN LIVE");
+});
+
+test("admin broker dropdown marks only the selected broker ACTIVE", () => {
+  assert.equal(brokerSelectLabel({ name: "Dhan", active: true, liveFeed: true }), "Dhan · ACTIVE · ON");
+  assert.equal(brokerSelectLabel({ name: "Upstox", active: false, connected: false }), "Upstox · INACTIVE");
+  assert.equal(canActivateBroker({ id: "dhan" }), true);
+  assert.equal(canActivateBroker({ id: "paper" }), true);
+  assert.equal(canActivateBroker({ id: "upstox", connected: true }), true);
+  assert.equal(canActivateBroker({ id: "upstox", connected: false, liveFeed: false }), false);
 });
 
 test("admin live chip uses Kotak only when that tape owns quotes", () => {

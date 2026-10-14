@@ -3,6 +3,7 @@ import { useMarket } from "../context/MarketContext";
 import { formatNumber, fundsCaption } from "../lib/format";
 import { startDhanFeed, type BrokerAccount, type Snapshot } from "../api/client";
 import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
+import { brokerSelectLabel, canActivateBroker } from "../lib/brokers";
 import { catchDeskError, isTrade2SmartHost } from "../lib/liveSite";
 
 export function Brokers() {
@@ -35,7 +36,6 @@ export function Brokers() {
   const savedDhanClientId = String(feed?.clientId || dhan?.clientId || "").trim();
   const viewed =
     brokers.find((item) => item.id === viewId) || defaultBroker || frontBroker || null;
-  const others = brokers.filter((item) => item.id !== viewed?.id);
   const clientLocked = Boolean(selected && selected.id !== "dhan" && (selected.liveFeed || selected.connected));
   const showDhanSettings = viewed?.id === "dhan";
   const showOtherBook = Boolean(viewed && viewed.id !== "dhan");
@@ -73,6 +73,9 @@ export function Brokers() {
     if (!broker) return;
     setViewId(id);
     setError("");
+    if (canActivateBroker(broker) && !broker.active) {
+      void activate(id).catch((err) => setError(catchDeskError(err, "Could not set default broker")));
+    }
     if (broker.connected || broker.id === "dhan") {
       setSelected(null);
     } else {
@@ -106,6 +109,9 @@ export function Brokers() {
         setKotakMobile("");
         setKotakMpin("");
         setKotakTotp("");
+      }
+      if (selected.id !== "dhan") {
+        await activate(selected.id).catch(() => undefined);
       }
       setSelected(null);
       setSecret("");
@@ -204,26 +210,24 @@ export function Brokers() {
         <div>
           <h1 className="text-xl font-bold md:text-2xl">Brokers</h1>
           <p className="desk-help text-sm text-slate-400">
-            Live brokers: <b>Dhan</b>, Zerodha Kite, Upstox, Fyers, Kotak Neo, and Angel Broking. Connect more than one.
-            Set default is the broker used for admin orders and the admin balance. The Dhan data feed can stay on without becoming that default. Connecting a broker does not start LIVE algos.
+            Pick the default broker from the list. Only that broker is <b>ACTIVE</b> for admin orders and the admin
+            balance. The others stay <b>INACTIVE</b>. The Dhan data feed can stay on without being the default.
+            Connecting a broker does not start LIVE algos.
           </p>
         </div>
-        <label className="flex min-w-[14rem] items-center gap-2 text-sm font-semibold">
-          Other brokers
+        <label className="flex min-w-[16rem] flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm sm:normal-case sm:tracking-normal">
+          Default broker
           <select
-            className="h-10 min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold md:h-11"
-            value=""
+            data-broker-list="connections"
+            className="h-10 min-w-[16rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold text-[var(--text)] md:h-11"
+            value={viewed?.id || defaultBroker?.id || ""}
             onChange={(event) => {
               if (event.target.value) pickBroker(event.target.value);
             }}
           >
-            <option value="">{others.length ? "Switch broker" : "No other broker"}</option>
-            {others.map((item) => (
+            {brokers.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name}
-                {item.active ? " · DEFAULT" : ""}
-                {item.main ? " · MAIN" : ""}
-                {item.connected || item.liveFeed ? " · ON" : ""}
+                {brokerSelectLabel(item)}
               </option>
             ))}
           </select>
@@ -234,34 +238,6 @@ export function Brokers() {
         <Stat label="Connected" value={String(connectedCount)} />
         <Stat label="Dhan funds" value={dhan?.liveFeed ? `₹${formatNumber(actualFunds, 0)}` : paper ? fundsCaption(paper) : "—"} />
       </div>
-      <section className="card divide-y divide-[var(--border)]" data-broker-list="connections">
-        {brokers.map((item) => (
-          <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
-            <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => pickBroker(item.id)}>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-extrabold text-white" style={{ background: item.color }}>
-                {item.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-bold">{item.name}</div>
-                <div className={item.connected || item.liveFeed ? "text-[11px] font-semibold text-up" : "text-[11px] text-slate-400"}>
-                  {item.connected || item.liveFeed ? "Connected" : "Not connected"}
-                </div>
-              </div>
-            </button>
-            {item.id === "paper" ? (
-              <span className="text-xs font-semibold text-slate-400">Paper</span>
-            ) : item.connected || item.liveFeed ? (
-              <button type="button" onClick={() => void disconnect(item.id)} className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold text-down">
-                Disconnect
-              </button>
-            ) : (
-              <button type="button" onClick={() => openForm(item)} className="rounded-full bg-brand-500 px-3 py-1.5 text-xs font-bold text-white">
-                Connect
-              </button>
-            )}
-          </div>
-        ))}
-      </section>
       {viewed ? (
         <section className="card p-3 md:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -282,9 +258,13 @@ export function Brokers() {
                   ) : null}
                   {viewed.active ? (
                     <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-extrabold text-brand-500">
-                      DEFAULT
+                      ACTIVE
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-500">
+                      INACTIVE
+                    </span>
+                  )}
                   {viewed.liveFeed ? (
                     <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-extrabold text-up dark:bg-emerald-950/40">
                       LIVE
@@ -304,7 +284,7 @@ export function Brokers() {
                   : "bg-slate-100 text-slate-500"
               }`}
             >
-              {viewed.active ? "DEFAULT" : viewed.status}
+              {viewed.active ? "ACTIVE" : "INACTIVE"}
             </span>
           </div>
 
@@ -328,7 +308,6 @@ export function Brokers() {
               onGenerate={() => void connectDhanAuto()}
               onReset={() => void changeTokenNow()}
               onSaveToken={() => void connectDhanCard()}
-              onActivate={() => void activate(viewed.id)}
               onStopFeed={() => {
                 const last = viewed.clientId || savedDhanClientId;
                 void disconnect(viewed.id).then(() => {
@@ -349,15 +328,6 @@ export function Brokers() {
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2 md:gap-3">
-                {viewed.connected && !viewed.active ? (
-                  <button
-                    type="button"
-                    onClick={() => void activate(viewed.id)}
-                    className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white md:h-11"
-                  >
-                    Set default
-                  </button>
-                ) : null}
                 {viewed.connected && viewed.id !== "paper" ? (
                   <button
                     type="button"
@@ -522,7 +492,6 @@ function DhanSettings({
   onGenerate,
   onReset,
   onSaveToken,
-  onActivate,
   onStopFeed,
   onStartFeed,
 }: {
@@ -544,7 +513,6 @@ function DhanSettings({
   onGenerate: () => void;
   onReset: () => void;
   onSaveToken: () => void;
-  onActivate: () => void;
   onStopFeed: () => void;
   onStartFeed: () => void;
 }) {
@@ -677,11 +645,6 @@ function DhanSettings({
       </div>
       {error ? <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-down">{error}</div> : null}
       <div className="flex flex-wrap gap-2 md:gap-3">
-        {!broker.active ? (
-          <button type="button" onClick={onActivate} className="h-10 rounded-lg bg-brand-500 px-5 text-sm font-semibold text-white md:h-11">
-            Set default
-          </button>
-        ) : null}
         <button
           type="button"
           disabled={busy}

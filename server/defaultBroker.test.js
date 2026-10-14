@@ -30,6 +30,14 @@ test("a Dhan strategy uses the selected default broker, and another named broker
   assert.equal(orderBrokerForDesk("dhan"), "kotak");
 });
 
+test("activating one broker leaves every other broker inactive", () => {
+  const result = activateBroker("dhan");
+  assert.equal(result.error, undefined);
+  const actives = (result.brokers || []).filter((row) => row.active).map((row) => row.id);
+  assert.deepEqual(actives, ["dhan"]);
+  assert.equal((result.brokers || []).every((row) => row.id === "dhan" || row.active === false), true);
+});
+
 test("setting Dhan as the default is saved and used for the next order", () => {
   const result = activateBroker("dhan");
   assert.equal(result.error, undefined);

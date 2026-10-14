@@ -1,13 +1,12 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
+import { brokerSelectLabel, canActivateBroker } from "../../lib/brokers";
 import { headerBrokerLabel } from "../../lib/format";
 
 export function BrokerSwitch() {
   const { data, activate } = useMarket();
-  const connected = (data.brokers || []).filter((item) => item.connected);
-  const active = connected.find((item) => item.id === data.activeBrokerId) || connected[0];
-
-  const others = connected.filter((item) => item.id !== active?.id);
+  const brokers = data.brokers || [];
+  const active = brokers.find((item) => item.id === data.activeBrokerId) || brokers.find((item) => item.active) || brokers[0];
 
   return (
     <div className="flex items-center gap-2">
@@ -15,7 +14,7 @@ export function BrokerSwitch() {
         <span className="hidden max-w-[7rem] truncate text-xs font-extrabold sm:inline">{active?.name || "Dhan"}</span>
         {active ? (
           <span className="hidden rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-extrabold text-brand-500 sm:inline">
-            DEFAULT
+            ACTIVE
           </span>
         ) : null}
         {active ? (
@@ -30,19 +29,16 @@ export function BrokerSwitch() {
         ) : null}
       </div>
       <select
-        className="h-9 max-w-[5.75rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-1.5 text-[11px] font-semibold outline-none sm:max-w-[120px] md:max-w-[160px] md:px-2 md:text-xs"
+        className="h-9 max-w-[9rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-1.5 text-[11px] font-semibold outline-none sm:max-w-[160px] md:max-w-[220px] md:px-2 md:text-xs"
         value={active?.id || "dhan"}
         onChange={(event) => {
           void activate(event.target.value).catch(() => undefined);
         }}
         title="Default order broker"
       >
-        {active ? (
-          <option value={active.id}>{active.liveFeed ? `${active.name} LIVE` : active.name}</option>
-        ) : null}
-        {others.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.liveFeed ? `${item.name} LIVE` : item.name}
+        {brokers.map((item) => (
+          <option key={item.id} value={item.id} disabled={!canActivateBroker(item)}>
+            {brokerSelectLabel(item)}
           </option>
         ))}
       </select>

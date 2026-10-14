@@ -129,3 +129,20 @@ export const defaultBrokers: BrokerAccount[] = [
 export function brokerName(brokers: BrokerAccount[] | undefined, id?: string) {
   return brokers?.find((item) => item.id === id)?.name || id || "Dhan";
 }
+
+export function brokerSelectLabel(item: {
+  name: string;
+  active?: boolean;
+  connected?: boolean;
+  liveFeed?: boolean;
+}) {
+  const status = item.active ? "ACTIVE" : "INACTIVE";
+  const on = item.liveFeed || item.connected ? " · ON" : "";
+  return `${item.name} · ${status}${on}`;
+}
+
+export function canActivateBroker(item: { id?: string; connected?: boolean; liveFeed?: boolean } = {}) {
+  const id = String(item.id || "").trim().toLowerCase();
+  if (id === "dhan" || id === "paper") return true;
+  return Boolean(item.connected || item.liveFeed);
+}
