@@ -73,6 +73,21 @@ function placeBuy({ adapter, config, option, strike, qty, price, expiry, securit
   });
 }
 
+function finishCycle(state, reason, now, barTime) {
+  const keep = Number(barTime || state.lastBarTime || 0);
+  resetCycle(state, reason, now);
+  if (keep) state.lastBarTime = keep;
+  return state;
+}
+
+function workingBuy(orders = []) {
+  return (orders || []).some((row) => {
+    if (String(row.side || "BUY").toUpperCase() === "SELL") return false;
+    const status = String(row.status || "").toUpperCase();
+    return !["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status);
+  });
+}
+
 function snapshotCycleConfig(config) {
   return {
     symbol: config.symbol,
@@ -171,6 +186,30 @@ export const MultiIndexReversalStrategy = {
     if (input.feedLive === false && !open.length) {
       algo.lastSignal = "FEED DOWN";
       return { action: "feed-down" };
+    }
+    const eodMinutes = Number(config.eodSquareOffMinutes ?? 15);
+    const minutesToClose = Number(input.minutesToClose);
+    if (config.intradayOnly !== false && open.length && Number.isFinite(minutesToClose) && minutesToClose <= eodMinutes) {
+      return this.exitAll(input, "eod");
+    }
+    if (
+      (state.phase === PHASE.CE_ENTRY_PENDING || state.phase === PHASE.PE_ENTRY_PENDING) &&
+      !open.length &&
+      !workingBuy(orders)
+    ) {
+      finishCycle(state, "entry-lost", now, state.lastBarTime);
+      algo.lastSignal = "WAIT NEXT SIGNAL";
+      return { action: "skip", reason: "entry-lost" };
+    }
+    if (
+      (state.phase === PHASE.CE_TO_PE_REVERSAL_PENDING || state.phase === PHASE.PE_TO_CE_REVERSAL_PENDING) &&
+      !workingBuy(orders)
+    ) {
+      const revOpt = state.phase === PHASE.CE_TO_PE_REVERSAL_PENDING ? "PE" : "CE";
+      const revLeg = pickLeg(positions, revOpt, name, symbol);
+      if (!revLeg) {
+        transition(state, state.originalOption === "PE" ? PHASE.PE_ACTIVE : PHASE.CE_ACTIVE, "reversal-lost");
+      }
     }
 
     const signal = this.evaluateSignal({ ...input, config });
@@ -283,12 +322,18 @@ export const MultiIndexReversalStrategy = {
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       markError(state, result?.error || "rejected");
       algo.lastSignal = `REJECTED ${option}`;
-      resetCycle(state, "entry-rejected", input.now);
+      finishCycle(state, "entry-rejected", input.now, signal.barTime);
       return { action: "rejected", result };
     }
-    if (result?.duplicate || result?.queued === false) {
+    if (result?.duplicate) {
+      algo.lastSignal = `BUY ${option} SENDING`;
+      state.lastBarTime = signal.barTime;
+      return { action: "queued", result };
+    }
+    if (result?.queued === false) {
+      finishCycle(state, "queue-blocked", input.now, signal.barTime);
       algo.lastSignal = `WAIT ${option} ORDER`;
-      return { action: "queued" };
+      return { action: "skip", reason: "queue-blocked", result };
     }
     const fill = fillFrom(result, ltp);
     if (result?.queued && !(fill > 0)) {
@@ -359,6 +404,16 @@ export const MultiIndexReversalStrategy = {
       algo.lastSignal = `REVERSAL REJECTED · HOLD ${state.originalOption}`;
       return { action: "reversal-rejected", result };
     }
+    if (result?.duplicate) {
+      algo.lastSignal = `BUY ${option} REVERSAL SENDING`;
+      state.lastBarTime = signal.barTime;
+      return { action: "queued", result };
+    }
+    if (result?.queued === false) {
+      transition(state, state.originalOption === "PE" ? PHASE.PE_ACTIVE : PHASE.CE_ACTIVE, "reversal-blocked");
+      algo.lastSignal = `REVERSAL WAIT · HOLD ${state.originalOption}`;
+      return { action: "reversal-rejected", reason: "queue-blocked", result };
+    }
     if (result?.queued && !(Number(result.avg || result.price) > 0)) {
       algo.lastSignal = `BUY ${option} REVERSAL SENDING`;
       state.lastBarTime = signal.barTime;
@@ -401,7 +456,7 @@ export const MultiIndexReversalStrategy = {
       return { action: "exit-pending" };
     }
     if (Number.isFinite(Number(closed?.pnl))) state.realizedPnl = round2(Number(state.realizedPnl || 0) + Number(closed.pnl));
-    resetCycle(state, reason, input.now);
+    finishCycle(state, reason, input.now, state.lastBarTime);
     algo.lastSignal = `EXIT ${reason}`;
     return { action: "exit", reason, result: closed };
   },
@@ -429,7 +484,7 @@ export const MultiIndexReversalStrategy = {
     transition(state, PHASE.RECONCILING, reason);
     if (!owned(input.positions, name, symbol).length) {
       transition(state, PHASE.COMPLETED, reason);
-      resetCycle(state, reason, input.now);
+      finishCycle(state, reason, input.now, state.lastBarTime);
     }
     algo.lastSignal = `EXIT ${reason}`;
     return { action: "exit-all", reason, results };
@@ -443,7 +498,7 @@ export const MultiIndexReversalStrategy = {
       return this.exitAll(input, state.lastTransitionReason || "reconcile");
     }
     transition(state, PHASE.COMPLETED, "closed");
-    resetCycle(state, "closed", input.now);
+    finishCycle(state, "closed", input.now, state.lastBarTime);
     algo.lastSignal = "CYCLE CLOSED";
     return { action: "completed" };
   },

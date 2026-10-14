@@ -89,6 +89,8 @@ export function multiIndexReversalConfig(algo = {}) {
     maxOrderRetries: Math.max(1, Math.round(num(algo.maxOrderRetries, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.maxOrderRetries))),
     brokeragePerLot: Math.max(0, num(algo.brokeragePerLot, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.brokeragePerLot)),
     expiryKind: String(algo.expiryKind || "weekly") === "monthly" ? "monthly" : "weekly",
+    intradayOnly: algo.intradayOnly !== false,
+    eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, 15))),
   };
 }
 

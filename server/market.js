@@ -1659,6 +1659,7 @@ function tickMultiIndexReversalAlgo(algo, mode, feedLive) {
     config,
     now,
     feedLive: Boolean(feedLive),
+    minutesToClose: minutesUntilIst(15 * 60 + 30, new Date(now)),
     indexBars: getCandles(config.timeframe, root) || [],
     ceBars: vs.ceBars,
     peBars: vs.peBars,

@@ -101,6 +101,7 @@ function tick(algo, env, extra = {}) {
     ceSecurityId: extra.ceSecurityId,
     peSecurityId: extra.peSecurityId,
     emergency: extra.emergency,
+    minutesToClose: extra.minutesToClose,
   });
 }
 
@@ -453,6 +454,69 @@ test("open-cycle settings stay locked after the first fill", () => {
   assert.equal(rev.action, "reversal");
   assert.equal(rev.qty, 130);
   assert.equal(mirState(algo).originalTarget, 0);
+});
+
+test("the same 15m candle does not buy again after the initial target", () => {
+  const env = book();
+  const algo = defaultMultiIndexReversalAlgo();
+  tick(algo, env);
+  env.positions[0].ltp = 160;
+  tick(algo, env, { now: T0 + BAR + 2000, ceLtp: 160 });
+  const again = tick(algo, env, { now: T0 + BAR + 3000, ceLtp: 160 });
+  assert.equal(again.action, "skip");
+  assert.equal(again.reason, "duplicate-bar");
+  assert.equal(env.positions.length, 0);
+});
+
+test("a blocked live queue does not invent a reversal fill", () => {
+  const env = book();
+  const algo = defaultMultiIndexReversalAlgo();
+  tick(algo, env);
+  env.positions[0].ltp = 80;
+  const blocked = tick(algo, env, {
+    indexBars: [bar(T0, 25000, 25040), bar(T0 + BAR, 25040, 24980)],
+    now: T0 + 2 * BAR + 1000,
+    peLtp: 95,
+    ceLtp: 80,
+    adapter: {
+      ...env.adapter,
+      place: () => ({ ok: true, queued: false, status: "FEED_DOWN" }),
+    },
+  });
+  assert.equal(blocked.action, "reversal-rejected");
+  assert.equal(blocked.reason, "queue-blocked");
+  assert.equal(env.positions.length, 1);
+  assert.equal(mirState(algo).phase, PHASE.CE_ACTIVE);
+  assert.equal(mirState(algo).reversalDone, false);
+});
+
+test("a blocked first BUY leaves WAITING so the next live tick can retry a later bar", () => {
+  const env = book();
+  const algo = defaultMultiIndexReversalAlgo();
+  const blocked = tick(algo, env, {
+    adapter: { place: () => ({ ok: true, queued: false, status: "FEED_DOWN" }), exit: () => ({}) },
+  });
+  assert.equal(blocked.action, "skip");
+  assert.equal(blocked.reason, "queue-blocked");
+  assert.equal(mirState(algo).phase, PHASE.WAITING_FOR_SIGNAL);
+  assert.equal(env.positions.length, 0);
+  const later = tick(algo, env, {
+    indexBars: [bar(T0, 25000, 25040), bar(T0 + BAR, 25040, 25080)],
+    ceBars: [bar(T0, 100, 110), bar(T0 + BAR, 110, 120)],
+    now: T0 + 2 * BAR + 1000,
+    ceLtp: 120,
+  });
+  assert.equal(later.action, "entry");
+});
+
+test("EOD flattens an open Multi-Index cycle", () => {
+  const env = book();
+  const algo = defaultMultiIndexReversalAlgo();
+  tick(algo, env);
+  const gone = tick(algo, env, { now: T0 + BAR + 2000, minutesToClose: 10, ceLtp: 108 });
+  assert.equal(gone.action, "exit-all");
+  assert.equal(gone.reason, "eod");
+  assert.equal(env.positions.length, 0);
 });
 
 test("paper replay backtest only uses completed candles", () => {
