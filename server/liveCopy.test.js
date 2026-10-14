@@ -800,7 +800,7 @@ test("mapped crude copy keeps the crude contract and the member token", async ()
   assert.equal(copy.price, 42.5);
 });
 
-test("nifty first candle uses the same mapped user as crude and keeps the NIFTY contract", async () => {
+test("NIFTY first candle copies only users mapped on that card and keeps the NIFTY contract", async () => {
   const user = { id: "u-nifty-same-copy", name: "Nifty Same", email: "niftysame@t2s.app", role: "user" };
   const other = { id: "u-vwap-only", name: "Vwap Only", email: "vwaponly@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "upstox" });
@@ -844,12 +844,38 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
   assert.equal(queuedResult.queued, true);
   const queued = drainPendingLiveAlgoOrders();
   const admin = queued.find((row) => row.strategy === "NIFTY 5m first candle" && !row.copyUserId);
-  const copy = queued.find((row) => row.copyUserId === user.id && row.strategy === "NIFTY 5m first candle");
   assert.ok(admin);
   assert.equal(admin.symbol, "NIFTY 22650 CE");
   assert.equal(admin.qty, 65);
   assert.equal(admin.securityId, "51338");
   assert.equal(admin.brokerId, "dhan");
+  assert.equal(
+    queued.some((row) => row.copyUserId === user.id && row.strategy === "NIFTY 5m first candle"),
+    false,
+    "Crude-mapped user must not receive a NIFTY copy",
+  );
+  assert.equal(queued.some((row) => row.copyUserId === other.id), false);
+
+  const mappedCopies = memberCopyPayloads(
+    {
+      strategy: "NIFTY 5m first candle",
+      side: "BUY",
+      symbol: "NIFTY 22650 CE",
+      qty: 65,
+      price: 118.2,
+      option: "CE",
+      strike: 22650,
+      expiry: "2026-10-06",
+      product: "MIS",
+      lots: 1,
+      lotSize: 65,
+      securityId: "51338",
+      exchangeSegment: "NSE_FNO",
+      brokerId: "dhan",
+    },
+    { id: "a10", name: "NIFTY 5m first candle", mappingScope: "both", mappedClientIds: [user.id] },
+  );
+  const copy = mappedCopies.find((row) => row.copyUserId === user.id);
   assert.ok(copy);
   assert.equal(copy.symbol, "NIFTY 22650 CE");
   assert.equal(copy.qty, 65);
@@ -861,14 +887,12 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
   assert.equal(copy.exchangeSegment, "NSE_FNO");
   assert.equal(copy.lots, 1);
   assert.equal(copy.lotSize, 65);
-  assert.equal(copy.type, "LIMIT");
-  assert.equal(copy.price, 118.2);
   assert.equal(copy.brokerId, "upstox");
   assert.equal(copy.account.accessToken, "nifty-upstox-token");
   assert.equal(copy.account.clientId, "393216");
-  assert.equal(queued.some((row) => row.copyUserId === other.id), false);
+  assert.equal(mappedCopies.some((row) => row.copyUserId === other.id), false);
 
-  const cardMapped = memberCopyPayloads(
+  const fromAlso = memberCopyPayloads(
     {
       strategy: "NIFTY 5m first candle",
       side: "BUY",
@@ -880,13 +904,10 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
       product: "MIS",
       brokerId: "dhan",
     },
-    { id: "a10", name: "NIFTY 5m first candle", mappingScope: "both", mappedClientIds: [], alsoMappedClientIds: [other.id] },
+    { id: "a10", name: "NIFTY 5m first candle", mappingScope: "both", mappedClientIds: [user.id], alsoMappedClientIds: [other.id] },
   );
-  const fromCard = cardMapped.find((row) => row.copyUserId === other.id);
-  assert.ok(fromCard);
-  assert.equal(fromCard.symbol, "NIFTY 22900 CE");
-  assert.equal(fromCard.qty, 65);
-  assert.equal(fromCard.product, "MIS");
+  assert.equal(fromAlso.some((row) => row.copyUserId === other.id), false, "alsoMappedClientIds must not add copies");
+  assert.ok(fromAlso.some((row) => row.copyUserId === user.id));
 
   const master = memberCopyPayloads(
     { strategy: "NIFTY 5m first candle", side: "BUY", symbol: "NIFTY 22650 CE", qty: 65, brokerId: "dhan" },
@@ -895,7 +916,44 @@ test("nifty first candle uses the same mapped user as crude and keeps the NIFTY 
   assert.equal(master.some((row) => row.copyUserId === user.id), false);
 });
 
-test("crude first candle copies the same NIFTY-mapped Kotak user", async () => {
+test("an unmapped Copy ON member does not receive a NIFTY order when the card already has a map", () => {
+  const mapped = { id: "u-nifty-mapped", name: "Mapped Nifty", email: "mappednifty@t2s.app", role: "user" };
+  const avinash = { id: "u-avinash-ramole", name: "Avinash Ramole", email: "avinash.ramole86@gmail.com", role: "user" };
+  selectMemberBroker({ user: mapped, brokerId: "dhan" });
+  installMemberBroker({ user: mapped, brokerId: "dhan", clientId: "1100888", accessToken: "mapped-nifty-token" });
+  saveClientSettings(mapped.id, { copy: false, tradeMode: "real", brokerId: "dhan", subscriptionUntil: "2026-12-31" });
+  selectMemberBroker({ user: avinash, brokerId: "dhan" });
+  installMemberBroker({ user: avinash, brokerId: "dhan", clientId: "1100777", accessToken: "avinash-copy-token" });
+  saveClientSettings(avinash.id, {
+    copy: true,
+    subscriptionMode: "copy",
+    mappedStrategy: "CRUDE OIL 5m first candle",
+    tradeMode: "real",
+    brokerId: "dhan",
+    subscriptionUntil: "2026-12-31",
+  });
+  const copies = memberCopyPayloads(
+    {
+      strategy: "NIFTY",
+      side: "BUY",
+      symbol: "NIFTY 22750 PE",
+      qty: 65,
+      lotSize: 65,
+      price: 42.5,
+      option: "PE",
+      strike: 22750,
+      brokerId: "dhan",
+    },
+    { id: "a10", name: "NIFTY", mappingScope: "both", mappedClientIds: [mapped.id], alsoMappedClientIds: [avinash.id] },
+  );
+  assert.deepEqual(
+    copies.map((row) => row.copyUserId),
+    [mapped.id],
+    "Copy ON, Crude map, and alsoMapped must not send NIFTY to an unmapped user",
+  );
+});
+
+test("crude first candle does not copy a NIFTY-mapped Kotak user", () => {
   const user = { id: "u-kotak-nifty-map", name: "K", email: "kotaknifty@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "kotak" });
   installMemberBroker({
@@ -930,17 +988,14 @@ test("crude first candle copies the same NIFTY-mapped Kotak user", async () => {
     },
     { id: "a-crude-share", name: "CRUDE OIL", mappingScope: "both", mappedClientIds: [] },
   );
-  const copy = copies.find((row) => row.copyUserId === user.id);
-  assert.ok(copy, "NIFTY-mapped Kotak user must also receive Crude Oil copies");
-  assert.equal(copy.symbol, "CRUDEOIL 6100 CE");
-  assert.equal(copy.exchangeSegment, "MCX_COMM");
-  assert.equal(copy.brokerId, "kotak");
-  assert.equal(copy.account.accessToken, "kotak-member-token-3324");
-  assert.equal(copy.account.clientId, "YT2VM");
-  assert.equal(copy.copyBlocked, "");
+  assert.equal(
+    copies.some((row) => row.copyUserId === user.id),
+    false,
+    "NIFTY-mapped Kotak user must not receive Crude Oil copies",
+  );
 });
 
-test("crude copies the Upstox user and the NIFTY-mapped Kotak user even if admin env has the same client id", () => {
+test("crude Copy ON Upstox still copies when the Crude card has no map", () => {
   const saved = {
     id: process.env.T2S_KOTAK_CLIENT_ID,
     key: process.env.T2S_KOTAK_CONSUMER_KEY,
@@ -992,14 +1047,9 @@ test("crude copies the Upstox user and the NIFTY-mapped Kotak user even if admin
     );
     const upx = copies.find((row) => row.copyUserId === upstox.id);
     const ktk = copies.find((row) => row.copyUserId === kotak.id);
-    assert.ok(upx, "Upstox copy user must receive Crude");
-    assert.ok(ktk, "Kotak Neo user must receive Crude with the Upstox users");
+    assert.ok(upx, "Copy ON Upstox user must receive Crude when the Crude card has no map");
     assert.equal(upx.brokerId, "upstox");
-    assert.equal(ktk.brokerId, "kotak");
-    assert.equal(ktk.copyBlocked, "");
-    assert.equal(ktk.account.clientId, "YT2VM");
-    assert.equal(ktk.account.accessToken, "kotak-member-token-3324");
-    assert.equal(JSON.stringify(ktk).includes("admin-kotak-token"), false);
+    assert.equal(ktk, undefined, "NIFTY-mapped Kotak user must not receive Crude");
   } finally {
     if (saved.id == null) delete process.env.T2S_KOTAK_CLIENT_ID;
     else process.env.T2S_KOTAK_CLIENT_ID = saved.id;
