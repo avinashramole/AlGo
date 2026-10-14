@@ -445,6 +445,7 @@ export type Snapshot = {
       ordersAllowed: boolean | null;
     } | null;
     hasQuotes?: boolean;
+    stalled?: boolean;
     autoRenew?: boolean;
     autoMode?: string;
     tokenExpiry?: string | null;
@@ -1177,6 +1178,7 @@ export function getMemberQuotes() {
     brokerName?: string;
     live?: boolean;
     lastTickAt?: number | null;
+    hasQuotes?: boolean;
     reason?: string;
   }>("/member/quotes");
 }

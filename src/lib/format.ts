@@ -154,7 +154,7 @@ export function hasDhanQuotes(data?: {
   );
 }
 
-export { adminLiveTape, brokerChipName, headerBrokerLabel } from "./headerBroker";
+export { adminLiveTape, brokerChipName, headerBrokerLabel, memberTapeHasQuotes } from "./headerBroker";
 
 export function kotakAdminTape(data?: {
   dhanFeed?: { source?: string; live?: boolean; hasQuotes?: boolean; lastTickAt?: number | null };

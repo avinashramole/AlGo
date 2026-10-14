@@ -32,6 +32,8 @@ test("boot and deploy start admin and user feeds without a user restart", () => 
   const indexSrc = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8");
   assert.match(indexSrc, /ensureMemberDataFeedsRunning\("deploy"\)/);
   assert.match(indexSrc, /ensureMemberDataFeedsRunning\("boot"\)/);
+  const dhanSrc = fs.readFileSync(new URL("./dhan.js", import.meta.url), "utf8");
+  assert.match(dhanSrc, /ensureMemberDataFeedsRunning\("live-start"\)/);
   const marketSrc = fs.readFileSync(new URL("./market.js", import.meta.url), "utf8");
   assert.match(marketSrc, /autoStart:\s*true/);
   const deploySrc = fs.readFileSync(new URL("../deploy/update-website.sh", import.meta.url), "utf8");

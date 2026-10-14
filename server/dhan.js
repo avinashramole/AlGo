@@ -2318,6 +2318,11 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     clearSimulatedDesk();
     startLiveLoop();
     console.log(`Dhan live client ${cleanId} · quote feed started without waiting on /profile`);
+    void import("./memberFeedStart.js")
+      .then((mod) => mod.ensureMemberDataFeedsRunning("live-start"))
+      .catch((error) => {
+        console.log(`Member data feeds (live-start) skipped: ${error?.message || error}`);
+      });
   }
   void fetchDhanIp();
 

@@ -52,7 +52,8 @@ export function findLiveCopyAlgo(algos = [], strategyName = "") {
   const rows = Array.isArray(algos) ? algos : [];
   const exact = rows.find((row) => String(row.name || "") === name);
   if (exact) return exact;
-  return rows.find((row) => sameStrategy(row.name, name)) || {};
+  const family = rows.filter((row) => sameStrategy(row.name, name));
+  return family.find((row) => row.enabled) || family[0] || {};
 }
 
 function subscriptionOpen(until) {
@@ -337,6 +338,7 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
 }
 
 export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder } = {}) {
+  if (String(payload.side || "").toUpperCase() === "BUY" && algo?.holdDailyLive) return;
   const live = [];
   const exitCopy = /^(exit|target|sl)$/i.test(String(payload.role || ""));
   for (const copy of memberCopyPayloads(payload, algo || {})) {

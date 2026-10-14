@@ -44,6 +44,13 @@ export function keepStrikeWindow<T extends StrikeRow>(previous: T[] = [], incomi
   return next;
 }
 
+export function keepLastBookRows<T extends IdRow>(previous: T[] = [], incoming: T[] = []): T[] {
+  const prev = Array.isArray(previous) ? previous : [];
+  const next = Array.isArray(incoming) ? incoming : [];
+  if (!next.length) return prev;
+  return patchById(prev, next);
+}
+
 export function patchById<T extends IdRow>(previous: T[] = [], incoming: T[] = []): T[] {
   const prev = Array.isArray(previous) ? previous : [];
   const next = Array.isArray(incoming) ? incoming : [];

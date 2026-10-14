@@ -8,7 +8,7 @@ import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { isAdminUser, pageTitleForPath } from "../../lib/roles";
 import { getMemberQuotes } from "../../api/client";
-import { adminLiveTape, cn, formatIstClock, formatMobile, headerBrokerLabel, isMcxSessionOpen, isNseSessionOpen } from "../../lib/format";
+import { adminLiveTape, cn, formatIstClock, formatMobile, headerBrokerLabel, isMcxSessionOpen, isNseSessionOpen, memberTapeHasQuotes } from "../../lib/format";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -61,7 +61,7 @@ export function Header() {
             brokerName: quotes.brokerName,
             live: Boolean(quotes.live),
             lastTickAt: quotes.lastTickAt || null,
-            hasQuotes: Boolean(quotes.indices?.length),
+            hasQuotes: memberTapeHasQuotes(quotes),
           });
         })
         .catch(() => undefined);
