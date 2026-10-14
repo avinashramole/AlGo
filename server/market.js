@@ -2175,12 +2175,19 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
   const barSession = isFirstCandleAlgo(algo) ? firstCandleBarSession(config, crude) : undefined;
   const sampledTf = String(config.timeframe || "5m");
-  if (isFirstCandleAlgo(algo) && vs.sampledTimeframe && vs.sampledTimeframe !== sampledTf) {
+  if (
+    isFirstCandleAlgo(algo) &&
+    ((vs.sampledTimeframe && vs.sampledTimeframe !== sampledTf) ||
+      (Number(vs.barMinutes || 0) > 0 && Number(vs.barMinutes) !== Number(config.barMinutes)))
+  ) {
     vs.ceBars = [];
     vs.peBars = [];
     vs.processedFirstBarTime = 0;
   }
-  if (isFirstCandleAlgo(algo)) vs.sampledTimeframe = sampledTf;
+  if (isFirstCandleAlgo(algo)) {
+    vs.sampledTimeframe = sampledTf;
+    vs.barMinutes = Number(config.barMinutes) || parseBarMinutes(sampledTf, 5);
+  }
   const positions = crude ? positionsForStrategyName(algo, mode) : positionsForNiftyVwap(algo, mode);
   const open = PositionManager.openFor(positions, algo.name, vs);
   const signalBars = crude ? crudeFutureSignalBars : niftyFutureSignalBars;
@@ -3618,6 +3625,16 @@ export function updateAlgo(id, payload) {
   const next = normalizeAlgo(payload || {}, previous);
   next.mappedClientIds = mappedClientIdsForMembers(next.mappedClientIds, memberIds());
   next.id = id;
+  if (String(next.timeframe || "") !== String(previous.timeframe || "")) {
+    const bag = next.vwapState || next.test1State;
+    if (bag && typeof bag === "object") {
+      bag.ceBars = [];
+      bag.peBars = [];
+      bag.sampledTimeframe = String(next.timeframe || "");
+      bag.barMinutes = Number(next.barMinutes || 0) || undefined;
+      bag.lastProcessedBarTime = 0;
+    }
+  }
   const leftLive = previous.runMode === "live" && next.runMode !== "live";
   const enteredLive = previous.runMode !== "live" && next.runMode === "live";
   const enteredPaper = previous.runMode !== "paper" && next.runMode === "paper";
@@ -5122,6 +5139,7 @@ function aggregateCrudeBars(source, minutes, now, includeForming, session = {}) 
       .map((bar) => ({ ...bar }));
   }
   return VwapSignalEngine.aggregateSessionBars(source, minutes, now, {
+    closeLabeled: false,
     sessionOpenMinutes: session.sessionOpenMinutes ?? MCX_SESSION_OPEN,
     sessionCloseMinutes: session.sessionCloseMinutes ?? MCX_SESSION_CLOSE,
     includeForming,

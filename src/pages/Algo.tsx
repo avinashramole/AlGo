@@ -27,6 +27,7 @@ import {
   isNiftyVwapReversalKind,
   isRetiredDeskStrategy,
   firstCandleEntryIst,
+  firstCandleMinutes,
   showsFirstCandleTimeframe,
   sortDeskAlgos,
   TEST2_SCRIPTS,
@@ -591,6 +592,7 @@ function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
     try {
       await updateAlgo(algo.id, {
         timeframe,
+        barMinutes: firstCandleMinutes(timeframe),
         entryEvaluationIst: firstCandleEntryIst(algo.firstBarStartIst, timeframe, algo.entryEvaluationIst),
       });
       await refresh();

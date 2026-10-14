@@ -26,7 +26,7 @@ const SYMBOLS = [
 
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
-const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "1H"];
+const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "30m", "60m", "1H"];
 const OPERATORS = ["close_above", "close_below", "crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
 const SOURCES = [
   "price",
@@ -763,6 +763,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
       targetPct: cfg.targetPct,
       eodSquareOffMinutes: cfg.eodSquareOffMinutes,
       timeframe: cfg.timeframe,
+      barMinutes: cfg.barMinutes,
+      tag: `crude ${cfg.timeframe}`,
       expiryKind: "monthly",
       strikeOffset: cfg.strikeOffset,
       maxTradesPerDay: cfg.maxTradesPerDay,
@@ -846,6 +848,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
       targetPct: cfg.targetPct,
       eodSquareOffMinutes: cfg.eodSquareOffMinutes,
       timeframe: cfg.timeframe,
+      barMinutes: cfg.barMinutes,
+      tag: `${cfg.timeframe} first`,
       expiryKind: cfg.expiryKind,
       strikeOffset: cfg.strikeOffset,
       maxTradesPerDay: cfg.maxTradesPerDay,

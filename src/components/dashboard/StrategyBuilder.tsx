@@ -262,6 +262,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     );
     set({
       timeframe,
+      barMinutes: firstCandleMinutes(timeframe),
       entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
     });
   };

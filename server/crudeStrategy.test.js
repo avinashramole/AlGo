@@ -29,6 +29,9 @@ import {
   replaceDhanOrders,
   resolveAlgoTrade,
   setCrudeFutureChartCandles,
+  crudeFutureSignalBars,
+  formatLiveFuturePreview,
+  updateAlgo,
   setDhanFeed,
   setLiveCandles,
   setOptionDesk,
@@ -927,6 +930,42 @@ test("manual Crude Exit queues one SELL and locks the first-candle lot", () => {
   } finally {
     drainPendingLiveAlgoOrders();
     replaceDhanBook([]);
+    deleteAlgo(created.id);
+  }
+});
+
+test("Crude uses the selected 30m candle, not a leftover 5m bar", async () => {
+  const open0900 = Date.parse("2026-10-14T03:30:00.000Z");
+  const bars = Array.from({ length: 6 }, (_, i) => ({
+    time: open0900 + i * 5 * 60_000,
+    open: 9000 + i,
+    high: 9010 + i,
+    low: 8990 + i,
+    close: 9005 + i,
+    volume: 10,
+  }));
+  setCrudeFutureChartCandles(bars);
+  const created = createAlgo({ name: `CRUDE 30m pick ${Date.now()}`, kind: "crude-first-candle", symbol: "CRUDEOIL", runMode: "live", timeframe: "5m" });
+  try {
+    const saved = updateAlgo(created.id, { timeframe: "30m" });
+    assert.equal(saved.timeframe, "30m");
+    assert.equal(saved.barMinutes, 30);
+    assert.equal(saved.tag, "crude 30m");
+    assert.equal(saved.entryEvaluationIst, "09:30");
+    const { crudeFirstCandleConfig } = await import("./niftyVwap/config.js");
+    const cfg = crudeFirstCandleConfig(getAlgo(created.id));
+    assert.equal(cfg.timeframe, "30m");
+    assert.equal(cfg.barMinutes, 30);
+    const halfHour = crudeFutureSignalBars("30m", open0900 + 35 * 60_000);
+    assert.ok(halfHour.length >= 1);
+    assert.equal(Number(halfHour[0].time), open0900);
+    assert.equal(Number(halfHour[0].open), 9000);
+    assert.equal(Number(halfHour[0].close), 9010);
+    const clock = formatLiveFuturePreview(halfHour[0], cfg.barMinutes, {}, "CRUDE FUT");
+    assert.match(clock, /09:00–09:30/);
+    assert.doesNotMatch(clock, /09:00–09:05/);
+  } finally {
+    setCrudeFutureChartCandles([]);
     deleteAlgo(created.id);
   }
 });

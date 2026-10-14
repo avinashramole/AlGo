@@ -40,6 +40,7 @@ export type AlgoStrategy = {
   lotSize?: number;
   qty?: number;
   timeframe?: string;
+  barMinutes?: number;
   slPct?: number;
   targetPct?: number;
   initialSlPct?: number;
@@ -321,7 +322,7 @@ export const PATTERNS = [
   { id: "SR_BOUNCE", label: "Support / resistance bounce" },
 ];
 
-export const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "1H"];
+export const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "30m", "60m", "1H"];
 
 export const FIRST_CANDLE_TIMEFRAMES = ["5m", "10m", "15m", "30m", "60m"] as const;
 
@@ -531,8 +532,9 @@ const CRUDE_INDICATOR_KEYS = [
   "rangeMinutes",
 ] as const;
 
-export function presentDeskAlgo<T extends { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string; tag?: string; instrument?: string }>(row: T): T {
+export function presentDeskAlgo<T extends { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string; tag?: string; instrument?: string; timeframe?: string }>(row: T): T {
   if (!row || !isCrudeFirstCandleKind(row)) return row;
+  const tf = String(row.timeframe || "5m");
   const next = {
     ...row,
     kind: "crude-first-candle" as const,
@@ -540,7 +542,8 @@ export function presentDeskAlgo<T extends { kind?: string; strategyType?: string
     indicator: "CRUDE_FIRST_CANDLE",
     symbol: "CRUDEOIL",
     instrument: "option" as const,
-    tag: "crude 5m",
+    tag: `crude ${tf}`,
+    timeframe: tf,
   };
   for (const key of CRUDE_INDICATOR_KEYS) delete (next as Record<string, unknown>)[key];
   return next;
@@ -1035,6 +1038,7 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       lotSize: 100,
       qty: 100,
       timeframe: "5m",
+      barMinutes: 5,
       slPct: 20,
       initialSlPct: 20,
       targetPct: 40,
