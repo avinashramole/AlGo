@@ -40,7 +40,7 @@ import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
-import { chooseDeskExpiry, dhanOrderQuantity, dhanPositionQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import { chooseDeskExpiry, collapseDhanPositionRows, dhanOrderQuantity, dhanPositionBookId, dhanPositionProduct, dhanPositionQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions, isMemberScopedOrder } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import { adminBookFromDhan } from "./memberBrokerPnl.js";
@@ -873,9 +873,8 @@ function mapDhanOrders(raw, algos = []) {
 }
 
 function mapDhanPositions(raw) {
-  const list = asList(raw);
+  const list = collapseDhanPositionRows(asList(raw));
   return list
-    .filter((row) => row.positionType !== "CLOSED" && Number(row.netQty) !== 0)
     .map((row) => {
       const qty = dhanPositionQuantity(row);
       const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
@@ -903,7 +902,7 @@ function mapDhanPositions(raw) {
           ? (chainLtp - avg) * qty * dir
           : brokerPnl;
       return {
-        id: `dhan-pos-${row.securityId}-${row.productType || "MIS"}`,
+        id: dhanPositionBookId(row),
         symbol: row.tradingSymbol || String(row.securityId),
         type,
         qty,
@@ -912,7 +911,7 @@ function mapDhanPositions(raw) {
         pnl: Number(Number(pnl).toFixed(2)),
         brokerPnl: Number(Number(brokerPnl).toFixed(2)),
         brokerLtp: Number((Number.isFinite(brokerLtp) ? brokerLtp : 0).toFixed(2)),
-        product: row.productType || "MIS",
+        product: dhanPositionProduct(row.productType || row.product),
         strategy: "",
         option: parsed?.option || "",
         strike: parsed?.strike || 0,

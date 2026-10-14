@@ -297,6 +297,7 @@ export function asLedgerPosition(row = {}) {
     sim: Boolean(row.sim) && !Boolean(row.paper || row.brokerId === "paper"),
     segment: isCryptoSymbol(row.symbol) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
+    securityId: String(row.securityId || ""),
     closed: false,
   };
 }
@@ -331,6 +332,7 @@ export function asClosedLedgerPosition(row = {}) {
     sim: Boolean(row.sim) && !Boolean(row.paper || row.brokerId === "paper"),
     segment: isCryptoSymbol(row.symbol) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
+    securityId: String(row.securityId || ""),
     closed: true,
   };
 }
@@ -403,9 +405,12 @@ function isPaperLedgerRow(row) {
 }
 
 function ledgerKey(row = {}) {
+  const securityId = String(row.securityId || "").trim();
+  const closed = row.closed ? "closed" : "open";
+  if (securityId && securityId !== "0") return `sid:${securityId}|${closed}`;
   const id = String(row.id || "").trim();
   if (id) return `id:${id}`;
-  return `${String(row.symbol || "").toUpperCase()}|${String(row.product || "MIS").toUpperCase()}|${row.closed ? "closed" : "open"}`;
+  return `${String(row.symbol || "").toUpperCase()}|${String(row.product || "MIS").toUpperCase()}|${closed}`;
 }
 
 function withLocalStrategy(row = {}, locals = []) {

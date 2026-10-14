@@ -84,6 +84,7 @@ function asLiveLedgerPosition(row: {
   pnl: number;
   product?: string;
   strategy?: string;
+  securityId?: string;
   brokerId?: string;
   paper?: boolean;
   sim?: boolean;
@@ -109,6 +110,7 @@ function asLiveLedgerPosition(row: {
     sim: Boolean(row.sim) && !paper,
     segment: /BTC|ETH|USDT|USDC|CRYPTO|BINANCE|DOGE|SOL/i.test(String(row.symbol || "")) ? "crypto" : "indian",
     strategy: String(row.strategy || ""),
+    securityId: String(row.securityId || ""),
     closed: false,
   };
 }
@@ -234,7 +236,14 @@ export function PositionsDesk({ embedded = false, book }: { embedded?: boolean; 
     const closedMaster = [...closedById.values()];
     const deskOpen = masterSource.filter((row) => !isClosedLedger(row));
     const liveIds = new Set(liveMaster.map((row) => String(row.id || "")));
-    const extraDesk = deskOpen.filter((row) => !liveIds.has(String(row.id || "")));
+    const liveSids = new Set(
+      liveMaster.map((row) => String(row.securityId || "")).filter((id) => id && id !== "0"),
+    );
+    const extraDesk = deskOpen.filter((row) => {
+      if (liveIds.has(String(row.id || ""))) return false;
+      if (row.securityId && liveSids.has(String(row.securityId))) return false;
+      return true;
+    });
     const openMaster = liveMaster.length ? [...liveMaster, ...extraDesk] : deskOpen;
     const masterPositions = [...openMaster, ...closedMaster];
     const localMtm = masterPositions.reduce((sum, row) => sum + Number(row.mtm || 0), 0);

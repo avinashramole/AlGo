@@ -1,6 +1,6 @@
 import { buildDailyPnl } from "./desk.js";
 import { optionContractKey, overlayMemberCopyMeta } from "./memberDesk.js";
-import { dhanPositionQuantity } from "./optionChain.js";
+import { collapseDhanPositionRows, dhanPositionBookId, dhanPositionProduct, dhanPositionQuantity } from "./optionChain.js";
 import { isOptionContract, isSaneOptionLtp } from "./positionMark.js";
 
 const CACHE_MS = 2000;
@@ -89,13 +89,7 @@ export function brokerPnlFromUpstoxRows(raw) {
 }
 
 export function brokerProduct(value) {
-  const raw = String(value || "MIS").trim().toUpperCase();
-  if (!raw) return "MIS";
-  if (raw === "I" || raw === "INTRA" || raw === "INTRADAY") return "INTRADAY";
-  if (raw === "M" || raw === "MIS" || raw === "MARGIN") return "MIS";
-  if (raw === "C" || raw === "CNC" || raw === "DELIVERY") return "CNC";
-  if (raw === "N" || raw === "NRML" || raw === "NORMAL") return "NRML";
-  return raw;
+  return dhanPositionProduct(value);
 }
 
 function qtyOf(row, keys) {
@@ -164,7 +158,7 @@ export function dhanMasterBook(raw) {
   if (!pnl) return null;
   const rows = positionRows(raw) || [];
   const closed = [];
-  const open = [];
+  const openRaw = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const kind = String(row.positionType || row.position_type || "").toUpperCase();
@@ -181,33 +175,7 @@ export function dhanMasterBook(raw) {
     const buyAvg = firstFinite(row, ["buyAvg", "buy_avg", "dayBuyAvg", "day_buy_avg", "buyAvgPrice", "buyPrice", "costPrice", "cost_price"]) || 0;
     const sellAvg = firstFinite(row, ["sellAvg", "sell_avg", "daySellAvg", "day_sell_avg", "sellAvgPrice", "sellPrice"]) || 0;
     if (!closedLeg) {
-      const qty = dhanPositionQuantity({
-        ...row,
-        netQty: net,
-        tradingSymbol: symbol,
-      }) || Math.max(buyQty, sellQty);
-      const type = kind === "SHORT" || Number(net) < 0 ? "SELL" : "BUY";
-      const avg = Number(row.costPrice || row.cost_price || (type === "BUY" ? buyAvg : sellAvg) || 0);
-      open.push({
-        id: `dhan-pos-${row.securityId || row.security_id || symbol || open.length}-${product}`,
-        symbol,
-        side: type,
-        type,
-        qty,
-        avg,
-        ltp: ltp || avg,
-        buyQty: type === "BUY" ? qty : 0,
-        buyPrice: type === "BUY" ? avg : 0,
-        sellQty: type === "SELL" ? qty : 0,
-        sellPrice: type === "SELL" ? avg : 0,
-        pnl: round2((realized || 0) + (unrealized || 0)),
-        realized: round2(realized || 0),
-        product,
-        brokerId: "dhan",
-        live: true,
-        paper: false,
-        closed: false,
-      });
+      openRaw.push(row);
       continue;
     }
     if ((realized || 0) === 0 && (unrealized || 0) === 0) continue;
@@ -239,6 +207,42 @@ export function dhanMasterBook(raw) {
       closed: true,
     });
   }
+  const open = collapseDhanPositionRows(openRaw).map((row) => {
+    const symbol = dhanSymbol(row);
+    const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
+    const realized = firstFinite(row, ["realizedProfit", "realized_profit", "realised"]) || 0;
+    const unrealized = firstFinite(row, ["unrealizedProfit", "unrealized_profit", "unrealised"]) || 0;
+    const buyAvg = firstFinite(row, ["buyAvg", "buy_avg", "dayBuyAvg", "day_buy_avg", "buyAvgPrice", "buyPrice", "costPrice", "cost_price"]) || 0;
+    const sellAvg = firstFinite(row, ["sellAvg", "sell_avg", "daySellAvg", "day_sell_avg", "sellAvgPrice", "sellPrice"]) || 0;
+    const avg = Number(row.costPrice || row.cost_price || (type === "BUY" ? buyAvg : sellAvg) || 0);
+    const ltp = firstFinite(row, ["lastTradedPrice", "last_traded_price", "ltp", "close"]) || avg;
+    const qty = dhanPositionQuantity({ ...row, tradingSymbol: symbol }) || Math.max(
+      qtyOf(row, ["buyQty", "buy_qty", "dayBuyQty", "day_buy_qty", "dayBuyQuantity", "buyQuantity"]),
+      qtyOf(row, ["sellQty", "sell_qty", "daySellQty", "day_sell_qty", "daySellQuantity", "sellQuantity"]),
+    );
+    const product = brokerProduct(row.productType || row.product_type || row.product);
+    return {
+      id: dhanPositionBookId({ ...row, tradingSymbol: symbol }),
+      symbol,
+      side: type,
+      type,
+      qty,
+      avg,
+      ltp: ltp || avg,
+      buyQty: type === "BUY" ? qty : 0,
+      buyPrice: type === "BUY" ? avg : 0,
+      sellQty: type === "SELL" ? qty : 0,
+      sellPrice: type === "SELL" ? avg : 0,
+      pnl: round2(realized + unrealized),
+      realized: round2(realized),
+      product,
+      securityId: String(row.securityId || row.security_id || ""),
+      brokerId: "dhan",
+      live: true,
+      paper: false,
+      closed: false,
+    };
+  });
   return {
     realizedPnl: pnl.realizedPnl,
     unrealizedPnl: pnl.unrealizedPnl,

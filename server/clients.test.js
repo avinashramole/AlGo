@@ -682,6 +682,50 @@ test("master desk shows the live Dhan open position when MTM is moving", () => {
   assert.equal(desk.master.brokerMtm, 845);
 });
 
+test("master desk keeps one Crude open when Dhan repeats the same security", () => {
+  const desk = listPositionDesk(
+    listPublicUsers(),
+    [
+      {
+        id: "dhan-pos-99-INTRADAY",
+        symbol: "CRUDEOIL 6100 CE",
+        type: "BUY",
+        qty: 100,
+        avg: 90,
+        ltp: 100,
+        pnl: 1000,
+        product: "INTRADAY",
+        securityId: "99",
+        brokerId: "dhan",
+        strategy: "CRUDE OIL",
+      },
+    ],
+    [],
+    {
+      realizedPnl: 0,
+      unrealizedPnl: 1000,
+      mtm: 1000,
+      closed: [],
+      open: [
+        {
+          id: "dhan-pos-99-MIS",
+          symbol: "CRUDEOIL 6100 CE",
+          type: "BUY",
+          qty: 100,
+          avg: 90,
+          ltp: 100,
+          pnl: 1000,
+          product: "MIS",
+          securityId: "99",
+          brokerId: "dhan",
+        },
+      ],
+    },
+  );
+  assert.equal(desk.master.open, 1);
+  assert.equal(desk.master.positions.filter((row) => !row.closed).length, 1);
+});
+
 test("client MTM uses each user's broker book instead of the local copy loss", () => {
   const desk = applyBrokerBooksToDesk(
     {

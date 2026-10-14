@@ -75,6 +75,79 @@ export function dhanPositionQuantity(row = {}) {
   return net * lotSize;
 }
 
+export function dhanPositionProduct(value) {
+  const raw = String(value || "MIS").trim().toUpperCase();
+  if (!raw) return "MIS";
+  if (raw === "I" || raw === "INTRA" || raw === "INTRADAY") return "INTRADAY";
+  if (raw === "M" || raw === "MIS" || raw === "MARGIN") return "MIS";
+  if (raw === "C" || raw === "CNC" || raw === "DELIVERY") return "CNC";
+  if (raw === "N" || raw === "NRML" || raw === "NORMAL") return "NRML";
+  return raw;
+}
+
+export function dhanPositionBookId(row = {}) {
+  const securityId = String(row.securityId || row.security_id || "").trim();
+  const symbol = String(row.tradingSymbol || row.symbol || "").trim();
+  return `dhan-pos-${securityId || symbol || "x"}-${dhanPositionProduct(row.productType || row.product_type || row.product)}`;
+}
+
+function dhanPositionContractKey(row = {}) {
+  const securityId = String(row.securityId || row.security_id || "").trim();
+  if (securityId && securityId !== "0") return `sid:${securityId}`;
+  const symbol = String(row.tradingSymbol || row.symbol || "").trim().toUpperCase();
+  return symbol ? `sym:${symbol}` : "";
+}
+
+function dhanSignedLots(row = {}) {
+  const net = Number(row.netQty ?? row.net_qty);
+  if (Number.isFinite(net) && net !== 0) return net;
+  const qty = Math.abs(Number(row.qty ?? row.quantity) || 0);
+  const kind = String(row.positionType || row.position_type || row.type || "").toUpperCase();
+  return kind === "SHORT" || kind === "SELL" ? -qty : qty;
+}
+
+function preferDhanPositionRow(rows = []) {
+  const rank = (row) => {
+    const product = dhanPositionProduct(row.productType || row.product_type || row.product);
+    if (product === "INTRADAY" || product === "MIS") return 2;
+    return 1;
+  };
+  return [...rows].sort((a, b) => rank(b) - rank(a))[0] || rows[0];
+}
+
+/** One live row per contract. Dhan product aliases + a just-sent SELL must not show as 4 opens. */
+export function collapseDhanPositionRows(raw = []) {
+  const list = (Array.isArray(raw) ? raw : []).filter((row) => {
+    if (!row || typeof row !== "object") return false;
+    const kind = String(row.positionType || row.position_type || "").toUpperCase();
+    if (kind === "CLOSED") return false;
+    return dhanSignedLots(row) !== 0;
+  });
+  const groups = new Map();
+  list.forEach((row, index) => {
+    const key = dhanPositionContractKey(row) || `row:${index}`;
+    const bucket = groups.get(key) || [];
+    bucket.push(row);
+    groups.set(key, bucket);
+  });
+  const out = [];
+  for (const rows of groups.values()) {
+    const longQty = Math.max(0, ...rows.filter((row) => dhanSignedLots(row) > 0).map((row) => Math.abs(dhanSignedLots(row))));
+    const shortQty = Math.max(0, ...rows.filter((row) => dhanSignedLots(row) < 0).map((row) => Math.abs(dhanSignedLots(row))));
+    const net = longQty - shortQty;
+    if (!net) continue;
+    const sideRows = rows.filter((row) => (net > 0 ? dhanSignedLots(row) > 0 : dhanSignedLots(row) < 0));
+    const row = preferDhanPositionRow(sideRows.length ? sideRows : rows);
+    out.push({
+      ...row,
+      netQty: net,
+      positionType: net < 0 ? "SHORT" : "LONG",
+      productType: dhanPositionProduct(row.productType || row.product_type || row.product),
+    });
+  }
+  return out;
+}
+
 function kolkataParts(date = new Date()) {
   return Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {

@@ -1212,11 +1212,26 @@ export function queueLivePositionExit(pos) {
       positions: state.positions || [],
       forPosition: true,
     }) || realStrategyName(pos.strategy);
-  return queueLiveAlgoOrder({
+  const algo =
+    (state.algos || []).find((item) => item.name === strategy) ||
+    liveCopyAlgo({ strategy }) ||
+    {};
+  if (isFirstCandleAlgo(algo)) {
+    const vs = runtimeState(algo);
+    vs.exitQueued = true;
+    vs.exitQueuedAt = Date.now();
+    vs.inFlight = true;
+  }
+  const lotSize =
+    Number(pos.lotSize) ||
+    (isMcxSymbol(pos.symbol) ? getUnderlying(underlyingIdFromSymbol(pos.symbol)).lot : 0) ||
+    undefined;
+  const result = queueLiveAlgoOrder({
     symbol: pos.symbol,
     name: pos.symbol,
     side: pos.type === "BUY" ? "SELL" : "BUY",
     qty: Math.abs(Number(pos.qty) || 0),
+    lotSize,
     product: pos.product || "MIS",
     type: "MARKET",
     securityId: pos.securityId,
@@ -1228,8 +1243,24 @@ export function queueLivePositionExit(pos) {
     kind: pos.kind || (pos.option ? "option" : undefined),
     exchangeSegment: exchangeSegmentFor(pos.symbol),
     role: pos.role || pos.exitReason || "exit",
-    exitReason: pos.exitReason || pos.role || "",
+    exitReason: pos.exitReason || pos.role || "exit",
+    skipMemberCopy: true,
   });
+  if (strategy && !pos.copyUserId) {
+    dispatchMemberExitCopies(
+      {
+        ...pos,
+        strategy,
+        qty: Math.abs(Number(pos.qty) || 0),
+        lotSize,
+        role: "exit",
+        exitReason: pos.exitReason || "exit",
+      },
+      algo,
+      { enqueueLiveOrder: enqueueLiveAlgoOrder },
+    );
+  }
+  return result;
 }
 
 export function liveAlgoBrokerSignal({ payload = {}, live = {}, error } = {}) {

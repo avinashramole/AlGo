@@ -11,7 +11,9 @@ import {
   UNDERLYINGS,
   weekdayNameIST,
   dhanOrderQuantity,
+  dhanPositionBookId,
   dhanPositionQuantity,
+  collapseDhanPositionRows,
   keepStrikeWindow,
   chooseDeskExpiry,
   dropExpired,
@@ -113,6 +115,25 @@ test("Dhan MCX position qty is barrel units so Crude MTM matches Nifty", () => {
   const qty = dhanPositionQuantity({ tradingSymbol: "CRUDEOIL 6100 CE", netQty: 1, exchangeSegment: "MCX_COMM" });
   assert.equal(Number(((ltp - avg) * qty).toFixed(2)), 1000);
   assert.equal(Number(((ltp - avg) * 1).toFixed(2)), 10);
+});
+
+test("Dhan Crude product aliases and a just-sent SELL collapse to one open lot", () => {
+  const rows = collapseDhanPositionRows([
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "INTRADAY", unrealizedProfit: 10 },
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "I", unrealizedProfit: 10 },
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "MIS", unrealizedProfit: 10 },
+    { positionType: "SHORT", netQty: -1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "MARGIN", unrealizedProfit: 0 },
+  ]);
+  assert.equal(rows.length, 0);
+  const open = collapseDhanPositionRows([
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "I" },
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "INTRADAY" },
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "MIS" },
+    { positionType: "LONG", netQty: 1, securityId: "99", tradingSymbol: "CRUDEOIL 6100 CE", productType: "MARGIN" },
+  ]);
+  assert.equal(open.length, 1);
+  assert.equal(open[0].netQty, 1);
+  assert.equal(dhanPositionBookId(open[0]), "dhan-pos-99-INTRADAY");
 });
 
 test("keepStrikeWindow patches LTP on the same strikes instead of recentering ATM", () => {

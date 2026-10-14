@@ -1361,6 +1361,7 @@ export type LedgerPosition = {
   sim?: boolean;
   segment: "indian" | "crypto";
   strategy?: string;
+  securityId?: string;
   closed?: boolean;
 };
 

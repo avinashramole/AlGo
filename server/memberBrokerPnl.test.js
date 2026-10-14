@@ -44,6 +44,60 @@ test("Crude Dhan open qty is barrel units like Nifty, not 1 lot", () => {
   assert.equal(book.open[0].pnl, 1000);
 });
 
+test("Crude Dhan book after Exit keeps one open, not four product aliases", () => {
+  const book = dhanMasterBook([
+    {
+      positionType: "LONG",
+      netQty: 1,
+      tradingSymbol: "CRUDEOIL 6100 CE",
+      exchangeSegment: "MCX_COMM",
+      securityId: "99",
+      productType: "INTRADAY",
+      costPrice: 90,
+      lastTradedPrice: 100,
+      realizedProfit: 0,
+      unrealizedProfit: 1000,
+    },
+    {
+      positionType: "LONG",
+      netQty: 1,
+      tradingSymbol: "CRUDEOIL 6100 CE",
+      exchangeSegment: "MCX_COMM",
+      securityId: "99",
+      productType: "I",
+      costPrice: 90,
+      lastTradedPrice: 100,
+      realizedProfit: 0,
+      unrealizedProfit: 1000,
+    },
+    {
+      positionType: "LONG",
+      netQty: 1,
+      tradingSymbol: "CRUDEOIL 6100 CE",
+      exchangeSegment: "MCX_COMM",
+      securityId: "99",
+      productType: "MIS",
+      costPrice: 90,
+      lastTradedPrice: 100,
+      realizedProfit: 0,
+      unrealizedProfit: 1000,
+    },
+    {
+      positionType: "SHORT",
+      netQty: -1,
+      tradingSymbol: "CRUDEOIL 6100 CE",
+      exchangeSegment: "MCX_COMM",
+      securityId: "99",
+      productType: "MARGIN",
+      costPrice: 80,
+      lastTradedPrice: 80,
+      realizedProfit: 0,
+      unrealizedProfit: 0,
+    },
+  ]);
+  assert.equal(book.open.length, 0);
+});
+
 test("broker realized and MTM replace the local copy total", async () => {
   const desk = localDesk();
   await attachMemberBrokerPnl(desk, "user-1", async () =>

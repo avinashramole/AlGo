@@ -24,6 +24,7 @@ import {
   noteLiveAlgoOrderResult,
   withLiveAlgo,
   queueLiveAlgoOrder,
+  queueLivePositionExit,
   replaceDhanBook,
   replaceDhanOrders,
   resolveAlgoTrade,
@@ -867,6 +868,60 @@ test("an accepted crude SL SELL clears the open lot so another SELL is not sent"
       false,
     );
   } finally {
+    replaceDhanBook([]);
+    deleteAlgo(created.id);
+  }
+});
+
+test("manual Crude Exit queues one SELL and locks the first-candle lot", () => {
+  const created = createAlgo({
+    name: "CRUDE EXIT ONE",
+    kind: "crude-first-candle",
+    symbol: "CRUDEOIL",
+    runMode: "live",
+  });
+  try {
+    armLiveOrders();
+    replaceDhanBook([
+      {
+        id: "dhan-pos-99-INTRADAY",
+        symbol: "CRUDEOIL 6100 CE",
+        type: "BUY",
+        qty: 100,
+        avg: 90,
+        ltp: 80,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 6100,
+        securityId: "99",
+        live: true,
+        lotSize: 100,
+      },
+    ]);
+    const result = queueLivePositionExit({
+      id: "dhan-pos-99-INTRADAY",
+      symbol: "CRUDEOIL 6100 CE",
+      type: "BUY",
+      qty: 100,
+      strategy: created.name,
+      brokerId: "dhan",
+      option: "CE",
+      strike: 6100,
+      securityId: "99",
+      lotSize: 100,
+    });
+    assert.equal(result.queued, true);
+    const pending = drainPendingLiveAlgoOrders();
+    const admin = pending.filter((row) => !row.copyUserId && row.side === "SELL");
+    assert.equal(admin.length, 1);
+    assert.equal(admin[0].skipMemberCopy, true);
+    assert.equal(admin[0].qty, 100);
+    const after = getAlgo(created.id);
+    assert.equal(after.vwapState.exitQueued, true);
+    assert.equal(after.vwapState.inFlight, true);
+  } finally {
+    drainPendingLiveAlgoOrders();
     replaceDhanBook([]);
     deleteAlgo(created.id);
   }
