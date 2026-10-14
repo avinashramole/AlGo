@@ -458,6 +458,32 @@ test("a paper-mode user quotes their own Dhan token", async () => {
   assert.equal(JSON.stringify(mine).includes("dhan-paper-token"), false);
 });
 
+test("an installed broker with empty quotes does not paint the admin desk LTP", async () => {
+  const member = { id: "u-empty-own", name: "Empty Own", email: "empty.own@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  installMemberBroker({ user: member, brokerId: "dhan", clientId: "1100222", accessToken: "empty-own-token" });
+  const mine = await memberQuotesForUser(member, {
+    now: Date.now() + 220_000,
+    fetchQuotes: async () => [],
+    deskQuotes: () => ({
+      indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 24880.5, change: 12, changePct: 0.05, spark: [], future: 24910, lot: 65 }],
+    }),
+  });
+  assert.equal(mine.source, "member");
+  assert.equal(mine.live, false);
+  assert.equal(mine.hasQuotes, false);
+  assert.equal(JSON.stringify(mine).includes("24880.5"), false);
+  assert.equal(JSON.stringify(mine).includes("24910"), false);
+  const rows = cardsFromMemberQuotes(
+    "u-empty-cards",
+    [],
+    [{ symbol: "NIFTY 50", price: 24880.5, future: 24910 }],
+  );
+  const nifty = rows.find((row) => row.symbol === "NIFTY 50");
+  assert.equal(nifty.price, 0);
+  assert.equal(nifty.future, 0);
+});
+
 test("a selected broker with no token does not use the admin desk tape", async () => {
   const fresh = { id: "u-dhan-not-setup", name: "New Dhan", email: "new.dhan@t2s.app", role: "user" };
   selectMemberBroker({ user: fresh, brokerId: "dhan" });

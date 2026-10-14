@@ -1198,6 +1198,41 @@ test("a short NIFTY label still finds the mapped first-candle card for user copi
   assert.ok(copies.some((row) => row.copyUserId === user.id && row.side === "BUY"));
 });
 
+test("a blocked enqueue does not lock the next member exit", () => {
+  resetMemberExitCopyLocks();
+  const user = { id: "u-exit-blocked-q", name: "Exit Blocked Q", email: "exitblockedq@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100777", accessToken: "exit-blocked-q-token" });
+  payMember(user);
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [user.id] };
+  const pos = { symbol: "NIFTY 22350 CE", type: "BUY", qty: 65, avg: 40, strategy: algo.name, securityId: "22350" };
+  dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: () => ({ queued: false, blocked: true }) });
+  const second = [];
+  dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: (copy) => second.push(copy) });
+  assert.equal(second.filter((row) => row.copyUserId === user.id).length, 1);
+});
+
+test("a new BUY copy unlocks the next TGT for that member contract", () => {
+  resetMemberExitCopyLocks();
+  const user = { id: "u-exit-reenter", name: "Exit Reenter", email: "exitreenter@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100555", accessToken: "exit-reenter-token" });
+  payMember(user);
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [user.id] };
+  const pos = { symbol: "NIFTY 22600 CE", type: "BUY", qty: 65, avg: 55, strategy: algo.name, securityId: "22600" };
+  const first = [];
+  dispatchMemberExitCopies({ ...pos, role: "target" }, mapped, { enqueueLiveOrder: (copy) => first.push(copy) });
+  assert.equal(first.filter((row) => row.copyUserId === user.id).length, 1);
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: pos.symbol, qty: 65, price: 55, brokerId: "dhan" },
+    mapped,
+    { enqueueLiveOrder: () => {} },
+  );
+  const second = [];
+  dispatchMemberExitCopies({ ...pos, role: "target" }, mapped, { enqueueLiveOrder: (copy) => second.push(copy) });
+  assert.equal(second.filter((row) => row.copyUserId === user.id).length, 1);
+});
+
 test("a blocked member exit does not lock the next copy after they install a token", () => {
   resetMemberExitCopyLocks();
   const user = { id: "u-exit-retry", name: "Exit Retry", email: "exitretry@t2s.app", role: "user" };
