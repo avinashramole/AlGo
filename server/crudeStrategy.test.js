@@ -22,7 +22,9 @@ import {
   drainPendingLiveAlgoOrders,
   getAlgo,
   noteLiveAlgoOrderResult,
+  withLiveAlgo,
   queueLiveAlgoOrder,
+  replaceDhanBook,
   replaceDhanOrders,
   resolveAlgoTrade,
   setCrudeFutureChartCandles,
@@ -801,4 +803,71 @@ test("a user copy stays on the admin order book after the Dhan refresh", () => {
   const orders = snapshot().orders;
   assert.ok(orders.some((row) => row.id === "admin-crude-1"));
   assert.ok(orders.some((row) => row.copyUserId === "u-show" && row.status === "REJECTED" && row.symbol === "CRUDEOIL 6100 CE"));
+});
+
+test("an accepted crude SL SELL clears the open lot so another SELL is not sent", () => {
+  const created = createAlgo({
+    name: "CRUDE SL accept exit",
+    kind: "crude-first-candle",
+    symbol: "CRUDEOIL",
+    runMode: "live",
+  });
+  try {
+    replaceDhanBook([
+      {
+        id: "crude-live-lot",
+        symbol: "CRUDEOIL 6100 CE",
+        type: "BUY",
+        qty: 100,
+        avg: 90,
+        ltp: 80,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 6100,
+        live: true,
+        openedAt: "2026-08-21T04:00:00.000Z",
+      },
+    ]);
+    withLiveAlgo(created.id, (algo) => {
+      algo.vwapState = {
+        ...(algo.vwapState || {}),
+        fillPrice: 90,
+        stopPrice: 81,
+        targetPrice: 126,
+        lockedStrike: 6100,
+        lockedOption: "CE",
+        lockedSymbol: "CRUDEOIL 6100 CE",
+        buyPhase: "open",
+        exitQueued: true,
+        exitQueuedAt: Date.now(),
+      };
+    });
+    noteLiveAlgoOrderResult(
+      {
+        strategy: created.name,
+        side: "SELL",
+        symbol: "CRUDEOIL 6100 CE",
+        option: "CE",
+        strike: 6100,
+        qty: 100,
+        role: "sl",
+        exitReason: "sl",
+        brokerId: "dhan",
+      },
+      { status: "TRADED", orderId: "sl-ok", filledQty: 100, price: 80 },
+      null,
+    );
+    const after = getAlgo(created.id);
+    assert.equal(after.lastSignal, "EXIT SL DONE");
+    assert.equal(Number(after.vwapState?.fillPrice || 0), 0);
+    assert.equal(after.vwapState?.exitQueued, false);
+    assert.equal(
+      snapshot().positions.some((row) => row.id === "crude-live-lot" && !row.copyUserId),
+      false,
+    );
+  } finally {
+    replaceDhanBook([]);
+    deleteAlgo(created.id);
+  }
 });

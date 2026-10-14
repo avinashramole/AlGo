@@ -3180,6 +3180,107 @@ test("crude 10% SL still exits after 10 leftover pending SELLs", () => {
   assert.equal(book.exits[0].role, "sl");
 });
 
+test("crude does not send another SELL after the broker FILLED the SL", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE SL no loop", initialSlPct: 10, maxTradesPerDay: 10 });
+  const book = bookAdapter();
+  const bar = firstBar(6100, 6120);
+  const input = {
+    algo,
+    now: T0_0900 + BAR,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [bar],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  };
+  assert.equal(NiftyVwapStrategy.tick(input).action, "entry");
+  const open = book.positions[0];
+  open.openedAt = new Date(T0_0900 + BAR).toISOString();
+  open.ltp = 80;
+  open.ticked = true;
+  algo.vwapState.lastEntryAt = T0_0900 + BAR;
+  algo.vwapState.exitQueued = true;
+  const filledSl = {
+    id: "sl-done",
+    side: "SELL",
+    status: "FILLED",
+    symbol: open.symbol,
+    option: open.option,
+    strike: open.strike,
+    strategy: algo.name,
+    qty: open.qty,
+    filledQty: open.qty,
+    createdAt: new Date(T0_0900 + BAR + 5_000).toISOString(),
+  };
+  const again = NiftyVwapStrategy.tick({
+    ...input,
+    now: T0_0900 + BAR + 20_000,
+    ceLtp: 80,
+    peLtp: 60,
+    orders: [filledSl],
+    positions: book.positions,
+  });
+  assert.equal(again.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(again.reason, "already-filled");
+  assert.equal(book.exits.length, 0);
+  assert.equal(algo.lastSignal, "EXIT DONE");
+  assert.equal(algo.vwapState.fillPrice, 0);
+  const rematerialize = NiftyVwapStrategy.tick({
+    ...input,
+    now: T0_0900 + BAR + 25_000,
+    ceLtp: 80,
+    peLtp: 60,
+    orders: [filledSl],
+    positions: book.positions,
+  });
+  assert.equal(rematerialize.action, "exit", String(algo.lastSignal || ""));
+  assert.equal(rematerialize.reason, "already-filled");
+  assert.equal(book.exits.length, 0);
+});
+
+test("a fresh queued crude SL holds for 20s instead of sending again", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE SL hold queue", initialSlPct: 10, maxTradesPerDay: 10 });
+  const book = bookAdapter();
+  const now = T0_0900 + BAR;
+  const input = {
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  };
+  assert.equal(NiftyVwapStrategy.tick(input).action, "entry");
+  book.positions[0].ltp = 80;
+  book.positions[0].ticked = true;
+  algo.vwapState.exitQueued = true;
+  algo.vwapState.exitQueuedAt = now + 1_000;
+  const hold = NiftyVwapStrategy.tick({
+    ...input,
+    now: now + 10_000,
+    ceLtp: 80,
+    peLtp: 60,
+    positions: book.positions,
+  });
+  assert.equal(hold.action, "exit-pending", String(algo.lastSignal || ""));
+  assert.equal(book.exits.length, 0);
+});
+
 test("first candle SL uses a sane chain print when the tick is still at fill", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "SL chain mark", initialSlPct: 20 });
   const book = bookAdapter();

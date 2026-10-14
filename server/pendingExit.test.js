@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isLeftoverWorkingSell, pendingExitOnBook, rowTimeMs, sameExitContract } from "./pendingExit.js";
+import { filledExitOnBook, isLeftoverWorkingSell, pendingExitOnBook, rowTimeMs, sameExitContract } from "./pendingExit.js";
 
 test("leftover PENDING SELLs from before this lot are not a live exit", () => {
   const open = { symbol: "CRUDEOIL 6100 CE", option: "CE", strike: 6100, openedAt: "2026-08-21T04:00:00.000Z" };
@@ -40,4 +40,54 @@ test("rowTimeMs and sameExitContract read the lot identity", () => {
   assert.equal(sameExitContract({ securityId: "1" }, { securityId: "1" }), true);
   assert.equal(sameExitContract({ option: "PE", strike: 100 }, { option: "PE", strike: 100 }), true);
   assert.equal(sameExitContract({ option: "PE", strike: 100 }, { option: "CE", strike: 100 }), false);
+});
+
+test("a FILLED SL SELL for this lot is already done", () => {
+  const open = { symbol: "CRUDEOIL 6100 CE", option: "CE", strike: 6100, openedAt: "2026-08-21T04:00:00.000Z" };
+  const filled = {
+    id: "sl-filled",
+    side: "SELL",
+    status: "FILLED",
+    symbol: "CRUDEOIL 6100 CE",
+    option: "CE",
+    strike: 6100,
+    strategy: "CRUDE OIL",
+    filledQty: 100,
+    createdAt: "2026-08-21T04:05:00.000Z",
+  };
+  assert.equal(filledExitOnBook([filled], open, "CRUDE OIL", { lastEntryAt: Date.parse(open.openedAt) }), true);
+  assert.equal(pendingExitOnBook([filled], open, "CRUDE OIL", { lastEntryAt: Date.parse(open.openedAt) }), false);
+});
+
+test("a leftover FILLED SELL from before this lot is not this lot's exit", () => {
+  const open = { symbol: "CRUDEOIL 6100 CE", option: "CE", strike: 6100, openedAt: "2026-08-21T04:00:00.000Z" };
+  const leftover = {
+    id: "old-sl-fill",
+    side: "SELL",
+    status: "FILLED",
+    symbol: "CRUDEOIL 6100 CE",
+    option: "CE",
+    strike: 6100,
+    strategy: "CRUDE OIL",
+    filledQty: 100,
+    createdAt: "2026-08-21T03:50:00.000Z",
+  };
+  assert.equal(filledExitOnBook([leftover], open, "CRUDE OIL", { lastEntryAt: Date.parse(open.openedAt) }), false);
+});
+
+test("a member-copy FILLED SELL is not the admin exit", () => {
+  const open = { symbol: "CRUDEOIL 6100 CE", option: "CE", strike: 6100, openedAt: "2026-08-21T04:00:00.000Z" };
+  const copy = {
+    id: "copy-sl",
+    side: "SELL",
+    status: "FILLED",
+    symbol: "CRUDEOIL 6100 CE",
+    option: "CE",
+    strike: 6100,
+    strategy: "CRUDE OIL",
+    copyUserId: "u-copy",
+    filledQty: 100,
+    createdAt: "2026-08-21T04:05:00.000Z",
+  };
+  assert.equal(filledExitOnBook([copy], open, "CRUDE OIL", { lastEntryAt: Date.parse(open.openedAt) }), false);
 });

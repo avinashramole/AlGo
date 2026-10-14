@@ -53,3 +53,17 @@ export function pendingExitOnBook(orders = [], open, strategyName, state = {}) {
     return true;
   });
 }
+
+/** Broker already filled the SL/TGT SELL for this lot — do not send another. */
+export function filledExitOnBook(orders = [], open, strategyName, state = {}) {
+  return (orders || []).some((row) => {
+    if (row?.copyUserId) return false;
+    if (String(row?.side || "").toUpperCase() !== "SELL") return false;
+    if (strategyName && String(row.strategy || "") !== String(strategyName || "")) return false;
+    if (!sameExitContract(row, open || {})) return false;
+    if (isLeftoverWorkingSell(row, open, state)) return false;
+    const status = String(row?.status || "").toUpperCase();
+    if (["FILLED", "TRADED", "PARTIAL", "PART_TRADED"].includes(status)) return true;
+    return Number(row?.filledQty || 0) > 0;
+  });
+}
