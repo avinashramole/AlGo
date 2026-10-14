@@ -58,6 +58,7 @@ import {
   OptionStrikeSelector,
   optionEngineConfig,
   parseIstHm,
+  parseBarMinutes,
   PaperTradingAdapter,
   PositionManager,
   resetSession,
@@ -387,19 +388,13 @@ export function pickBacktestTimeframe(requested, days) {
 
 function tfMinutesForSample(tf) {
   const raw = String(tf || "5m");
-  if (raw === "1m") return 1;
-  if (raw === "2m") return 2;
-  if (raw === "10m") return 10;
-  if (raw === "15m") return 15;
-  if (raw === "30m") return 30;
-  if (raw === "1H" || raw === "1h") return 60;
   if (raw === "1D" || raw === "1d") return 390;
-  return 5;
+  return parseBarMinutes(raw, 5);
 }
 
 function sessionSlots(tf) {
   if (tf === "1D" || tf === "1d" || tf === "day") return ["15:30"];
-  const step = tf === "1m" ? 1 : tf === "2m" ? 2 : tf === "5m" ? 5 : tf === "10m" ? 10 : tf === "15m" ? 15 : tf === "30m" ? 30 : 60;
+  const step = parseBarMinutes(tf, 60);
   const slots = [];
   for (let minute = 9 * 60 + 15; minute < 15 * 60 + 30; minute += step) {
     slots.push(`${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`);
@@ -4673,13 +4668,7 @@ function barsMatchMinutes(candles, minutes) {
 }
 
 function futureBarMinutes(timeframe) {
-  const tf = String(timeframe || "5m");
-  if (tf === "1m") return 1;
-  if (tf === "2m") return 2;
-  if (tf === "10m") return 10;
-  if (tf === "15m") return 15;
-  if (tf === "1H" || tf === "1h") return 60;
-  return 5;
+  return parseBarMinutes(timeframe, 5);
 }
 
 function futureCandleSource() {
@@ -5365,8 +5354,7 @@ export function getCandles(tf = "5m", symbol = "NIFTY") {
   if (!liveRows.length) return [];
   const unit = String(tf || "5m");
   if (unit === "1D" || unit === "1d" || unit === "D") return clone(aggregateDailyIst(liveRows));
-  const minutes =
-    unit === "1m" ? 1 : unit === "2m" ? 2 : unit === "3m" ? 3 : unit === "5m" ? 5 : unit === "10m" ? 10 : unit === "15m" ? 15 : unit === "30m" ? 30 : unit === "1H" || unit === "1h" ? 60 : 5;
+  const minutes = parseBarMinutes(unit, 5);
   if (minutes <= 1) return clone(liveRows);
   return VwapSignalEngine.aggregateSessionBars(liveRows, minutes);
 }

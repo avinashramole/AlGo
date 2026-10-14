@@ -10,6 +10,10 @@ import {
   STRATEGY_SYMBOLS,
   TEST1_SCRIPTS,
   TIMEFRAMES,
+  FIRST_CANDLE_TIMEFRAMES,
+  firstCandleMinutes,
+  firstCandleTimeframeSelect,
+  firstCandleTimeframeValue,
   defaultConditions,
   emptyStrategy,
   formatConditionGroup,
@@ -845,20 +849,34 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             Timeframe
             <select
               className={fieldClass}
-              value={reversal || hedge ? "15m" : vwap || test2 ? "5m" : form.timeframe || "5m"}
+              value={
+                reversal || hedge
+                  ? "15m"
+                  : vwap || test2
+                    ? "5m"
+                    : firstCandle || crudeFirst
+                      ? firstCandleTimeframeSelect(form.timeframe)
+                      : form.timeframe || "5m"
+              }
               disabled={(engine && !firstCandle && !test1) || test2}
               data-test1-timeframe={test1 ? "true" : undefined}
+              data-first-candle-timeframe={firstCandle || crudeFirst ? "true" : undefined}
               data-mir-timeframe={mir ? "true" : undefined}
               onChange={(event) => {
-                const timeframe = event.target.value;
+                const picked = event.target.value;
                 if (firstCandle || crudeFirst) {
+                  const alreadyCustom = firstCandleTimeframeSelect(form.timeframe) === "custom";
+                  const timeframe = firstCandleTimeframeValue(
+                    picked,
+                    picked === "custom" ? (alreadyCustom ? firstCandleMinutes(form.timeframe) : 20) : undefined,
+                  );
                   set({
                     timeframe,
                     entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
                   });
                   return;
                 }
-                set({ timeframe });
+                set({ timeframe: picked });
               }}
             >
               {(reversal || hedge
@@ -867,16 +885,37 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   ? ["5m"]
                   : mir
                     ? [...MULTI_INDEX_TIMEFRAMES]
-                  : test1 || test2 || firstCandle || crudeFirst || niftyTest
+                  : firstCandle || crudeFirst
+                    ? [...FIRST_CANDLE_TIMEFRAMES, "custom"]
+                  : test1 || test2 || niftyTest
                     ? ["1m", "2m", "5m", "10m", "15m"]
                     : TIMEFRAMES
               ).map((row) => (
                 <option key={row} value={row}>
-                  {row}
+                  {row === "custom" ? "Custom" : row}
                 </option>
               ))}
             </select>
           </label>
+          {(firstCandle || crudeFirst) && firstCandleTimeframeSelect(form.timeframe) === "custom" ? (
+            <label className="text-xs font-semibold text-slate-500" data-first-candle-custom-minutes="true">
+              Custom minutes
+              <input
+                className={fieldClass}
+                type="number"
+                min={1}
+                max={240}
+                value={firstCandleMinutes(form.timeframe)}
+                onChange={(event) => {
+                  const timeframe = firstCandleTimeframeValue("custom", Number(event.target.value));
+                  set({
+                    timeframe,
+                    entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
+                  });
+                }}
+              />
+            </label>
+          ) : null}
           <label className="text-xs font-semibold text-slate-500">
             Broker
             <select
@@ -1132,7 +1171,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                 <input className={fieldClass} value={form.firstBarStartIst || "09:00"} onChange={(event) => set({ firstBarStartIst: event.target.value })} placeholder="09:00" />
               </label>
               <label className="text-xs font-semibold text-slate-500">
-                {crudeFirst ? "First 5m close, then every 5m" : "Entry evaluation (IST)"}
+                {crudeFirst ? `First ${form.timeframe || "5m"} close, then every ${form.timeframe || "5m"}` : "Entry evaluation (IST)"}
                 <input className={fieldClass} value={firstCandleEntryIst(form.firstBarStartIst, form.timeframe, form.entryEvaluationIst)} onChange={(event) => set({ entryEvaluationIst: event.target.value })} placeholder={firstCandleEntryIst(form.firstBarStartIst, form.timeframe)} />
               </label>
               <label className="text-xs font-semibold text-slate-500">

@@ -264,7 +264,22 @@ export function AlgoScreen() {
       instrument: draft.kind === "nifty-test" ? "future" : isEngineKind(draft.kind) ? "option" : draft.instrument,
       side: draft.kind === "nifty-test" ? "BOTH" : draft.side,
       startTimeIst: draft.kind === "nifty-test" ? draft.startTimeIst || "09:15" : draft.startTimeIst,
-      timeframe: draft.kind === "nifty-vwap" ? "5m" : draft.kind === "nifty-first-candle" || draft.kind === "nifty-test" ? (["1m", "5m", "15m"].includes(draft.timeframe) ? draft.timeframe : "5m") : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge" ? "15m" : draft.timeframe,
+      timeframe:
+        draft.kind === "nifty-vwap"
+          ? "5m"
+          : draft.kind === "nifty-first-candle" || draft.kind === "crude-first-candle"
+            ? /^\d+m$/i.test(String(draft.timeframe || "")) || /^(1H|1h)$/.test(String(draft.timeframe || ""))
+              ? /^(1H|1h)$/.test(String(draft.timeframe || ""))
+                ? "60m"
+                : draft.timeframe
+              : "5m"
+          : draft.kind === "nifty-test"
+            ? ["1m", "5m", "15m"].includes(draft.timeframe)
+              ? draft.timeframe
+              : "5m"
+            : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge"
+              ? "15m"
+              : draft.timeframe,
       dailyLiveIst: draft.kind === "nifty-first-candle" ? draft.dailyLiveIst || "09:00" : draft.dailyLiveIst,
       firstBarStartIst: draft.kind === "nifty-first-candle" ? draft.firstBarStartIst || "09:00" : draft.firstBarStartIst,
       entryEvaluationIst: draft.kind === "nifty-first-candle" ? draft.entryEvaluationIst || "09:05" : draft.entryEvaluationIst,

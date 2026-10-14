@@ -4,7 +4,7 @@ import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
 import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect, STALE_LIVE_SEND_MS } from "./NiftyVwapStrategy.js";
-import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyOptionEngineAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
+import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, firstCandleBarMinutes, firstCandleEntryIst, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyOptionEngineAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig, parseBarMinutes, resolveFirstCandleTimeframe } from "./config.js";
 import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap, nextCandleEntryWindow } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
 import { runtimeState, PositionManager } from "./PositionManager.js";
@@ -1398,6 +1398,35 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.expiryKind, "monthly");
   assert.equal(updated.strikeOffset, 1);
   assert.equal(updated.maxTradesPerDay, 2);
+});
+
+test("Nifty and Crude first candle keep 5 10 15 30 60 and custom minutes", () => {
+  assert.equal(parseBarMinutes("5m"), 5);
+  assert.equal(parseBarMinutes("10m"), 10);
+  assert.equal(parseBarMinutes("15m"), 15);
+  assert.equal(parseBarMinutes("30m"), 30);
+  assert.equal(parseBarMinutes("60m"), 60);
+  assert.equal(parseBarMinutes("1H"), 60);
+  assert.equal(parseBarMinutes("20m"), 20);
+  assert.equal(parseBarMinutes("20"), 20);
+  assert.equal(resolveFirstCandleTimeframe("1H"), "60m");
+  assert.equal(resolveFirstCandleTimeframe("20"), "20m");
+  assert.equal(firstCandleBarMinutes("30m"), 30);
+  assert.equal(firstCandleEntryIst("09:00", "30m"), "09:30");
+  assert.equal(firstCandleEntryIst("09:00", "60m"), "10:00");
+  assert.equal(firstCandleEntryIst("09:00", "20m", "09:05"), "09:20");
+  assert.equal(niftyFirstCandleConfig({ timeframe: "30m" }).timeframe, "30m");
+  assert.equal(niftyFirstCandleConfig({ timeframe: "30m" }).barMinutes, 30);
+  assert.equal(niftyFirstCandleConfig({ timeframe: "60m" }).barMinutes, 60);
+  assert.equal(niftyFirstCandleConfig({ timeframe: "20m" }).barMinutes, 20);
+  assert.equal(crudeFirstCandleConfig({ timeframe: "30m" }).barMinutes, 30);
+  assert.equal(crudeFirstCandleConfig({ timeframe: "20m" }).timeframe, "20m");
+  const nifty30 = normalizeAlgo({ name: "NIFTY", kind: "nifty-first-candle", timeframe: "30m" });
+  assert.equal(nifty30.timeframe, "30m");
+  assert.equal(nifty30.entryEvaluationIst, "09:30");
+  const crudeCustom = normalizeAlgo({ name: "CRUDE OIL", kind: "crude-first-candle", timeframe: "20m" });
+  assert.equal(crudeCustom.timeframe, "20m");
+  assert.equal(crudeFirstCandleConfig(crudeCustom).barMinutes, 20);
 });
 
 test("first candle checks every later 5m candle and allows five trades a day", () => {

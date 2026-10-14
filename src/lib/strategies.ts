@@ -323,6 +323,22 @@ export const PATTERNS = [
 
 export const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "1H"];
 
+export const FIRST_CANDLE_TIMEFRAMES = ["5m", "10m", "15m", "30m", "60m"] as const;
+
+export function firstCandleTimeframeSelect(timeframe?: string) {
+  const raw = String(timeframe || "5m");
+  if (raw === "1H" || raw === "1h") return "60m";
+  return (FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(raw) ? raw : "custom";
+}
+
+export function firstCandleTimeframeValue(select: string, customMinutes?: number) {
+  if (select === "custom") {
+    const n = Math.max(1, Math.min(240, Math.round(Number(customMinutes) || firstCandleMinutes("5m"))));
+    return `${n}m`;
+  }
+  return (FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(select) ? select : "5m";
+}
+
 export const RUN_MODES = [
   { id: "paper" as const, title: "Paper trading", text: "Uses the live Dhan feed. Fills stay virtual on Paper Trading — nothing is sent to Dhan." },
   { id: "backtest" as const, title: "Backtest", text: "Replay the last 1–10 years or custom dates. See P&L, win rate, and trade book." },
@@ -433,10 +449,13 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
 }
 
 export function firstCandleMinutes(timeframe?: string) {
-  if (timeframe === "1m") return 1;
-  if (timeframe === "2m") return 2;
-  if (timeframe === "10m") return 10;
-  if (timeframe === "15m") return 15;
+  const raw = String(timeframe || "").trim();
+  if (raw === "1H" || raw === "1h") return 60;
+  const named: Record<string, number> = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60 };
+  if (named[raw]) return named[raw];
+  const match = raw.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/i) || raw.match(/^(\d+)$/);
+  const n = match ? Number(match[1]) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 240) return Math.round(n);
   return 5;
 }
 
@@ -456,7 +475,7 @@ export function firstCandleEntryIst(firstBar?: string, timeframe?: string, store
   const barClose = addIstMinutes(start, minutes);
   const current = String(stored || "").trim();
   if (!current) return barClose;
-  const otherClocks = [1, 2, 5, 10, 15].filter((step) => step !== minutes).map((step) => addIstMinutes(start, step));
+  const otherClocks = [1, 2, 5, 10, 15, 30, 60].filter((step) => step !== minutes).map((step) => addIstMinutes(start, step));
   if (otherClocks.includes(current)) return barClose;
   return current;
 }

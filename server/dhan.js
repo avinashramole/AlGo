@@ -45,6 +45,7 @@ import { dhanOrderCredentials, dhanSendOptions, isMemberScopedOrder } from "./br
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import { adminBookFromDhan } from "./memberBrokerPnl.js";
 import { looksLikePrevClose, MCX_PREV_CLOSE_MAX } from "./quoteDayChange.js";
+import { parseBarMinutes } from "./niftyVwap/config.js";
 import { crossBuyLimit, needsScripMasterLookup } from "./executionSpeed.js";
 import {
   canAutoGenerate,
@@ -1774,11 +1775,13 @@ function dateOnly(value) {
 }
 
 function intradayInterval(timeframe) {
-  const tf = String(timeframe || "");
-  if (tf === "1m") return "1";
-  if (tf === "5m") return "5";
-  if (tf === "15m") return "15";
-  if (tf === "1H" || tf === "1h") return "60";
+  const minutes = parseBarMinutes(timeframe, 0);
+  if (minutes === 1) return "1";
+  if (minutes === 5) return "5";
+  if (minutes === 15) return "15";
+  if (minutes === 60) return "60";
+  if (minutes > 0 && minutes < 5) return "1";
+  if (minutes > 0) return "5";
   return null;
 }
 
