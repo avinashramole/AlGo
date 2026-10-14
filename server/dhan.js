@@ -40,7 +40,7 @@ import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
 import { chooseDeskExpiry, dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
-import { dhanOrderCredentials, dhanSendOptions } from "./brokerIsolation.js";
+import { dhanOrderCredentials, dhanSendOptions, isMemberScopedOrder } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import { adminBookFromDhan } from "./memberBrokerPnl.js";
 import { looksLikePrevClose, MCX_PREV_CLOSE_MAX } from "./quoteDayChange.js";
@@ -983,6 +983,28 @@ function scheduleFastAccountSync() {
   fastAccountTimer.unref?.();
 }
 
+export function applyPulledDhanAccount({
+  positionsOk = false,
+  positionsRaw = [],
+  holdingsRaw = [],
+  ordersOk = false,
+  ordersRaw = [],
+} = {}) {
+  if (positionsOk) {
+    const book = adminBookFromDhan(positionsRaw, null);
+    if (book && (book.closed.length || book.open.length || book.realizedPnl || book.unrealizedPnl)) {
+      setAdminBrokerBook(book);
+    }
+    const positions = mapDhanPositions(positionsRaw);
+    const holdings = mapDhanHoldings(holdingsRaw).filter(
+      (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
+    );
+    replaceDhanBook([...positions, ...holdings]);
+    setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
+  }
+  if (ordersOk) replaceDhanOrders(mapDhanOrders(ordersRaw, snapshot().algos || []));
+}
+
 async function pullAccount() {
   if (!accessToken) return;
   if (Date.now() < quoteBackoffUntil) return;
@@ -996,20 +1018,13 @@ async function pullAccount() {
         .then((rows) => ({ ok: true, rows }))
         .catch(() => ({ ok: false, rows: [] })),
     ]);
-    const positionsRaw = positionsPull.rows;
-    if (positionsPull.ok) {
-      const book = adminBookFromDhan(positionsRaw, null);
-      if (book && (book.closed.length || book.open.length || book.realizedPnl || book.unrealizedPnl)) {
-        setAdminBrokerBook(book);
-      }
-    }
-    const positions = mapDhanPositions(positionsRaw);
-    const holdings = mapDhanHoldings(holdingsRaw).filter(
-      (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
-    );
-    replaceDhanBook([...positions, ...holdings]);
-    if (ordersPull.ok) replaceDhanOrders(mapDhanOrders(ordersPull.rows, snapshot().algos || []));
-    setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
+    applyPulledDhanAccount({
+      positionsOk: positionsPull.ok,
+      positionsRaw: positionsPull.rows,
+      holdingsRaw,
+      ordersOk: ordersPull.ok,
+      ordersRaw: ordersPull.rows,
+    });
   } catch (error) {
     handleDhanPollError("positions", error);
   }
@@ -1524,6 +1539,10 @@ async function finishOptionSelect(gen, und, expiry) {
 }
 
 function startLiveLoop() {
+  if (accessToken && pollTimer) {
+    if (clientId && !socket && !reconnectTimer) startSocket();
+    return;
+  }
   stopLiveLoop(false);
   restoreLastIndexQuotes();
   if (!(futureInstruments || []).some((row) => row?.securityId)) {
@@ -1658,6 +1677,25 @@ function stampAdminFeedLive() {
     clientId: clientId || session.clientId || null,
     ...dhanTokenStatus(),
   });
+}
+
+/** Use the in-memory or saved token for a BUY send without stopping the quote loop. */
+export function ensureDhanOrderSession() {
+  if (!accessToken || !clientId) {
+    const saved = savedDhanAccess();
+    if (saved.token) accessToken = saved.token;
+    if (saved.id) clientId = saved.id;
+  }
+  if (!accessToken || !clientId) return false;
+  if (isDhanFeedLoopRunning()) {
+    stampAdminFeedLive();
+    return true;
+  }
+  if (!dhanFeedWasStopped()) {
+    stampAdminFeedLive();
+    startLiveLoop();
+  }
+  return true;
 }
 
 function savedDhanAccess() {
@@ -2006,6 +2044,7 @@ function attachPlaceLive(error, extra = {}) {
 }
 
 export async function placeDhanOrder(payload = {}) {
+  if (!isMemberScopedOrder(payload)) ensureDhanOrderSession();
   const creds = dhanOrderCredentials(payload, { accessToken, clientId });
   const { token, account } = creds;
   const id = creds.clientId;
@@ -2243,22 +2282,32 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     clientId: cleanId,
     keyHint: tokenHint(accessToken),
   });
+  const keepLoop = isDhanFeedLoopRunning();
   setDhanFeed({
     live: true,
-    source: "rest",
     error: null,
     tokenHint: tokenHint(accessToken),
     clientId: cleanId,
-    quoteCount: 0,
-    positionCount: 0,
-    holdingCount: 0,
-    ipCheck: null,
+    ...(keepLoop
+      ? {}
+      : {
+          source: "rest",
+          quoteCount: 0,
+          positionCount: 0,
+          holdingCount: 0,
+          ipCheck: null,
+        }),
     ...dhanTokenStatus(),
   });
-  clearSimulatedDesk();
-  startLiveLoop();
+  if (keepLoop) {
+    stampAdminFeedLive();
+    console.log(`Dhan live client ${cleanId} · quote feed stayed on for the BUY send`);
+  } else {
+    clearSimulatedDesk();
+    startLiveLoop();
+    console.log(`Dhan live client ${cleanId} · quote feed started without waiting on /profile`);
+  }
   void fetchDhanIp();
-  console.log(`Dhan live client ${cleanId} · quote feed started without waiting on /profile`);
 
   try {
     const { profile, funds } = await validateDhan(cleanToken, cleanId);
@@ -2453,6 +2502,7 @@ async function resumeSavedFeed(session, reason, { refreshIfLive = false } = {}) 
   const useToken = saved.token || session.accessToken;
   const useId = saved.id || session.clientId;
   if (!useToken) return;
+  if (isDhanFeedLoopRunning()) return;
   armDataFeedOnBoot();
   if (!useId || (isDhanLive() && !refreshIfLive)) return;
   try {

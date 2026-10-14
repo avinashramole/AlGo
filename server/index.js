@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureAdminDataFeedRunning, ensureDhanLiveFromSavedToken, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, scheduleAdminDataFeedWatchdog, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureAdminDataFeedRunning, ensureDhanLiveFromSavedToken, ensureDhanOrderSession, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, scheduleAdminDataFeedWatchdog, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureReplayBars } from "./indexHistory.js";
 import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
@@ -130,9 +130,9 @@ async function sendLiveBrokerOrder(payload) {
   const adminPayload = adminLiveOrderPayload(payload);
   const brokerId = String(adminPayload.brokerId || "dhan");
   if (brokerId === "dhan") {
-    if (!isDhanLive()) {
+    if (!ensureDhanOrderSession() && !isDhanLive()) {
       const started = await ensureDhanLiveFromSavedToken();
-      if (!started.live) {
+      if (!started.live && !ensureDhanOrderSession()) {
         throw Object.assign(new Error("Dhan is not LIVE. Connect Access Token on Brokers."), { status: 400 });
       }
     }
