@@ -181,15 +181,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           Alert.alert("Paper / live", "Backtest strategies do not go live. Use Run backtest.");
           return;
         }
-        if (nextEnabled && previous.runMode !== "backtest" && !dataRef.current.dhanFeed?.live) {
-          Alert.alert(
-            "Paper / live",
-            previous.runMode === "paper"
-              ? "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first."
-              : "Start live needs Dhan LIVE — real CE/PE and futures orders only.",
-          );
-          return;
-        }
         const status = nextEnabled ? (previous.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
         pendingToggles.current.set(id, { enabled: nextEnabled, status });
         patchAlgo(id, { enabled: nextEnabled, status });

@@ -368,3 +368,24 @@ test("a deleted client is removed from every strategy map", () => {
     deleteAlgo(created.id);
   }
 });
+
+test("paper to live with enabled starts LIVE in one write", () => {
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    name: `Paper Live Shift ${Date.now()}`,
+    kind: "nifty-first-candle",
+    runMode: "paper",
+  });
+  try {
+    const live = updateAlgo(created.id, { runMode: "live", enabled: true, brokerId: "dhan" });
+    assert.equal(live.runMode, "live");
+    assert.equal(live.enabled, true);
+    assert.equal(live.status, "LIVE");
+    assert.equal(live.brokerId, "dhan");
+    assert.equal(live.holdDailyLive, false);
+    assert.equal(live.allowFreshLiveEntry, true);
+  } finally {
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false });
+  }
+});

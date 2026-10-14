@@ -922,14 +922,21 @@ app.post("/api/option-chain/select", async (req, res) => {
   }
 });
 
-app.post("/api/algos/:id/toggle", (req, res) => {
+app.post("/api/algos/:id/toggle", async (req, res) => {
   try {
     const current = getAlgo(req.params.id);
     const wantEnabled = req.body?.enabled;
-    const starting = current && current.runMode === "live" && !current.enabled && wantEnabled !== false;
+    const starting = current && !current.enabled && wantEnabled !== false && current.runMode !== "backtest";
     if (starting && !isDhanLive()) {
-      res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
-      return;
+      const feed = await ensureAdminDataFeedRunning(current.runMode === "paper" ? "paper-start" : "live-start");
+      if (!feed.live && current.runMode === "live") {
+        res.status(400).json({ error: "Start live needs Dhan LIVE — real CE/PE and futures orders only." });
+        return;
+      }
+      if (!feed.live && current.runMode === "paper") {
+        res.status(400).json({ error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." });
+        return;
+      }
     }
     const algo = toggleAlgo(req.params.id, { enabled: wantEnabled });
     if (!algo) {
@@ -955,11 +962,18 @@ app.post("/api/algos", (req, res) => {
   }
 });
 
-app.put("/api/algos/:id", (req, res) => {
+app.put("/api/algos/:id", async (req, res) => {
   try {
+    const current = getAlgo(req.params.id);
+    const nextMode = String(req.body?.runMode || current?.runMode || "");
+    const wantStart = req.body?.enabled === true;
+    const shiftingToLive = current && current.runMode !== "live" && nextMode === "live";
+    if ((shiftingToLive || wantStart) && !isDhanLive()) {
+      await ensureAdminDataFeedRunning(shiftingToLive ? "paper-to-live" : "live-start");
+    }
     const result = updateAlgo(req.params.id, req.body || {});
     if (result.error) {
-      res.status(404).json({ error: result.error });
+      res.status(result.error.includes("not found") ? 404 : 400).json({ error: result.error });
       return;
     }
     res.json({ ok: true, algo: result, snapshot: null });

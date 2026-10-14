@@ -822,11 +822,17 @@ test("a saved token resumes the data feed and VPS restart arms Start data feed",
     assert.match(dhanSrc, /armDataFeedOnBoot\(\)/);
     assert.match(dhanSrc, /ensureAdminDataFeedRunning/);
     assert.match(dhanSrc, /scheduleAdminDataFeedWatchdog/);
+    assert.match(dhanSrc, /void fetchDhanIp\(\)/);
+    assert.match(dhanSrc, /Promise\.all/);
     const indexSrc = fs.readFileSync(new URL("./index.js", import.meta.url), "utf8");
     assert.match(indexSrc, /scheduleAdminDataFeedWatchdog\(\)/);
     assert.match(indexSrc, /\/api\/internal\/start-data-feed/);
+    assert.match(indexSrc, /paper-to-live/);
+    assert.match(indexSrc, /live-start/);
     const deploySrc = fs.readFileSync(new URL("../deploy/update-website.sh", import.meta.url), "utf8");
     assert.match(deploySrc, /\/api\/internal\/start-data-feed/);
+    const algoUi = fs.readFileSync(new URL("../src/pages/Algo.tsx", import.meta.url), "utf8");
+    assert.match(algoUi, /runMode: mode,[\s\S]*enabled: true/);
   } finally {
     if (prevSession === undefined) delete process.env.T2S_DHAN_SESSION_FILE;
     else process.env.T2S_DHAN_SESSION_FILE = prevSession;

@@ -281,8 +281,9 @@ export function Algo() {
           id: algo.id,
           runMode: mode,
           brokerId: mode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
+          enabled: true,
         });
-        await refresh();
+        return;
       }
       await toggle(algo.id, true);
     } catch (err) {

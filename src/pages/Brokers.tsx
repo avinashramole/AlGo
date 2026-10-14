@@ -188,7 +188,7 @@ export function Brokers() {
     setError("");
     try {
       await startDhanFeed();
-      await refresh();
+      void refresh();
     } catch (err) {
       setError(catchDeskError(err, "Could not start the data feed"));
     } finally {

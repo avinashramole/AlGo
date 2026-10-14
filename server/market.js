@@ -3147,11 +3147,47 @@ export function updateAlgo(id, payload) {
   next.mappedClientIds = mappedClientIdsForMembers(next.mappedClientIds, memberIds());
   next.id = id;
   const leftLive = previous.runMode === "live" && next.runMode !== "live";
+  const enteredLive = previous.runMode !== "live" && next.runMode === "live";
+  const enteredPaper = previous.runMode !== "paper" && next.runMode === "paper";
   if (next.runMode === "paper" || next.runMode === "backtest") next.brokerId = "paper";
+  if (enteredLive) {
+    next.brokerId = next.brokerId && next.brokerId !== "paper" ? next.brokerId : "dhan";
+    next.holdDailyLive = false;
+    next.allowFreshLiveEntry = true;
+  }
   if (leftLive) {
     next.holdDailyLive = true;
     cancelPendingForStrategy(next.name || previous.name, { buysOnly: true });
   }
+  const wantStart = payload?.enabled === true;
+  if (wantStart && (enteredLive || enteredPaper || !next.enabled)) {
+    if (enteredLive || next.runMode === "live") {
+      const brokerId = next.brokerId && next.brokerId !== "paper" ? next.brokerId : "dhan";
+      const ready = brokerId === "dhan" ? isDhanFeedLive() : isLiveBrokerReady(brokerId);
+      if (!ready) {
+        const name = publicBrokers().brokers.find((row) => row.id === brokerId)?.name || brokerId;
+        return { error: `Start live needs ${name} LIVE — connect that broker on Brokers first.` };
+      }
+    }
+    if (enteredPaper || next.runMode === "paper") {
+      if (!isDhanFeedLive()) {
+        return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
+      }
+    }
+    next.enabled = true;
+    next.holdDailyLive = false;
+    resetStrategyOrders(next);
+    if (!isNiftyTest2Algo(next) || niftyTest2Config(next).holdStyle === "intraday") dropPreviousIntradayBook(next);
+    next.lastPaperAt = 0;
+    next.lastLiveAt = 0;
+    next.lastLiveSide = "";
+    next.lastSignal = isNiftyTestAlgo(next) ? "NO SIGNAL" : "WAIT";
+    beginStrategyRecord(next);
+  }
+  if (enteredLive && !wantStart) beginStrategyRecord(next);
+  if (next.enabled && next.runMode === "live") next.status = "LIVE";
+  else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+  else if (!next.enabled && next.runMode !== "backtest") next.status = "PAUSED";
   state.algos[index] = next;
   state.notifications.unshift(`Strategy updated: ${next.name}`);
   persistAlgos();

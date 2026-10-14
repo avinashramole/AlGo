@@ -2128,13 +2128,10 @@ export async function cancelDhanOrder(orderId) {
 }
 
 export async function validateDhan(token, id) {
-  const profile = await dhanGet("/profile", token, id);
-  let funds = null;
-  try {
-    funds = await dhanGet("/fundlimit", token, id);
-  } catch {
-    funds = null;
-  }
+  const [profile, funds] = await Promise.all([
+    dhanGet("/profile", token, id),
+    dhanGet("/fundlimit", token, id).catch(() => null),
+  ]);
   return { profile, funds };
 }
 
@@ -2218,7 +2215,7 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
   });
   clearSimulatedDesk();
   startLiveLoop();
-  await fetchDhanIp();
+  void fetchDhanIp();
   return { profile, funds, tokenHint: tokenHint(accessToken), ...dhanTokenStatus() };
 }
 

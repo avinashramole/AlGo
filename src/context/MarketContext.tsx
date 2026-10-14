@@ -453,13 +453,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         if (previous.runMode === "backtest" && nextEnabled) {
           throw new Error("Backtest strategies do not go live. Use Run backtest.");
         }
-        if (nextEnabled && previous.runMode !== "backtest" && !dataRef.current.dhanFeed?.live) {
-          throw new Error(
-            previous.runMode === "paper"
-              ? "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first."
-              : "Start live needs Dhan LIVE — real CE/PE and futures orders only.",
-          );
-        }
         const status = nextEnabled ? (previous.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
         pendingToggles.current.set(id, { enabled: nextEnabled, status });
         patchAlgo(id, { enabled: nextEnabled, status });
@@ -480,9 +473,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           return Boolean(row.enabled) !== enabled;
         });
         if (!rows.length) return;
-        if (enabled && !dataRef.current.dhanFeed?.live) {
-          throw new Error("Start live needs Dhan LIVE — real CE/PE and futures orders only.");
-        }
         for (const row of rows) {
           const status = enabled ? (row.runMode === "paper" ? "PAPER" : "LIVE") : "PAUSED";
           pendingToggles.current.set(row.id, { enabled, status });
