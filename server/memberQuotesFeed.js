@@ -67,9 +67,8 @@ export function cardsFromMemberQuotes(userId, quotes = [], deskIndices = []) {
     const isMcx = MCX_SPOT_FROM_FUT.has(card.symbol);
     const priceRaw = Number(indexQuote?.ltp || (isMcx ? futureQuote?.ltp : 0));
     const futureRaw = Number(futureQuote?.ltp || 0);
-    const deskPrice = Number(desk?.price || 0);
     const deskFuture = Number(desk?.future || 0);
-    const price = priceRaw > 0 ? priceRaw : isMcx ? futureRaw : deskPrice;
+    const price = priceRaw > 0 ? priceRaw : isMcx ? futureRaw : 0;
     const seed = indexQuote || futureQuote || {};
     const day = dayChangeFromQuote(
       price,
@@ -96,7 +95,7 @@ export function cardsFromMemberQuotes(userId, quotes = [], deskIndices = []) {
       changePct: day.changePct,
       prevClose: day.prevClose,
       spark: sparkMap[card.symbol] || [],
-      future: futureRaw > 0 ? round2(futureRaw) : isMcx && price > 0 ? round2(price) : deskFuture > 0 ? round2(deskFuture) : 0,
+      future: futureRaw > 0 ? round2(futureRaw) : isMcx && price > 0 ? round2(price) : price > 0 && deskFuture > 0 ? round2(deskFuture) : 0,
       futureExpiry: futureQuote?.expiry || "",
       vwap: vwapRaw > 0 ? round2(vwapRaw) : 0,
       futureVwap: vwapRaw > 0 ? round2(vwapRaw) : 0,

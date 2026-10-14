@@ -1091,6 +1091,32 @@ function noteArmedTargetResult(payload, live, error) {
   rememberArmedTarget(key, { orderId, pending: false });
 }
 
+function openForFilledTarget(row, key) {
+  const armed = armedTargetSells.get(key);
+  const stored = armed?.position;
+  if (stored && (stored.symbol || stored.id) && String(stored.side || stored.type || "BUY").toUpperCase() !== "SELL") {
+    return stored;
+  }
+  const match = (state.positions || []).find(
+    (pos) =>
+      !pos.copyUserId &&
+      strategyKey(pos.strategy) === key &&
+      Number(pos.qty) > 0 &&
+      sameLiveContract(pos, row),
+  );
+  if (match) return match;
+  return {
+    symbol: row.symbol,
+    qty: row.filledQty || row.qty,
+    strategy: row.strategy,
+    type: "BUY",
+    ltp: row.price,
+    avg: row.avg || row.price,
+    brokerId: row.brokerId,
+    securityId: row.securityId,
+  };
+}
+
 function fanOutFilledTarget(row) {
   const key = strategyKey(row?.strategy);
   const armed = armedTargetSells.get(key);
@@ -1100,7 +1126,7 @@ function fanOutFilledTarget(row) {
   armed.copied = true;
   const algo = (state.algos || []).find((item) => strategyKey(item.name) === key) || {};
   dispatchMemberExitCopies(
-    { ...(armed.position || {}), role: "target", exitReason: "target" },
+    { ...openForFilledTarget(row, key), role: "target", exitReason: "target" },
     algo,
     { enqueueLiveOrder: enqueueLiveAlgoOrder },
   );
@@ -1109,6 +1135,7 @@ function fanOutFilledTarget(row) {
 export function armLiveTarget({ algo, open, target, mark, mode }) {
   if (mode !== "live" || !open || !(Number(open.qty) > 0)) return false;
   const key = strategyKey(algo?.name);
+  rememberArmedTarget(key, { position: open, positionId: open.id });
   const plan = planTargetExit({ mark, target: Number(target), resting: targetSellResting(key, open) });
   return plan.action === "resting" || plan.action === "wait-resting";
 }

@@ -34,6 +34,24 @@ function claimMemberExitCopy(copy = {}) {
   return true;
 }
 
+export function releaseMemberExitCopy(copy = {}) {
+  if (!copy.copyUserId || !copy.symbol) return;
+  sentMemberExits.delete(memberExitLockKey(copy));
+}
+
+export function clearMemberExitCopiesForEntry(copy = {}) {
+  const userId = String(copy.copyUserId || "").trim();
+  const symbol = String(copy.symbol || "").trim();
+  const strategy = String(copy.strategy || "").trim();
+  if (!userId || !symbol) return;
+  for (const key of sentMemberExits.keys()) {
+    const [uid, sym, , strat] = String(key).split("|");
+    if (uid === userId && sym === symbol && (!strategy || strat === strategy)) {
+      sentMemberExits.delete(key);
+    }
+  }
+}
+
 function strategyLabel(name) {
   const text = String(name || "").trim().toLowerCase();
   if (!text) return "";
@@ -348,6 +366,9 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
   const live = [];
   const exitCopy = /^(exit|target|sl)$/i.test(String(payload.role || ""));
   for (const copy of memberCopyPayloads(payload, algo || {})) {
+    if (!exitCopy && String(copy.side || "").toUpperCase() === "BUY") {
+      clearMemberExitCopiesForEntry(copy);
+    }
     if (copy.paper || copy.brokerId === "paper") {
       recordMemberCopyFill({ userId: copy.copyUserId, payload: copy, paper: true });
       continue;
@@ -363,7 +384,10 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
     }
     if (exitCopy && !claimMemberExitCopy(copy)) continue;
     if (typeof enqueueLiveOrder === "function") {
-      enqueueLiveOrder(copy);
+      const result = enqueueLiveOrder(copy);
+      if (exitCopy && result && result.queued === false && !result.duplicate) {
+        releaseMemberExitCopy(copy);
+      }
       continue;
     }
     live.push(copy);
@@ -374,7 +398,10 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
       sendCopy: (copy) => sendMemberCopyOrder(copy),
     }).then((outcomes) => {
       for (const item of outcomes) {
-        if (!item.ok) console.log(`Member copy order failed: ${item.error?.message || item.error}`);
+        if (!item.ok) {
+          releaseMemberExitCopy(item.payload);
+          console.log(`Member copy order failed: ${item.error?.message || item.error}`);
+        }
       }
       return outcomes;
     }),
