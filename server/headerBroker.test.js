@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminLiveTape, headerBrokerLabel } from "../src/lib/headerBroker.ts";
+import { adminLiveTape, headerBrokerLabel, memberTapeHasQuotes } from "../src/lib/headerBroker.ts";
 import { brokerSelectLabel, canActivateBroker, uniqueBrokers } from "../src/lib/brokers.ts";
 import fs from "node:fs";
 
@@ -13,6 +13,12 @@ test("admin header uses the selected broker, not a hard-coded Dhan label", () =>
   );
   assert.equal(headerBrokerLabel({ brokerId: "upstox", live: false, hasQuotes: false }), "UPSTOX · wait");
   assert.equal(headerBrokerLabel({ brokerId: "paper" }), "PAPER");
+});
+
+test("member header chip is wait when index cards have no price", () => {
+  assert.equal(memberTapeHasQuotes({ indices: [{ price: 0 }] }), false);
+  assert.equal(headerBrokerLabel({ brokerId: "upstox", live: false, hasQuotes: memberTapeHasQuotes({ indices: [{ price: 0 }] }) }), "UPSTOX · wait");
+  assert.equal(headerBrokerLabel({ brokerId: "upstox", live: false, hasQuotes: memberTapeHasQuotes({ indices: [{ price: 25111 }] }) }), "UPSTOX");
 });
 
 test("member header chip follows the member selected broker", () => {

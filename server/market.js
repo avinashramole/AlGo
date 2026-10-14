@@ -588,38 +588,38 @@ export function peekOptionChain(symbol) {
   return optionChainCache.get(String(symbol || "").toUpperCase()) || null;
 }
 
+function strategyCard(strategy) {
+  const name = String(strategy || "").trim();
+  if (!name) return {};
+  return findLiveCopyAlgo(state.algos || [], name);
+}
+
 export function liveBuyAllowedForStrategy(strategy) {
   const name = String(strategy || "").trim();
   if (!name) return true;
-  const algo = (state.algos || []).find((row) => String(row.name || "") === name);
-  if (!algo) return true;
-  return Boolean(algo.enabled && algo.runMode === "live");
+  const algo = strategyCard(name);
+  if (!algo?.id && !algo?.name) return true;
+  if (algo.runMode === "paper") return false;
+  if (algo.enabled && algo.runMode === "live") return true;
+  if (algo.holdDailyLive) return false;
+  return true;
 }
 
 export function strategyAllowsLiveMemberCopies(strategy) {
   const name = String(strategy || "").trim();
   if (!name) return true;
-  const algo = (state.algos || []).find((row) => String(row.name || "") === name);
-  if (!algo) return true;
-  return Boolean(algo.enabled);
-}
-
-function paperOnlyMemberCopies(payload = {}) {
-  return liveOrderSide(payload) === "BUY" && !strategyAllowsLiveMemberCopies(payload.strategy);
+  const algo = strategyCard(name);
+  if (!algo?.id && !algo?.name) return true;
+  if (algo.enabled) return true;
+  if (algo.holdDailyLive) return false;
+  return true;
 }
 
 function memberCopiesForOrder(payload = {}, algo = {}) {
-  const copies = memberCopyPayloads(payload, algo || {});
-  if (!paperOnlyMemberCopies(payload)) return copies;
-  return copies.map((copy) => ({
-    ...copy,
-    paper: true,
-    brokerId: "paper",
-    leftoverSlot: false,
-    copyBlocked: "",
-    account: undefined,
-    brokerSession: undefined,
-  }));
+  if (liveOrderSide(payload) === "BUY" && !strategyAllowsLiveMemberCopies(payload.strategy)) {
+    return [];
+  }
+  return memberCopyPayloads(payload, algo || {});
 }
 
 export function dropStoppedStrategyLiveEntries(queued = pendingLiveAlgoOrders) {
@@ -898,6 +898,7 @@ function enqueueLiveAlgoOrder(payload) {
   const role = String(payload?.role || "");
   const brokerId = orderBrokerId(payload);
   const allowHedge = payload?.allowHedge === true && role === "hedge";
+  const card = strategyCard(strategy);
   const sameCopy = (row) => String(row?.copyUserId || "") === copyUserId;
   const sameContractPending = pendingLiveAlgoOrders.some(
     (row) =>
@@ -926,7 +927,7 @@ function enqueueLiveAlgoOrder(payload) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
-    const freshAdminEntry = !copyUserId && Boolean((state.algos || []).find((item) => item.name === strategy)?.allowFreshLiveEntry);
+    const freshAdminEntry = !copyUserId && Boolean(card?.allowFreshLiveEntry);
     if (!copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy)) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
@@ -949,9 +950,8 @@ function enqueueLiveAlgoOrder(payload) {
     }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId, copyUserId });
-  if (!copyUserId && side === "BUY") {
-    const algo = (state.algos || []).find((item) => item.name === strategy);
-    if (algo) algo.allowFreshLiveEntry = false;
+  if (!copyUserId && side === "BUY" && (card?.id || card?.name)) {
+    card.allowFreshLiveEntry = false;
   }
   return { ok: true, queued: true, status: "PENDING" };
 }
@@ -1154,11 +1154,9 @@ export function queueLiveAlgoOrder(payload) {
     adminResult = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
   if (!payload.skipMemberCopy) {
-    if (!paperOnlyMemberCopies(deskStamped)) {
-      const algo = liveCopyAlgo(deskStamped);
-      for (const copy of memberCopiesForOrder(deskStamped, algo || {})) {
-        enqueueLiveAlgoOrder(copy);
-      }
+    const algo = liveCopyAlgo(deskStamped);
+    for (const copy of memberCopiesForOrder(deskStamped, algo || {})) {
+      enqueueLiveAlgoOrder(copy);
     }
   }
   if (typeof onLiveBookChange === "function") onLiveBookChange();
@@ -2612,6 +2610,17 @@ function dhanTapeReady() {
   return isDhanFeedLive() || hasLastLiveBook();
 }
 
+export function dhanQuotesStalled(feed = state.dhanFeed, now = Date.now()) {
+  const source = String(feed?.source || "");
+  const live = Boolean(feed?.live) || dhanSourceOwnsTape(source);
+  if (!live) return false;
+  const err = String(feed?.error || "").trim();
+  if (!err) return false;
+  const tick = Number(feed?.lastTickAt) || 0;
+  if (!tick) return true;
+  return now - tick > 45_000;
+}
+
 function publicDhanFeed() {
   const feed = clone(state.dhanFeed);
   let saved = null;
@@ -2625,6 +2634,7 @@ function publicDhanFeed() {
   return {
     ...feed,
     live,
+    stalled: dhanQuotesStalled(feed),
     source: live && source === "idle" ? "rest" : feed.source,
     tokenHint: feed.tokenHint || saved?.tokenHint || null,
     clientId: feed.clientId || saved?.clientId || null,
@@ -2715,9 +2725,10 @@ export function purgeStrategiesNotOnDesk() {
 }
 
 export function clearSimulatedDesk() {
-  state.orders = state.orders.filter((row) => row.paper || row.brokerId === "paper");
-  state.positions = state.positions.filter((row) => row.paper || row.brokerId === "paper");
-  state.closedTrades = (state.closedTrades || []).filter((row) => row.paper || row.brokerId === "paper");
+  const keep = (row) => isPaperRow(row) || (!isSimRow(row) && row?.live !== false);
+  state.orders = (state.orders || []).filter(keep);
+  state.positions = (state.positions || []).filter(keep);
+  state.closedTrades = (state.closedTrades || []).filter(keep);
   state.algos = (state.algos || []).map((algo) =>
     algo.runMode === "paper" ? algo : { ...algo, pnl: algo.runMode === "backtest" ? algo.pnl : 0 },
   );

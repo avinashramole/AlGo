@@ -15,6 +15,18 @@ export function brokerChipName(brokerId?: string, brokerName?: string) {
   return NAMES[id] || (id ? id.toUpperCase() : "");
 }
 
+export function memberTapeHasQuotes(
+  quotes?: {
+    live?: boolean;
+    hasQuotes?: boolean;
+    indices?: Array<{ price?: number; future?: number }>;
+  } | null,
+) {
+  if (!quotes) return false;
+  if (quotes.live || quotes.hasQuotes) return true;
+  return (quotes.indices || []).some((row) => Number(row?.price) > 0 || Number(row?.future) > 0);
+}
+
 export function headerBrokerLabel({
   brokerId,
   brokerName,

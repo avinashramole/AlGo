@@ -32,7 +32,7 @@ import {
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
-import { keepLastIndexPrices, keepStrikeWindow, patchById } from "../lib/deskFeed";
+import { keepLastBookRows, keepLastIndexPrices, keepStrikeWindow, patchById } from "../lib/deskFeed";
 import { OPTION_UNDERLYINGS } from "../lib/markets";
 import { presentDeskAlgo } from "../lib/strategies";
 
@@ -314,6 +314,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       optionMeta: held.optionMeta,
       optionChain,
       indices: keepLastIndexPrices(current.indices || [], incoming.indices || []),
+      positions: keepLastBookRows(current.positions || [], incoming.positions || []),
+      orders: keepLastBookRows(current.orders || [], incoming.orders || []),
     };
     dataRef.current = next;
     writeCachedDesk(next);

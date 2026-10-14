@@ -108,6 +108,11 @@ export function cardsFromMemberQuotes(userId, quotes = [], deskIndices = []) {
   return rows;
 }
 
+function boardHasQuotes(indices = [], live = false) {
+  if (live) return true;
+  return (indices || []).some((row) => Number(row?.price) > 0 || Number(row?.future) > 0);
+}
+
 function emptyQuotes(brokerId, reason) {
   return {
     indices: [],
@@ -116,6 +121,7 @@ function emptyQuotes(brokerId, reason) {
     brokerName: brokerNameOf(brokerId || "paper"),
     live: false,
     lastTickAt: null,
+    hasQuotes: false,
     reason,
   };
 }
@@ -146,6 +152,7 @@ function adminDeskBoard(user, { deskQuotes, now } = {}) {
     brokerName: brokerNameOf(brokerId),
     live,
     lastTickAt: live ? now : null,
+    hasQuotes: boardHasQuotes(indices, live),
     reason: live
       ? "Desk live tape from the admin broker. Install your own broker on Profile to switch to your quotes."
       : "Desk live tape is not ready yet. Admin broker quotes will appear here until you install your own on Profile.",
@@ -172,6 +179,7 @@ function kotakQuoteBoard(now, { live = false, indices = [], reason = "" } = {}) 
     brokerName: brokerNameOf("kotak"),
     live,
     lastTickAt: live ? now : null,
+    hasQuotes: boardHasQuotes(indices, live),
     reason,
   };
 }
@@ -197,13 +205,15 @@ async function kotakLiveBoard(user, secrets, { fetchQuotes, now }) {
     if (!quotes.length) {
       return kotakQuoteBoard(now, { reason: "Kotak Neo did not return index quotes yet." });
     }
+    const indices = cardsFromMemberQuotes(user.id, quotes, memberQuotes().indices);
     const payload = {
-      indices: cardsFromMemberQuotes(user.id, quotes, memberQuotes().indices),
+      indices,
       source: "kotak",
       brokerId: "kotak",
       brokerName: brokerNameOf("kotak"),
       live: true,
       lastTickAt: now,
+      hasQuotes: boardHasQuotes(indices, true),
       reason: "",
     };
     cache.set(user.id, { at: now, payload });
@@ -251,14 +261,17 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now =
     } catch {
       quotes = [];
     }
+    const indices = cardsFromMemberQuotes(user.id, quotes, memberQuotes().indices);
+    const live = quotes.length > 0;
     const payload = {
-      indices: cardsFromMemberQuotes(user.id, quotes, memberQuotes().indices),
+      indices,
       source: "member",
       brokerId,
       brokerName: brokerNameOf(brokerId),
-      live: quotes.length > 0,
-      lastTickAt: quotes.length ? now : null,
-      reason: quotes.length
+      live,
+      lastTickAt: live ? now : null,
+      hasQuotes: boardHasQuotes(indices, live),
+      reason: live
         ? ""
         : `Your ${brokerId} token did not return index quotes yet. Check the token on My plan.`,
     };

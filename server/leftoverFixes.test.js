@@ -1,0 +1,174 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { keepLastBookRows } from "../src/lib/deskFeed.ts";
+import { memberTapeHasQuotes } from "../src/lib/headerBroker.ts";
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-leftover-"));
+process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
+process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
+process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
+process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
+
+const {
+  clearSimulatedDesk,
+  createAlgo,
+  deleteAlgo,
+  dhanQuotesStalled,
+  drainPendingLiveAlgoOrders,
+  liveBuyAllowedForStrategy,
+  queueLiveAlgoOrder,
+  replaceDhanBook,
+  setDhanFeed,
+  snapshot,
+  strategyAllowsLiveMemberCopies,
+  toggleAlgo,
+} = await import("./market.js");
+const { dispatchMemberCopies, findLiveCopyAlgo } = await import("./liveCopy.js");
+const { getMemberDesk, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
+
+test("clearSimulatedDesk keeps a live Dhan book and drops only simulated rows", () => {
+  replaceDhanBook([
+    {
+      id: "dhan-pos-live-keep",
+      symbol: "NIFTY 22700 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 80,
+      ltp: 82,
+      brokerId: "dhan",
+      live: true,
+      sim: false,
+    },
+    {
+      id: "dhan-pos-sim-drop",
+      symbol: "NIFTY 22600 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 10,
+      ltp: 11,
+      brokerId: "dhan",
+      live: false,
+      sim: true,
+    },
+  ]);
+  clearSimulatedDesk();
+  const rows = (snapshot().positions || []).filter((row) => String(row.id || "").startsWith("dhan-pos-"));
+  assert.equal(rows.some((row) => row.id === "dhan-pos-live-keep"), true);
+  assert.equal(rows.some((row) => row.id === "dhan-pos-sim-drop"), false);
+  replaceDhanBook([]);
+});
+
+test("quote stall is visible while the feed stays live", () => {
+  setDhanFeed({
+    live: true,
+    source: "websocket",
+    lastTickAt: Date.now() - 60_000,
+    error: "Dhan quotes request failed",
+  });
+  assert.equal(dhanQuotesStalled(), true);
+  assert.equal(snapshot().dhanFeed.live, true);
+  assert.equal(snapshot().dhanFeed.stalled, true);
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: Date.now(), error: null });
+  assert.equal(dhanQuotesStalled(), false);
+  assert.equal(snapshot().dhanFeed.stalled, false);
+});
+
+test("a 30s empty snapshot merge keeps the last admin book rows", () => {
+  const kept = keepLastBookRows(
+    [{ id: "dhan-pos-recent", symbol: "NIFTY 22750 PE", qty: 65 }],
+    [],
+  );
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].id, "dhan-pos-recent");
+});
+
+test("member header quotes require a live flag or a real price, not an empty card list", () => {
+  assert.equal(memberTapeHasQuotes({ indices: [{ price: 0 }, { price: 0 }] }), false);
+  assert.equal(memberTapeHasQuotes({ live: false, indices: [{ symbol: "NIFTY 50" }] }), false);
+  assert.equal(memberTapeHasQuotes({ live: true, indices: [] }), true);
+  assert.equal(memberTapeHasQuotes({ indices: [{ price: 25111 }] }), true);
+  assert.equal(memberTapeHasQuotes({ hasQuotes: true, indices: [] }), true);
+});
+
+test("short NIFTY still follows the first-candle card on/off for admin and user copies", () => {
+  const created = createAlgo({ name: `NIFTY 5m first candle leftover ${Date.now()}`, kind: "nifty-first-candle", runMode: "live" });
+  drainPendingLiveAlgoOrders();
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    assert.equal(findLiveCopyAlgo([created], "NIFTY").name, created.name);
+    assert.equal(liveBuyAllowedForStrategy(created.name), true);
+    assert.equal(strategyAllowsLiveMemberCopies(created.name), true);
+    const queued = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22350 CE",
+      option: "CE",
+      strike: 22350,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(queued.queued, true);
+    toggleAlgo(created.id, { enabled: false });
+    assert.equal(liveBuyAllowedForStrategy(created.name), false);
+    assert.equal(strategyAllowsLiveMemberCopies(created.name), false);
+    const leftover = drainPendingLiveAlgoOrders().filter((row) => row.strategy === created.name && row.side === "BUY");
+    assert.equal(leftover.length, 0);
+    const again = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22350 CE",
+      option: "CE",
+      strike: 22350,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(again.queued, false);
+    assert.equal(again.blocked, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+  }
+});
+
+test("a disabled strategy does not book a paper copy for a mapped user", () => {
+  const user = { id: "u-off-paper", name: "Off Paper", email: "offpaper@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "paper" });
+  saveClientSettings(user.id, { copy: false, tradeMode: "paper", brokerId: "paper", subscriptionUntil: "2026-12-31" });
+  const algo = {
+    id: "a-off-paper",
+    name: "NIFTY 5m first candle",
+    enabled: false,
+    holdDailyLive: true,
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  };
+  dispatchMemberCopies(
+    { strategy: algo.name, side: "BUY", symbol: "NIFTY 22800 CE", qty: 65, price: 40, brokerId: "dhan" },
+    algo,
+  );
+  const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0 });
+  assert.equal(desk.positions.some((row) => row.symbol === "NIFTY 22800 CE"), false);
+});
+
+test("Start data feed warms user desks; Brokers shows stall without stopping LIVE", () => {
+  const dhanSrc = fs.readFileSync(new URL("./dhan.js", import.meta.url), "utf8");
+  assert.match(dhanSrc, /ensureMemberDataFeedsRunning\("live-start"\)/);
+  const marketSrc = fs.readFileSync(new URL("./market.js", import.meta.url), "utf8");
+  assert.match(marketSrc, /export function dhanQuotesStalled/);
+  assert.match(marketSrc, /stalled: dhanQuotesStalled\(feed\)/);
+  assert.match(marketSrc, /isPaperRow\(row\) \|\| \(!isSimRow\(row\)/);
+  assert.match(marketSrc, /findLiveCopyAlgo\(state\.algos/);
+  const header = fs.readFileSync(new URL("../src/components/layout/Header.tsx", import.meta.url), "utf8");
+  assert.match(header, /memberTapeHasQuotes\(quotes\)/);
+  const brokers = fs.readFileSync(new URL("../src/pages/Brokers.tsx", import.meta.url), "utf8");
+  assert.match(brokers, /DHAN LIVE · stalled/);
+  const webDesk = fs.readFileSync(new URL("../src/context/MarketContext.tsx", import.meta.url), "utf8");
+  assert.match(webDesk, /keepLastBookRows\(current\.positions/);
+});

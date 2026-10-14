@@ -268,7 +268,7 @@ export function Brokers() {
                   )}
                   {(viewed.id === "dhan" ? feedOn : viewed.liveFeed) ? (
                     <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-extrabold text-up dark:bg-emerald-950/40">
-                      LIVE
+                      {viewed.id === "dhan" && feed?.stalled ? "LIVE · STALL" : "LIVE"}
                     </span>
                   ) : null}
                 </div>
@@ -518,7 +518,9 @@ function DhanSettings({
           }`}
         >
           {feed?.live || broker.liveFeed
-            ? `DHAN LIVE · ${feed?.source || "rest"}`
+            ? feed?.stalled
+              ? "DHAN LIVE · stalled"
+              : `DHAN LIVE · ${feed?.source || "rest"}`
             : feed?.tokenHint
               ? "TOKEN SAVED"
               : "WAITING FOR TOKEN"}
