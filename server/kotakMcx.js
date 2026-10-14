@@ -115,7 +115,6 @@ export function lookupKotakCrudeOptionCode({ strike, option, expiry } = {}) {
   return (
     rows.find((row) => row.strike === px && row.option === opt && row.expiry === ymd)?.code ||
     rows.find((row) => row.strike === px && row.option === opt && month && row.expiry.startsWith(month))?.code ||
-    rows.find((row) => row.strike === px && row.option === opt)?.code ||
     ""
   );
 }

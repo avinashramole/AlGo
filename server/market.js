@@ -984,7 +984,7 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
   if (!copies.length) {
     const mapped = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0;
     console.log(
-      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — ${mapped ? `${mapped} mapped client(s) on ${algo.name || next.strategy}, scope ${algo.mappingScope || "both"}` : "Copy ON + saved token copies even if the user is logged off"}`,
+      `Copy fan-out: 0 members for ${next.side || "?"} ${next.symbol || "order"} — ${mapped ? `${mapped} mapped client(s) on ${algo.name || next.strategy}, scope ${algo.mappingScope || "both"}` : "no user mapped on this card"}`,
     );
   }
   dispatchMemberCopies(next, algo);

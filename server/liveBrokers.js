@@ -227,13 +227,14 @@ export function pickKotakOptionExpiry(wanted, listed = []) {
   const want = String(wanted || "").slice(0, 10);
   const days = [...new Set((listed || []).map((day) => String(day || "").slice(0, 10)).filter(Boolean))].sort();
   if (want && days.includes(want)) return want;
+  const mapped = kotakOptionExpiryFromFutDate(want);
+  if (mapped && days.includes(mapped)) return mapped;
   if (want) {
     const sameMonth = days.filter((day) => day.startsWith(want.slice(0, 7)));
     if (sameMonth.length) return sameMonth[0];
-    const next = days.find((day) => day >= want);
-    if (next) return next;
+    return mapped || want;
   }
-  return days[0] || kotakOptionExpiryFromFutDate(want);
+  return days[0] || "";
 }
 
 export function kotakTradingSymbol(symbol, expiry, optionExpiries = kotakCrudeOptionExpiries()) {
@@ -498,7 +499,8 @@ function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry, se
   if (wantDay) {
     const exact = scored.find((row) => row.exact);
     if (exact) return exact.row;
-    if (getUnderlying(wantRoot).weekly) return null;
+    const nseCommodity = String(segment || "").toUpperCase() === "NSE";
+    if (!nseCommodity) return null;
   }
   const monthHits = wantMonth ? scored.filter((row) => row.month) : [];
   const pool = monthHits.length ? monthHits : scored;
