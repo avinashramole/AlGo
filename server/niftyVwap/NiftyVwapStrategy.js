@@ -23,6 +23,12 @@ function isWorkingBuy(row) {
   return !["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status);
 }
 
+function holdInFlightSignal(algo) {
+  const text = String(algo?.lastSignal || "");
+  if (/\b(?:WAIT ORDER|SENDING)\b/i.test(text)) return text;
+  return "BUY SENDING";
+}
+
 function shouldReleaseEntryLock(state, { buys = [], now, pending = false, lastSignal = "" } = {}) {
   const working = pending || (buys || []).some(isWorkingBuy);
   if (working) return { release: false, clearBar: false };
@@ -349,13 +355,13 @@ export const NiftyVwapStrategy = {
       return { action: "rejected", result };
     }
     if (result?.duplicate || result?.queued === false) {
-      state.inFlight = false;
-      state.buyPhase = "";
-      state.lastEntryBarTime = 0;
-      state.lastEntryAt = 0;
-      if (!state.fillPrice) PositionManager.clearOpen(state);
-      algo.lastSignal = `BUY ${pick.strike} ${pick.option}`;
-      return { action: "retry", reason: "queue-missed", pick, result };
+      state.inFlight = true;
+      state.buyPhase = "entry";
+      state.lastEntryBarTime = signal.barTime;
+      if (crudeSignal) state.sentSignalBarTime = signal.barTime;
+      state.lastEntryAt = Number(now) || Date.now();
+      algo.lastSignal = `BUY ${pick.option} SENDING`;
+      return { action: "skip", reason: "buy-active", pick, result };
     }
     state.inFlight = true;
     state.lastEntryBarTime = signal.barTime;
@@ -529,7 +535,7 @@ export const NiftyVwapStrategy = {
         }
         if (decision.clearBar || !state.fillPrice) PositionManager.clearOpen(state);
       } else {
-        algo.lastSignal = "WAIT ORDER";
+        algo.lastSignal = holdInFlightSignal(algo);
         return { action: "skip", reason: "buy-active" };
       }
     }
@@ -560,7 +566,7 @@ export const NiftyVwapStrategy = {
         }
         if (!state.fillPrice) PositionManager.clearOpen(state);
       } else {
-        algo.lastSignal = "WAIT ORDER";
+        algo.lastSignal = holdInFlightSignal(algo);
         return { action: "skip", reason: "buy-active" };
       }
     }

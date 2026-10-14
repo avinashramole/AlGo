@@ -634,11 +634,31 @@ test("duplicate live queue does not mark the strategy as filled", () => {
     positions: [],
     adapter: { place: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }), exit: () => ({}) },
   });
-  assert.equal(result.action, "retry");
-  assert.equal(result.reason, "queue-missed");
-  assert.notEqual(algo.vwapState.buyPhase, "open");
+  assert.equal(result.action, "skip");
+  assert.equal(result.reason, "buy-active");
+  assert.equal(algo.vwapState.buyPhase, "entry");
+  assert.equal(algo.vwapState.inFlight, true);
+  assert.ok(Number(algo.vwapState.lastEntryBarTime || 0) > 0);
   assert.equal(Number(algo.vwapState.fillPrice || 0), 0);
-  assert.match(String(algo.lastSignal || ""), /BUY \d+ CE/);
+  assert.match(String(algo.lastSignal || ""), /SENDING/);
+  const again = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 6 * BAR + 5_000,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars: risingFutures(6),
+    ceBars: optionAboveVwap(6, "CE"),
+    peBars: optionAboveVwap(6, "PE"),
+    spot: 24500,
+    step: 50,
+    expiry: "2026-08-27",
+    ceLtp: 140,
+    peLtp: 110,
+    positions: [],
+    adapter: { place: () => ({ ok: true, queued: true, status: "PENDING" }), exit: () => ({}) },
+  });
+  assert.equal(again.reason, "buy-active");
+  assert.match(String(algo.lastSignal || ""), /SENDING/);
 });
 
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
@@ -2469,7 +2489,7 @@ test("only one buy is sent until that order is squared off", () => {
   });
   assert.equal(second.reason, "buy-active");
   assert.equal(places.length, 1);
-  assert.equal(algo.lastSignal, "WAIT ORDER");
+  assert.match(String(algo.lastSignal || ""), /SENDING|WAIT ORDER/);
   const held = tickAt(2, {
     positions: [
       {
@@ -2667,7 +2687,7 @@ test("same-day entry lock stays while a fresh SENDING can still flush", () => {
     adapter: { place: () => ({ queued: true, status: "PENDING" }), exit: () => ({}) },
   });
   assert.equal(tick.reason, "buy-active");
-  assert.equal(algo.lastSignal, "WAIT ORDER");
+  assert.match(String(algo.lastSignal || ""), /SENDING|WAIT ORDER/);
   assert.equal(algo.vwapState.buyPhase, "entry");
 });
 

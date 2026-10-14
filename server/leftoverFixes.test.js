@@ -165,6 +165,8 @@ test("Start data feed warms user desks; Brokers shows stall without stopping LIV
   assert.match(marketSrc, /stalled: dhanQuotesStalled\(feed\)/);
   assert.match(marketSrc, /isPaperRow\(row\) \|\| \(!isSimRow\(row\)/);
   assert.match(marketSrc, /findLiveCopyAlgo\(state\.algos/);
+  assert.match(marketSrc, /export function dhanOrdersLive/);
+  assert.match(dhanSrc, /armLiveOrders\(false\)/);
   const header = fs.readFileSync(new URL("../src/components/layout/Header.tsx", import.meta.url), "utf8");
   assert.match(header, /memberTapeHasQuotes\(quotes\)/);
   const brokers = fs.readFileSync(new URL("../src/pages/Brokers.tsx", import.meta.url), "utf8");

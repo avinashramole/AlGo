@@ -69,5 +69,7 @@ test("BUY send keeps the quote loop on and still places the broker order", () =>
   assert.match(indexSrc, /placeDhanOrder\(adminPayload\)/);
   const marketSrc = fs.readFileSync(new URL("./market.js", import.meta.url), "utf8");
   assert.match(marketSrc, /return isDhanFeedLive\(\) \|\| hasLastLiveBook\(\)/);
+  assert.match(marketSrc, /return liveOrdersArmed && isDhanFeedLive\(\)/);
+  assert.match(marketSrc, /if \(dhanOrdersLive\(\)\)/);
   assert.match(marketSrc, /stalled: dhanQuotesStalled\(feed\)/);
 });

@@ -3,11 +3,13 @@ import test from "node:test";
 import {
   applyLiveQuotes,
   applySyntheticOptionChain,
+  armLiveOrders,
   cacheOptionDesk,
   candleSymbol,
   clearSimulatedDesk,
   createAlgo,
   deleteAlgo,
+  dhanOrdersLive,
   getCandles,
   getChainSpot,
   isCrudeSymbol,
@@ -497,6 +499,95 @@ test("tickMarket keeps last Dhan quotes after the feed stops", () => {
   assert.equal(after.dhanFeed.hasQuotes, true);
   setDhanFeed({ live: false, source: "idle", lastTickAt: null });
   applySyntheticOptionChain("NIFTY");
+});
+
+test("Stop data feed keeps last quotes and does not send live BUY/SELL", () => {
+  applyLiveQuotes([{ symbol: "CRUDEOIL FUT", parent: "CRUDEOIL", kind: "future", ltp: 6120, securityId: "426268" }]);
+  setOptionDesk({
+    symbol: "CRUDEOIL",
+    expiry: "2026-10-19",
+    rows: [{ strike: 6100, atm: true, callLtp: 42, putLtp: 38, callId: "crude-ce-6100", putId: "crude-pe-6100" }],
+    source: "dhan",
+  });
+  setDhanFeed({ live: true, source: "websocket", lastTickAt: Date.now() });
+  drainPendingLiveAlgoOrders();
+  const created = createAlgo({
+    name: `CRUDE stop feed ${Date.now()}`,
+    kind: "crude-first-candle",
+    symbol: "CRUDEOIL",
+    runMode: "live",
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const first = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      symbol: "CRUDEOIL 6100 CE",
+      qty: 100,
+      lots: 1,
+      lotSize: 100,
+      price: 42,
+      option: "CE",
+      strike: 6100,
+      brokerId: "dhan",
+    });
+    assert.equal(first.queued, true);
+    assert.equal(drainPendingLiveAlgoOrders().some((row) => row.strategy === created.name), true);
+
+    armLiveOrders(false);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+    assert.equal(hasLastLiveBook(), true);
+    assert.equal(dhanOrdersLive(), false);
+    assert.equal(snapshot().dhanFeed.hasQuotes, true);
+    assert.equal(drainPendingLiveAlgoOrders().length, 0);
+
+    const blocked = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      symbol: "CRUDEOIL 6100 CE",
+      qty: 100,
+      lots: 1,
+      lotSize: 100,
+      price: 42,
+      option: "CE",
+      strike: 6100,
+      brokerId: "dhan",
+    });
+    assert.equal(blocked.queued, false);
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.status, "FEED_DOWN");
+
+    tickMarket();
+    tickMarket();
+    assert.equal(
+      drainPendingLiveAlgoOrders().filter((row) => row.strategy === created.name).length,
+      0,
+    );
+    assert.equal(snapshot().indices.find((row) => /CRUDE/i.test(row.symbol || ""))?.price || 6120, 6120);
+
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: Date.now() });
+    assert.equal(dhanOrdersLive(), true);
+    const again = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      symbol: "CRUDEOIL 6100 CE",
+      qty: 100,
+      lots: 1,
+      lotSize: 100,
+      price: 42,
+      option: "CE",
+      strike: 6100,
+      brokerId: "dhan",
+    });
+    assert.equal(again.queued, true);
+  } finally {
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    armLiveOrders(true);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+    applySyntheticOptionChain("NIFTY");
+  }
 });
 
 test("tickMarket never invents DEMO prices", () => {

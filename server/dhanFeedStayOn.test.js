@@ -62,4 +62,6 @@ test("refresh UI keeps Stop data feed when the quote loop is live", () => {
   const marketSrc = fs.readFileSync(new URL("./market.js", import.meta.url), "utf8");
   assert.match(marketSrc, /dhanSourceOwnsTape/);
   assert.match(marketSrc, /nextSource !== "idle"/);
+  assert.match(marketSrc, /export function dhanOrdersLive/);
+  assert.match(dhanSrc, /armLiveOrders\(false\)/);
 });
