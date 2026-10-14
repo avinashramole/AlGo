@@ -920,6 +920,10 @@ test("manual Crude Exit queues one SELL and locks the first-candle lot", () => {
     const after = getAlgo(created.id);
     assert.equal(after.vwapState.exitQueued, true);
     assert.equal(after.vwapState.inFlight, true);
+    assert.equal(
+      snapshot().positions.some((row) => String(row.securityId) === "99" && !row.copyUserId),
+      false,
+    );
   } finally {
     drainPendingLiveAlgoOrders();
     replaceDhanBook([]);

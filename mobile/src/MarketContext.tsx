@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Alert } from "react-native";
 import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getDeskFeed, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
 import { useAuth } from "./AuthContext";
-import { keepLastBookRows, keepLivePositionBook, keepStrikeWindow } from "./deskFeed";
+import { dropClosedLivePosition, keepLastBookRows, keepLivePositionBook, keepStrikeWindow } from "./deskFeed";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -84,7 +84,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       ...incoming,
       algos,
       optionChain,
-      positions: keepLivePositionBook(current.positions || [], incoming.positions || []),
+      positions: keepLivePositionBook(current.positions || [], incoming.positions || [], { trustEmpty: true }),
       orders: keepLastBookRows(current.orders || [], incoming.orders || []),
     };
     dataRef.current = next;
@@ -284,12 +284,20 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         }
       },
       closePosition: async (id: string) => {
+        const current = dataRef.current;
+        const row = (current.positions || []).find((item) => String(item.id) === String(id));
+        const optimistic = {
+          ...current,
+          positions: dropClosedLivePosition(current.positions || [], row || { id }),
+        };
+        dataRef.current = optimistic;
+        setData(optimistic);
         try {
           const result = await squareOff(id);
           if (result.snapshot) mergeSnapshot(result.snapshot);
           else await refresh();
         } catch {
-          /* offline */
+          await refresh();
         }
       },
     }),

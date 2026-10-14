@@ -365,6 +365,8 @@ export function Algo() {
         await closePosition(row.id);
       }
       await refresh();
+    } catch (err) {
+      window.alert(catchDeskError(err, "Could not exit position"));
     } finally {
       setBusyId("");
     }

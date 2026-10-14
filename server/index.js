@@ -79,6 +79,7 @@ import {
   bookRejectedLiveOrder,
   bookMemberCopyOnAdminDesk,
   queueLivePositionExit,
+  findDeskPosition,
   routeManualOrderBrokerId,
 } from "./market.js";
 import { startFirstCandleDailyLiveScheduler, startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
@@ -1359,14 +1360,14 @@ app.post("/api/orders/:id/cancel", async (req, res) => {
 
 app.post("/api/positions/:id/squareoff", async (req, res) => {
   try {
-    const pos = snapshot().positions.find((row) => row.id === req.params.id);
+    const pos = findDeskPosition(req.params.id);
     if (!pos) {
       res.status(404).json({ error: "Position not found" });
       return;
     }
     if (isDhanLive()) {
       if (pos.paper || pos.brokerId === "paper") {
-        const result = squareOff(req.params.id);
+        const result = squareOff(pos.id);
         if (result.error) {
           res.status(400).json({ error: result.error });
           return;
@@ -1387,11 +1388,15 @@ app.post("/api/positions/:id/squareoff", async (req, res) => {
         res.status(400).json({ error: queued.error });
         return;
       }
+      if (queued?.queued === false && !queued?.duplicate) {
+        res.status(400).json({ error: queued.status === "FEED_DOWN" ? "Data feed is down. Start LIVE, then Exit again." : "Could not send the exit order." });
+        return;
+      }
       await flushLiveAlgoOrders();
       res.json({ ok: true, live: true, queued: true, snapshot: snapshot() });
       return;
     }
-    const result = squareOff(req.params.id);
+    const result = squareOff(pos.id);
     if (result.error) {
       res.status(400).json({ error: result.error });
       return;

@@ -28,7 +28,7 @@ import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
-import { filledExitOnBook, isLeftoverWorkingSell } from "./pendingExit.js";
+import { filledExitOnBook, isLeftoverWorkingSell, pendingExitOnBook } from "./pendingExit.js";
 import { exitReasonLabel, exitRoleFromReason, keepExitReason } from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
@@ -1202,6 +1202,77 @@ export function queueLiveAlgoOrder(payload) {
   return adminResult;
 }
 
+function securityIdFromPositionId(id) {
+  const raw = String(id || "").trim();
+  const tagged = raw.match(/^dhan-pos-(.+)-(INTRADAY|MIS|I|MARGIN|CNC|NRML|M)$/i);
+  if (tagged) return tagged[1];
+  const plain = raw.match(/^dhan-pos-(.+)$/);
+  return plain ? plain[1] : "";
+}
+
+export function findDeskPosition(id, hint = {}) {
+  const want = String(id || "").trim();
+  const rows = [...(state.positions || []), ...(snapshotPositions() || [])];
+  if (want) {
+    const exact = rows.find((row) => String(row.id) === want);
+    if (exact) return exact;
+  }
+  const securityId = String(hint.securityId || "").trim() || securityIdFromPositionId(want);
+  if (securityId && securityId !== "0") {
+    const hit = rows.find(
+      (row) => !row.copyUserId && Number(row.qty) > 0 && String(row.securityId || "") === securityId,
+    );
+    if (hit) return hit;
+  }
+  const symbol = String(hint.symbol || "").trim();
+  if (symbol) {
+    const hit = rows.find(
+      (row) => !row.copyUserId && Number(row.qty) > 0 && String(row.symbol || "") === symbol,
+    );
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function snapshotPositions() {
+  try {
+    return liveDesk().positions || [];
+  } catch {
+    return [];
+  }
+}
+
+export function dropExitingLivePosition(pos) {
+  if (!pos) return 0;
+  let dropped = 0;
+  state.positions = (state.positions || []).filter((row) => {
+    if (row.copyUserId || isPaperRow(row)) return true;
+    const sameId = pos.id && String(row.id) === String(pos.id);
+    const sameSid = pos.securityId && row.securityId && String(row.securityId) === String(pos.securityId);
+    const sameContract = sameLiveContract(pos, row);
+    if (!sameId && !sameSid && !sameContract) return true;
+    rememberClosedFromPosition(row, {
+      exit: Number(pos.ltp || row.ltp || row.avg),
+      strategy: pos.strategy || row.strategy,
+      brokerId: pos.brokerId || row.brokerId || "dhan",
+    });
+    dropped += 1;
+    return false;
+  });
+  return dropped;
+}
+
+function liveExitWorkingFor(row) {
+  if (!row) return false;
+  const algo = firstCandleAlgoNamed(row.strategy);
+  const vs = algo ? runtimeState(algo) : {};
+  if (pendingExitOnBook(state.orders || [], row, row.strategy, vs)) return true;
+  if (vs.exitQueued) return true;
+  return pendingLiveAlgoOrders.some(
+    (item) => !item.copyUserId && liveOrderSide(item) === "SELL" && sameLiveContract(item, row),
+  );
+}
+
 export function queueLivePositionExit(pos) {
   if (!pos) return { error: "Position not found" };
   const strategy =
@@ -1260,6 +1331,7 @@ export function queueLivePositionExit(pos) {
       { enqueueLiveOrder: enqueueLiveAlgoOrder },
     );
   }
+  if (result?.queued || result?.duplicate) dropExitingLivePosition({ ...pos, strategy });
   return result;
 }
 
@@ -4497,7 +4569,7 @@ export function replaceDhanBook(rows) {
       break;
     }
     return next;
-  });
+  }).filter((row) => !liveExitWorkingFor(row));
   const others = state.positions.filter((row) => row.brokerId !== "dhan");
   const previousDhan = new Map(state.positions.filter((row) => row.brokerId === "dhan").map((row) => [String(row.id), row]));
   const incomingIds = new Set(incoming.map((row) => String(row.id)));

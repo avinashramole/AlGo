@@ -32,7 +32,7 @@ import {
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
-import { keepLastBookRows, keepLastIndexPrices, keepLivePositionBook, keepStrikeWindow, patchById } from "../lib/deskFeed";
+import { dropClosedLivePosition, keepLastBookRows, keepLastIndexPrices, keepLivePositionBook, keepStrikeWindow, patchById } from "../lib/deskFeed";
 import { OPTION_UNDERLYINGS } from "../lib/markets";
 import { presentDeskAlgo } from "../lib/strategies";
 
@@ -314,7 +314,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       optionMeta: held.optionMeta,
       optionChain,
       indices: keepLastIndexPrices(current.indices || [], incoming.indices || []),
-      positions: keepLivePositionBook(current.positions || [], incoming.positions || []),
+      positions: keepLivePositionBook(current.positions || [], incoming.positions || [], { trustEmpty: true }),
       orders: keepLastBookRows(current.orders || [], incoming.orders || []),
     };
     dataRef.current = next;
@@ -689,9 +689,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         else await refresh();
       },
       closePosition: async (id: string) => {
-        const result = await squareOff(id);
-        if (result.snapshot) mergeSnapshot(result.snapshot);
-        else await refresh();
+        const current = dataRef.current;
+        const row = (current.positions || []).find((item) => String(item.id) === String(id));
+        const optimistic = {
+          ...current,
+          positions: dropClosedLivePosition(current.positions || [], row || { id }),
+        };
+        dataRef.current = optimistic;
+        setData(optimistic);
+        try {
+          const result = await squareOff(id);
+          if (result.snapshot) mergeSnapshot(result.snapshot);
+          else await refresh();
+        } catch (error) {
+          await refresh();
+          throw error;
+        }
       },
     }),
     [data, live, refresh],

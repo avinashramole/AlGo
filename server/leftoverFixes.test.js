@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { keepLastBookRows, keepLivePositionBook, uniqueOpenContracts } from "../src/lib/deskFeed.ts";
+import { dropClosedLivePosition, keepLastBookRows, keepLivePositionBook, uniqueOpenContracts } from "../src/lib/deskFeed.ts";
 import { memberTapeHasQuotes } from "../src/lib/headerBroker.ts";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-leftover-"));
@@ -18,8 +18,11 @@ const {
   deleteAlgo,
   dhanQuotesStalled,
   drainPendingLiveAlgoOrders,
+  findDeskPosition,
   liveBuyAllowedForStrategy,
+  armLiveOrders,
   queueLiveAlgoOrder,
+  queueLivePositionExit,
   replaceDhanBook,
   setDhanFeed,
   snapshot,
@@ -99,6 +102,99 @@ test("a fresh Crude book drops stale Dhan product-alias ids so Exit sees one lot
   assert.equal(kept.length, 1);
   assert.equal(kept[0].id, "dhan-pos-99-INTRADAY");
   assert.equal(uniqueOpenContracts(previous).length, 1);
+  const flat = keepLivePositionBook(previous, [], { trustEmpty: true });
+  assert.equal(flat.some((row) => String(row.id).startsWith("dhan-pos-")), false);
+  const dropped = dropClosedLivePosition(previous, { id: "dhan-pos-99-I", securityId: "99" });
+  assert.equal(dropped.length, 0);
+});
+
+test("Exit finds a stale Dhan id and clears every strategy lot the same way", () => {
+  armLiveOrders();
+  const nifty = createAlgo({ name: `NIFTY exit ${Date.now()}`, kind: "nifty-first-candle", runMode: "live" });
+  const crude = createAlgo({ name: `CRUDE exit ${Date.now()}`, kind: "crude-first-candle", symbol: "CRUDEOIL", runMode: "live" });
+  const vwap = createAlgo({ name: `VWAP exit ${Date.now()}`, kind: "nifty-vwap", runMode: "live" });
+  const multi = createAlgo({ name: `MULTI exit ${Date.now()}`, kind: "multi-index-reversal", symbol: "BANKNIFTY", runMode: "live" });
+  const lots = [
+    {
+      id: "dhan-pos-11-INTRADAY",
+      symbol: "NIFTY 22750 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 80,
+      ltp: 90,
+      strategy: nifty.name,
+      brokerId: "dhan",
+      option: "CE",
+      strike: 22750,
+      securityId: "11",
+      live: true,
+    },
+    {
+      id: "dhan-pos-99-INTRADAY",
+      symbol: "CRUDEOIL 6100 CE",
+      type: "BUY",
+      qty: 100,
+      avg: 90,
+      ltp: 80,
+      strategy: crude.name,
+      brokerId: "dhan",
+      option: "CE",
+      strike: 6100,
+      securityId: "99",
+      live: true,
+      lotSize: 100,
+    },
+    {
+      id: "dhan-pos-22-INTRADAY",
+      symbol: "NIFTY 22800 PE",
+      type: "BUY",
+      qty: 65,
+      avg: 70,
+      ltp: 75,
+      strategy: vwap.name,
+      brokerId: "dhan",
+      option: "PE",
+      strike: 22800,
+      securityId: "22",
+      live: true,
+    },
+    {
+      id: "dhan-pos-33-INTRADAY",
+      symbol: "BANKNIFTY 52000 CE",
+      type: "BUY",
+      qty: 30,
+      avg: 120,
+      ltp: 130,
+      strategy: multi.name,
+      brokerId: "dhan",
+      option: "CE",
+      strike: 52000,
+      securityId: "33",
+      live: true,
+    },
+  ];
+  try {
+    replaceDhanBook(lots);
+    assert.equal(findDeskPosition("dhan-pos-11-I")?.securityId, "11");
+    assert.equal(findDeskPosition("dhan-pos-99-MIS")?.securityId, "99");
+    assert.equal(findDeskPosition("dhan-pos-22-I")?.securityId, "22");
+    assert.equal(findDeskPosition("dhan-pos-33-MIS")?.securityId, "33");
+    for (const staleId of ["dhan-pos-11-I", "dhan-pos-99-MIS", "dhan-pos-22-I", "dhan-pos-33-MIS"]) {
+      assert.equal(queueLivePositionExit(findDeskPosition(staleId)).queued, true);
+    }
+    const open = snapshot().positions.filter((row) => !row.copyUserId && Number(row.qty) > 0);
+    assert.equal(open.some((row) => ["11", "99", "22", "33"].includes(String(row.securityId))), false);
+    replaceDhanBook(lots);
+    const afterPoll = snapshot().positions.filter((row) => !row.copyUserId && Number(row.qty) > 0);
+    assert.equal(afterPoll.some((row) => ["11", "99", "22", "33"].includes(String(row.securityId))), false);
+  } finally {
+    drainPendingLiveAlgoOrders();
+    replaceDhanBook([]);
+    deleteAlgo(nifty.id);
+    deleteAlgo(crude.id);
+    deleteAlgo(vwap.id);
+    deleteAlgo(multi.id);
+  }
 });
 
 test("member header quotes require a live flag or a real price, not an empty card list", () => {

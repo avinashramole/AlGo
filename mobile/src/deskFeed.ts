@@ -49,10 +49,17 @@ export function uniqueOpenContracts<T extends BookRow>(rows: T[] = []): T[] {
   return [...groups.values()].map((list) => preferLiveRow(list));
 }
 
-export function keepLivePositionBook<T extends BookRow>(previous: T[] = [], incoming: T[] = []): T[] {
+export function keepLivePositionBook<T extends BookRow>(
+  previous: T[] = [],
+  incoming: T[] = [],
+  { trustEmpty = false } = {},
+): T[] {
   const prev = Array.isArray(previous) ? previous : [];
   const next = uniqueOpenContracts(Array.isArray(incoming) ? incoming : []);
-  if (!next.length) return uniqueOpenContracts(prev);
+  if (!next.length) {
+    if (trustEmpty) return prev.filter((row) => !isLiveBrokerRow(row));
+    return uniqueOpenContracts(prev);
+  }
   const incomingIds = new Set(next.map((row) => String(row.id)));
   const incomingKeys = new Set(next.map(contractKey).filter(Boolean));
   const extras = prev.filter((row) => {
@@ -63,6 +70,17 @@ export function keepLivePositionBook<T extends BookRow>(previous: T[] = [], inco
     return true;
   });
   return [...next, ...extras];
+}
+
+export function dropClosedLivePosition<T extends BookRow>(rows: T[] = [], closed: BookRow = {}): T[] {
+  const id = String(closed.id || "").trim();
+  const key = contractKey(closed);
+  return (rows || []).filter((row) => {
+    if (id && String(row.id) === id) return false;
+    const rowKey = contractKey(row);
+    if (key && rowKey && key === rowKey && !row.copyUserId) return false;
+    return true;
+  });
 }
 
 export function keepStrikeWindow<T extends StrikeRow>(previous: T[] = [], incoming: T[] = []): T[] {
