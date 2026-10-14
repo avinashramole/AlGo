@@ -29,6 +29,8 @@ import {
   firstCandleEntryIst,
   firstCandleMinutes,
   showsFirstCandleTimeframe,
+  showsStrategyTimeframe,
+  strategyTimeframeValue,
   sortDeskAlgos,
   TEST2_SCRIPTS,
   type AlgoStrategy,
@@ -585,7 +587,8 @@ function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
     setDraft(saved);
   }, [algo.id, saved]);
 
-  const save = async (timeframe: string) => {
+  const save = async (picked: string) => {
+    const timeframe = strategyTimeframeValue(algo, picked);
     setDraft(timeframe);
     if (timeframe === saved) return;
     setSaving(true);
@@ -593,7 +596,9 @@ function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
       await updateAlgo(algo.id, {
         timeframe,
         barMinutes: firstCandleMinutes(timeframe),
-        entryEvaluationIst: firstCandleEntryIst(algo.firstBarStartIst, timeframe, algo.entryEvaluationIst),
+        ...(showsFirstCandleTimeframe(algo)
+          ? { entryEvaluationIst: firstCandleEntryIst(algo.firstBarStartIst, timeframe, algo.entryEvaluationIst) }
+          : {}),
       });
       await refresh();
     } catch (err) {
@@ -933,7 +938,7 @@ function AlgoCard({
           <div className={cn("px text-xl font-extrabold leading-none", moneyClass(liveMtm))}>{rupee(liveMtm)}</div>
         </div>
       </div>
-      {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
+      {showsStrategyTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
       <DailyTradeLimit algo={algo} />
       {isCrudeFirstCandleKind(algo) ? <CrudeLevels algo={algo} /> : null}
 

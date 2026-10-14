@@ -517,6 +517,16 @@ export function showsFirstCandleTimeframe(algo?: { kind?: string; strategyType?:
   return isNiftyFirstCandleKind(algo) || isCrudeFirstCandleKind(algo);
 }
 
+export function showsStrategyTimeframe(_algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
+  return true;
+}
+
+export function strategyTimeframeValue(algo: { kind?: string; strategyType?: string; indicator?: string } | undefined, timeframe: string) {
+  const raw = String(timeframe || "5m");
+  if (isMultiIndexReversalKind(algo) && (raw === "60m" || raw === "1h" || raw === "1H")) return "1H";
+  return raw;
+}
+
 const CRUDE_INDICATOR_KEYS = [
   "buyConditions",
   "sellConditions",

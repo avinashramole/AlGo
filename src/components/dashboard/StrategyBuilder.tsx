@@ -10,7 +10,6 @@ import {
   SOURCES,
   STRATEGY_SYMBOLS,
   TEST1_SCRIPTS,
-  TIMEFRAMES,
   firstCandleMinutes,
   firstCandleTimeframeSelect,
   firstCandleTimeframeValue,
@@ -31,6 +30,7 @@ import {
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
   showsFirstCandleTimeframe,
+  strategyTimeframeValue,
   NIFTY_FIRST_CANDLE_NAME,
   CRUDE_FIRST_CANDLE_NAME,
   niftyFirstCandleTrail,
@@ -256,14 +256,19 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
   const setFirstCandleTimeframe = (picked: string, customMinutes?: number) => {
     const alreadyCustom = firstCandleTimeframeSelect(form.timeframe) === "custom";
-    const timeframe = firstCandleTimeframeValue(
-      picked,
-      picked === "custom" ? (alreadyCustom ? firstCandleMinutes(form.timeframe) : customMinutes ?? 20) : customMinutes,
+    const timeframe = strategyTimeframeValue(
+      form,
+      firstCandleTimeframeValue(
+        picked,
+        picked === "custom" ? (alreadyCustom ? firstCandleMinutes(form.timeframe) : customMinutes ?? 20) : customMinutes,
+      ),
     );
     set({
       timeframe,
       barMinutes: firstCandleMinutes(timeframe),
-      entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
+      ...(firstCandle || crudeFirst
+        ? { entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst) }
+        : {}),
     });
   };
   const pickTest2Script = (symbol: string) => {
@@ -313,7 +318,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               side: "BUY",
               timeframe: MULTI_INDEX_TIMEFRAMES.includes(form.timeframe as (typeof MULTI_INDEX_TIMEFRAMES)[number])
                 ? form.timeframe
-                : form.timeframe === "1h"
+                : form.timeframe === "1h" || form.timeframe === "60m"
                   ? "1H"
                   : "15m",
               strikeOffset: Math.max(-4, Math.min(4, Math.round(Number(form.strikeOffset) || 0))),
@@ -558,13 +563,15 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {firstCandleTf ? (
-          <FirstCandleTimeframeBar
-            timeframe={form.timeframe}
-            mark={crudeFirst ? "crude" : "nifty"}
-            onPick={setFirstCandleTimeframe}
-          />
-        ) : null}
+        {editing ? null : (
+          <div data-test1-timeframe={test1 ? "true" : undefined} data-mir-timeframe={mir ? "true" : undefined}>
+            <FirstCandleTimeframeBar
+              timeframe={form.timeframe}
+              mark={crudeFirst ? "crude" : "nifty"}
+              onPick={setFirstCandleTimeframe}
+            />
+          </div>
+        )}
 
         <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2 || mir) && "sm:hidden", (test2 || mir) && "hidden")}>
           Strategy name
@@ -867,34 +874,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
-          {firstCandleTf ? null : (
-          <label className="text-xs font-semibold text-slate-500">
-            Timeframe
-            <select
-              className={fieldClass}
-              value={reversal || hedge ? "15m" : vwap || test2 ? "5m" : form.timeframe || "5m"}
-              disabled={(engine && !test1) || test2}
-              data-test1-timeframe={test1 ? "true" : undefined}
-              data-mir-timeframe={mir ? "true" : undefined}
-              onChange={(event) => set({ timeframe: event.target.value })}
-            >
-              {(reversal || hedge
-                ? ["15m"]
-                : vwap
-                  ? ["5m"]
-                  : mir
-                    ? [...MULTI_INDEX_TIMEFRAMES]
-                  : test1 || test2 || niftyTest
-                    ? ["1m", "2m", "5m", "10m", "15m"]
-                    : TIMEFRAMES
-              ).map((row) => (
-                <option key={row} value={row}>
-                  {row}
-                </option>
-              ))}
-            </select>
-          </label>
-          )}
           <label className="text-xs font-semibold text-slate-500">
             Broker
             <select

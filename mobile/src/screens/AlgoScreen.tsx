@@ -93,10 +93,6 @@ function isEngineKind(kind: Draft["kind"]) {
   return kind === "nifty-vwap" || kind === "nifty-vwap-reversal" || kind === "nifty-vwap-hedge" || kind === "nifty-first-candle";
 }
 
-function isFirstCandleKind(kind?: string) {
-  return kind === "nifty-first-candle" || kind === "crude-first-candle";
-}
-
 function firstCandleMinutes(timeframe?: string) {
   const raw = String(timeframe || "").trim();
   if (raw === "1H" || raw === "1h") return 60;
@@ -401,12 +397,12 @@ export function AlgoScreen() {
         </View>
         {draft.runMode === "paper" ? <Text style={styles.muted}>Paper uses live Dhan quotes. Fills stay virtual — nothing is sent to Dhan.</Text> : null}
         </>
-        {isFirstCandleKind(draft.kind) ? (
+        {draft.id ? null : (
           <FirstCandleTfChips
             timeframe={draft.timeframe}
             onPick={(timeframe) => setDraft({ ...draft, timeframe })}
           />
-        ) : null}
+        )}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Field
           label="Daily trade limit"
@@ -745,12 +741,10 @@ export function AlgoScreen() {
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.name}>{algo.name}</Text>
               <Text style={styles.muted}>{algo.summary || algo.tag}</Text>
-              {isFirstCandleKind(algo.kind) ? (
-                <FirstCandleTfChips
-                  timeframe={algo.timeframe || "5m"}
-                  onPick={(timeframe) => void saveAlgo({ id: algo.id, timeframe })}
-                />
-              ) : null}
+              <FirstCandleTfChips
+                timeframe={algo.timeframe || "5m"}
+                onPick={(timeframe) => void saveAlgo({ id: algo.id, timeframe })}
+              />
               {algo.kind === "nifty-first-candle" ? (
                 <Text style={styles.muted}>
                   Trailing SL +{Number(algo.trailingEveryPct) > 0 && Number(algo.trailingShiftPct) > 0 ? algo.trailingActivationPct || 20 : 20}% to buy, then +{Number(algo.trailingShiftPct) > 0 ? algo.trailingShiftPct : 5}% every +{Number(algo.trailingEveryPct) > 0 ? algo.trailingEveryPct : 10}%
