@@ -18,11 +18,13 @@ test("Nifty and Crude cards and edit forms offer 5 10 15 30 60 and custom minute
   assert.match(bar, /data-first-candle-custom-minutes="true"/);
   assert.match(builder, /FirstCandleTimeframeBar/);
   assert.match(builder, /mark=\{crudeFirst \? "crude" : "nifty"\}/);
+  assert.equal((builder.match(/<FirstCandleTimeframeBar/g) || []).length, 1);
+  assert.doesNotMatch(builder, /data-first-candle-lots-timeframe/);
+  assert.doesNotMatch(builder, /data-first-candle-timeframe="true"/);
   assert.match(lib, /export function showsFirstCandleTimeframe/);
   assert.match(page, /<CardTimeframe algo=\{algo\} \/>/);
   assert.match(page, /showsFirstCandleTimeframe\(algo\) \? <CardTimeframe/);
   assert.match(page, /mark=\{isCrudeFirstCandleKind\(algo\) \? "crude" : "nifty"\}/);
-  assert.match(builder, /data-first-candle-lots-timeframe="true"/);
   assert.match(builder, /firstCandleTf \? \(/);
   assert.match(mobile, /FIRST_CANDLE_TIMEFRAMES = \["5m", "10m", "15m", "30m", "60m"\]/);
   assert.match(mobile, /function FirstCandleTfChips/);

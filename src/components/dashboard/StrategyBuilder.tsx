@@ -11,7 +11,6 @@ import {
   STRATEGY_SYMBOLS,
   TEST1_SCRIPTS,
   TIMEFRAMES,
-  FIRST_CANDLE_TIMEFRAMES,
   firstCandleMinutes,
   firstCandleTimeframeSelect,
   firstCandleTimeframeValue,
@@ -867,15 +866,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
-          {firstCandleTf ? (
-          <div className="col-span-2 lg:col-span-3" data-first-candle-lots-timeframe="true">
-            <FirstCandleTimeframeBar
-              timeframe={form.timeframe}
-              mark={crudeFirst ? "crude" : "nifty"}
-              onPick={setFirstCandleTimeframe}
-            />
-          </div>
-          ) : (
+          {firstCandleTf ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
             <select
@@ -1149,33 +1140,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         ) : firstCandleTf ? (
           <div className="mt-2.5 space-y-2" data-first-candle-settings={crudeFirst ? "crude" : "nifty"}>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-              <label className="text-xs font-semibold text-slate-500" data-first-candle-timeframe="true">
-                Timeframe
-                <select
-                  className={fieldClass}
-                  value={firstCandleTimeframeSelect(form.timeframe)}
-                  onChange={(event) => setFirstCandleTimeframe(event.target.value)}
-                >
-                  {[...FIRST_CANDLE_TIMEFRAMES, "custom"].map((row) => (
-                    <option key={row} value={row}>
-                      {row === "custom" ? "Custom" : row}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {firstCandleTimeframeSelect(form.timeframe) === "custom" ? (
-                <label className="text-xs font-semibold text-slate-500" data-first-candle-custom-minutes="true">
-                  Custom minutes
-                  <input
-                    className={fieldClass}
-                    type="number"
-                    min={1}
-                    max={240}
-                    value={firstCandleMinutes(form.timeframe)}
-                    onChange={(event) => setFirstCandleTimeframe("custom", Number(event.target.value))}
-                  />
-                </label>
-              ) : null}
               <label className="text-xs font-semibold text-slate-500">
                 Start LIVE (IST)
                 <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
