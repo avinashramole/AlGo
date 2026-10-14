@@ -253,34 +253,25 @@ export const NiftyVwapStrategy = {
     }
     if (!signal.buyCe && !signal.buyPe) {
       if (config.signalMode === "first-candle") {
-        const tape = niftyFutCandleText(signal, config);
-        const preview = signal.previewCandle || signal.previewLive ? "PREVIEW " : "";
         if (signal.waitingEval && !signal.previewLive) {
           algo.lastSignal = "WAIT 09:05 FIRST 5m CLOSE";
           return { action: "wait", reason: "wait-eval" };
         }
-        const fut = futTapeLabel(config);
         const ceTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "CE");
         const peTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "PE");
-        const strikeNote = ceTrack && ceTrack === peTrack ? ` · STRIKE ${ceTrack}` : "";
         if (signal.niftyColor === "doji") {
-          algo.lastSignal = `NO TRADE · ${preview}${fut} DOJI O ${tape.open} C ${tape.close}${tape.clock}${strikeNote} · next 5m`;
           return { action: "wait", reason: "first-doji" };
         }
         if (signal.niftyColor === "green" && signal.ceColor !== "green") {
-          algo.lastSignal = signal.ceColor
-            ? `NO TRADE · ${preview}${fut} GREEN ${optionColorText("CE", signal.ceColor, ceTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : ceTrack
-              ? `WAIT CE ${ceTrack} 5m`
-              : "WAIT CE 5m";
+          if (!signal.ceColor) {
+            algo.lastSignal = ceTrack ? `WAIT CE ${ceTrack} 5m` : "WAIT CE 5m";
+          }
           return { action: "wait", reason: signal.ceColor ? "ce-not-green" : "wait-ce" };
         }
         if (signal.niftyColor === "red" && signal.peColor !== "green") {
-          algo.lastSignal = signal.peColor
-            ? `NO TRADE · ${preview}${fut} RED ${optionColorText("PE", signal.peColor, peTrack)} O ${tape.open} C ${tape.close}${tape.clock} · next 5m`
-            : peTrack
-              ? `WAIT PE ${peTrack} 5m`
-              : "WAIT PE 5m";
+          if (!signal.peColor) {
+            algo.lastSignal = peTrack ? `WAIT PE ${peTrack} 5m` : "WAIT PE 5m";
+          }
           return { action: "wait", reason: signal.peColor ? "pe-not-green" : "wait-pe" };
         }
         algo.lastSignal = "WAIT NEXT 5m";

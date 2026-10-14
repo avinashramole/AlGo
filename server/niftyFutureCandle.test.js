@@ -7,6 +7,7 @@ import {
   crudeFutureSignalBars,
   deleteAlgo,
   drainPendingLiveAlgoOrders,
+  firstCandleConditionDots,
   formatLiveFuturePreview,
   getChainSpot,
   niftyFuturePreviewBar,
@@ -112,8 +113,34 @@ test("live preview candle keeps its own open and close while the 5m bar is still
         peStrike: 22550,
       },
     ),
-    "LIVE NIFTY FUT RED CE 22550 GREEN PE 22550 RED O 22663.00 C 22647.50 · 09:20–09:25 IST · NO TRADE PE 22550 RED",
+    "LIVE NIFTY FUT RED CE 22550 GREEN PE 22550 RED O 22663.00 C 22647.50 · 09:20–09:25 IST",
   );
+  assert.equal(
+    formatLiveFuturePreview(
+      { ...preview, open: 22750, close: 22755 },
+      5,
+      {
+        ce: { open: 90, close: 80 },
+        pe: { open: 80, close: 95 },
+        ceStrike: 22750,
+        peStrike: 22750,
+      },
+    ),
+    "LIVE NIFTY FUT GREEN CE 22750 RED PE 22750 GREEN O 22750.00 C 22755.00 · 09:20–09:25 IST",
+  );
+  assert.deepEqual(firstCandleConditionDots({ nifty: "green", ceColor: "red", peColor: "green" }), {
+    fut: "green",
+    ce: "red",
+    pe: "green",
+    futOk: true,
+    ceOk: false,
+    peOk: true,
+    okCount: 2,
+    buy: "",
+  });
+  assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "green", peColor: "green" }).buy, "CE");
+  assert.equal(firstCandleConditionDots({ nifty: "red", peColor: "green", ceColor: "green" }).buy, "PE");
+  assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "green", peColor: "green" }).okCount, 3);
   const closed = niftyFutureSignalBars("5m", now);
   assert.equal(closed.length, 1);
   assert.equal(closed[0].open, 22678.6);

@@ -1853,7 +1853,7 @@ test("first candle exits on +40% even if stored TGT was pushed higher", () => {
   assert.equal(book.exits.length, 1);
 });
 
-test("first candle no-trade line prints the Nifty future candle", () => {
+test("first candle no-buy does not print NO TRADE", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "Fut OHLC" });
   const book = bookAdapter();
   const tick = NiftyVwapStrategy.tick({
@@ -1875,9 +1875,8 @@ test("first candle no-trade line prints the Nifty future candle", () => {
   assert.equal(tick.action, "wait");
   assert.equal(tick.reason, "pe-not-green");
   assert.equal(book.places.length, 0);
-  assert.match(algo.lastSignal, /NO TRADE · PREVIEW NIFTY FUT RED PE 22650 RED O 22663\.00 C 22647\.50/);
-  assert.match(algo.lastSignal, /09:00–09:05 IST/);
-  assert.doesNotMatch(algo.lastSignal, /22678/);
+  assert.doesNotMatch(String(algo.lastSignal || ""), /NO TRADE/);
+  assert.doesNotMatch(String(algo.lastSignal || ""), /22678/);
 });
 
 test("preview candle is checked when the current candle opens, not from the current close", () => {

@@ -6,6 +6,15 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("first-candle card shows three condition dots and hides NO TRADE", () => {
+  const page = fs.readFileSync(path.join(root, "src/pages/Algo.tsx"), "utf8");
+  assert.match(page, /data-first-candle-dots/);
+  assert.match(page, /data-first-candle-buy/);
+  assert.match(page, /ConditionDot/);
+  assert.match(page, /BUY \{buy\}/);
+  assert.match(page, /\^NO TRADE/);
+});
+
 test("Algo Live book shows only the two newest fills", () => {
   const feed = fs.readFileSync(path.join(root, "src/components/dashboard/SignalFeed.tsx"), "utf8");
   const live = fs.readFileSync(path.join(root, "server/liveSignals.js"), "utf8");
