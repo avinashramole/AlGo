@@ -219,14 +219,13 @@ export function listLiveCopyTargets({
   }
   if (scope === "clients" || scope === "both") {
     for (const id of mapped) userIds.add(id);
-    for (const id of desks.mapped) userIds.add(id);
+    if (!mapped.size) {
+      for (const id of desks.mapped) userIds.add(id);
+    }
   }
   if (scope === "both" && mapped.size) {
-    for (const id of desks.copyMaster) {
-      if (mapped.has(id)) userIds.add(id);
-    }
     for (const id of [...userIds]) {
-      if (!mapped.has(id) && !desks.mapped.has(id)) userIds.delete(id);
+      if (!mapped.has(id)) userIds.delete(id);
     }
   }
   const targets = [];
@@ -264,37 +263,16 @@ function mergeCopyTargets(...lists) {
   return [...byUser.values()];
 }
 
-/** NIFTY and Crude 5m first candle share the same mapped copy users. */
-function firstCandleSharesCopyTargets(payload = {}, algo = {}) {
-  if (String(algo.mappingScope || "") === "master") return [];
-  const nifty = isNiftyFirstCandleName(payload.strategy);
-  const crude = isCrudeFirstCandleName(payload.strategy);
-  if (!nifty && !crude) return [];
-  const ids = new Set();
-  for (const id of Array.isArray(algo.alsoMappedClientIds) ? algo.alsoMappedClientIds : []) {
-    const clean = String(id || "").trim();
-    if (clean && clean !== "admin") ids.add(clean);
-  }
-  for (const row of listDeskRecords()) {
-    if (!row.userId || row.userId === "admin") continue;
-    if (!subscriptionOpen(row.subscriptionUntil)) continue;
-    if (nifty && isCrudeFirstCandleName(row.mappedStrategy)) ids.add(row.userId);
-    if (crude && isNiftyFirstCandleName(row.mappedStrategy)) ids.add(row.userId);
-  }
-  const targets = [];
-  for (const userId of ids) {
-    const target = copyTargetForUser(userId, {
-      masterQty: payload.qty,
-      lotSize: payload.lotSize || payload.qty,
-      strategyId: algo.id,
-      strategyName: payload.strategy,
-    });
-    if (target) targets.push(target);
-  }
-  return targets;
+function mappedCopyUserIds(algo = {}) {
+  return new Set(
+    (Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [])
+      .map((id) => String(id || "").trim())
+      .filter((id) => id && id !== "admin"),
+  );
 }
 
 export function memberCopyPayloads(payload = {}, algo = {}) {
+  const mapped = mappedCopyUserIds(algo);
   const targets = mergeCopyTargets(
     listLiveCopyTargets({
       strategyName: payload.strategy,
@@ -304,13 +282,15 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
       mappedClientIds: algo.mappedClientIds,
       mappingScope: algo.mappingScope,
     }),
-    listCopyOnTargets({
-      masterQty: payload.qty,
-      lotSize: payload.lotSize || payload.qty,
-    }),
-    firstCandleSharesCopyTargets(payload, algo),
+    mapped.size
+      ? []
+      : listCopyOnTargets({
+          masterQty: payload.qty,
+          lotSize: payload.lotSize || payload.qty,
+        }),
   );
-  return targets.map((target) => ({
+  const allowed = mapped.size ? targets.filter((row) => mapped.has(row.userId)) : targets;
+  return allowed.map((target) => ({
     ...payload,
     qty: target.qty,
     brokerId: target.brokerId,

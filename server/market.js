@@ -1068,20 +1068,7 @@ function sameBookOrder(payload = {}) {
 
 function liveCopyAlgo(stamped = {}) {
   const name = String(stamped?.strategy || "");
-  const exact = (state.algos || []).find((row) => String(row.name || "") === name) || {};
-  const niftyFirst = isNiftyFirstCandleAlgo(exact) || isNiftyFirstCandleName(name);
-  const crudeFirst = isCrudeFirstCandleAlgo(exact) || isCrudeFirstCandleName(name);
-  if ((!niftyFirst && !crudeFirst) || String(exact.mappingScope || "") === "master") return exact;
-  const also = new Set();
-  for (const row of state.algos || []) {
-    if (niftyFirst && !isCrudeFirstCandleAlgo(row)) continue;
-    if (crudeFirst && !isNiftyFirstCandleAlgo(row)) continue;
-    for (const id of row.mappedClientIds || []) {
-      const clean = String(id || "").trim();
-      if (clean) also.add(clean);
-    }
-  }
-  return also.size ? { ...exact, alsoMappedClientIds: [...also] } : exact;
+  return (state.algos || []).find((row) => String(row.name || "") === name) || {};
 }
 
 export function queueLiveAlgoOrder(payload) {
