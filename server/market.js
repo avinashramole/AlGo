@@ -2610,7 +2610,7 @@ export function hasLastLiveBook() {
 }
 
 function dhanTapeReady() {
-  return Boolean(state.dhanFeed.live) || hasLastLiveBook();
+  return isDhanFeedLive() || hasLastLiveBook();
 }
 
 function publicDhanFeed() {
