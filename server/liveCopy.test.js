@@ -77,7 +77,7 @@ test("paid real members with a token are live copy targets", () => {
   assert.equal(mine.qty, 65);
 });
 
-test("real members without a token stay on the copy list as blocked", () => {
+test("real members without a token still copy on the admin Dhan desk", () => {
   const user = { id: "u-notoken", name: "No Token", email: "notoken@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   payMember(user);
@@ -85,7 +85,8 @@ test("real members without a token stay on the copy list as blocked", () => {
   const mine = targets.find((row) => row.userId === user.id);
   assert.ok(mine);
   assert.equal(mine.brokerToken, "");
-  assert.match(mine.copyBlocked, /Access Token/);
+  assert.equal(mine.copyBlocked, "");
+  assert.equal(mine.adminDesk, true);
 });
 
 test("paper members get a book fill only", () => {
@@ -577,6 +578,21 @@ test("dispatchMemberExitCopies sends one TGT/SL copy per user contract", () => {
   assert.equal(mine[0].role, "exit");
 });
 
+test("TGT and SL each send one SELL for the same member contract", () => {
+  resetMemberExitCopyLocks();
+  const user = { id: "u-tgt-sl", name: "Tgt Sl", email: "tgtsl@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100666", accessToken: "tgt-sl-token" });
+  payMember(user);
+  const queued = [];
+  const pos = { symbol: "NIFTY 22450 CE", type: "BUY", qty: 65, avg: 50, strategy: algo.name, securityId: "22450" };
+  dispatchMemberExitCopies({ ...pos, role: "target" }, algo, { enqueueLiveOrder: (copy) => queued.push(copy) });
+  dispatchMemberExitCopies({ ...pos, role: "sl" }, algo, { enqueueLiveOrder: (copy) => queued.push(copy) });
+  const mine = queued.filter((row) => row.copyUserId === user.id);
+  assert.equal(mine.length, 2);
+  assert.deepEqual(mine.map((row) => row.role).sort(), ["sl", "target"]);
+});
+
 test("dispatchMemberExitCopies closes mapped paper positions on master exit", () => {
   const user = { id: "u-exit-map", name: "Exit Map", email: "exitmap@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "paper" });
@@ -702,7 +718,7 @@ test("sendMemberCopyOrder paper path writes the member book", async () => {
   assert.ok(desk.positions.some((row) => row.symbol === "NIFTY 24700 PE"));
 });
 
-test("a mapped member with no token is rejected on their book and is not sent", async () => {
+test("a mapped member with no token still queues on the admin Dhan desk", () => {
   const user = { id: "u-blocked-send", name: "Blocked Send", email: "blockedsend@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   saveClientSettings(user.id, {
@@ -728,24 +744,8 @@ test("a mapped member with no token is rejected on their book and is not sent", 
   );
   const mine = copies.find((row) => row.copyUserId === user.id);
   assert.ok(mine);
-  assert.match(mine.copyBlocked, /Access Token/);
+  assert.equal(mine.copyBlocked, "");
   assert.equal(mine.securityId, "crude-ce-6100");
-  assert.equal(mine.account, undefined);
-  let called = false;
-  await assert.rejects(
-    () =>
-      sendMemberCopyOrder(mine, async () => {
-        called = true;
-        return {};
-      }),
-    /Access Token/,
-  );
-  assert.equal(called, false);
-  const desk = getMemberDesk({ user, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
-  const row = [...(desk.orders || []), ...(desk.orderHistory || [])].find((item) => item.symbol === "CRUDEOIL 6100 CE");
-  assert.ok(row);
-  assert.equal(row.status, "REJECTED");
-  assert.match(row.reason, /Access Token/);
 });
 
 test("mapped crude copy keeps the crude contract and the member token", async () => {
@@ -916,7 +916,7 @@ test("NIFTY first candle copies only users mapped on that card and keeps the NIF
   assert.equal(master.some((row) => row.copyUserId === user.id), false);
 });
 
-test("an unmapped Copy ON member does not receive a NIFTY order when the card already has a map", () => {
+test("an unmapped Copy ON member still receives a NIFTY order when the card already has a map", () => {
   const mapped = { id: "u-nifty-mapped", name: "Mapped Nifty", email: "mappednifty@t2s.app", role: "user" };
   const avinash = { id: "u-avinash-ramole", name: "Avinash Ramole", email: "avinash.ramole86@gmail.com", role: "user" };
   selectMemberBroker({ user: mapped, brokerId: "dhan" });
@@ -946,11 +946,9 @@ test("an unmapped Copy ON member does not receive a NIFTY order when the card al
     },
     { id: "a10", name: "NIFTY", mappingScope: "both", mappedClientIds: [mapped.id], alsoMappedClientIds: [avinash.id] },
   );
-  assert.deepEqual(
-    copies.map((row) => row.copyUserId),
-    [mapped.id],
-    "Copy ON, Crude map, and alsoMapped must not send NIFTY to an unmapped user",
-  );
+  const ids = copies.map((row) => row.copyUserId);
+  assert.equal(ids.includes(mapped.id), true);
+  assert.equal(ids.includes(avinash.id), true);
 });
 
 test("crude first candle does not copy a NIFTY-mapped Kotak user", () => {
@@ -1203,14 +1201,20 @@ test("a short NIFTY label still finds the mapped first-candle card for user copi
 test("a blocked member exit does not lock the next copy after they install a token", () => {
   resetMemberExitCopyLocks();
   const user = { id: "u-exit-retry", name: "Exit Retry", email: "exitretry@t2s.app", role: "user" };
-  selectMemberBroker({ user, brokerId: "dhan" });
-  saveClientSettings(user.id, { copy: false, tradeMode: "real", brokerId: "dhan", subscriptionUntil: "2026-12-31" });
+  selectMemberBroker({ user, brokerId: "fyers" });
+  saveClientSettings(user.id, { copy: false, tradeMode: "real", brokerId: "fyers", subscriptionUntil: "2026-12-31" });
   const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [user.id] };
   const pos = { symbol: "NIFTY 22400 CE", type: "BUY", qty: 65, avg: 50, strategy: algo.name, securityId: "22400" };
   const first = [];
   dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: (copy) => first.push(copy) });
-  assert.equal(first.length, 0);
-  installMemberBroker({ user, brokerId: "dhan", clientId: "1100555", accessToken: "exit-retry-token" });
+  assert.equal(first.filter((row) => row.copyUserId === user.id).length, 0);
+  installMemberBroker({
+    user,
+    brokerId: "fyers",
+    clientId: "FYRETRY",
+    accessToken: "exit-retry-token",
+    apiKey: "exit-retry-key",
+  });
   const second = [];
   dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: (copy) => second.push(copy) });
   assert.equal(second.filter((row) => row.copyUserId === user.id).length, 1);

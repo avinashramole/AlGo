@@ -35,26 +35,20 @@ test("admin orders are not member-scoped and keep the desk Dhan token", () => {
   assert.equal(creds.account, null);
 });
 
-test("member Dhan copy never falls back to the admin desk token", () => {
+test("member Dhan copy uses the admin desk token when the member has none", () => {
   assert.equal(isMemberScopedOrder({ copyUserId: "u-1" }), true);
-  assert.throws(
-    () => dhanOrderCredentials({ copyUserId: "u-1" }, adminDesk),
-    /My plan/,
+  const fromDesk = dhanOrderCredentials({ copyUserId: "u-1" }, adminDesk);
+  assert.equal(fromDesk.lane, "admin");
+  assert.equal(fromDesk.token, "admin-dhan-token");
+  assert.equal(fromDesk.clientId, "1000561739");
+  const emptyAccount = dhanOrderCredentials(
+    { copyUserId: "u-1", account: { clientId: "1100333", accessToken: "" } },
+    adminDesk,
   );
+  assert.equal(emptyAccount.lane, "admin");
+  assert.equal(emptyAccount.token, "admin-dhan-token");
   assert.throws(
-    () =>
-      dhanOrderCredentials(
-        { copyUserId: "u-1", account: { clientId: "1100333", accessToken: "" } },
-        adminDesk,
-      ),
-    /My plan/,
-  );
-  assert.throws(
-    () =>
-      dhanOrderCredentials(
-        { account: { clientId: "1100333" } },
-        adminDesk,
-      ),
+    () => dhanOrderCredentials({ copyUserId: "u-1" }, { accessToken: "", clientId: "" }),
     /My plan/,
   );
 });
@@ -92,18 +86,18 @@ test("admin live payload strips leftover member credential fields", () => {
   assert.equal(creds.token, "admin-dhan-token");
 });
 
-test("member live broker copy never falls back to the admin session", () => {
-  assert.throws(
-    () => liveOrderSession({ copyUserId: "u-1" }, adminZerodha, { brokerName: "Zerodha Kite" }),
-    /My plan/,
+test("member live broker copy uses the admin session when the member has no token", () => {
+  const fromDesk = liveOrderSession({ copyUserId: "u-1", brokerId: "zerodha" }, adminZerodha, { brokerName: "Zerodha Kite" });
+  assert.equal(fromDesk.lane, "admin");
+  assert.equal(fromDesk.session.accessToken, "admin-kite-token");
+  const empty = liveOrderSession(
+    { copyUserId: "u-1", brokerId: "zerodha", brokerSession: { accessToken: "" } },
+    adminZerodha,
+    { brokerName: "Zerodha Kite" },
   );
+  assert.equal(empty.lane, "admin");
   assert.throws(
-    () =>
-      liveOrderSession(
-        { copyUserId: "u-1", brokerSession: { accessToken: "" } },
-        adminZerodha,
-        { brokerName: "Zerodha Kite" },
-      ),
+    () => liveOrderSession({ copyUserId: "u-1", brokerId: "kotak" }, adminZerodha, { brokerName: "Kotak Neo" }),
     /My plan/,
   );
 });

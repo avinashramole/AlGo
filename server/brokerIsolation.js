@@ -34,10 +34,15 @@ export function dhanOrderCredentials(payload = {}, desk = {}) {
     const account = payload.account && typeof payload.account === "object" ? payload.account : null;
     const token = sanitizeAccessToken(account?.accessToken);
     const clientId = String(account?.clientId || "").trim();
-    if (!token || !clientId) {
-      throw fail("This member has no Dhan Client ID + Access Token. Install them on My plan.");
+    if (token && clientId) {
+      return { lane: "member", token, clientId, account };
     }
-    return { lane: "member", token, clientId, account };
+    const deskToken = sanitizeAccessToken(desk.accessToken);
+    const deskId = String(desk.clientId || "").trim();
+    if (deskToken && deskId) {
+      return { lane: "admin", token: deskToken, clientId: deskId, account: null };
+    }
+    throw fail("This member has no Dhan Client ID + Access Token. Install them on My plan.");
   }
   const token = sanitizeAccessToken(desk.accessToken);
   const clientId = String(desk.clientId || "").trim();
@@ -121,6 +126,10 @@ export function liveOrderSession(payload = {}, adminSession = null, { brokerName
       );
     }
     if (!session.accessToken) {
+      const brokerId = String(payload.brokerId || "").toLowerCase();
+      if (brokerId !== "kotak" && adminSession?.accessToken) {
+        return { lane: "admin", session: adminSession };
+      }
       throw fail(`This member has no ${brokerName} access token. Install it on My plan.`);
     }
     return { lane: "member", session };

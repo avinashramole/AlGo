@@ -1,8 +1,22 @@
-import { annotateMemberLiveAuthError, dhanOrderCredentials, liveOrderSession } from "./brokerIsolation.js";
+import { annotateMemberLiveAuthError, liveOrderSession } from "./brokerIsolation.js";
 import { placeDhanOrder } from "./dhan.js";
 import { liveBrokerMeta, placeLiveBrokerOrder } from "./liveBrokers.js";
-import { recordMemberCopyFill } from "./memberDesk.js";
+import { peekAdminBrokerSecrets, recordMemberCopyFill } from "./memberDesk.js";
 import { requestUpstoxTradingTokenForUser } from "./upstoxAuth.js";
+
+function adminFallbackSession(brokerId) {
+  const id = String(brokerId || "").trim().toLowerCase();
+  if (!id || id === "paper" || id === "kotak") return null;
+  const row = peekAdminBrokerSecrets(id);
+  const accessToken = String(row?.brokerToken || "").trim();
+  if (!accessToken) return null;
+  return {
+    accessToken,
+    clientId: String(row.accountId || "").trim(),
+    apiKey: String(row.brokerApiKey || "").trim(),
+    sessionToken: String(row.brokerSessionToken || "").trim(),
+  };
+}
 
 export async function sendMemberCopyOrder(payload = {}, fetchImpl = fetch) {
   const userId = payload.copyUserId;
@@ -17,10 +31,16 @@ export async function sendMemberCopyOrder(payload = {}, fetchImpl = fetch) {
     throw error;
   }
   const brokerName = liveBrokerMeta(payload.brokerId)?.name || payload.brokerId;
-  const creds = payload.brokerSession || payload.account || {};
+  let creds = payload.brokerSession || payload.account || {};
+  if (!String(creds.accessToken || "").trim()) {
+    const adminSession = adminFallbackSession(payload.brokerId);
+    if (adminSession) {
+      creds = { ...creds, ...adminSession };
+      payload = { ...payload, account: creds, brokerSession: creds };
+    }
+  }
   try {
     if (payload.brokerId === "dhan") {
-      dhanOrderCredentials(payload, { accessToken: "", clientId: "" });
       const live = await placeDhanOrder(payload);
       return recordMemberCopyFill({ userId, payload, live });
     }

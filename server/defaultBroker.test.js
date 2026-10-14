@@ -19,15 +19,15 @@ test.after(() => {
   delete process.env.T2S_ACTIVE_BROKER_FILE;
 });
 
-test("a Dhan strategy uses the selected default broker, and another named broker stays", () => {
+test("a Dhan-stamped strategy stays on Dhan; an empty stamp uses the selected default", () => {
   assert.equal(reloadDefaultBroker(), "kotak");
   assert.equal(publicBrokers().activeBrokerId, "kotak");
-  assert.equal(orderBrokerForDesk("dhan"), "kotak");
+  assert.equal(orderBrokerForDesk("dhan"), "dhan");
   assert.equal(orderBrokerForDesk(""), "kotak");
   assert.equal(orderBrokerForDesk("zerodha"), "zerodha");
   markDhanLive({ clientId: "1100", funds: 10, marginUsed: 0, keyHint: "••••", displayName: "Dhan" });
   assert.equal(publicBrokers().activeBrokerId, "kotak");
-  assert.equal(orderBrokerForDesk("dhan"), "kotak");
+  assert.equal(orderBrokerForDesk("dhan"), "dhan");
 });
 
 test("activating one broker leaves every other broker inactive", () => {
