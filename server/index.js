@@ -5,7 +5,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { activateBroker, connectBroker, disconnectBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
+import { activateBroker, connectBroker, disconnectBroker, ensureAdminDefaultBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
 import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureAdminDataFeedRunning, ensureDhanLiveFromSavedToken, ensureDhanOrderSession, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, scheduleAdminDataFeedWatchdog, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
@@ -1567,6 +1567,12 @@ function startDeskTimers() {
 }
 
 async function bootBackground() {
+  try {
+    const defaultId = ensureAdminDefaultBroker();
+    console.log(`Admin default broker is ${defaultId}`);
+  } catch (error) {
+    console.log(`Admin default broker skip: ${error.message || error}`);
+  }
   try {
     const reset = resetMemberPasswordsToDefault();
     if (reset.changed) console.log(`Member logins reset to email + default password (${reset.changed} users).`);
