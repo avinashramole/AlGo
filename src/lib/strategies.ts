@@ -332,11 +332,14 @@ export function firstCandleTimeframeSelect(timeframe?: string) {
 }
 
 export function firstCandleTimeframeValue(select: string, customMinutes?: number) {
+  if ((FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(select)) return select;
+  if (select === "1H" || select === "1h") return "60m";
   if (select === "custom") {
-    const n = Math.max(1, Math.min(240, Math.round(Number(customMinutes) || firstCandleMinutes("5m"))));
+    const n = Math.max(1, Math.min(240, Math.round(Number(customMinutes) || 20)));
     return `${n}m`;
   }
-  return (FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(select) ? select : "5m";
+  if (/^\d+m$/i.test(select) || /^\d+$/.test(select)) return `${firstCandleMinutes(select)}m`;
+  return "5m";
 }
 
 export const RUN_MODES = [

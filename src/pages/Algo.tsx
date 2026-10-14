@@ -5,6 +5,7 @@ import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { OneMinuteHistoryBar } from "../components/dashboard/OneMinuteHistoryBar";
 import { SignalFeed } from "../components/dashboard/SignalFeed";
+import { FirstCandleTimeframeBar } from "../components/dashboard/FirstCandleTimeframeBar";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
 import { catchDeskError } from "../lib/liveSite";
@@ -24,6 +25,7 @@ import {
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
   isRetiredDeskStrategy,
+  firstCandleEntryIst,
   sortDeskAlgos,
   TEST2_SCRIPTS,
   type AlgoStrategy,
@@ -430,7 +432,7 @@ export function Algo() {
             {(
               [
                 ["all", "All"],
-                ["nifty-first-candle", "5m first candle"],
+                ["nifty-first-candle", "NIFTY"],
                 ["crudeoil", "CRUDE OIL"],
               ] as const
             ).map(([id, label]) => (
@@ -557,6 +559,44 @@ export function Algo() {
         />
       ) : null}
     </div>
+  );
+}
+
+function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
+  const { refresh } = useMarket();
+  const saved = algo.timeframe || "5m";
+  const [draft, setDraft] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setDraft(saved);
+  }, [algo.id, saved]);
+
+  const save = async (timeframe: string) => {
+    setDraft(timeframe);
+    if (timeframe === saved) return;
+    setSaving(true);
+    try {
+      await updateAlgo(algo.id, {
+        timeframe,
+        entryEvaluationIst: firstCandleEntryIst(algo.firstBarStartIst, timeframe, algo.entryEvaluationIst),
+      });
+      await refresh();
+    } catch (err) {
+      window.alert(catchDeskError(err, "Could not save timeframe"));
+      setDraft(saved);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <FirstCandleTimeframeBar
+      timeframe={draft}
+      saving={saving}
+      commitCustomOnBlur
+      mark={isCrudeFirstCandleKind(algo) ? "crude" : "nifty"}
+      onPick={(timeframe) => void save(timeframe)}
+    />
   );
 }
 
@@ -766,6 +806,7 @@ function AlgoCard({
                 {algo.clientVisible === false ? "Hidden" : "Visible"}
               </span>
             </div>
+            {isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <CardTimeframe algo={algo} /> : null}
             {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>

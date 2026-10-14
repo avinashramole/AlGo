@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { FirstCandleTimeframeBar } from "./FirstCandleTimeframeBar";
 import { useMarket } from "../../context/MarketContext";
 import { cn } from "../../lib/format";
 import {
@@ -552,6 +553,14 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           ))}
         </div>
         )}
+
+        {firstCandle || crudeFirst ? (
+          <FirstCandleTimeframeBar
+            timeframe={form.timeframe}
+            mark={crudeFirst ? "crude" : "nifty"}
+            onPick={setFirstCandleTimeframe}
+          />
+        ) : null}
 
         <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2 || mir) && "sm:hidden", (test2 || mir) && "hidden")}>
           Strategy name

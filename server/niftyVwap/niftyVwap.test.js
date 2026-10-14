@@ -1409,6 +1409,7 @@ test("Nifty and Crude first candle keep 5 10 15 30 60 and custom minutes", () =>
   assert.equal(parseBarMinutes("1H"), 60);
   assert.equal(parseBarMinutes("20m"), 20);
   assert.equal(parseBarMinutes("20"), 20);
+  assert.equal(resolveFirstCandleTimeframe("20m"), "20m");
   assert.equal(resolveFirstCandleTimeframe("1H"), "60m");
   assert.equal(resolveFirstCandleTimeframe("20"), "20m");
   assert.equal(firstCandleBarMinutes("30m"), 30);
