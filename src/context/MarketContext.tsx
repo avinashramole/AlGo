@@ -139,10 +139,11 @@ function readCachedDesk(): Snapshot | null {
 function syncDhanBrokerLive(
   brokers: Snapshot["brokers"] | undefined,
   feed: Snapshot["dhanFeed"] | undefined,
-) {
-  if (!Array.isArray(brokers) || !feed) return brokers;
+): Snapshot["brokers"] {
+  const rows = Array.isArray(brokers) ? brokers : defaultBrokers;
+  if (!feed) return rows;
   const live = Boolean(feed.live);
-  return brokers.map((row) => {
+  return rows.map((row) => {
     if (row.id !== "dhan") return row;
     if (Boolean(row.liveFeed) === live) return row;
     return {
