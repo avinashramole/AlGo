@@ -344,6 +344,10 @@ export const NiftyVwapHedgeStrategy = {
       algo.lastSignal = "MAX TRADES";
       return { action: "skip", reason: "max-trades" };
     }
+    if (Number(state.marginHoldBarTime || 0) > 0 && Number(state.marginHoldBarTime) === Number(preview.time)) {
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold" };
+    }
 
     const option = reversal.buyCe ? "CE" : "PE";
     const ltp = option === "CE" ? Number(input.ceLtp) : Number(input.peLtp);
@@ -389,11 +393,12 @@ export const NiftyVwapHedgeStrategy = {
       algo.lastSignal = "DUPLICATE BLOCKED";
       return { action: "skip", reason: "duplicate-order" };
     }
-    if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
+    if (result?.error || ["REJECTED", "MARGIN"].includes(String(result?.status || "").toUpperCase())) {
       state.inFlight = false;
       state.pendingRole = "";
-      if (isMarginError(result?.error)) {
-        algo.lastSignal = "MARGIN";
+      if (String(result?.status || "").toUpperCase() === "MARGIN" || isMarginError(result?.error)) {
+        state.marginHoldBarTime = Number(preview.time) || state.marginHoldBarTime;
+        algo.lastSignal = "MARGIN · insufficient funds";
         return { action: "rejected", reason: "margin", result };
       }
       algo.lastSignal = "REJECTED";
@@ -458,11 +463,11 @@ export const NiftyVwapHedgeStrategy = {
       algo.lastSignal = "HEDGE DUPLICATE BLOCKED";
       return { action: "skip", reason: "duplicate-order" };
     }
-    if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
+    if (result?.error || ["REJECTED", "MARGIN"].includes(String(result?.status || "").toUpperCase())) {
       state.inFlight = false;
       state.pendingRole = "";
-      if (isMarginError(result?.error)) {
-        algo.lastSignal = "MARGIN";
+      if (String(result?.status || "").toUpperCase() === "MARGIN" || isMarginError(result?.error)) {
+        algo.lastSignal = "MARGIN · insufficient funds";
         return { action: "rejected", reason: "margin", result };
       }
       algo.lastSignal = "HEDGE REJECTED";

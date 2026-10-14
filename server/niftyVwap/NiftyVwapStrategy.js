@@ -30,6 +30,9 @@ function holdInFlightSignal(algo) {
 }
 
 function shouldReleaseEntryLock(state, { buys = [], now, pending = false, lastSignal = "" } = {}) {
+  const marginHold =
+    Number(state?.marginHoldBarTime || 0) > 0 || /MARGIN|insufficient funds/i.test(String(lastSignal || ""));
+  if (marginHold) return { release: true, clearBar: false };
   const working = pending || (buys || []).some(isWorkingBuy);
   if (working) return { release: false, clearBar: false };
   const rejected = (buys || []).length > 0 && (buys || []).every(isDeadBuy);
@@ -281,6 +284,10 @@ export const NiftyVwapStrategy = {
       algo.lastSignal = "MAX TRADES";
       return { action: "skip", reason: "max-trades" };
     }
+    if (Number(state.marginHoldBarTime || 0) > 0 && RiskManager.duplicateBar(state.marginHoldBarTime, signal.barTime)) {
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold" };
+    }
     if (crudeSignal && RiskManager.duplicateBar(state.sentSignalBarTime, signal.barTime)) {
       algo.lastSignal = "HOLD 1 SIGNAL";
       return { action: "skip", reason: "duplicate-bar" };
@@ -378,6 +385,16 @@ export const NiftyVwapStrategy = {
       exchangeSegment: exchangeSegmentFor(pick.symbol),
     };
     const result = adapter.place(payload);
+    if (String(result?.status || "").toUpperCase() === "MARGIN") {
+      state.inFlight = false;
+      state.buyPhase = "";
+      state.lastEntryBarTime = signal.barTime;
+      state.marginHoldBarTime = signal.barTime;
+      if (crudeSignal) state.sentSignalBarTime = signal.barTime;
+      PositionManager.clearOpen(state);
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold", result };
+    }
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       state.inFlight = false;
       state.lastEntryBarTime = signal.barTime;

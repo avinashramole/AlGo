@@ -28,6 +28,13 @@ test("DH-906 insufficient funds is a Dhan reject, not a local miss", () => {
   );
 });
 
+test("Dhan RMS string reject is insufficient funds", () => {
+  const rms = "RMS:23826101487909:You have insufficient funds. Please add Rs.2385.80 to trade.";
+  assert.equal(isDhanFundsReject(rms), true);
+  assert.equal(dhanFundsNeed(rms), "2385.80");
+  assert.equal(isDhanFundsReject({ live: { reason: rms } }), true);
+});
+
 test("bookRejectedLiveOrder keeps a Dhan funds reject on the order book without a broker orderId", () => {
   const booked = bookRejectedLiveOrder(
     { symbol: "BANKNIFTY 52000 CE", side: "BUY", qty: 30, product: "MIS", type: "MARKET", brokerId: "dhan" },

@@ -36,7 +36,7 @@ import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
 import { listPublicUsers } from "./auth.js";
 import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
-import { isDhanBrokerReject } from "./dhanPlaceError.js";
+import { dhanFundsNeed, isDhanBrokerReject, isDhanFundsReject } from "./dhanPlaceError.js";
 import {
   dailyTradeLimitHit,
   isCrudeFirstCandleAlgo,
@@ -741,6 +741,11 @@ export function releaseStaleLiveSend(algo, now = Date.now()) {
   if (!locked) return false;
   const name = String(algo.name || "");
   if (strategyHasPendingBuy(name) || strategyHasWorkingBuy(name) || strategyHasOpenLot(name)) return false;
+  if (Number(vs.marginHoldBarTime || 0) > 0 || /MARGIN|insufficient funds/i.test(String(algo.lastSignal || ""))) {
+    vs.buyPhase = "";
+    vs.inFlight = false;
+    return false;
+  }
   const entryMs = Number(vs.lastEntryAt) || 0;
   const waitOrderMiss = /\bWAIT ORDER\b/i.test(String(algo.lastSignal || ""));
   if (entryMs > 0 && now - entryMs < STALE_LIVE_SEND_MS && !waitOrderMiss) return false;
@@ -767,6 +772,7 @@ function parseWaitOrderBuy(text) {
 
 export function recoverWaitOrderLiveBuy(algo, ctx = {}) {
   if (!algo) return false;
+  if (/MARGIN|insufficient funds/i.test(String(algo.lastSignal || ""))) return false;
   const want = parseWaitOrderBuy(algo.lastSignal);
   if (!want) return false;
   const name = String(algo.name || "");
@@ -775,6 +781,7 @@ export function recoverWaitOrderLiveBuy(algo, ctx = {}) {
     return false;
   }
   const vs = runtimeState(algo);
+  if (Number(vs.marginHoldBarTime || 0) > 0) return false;
   if (isFirstCandleAlgo(algo)) {
     const barMs = (Number(ctx.config?.barMinutes) || 5) * 60 * 1000;
     const barTime = Number(vs.lastProcessedBarTime || vs.lastEntryBarTime || 0);
@@ -948,6 +955,7 @@ function entryLimitState(algo) {
   const today = VwapSignalEngine.sessionKeyIST(Date.now());
   if (bag.sessionDate && bag.sessionDate !== today) {
     bag.sessionTrades = 0;
+    bag.marginHoldBarTime = 0;
     bag.sessionDate = today;
   } else if (!bag.sessionDate) {
     bag.sessionDate = today;
@@ -976,6 +984,37 @@ function noteGenericDailyEntry(algo) {
   bag.sessionTrades = Number(bag.sessionTrades || 0) + 1;
 }
 
+export function holdInsufficientFunds(algo, { barTime, reason } = {}) {
+  if (!algo) return;
+  const bag = entryLimitState(algo);
+  const t = Number(barTime || bag.lastProcessedBarTime || bag.lastEntryBarTime || bag.lastBarTime || algo.lastSignalBarTime || 0);
+  const next = t || Date.now();
+  const already = Number(bag.marginHoldBarTime || 0) === next && /MARGIN/i.test(String(algo.lastSignal || ""));
+  bag.marginHoldBarTime = next;
+  if (t) {
+    bag.lastEntryBarTime = t;
+    bag.sentSignalBarTime = t;
+    bag.lastBarTime = t;
+    bag.lastProcessedBarTime = t;
+    algo.lastSignalBarTime = t;
+  }
+  bag.inFlight = false;
+  bag.buyPhase = "";
+  if (isNiftyTest2Algo(algo)) bag.lockedDay = true;
+  const amt = dhanFundsNeed(reason);
+  algo.lastSignal = amt ? `MARGIN · add ₹${amt}` : "MARGIN · insufficient funds";
+  if (!already) persistAlgos();
+}
+
+export function fundsHoldBlocks(algo, barTime) {
+  if (!algo) return false;
+  const bag = entryLimitState(algo);
+  const hold = Number(bag.marginHoldBarTime || 0);
+  if (!hold) return false;
+  const t = Number(barTime || 0);
+  return t > 0 ? t === hold : false;
+}
+
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
@@ -993,6 +1032,9 @@ function enqueueLiveAlgoOrder(payload) {
       const algo = strategyCard(strategy);
       if (dailyEntryBlocked(algo)) {
         return { ok: true, queued: false, status: "MAX_TRADES", blocked: true };
+      }
+      if (fundsHoldBlocks(algo, payload?.barTime)) {
+        return { ok: true, queued: false, status: "MARGIN", blocked: true };
       }
     }
   }
@@ -1505,15 +1547,58 @@ function syncExecutedTradeCount(previousRow, nextRow) {
   if (wasExecuted && orderWasRejected(nextRow) && !(Number(nextRow.filledQty) > 0)) dropCountedEntry(algo, nextRow.id);
 }
 
+function fundsRejectReason(error, live, extra) {
+  if (isDhanFundsReject(error)) return error;
+  if (isDhanFundsReject(live?.reason)) return live.reason;
+  if (isDhanFundsReject(extra)) return extra;
+  return "";
+}
+
+function noteFundsRejectOnAlgo(algo, { barTime, reason } = {}) {
+  if (!algo) return false;
+  holdInsufficientFunds(algo, { barTime, reason });
+  return true;
+}
+
+function noteFundsRejectFromBook(row, previousRow) {
+  if (!row || row.copyUserId) return;
+  if (String(row.side || "BUY").toUpperCase() === "SELL") return;
+  if (!orderWasRejected(row)) return;
+  const reason = row.reason || row.exitReason || previousRow?.reason || "";
+  if (!isDhanFundsReject(reason)) return;
+  const name = realStrategyName(row.strategy) || String(row.strategy || "");
+  if (!name) return;
+  const algo = (state.algos || []).find((item) => item.name === name);
+  if (!algo) return;
+  const barTime =
+    Number(row.barTime || previousRow?.barTime || 0) ||
+    Number(entryLimitState(algo).lastEntryBarTime || entryLimitState(algo).lastProcessedBarTime || algo.lastSignalBarTime || 0);
+  noteFundsRejectOnAlgo(algo, { barTime, reason });
+}
+
 export function noteLiveAlgoOrderResult(payload, live, error) {
   noteArmedTargetResult(payload, live, error);
   if (payload?.copyUserId) return;
   const name = realStrategyName(payload?.strategy) || String(payload?.strategy || "");
   if (!name) return;
-  const algo = (state.algos || []).find(
-    (item) => item.name === name && (isNiftyOptionEngineAlgo(item) || isCrudeFirstCandleAlgo(item) || isNiftyTest1Algo(item) || isNiftyTest2Algo(item) || isNiftyVwapHedgeAlgo(item) || isMultiIndexReversalAlgo(item)),
-  );
+  const algo = (state.algos || []).find((item) => item.name === name);
   if (!algo) return;
+  const next = liveAlgoBrokerSignal({ payload, live, error });
+  const fundsReason =
+    String(payload?.side || "BUY").toUpperCase() !== "SELL" && !next.accepted
+      ? fundsRejectReason(error, live, next.lastSignal)
+      : "";
+  const isEngine =
+    isNiftyOptionEngineAlgo(algo) ||
+    isCrudeFirstCandleAlgo(algo) ||
+    isNiftyTest1Algo(algo) ||
+    isNiftyTest2Algo(algo) ||
+    isNiftyVwapHedgeAlgo(algo) ||
+    isMultiIndexReversalAlgo(algo);
+  if (!isEngine) {
+    if (fundsReason) noteFundsRejectOnAlgo(algo, { barTime: payload?.barTime, reason: fundsReason });
+    return;
+  }
   rememberOrderStrategy(
     { id: live?.orderId, securityId: live?.securityId || payload?.securityId, strategy: name },
     name,
@@ -1521,11 +1606,11 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   if (isNiftyVwapHedgeAlgo(algo) && live?.orderId) {
     hedgeState(algo).lastOrderId = String(live.orderId);
   }
-  const next = liveAlgoBrokerSignal({ payload, live, error });
   if (!next.accepted) {
     if (isNiftyVwapHedgeAlgo(algo)) noteHedgeBrokerRejection(algo);
     else noteBrokerRejection(algo);
-    algo.lastSignal = next.lastSignal;
+    if (fundsReason) noteFundsRejectOnAlgo(algo, { barTime: payload?.barTime, reason: fundsReason });
+    else algo.lastSignal = next.lastSignal;
     if (isFirstCandleAlgo(algo) && payload.side !== "SELL") dropCountedEntry(algo, live?.orderId);
     return;
   }
@@ -3944,6 +4029,9 @@ function runPaperAlgos() {
         algo.lastSignal = "MAX TRADES";
         continue;
       }
+      if (side === "BUY" && fundsHoldBlocks(algo, algo.lastSignalBarTime)) {
+        continue;
+      }
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || !(trade.ltp > 0)) continue;
       placeOrder({
@@ -3984,6 +4072,9 @@ function runPaperAlgos() {
     const side = wantBuy ? "BUY" : "SELL";
     if (side === "BUY" && dailyEntryBlocked(algo)) {
       algo.lastSignal = "MAX TRADES";
+      continue;
+    }
+    if (side === "BUY" && fundsHoldBlocks(algo, pack.candles?.[pack.candles.length - 1]?.time)) {
       continue;
     }
     if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
@@ -4053,6 +4144,9 @@ function runLiveAlgos() {
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || trade.kind !== "future" || !(trade.ltp > 0)) continue;
       const signalBar = Number(niftyFuturePreviewBar(algo?.timeframe || "5m", now)?.time || 0);
+      if (side === "BUY" && fundsHoldBlocks(algo, signalBar || algo.lastSignalBarTime)) {
+        continue;
+      }
       if (signalBar && Number(algo.lastSignalBarTime) === signalBar) {
         algo.lastSignal = "WAIT NEXT";
         continue;
@@ -4060,9 +4154,13 @@ function runLiveAlgos() {
       const queued = queueLiveAlgoOrder({
         ...algoOrderFields(algo, side, trade),
         brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
+        barTime: signalBar || undefined,
       });
       if (queued?.status === "MAX_TRADES") {
         algo.lastSignal = "MAX TRADES";
+        continue;
+      }
+      if (queued?.status === "MARGIN") {
         continue;
       }
       if (!queued?.queued) {
@@ -4097,6 +4195,9 @@ function runLiveAlgos() {
       algo.lastSignal = "MAX TRADES";
       continue;
     }
+    if (side === "BUY" && fundsHoldBlocks(algo, signalBar)) {
+      continue;
+    }
     if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
       algo.lastSignal = "WAIT ORDER";
       continue;
@@ -4114,9 +4215,13 @@ function runLiveAlgos() {
     const queued = queueLiveAlgoOrder({
       ...algoOrderFields(algo, side, trade),
       brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
+      barTime: signalBar || undefined,
     });
     if (queued?.status === "MAX_TRADES") {
       algo.lastSignal = "MAX TRADES";
+      continue;
+    }
+    if (queued?.status === "MARGIN") {
       continue;
     }
     if (!queued?.queued) {
@@ -4595,6 +4700,7 @@ export function replaceDhanOrders(rows) {
       }),
     };
     syncExecutedTradeCount(existing, next);
+    noteFundsRejectFromBook(next, existing);
     return next;
   });
   for (const row of tagged) {

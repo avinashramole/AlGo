@@ -23,9 +23,15 @@ const {
   getAlgo,
   liveBuyAllowedForStrategy,
   armLiveOrders,
+  fundsHoldBlocks,
+  holdInsufficientFunds,
+  noteLiveAlgoOrderResult,
   queueLiveAlgoOrder,
   queueLivePositionExit,
+  recoverWaitOrderLiveBuy,
+  releaseStaleLiveSend,
   replaceDhanBook,
+  replaceDhanOrders,
   setDhanFeed,
   snapshot,
   strategyAllowsLiveMemberCopies,
@@ -325,6 +331,123 @@ test("every strategy keeps a custom daily trade limit and blocks extra BUY", () 
     assert.match(algoSrc, /data-sl-tgt="crude"/);
     const builder = fs.readFileSync(new URL("../src/components/dashboard/StrategyBuilder.tsx", import.meta.url), "utf8");
     assert.match(builder, /data-trade-limit="daily"/);
+  } finally {
+    drainPendingLiveAlgoOrders();
+    for (const algo of created) deleteAlgo(algo.id);
+  }
+});
+
+test("insufficient funds holds the same signal on every strategy and lets the next bar send", () => {
+  armLiveOrders();
+  const rms = "RMS:23826101487909:You have insufficient funds. Please add Rs.2385.80 to trade.";
+  const barTime = Date.parse("2026-10-14T15:30:00.000Z");
+  const nextBar = barTime + 15 * 60 * 1000;
+  const specs = [
+    { kind: "nifty-first-candle", name: `NIFTY margin ${Date.now()}` },
+    { kind: "crude-first-candle", name: `CRUDE margin ${Date.now()}`, symbol: "CRUDEOIL" },
+    { kind: "nifty-vwap", name: `VWAP margin ${Date.now()}` },
+    { kind: "nifty-vwap-reversal", name: `REV margin ${Date.now()}` },
+    { kind: "nifty-vwap-hedge", name: `HEDGE margin ${Date.now()}` },
+    { kind: "multi-index-reversal", name: `MULTI margin ${Date.now()}`, symbol: "BANKNIFTY" },
+    { kind: "nifty-test1", name: `TEST1 margin ${Date.now()}` },
+    { kind: "nifty-test2", name: `TEST2 margin ${Date.now()}` },
+    { kind: "nifty-test", name: `TEST margin ${Date.now()}` },
+    { kind: "indicator", name: `IND margin ${Date.now()}`, indicator: "VWAP" },
+    { kind: "price-action", name: `PA margin ${Date.now()}`, pattern: "ORB" },
+  ];
+  const created = [];
+  try {
+    for (const spec of specs) {
+      const algo = createAlgo({ ...spec, runMode: "live" });
+      created.push(algo);
+      toggleAlgo(algo.id, { enabled: true });
+      withLiveAlgo(algo.id, (row) => {
+        noteLiveAlgoOrderResult(
+          { strategy: row.name, side: "BUY", option: "PE", strike: 9050, barTime },
+          { status: "REJECTED", reason: rms },
+          rms,
+        );
+      });
+      const held = getAlgo(algo.id);
+      assert.match(String(held.lastSignal || ""), /MARGIN/, spec.kind);
+      assert.equal(fundsHoldBlocks(held, barTime), true, spec.kind);
+      const strike = spec.symbol === "CRUDEOIL" ? 9050 : 22700;
+      const nextStrike = strike + 50;
+      const root = spec.symbol === "CRUDEOIL" ? "CRUDEOIL" : "NIFTY";
+      const same = queueLiveAlgoOrder({
+        strategy: held.name,
+        side: "BUY",
+        qty: 1,
+        symbol: `${root} ${strike} PE`,
+        option: "PE",
+        strike,
+        brokerId: "dhan",
+        barTime,
+      });
+      assert.equal(same.queued, false, spec.kind);
+      assert.equal(same.status, "MARGIN", spec.kind);
+      const next = queueLiveAlgoOrder({
+        strategy: held.name,
+        side: "BUY",
+        qty: 1,
+        symbol: `${root} ${nextStrike} PE`,
+        option: "PE",
+        strike: nextStrike,
+        brokerId: "dhan",
+        barTime: nextBar,
+      });
+      assert.equal(next.queued, true, spec.kind);
+      assert.notEqual(next.status, "MARGIN", spec.kind);
+      drainPendingLiveAlgoOrders();
+    }
+    const crude = created.find((row) => row.kind === "crude-first-candle");
+    const live = withLiveAlgo(crude.id, (algo) => {
+      holdInsufficientFunds(algo, { barTime, reason: rms });
+      algo.vwapState = {
+        ...(algo.vwapState || {}),
+        buyPhase: "entry",
+        inFlight: true,
+        lastEntryAt: Date.now() - 30_000,
+        lastEntryBarTime: barTime,
+        marginHoldBarTime: barTime,
+      };
+      algo.lastSignal = "MARGIN · add ₹2385.80";
+      return algo;
+    });
+    assert.equal(releaseStaleLiveSend(live), false);
+    assert.equal(Number(live.vwapState.lastEntryBarTime), barTime);
+    assert.equal(recoverWaitOrderLiveBuy(live, { peStrike: 9050, peLtp: 108.7, config: { qty: 1, symbol: "CRUDEOIL" } }), false);
+    replaceDhanOrders([
+      {
+        id: "dhan-rms-1",
+        symbol: "CRUDEOIL-15Oct2026-9050-PE",
+        side: "BUY",
+        qty: 1,
+        filledQty: 0,
+        price: 108.7,
+        product: "INTRADAY",
+        type: "LIMIT",
+        status: "REJECTED",
+        strategy: crude.name,
+        brokerId: "dhan",
+        reason: rms,
+        barTime,
+      },
+    ]);
+    const afterFeed = getAlgo(crude.id);
+    assert.match(String(afterFeed.lastSignal || ""), /MARGIN · add ₹2385\.80/);
+    const afterNext = queueLiveAlgoOrder({
+      strategy: afterFeed.name,
+      side: "BUY",
+      qty: 1,
+      symbol: "CRUDEOIL 9100 PE",
+      option: "PE",
+      strike: 9100,
+      brokerId: "dhan",
+      barTime: nextBar,
+    });
+    assert.equal(afterNext.queued, true);
+    assert.notEqual(afterNext.status, "MARGIN");
   } finally {
     drainPendingLiveAlgoOrders();
     for (const algo of created) deleteAlgo(algo.id);

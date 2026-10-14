@@ -1,14 +1,16 @@
 export function dhanErrorBlob(error) {
-  return `${error?.message || ""} ${JSON.stringify(error?.body || {})}`;
+  if (error == null) return "";
+  if (typeof error === "string") return error;
+  return `${error?.message || ""} ${error?.reason || ""} ${error?.live?.reason || ""} ${JSON.stringify(error?.body || {})}`;
 }
 
 export function dhanFundsNeed(error) {
-  const match = dhanErrorBlob(error).match(/add Rs\.?\s*([\d,]+(?:\.\d+)?)/i);
-  return match ? match[1].replace(/,/g, "") : "";
+  const match = dhanErrorBlob(error).match(/add Rs\.?\s*([\d,]+(?:\.\d+)?)|add ₹\s*([\d,]+(?:\.\d+)?)/i);
+  return match ? (match[1] || match[2] || "").replace(/,/g, "") : "";
 }
 
 export function isDhanFundsReject(error) {
-  return /insufficient funds/i.test(dhanErrorBlob(error));
+  return /insufficient funds|insufficient margin|add Rs\.|add ₹|DH-906/i.test(dhanErrorBlob(error));
 }
 
 export function isDhanBrokerReject(error) {

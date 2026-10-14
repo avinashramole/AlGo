@@ -23,6 +23,7 @@ function rollSession(state, day, hasOpen, holdOvernight) {
   }
   state.entered = false;
   state.lockedDay = false;
+  state.marginHoldBarTime = 0;
   state.entryDate = "";
   state.legs = [];
   return state;
@@ -261,6 +262,10 @@ export const Test2Strategy = {
       algo.lastSignal = "MAX TRADES";
       return { action: "skip", reason: "max-trades" };
     }
+    if (Number(state.marginHoldBarTime || 0) > 0) {
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold" };
+    }
     if (state.entered || state.lockedDay || state.inFlight) {
       algo.lastSignal = state.lockedDay ? `HOLD ${styleLabel(config)}` : "HOLD TEST2";
       return { action: "skip", reason: state.lockedDay ? "locked" : "open" };
@@ -298,6 +303,11 @@ export const Test2Strategy = {
         continue;
       }
       const result = adapter.place(payload);
+      if (String(result?.status || "").toUpperCase() === "MARGIN") {
+        state.inFlight = false;
+        if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+        return { action: "skip", reason: "margin-hold", result };
+      }
       if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
         TradeLogger.record("rejected", { message: result?.error || "broker-rejected", strategy: algo.name, symbol: payload.symbol });
         algo.lastSignal = "REJECTED";

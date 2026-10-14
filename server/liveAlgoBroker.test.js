@@ -3,12 +3,15 @@ import test from "node:test";
 import {
   armLiveTarget,
   drainPendingLiveAlgoOrders,
+  fundsHoldBlocks,
   kickLiveAlgoFlush,
   liveAlgoBrokerSignal,
+  noteLiveAlgoOrderResult,
   onLiveAlgoOrders,
   queueLiveAlgoOrder,
   recoverWaitOrderLiveBuy,
   releaseStaleLiveSend,
+  replaceDhanOrders,
   requeueLiveAlgoOrders,
 } from "./market.js";
 import { STALE_LIVE_SEND_MS } from "./niftyVwap/index.js";
@@ -209,6 +212,114 @@ test("recoverWaitOrderLiveBuy queues BUY PE 22750 for admin when the tape is WAI
     drainPendingLiveAlgoOrders();
     setDhanFeed({ live: false });
   }
+});
+
+test("RMS insufficient funds holds this signal and sends on the next bar", async () => {
+  drainPendingLiveAlgoOrders();
+  const { createAlgo, deleteAlgo, getAlgo, toggleAlgo, withLiveAlgo, armLiveOrders } = await import("./market.js");
+  armLiveOrders();
+  const rms = "RMS:23826101487909:You have insufficient funds. Please add Rs.2385.80 to trade.";
+  const barTime = Date.parse("2026-10-14T15:33:00.000Z");
+  const nextBar = barTime + 15 * 60 * 1000;
+  const created = createAlgo({
+    name: `CRUDE funds ${Date.now()}`,
+    kind: "crude-first-candle",
+    symbol: "CRUDEOIL",
+    runMode: "live",
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    withLiveAlgo(created.id, (algo) => {
+      noteLiveAlgoOrderResult(
+        { strategy: algo.name, side: "BUY", option: "PE", strike: 9050, barTime },
+        { status: "REJECTED", reason: rms },
+        rms,
+      );
+    });
+    const held = getAlgo(created.id);
+    assert.match(String(held.lastSignal || ""), /MARGIN · add ₹2385\.80/);
+    assert.equal(fundsHoldBlocks(held, barTime), true);
+    const same = queueLiveAlgoOrder({
+      strategy: held.name,
+      side: "BUY",
+      qty: 1,
+      symbol: "CRUDEOIL 9050 PE",
+      option: "PE",
+      strike: 9050,
+      brokerId: "dhan",
+      barTime,
+    });
+    assert.equal(same.queued, false);
+    assert.equal(same.status, "MARGIN");
+    const next = queueLiveAlgoOrder({
+      strategy: held.name,
+      side: "BUY",
+      qty: 1,
+      symbol: "CRUDEOIL 9100 PE",
+      option: "PE",
+      strike: 9100,
+      brokerId: "dhan",
+      barTime: nextBar,
+    });
+    assert.equal(next.queued, true);
+    drainPendingLiveAlgoOrders();
+    replaceDhanOrders([
+      {
+        id: "dhan-rms-crude",
+        symbol: "CRUDEOIL-15Oct2026-9050-PE",
+        side: "BUY",
+        qty: 1,
+        filledQty: 0,
+        price: 108.7,
+        product: "INTRADAY",
+        type: "LIMIT",
+        status: "REJECTED",
+        strategy: held.name,
+        brokerId: "dhan",
+        reason: rms,
+        barTime,
+      },
+    ]);
+    const afterFeed = getAlgo(created.id);
+    assert.match(String(afterFeed.lastSignal || ""), /MARGIN · add ₹2385\.80/);
+    assert.equal(
+      queueLiveAlgoOrder({
+        strategy: afterFeed.name,
+        side: "BUY",
+        qty: 1,
+        symbol: "CRUDEOIL 9050 PE",
+        option: "PE",
+        strike: 9050,
+        brokerId: "dhan",
+        barTime,
+      }).status,
+      "MARGIN",
+    );
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+  }
+});
+
+test("insufficient funds does not unlock the same candle after 20s", () => {
+  drainPendingLiveAlgoOrders();
+  const barTime = Date.now() - STALE_LIVE_SEND_MS - 1_000;
+  const algo = {
+    name: "CRUDE OIL",
+    lastSignal: "MARGIN · add ₹2385.80",
+    vwapState: {
+      buyPhase: "entry",
+      inFlight: true,
+      lastEntryAt: barTime,
+      lastEntryBarTime: barTime,
+      sentSignalBarTime: barTime,
+      marginHoldBarTime: barTime,
+    },
+  };
+  assert.equal(releaseStaleLiveSend(algo), false);
+  assert.equal(algo.vwapState.lastEntryBarTime, barTime);
+  assert.equal(algo.vwapState.marginHoldBarTime, barTime);
+  assert.equal(algo.allowFreshLiveEntry, undefined);
 });
 
 test("a fresh SENDING is held while the flush can still run", () => {

@@ -302,6 +302,10 @@ export const MultiIndexReversalStrategy = {
       algo.lastSignal = "MAX TRADES";
       return { action: "skip", reason: "max-trades" };
     }
+    if (Number(state.marginHoldBarTime || 0) > 0 && Number(state.marginHoldBarTime) === Number(signal.barTime)) {
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold" };
+    }
     if (signal.buyCe) return this.enterOriginal(input, signal, "CE");
     if (signal.buyPe) return this.enterOriginal(input, signal, "PE");
     algo.lastSignal = `NO TRADE · ${config.symbol} ${String(signal.indexColor || "").toUpperCase()} CE ${String(signal.ceColor || "—").toUpperCase()} PE ${String(signal.peColor || "—").toUpperCase()}`;
@@ -333,6 +337,13 @@ export const MultiIndexReversalStrategy = {
       barTime: signal.barTime,
       role: "original",
     });
+    if (String(result?.status || "").toUpperCase() === "MARGIN") {
+      state.marginHoldBarTime = signal.barTime;
+      state.lastBarTime = signal.barTime;
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      finishCycle(state, "margin-hold", input.now, signal.barTime);
+      return { action: "skip", reason: "margin-hold", result };
+    }
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       markError(state, result?.error || "rejected");
       algo.lastSignal = `REJECTED ${option}`;

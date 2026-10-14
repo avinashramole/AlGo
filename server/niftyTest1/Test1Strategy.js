@@ -114,6 +114,10 @@ export const Test1Strategy = {
       algo.lastSignal = "MAX TRADES";
       return { action: "skip", reason: "max-trades" };
     }
+    if (Number(state.marginHoldBarTime || 0) > 0 && RiskManager.duplicateBar(state.marginHoldBarTime, signal.barTime)) {
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold" };
+    }
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: 1 });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     if (RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime) || RiskManager.duplicateBar(state.sentSignalBarTime, signal.barTime)) {
@@ -187,6 +191,16 @@ export const Test1Strategy = {
       sl: signal.low,
     });
     const result = adapter.place(payload);
+    if (String(result?.status || "").toUpperCase() === "MARGIN") {
+      state.inFlight = false;
+      state.buyPhase = "";
+      state.lastEntryBarTime = signal.barTime;
+      state.sentSignalBarTime = signal.barTime;
+      state.marginHoldBarTime = signal.barTime;
+      PositionManager.clearOpen(state);
+      if (!/MARGIN/i.test(String(algo.lastSignal || ""))) algo.lastSignal = "MARGIN · insufficient funds";
+      return { action: "skip", reason: "margin-hold", result };
+    }
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       state.inFlight = false;
       PositionManager.clearOpen(state);
