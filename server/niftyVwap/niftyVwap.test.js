@@ -1425,8 +1425,12 @@ test("Nifty and Crude first candle keep 5 10 15 30 60 and custom minutes", () =>
   const nifty30 = normalizeAlgo({ name: "NIFTY", kind: "nifty-first-candle", timeframe: "30m" });
   assert.equal(nifty30.timeframe, "30m");
   assert.equal(nifty30.entryEvaluationIst, "09:30");
+  const niftyFromFive = normalizeAlgo({ timeframe: "60m" }, { id: "a10", name: "NIFTY", kind: "nifty-first-candle", timeframe: "5m" });
+  assert.equal(niftyFromFive.timeframe, "60m");
   const crudeCustom = normalizeAlgo({ name: "CRUDE OIL", kind: "crude-first-candle", timeframe: "20m" });
   assert.equal(crudeCustom.timeframe, "20m");
+  const crudeFromFive = normalizeAlgo({ timeframe: "30m" }, { id: "a12", name: "CRUDE OIL", kind: "crude-first-candle", timeframe: "5m" });
+  assert.equal(crudeFromFive.timeframe, "30m");
   assert.equal(crudeFirstCandleConfig(crudeCustom).barMinutes, 20);
 });
 

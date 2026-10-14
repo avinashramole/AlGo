@@ -23,8 +23,8 @@ export function FirstCandleTimeframeBar({
 }) {
   const selected = firstCandleTimeframeSelect(timeframe);
   return (
-    <div className="mt-2 w-full" data-first-candle-timeframe-bar={mark || "form"}>
-      <div className="text-xs font-semibold text-slate-500">Timeframe</div>
+    <div className="mt-2 w-full min-w-0 overflow-visible" data-first-candle-timeframe-bar={mark || "form"}>
+      <div className="text-xs font-extrabold uppercase tracking-wide text-slate-600">Candle timeframe · 5m 10m 15m 30m 60m Custom</div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {CHOICES.map((row) => (
           <button
@@ -40,7 +40,7 @@ export function FirstCandleTimeframeBar({
               )
             }
             className={cn(
-              "h-9 rounded-lg px-3 text-xs font-bold",
+              "h-10 shrink-0 rounded-lg px-3.5 text-sm font-extrabold",
               selected === row ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)] text-[var(--text)]",
             )}
           >

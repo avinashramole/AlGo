@@ -31,6 +31,7 @@ import {
   isNiftyVwapHedgeKind,
   isCrudeFirstCandleKind,
   isNiftyFirstCandleKind,
+  showsFirstCandleTimeframe,
   NIFTY_FIRST_CANDLE_NAME,
   CRUDE_FIRST_CANDLE_NAME,
   niftyFirstCandleTrail,
@@ -180,6 +181,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   const hedge = isNiftyVwapHedgeKind(form);
   const firstCandle = isNiftyFirstCandleKind(form);
   const crudeFirst = isCrudeFirstCandleKind(form) || isCrudeFirstCandleKind(algo || undefined);
+  const firstCandleTf = showsFirstCandleTimeframe(form) || showsFirstCandleTimeframe(algo || undefined) || firstCandle || crudeFirst;
   const niftyTest = isNiftyTestKind(form);
   const test1 = isNiftyTest1Kind(form) || isNiftyTest1Kind(algo || undefined);
   const test2 = isNiftyTest2Kind(form) || isNiftyTest2Kind(algo || undefined);
@@ -554,7 +556,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         </div>
         )}
 
-        {firstCandle || crudeFirst ? (
+        {firstCandleTf ? (
           <FirstCandleTimeframeBar
             timeframe={form.timeframe}
             mark={crudeFirst ? "crude" : "nifty"}
@@ -865,7 +867,15 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
-          {firstCandle || crudeFirst ? null : (
+          {firstCandleTf ? (
+          <div className="col-span-2 lg:col-span-3" data-first-candle-lots-timeframe="true">
+            <FirstCandleTimeframeBar
+              timeframe={form.timeframe}
+              mark={crudeFirst ? "crude" : "nifty"}
+              onPick={setFirstCandleTimeframe}
+            />
+          </div>
+          ) : (
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
             <select
@@ -1136,7 +1146,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             </label>
             <NumberField label="EOD square-off (min)" value={form.eodSquareOffMinutes ?? 15} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
           </div>
-        ) : firstCandle || crudeFirst ? (
+        ) : firstCandleTf ? (
           <div className="mt-2.5 space-y-2" data-first-candle-settings={crudeFirst ? "crude" : "nifty"}>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-500" data-first-candle-timeframe="true">

@@ -26,6 +26,7 @@ import {
   isNiftyVwapReversalKind,
   isRetiredDeskStrategy,
   firstCandleEntryIst,
+  showsFirstCandleTimeframe,
   sortDeskAlgos,
   TEST2_SCRIPTS,
   type AlgoStrategy,
@@ -806,8 +807,6 @@ function AlgoCard({
                 {algo.clientVisible === false ? "Hidden" : "Visible"}
               </span>
             </div>
-            {isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <CardTimeframe algo={algo} /> : null}
-            {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
             {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
             <div className="desk-help mt-2 text-sm text-slate-400">{meta.config}</div>
@@ -828,6 +827,8 @@ function AlgoCard({
           <div className={cn("px text-xl font-extrabold leading-none", moneyClass(liveMtm))}>{rupee(liveMtm)}</div>
         </div>
       </div>
+      {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
+      {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
 
       <div className="metric-well mt-4 grid-cols-2 sm:grid-cols-4">
         <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />

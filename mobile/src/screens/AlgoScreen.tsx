@@ -47,7 +47,7 @@ type CondRow = { left: string; op: string; right: string; value: string };
 type Draft = {
   id?: string;
   name: string;
-  kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "nifty-test";
+  kind: "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test";
   dailyLiveIst?: string;
   startTimeIst?: string;
   firstBarStartIst?: string;
@@ -87,8 +87,42 @@ type Draft = {
   runMode: "live" | "paper" | "backtest";
 };
 
+const FIRST_CANDLE_TIMEFRAMES = ["5m", "10m", "15m", "30m", "60m"] as const;
+
 function isEngineKind(kind: Draft["kind"]) {
   return kind === "nifty-vwap" || kind === "nifty-vwap-reversal" || kind === "nifty-vwap-hedge" || kind === "nifty-first-candle";
+}
+
+function isFirstCandleKind(kind?: string) {
+  return kind === "nifty-first-candle" || kind === "crude-first-candle";
+}
+
+function firstCandleMinutes(timeframe?: string) {
+  const raw = String(timeframe || "").trim();
+  if (raw === "1H" || raw === "1h") return 60;
+  const named: Record<string, number> = { "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60 };
+  if (named[raw]) return named[raw];
+  const match = raw.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/i) || raw.match(/^(\d+)$/);
+  const n = match ? Number(match[1]) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 240) return Math.round(n);
+  return 5;
+}
+
+function firstCandleTimeframeSelect(timeframe?: string) {
+  const raw = String(timeframe || "5m");
+  if (raw === "1H" || raw === "1h") return "60m";
+  return (FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(raw) ? raw : "custom";
+}
+
+function firstCandleTimeframeValue(select: string, customMinutes?: number) {
+  if ((FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(select)) return select;
+  if (select === "1H" || select === "1h") return "60m";
+  if (select === "custom") {
+    const n = Math.max(1, Math.min(240, Math.round(Number(customMinutes) || 20)));
+    return `${n}m`;
+  }
+  if (/^\d+m$/i.test(select) || /^\d+$/.test(select)) return `${firstCandleMinutes(select)}m`;
+  return "5m";
 }
 
 function lotFor(symbol: string) {
@@ -367,6 +401,12 @@ export function AlgoScreen() {
         </View>
         {draft.runMode === "paper" ? <Text style={styles.muted}>Paper uses live Dhan quotes. Fills stay virtual — nothing is sent to Dhan.</Text> : null}
         </>
+        {isFirstCandleKind(draft.kind) ? (
+          <FirstCandleTfChips
+            timeframe={draft.timeframe}
+            onPick={(timeframe) => setDraft({ ...draft, timeframe })}
+          />
+        ) : null}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>
@@ -700,6 +740,12 @@ export function AlgoScreen() {
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.name}>{algo.name}</Text>
               <Text style={styles.muted}>{algo.summary || algo.tag}</Text>
+              {isFirstCandleKind(algo.kind) ? (
+                <FirstCandleTfChips
+                  timeframe={algo.timeframe || "5m"}
+                  onPick={(timeframe) => void saveAlgo({ id: algo.id, timeframe })}
+                />
+              ) : null}
               {algo.kind === "nifty-first-candle" ? (
                 <Text style={styles.muted}>
                   Trailing SL +{Number(algo.trailingEveryPct) > 0 && Number(algo.trailingShiftPct) > 0 ? algo.trailingActivationPct || 20 : 20}% to buy, then +{Number(algo.trailingShiftPct) > 0 ? algo.trailingShiftPct : 5}% every +{Number(algo.trailingEveryPct) > 0 ? algo.trailingEveryPct : 10}%
@@ -747,6 +793,8 @@ export function AlgoScreen() {
                       ? "nifty-vwap-reversal"
                       : algo.kind === "nifty-first-candle"
                         ? "nifty-first-candle"
+                      : algo.kind === "crude-first-candle"
+                        ? "crude-first-candle"
                       : algo.kind === "nifty-test"
                         ? "nifty-test"
                       : algo.kind === "nifty-vwap"
@@ -848,6 +896,40 @@ export function AlgoScreen() {
         <Text style={styles.ctaText}>Add strategy</Text>
       </Pressable>
     </ScrollView>
+  );
+}
+
+function FirstCandleTfChips({ timeframe, onPick }: { timeframe?: string; onPick: (timeframe: string) => void }) {
+  const selected = firstCandleTimeframeSelect(timeframe);
+  return (
+    <View>
+      <Text style={styles.muted}>Candle timeframe · 5m 10m 15m 30m 60m Custom</Text>
+      <View style={styles.chips}>
+        {[...FIRST_CANDLE_TIMEFRAMES, "custom"].map((row) => (
+          <Chip
+            key={row}
+            label={row === "custom" ? "Custom" : row}
+            on={selected === row}
+            onPress={() =>
+              onPick(
+                firstCandleTimeframeValue(
+                  row,
+                  row === "custom" ? (selected === "custom" ? firstCandleMinutes(timeframe) : 20) : undefined,
+                ),
+              )
+            }
+          />
+        ))}
+      </View>
+      {selected === "custom" ? (
+        <Field
+          label="Custom minutes"
+          value={String(firstCandleMinutes(timeframe))}
+          keyboard="numeric"
+          onChange={(value) => onPick(firstCandleTimeframeValue("custom", Number(value)))}
+        />
+      ) : null}
+    </View>
   );
 }
 

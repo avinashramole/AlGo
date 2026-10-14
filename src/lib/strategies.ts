@@ -512,6 +512,10 @@ export function isCrudeFirstCandleKind(algo?: { kind?: string; strategyType?: st
   return isCrudeFirstCandleName(algo?.name, algo?.symbol);
 }
 
+export function showsFirstCandleTimeframe(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
+  return isNiftyFirstCandleKind(algo) || isCrudeFirstCandleKind(algo);
+}
+
 const CRUDE_INDICATOR_KEYS = [
   "buyConditions",
   "sellConditions",
