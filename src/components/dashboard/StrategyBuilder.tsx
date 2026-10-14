@@ -250,6 +250,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
   }, [form, lotSize, lots, crudeFirst, test1, test2, mir]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
+  const setFirstCandleTimeframe = (picked: string, customMinutes?: number) => {
+    const alreadyCustom = firstCandleTimeframeSelect(form.timeframe) === "custom";
+    const timeframe = firstCandleTimeframeValue(
+      picked,
+      picked === "custom" ? (alreadyCustom ? firstCandleMinutes(form.timeframe) : customMinutes ?? 20) : customMinutes,
+    );
+    set({
+      timeframe,
+      entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
+    });
+  };
   const pickTest2Script = (symbol: string) => {
     const row = TEST1_SCRIPTS.find((item) => item.id === symbol) || TEST1_SCRIPTS[0];
     const mcx = row.session === "mcx";
@@ -421,7 +432,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={crudeFirst}
             title="CRUDE OIL"
-            text="Checks every completed 5m Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
+            text="Pick 5, 10, 15, 30, 60, or custom minutes. Checks every completed Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
@@ -491,7 +502,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
-            text="Every 5m NIFTY FUT candle, up to 5 trades a day. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
+            text="Pick 5, 10, 15, 30, 60, or custom minutes. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -845,39 +856,16 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
+          {firstCandle || crudeFirst ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
             <select
               className={fieldClass}
-              value={
-                reversal || hedge
-                  ? "15m"
-                  : vwap || test2
-                    ? "5m"
-                    : firstCandle || crudeFirst
-                      ? firstCandleTimeframeSelect(form.timeframe)
-                      : form.timeframe || "5m"
-              }
-              disabled={(engine && !firstCandle && !test1) || test2}
+              value={reversal || hedge ? "15m" : vwap || test2 ? "5m" : form.timeframe || "5m"}
+              disabled={(engine && !test1) || test2}
               data-test1-timeframe={test1 ? "true" : undefined}
-              data-first-candle-timeframe={firstCandle || crudeFirst ? "true" : undefined}
               data-mir-timeframe={mir ? "true" : undefined}
-              onChange={(event) => {
-                const picked = event.target.value;
-                if (firstCandle || crudeFirst) {
-                  const alreadyCustom = firstCandleTimeframeSelect(form.timeframe) === "custom";
-                  const timeframe = firstCandleTimeframeValue(
-                    picked,
-                    picked === "custom" ? (alreadyCustom ? firstCandleMinutes(form.timeframe) : 20) : undefined,
-                  );
-                  set({
-                    timeframe,
-                    entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
-                  });
-                  return;
-                }
-                set({ timeframe: picked });
-              }}
+              onChange={(event) => set({ timeframe: event.target.value })}
             >
               {(reversal || hedge
                 ? ["15m"]
@@ -885,37 +873,17 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   ? ["5m"]
                   : mir
                     ? [...MULTI_INDEX_TIMEFRAMES]
-                  : firstCandle || crudeFirst
-                    ? [...FIRST_CANDLE_TIMEFRAMES, "custom"]
                   : test1 || test2 || niftyTest
                     ? ["1m", "2m", "5m", "10m", "15m"]
                     : TIMEFRAMES
               ).map((row) => (
                 <option key={row} value={row}>
-                  {row === "custom" ? "Custom" : row}
+                  {row}
                 </option>
               ))}
             </select>
           </label>
-          {(firstCandle || crudeFirst) && firstCandleTimeframeSelect(form.timeframe) === "custom" ? (
-            <label className="text-xs font-semibold text-slate-500" data-first-candle-custom-minutes="true">
-              Custom minutes
-              <input
-                className={fieldClass}
-                type="number"
-                min={1}
-                max={240}
-                value={firstCandleMinutes(form.timeframe)}
-                onChange={(event) => {
-                  const timeframe = firstCandleTimeframeValue("custom", Number(event.target.value));
-                  set({
-                    timeframe,
-                    entryEvaluationIst: firstCandleEntryIst(form.firstBarStartIst, timeframe, form.entryEvaluationIst),
-                  });
-                }}
-              />
-            </label>
-          ) : null}
+          )}
           <label className="text-xs font-semibold text-slate-500">
             Broker
             <select
@@ -1160,8 +1128,35 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             <NumberField label="EOD square-off (min)" value={form.eodSquareOffMinutes ?? 15} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
           </div>
         ) : firstCandle || crudeFirst ? (
-          <div className="mt-2.5 space-y-2">
+          <div className="mt-2.5 space-y-2" data-first-candle-settings={crudeFirst ? "crude" : "nifty"}>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+              <label className="text-xs font-semibold text-slate-500" data-first-candle-timeframe="true">
+                Timeframe
+                <select
+                  className={fieldClass}
+                  value={firstCandleTimeframeSelect(form.timeframe)}
+                  onChange={(event) => setFirstCandleTimeframe(event.target.value)}
+                >
+                  {[...FIRST_CANDLE_TIMEFRAMES, "custom"].map((row) => (
+                    <option key={row} value={row}>
+                      {row === "custom" ? "Custom" : row}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {firstCandleTimeframeSelect(form.timeframe) === "custom" ? (
+                <label className="text-xs font-semibold text-slate-500" data-first-candle-custom-minutes="true">
+                  Custom minutes
+                  <input
+                    className={fieldClass}
+                    type="number"
+                    min={1}
+                    max={240}
+                    value={firstCandleMinutes(form.timeframe)}
+                    onChange={(event) => setFirstCandleTimeframe("custom", Number(event.target.value))}
+                  />
+                </label>
+              ) : null}
               <label className="text-xs font-semibold text-slate-500">
                 Start LIVE (IST)
                 <input className={fieldClass} value={form.dailyLiveIst || "09:00"} onChange={(event) => set({ dailyLiveIst: event.target.value })} placeholder="09:00" />
