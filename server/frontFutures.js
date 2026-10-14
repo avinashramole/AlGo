@@ -513,23 +513,39 @@ export function scripMasterLoaded() {
   return Number(cache.at) > 0;
 }
 
+export function seedOptionScripForTests(entries = []) {
+  if (!cache.options || !(cache.options instanceof Map)) cache.options = new Map();
+  if (!cache.byExpiry || !(cache.byExpiry instanceof Map)) cache.byExpiry = new Map();
+  for (const row of entries) {
+    const root = optionRoot(row.symbol || row.root);
+    const exp = normalizeExpiry(row.expiry);
+    const px = Number(row.strike);
+    const opt = optionType(row.option);
+    const id = String(row.securityId || "").trim();
+    if (!root || !exp || !px || (opt !== "CE" && opt !== "PE") || !id) continue;
+    cache.options.set(optionKey(root, exp, px, opt), id);
+    const bucket = strikeBucket(cache.byExpiry, root, exp, px);
+    if (opt === "PE") bucket.putId = id;
+    else bucket.callId = id;
+  }
+}
+
 export async function reloadScripMaster() {
   if (loading) return loading;
   cache.at = 0;
   return loadScripMaster();
 }
 
-export async function lookupOptionSecurityId({ symbol, expiry, strike, option } = {}) {
+export function peekOptionSecurityId({ symbol, expiry, strike, option } = {}) {
   const parsed = parseOptionContract(symbol);
   const root = optionRoot(symbol || parsed?.root);
   const opt = optionType(option || parsed?.option);
   const px = Number(strike || parsed?.strike || 0);
   const exp = normalizeExpiry(expiry);
   if (!root || (opt !== "CE" && opt !== "PE") || !px || !exp) return "";
-  const data = await loadScripMaster();
-  const direct = data.options.get(optionKey(root, exp, px, opt));
+  const direct = cache.options.get(optionKey(root, exp, px, opt));
   if (direct) return String(direct);
-  const bucket = data.byExpiry.get(expiryKey(root, exp));
+  const bucket = cache.byExpiry.get(expiryKey(root, exp));
   if (bucket) {
     const ids = bucket.get(px) || bucket.get(Number(px));
     const found = opt === "PE" ? ids?.putId : ids?.callId;
@@ -541,6 +557,17 @@ export async function lookupOptionSecurityId({ symbol, expiry, strike, option } 
     }
   }
   return "";
+}
+
+export async function lookupOptionSecurityId({ symbol, expiry, strike, option } = {}) {
+  const parsed = parseOptionContract(symbol);
+  const root = optionRoot(symbol || parsed?.root);
+  const opt = optionType(option || parsed?.option);
+  const px = Number(strike || parsed?.strike || 0);
+  const exp = normalizeExpiry(expiry);
+  if (!root || (opt !== "CE" && opt !== "PE") || !px || !exp) return "";
+  await loadScripMaster();
+  return peekOptionSecurityId({ symbol: root, expiry: exp, strike: px, option: opt });
 }
 
 export async function resolveTradableSecurityId({ symbol, expiry, strike, option, kind } = {}) {

@@ -33,6 +33,7 @@ import {
   hasLastLiveBook,
 } from "./market.js";
 import { hydrateAlgos, normalizeAlgo, seedAlgos } from "./strategies.js";
+import { nearestWeeklyExpiry, upcomingExpiries } from "./optionChain.js";
 
 test("candleSymbol and isCrudeSymbol map Crude Oil ids", () => {
   assert.equal(candleSymbol("CRUDEOIL"), "CRUDEOIL");
@@ -83,7 +84,7 @@ test("option-chain BUY goes to Dhan when LIVE even if Paper is selected", () => 
 });
 
 test("nifty first candle ATM+2 and ATM-2 resolve to 22800 and 22600, not the ATM strike", () => {
-  const expiry = "2026-10-06";
+  const expiry = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
   setOptionDesk({
     symbol: "NIFTY",
     expiry,

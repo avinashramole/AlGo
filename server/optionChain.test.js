@@ -5,6 +5,7 @@ import {
   getUnderlying,
   isLastWeekdayOfMonth,
   isWeeklyOptionExpiry,
+  listedExpiries,
   nearestWeeklyExpiry,
   upcomingExpiries,
   UNDERLYINGS,
@@ -51,6 +52,18 @@ test("nearestWeeklyExpiry buys the next weekly and never the monthly", () => {
   assert.equal(nearestWeeklyExpiry(["2027-03-30", "2027-04-06", "2027-04-13"], "NIFTY"), "2027-04-06");
   assert.equal(isWeeklyOptionExpiry(nearestWeeklyExpiry(["2027-03-30"], "NIFTY"), "NIFTY"), true);
   assert.notEqual(nearestWeeklyExpiry(["2027-03-30"], "NIFTY"), "2027-03-30");
+});
+
+test("listedExpiries restores this week's NIFTY weekly when the desk only has 3 Nov", () => {
+  const expected = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
+  const fromDesk = nearestWeeklyExpiry(listedExpiries("NIFTY", ["2026-11-03", "2026-11-10", "2026-11-17"]), "NIFTY");
+  assert.equal(fromDesk, expected);
+  assert.equal(isWeeklyOptionExpiry(fromDesk, "NIFTY"), true);
+  const laterWeeklies = upcomingExpiries("NIFTY", 12).filter((date) => isWeeklyOptionExpiry(date, "NIFTY")).slice(1);
+  if (laterWeeklies.length) {
+    assert.equal(nearestWeeklyExpiry(laterWeeklies, "NIFTY"), laterWeeklies[0]);
+    assert.notEqual(laterWeeklies[0], expected);
+  }
 });
 
 test("CRUDEOIL is a market card underlying on MCX", () => {

@@ -187,6 +187,13 @@ export function nearestWeeklyExpiry(dates, symbol = "NIFTY") {
   return sameWeekday[0] || listed[0] || "";
 }
 
+/** Desk/Dhan lists can skip this week's Tuesday. Merge calendar weeklies so "nearest" stays this week. */
+export function listedExpiries(symbol = "NIFTY", dates = []) {
+  const listed = (Array.isArray(dates) ? dates : []).map(normalizeExpiry).filter(Boolean);
+  const generated = upcomingExpiries(symbol, 12);
+  return dropExpired([...new Set([...listed, ...generated])].sort());
+}
+
 function lastWeekdayOfMonth(year, month, weekday) {
   const lastDay = new Date(Date.UTC(year, month, 0, 6, 30)).getUTCDate();
   for (let day = lastDay; day >= 1; day -= 1) {

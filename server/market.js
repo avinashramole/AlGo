@@ -13,6 +13,7 @@ import {
   exchangeSegmentFor,
   getUnderlying,
   isMcxSymbol,
+  listedExpiries,
   nearestWeeklyExpiry,
   underlyingIdFromSymbol,
   normalizeExpiry,
@@ -21,7 +22,7 @@ import {
   withExpiryLabels,
   keepStrikeWindow,
 } from "./optionChain.js";
-import { listIndexContracts, optionCount, parseOptionContract, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { listIndexContracts, optionCount, parseOptionContract, peekOptionSecurityId, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
 import { optionBacktestWindow } from "./niftyOptionHistory.js";
 import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
@@ -822,17 +823,31 @@ export function fanOutAdminOrderCopies(payload = {}, order = {}) {
 }
 
 function contractSecurityId(payload = {}) {
-  const existing = String(payload.securityId || "").trim();
-  if (existing && existing !== "0") return existing;
   const opt = String(payload.option || "").toUpperCase();
   const strike = Number(payload.strike);
-  if (!(strike > 0) || (opt !== "CE" && opt !== "PE")) return "";
   const root = candleSymbol(payload.symbol || "NIFTY");
+  const exp = normalizeExpiry(payload.expiry);
   const pack = chainForSymbol(root);
-  const row = (pack?.rows || optionRowsForSymbol(root)).find((item) => Number(item.strike) === strike);
-  if (!row) return "";
-  const id = opt === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
-  return id ? String(id) : "";
+  const packExpiry = normalizeExpiry(pack?.meta?.expiry);
+  const chainMatches = !exp || !packExpiry || exp === packExpiry;
+  const existing = String(payload.securityId || "").trim();
+  let deskId = "";
+  if (strike > 0 && (opt === "CE" || opt === "PE")) {
+    const row = (pack?.rows || optionRowsForSymbol(root)).find((item) => Number(item.strike) === strike);
+    deskId = String((opt === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId) || "");
+  }
+  if (existing && existing !== "0") {
+    if (chainMatches) return existing;
+    if (deskId && existing === deskId) {
+      return peekOptionSecurityId({ symbol: root, expiry: exp, strike, option: opt }) || "";
+    }
+    return existing;
+  }
+  if (chainMatches && deskId && deskId !== "0") return deskId;
+  if (exp && strike > 0 && (opt === "CE" || opt === "PE")) {
+    return peekOptionSecurityId({ symbol: root, expiry: exp, strike, option: opt }) || "";
+  }
+  return "";
 }
 
 let notifyLiveAlgoOrders = () => {};
@@ -1262,13 +1277,11 @@ function optionPremium(symbol, strike, option) {
   return ltp > 0 ? round2(ltp) : 0;
 }
 
-function niftyListedExpiries(pack) {
-  const listed = dropExpired(pack?.meta?.expiries || []);
-  if (listed.length) return listed;
-  return upcomingExpiries("NIFTY", 12);
+function niftyListedExpiries(pack, root = "NIFTY") {
+  return listedExpiries(root || "NIFTY", pack?.meta?.expiries || []);
 }
 
-function expiryForNiftyVwap(algo, pack) {
+export function expiryForNiftyVwap(algo, pack) {
   const listed = niftyListedExpiries(pack);
   const weeklyFirstCandle = isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly";
   if (isNiftyVwapReversalAlgo(algo) || isNiftyVwapHedgeAlgo(algo) || weeklyFirstCandle) {
@@ -1437,7 +1450,7 @@ function tickMultiIndexReversalAlgo(algo, mode, feedLive) {
   if (mode === "live" && !session.open && !open) return;
   const und = getUnderlying(root);
   const pack = chainForSymbol(root);
-  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(root, 12);
+  const listed = niftyListedExpiries(pack, root);
   const expiry =
     config.expiryKind === "weekly"
       ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || ""
@@ -1489,8 +1502,8 @@ function tickMultiIndexReversalAlgo(algo, mode, feedLive) {
     expiry,
     ceLtp,
     peLtp,
-    ceSecurityId: optionLegId(ceStrike, "CE", root),
-    peSecurityId: optionLegId(peStrike, "PE", root),
+    ceSecurityId: optionLegId(ceStrike, "CE", root, expiry),
+    peSecurityId: optionLegId(peStrike, "PE", root, expiry),
     requireSecurityId: pack?.meta?.source === "dhan" && mode === "live",
     positions,
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
@@ -1524,7 +1537,7 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
   if (mode === "live" && !session.open && !open) return;
   const und = getUnderlying(root);
   const pack = chainForSymbol(root);
-  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(root, 12);
+  const listed = niftyListedExpiries(pack, root);
   const expiry = mcx
     ? pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
     : config.expiryKind === "weekly"
@@ -1554,8 +1567,8 @@ function tickNiftyTest1Algo(algo, mode, feedLive) {
   const optionBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.barMinutes || 5, { sessionOpenMinutes: mcx ? 9 * 60 : 9 * 60 + 15 }) || 0;
   vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp);
-  const ceSecurityId = optionLegId(ceStrike, "CE", root);
-  const peSecurityId = optionLegId(peStrike, "PE", root);
+  const ceSecurityId = optionLegId(ceStrike, "CE", root, expiry);
+  const peSecurityId = optionLegId(peStrike, "PE", root, expiry);
   let targetResting = false;
   if (open && mode === "live") {
     const chainMark = (open.option || "") === "PE" ? peLtp : ceLtp;
@@ -1622,7 +1635,7 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
   const before = JSON.stringify(algo.test2State || {});
   if (mode === "live" && !session.open && !open) return;
   const pack = chainForSymbol(root);
-  const listed = dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(root, 12);
+  const listed = niftyListedExpiries(pack, root);
   const weekly = nearestWeeklyExpiry(listed, root) || listed[0] || "";
   const monthly = listed.find((date) => !isWeeklyOptionExpiry(date, root)) || listed[listed.length - 1] || weekly;
   const rows = pack?.rows || [];
@@ -1763,8 +1776,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
       inheritOpen: optionBarTime === barTime && optionBarTime !== formingTime,
     });
   }
-  const ceSecurityId = optionLegId(ceStrike, "CE", root);
-  const peSecurityId = optionLegId(peStrike, "PE", root);
+  const ceSecurityId = optionLegId(ceStrike, "CE", root, expiry);
+  const peSecurityId = optionLegId(peStrike, "PE", root, expiry);
   let targetResting = false;
   if (open && mode === "live") {
     const leg = PositionManager.niftyOptionLeg(open);
@@ -1836,12 +1849,20 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   }
 }
 
-function optionLegId(strike, option, root = "NIFTY") {
+export function optionLegId(strike, option, root = "NIFTY", expiry = "") {
+  const exp = normalizeExpiry(expiry);
   const pack = chainForSymbol(root || "NIFTY");
-  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
-  if (!row) return "";
-  const id = option === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
-  return id ? String(id) : "";
+  const packExpiry = normalizeExpiry(pack?.meta?.expiry);
+  const chainMatches = !exp || !packExpiry || exp === packExpiry;
+  if (chainMatches) {
+    const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+    if (row) {
+      const id = option === "PE" ? row.putId || row.putSecurityId : row.callId || row.callSecurityId;
+      if (id) return String(id);
+    }
+  }
+  if (exp) return peekOptionSecurityId({ symbol: root, expiry: exp, strike, option }) || "";
+  return "";
 }
 
 function hedgeCapital(mode) {
@@ -1917,8 +1938,8 @@ function tickNiftyVwapHedgeAlgo(algo, mode, feedLive) {
   const ceLtp = optionPremium("NIFTY", atm, "CE", expiry);
   const peLtp = optionPremium("NIFTY", atm, "PE", expiry);
   const liveChain = pack?.meta?.source === "dhan";
-  const ceId = optionLegId(atm, "CE");
-  const peId = optionLegId(atm, "PE");
+  const ceId = optionLegId(atm, "CE", "NIFTY", expiry);
+  const peId = optionLegId(atm, "PE", "NIFTY", expiry);
   const pending = pendingLiveAlgoOrders.filter((row) => row.strategy === algo.name);
   const orders = (state.orders || []).filter((row) => row.strategy === algo.name);
   const primary =
@@ -2124,14 +2145,14 @@ export function resolveAlgoTrade(algo) {
       (isNiftyTest1Algo(algo) && String(algo.expiryKind || niftyTest1Config(algo).expiryKind) === "weekly") ||
       (isNiftyFirstCandleAlgo(algo) && String(algo.expiryKind || "weekly").toLowerCase() !== "monthly");
     const expiry = weeklyCard
-      ? nearestWeeklyExpiry(dropExpired(pack?.meta?.expiries || []).length ? dropExpired(pack.meta.expiries) : upcomingExpiries(symbol, 12), symbol) || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
+      ? nearestWeeklyExpiry(niftyListedExpiries(pack, symbol), symbol) || pack?.meta?.expiry || upcomingExpiries(und.id)[0] || ""
       : pack?.meta?.expiry || upcomingExpiries(und.id)[0] || "";
     const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
     const ceLtp = Number(row?.callLtp);
     const peLtp = Number(row?.putLtp);
     const liveChain = pack?.meta?.source === "dhan";
     const premium = option === "PE" ? peLtp : option === "CE" ? ceLtp : ceLtp || peLtp;
-    const securityId = option === "PE" ? row?.putId || row?.putSecurityId : row?.callId || row?.callSecurityId;
+    const securityId = optionLegId(strike, option || "CE", symbol, expiry);
     const contract = option ? `${symbol} ${strike} ${option}` : `${symbol} ${strike} ${strikeOffsetLabel(offset)}`;
     let hint = "";
     if (!liveChain) hint = `Open Options on ${symbol} for live ATM CE/PE`;
@@ -2727,7 +2748,7 @@ export function livePositionQuoteTargets() {
     if (!(strike > 0) || !option) continue;
     add({
       symbol: vs.lockedSymbol || `${root} ${strike} ${option}`,
-      securityId: optionLegId(strike, option, root),
+      securityId: optionLegId(strike, option, root, root === "NIFTY" ? expiryForNiftyVwap(algo, chainForSymbol(root)) : ""),
       kind: "option",
     });
   }
