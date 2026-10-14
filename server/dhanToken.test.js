@@ -33,6 +33,7 @@ import {
   feedResumesOnBoot,
   markDhanAutoStart,
   armDataFeedOnBoot,
+  shouldArmAdminDataFeed,
   resolveTokenExpiry,
   retryAfterMs,
 } from "./dhanToken.js";
@@ -809,6 +810,10 @@ test("a saved token resumes the data feed and VPS restart arms Start data feed",
     assert.equal(armed.feedStopped, false);
     assert.equal(armed.autoStart, true);
     assert.equal(feedResumesOnBoot(armed), true);
+    assert.equal(shouldArmAdminDataFeed("watchdog", { feedStopped: true }), false);
+    assert.equal(shouldArmAdminDataFeed("boot", { feedStopped: true }), true);
+    assert.equal(shouldArmAdminDataFeed("deploy", { feedStopped: true }), true);
+    assert.equal(shouldArmAdminDataFeed("watchdog", { feedStopped: false }), true);
 
     markDhanAutoStart(true);
     const resumed = loadDhanSession();
@@ -825,6 +830,10 @@ test("a saved token resumes the data feed and VPS restart arms Start data feed",
     assert.match(dhanSrc, /quote feed started without waiting on \/profile/);
     assert.match(dhanSrc, /scheduleSocketReconnect/);
     assert.match(dhanSrc, /if \(isDhanFeedLoopRunning\(\)\)/);
+    assert.match(dhanSrc, /shouldArmAdminDataFeed/);
+    assert.match(dhanSrc, /stampAdminFeedLive/);
+    assert.match(dhanSrc, /markDhanLive\(\{/);
+    assert.match(dhanSrc, /WebSocket.CONNECTING/);
     assert.match(dhanSrc, /scheduleAdminDataFeedWatchdog/);
     assert.match(dhanSrc, /void fetchDhanIp\(\)/);
     assert.match(dhanSrc, /Promise\.all/);

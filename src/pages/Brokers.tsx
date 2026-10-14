@@ -32,7 +32,8 @@ export function Brokers() {
   const paper = brokers.find((item) => item.id === "paper");
   const defaultBroker = brokers.find((item) => item.active) || brokers.find((item) => item.main) || brokers[0] || null;
   const frontBroker = brokers.find((item) => item.main) || dhan || defaultBroker;
-  const actualFunds = dhan?.liveFeed ? dhan.funds : 0;
+  const feedOn = Boolean(feed?.live || dhan?.liveFeed);
+  const actualFunds = feedOn ? dhan?.funds || 0 : 0;
   const savedDhanClientId = String(feed?.clientId || dhan?.clientId || "").trim();
   const viewed =
     brokers.find((item) => item.id === viewId) || defaultBroker || frontBroker || null;
@@ -265,7 +266,7 @@ export function Brokers() {
                       INACTIVE
                     </span>
                   )}
-                  {viewed.liveFeed ? (
+                  {(viewed.id === "dhan" ? feedOn : viewed.liveFeed) ? (
                     <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-extrabold text-up dark:bg-emerald-950/40">
                       LIVE
                     </span>
@@ -513,17 +514,22 @@ function DhanSettings({
         <div className="text-sm font-bold md:text-base">Dhan live feed</div>
         <span
           className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold md:px-2 md:py-1 md:text-xs ${
-            feed?.live ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-slate-100 text-slate-500"
+            feed?.live || broker.liveFeed ? "bg-emerald-50 text-up dark:bg-emerald-950/40" : "bg-slate-100 text-slate-500"
           }`}
         >
-          {feed?.live ? `DHAN LIVE · ${feed.source}` : feed?.tokenHint ? "TOKEN SAVED" : "WAITING FOR TOKEN"}
+          {feed?.live || broker.liveFeed
+            ? `DHAN LIVE · ${feed?.source || "rest"}`
+            : feed?.tokenHint
+              ? "TOKEN SAVED"
+              : "WAITING FOR TOKEN"}
         </span>
       </div>
       <p className="desk-help mt-2 text-xs text-slate-400">
         Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
         <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
         no password token API). A deploy or <b>systemctl restart</b> reconnects the saved access token and turns the
-        data feed back on for <b>admin and users</b> and keeps it on. The feed does not stay down after a Dhan drop,
+        data feed back on for <b>admin and users</b> and keeps it on. A browser refresh or later
+        check does not stop it. Only <b>Stop data feed</b> turns it off. The feed does not stay down after a Dhan drop,
         429, or token check. If Dhan rejects that token, the server calls <b>GET /v2/RenewToken</b>, then PIN + TOTP,
         without a click. The quote loop stays on. Saving a pasted token does not
         remove it and does not turn strategies LIVE. <b>Reset token now</b> is the same renew, for a cooldown that
@@ -534,14 +540,14 @@ function DhanSettings({
       </p>
       <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 md:gap-3">
         <Mini label="Token" value={feed?.tokenHint || "not set"} />
-        <Mini label="Quotes" value={feed?.live ? String(feed.quoteCount || 0) : "—"} />
-        <Mini label="Positions" value={feed?.live ? String(feed.positionCount || 0) : "—"} />
+        <Mini label="Quotes" value={feed?.live || broker.liveFeed ? String(feed?.quoteCount || 0) : "—"} />
+        <Mini label="Positions" value={feed?.live || broker.liveFeed ? String(feed?.positionCount || 0) : "—"} />
         <Mini
           label="Last tick"
           value={feed?.lastTickAt ? new Date(feed.lastTickAt).toLocaleTimeString("en-IN") : "—"}
         />
         <Mini label="Client ID" value={broker.clientId || savedDhanClientId || "—"} />
-        <Mini label="Funds" value={broker.liveFeed ? fundsCaption(broker) : "—"} />
+        <Mini label="Funds" value={feed?.live || broker.liveFeed ? fundsCaption(broker) : "—"} />
         <Mini
           label="Auto token"
           value={
@@ -661,7 +667,7 @@ function DhanSettings({
         >
           {busy ? "Saving..." : "Save token"}
         </button>
-        {broker.liveFeed ? (
+        {feed?.live || broker.liveFeed ? (
           <button
             type="button"
             disabled={busy}

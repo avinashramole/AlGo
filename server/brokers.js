@@ -198,14 +198,17 @@ export async function connectBroker(id, payload = {}, fetchImpl = fetch) {
 }
 
 export function markDhanLive({ clientId, funds, marginUsed, keyHint, displayName }) {
+  const prev = connections.dhan || {};
+  const nextFunds = Number(funds);
+  const nextUsed = Number(marginUsed);
   connections.dhan = {
     connected: true,
-    clientId: String(clientId || "").trim(),
-    funds: Number(funds) || 0,
-    marginUsed: Number(marginUsed) || 0,
+    clientId: String(clientId || prev.clientId || "").trim(),
+    funds: Number.isFinite(nextFunds) && nextFunds > 0 ? nextFunds : Number(prev.funds) || 0,
+    marginUsed: Number.isFinite(nextUsed) && nextUsed > 0 ? nextUsed : Number(prev.marginUsed) || 0,
     mode: "live",
-    keyHint: keyHint || "",
-    displayName: displayName || "Dhan",
+    keyHint: keyHint || prev.keyHint || "",
+    displayName: displayName || prev.displayName || "Dhan",
     liveFeed: true,
   };
   return publicAccount(catalog.find((item) => item.id === MAIN_BROKER_ID));
