@@ -46,34 +46,76 @@ function moneyClass(value: number) {
 }
 
 function orderActivity(signal: string | undefined, fallback: string) {
-  const text = String(signal || "").trim();
+  const text = String(signal || "")
+    .replace(/^NO TRADE\s*·\s*/i, "")
+    .replace(/\s*·\s*NO TRADE\b.*$/i, "")
+    .trim();
   if (/\b(?:GREEN|RED)\b/i.test(text)) return text;
   if (!text || /^hold\b/i.test(text)) return fallback;
   return text;
 }
 
-function futureCandleColor(algo: AlgoStrategy) {
-  const stored = String(algo.futureColor || "").toLowerCase();
-  if (stored === "green" || stored === "red" || stored === "doji") return stored;
-  const text = String(algo.lastSignal || "");
-  if (/\bFUT GREEN\b/i.test(text) || /\b(?:NIFTY|CRUDE) FUT GREEN\b/i.test(text)) return "green";
-  if (/\bFUT RED\b/i.test(text) || /\b(?:NIFTY|CRUDE) FUT RED\b/i.test(text)) return "red";
-  if (/\bDOJI\b/i.test(text)) return "doji";
+function candleTone(value: string | undefined) {
+  const color = String(value || "").toLowerCase();
+  if (color === "green" || color === "red" || color === "doji") return color;
   return "";
 }
 
+function signalCandleColor(text: string, kind: "fut" | "ce" | "pe") {
+  const raw = String(text || "");
+  if (kind === "fut") {
+    if (/\bFUT GREEN\b/i.test(raw) || /\b(?:NIFTY|CRUDE) FUT GREEN\b/i.test(raw)) return "green";
+    if (/\bFUT RED\b/i.test(raw) || /\b(?:NIFTY|CRUDE) FUT RED\b/i.test(raw)) return "red";
+    if (/\bDOJI\b/i.test(raw)) return "doji";
+    return "";
+  }
+  const token = kind === "ce" ? "CE" : "PE";
+  const hit = raw.match(new RegExp(`\\b${token}(?: \\d+)? (GREEN|RED|DOJI)\\b`, "i"));
+  return candleTone(hit?.[1]);
+}
+
+function firstCandleDotColors(algo: AlgoStrategy) {
+  const text = String(algo.lastSignal || "");
+  const fut = candleTone(algo.futureColor) || signalCandleColor(text, "fut");
+  const ce = candleTone(algo.ceColor) || signalCandleColor(text, "ce");
+  const pe = candleTone(algo.peColor) || signalCandleColor(text, "pe");
+  const buy = /\bBUY CE\b/i.test(text) || (fut === "green" && ce === "green") ? "CE" : /\bBUY PE\b/i.test(text) || (fut === "red" && pe === "green") ? "PE" : "";
+  return { fut, ce, pe, buy };
+}
+
+function ConditionDot({ label, color, ok }: { label: string; color: string; ok: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1" title={`${label} ${color || "—"}${ok ? " · ok" : ""}`}>
+      <span
+        className={cn(
+          "inline-block h-2.5 w-2.5 rounded-full",
+          ok ? "bg-emerald-500" : color === "doji" ? "bg-slate-400" : "bg-rose-500",
+        )}
+        data-dot-ok={ok ? "true" : "false"}
+      />
+      <span className="text-[10px] font-extrabold tracking-wide text-slate-500">{label}</span>
+    </span>
+  );
+}
+
 function FutureCandleChip({ algo }: { algo: AlgoStrategy }) {
-  const color = futureCandleColor(algo);
-  const label = color === "green" ? "FUT GREEN" : color === "red" ? "FUT RED" : color === "doji" ? "FUT DOJI" : "FUT —";
+  const { fut, ce, pe, buy } = firstCandleDotColors(algo);
+  const futOk = fut === "green" || fut === "red";
+  const ceOk = ce === "green";
+  const peOk = pe === "green";
   return (
     <span
-      className={cn(
-        "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",
-        color === "green" ? "bg-emerald-500/15 text-up" : color === "red" ? "bg-rose-500/15 text-down" : "bg-[var(--card-muted)] text-slate-500",
-      )}
-      data-future-candle={color || "none"}
+      className="inline-flex flex-wrap items-center gap-2 rounded bg-[var(--card-muted)] px-1.5 py-0.5"
+      data-future-candle={fut || "none"}
+      data-first-candle-dots={`${futOk ? "green" : "red"},${ceOk ? "green" : "red"},${peOk ? "green" : "red"}`}
+      data-first-candle-buy={buy || ""}
     >
-      {label}
+      <ConditionDot label="FUT" color={fut} ok={futOk} />
+      <ConditionDot label="CE" color={ce} ok={ceOk} />
+      <ConditionDot label="PE" color={pe} ok={peOk} />
+      {buy ? (
+        <span className="text-[10px] font-extrabold tracking-wide text-up">BUY {buy}</span>
+      ) : null}
     </span>
   );
 }

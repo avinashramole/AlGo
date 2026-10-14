@@ -2963,6 +2963,9 @@ export function deskFeed() {
     pnl: algo.pnl,
     winRate: algo.winRate,
     lastSignal: algo.lastSignal,
+    futureColor: algo.futureColor || "",
+    ceColor: algo.ceColor || "",
+    peColor: algo.peColor || "",
     mappedClientIds: algo.mappedClientIds || [],
     trade: resolveAlgoTrade(algo),
   }));
@@ -4709,16 +4712,36 @@ export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), sessio
   return last;
 }
 
+export function firstCandleConditionDots({ nifty, ceColor, peColor } = {}) {
+  const fut = nifty === "green" || nifty === "red" || nifty === "doji" ? nifty : "";
+  const ce = ceColor === "green" || ceColor === "red" || ceColor === "doji" ? ceColor : "";
+  const pe = peColor === "green" || peColor === "red" || peColor === "doji" ? peColor : "";
+  const futOk = fut === "green" || fut === "red";
+  const ceOk = ce === "green";
+  const peOk = pe === "green";
+  const buy = fut === "green" && ceOk ? "CE" : fut === "red" && peOk ? "PE" : "";
+  return {
+    fut,
+    ce,
+    pe,
+    futOk,
+    ceOk,
+    peOk,
+    okCount: [futOk, ceOk, peOk].filter(Boolean).length,
+    buy,
+  };
+}
+
 export function livePreviewCondition(bar, ce, pe) {
   const nifty = VwapSignalEngine.firstBarColor(bar);
   const ceColor = VwapSignalEngine.firstBarColor(ce);
   const peColor = VwapSignalEngine.firstBarColor(pe);
-  if (nifty === "doji") return { nifty, ceColor, peColor, condition: "NO TRADE DOJI" };
-  if (nifty === "green" && ceColor === "green") return { nifty, ceColor, peColor, condition: "BUY CE" };
-  if (nifty === "red" && peColor === "green") return { nifty, ceColor, peColor, condition: "BUY PE" };
-  if (nifty === "green") return { nifty, ceColor, peColor, condition: ceColor ? `NO TRADE CE ${ceColor.toUpperCase()}` : "WAIT CE" };
-  if (nifty === "red") return { nifty, ceColor, peColor, condition: peColor ? `NO TRADE PE ${peColor.toUpperCase()}` : "WAIT PE" };
-  return { nifty: "", ceColor, peColor, condition: "" };
+  const dots = firstCandleConditionDots({ nifty, ceColor, peColor });
+  if (dots.buy === "CE") return { nifty, ceColor, peColor, dots, condition: "BUY CE" };
+  if (dots.buy === "PE") return { nifty, ceColor, peColor, dots, condition: "BUY PE" };
+  if (nifty === "green") return { nifty, ceColor, peColor, dots, condition: ceColor ? "" : "WAIT CE" };
+  if (nifty === "red") return { nifty, ceColor, peColor, dots, condition: peColor ? "" : "WAIT PE" };
+  return { nifty: nifty === "doji" ? "doji" : "", ceColor, peColor, dots, condition: "" };
 }
 
 function strikeToken(value) {
@@ -4765,9 +4788,16 @@ function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = ni
   const closed = signalBars(timeframe, now, session);
   const preview = closed[closed.length - 1] || null;
   const color = VwapSignalEngine.firstBarColor(preview);
+  const rule = livePreviewCondition(preview, legs.ce, legs.pe);
   if (color) algo.futureColor = color;
+  algo.ceColor = rule.ceColor || "";
+  algo.peColor = rule.peColor || "";
   const label = formatLiveFuturePreview(preview, minutes, legs, root).replace(/^LIVE /, "PREVIEW ");
-  const base = String(algo.lastSignal || "").replace(/ · (?:LIVE|PREVIEW) .+$/, "");
+  const base = String(algo.lastSignal || "")
+    .replace(/ · (?:LIVE|PREVIEW) .+$/, "")
+    .replace(/^NO TRADE(?:\s*·\s*)?/i, "")
+    .replace(/\s*·\s*NO TRADE\b.*$/i, "")
+    .trim();
   const previewText =
     isLiveSendSignal(base) && /(?:WAIT (?:CE|PE)|NO TRADE)/i.test(label)
       ? label.replace(/ · (?:WAIT|NO TRADE).+$/, "")
