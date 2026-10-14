@@ -2,9 +2,15 @@ export function isTrade2SmartHost(host = "") {
   return /trade2smart/i.test(String(host || ""));
 }
 
+export function isApiDownError(message = "") {
+  return /API is down|API is not running|Request failed \(50[234]\)|Failed to fetch|NetworkError/i.test(
+    String(message || ""),
+  );
+}
+
 export function apiDownMessage(host?: string) {
   if (isTrade2SmartHost(host)) {
-    return "API is down on the server. On the VPS as root run: systemctl restart t2s. Then press Ctrl+Shift+R. Do not open localhost.";
+    return "Desk is reconnecting. Wait 10 seconds, then press Ctrl+Shift+R. Do not open localhost.";
   }
   return "API is not running. Keep npm start open. Open http://localhost:5173";
 }

@@ -56,7 +56,7 @@ function isTransientApiDown(error: unknown) {
 async function request<T>(path: string, init?: RequestInit, extra?: { retries?: number }) {
   const method = String(init?.method || "GET").toUpperCase();
   const mutating = method === "POST" || method === "PUT" || method === "DELETE" || method === "PATCH";
-  const retries = extra?.retries ?? (mutating ? 3 : 1);
+  const retries = extra?.retries ?? (mutating ? 4 : 4);
   let last: unknown;
   for (let attempt = 0; attempt < retries; attempt += 1) {
     try {
