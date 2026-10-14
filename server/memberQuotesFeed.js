@@ -238,7 +238,10 @@ export async function memberQuotesForUser(user, { fetchQuotes, deskQuotes, now =
     return kotakLiveBoard(user, secrets, { fetchQuotes, now });
   }
   if (!memberHasOwnQuoteSetup(secrets)) {
-    return adminDeskBoard(user, { deskQuotes, now });
+    return emptyQuotes(
+      brokerId,
+      "Install your own broker on Profile to see live quotes. The admin tape stays on the admin desk.",
+    );
   }
   if (!supportedMemberQuoteBroker(brokerId)) {
     return emptyQuotes(

@@ -22,7 +22,8 @@ function firstPositive(...values) {
 }
 
 function memberExitLockKey(copy = {}) {
-  return [copy.copyUserId, copy.symbol, copy.side, copy.strategy].map((part) => String(part || "").trim()).join("|");
+  const role = String(copy.role || copy.exitReason || "exit").trim().toLowerCase() || "exit";
+  return [copy.copyUserId, copy.symbol, copy.side, copy.strategy, role].map((part) => String(part || "").trim()).join("|");
 }
 
 function claimMemberExitCopy(copy = {}) {
@@ -167,9 +168,24 @@ function copyTargetForUser(userId, { masterQty, lotSize, strategyId, strategyNam
     saveClientSettings(userId, { brokerMobile: profileMobile });
   }
   if (!paper && !token && !leftoverSlot && !canMintUpstox) {
+    if (brokerId === "dhan" || brokerId === "upstox") {
+      return {
+        ...base,
+        lane: desk.copy ? "copy" : "individual",
+        brokerId,
+        accountId: "",
+        leftoverSlot: false,
+        brokerToken: "",
+        brokerApiKey: "",
+        brokerSessionToken: "",
+        paper: false,
+        copyBlocked: "",
+        adminDesk: true,
+      };
+    }
     const copyBlocked =
-      brokerId === "dhan"
-        ? "This member has no Dhan Client ID + Access Token. Install them on My plan."
+      brokerId === "kotak"
+        ? "This user is not the admin. The admin Kotak Neo login is not used for this order. Add this user's own Kotak Neo on Profile."
         : `This member has no ${brokerId} access token. Install it on My plan.`;
     return {
       ...base,
@@ -272,16 +288,9 @@ function mergeCopyTargets(...lists) {
   return [...byUser.values()];
 }
 
-function mappedCopyUserIds(algo = {}) {
-  return new Set(
-    (Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [])
-      .map((id) => String(id || "").trim())
-      .filter((id) => id && id !== "admin"),
-  );
-}
-
 export function memberCopyPayloads(payload = {}, algo = {}) {
-  const mapped = mappedCopyUserIds(algo);
+  const scope = String(algo.mappingScope || "both");
+  if (scope === "master") return [];
   const targets = mergeCopyTargets(
     listLiveCopyTargets({
       strategyName: payload.strategy,
@@ -291,15 +300,12 @@ export function memberCopyPayloads(payload = {}, algo = {}) {
       mappedClientIds: algo.mappedClientIds,
       mappingScope: algo.mappingScope,
     }),
-    mapped.size
-      ? []
-      : listCopyOnTargets({
-          masterQty: payload.qty,
-          lotSize: payload.lotSize || payload.qty,
-        }),
+    listCopyOnTargets({
+      masterQty: payload.qty,
+      lotSize: payload.lotSize || payload.qty,
+    }),
   );
-  const allowed = mapped.size ? targets.filter((row) => mapped.has(row.userId)) : targets;
-  return allowed.map((target) => ({
+  return targets.map((target) => ({
     ...payload,
     qty: target.qty,
     brokerId: target.brokerId,

@@ -14,7 +14,7 @@ const { cardsFromMemberQuotes, dayChangeFromQuote, memberQuotesForUser } = await
 
 const user = { id: "u-quotes", name: "Quote Member", email: "quotes@t2s.app", role: "user" };
 
-test("new members without a broker see the admin desk live tape", async () => {
+test("new members without a broker do not see the admin desk live tape", async () => {
   const adminTape = {
     indices: [
       { symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 20, changePct: 0.08, spark: [25100, 25111.25], future: 25140, lot: 65 },
@@ -26,11 +26,11 @@ test("new members without a broker see the admin desk live tape", async () => {
     deskQuotes: () => adminTape,
     fetchQuotes: async () => [{ symbol: "NIFTY 50", parent: "NIFTY 50", kind: "index", ltp: 99999 }],
   });
-  assert.equal(mine.source, "admin");
-  assert.equal(mine.live, true);
-  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
-  assert.equal(mine.indices.find((row) => row.symbol === "BANKNIFTY").price, 52100);
-  assert.match(mine.reason, /admin broker/i);
+  assert.equal(mine.source, "member");
+  assert.equal(mine.live, false);
+  assert.equal(mine.indices.length, 0);
+  assert.match(mine.reason, /install your own broker/i);
+  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
   assert.equal(JSON.stringify(mine).includes("99999"), false);
 });
 
@@ -458,7 +458,7 @@ test("a paper-mode user quotes their own Dhan token", async () => {
   assert.equal(JSON.stringify(mine).includes("dhan-paper-token"), false);
 });
 
-test("a selected broker with no token still uses the admin desk tape", async () => {
+test("a selected broker with no token does not use the admin desk tape", async () => {
   const fresh = { id: "u-dhan-not-setup", name: "New Dhan", email: "new.dhan@t2s.app", role: "user" };
   selectMemberBroker({ user: fresh, brokerId: "dhan" });
   const mine = await memberQuotesForUser(fresh, {
@@ -468,12 +468,14 @@ test("a selected broker with no token still uses the admin desk tape", async () 
       indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 24880.5, change: 12, changePct: 0.05, spark: [], future: 24910, lot: 65 }],
     }),
   });
-  assert.equal(mine.source, "admin");
-  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 24880.5);
+  assert.equal(mine.source, "member");
+  assert.equal(mine.live, false);
+  assert.equal(mine.indices.length, 0);
+  assert.equal(JSON.stringify(mine).includes("24880.5"), false);
   assert.equal(JSON.stringify(mine).includes("99999"), false);
 });
 
-test("paper members see admin desk cards until they install a broker", async () => {
+test("paper members do not see admin desk cards until they install a broker", async () => {
   const paper = { id: "u-paper-quotes", name: "Paper Quotes", email: "paperq@t2s.app", role: "user" };
   selectMemberBroker({ user: paper, brokerId: "paper" });
   saveClientSettings(paper.id, { brokerId: "paper", tradeMode: "paper" });
@@ -484,8 +486,9 @@ test("paper members see admin desk cards until they install a broker", async () 
       indices: [{ symbol: "NIFTY 50", name: "NIFTY", price: 25111.25, change: 1, changePct: 0.01, spark: [], future: 25140, lot: 65 }],
     }),
   });
-  assert.equal(mine.source, "admin");
-  assert.equal(mine.live, true);
-  assert.equal(mine.indices.find((row) => row.symbol === "NIFTY 50").price, 25111.25);
+  assert.equal(mine.source, "member");
+  assert.equal(mine.live, false);
+  assert.equal(mine.indices.length, 0);
+  assert.equal(JSON.stringify(mine).includes("25111.25"), false);
   assert.equal(JSON.stringify(mine).includes("99999"), false);
 });

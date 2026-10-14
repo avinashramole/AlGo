@@ -83,7 +83,8 @@ export function reloadDefaultBroker() {
 export function orderBrokerForDesk(requested) {
   const asked = String(requested || "").trim().toLowerCase();
   const selected = String(activeBrokerId || MAIN_BROKER_ID).trim().toLowerCase() || MAIN_BROKER_ID;
-  if (!asked || asked === "paper" || asked === MAIN_BROKER_ID) return selected === "paper" ? MAIN_BROKER_ID : selected;
+  const fallback = selected === "paper" ? MAIN_BROKER_ID : selected;
+  if (!asked || asked === "paper") return fallback;
   return asked;
 }
 
