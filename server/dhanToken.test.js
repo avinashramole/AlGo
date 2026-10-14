@@ -821,6 +821,10 @@ test("a saved token resumes the data feed and VPS restart arms Start data feed",
     const dhanSrc = fs.readFileSync(new URL("./dhan.js", import.meta.url), "utf8");
     assert.match(dhanSrc, /armDataFeedOnBoot\(\)/);
     assert.match(dhanSrc, /ensureAdminDataFeedRunning/);
+    assert.match(dhanSrc, /isDhanFeedLoopRunning/);
+    assert.match(dhanSrc, /quote feed started without waiting on \/profile/);
+    assert.match(dhanSrc, /scheduleSocketReconnect/);
+    assert.match(dhanSrc, /if \(isDhanFeedLoopRunning\(\)\)/);
     assert.match(dhanSrc, /scheduleAdminDataFeedWatchdog/);
     assert.match(dhanSrc, /void fetchDhanIp\(\)/);
     assert.match(dhanSrc, /Promise\.all/);

@@ -1200,6 +1200,14 @@ async function pullQuoteBody(body) {
   return quotes;
 }
 
+function scheduleSocketReconnect(ms = 1_500) {
+  if (reconnectTimer || !accessToken || !clientId) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    startSocket();
+  }, ms);
+}
+
 function stopSocket() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -1278,7 +1286,8 @@ function startSocket() {
   try {
     socket = new WebSocket(url);
   } catch (error) {
-    setDhanFeed({ error: `Dhan websocket failed: ${error.message}` });
+    setDhanFeed({ error: `Dhan websocket failed: ${error.message}. Reconnecting.` });
+    scheduleSocketReconnect(2_000);
     return;
   }
 
@@ -1325,12 +1334,13 @@ function startSocket() {
   socket.on("close", () => {
     socket = null;
     if (!accessToken) return;
-    setDhanFeed({ source: "rest" });
-    reconnectTimer = setTimeout(startSocket, 4000);
+    setDhanFeed({ live: true, source: "rest" });
+    scheduleSocketReconnect(1_500);
   });
 
   socket.on("error", () => {
-    setDhanFeed({ source: "rest" });
+    setDhanFeed({ live: true, source: "rest" });
+    scheduleSocketReconnect(1_500);
   });
 }
 
@@ -1622,6 +1632,11 @@ function stopLiveLoop(clearCreds) {
 
 export function isDhanLive() {
   return Boolean(accessToken);
+}
+
+export function isDhanFeedLoopRunning() {
+  const socketOpen = Boolean(socket && socket.readyState === WebSocket.OPEN);
+  return Boolean(accessToken && (pollTimer || socketOpen));
 }
 
 function savedDhanAccess() {
@@ -2135,6 +2150,47 @@ export async function validateDhan(token, id) {
   return { profile, funds };
 }
 
+function applyValidatedDhanProfile(profile, funds, enteredId) {
+  const apiId = configuredDhanClientId(profile, enteredId || clientId);
+  if (apiId) clientId = apiId;
+  const fundsNum = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const avail =
+    fundsNum(funds?.availabelBalance) ||
+    fundsNum(funds?.availableBalance) ||
+    fundsNum(funds?.availablBalance) ||
+    fundsNum(funds?.sodLimit);
+  const used = fundsNum(funds?.utilizedAmount) || fundsNum(funds?.usedMargin);
+  markDhanLive({
+    clientId: apiId || clientId,
+    funds: avail,
+    marginUsed: used,
+    keyHint: tokenHint(accessToken),
+    displayName: profile?.dhanClientName ? `Dhan · ${profile.dhanClientName}` : "Dhan",
+  });
+  persistPastedToken({
+    clientId: apiId || clientId,
+    loginId: enteredId || apiId || clientId,
+    accessToken,
+    expiryTime: resolveTokenExpiry({
+      accessToken,
+      expiryTime: loadDhanSession().expiryTime,
+      tokenValidity: profile?.tokenValidity,
+      fallbackHours: 24,
+    }),
+    tokenValidity: profile?.tokenValidity,
+  });
+  setDhanFeed({
+    live: true,
+    tokenHint: tokenHint(accessToken),
+    profileName: profile?.dhanClientName || null,
+    clientId: apiId || clientId,
+    ...dhanTokenStatus(),
+  });
+}
+
 export async function startDhanLive({ accessToken: token, clientId: id, loginId } = {}) {
   const cleanToken = String(token || "").trim();
   const enteredId = String(id || loginId || "").trim();
@@ -2157,56 +2213,17 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
     accessToken: cleanToken,
   });
 
-  const { profile, funds } = await validateDhan(cleanToken, cleanId);
-  if (profile?.dataPlan && String(profile.dataPlan).toLowerCase() === "deactive") {
-    const error = new Error("Dhan Data API plan is inactive. Enable Live Market Data on web.dhan.co, then paste a new Access Token.");
-    error.status = 400;
-    throw error;
-  }
   accessToken = cleanToken;
+  clientId = cleanId;
   savedTokenRejected = false;
-  const apiId = configuredDhanClientId(profile, enteredId);
-  clientId = apiId;
   usedFallback = false;
-  console.log(`Dhan live client ${apiId}`);
-
-  const fundsNum = (value) => {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : 0;
-  };
-  const avail =
-    fundsNum(funds?.availabelBalance) ||
-    fundsNum(funds?.availableBalance) ||
-    fundsNum(funds?.availablBalance) ||
-    fundsNum(funds?.sodLimit);
-  const used = fundsNum(funds?.utilizedAmount) || fundsNum(funds?.usedMargin);
-  markDhanLive({
-    clientId: apiId,
-    funds: avail,
-    marginUsed: used,
-    keyHint: tokenHint(accessToken),
-    displayName: profile.dhanClientName ? `Dhan · ${profile.dhanClientName}` : "Dhan",
-  });
-  persistPastedToken({
-    clientId: apiId,
-    loginId: enteredId || apiId,
-    accessToken,
-    expiryTime: resolveTokenExpiry({
-      accessToken,
-      expiryTime: loadDhanSession().expiryTime,
-      tokenValidity: profile.tokenValidity,
-      fallbackHours: 24,
-    }),
-    tokenValidity: profile.tokenValidity,
-  });
+  markDhanAutoStart(true);
   setDhanFeed({
     live: true,
     source: "rest",
-    lastTickAt: null,
     error: null,
     tokenHint: tokenHint(accessToken),
-    profileName: profile.dhanClientName || null,
-    clientId: apiId,
+    clientId: cleanId,
     quoteCount: 0,
     positionCount: 0,
     holdingCount: 0,
@@ -2216,7 +2233,25 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
   clearSimulatedDesk();
   startLiveLoop();
   void fetchDhanIp();
-  return { profile, funds, tokenHint: tokenHint(accessToken), ...dhanTokenStatus() };
+  console.log(`Dhan live client ${cleanId} · quote feed started without waiting on /profile`);
+
+  try {
+    const { profile, funds } = await validateDhan(cleanToken, cleanId);
+    if (profile?.dataPlan && String(profile.dataPlan).toLowerCase() === "deactive") {
+      const warning = "Dhan Data API plan is inactive. Enable Live Market Data on web.dhan.co, then paste a new Access Token.";
+      setDhanFeed({ live: true, error: warning });
+      return { profile, funds, warning, tokenHint: tokenHint(accessToken), ...dhanTokenStatus() };
+    }
+    applyValidatedDhanProfile(profile, funds, enteredId);
+    return { profile, funds, tokenHint: tokenHint(accessToken), ...dhanTokenStatus() };
+  } catch (error) {
+    if (isDhanAuthExpiredError(error)) {
+      savedTokenRejected = true;
+      void keepDhanTokenFresh("auth");
+    }
+    console.log(`Dhan profile check lagged; quote feed stayed on: ${error.message || error}`);
+    return { profile: null, funds: null, warning: error.message || String(error), tokenHint: tokenHint(accessToken), ...dhanTokenStatus() };
+  }
 }
 
 export function stopDhanLive() {
@@ -2269,21 +2304,7 @@ export async function rotateDhanAccessToken({
   credentialsBlockedUntil = 0;
   clearTokenBackoff();
   const how = generated.method === "renew" ? "RenewToken" : "PIN + TOTP";
-  if (!isDhanLive() && dhanFeedWasStopped(loadDhanSession())) {
-    scheduleTokenKeepAlive();
-    const status = dhanTokenStatus();
-    setDhanFeed({
-      live: false,
-      source: "idle",
-      tokenHint: status.tokenHint,
-      clientId: status.clientId,
-      ...status,
-    });
-    console.log(
-      `Dhan access token ${how} (${reason}) · saved token kept · Stop data feed left the feed off · expires ${generated.expiryTime}`,
-    );
-    return { rotated: true, live: false, expiryTime: generated.expiryTime, method: generated.method, ...status };
-  }
+  armDataFeedOnBoot();
   const live = await startDhanLive({
     accessToken: generated.accessToken,
     clientId: generated.clientId,
@@ -2394,8 +2415,8 @@ function blockBadTotp(error) {
     "Invalid TOTP: PIN or Setup TOTP secret is wrong, or VPS clock is off. Fix them on Brokers, then click Reset token now. Do not restart t2s.";
   console.log(`Dhan ${message} · auto-retry after ${when}. Click Reset token now after fixing PIN + TOTP.`);
   setDhanFeed({
-    live: false,
-    source: "idle",
+    live: Boolean(accessToken),
+    source: accessToken ? "rest" : "idle",
     error: message,
     ...dhanTokenStatus(),
   });
@@ -2407,10 +2428,7 @@ async function resumeSavedFeed(session, reason, { refreshIfLive = false } = {}) 
   const useToken = saved.token || session.accessToken;
   const useId = saved.id || session.clientId;
   if (!useToken) return;
-  if (dhanFeedWasStopped(session)) {
-    console.log(`Dhan saved access token kept after ${reason}. Stop data feed left the feed off.`);
-    return;
-  }
+  armDataFeedOnBoot();
   if (!useId || (isDhanLive() && !refreshIfLive)) return;
   try {
     await startDhanLive({
@@ -2593,16 +2611,14 @@ export async function startDhanFeedFromSavedToken() {
   return startFeedPromise;
 }
 
-/** Same action as Brokers → Start data feed. VPS boot and deploy keep retrying this. */
+/** Same action as Brokers → Start data feed. Always on: boot, deploy, and watchdog never leave it off. */
 export async function ensureAdminDataFeedRunning(reason = "boot") {
   if (adminFeedEnsurePromise) return adminFeedEnsurePromise;
   adminFeedEnsurePromise = (async () => {
-    const bootLike = reason === "boot" || reason === "deploy";
-    if (bootLike) armDataFeedOnBoot();
-    if (isDhanLive()) return { live: true, started: false, reason: "already-live" };
-    const session = loadDhanSession();
-    if (!bootLike && dhanFeedWasStopped(session)) {
-      return { live: false, started: false, reason: "feed-stopped" };
+    armDataFeedOnBoot();
+    if (isDhanFeedLoopRunning()) {
+      if (accessToken && clientId && !socket && !reconnectTimer) startSocket();
+      return { live: true, started: false, reason: "already-live" };
     }
     const { token, id } = savedDhanAccess();
     if (!token || !id) {
@@ -2639,7 +2655,7 @@ export function scheduleAdminDataFeedWatchdog() {
     });
   };
   tick("boot");
-  adminFeedWatchdogTimer = setInterval(() => tick("watchdog"), 12_000);
+  adminFeedWatchdogTimer = setInterval(() => tick("watchdog"), 8_000);
   if (typeof adminFeedWatchdogTimer.unref === "function") adminFeedWatchdogTimer.unref();
 }
 
@@ -2677,7 +2693,8 @@ function tokenLooksAliveNow(session, token) {
  */
 export async function connectSavedDhan() {
   const { session, token, id } = savedDhanAccess();
-  const feedStopped = dhanFeedWasStopped(session);
+  armDataFeedOnBoot();
+  const feedStopped = false;
   const remaining = tokenMsRemaining();
   const tokenStillGood = Number.isFinite(remaining) && remaining > 20 * 60 * 1000;
   const blocked = Date.now() < keepAliveBackoffUntil || Date.now() < credentialsBlockedUntil;
@@ -2685,7 +2702,7 @@ export async function connectSavedDhan() {
   let authRejected = false;
   let rateLimited = false;
   let startError = null;
-  if (!feedStopped && token && id) {
+  if (token && id) {
     try {
       await startDhanWithRetry(token, id, 4);
       started = true;
@@ -2763,33 +2780,28 @@ export async function bootDhanFromEnv() {
     scheduleTokenKeepAlive();
     return true;
   }
-  const stopped = dhanFeedWasStopped(loadDhanSession());
   console.log(
-    stopped
-      ? "Dhan saved access token kept. Stop data feed left the feed off. Restart did not remove the token."
-      : connected.reason === "saved-token-kept"
-        ? `Dhan saved access token kept. Data feed will retry${connected.error ? `: ${connected.error.message || connected.error}` : "."}`
-        : connected.reason === "rate-limit" || connected.reason === "cooldown"
-          ? "Dhan token renew is in cooldown. The saved token was kept and will retry."
-          : token && !id
-            ? "Dhan saved access token kept. Client ID is missing, so the data feed did not start. The token was not removed."
-            : token
-              ? "Dhan saved access token kept after restart. Automatic renew did not start the data feed yet."
-              : "No Dhan access token saved. Paste it on Brokers, or save PIN + TOTP so restart can generate one.",
+    connected.reason === "saved-token-kept"
+      ? `Dhan saved access token kept. Data feed will retry${connected.error ? `: ${connected.error.message || connected.error}` : "."}`
+      : connected.reason === "rate-limit" || connected.reason === "cooldown"
+        ? "Dhan token renew is in cooldown. The saved token was kept and will retry."
+        : token && !id
+          ? "Dhan saved access token kept. Client ID is missing, so the data feed did not start. The token was not removed."
+          : token
+            ? "Dhan saved access token kept after restart. Automatic renew did not start the data feed yet."
+            : "No Dhan access token saved. Paste it on Brokers, or save PIN + TOTP so restart can generate one.",
   );
   const renewAttempted = connected.reason === "dhan-rejected-token" || connected.reason === "needs-token";
-  if (!renewAttempted) {
+  if (!renewAttempted && !isDhanLive()) {
     const rate = connected.reason === "rate-limit" || connected.reason === "cooldown";
     setDhanFeed({
       live: false,
       source: "idle",
       error: rate
         ? "Dhan 429 while starting the saved token. The token was not removed. The data feed will retry."
-        : stopped
-          ? null
-          : connected.error
-            ? `Saved token was kept. Data feed will retry: ${connected.error.message || connected.error}`
-            : null,
+        : connected.error
+          ? `Saved token was kept. Data feed will retry: ${connected.error.message || connected.error}`
+          : null,
       ...dhanTokenStatus(),
     });
   }
