@@ -53,6 +53,8 @@ test("refresh UI keeps Stop data feed when the quote loop is live", () => {
   assert.match(brokersUi, /browser refresh or later/);
   const deskUi = fs.readFileSync(new URL("../src/context/MarketContext.tsx", import.meta.url), "utf8");
   assert.match(deskUi, /syncDhanBrokerLive/);
+  assert.match(deskUi, /Snapshot\["brokers"\]/);
+  assert.match(deskUi, /defaultBrokers/);
   const dhanSrc = fs.readFileSync(new URL("./dhan.js", import.meta.url), "utf8");
   assert.match(dhanSrc, /stampAdminFeedLive\(\)/);
   assert.match(dhanSrc, /shouldArmAdminDataFeed\(reason/);
