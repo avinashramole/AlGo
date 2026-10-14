@@ -422,6 +422,14 @@ export function feedResumesOnBoot(session = {}) {
   return Boolean(String(session?.accessToken || "").trim()) && !dhanFeedWasStopped(session);
 }
 
+const ADMIN_FEED_FORCE_REASONS = new Set(["boot", "deploy", "paper-to-live", "live-start", "paper-start"]);
+
+/** Watchdog must not clear Stop. Boot, deploy, and live-start still turn the feed back on. */
+export function shouldArmAdminDataFeed(reason, session = {}) {
+  if (!dhanFeedWasStopped(session)) return true;
+  return ADMIN_FEED_FORCE_REASONS.has(String(reason || ""));
+}
+
 /** Deploy / systemd restart always arms Start data feed before the saved token connects. */
 export function armDataFeedOnBoot() {
   markDhanAutoStart(true);

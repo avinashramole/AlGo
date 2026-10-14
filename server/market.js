@@ -2469,12 +2469,29 @@ function sanePrevClose(ltp, prev, { loose = false, maxMove } = {}) {
   return round2(close);
 }
 
+function dhanSourceOwnsTape(source) {
+  const value = String(source || "");
+  return value === "websocket" || value === "rest";
+}
+
 export function setDhanFeed(patch) {
-  state.dhanFeed = { ...state.dhanFeed, ...patch };
+  const current = state.dhanFeed || {};
+  const next = { ...current, ...patch };
+  const currentSource = String(current.source || "");
+  const nextSource = String(next.source || "");
+  if (patch.live === false && dhanSourceOwnsTape(currentSource) && nextSource !== "idle") {
+    next.live = true;
+    if (nextSource === "kotak") next.source = currentSource;
+  }
+  state.dhanFeed = next;
 }
 
 export function adminQuoteFeed() {
-  return { live: Boolean(state.dhanFeed.live), source: String(state.dhanFeed.source || "") };
+  const source = String(state.dhanFeed.source || "");
+  return {
+    live: Boolean(state.dhanFeed.live) || dhanSourceOwnsTape(source),
+    source,
+  };
 }
 
 const LAST_QUOTES_FILE = process.env.T2S_QUOTE_CACHE || path.join(path.dirname(fileURLToPath(import.meta.url)), "data", "last-quotes.json");
@@ -2576,7 +2593,8 @@ function schedulePersistLastQuotes() {
 }
 
 export function isDhanFeedLive() {
-  return Boolean(state.dhanFeed.live);
+  if (state.dhanFeed.live) return true;
+  return dhanSourceOwnsTape(state.dhanFeed.source);
 }
 
 export function hasLastLiveBook() {
@@ -2603,8 +2621,12 @@ function publicDhanFeed() {
   } catch {
     saved = null;
   }
+  const source = String(feed.source || "");
+  const live = Boolean(feed.live) || dhanSourceOwnsTape(source);
   return {
     ...feed,
+    live,
+    source: live && source === "idle" ? "rest" : feed.source,
     tokenHint: feed.tokenHint || saved?.tokenHint || null,
     clientId: feed.clientId || saved?.clientId || null,
     autoRenew: feed.autoRenew || Boolean(saved?.autoRenew),

@@ -60,6 +60,7 @@ import {
   loadTokenBackoff,
   markDhanAutoStart,
   armDataFeedOnBoot,
+  shouldArmAdminDataFeed,
   needsFreshAccessToken,
   dhanFeedWasStopped,
   ensureSessionHasPickedToken,
@@ -1635,8 +1636,28 @@ export function isDhanLive() {
 }
 
 export function isDhanFeedLoopRunning() {
-  const socketOpen = Boolean(socket && socket.readyState === WebSocket.OPEN);
-  return Boolean(accessToken && (pollTimer || socketOpen));
+  const socketUp = Boolean(
+    socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING),
+  );
+  return Boolean(
+    accessToken && (pollTimer || accountTimer || chainTimer || candleTimer || reconnectTimer || socketUp),
+  );
+}
+
+function stampAdminFeedLive() {
+  if (!accessToken) return;
+  const session = loadDhanSession();
+  markDhanLive({
+    clientId: clientId || session.clientId,
+    keyHint: tokenHint(accessToken),
+  });
+  setDhanFeed({
+    live: true,
+    source: socket && socket.readyState === WebSocket.OPEN ? "websocket" : "rest",
+    tokenHint: tokenHint(accessToken),
+    clientId: clientId || session.clientId || null,
+    ...dhanTokenStatus(),
+  });
 }
 
 function savedDhanAccess() {
@@ -2218,6 +2239,10 @@ export async function startDhanLive({ accessToken: token, clientId: id, loginId 
   savedTokenRejected = false;
   usedFallback = false;
   markDhanAutoStart(true);
+  markDhanLive({
+    clientId: cleanId,
+    keyHint: tokenHint(accessToken),
+  });
   setDhanFeed({
     live: true,
     source: "rest",
@@ -2577,6 +2602,17 @@ export async function saveDhanAccessToken({ accessToken: token, clientId: id, lo
   } catch (error) {
     const warning = error?.message || "Dhan did not accept this token yet. It is still saved.";
     const status = dhanTokenStatus();
+    if (isDhanLive() || isDhanFeedLoopRunning()) {
+      setDhanFeed({
+        ...status,
+        live: true,
+        error: warning,
+        tokenHint: status.tokenHint,
+        clientId: status.clientId || cleanId,
+      });
+      console.log(`Dhan access token saved. Quote feed stayed on: ${warning}`);
+      return { live: true, saved: true, warning, tokenHint: status.tokenHint, ...status };
+    }
     setDhanFeed({
       ...status,
       live: false,
@@ -2611,12 +2647,16 @@ export async function startDhanFeedFromSavedToken() {
   return startFeedPromise;
 }
 
-/** Same action as Brokers → Start data feed. Always on: boot, deploy, and watchdog never leave it off. */
+/** Same action as Brokers → Start data feed. Watchdog keeps it on; only Stop turns it off. */
 export async function ensureAdminDataFeedRunning(reason = "boot") {
   if (adminFeedEnsurePromise) return adminFeedEnsurePromise;
   adminFeedEnsurePromise = (async () => {
+    if (!shouldArmAdminDataFeed(reason, loadDhanSession())) {
+      return { live: false, started: false, reason: "feed-stopped" };
+    }
     armDataFeedOnBoot();
     if (isDhanFeedLoopRunning()) {
+      stampAdminFeedLive();
       if (accessToken && clientId && !socket && !reconnectTimer) startSocket();
       return { live: true, started: false, reason: "already-live" };
     }
@@ -2792,7 +2832,7 @@ export async function bootDhanFromEnv() {
             : "No Dhan access token saved. Paste it on Brokers, or save PIN + TOTP so restart can generate one.",
   );
   const renewAttempted = connected.reason === "dhan-rejected-token" || connected.reason === "needs-token";
-  if (!renewAttempted && !isDhanLive()) {
+  if (!renewAttempted && !isDhanLive() && !isDhanFeedLoopRunning()) {
     const rate = connected.reason === "rate-limit" || connected.reason === "cooldown";
     setDhanFeed({
       live: false,

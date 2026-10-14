@@ -136,6 +136,23 @@ function readCachedDesk(): Snapshot | null {
   }
 }
 
+function syncDhanBrokerLive(
+  brokers: Snapshot["brokers"] | undefined,
+  feed: Snapshot["dhanFeed"] | undefined,
+) {
+  if (!Array.isArray(brokers) || !feed) return brokers;
+  const live = Boolean(feed.live);
+  return brokers.map((row) => {
+    if (row.id !== "dhan") return row;
+    if (Boolean(row.liveFeed) === live) return row;
+    return {
+      ...row,
+      liveFeed: live,
+      mode: live ? "live" : row.mode === "live" ? "idle" : row.mode,
+    };
+  });
+}
+
 function writeCachedDesk(next: Snapshot) {
   try {
     sessionStorage.setItem(
@@ -348,7 +365,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         notifications: current.notifications,
         settings: current.settings,
         contracts: current.contracts,
-        brokers: current.brokers,
+        brokers: syncDhanBrokerLive(feed.brokers || current.brokers, feed.dhanFeed),
       };
       dataRef.current = next;
       return next;
