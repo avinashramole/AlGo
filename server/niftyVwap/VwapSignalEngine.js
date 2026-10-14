@@ -262,18 +262,25 @@ export function firstBarColor(bar) {
   return "doji";
 }
 
-export function nextCandleEntryWindow(previewTime, now, barMs) {
+export function firstCandleEntryGraceMs(barMs) {
+  const ms = Number(barMs) || BAR_MS;
+  return Math.min(Math.max(ms, 0), 5 * 60 * 1000);
+}
+
+export function nextCandleEntryWindow(previewTime, now, barMs, { graceMs } = {}) {
   const t = Number(previewTime);
   const ms = Number(barMs) || 15 * 60 * 1000;
   const n = Number(now);
+  const grace = Number(graceMs) > 0 ? Number(graceMs) : ms;
   if (!(t > 0) || !(ms > 0) || !(n > 0)) {
-    return { nextOpen: 0, inNewCandle: false, missedOpen: false };
+    return { nextOpen: 0, inNewCandle: false, missedOpen: false, inGrace: false };
   }
   const nextOpen = t + ms;
   return {
     nextOpen,
     inNewCandle: n >= nextOpen && n < nextOpen + ms,
-    missedOpen: n >= nextOpen + ms,
+    inGrace: n >= nextOpen && n < nextOpen + grace,
+    missedOpen: n >= nextOpen + grace,
   };
 }
 
@@ -296,6 +303,7 @@ export const VwapSignalEngine = {
   sessionOpenMinutesFromIst,
   hmToMinutes,
   looksLikeOneMinuteBars,
+  firstCandleEntryGraceMs,
   nextCandleEntryWindow,
   evaluate({ futuresBars = [], ceBars = [], peBars = [], now = Date.now(), barMs = BAR_MS } = {}) {
     const futCompleted = completedCandles(sessionBars(futuresBars, now), now, barMs);
@@ -356,6 +364,7 @@ export const VwapSignalEngine = {
     entryEvaluationIst = "09:05",
     endTimeIst = "15:15",
     scanUntilSignal = false,
+    oppositeConfirm = false,
     afterBarTime = 0,
   } = {}) {
     const barMinutes = Math.max(1, Math.round(Number(barMs) / 60_000) || 5);
@@ -383,23 +392,37 @@ export const VwapSignalEngine = {
       const niftyColor = firstBarColor(bar);
       const ceColor = firstBarColor(sameTime(ceAll, bar.time));
       const peColor = firstBarColor(sameTime(peAll, bar.time));
-      const buyCe = !waitingEval && niftyColor === "green" && ceColor === "green";
-      const buyPe = !waitingEval && niftyColor === "red" && peColor === "green";
+      const buyCe =
+        !waitingEval &&
+        niftyColor === "green" &&
+        ceColor === "green" &&
+        (!oppositeConfirm || peColor === "red");
+      const buyPe = !waitingEval &&
+        (oppositeConfirm
+          ? niftyColor === "green" && peColor === "green" && ceColor === "red"
+          : niftyColor === "red" && peColor === "green");
       return { bar, niftyColor, ceColor, peColor, buyCe, buyPe };
     };
     const completed = futAll.filter(inWindow);
     const unused = completed.filter((bar) => Number(bar.time) > Number(afterBarTime || 0));
-    const scored = (scanUntilSignal ? unused : completed).map(score);
-    const matched = scanUntilSignal ? scored.find((row) => row.buyCe || row.buyPe) : null;
-    const pick = matched || score((scanUntilSignal ? unused : completed)[(scanUntilSignal ? unused : completed).length - 1] || null);
+    const pool = scanUntilSignal ? unused : completed;
+    const graceMs = firstCandleEntryGraceMs(width);
+    const windowFor = (bar) => nextCandleEntryWindow(bar?.time, now, width, { graceMs });
+    const scored = pool.map(score);
+    const matched = scanUntilSignal
+      ? scored.find((row) => (row.buyCe || row.buyPe) && windowFor(row.bar).inGrace)
+      : null;
+    const pick = matched || score(pool[pool.length - 1] || null);
     const preview = pick.bar;
     const openedAt = preview ? Number(preview.time) + width : 0;
-    const onCurrentOpen = Boolean(preview && Number(now) >= openedAt && Number(now) < openedAt + width);
+    const entryWindow = windowFor(preview);
+    const onCurrentOpen = Boolean(preview && entryWindow.inNewCandle);
     const niftyColor = pick.niftyColor;
     const ceColor = pick.ceColor;
     const peColor = pick.peColor;
-    const buyCe = Boolean(preview) && pick.buyCe;
-    const buyPe = Boolean(preview) && pick.buyPe;
+    const liveEntry = Boolean(preview) && entryWindow.inGrace;
+    const buyCe = liveEntry && pick.buyCe;
+    const buyPe = liveEntry && pick.buyPe;
     const shownWall = preview ? istWallTime(preview.time) : null;
     const shownMin = shownWall ? shownWall.hour * 60 + shownWall.minute : -1;
     return {
@@ -419,6 +442,8 @@ export const VwapSignalEngine = {
       previewLive: false,
       previewCandle: Boolean(preview),
       onCurrentOpen,
+      inGrace: Boolean(preview && entryWindow.inGrace),
+      missedOpen: Boolean(preview && entryWindow.missedOpen),
       firstCandle: shownMin === sessionOpenMinutes,
       waitingEval,
       previewFilled: Boolean(preview && niftyColor),

@@ -775,6 +775,16 @@ export function recoverWaitOrderLiveBuy(algo, ctx = {}) {
     return false;
   }
   const vs = runtimeState(algo);
+  if (isFirstCandleAlgo(algo)) {
+    const barMs = (Number(ctx.config?.barMinutes) || 5) * 60 * 1000;
+    const barTime = Number(vs.lastProcessedBarTime || vs.lastEntryBarTime || 0);
+    if (barTime > 0) {
+      const window = VwapSignalEngine.nextCandleEntryWindow(barTime, Number(ctx.now) || Date.now(), barMs, {
+        graceMs: VwapSignalEngine.firstCandleEntryGraceMs(barMs),
+      });
+      if (!window.inGrace) return false;
+    }
+  }
   const option = want.option || vs.lockedOption || "";
   const strike =
     Number(want.strike) ||
@@ -1554,12 +1564,14 @@ function upsertOptionBar(list, barTime, ltp, opts = {}) {
   if (!(ltp > 0) || !barTime) return bars;
   const existing = bars.find((bar) => Number(bar.time) === Number(barTime));
   if (existing) {
+    if (opts.frozen) return bars;
     existing.close = ltp;
     existing.high = Math.max(Number(existing.high), ltp);
     existing.low = Math.min(Number(existing.low), ltp);
     existing.volume = Number(existing.volume || 0) + 1;
     return bars;
   }
+  if (opts.frozen) return bars;
   let open = ltp;
   if (opts.inheritOpen) {
     const prior = [...bars].reverse().find((bar) => Number(bar.time) < Number(barTime) && Number(bar.close) > 0);
@@ -1650,6 +1662,7 @@ function firstCandlePreviewLegs(algo, preview) {
     pe: preview ? sameTime(vs.peBars, preview.time) : null,
     ceStrike,
     peStrike,
+    confirmOpposite: crude,
   };
 }
 
@@ -2157,12 +2170,18 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const ceLtp = optionPremium(root, ceStrike, "CE", expiry);
   const peLtp = optionPremium(root, peStrike, "PE", expiry);
   const formingTime = Number(livePreview?.time) || 0;
+  const barMs = (Number(config.barMinutes) || 5) * 60 * 1000;
+  const graceMs = VwapSignalEngine.firstCandleEntryGraceMs(barMs);
   for (const optionBarTime of optionBarTimes({ signalTime: barTime, formingTime })) {
+    const closed = Boolean(formingTime) && optionBarTime === barTime && optionBarTime !== formingTime;
+    const frozen = closed && now >= optionBarTime + barMs + graceMs;
     vs.ceBars = upsertOptionBar(vs.ceBars, optionBarTime, ceLtp, {
-      inheritOpen: optionBarTime === barTime && optionBarTime !== formingTime,
+      inheritOpen: closed,
+      frozen,
     });
     vs.peBars = upsertOptionBar(vs.peBars, optionBarTime, peLtp, {
-      inheritOpen: optionBarTime === barTime && optionBarTime !== formingTime,
+      inheritOpen: closed,
+      frozen,
     });
   }
   const ceSecurityId = optionLegId(ceStrike, "CE", root, expiry);
@@ -5039,14 +5058,24 @@ export function niftyFuturePreviewBar(timeframe = "5m", now = Date.now(), sessio
   return last;
 }
 
-export function firstCandleConditionDots({ nifty, ceColor, peColor } = {}) {
+export function firstCandleConditionDots({ nifty, ceColor, peColor, confirmOpposite = false } = {}) {
   const fut = nifty === "green" || nifty === "red" || nifty === "doji" ? nifty : "";
   const ce = ceColor === "green" || ceColor === "red" || ceColor === "doji" ? ceColor : "";
   const pe = peColor === "green" || peColor === "red" || peColor === "doji" ? peColor : "";
   const futOk = fut === "green" || fut === "red";
   const ceOk = ce === "green";
   const peOk = pe === "green";
-  const buy = fut === "green" && ceOk ? "CE" : fut === "red" && peOk ? "PE" : "";
+  const buy = confirmOpposite
+    ? fut === "green" && ce === "green" && pe === "red"
+      ? "CE"
+      : fut === "green" && pe === "green" && ce === "red"
+        ? "PE"
+        : ""
+    : fut === "green" && ceOk
+      ? "CE"
+      : fut === "red" && peOk
+        ? "PE"
+        : "";
   return {
     fut,
     ce,
@@ -5059,11 +5088,11 @@ export function firstCandleConditionDots({ nifty, ceColor, peColor } = {}) {
   };
 }
 
-export function livePreviewCondition(bar, ce, pe) {
+export function livePreviewCondition(bar, ce, pe, { confirmOpposite = false } = {}) {
   const nifty = VwapSignalEngine.firstBarColor(bar);
   const ceColor = VwapSignalEngine.firstBarColor(ce);
   const peColor = VwapSignalEngine.firstBarColor(pe);
-  const dots = firstCandleConditionDots({ nifty, ceColor, peColor });
+  const dots = firstCandleConditionDots({ nifty, ceColor, peColor, confirmOpposite });
   if (dots.buy === "CE") return { nifty, ceColor, peColor, dots, condition: "BUY CE" };
   if (dots.buy === "PE") return { nifty, ceColor, peColor, dots, condition: "BUY PE" };
   if (nifty === "green") return { nifty, ceColor, peColor, dots, condition: ceColor ? "" : "WAIT CE" };
@@ -5095,7 +5124,7 @@ export function formatLiveFuturePreview(bar, barMinutes = 5, legs = {}, root = "
   const end = start + Math.max(1, Number(barMinutes) || 5);
   const pad = (value) => String(value).padStart(2, "0");
   const clock = `${pad(wall.hour)}:${pad(wall.minute)}–${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)} IST`;
-  const rule = livePreviewCondition(bar, legs.ce, legs.pe);
+  const rule = livePreviewCondition(bar, legs.ce, legs.pe, { confirmOpposite: legs.confirmOpposite === true });
   const ceStrike = legs.ceStrike;
   const peStrike = legs.peStrike;
   const parts = [
@@ -5115,7 +5144,7 @@ function stampLiveFuturePreview(algo, timeframe, now, legs = {}, signalBars = ni
   const closed = signalBars(timeframe, now, session);
   const preview = closed[closed.length - 1] || null;
   const color = VwapSignalEngine.firstBarColor(preview);
-  const rule = livePreviewCondition(preview, legs.ce, legs.pe);
+  const rule = livePreviewCondition(preview, legs.ce, legs.pe, { confirmOpposite: isCrudeFirstCandleAlgo(algo) });
   if (color) algo.futureColor = color;
   algo.ceColor = rule.ceColor || "";
   algo.peColor = rule.peColor || "";

@@ -322,6 +322,7 @@ test("every strategy keeps a custom daily trade limit and blocks extra BUY", () 
     assert.notEqual(hedge.status, "MAX_TRADES");
     const algoSrc = fs.readFileSync(new URL("../src/pages/Algo.tsx", import.meta.url), "utf8");
     assert.match(algoSrc, /data-trade-limit="daily"/);
+    assert.match(algoSrc, /data-sl-tgt="crude"/);
     const builder = fs.readFileSync(new URL("../src/components/dashboard/StrategyBuilder.tsx", import.meta.url), "utf8");
     assert.match(builder, /data-trade-limit="daily"/);
   } finally {

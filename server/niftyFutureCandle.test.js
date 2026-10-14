@@ -141,6 +141,10 @@ test("live preview candle keeps its own open and close while the 5m bar is still
   });
   assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "green", peColor: "green" }).buy, "CE");
   assert.equal(firstCandleConditionDots({ nifty: "red", peColor: "green", ceColor: "green" }).buy, "PE");
+  assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "red", peColor: "green", confirmOpposite: true }).buy, "PE");
+  assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "green", peColor: "red", confirmOpposite: true }).buy, "CE");
+  assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "green", peColor: "green", confirmOpposite: true }).buy, "");
+  assert.equal(firstCandleConditionDots({ nifty: "red", peColor: "green", ceColor: "red", confirmOpposite: true }).buy, "");
   assert.equal(firstCandleConditionDots({ nifty: "green", ceColor: "green", peColor: "green" }).okCount, 3);
   const closed = niftyFutureSignalBars("5m", now);
   assert.equal(closed.length, 1);
@@ -314,8 +318,8 @@ test("paused NIFTY and CRUDE OIL always show future candle green or red", () => 
     }
     tickMarket();
     const after = snapshot();
-    const nifty = after.algos.find((row) => row.kind === "nifty-first-candle");
-    const crude = after.algos.find((row) => row.kind === "crude-first-candle");
+    const nifty = after.algos.find((row) => row.name === "NIFTY") || after.algos.find((row) => row.kind === "nifty-first-candle");
+    const crude = after.algos.find((row) => row.name === "CRUDE OIL") || after.algos.find((row) => row.kind === "crude-first-candle");
     assert.equal(nifty.name, "NIFTY");
     assert.equal(crude.name, "CRUDE OIL");
     assert.equal(nifty.futureColor, "green");

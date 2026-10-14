@@ -294,7 +294,7 @@ test("crude first-candle matched colors send one order after the next 5m window"
   });
   const open0900 = Date.parse("2026-09-29T03:30:00.000Z");
   const duringFirst = open0900 + 2 * 60_000;
-  const afterWindow = open0900 + 12 * 60_000;
+  const afterWindow = open0900 + 6 * 60_000;
   const realNow = Date.now;
   const created = createAlgo({
     name: "CRUDE late window first candle",

@@ -332,7 +332,7 @@ export function summarizeAlgo(algo) {
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
-    return `CRUDE OIL FUT every ${tf} candle · monthly ATM · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT green + ATM CE green → BUY CE · CRUDE FUT red + ATM PE green → BUY PE · doji skips that candle and waits for the next · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
+    return `CRUDE OIL FUT every ${tf} candle · monthly ATM · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT + CE green and PE red → BUY CE · CRUDE FUT + PE green and CE red → BUY PE · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;

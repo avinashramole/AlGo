@@ -291,6 +291,17 @@ export const NiftyVwapStrategy = {
           algo.lastSignal = "WAIT 09:05 FIRST 5m CLOSE";
           return { action: "wait", reason: "wait-eval" };
         }
+        if (
+          signal.missedOpen &&
+          ((signal.niftyColor === "green" && signal.ceColor === "green" && (!crudeSignal || signal.peColor === "red")) ||
+            (crudeSignal
+              ? signal.niftyColor === "green" && signal.peColor === "green" && signal.ceColor === "red"
+              : signal.niftyColor === "red" && signal.peColor === "green"))
+        ) {
+          const clock = niftyFutCandleText(signal, config).clock.replace(/^ · /, "");
+          algo.lastSignal = clock ? `MISSED ${clock}` : "MISSED CANDLE";
+          return { action: "wait", reason: "missed-open" };
+        }
         const ceTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "CE");
         const peTrack = trackedOptionStrike(state, spot, step, config.strikeOffset, "PE");
         if (signal.niftyColor === "doji") {
@@ -460,6 +471,7 @@ export const NiftyVwapStrategy = {
               entryEvaluationIst: config.entryEvaluationIst || "09:05",
               endTimeIst: config.endTimeIst || "15:15",
               scanUntilSignal: String(config.symbol || "").toUpperCase() === "CRUDEOIL",
+              oppositeConfirm: String(config.symbol || "").toUpperCase() === "CRUDEOIL",
               afterBarTime: Math.max(Number(state.lastEntryBarTime || 0), Number(state.sentSignalBarTime || 0)),
             })
           : VwapSignalEngine.evaluate({

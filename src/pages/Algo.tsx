@@ -83,7 +83,12 @@ function firstCandleDotColors(algo: AlgoStrategy) {
   const fut = candleTone(algo.futureColor) || signalCandleColor(text, "fut");
   const ce = candleTone(algo.ceColor) || signalCandleColor(text, "ce");
   const pe = candleTone(algo.peColor) || signalCandleColor(text, "pe");
-  const buy = /\bBUY CE\b/i.test(text) || (fut === "green" && ce === "green") ? "CE" : /\bBUY PE\b/i.test(text) || (fut === "red" && pe === "green") ? "PE" : "";
+  const crude = isCrudeFirstCandleKind(algo);
+  const buy = /\bBUY CE\b/i.test(text) || (crude ? fut === "green" && ce === "green" && pe === "red" : fut === "green" && ce === "green")
+    ? "CE"
+    : /\bBUY PE\b/i.test(text) || (crude ? fut === "green" && pe === "green" && ce === "red" : fut === "red" && pe === "green")
+      ? "PE"
+      : "";
   return { fut, ce, pe, buy };
 }
 
@@ -217,7 +222,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "crude-first-candle" as const,
       category: `CRUDE OIL EVERY ${(algo.timeframe || "5m").toUpperCase()}`,
-      config: `CRUDE FUT · every ${algo.timeframe || "5m"} candle until a signal · monthly ATM · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
+      config: `CRUDE FUT · every ${algo.timeframe || "5m"} · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
@@ -665,6 +670,91 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
+function pctOr(value: number | undefined, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.min(90, Math.round(n * 10) / 10) : fallback;
+}
+
+function CrudeLevels({ algo }: { algo: AlgoStrategy }) {
+  const { refresh } = useMarket();
+  const slSaved = pctOr(algo.initialSlPct, 20);
+  const tgtSaved = pctOr(algo.targetPct, 40);
+  const [sl, setSl] = useState(String(slSaved));
+  const [tgt, setTgt] = useState(String(tgtSaved));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setSl(String(slSaved));
+    setTgt(String(tgtSaved));
+  }, [algo.id, slSaved, tgtSaved]);
+
+  const save = async () => {
+    const nextSl = pctOr(Number(sl), slSaved);
+    const nextTgt = pctOr(Number(tgt), tgtSaved);
+    setSl(String(nextSl));
+    setTgt(String(nextTgt));
+    if (nextSl === slSaved && nextTgt === tgtSaved) return;
+    setSaving(true);
+    try {
+      await updateAlgo(algo.id, { initialSlPct: nextSl, slPct: nextSl, targetPct: nextTgt });
+      await refresh();
+    } catch (err) {
+      window.alert(catchDeskError(err, "Could not save SL / TGT"));
+      setSl(String(slSaved));
+      setTgt(String(tgtSaved));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 flex w-full flex-wrap items-center gap-3 text-sm font-bold text-[var(--text)]" data-sl-tgt="crude">
+      <label className="flex items-center gap-2">
+        Stop %
+        <input
+          type="number"
+          min={1}
+          max={90}
+          step={1}
+          inputMode="decimal"
+          aria-label="Crude stop percent"
+          className="h-10 w-20 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
+          value={sl}
+          onChange={(event) => setSl(event.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void save();
+            }
+          }}
+        />
+      </label>
+      <label className="flex items-center gap-2">
+        Target %
+        <input
+          type="number"
+          min={1}
+          max={90}
+          step={1}
+          inputMode="decimal"
+          aria-label="Crude target percent"
+          className="h-10 w-20 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
+          value={tgt}
+          onChange={(event) => setTgt(event.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void save();
+            }
+          }}
+        />
+      </label>
+      <span className="font-medium text-slate-400">{saving ? "Saving..." : "Custom % from the fill. Same values as Edit."}</span>
+    </div>
+  );
+}
+
 function Test2ExpiryBar({ algo }: { algo: AlgoStrategy }) {
   const { refresh } = useMarket();
   const [saving, setSaving] = useState(false);
@@ -843,6 +933,7 @@ function AlgoCard({
       </div>
       {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
       <DailyTradeLimit algo={algo} />
+      {isCrudeFirstCandleKind(algo) ? <CrudeLevels algo={algo} /> : null}
 
       <div className="metric-well mt-4 grid-cols-2 sm:grid-cols-4">
         <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />

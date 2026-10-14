@@ -1978,8 +1978,8 @@ test("preview candle is checked when the current candle opens, not from the curr
   assert.equal(laterOnly.onCurrentOpen, true);
 });
 
-test("matched first-candle still sends after the next 5m window has already opened", () => {
-  const now = T0_0900 + 2 * BAR + 30_000;
+test("matched first-candle still sends in the first minutes of the next candle", () => {
+  const now = T0_0900 + BAR + 30_000;
   const signal = VwapSignalEngine.evaluateFirstCandle({
     futuresBars: [firstBar(22663, 22680)],
     ceBars: [firstBar(100, 118)],
@@ -1987,7 +1987,8 @@ test("matched first-candle still sends after the next 5m window has already open
     now,
   });
   assert.equal(signal.buyCe, true);
-  assert.equal(signal.onCurrentOpen, false);
+  assert.equal(signal.onCurrentOpen, true);
+  assert.equal(signal.inGrace, true);
   assert.equal(signal.niftyColor, "green");
   assert.equal(signal.ceColor, "green");
   const algo = defaultNiftyFirstCandleAlgo({ name: "Late CE" });
@@ -2014,6 +2015,39 @@ test("matched first-candle still sends after the next 5m window has already open
   assert.match(algo.lastSignal, /BUY 22700 CE/);
 });
 
+test("a first-candle match does not send after the next candle grace has passed", () => {
+  const now = T0_0900 + 2 * BAR + 30_000;
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(22663, 22680)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    now,
+  });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.missedOpen, true);
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Stale CE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(22663, 22680)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 22680,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.notEqual(tick.action, "entry");
+  assert.equal(book.places.length, 0);
+  assert.match(String(algo.lastSignal || ""), /MISSED/);
+});
+
 test("crude keeps checking every 5m candle until a signal is found", () => {
   const laterDoji = { time: T0_0900 + BAR, open: 6120, high: 6122, low: 6118, close: 6120, volume: 100 };
   const laterCe = { time: T0_0900 + BAR, open: 90, high: 91, low: 88, close: 89, volume: 50 };
@@ -2030,7 +2064,7 @@ test("crude keeps checking every 5m candle until a signal is found", () => {
     futuresBars: [firstBar(6100, 6120), laterDoji],
     ceBars: [firstBar(80, 90), laterCe],
     peBars: [firstBar(70, 60)],
-    now,
+    now: T0_0900 + BAR + 30_000,
     endTimeIst: "23:15",
     scanUntilSignal: true,
   });
@@ -2040,7 +2074,7 @@ test("crude keeps checking every 5m candle until a signal is found", () => {
   const book = bookAdapter();
   const tick = NiftyVwapStrategy.tick({
     algo,
-    now,
+    now: T0_0900 + BAR + 30_000,
     feedLive: true,
     minutesToClose: 800,
     futuresBars: [firstBar(6100, 6120), laterDoji],
@@ -2059,8 +2093,8 @@ test("crude keeps checking every 5m candle until a signal is found", () => {
   assert.equal(book.places[0].symbol, "CRUDEOIL 6100 CE");
 });
 
-test("matched crude first-candle still sends one order after the next 5m window", () => {
-  const now = T0_0900 + 2 * BAR + 30_000;
+test("matched crude first-candle still sends one order in the next candle grace", () => {
+  const now = T0_0900 + BAR + 30_000;
   const signal = VwapSignalEngine.evaluateFirstCandle({
     futuresBars: [firstBar(6100, 6120)],
     ceBars: [firstBar(80, 90)],
@@ -2071,7 +2105,7 @@ test("matched crude first-candle still sends one order after the next 5m window"
     entryEvaluationIst: "09:05",
   });
   assert.equal(signal.buyCe, true);
-  assert.equal(signal.onCurrentOpen, false);
+  assert.equal(signal.onCurrentOpen, true);
   assert.equal(signal.niftyColor, "green");
   assert.equal(signal.ceColor, "green");
   const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE late CE" });
@@ -2115,6 +2149,148 @@ test("matched crude first-candle still sends one order after the next 5m window"
   });
   assert.notEqual(again.action, "entry");
   assert.equal(book.places.length, 1);
+});
+
+test("Crude buys PE when FUT and PE are green and CE is red", () => {
+  const now = T0_0900 + BAR + 30_000;
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(90, 80)],
+    peBars: [firstBar(70, 88)],
+    now,
+    endTimeIst: "23:15",
+    scanUntilSignal: true,
+    oppositeConfirm: true,
+  });
+  assert.equal(signal.buyPe, true);
+  assert.equal(signal.buyCe, false);
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE confirm PE" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(90, 80)],
+    peBars: [firstBar(70, 88)],
+    ceLtp: 80,
+    peLtp: 88,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(tick.action, "entry");
+  assert.equal(book.places[0].option, "PE");
+  assert.equal(book.places[0].symbol, "CRUDEOIL 6100 PE");
+});
+
+test("Crude does not buy CE when PE is also green", () => {
+  const now = T0_0900 + BAR + 30_000;
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 88)],
+    now,
+    endTimeIst: "23:15",
+    scanUntilSignal: true,
+    oppositeConfirm: true,
+  });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.buyPe, false);
+});
+
+test("a 30m Crude preview does not buy a red CALL at 20:48", () => {
+  const bar30 = 30 * 60 * 1000;
+  const open2000 = Date.parse("2026-10-14T14:30:00.000Z");
+  const at2048 = open2000 + bar30 + 18 * 60 * 1000;
+  const fut = { time: open2000, open: 9084, high: 9100, low: 9070, close: 9095, volume: 20 };
+  const ceRed = { time: open2000, open: 120, high: 122, low: 100, close: 108, volume: 8 };
+  const peGreen = { time: open2000, open: 90, high: 110, low: 88, close: 104, volume: 8 };
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [fut],
+    ceBars: [ceRed],
+    peBars: [peGreen],
+    now: at2048,
+    barMs: bar30,
+    endTimeIst: "23:15",
+    firstBarStartIst: "09:00",
+    entryEvaluationIst: "09:05",
+    scanUntilSignal: true,
+    oppositeConfirm: true,
+  });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.buyPe, false);
+  assert.equal(signal.niftyColor, "green");
+  assert.equal(signal.ceColor, "red");
+  assert.equal(signal.peColor, "green");
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE 30m late call", timeframe: "30m" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    config: { ...crudeFirstCandleConfig(algo), barMinutes: 30, timeframe: "30m" },
+    now: at2048,
+    feedLive: true,
+    minutesToClose: 200,
+    futuresBars: [fut],
+    ceBars: [ceRed],
+    peBars: [peGreen],
+    ceLtp: 108,
+    peLtp: 104,
+    spot: 9095,
+    step: 50,
+    expiry: "2026-10-15",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.notEqual(tick.action, "entry");
+  assert.equal(book.places.length, 0);
+});
+
+test("a 30m Crude green CALL still misses if the next candle is 18 minutes old", () => {
+  const bar30 = 30 * 60 * 1000;
+  const open2000 = Date.parse("2026-10-14T14:30:00.000Z");
+  const at2048 = open2000 + bar30 + 18 * 60 * 1000;
+  const fut = { time: open2000, open: 9084, high: 9100, low: 9070, close: 9095, volume: 20 };
+  const ceGreen = { time: open2000, open: 100, high: 130, low: 98, close: 118, volume: 8 };
+  const peRed = { time: open2000, open: 110, high: 112, low: 90, close: 96, volume: 8 };
+  const signal = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [fut],
+    ceBars: [ceGreen],
+    peBars: [peRed],
+    now: at2048,
+    barMs: bar30,
+    endTimeIst: "23:15",
+    firstBarStartIst: "09:00",
+    entryEvaluationIst: "09:05",
+    scanUntilSignal: true,
+  });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.missedOpen, true);
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE 30m missed", timeframe: "30m" });
+  const book = bookAdapter();
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    config: { ...crudeFirstCandleConfig(algo), barMinutes: 30, timeframe: "30m" },
+    now: at2048,
+    feedLive: true,
+    minutesToClose: 200,
+    futuresBars: [fut],
+    ceBars: [ceGreen],
+    peBars: [peRed],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 9095,
+    step: 50,
+    expiry: "2026-10-15",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.notEqual(tick.action, "entry");
+  assert.equal(book.places.length, 0);
+  assert.match(String(algo.lastSignal || ""), /MISSED/);
 });
 
 test("crude holds after BUY until SL or TGT is actually reached", () => {
@@ -3007,7 +3183,7 @@ test("crude max trades input is kept, and one signal places one order", () => {
       minutesToClose: 800,
       futuresBars: [{ time, open: 6100, high: 6130, low: 6090, close: 6120, volume: 10 }],
       ceBars: [{ time, open: 80, high: 95, low: 78, close: 90, volume: 5 }],
-      peBars: [firstBar(70, 60)],
+      peBars: [{ time, open: 70, high: 72, low: 58, close: 60, volume: 5 }],
       ceLtp: 90,
       peLtp: 60,
       spot: 6120,
@@ -3029,7 +3205,7 @@ test("crude max trades input is kept, and one signal places one order", () => {
     minutesToClose: 800,
     futuresBars: [{ time: T0_0900 + 2 * BAR, open: 6100, high: 6130, low: 6090, close: 6120, volume: 10 }],
     ceBars: [{ time: T0_0900 + 2 * BAR, open: 80, high: 95, low: 78, close: 90, volume: 5 }],
-    peBars: [firstBar(70, 60)],
+    peBars: [{ time: T0_0900 + 2 * BAR, open: 70, high: 72, low: 58, close: 60, volume: 5 }],
     ceLtp: 90,
     peLtp: 60,
     spot: 6120,
@@ -3091,7 +3267,7 @@ test("default rule: broker option is tracked, SL exits, then a new entry can fir
     minutesToClose: 780,
     futuresBars: [{ time: nextBar, open: 6100, high: 6130, low: 6090, close: 6120, volume: 10 }],
     ceBars: [{ time: nextBar, open: 80, high: 95, low: 78, close: 90, volume: 5 }],
-    peBars: [firstBar(70, 60)],
+    peBars: [{ time: nextBar, open: 70, high: 72, low: 58, close: 60, volume: 5 }],
     ceLtp: 90,
     peLtp: 60,
     spot: 6120,

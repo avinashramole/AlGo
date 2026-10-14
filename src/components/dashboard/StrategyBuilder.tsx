@@ -221,7 +221,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const requested = Number(form.maxTradesPerDay);
       const maxTrades = Number.isFinite(requested) && requested >= 1 ? Math.max(1, Math.min(20, Math.round(requested))) : 5;
       const tf = form.timeframe || "5m";
-      return `CRUDE OIL ${tf} · monthly ATM · every completed ${tf} until a signal · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
+      return `CRUDE OIL ${tf} · monthly ATM · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · ${lots} lot × 100 = ${lots * 100} qty · max ${maxTrades} trades · MCX until ${form.endTimeIst || "23:15"} IST`;
     }
     if (isNiftyFirstCandleKind(form)) {
       const start = form.dailyLiveIst || "09:00";
@@ -1139,6 +1139,11 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </div>
         ) : firstCandleTf ? (
           <div className="mt-2.5 space-y-2" data-first-candle-settings={crudeFirst ? "crude" : "nifty"}>
+            {crudeFirst ? (
+              <p className="desk-help text-[11px] font-semibold text-slate-400">
+                Same custom timeframe on Crude FUT, CE, and PE. FUT + CE green and PE red buys CE. FUT + PE green and CE red buys PE. Set your own stop % and target %.
+              </p>
+            ) : null}
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-500">
                 Start LIVE (IST)
