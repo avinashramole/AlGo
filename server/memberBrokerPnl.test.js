@@ -25,6 +25,25 @@ test("Dhan closed legs keep realized profit and open legs keep MTM", () => {
   assert.equal(pnl.source, "dhan");
 });
 
+test("Crude Dhan open qty is barrel units like Nifty, not 1 lot", () => {
+  const book = dhanMasterBook([
+    {
+      positionType: "LONG",
+      netQty: 1,
+      tradingSymbol: "CRUDEOIL 6100 CE",
+      exchangeSegment: "MCX_COMM",
+      securityId: "99",
+      productType: "INTRADAY",
+      costPrice: 90,
+      lastTradedPrice: 100,
+      realizedProfit: 0,
+      unrealizedProfit: 1000,
+    },
+  ]);
+  assert.equal(book.open[0].qty, 100);
+  assert.equal(book.open[0].pnl, 1000);
+});
+
 test("broker realized and MTM replace the local copy total", async () => {
   const desk = localDesk();
   await attachMemberBrokerPnl(desk, "user-1", async () =>

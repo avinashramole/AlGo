@@ -51,6 +51,30 @@ export function dhanOrderQuantity(payload = {}) {
   return Math.max(1, qty);
 }
 
+function mcxLotSize(row = {}) {
+  const symbol = row.tradingSymbol || row.symbol || "";
+  return Math.max(
+    1,
+    Math.round(Number(row.lotSize || row.lot_size) || getUnderlying(underlyingIdFromSymbol(symbol)).lot || 100),
+  );
+}
+
+function isMcxPosition(row = {}) {
+  const symbol = row.tradingSymbol || row.symbol || "";
+  const segment = String(row.exchangeSegment || row.exchange_segment || exchangeSegmentFor(symbol) || "");
+  return segment === "MCX_COMM" || isMcxSymbol(symbol);
+}
+
+/** Inverse of dhanOrderQuantity: Dhan MCX netQty is lots, Live MTM needs barrel units like Nifty. */
+export function dhanPositionQuantity(row = {}) {
+  const net = Math.abs(Number(row.netQty ?? row.qty ?? row.quantity) || 0);
+  if (!net) return 0;
+  if (!isMcxPosition(row)) return net;
+  const lotSize = mcxLotSize(row);
+  if (net >= lotSize) return net;
+  return net * lotSize;
+}
+
 function kolkataParts(date = new Date()) {
   return Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {

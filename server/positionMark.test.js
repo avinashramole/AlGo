@@ -47,6 +47,15 @@ test("sane option LTP marks (premium - avg) * qty", () => {
   assert.equal(row.pnl, Number(((91.48 - 96.71) * 65).toFixed(2)));
 });
 
+test("Crude Live MTM uses the same (premium - avg) * lot units as Nifty", () => {
+  const row = markContractToMarket(
+    { symbol: "CRUDEOIL 6100 CE", type: "BUY", qty: 100, avg: 90, option: "CE" },
+    100,
+  );
+  assert.equal(row.ltp, 100);
+  assert.equal(row.pnl, 1000);
+});
+
 test("tick LTP is kept when the chain feed is missing", () => {
   assert.equal(
     preferMarkLtp({ symbol: "NIFTY 23450 PE", option: "PE", avg: 96.71, ltp: 91.48, ticked: true }, 0),

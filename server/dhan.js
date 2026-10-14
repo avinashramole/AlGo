@@ -40,7 +40,7 @@ import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
-import { chooseDeskExpiry, dhanOrderQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
+import { chooseDeskExpiry, dhanOrderQuantity, dhanPositionQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions, isMemberScopedOrder } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
 import { adminBookFromDhan } from "./memberBrokerPnl.js";
@@ -877,7 +877,7 @@ function mapDhanPositions(raw) {
   return list
     .filter((row) => row.positionType !== "CLOSED" && Number(row.netQty) !== 0)
     .map((row) => {
-      const qty = Math.abs(Number(row.netQty) || 0);
+      const qty = dhanPositionQuantity(row);
       const type = row.positionType === "SHORT" || Number(row.netQty) < 0 ? "SELL" : "BUY";
       const avg = Number(row.costPrice || (type === "BUY" ? row.buyAvg : row.sellAvg) || 0);
       const dir = type === "BUY" ? 1 : -1;

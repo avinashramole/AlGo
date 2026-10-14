@@ -11,6 +11,7 @@ import {
   UNDERLYINGS,
   weekdayNameIST,
   dhanOrderQuantity,
+  dhanPositionQuantity,
   keepStrikeWindow,
   chooseDeskExpiry,
   dropExpired,
@@ -99,6 +100,19 @@ test("Dhan MCX quantity is lots, not barrel lot-size", () => {
   assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 CE", qty: 200, lots: 1, lotSize: 100 }), 2);
   assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL FUT", qty: 200, exchangeSegment: "MCX_COMM", lotSize: 100 }), 2);
   assert.equal(dhanOrderQuantity({ symbol: "CRUDEOIL 6100 PE", qty: 1, exchangeSegment: "MCX_COMM" }), 1);
+});
+
+test("Dhan MCX position qty is barrel units so Crude MTM matches Nifty", () => {
+  assert.equal(dhanPositionQuantity({ tradingSymbol: "NIFTY 24600 CE", netQty: 65 }), 65);
+  assert.equal(dhanPositionQuantity({ tradingSymbol: "CRUDEOIL 6100 CE", netQty: 1, exchangeSegment: "MCX_COMM" }), 100);
+  assert.equal(dhanPositionQuantity({ tradingSymbol: "CRUDEOIL 6100 CE", netQty: 2, lotSize: 100 }), 200);
+  assert.equal(dhanPositionQuantity({ tradingSymbol: "CRUDEOIL 16 OCT 6100 CE", netQty: 100, exchangeSegment: "MCX_COMM" }), 100);
+  assert.equal(dhanPositionQuantity({ tradingSymbol: "NATURALGAS 250 CE", netQty: 1 }), 1250);
+  const avg = 90;
+  const ltp = 100;
+  const qty = dhanPositionQuantity({ tradingSymbol: "CRUDEOIL 6100 CE", netQty: 1, exchangeSegment: "MCX_COMM" });
+  assert.equal(Number(((ltp - avg) * qty).toFixed(2)), 1000);
+  assert.equal(Number(((ltp - avg) * 1).toFixed(2)), 10);
 });
 
 test("keepStrikeWindow patches LTP on the same strikes instead of recentering ATM", () => {

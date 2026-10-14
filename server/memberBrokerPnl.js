@@ -1,5 +1,6 @@
 import { buildDailyPnl } from "./desk.js";
 import { optionContractKey, overlayMemberCopyMeta } from "./memberDesk.js";
+import { dhanPositionQuantity } from "./optionChain.js";
 import { isOptionContract, isSaneOptionLtp } from "./positionMark.js";
 
 const CACHE_MS = 2000;
@@ -180,7 +181,11 @@ export function dhanMasterBook(raw) {
     const buyAvg = firstFinite(row, ["buyAvg", "buy_avg", "dayBuyAvg", "day_buy_avg", "buyAvgPrice", "buyPrice", "costPrice", "cost_price"]) || 0;
     const sellAvg = firstFinite(row, ["sellAvg", "sell_avg", "daySellAvg", "day_sell_avg", "sellAvgPrice", "sellPrice"]) || 0;
     if (!closedLeg) {
-      const qty = Math.abs(net || 0) || Math.max(buyQty, sellQty);
+      const qty = dhanPositionQuantity({
+        ...row,
+        netQty: net,
+        tradingSymbol: symbol,
+      }) || Math.max(buyQty, sellQty);
       const type = kind === "SHORT" || Number(net) < 0 ? "SELL" : "BUY";
       const avg = Number(row.costPrice || row.cost_price || (type === "BUY" ? buyAvg : sellAvg) || 0);
       open.push({
