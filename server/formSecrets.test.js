@@ -73,7 +73,8 @@ test("My plan says when API key and secret are saved but the trading token is no
   assert.match(describeBrokerInstall(install, "upstox"), /API key/);
   assert.match(describeBrokerInstall(install, "upstox"), /API secret/);
   assert.match(describeBrokerInstall(install, "upstox"), /No trading token yet/);
-  assert.match(describeBrokerSave(install, "upstox"), /Tap Gets Token/);
+  assert.match(describeBrokerSave(install, "upstox"), /Tap Gets Token only if/);
+  assert.match(describeBrokerSave(install, "upstox"), /data feed starts for users and admin/);
   assert.equal(tradingTokenArrived(install, install), false);
   assert.equal(
     tradingTokenArrived(install, { installed: true, tokenHint: "up••••64MI", tokenUpdatedAt: "2026-09-19T10:00:00.000Z" }),

@@ -256,7 +256,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
 
       <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
         <div className="text-sm font-bold">Add broker</div>
-        <p className="desk-help mt-1 text-xs text-slate-500">Pick the broker, then save that broker’s client ID and access token.</p>
+        <p className="desk-help mt-1 text-xs text-slate-500">Pick the broker, then save that broker’s client ID and access token. After a VPS update the data feed starts on its own for users and admin — no restart.</p>
         <label className="mt-3 block text-xs font-semibold">
           Broker
           <select

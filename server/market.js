@@ -543,7 +543,7 @@ const state = {
     autoMode: "off",
     tokenExpiry: null,
     nextRenewAt: null,
-    autoStart: false,
+    autoStart: true,
     needsFresh: false,
   },
   liveCandles: [],

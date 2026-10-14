@@ -33,6 +33,7 @@ import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markT
 import { attachMemberBrokerBalance, attachMemberBrokerPnl, overlayDeskLiveMtm, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
+import { ensureMemberDataFeedsRunning } from "./memberFeedStart.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -822,10 +823,12 @@ app.post("/api/internal/start-data-feed", async (req, res) => {
   }
   try {
     const result = await ensureAdminDataFeedRunning("deploy");
+    const members = await ensureMemberDataFeedsRunning("deploy");
     res.json({
       ok: Boolean(result.live),
       live: Boolean(result.live),
       reason: result.reason || (result.live ? "started" : "not-live"),
+      members: { asked: members.asked, warmed: members.warmed },
     });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not start the Dhan data feed" });
@@ -1598,6 +1601,7 @@ async function bootBackground() {
   if (skipDhanBoot()) {
     console.log("Dhan boot skipped (T2S_SKIP_DHAN_BOOT). API is answering on this port.");
     startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
+    void ensureMemberDataFeedsRunning("boot");
     return;
   }
   try {
@@ -1617,4 +1621,5 @@ async function bootBackground() {
   }
   scheduleAdminDataFeedWatchdog();
   startKotakAdminQuoteFeed({ dhanRunning: isDhanLive });
+  void ensureMemberDataFeedsRunning("boot");
 }

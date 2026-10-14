@@ -146,8 +146,8 @@ export function describeBrokerInstall(install?: InstallHints | null, brokerId = 
   if (flags.hasTradingToken) return bits.join(" · ");
   if (flags.oauthReady) {
     return bits.length
-      ? `${bits.join(" · ")}. No trading token yet — tap Gets Token.`
-      : "API key and secret saved. No trading token yet — tap Gets Token.";
+      ? `${bits.join(" · ")}. No trading token yet. After a VPS update the server asks Upstox — tap Gets Token only if it did not arrive.`
+      : "API key and secret saved. After a VPS update the server asks Upstox — tap Gets Token only if it did not arrive.";
   }
   if (bits.length) {
     return `${bits.join(" · ")}. ${
@@ -164,7 +164,7 @@ export function describeBrokerSave(install?: InstallHints | null, brokerId = "")
   const { flags, bits } = installBits(install, id);
   const saved = bits.length ? bits.join(" · ") : "Credentials";
   if (id === "upstox" && flags.oauthReady && !flags.hasTradingToken) {
-    return `${saved} saved on this account. Tap Gets Token next. Desk LIVE was not started.`;
+    return `${saved} saved on this account. After a VPS update the data feed starts for users and admin. Tap Gets Token only if today's token did not arrive.`;
   }
   if (flags.hasTradingToken) {
     return `${saved} saved on this account. Live copy now uses this token. Desk LIVE was not started.`;

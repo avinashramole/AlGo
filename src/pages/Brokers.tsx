@@ -532,7 +532,7 @@ function DhanSettings({
         Dhan Access Tokens last <b>24 hours</b> and reset at <b>8:00 AM IST</b>. Login ID is the Dhan{" "}
         <b>Client ID</b>. Password is the 4–6 digit Dhan <b>PIN</b> — not the web.dhan.co website password (Dhan has
         no password token API). A deploy or <b>systemctl restart</b> reconnects the saved access token and turns the
-        data feed back on. If Dhan rejects that token, the server calls <b>GET /v2/RenewToken</b>, then PIN + TOTP,
+        data feed back on for <b>admin and users</b> by default. Users do not restart the feed. If Dhan rejects that token, the server calls <b>GET /v2/RenewToken</b>, then PIN + TOTP,
         without a click. The feed stays on until you click <b>Stop data feed</b>. Saving a pasted token does not
         remove it and does not turn strategies LIVE. <b>Reset token now</b> is the same renew, for a cooldown that
         is blocking the automatic one. Save PIN + TOTP once (or set{" "}

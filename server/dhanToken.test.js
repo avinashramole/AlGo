@@ -829,6 +829,8 @@ test("a saved token resumes the data feed and VPS restart arms Start data feed",
     assert.match(indexSrc, /\/api\/internal\/start-data-feed/);
     assert.match(indexSrc, /paper-to-live/);
     assert.match(indexSrc, /live-start/);
+    assert.match(indexSrc, /ensureMemberDataFeedsRunning\("deploy"\)/);
+    assert.match(indexSrc, /ensureMemberDataFeedsRunning\("boot"\)/);
     const deploySrc = fs.readFileSync(new URL("../deploy/update-website.sh", import.meta.url), "utf8");
     assert.match(deploySrc, /\/api\/internal\/start-data-feed/);
     const algoUi = fs.readFileSync(new URL("../src/pages/Algo.tsx", import.meta.url), "utf8");
