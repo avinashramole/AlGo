@@ -589,12 +589,54 @@ function strategyCard(strategy) {
   return findLiveCopyAlgo(state.algos || [], name);
 }
 
+export function closeSideForPosition(pos = {}) {
+  const type = String(pos.type || pos.side || pos.positionType || "").toUpperCase();
+  if (type === "SELL" || type === "SHORT") return "BUY";
+  const qty = Number(pos.qty ?? pos.netQty);
+  if (Number.isFinite(qty) && qty < 0) return "BUY";
+  return "SELL";
+}
+
+function algoExitBlocksBuy(algo) {
+  const bags = [algo?.vwapState, algo?.test1State, algo?.mirState, algo?.hedgeState, algo?.test2State];
+  const now = Date.now();
+  return bags.some((state) => {
+    if (!state?.exitQueued) return false;
+    const queuedAt = Number(state.exitQueuedAt || 0);
+    return !queuedAt || now - queuedAt < STALE_LIVE_SEND_MS;
+  });
+}
+
+function markAlgoExitHold(algo) {
+  if (!algo) return;
+  const now = Date.now();
+  const stamp = (state) => {
+    if (!state || typeof state !== "object") return state;
+    state.exitQueued = true;
+    state.exitQueuedAt = now;
+    state.inFlight = true;
+    return state;
+  };
+  if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo)) {
+    stamp(runtimeState(algo));
+  }
+  if (isNiftyTest2Algo(algo)) stamp(algo.test2State || (algo.test2State = {}));
+  if (isMultiIndexReversalAlgo(algo)) stamp(mirState(algo));
+  if (isNiftyVwapHedgeAlgo(algo)) stamp(hedgeState(algo));
+  stamp(algo.vwapState);
+  stamp(algo.test1State);
+  stamp(algo.mirState);
+  stamp(algo.hedgeState);
+  stamp(algo.test2State);
+}
+
 export function liveBuyAllowedForStrategy(strategy) {
   const name = String(strategy || "").trim();
   if (!name) return true;
   const algo = strategyCard(name);
   if (!algo?.id && !algo?.name) return true;
   if (algo.runMode === "paper") return false;
+  if (algoExitBlocksBuy(algo)) return false;
   if (algo.enabled && algo.runMode === "live") return true;
   if (algo.holdDailyLive) return false;
   return true;
@@ -1287,12 +1329,7 @@ export function queueLivePositionExit(pos) {
     (state.algos || []).find((item) => item.name === strategy) ||
     liveCopyAlgo({ strategy }) ||
     {};
-  if (isFirstCandleAlgo(algo)) {
-    const vs = runtimeState(algo);
-    vs.exitQueued = true;
-    vs.exitQueuedAt = Date.now();
-    vs.inFlight = true;
-  }
+  markAlgoExitHold(algo);
   const lotSize =
     Number(pos.lotSize) ||
     (isMcxSymbol(pos.symbol) ? getUnderlying(underlyingIdFromSymbol(pos.symbol)).lot : 0) ||
@@ -1300,7 +1337,7 @@ export function queueLivePositionExit(pos) {
   const result = queueLiveAlgoOrder({
     symbol: pos.symbol,
     name: pos.symbol,
-    side: pos.type === "BUY" ? "SELL" : "BUY",
+    side: closeSideForPosition(pos),
     qty: Math.abs(Number(pos.qty) || 0),
     lotSize,
     product: pos.product || "MIS",
@@ -4370,14 +4407,15 @@ export function squareOff(id, extras = {}) {
   const brokers = publicBrokers();
   const account = brokers.brokers.find((item) => item.id === (pos.brokerId || brokers.activeBrokerId));
   if (!account?.connected) return { error: "Connect this broker before squaring off" };
-  const dir = pos.type === "BUY" ? 1 : -1;
+  const closeSide = closeSideForPosition(pos);
+  const dir = closeSide === "SELL" ? 1 : -1;
   const liveExit = isPaperRow(pos) ? liveLtpForSymbol(pos.symbol) : 0;
   const exit = Number(liveExit || pos.ltp || pos.avg);
   const pnl = Number(((exit - pos.avg) * pos.qty * dir).toFixed(2));
   const order = {
     id: `o${Date.now()}`,
     symbol: pos.symbol,
-    side: pos.type === "BUY" ? "SELL" : "BUY",
+    side: closeSide,
     qty: pos.qty,
     filledQty: pos.qty,
     product: pos.product || "MIS",

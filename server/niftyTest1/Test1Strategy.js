@@ -105,6 +105,10 @@ export const Test1Strategy = {
 
   maybeEnter({ algo, config, signal, spot, step, expiry, ceLtp, peLtp, ceSecurityId, peSecurityId, positions, adapter }) {
     const state = runtimeState(algo);
+    if (state.exitQueued) {
+      algo.lastSignal = "EXIT PENDING";
+      return { action: "skip", reason: "exit-queued" };
+    }
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: 1 });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     if (RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime) || RiskManager.duplicateBar(state.sentSignalBarTime, signal.barTime)) {
@@ -317,6 +321,10 @@ export const Test1Strategy = {
       }
       state.buyPhase = "";
       state.inFlight = false;
+    }
+    if (state.exitQueued) {
+      algo.lastSignal = "EXIT PENDING";
+      return { action: "exit-pending" };
     }
     return this.maybeEnter({
       algo,

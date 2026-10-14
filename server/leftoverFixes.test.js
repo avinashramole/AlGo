@@ -14,6 +14,7 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
 const {
   clearSimulatedDesk,
+  closeSideForPosition,
   createAlgo,
   deleteAlgo,
   dhanQuotesStalled,
@@ -194,6 +195,76 @@ test("Exit finds a stale Dhan id and clears every strategy lot the same way", ()
     deleteAlgo(crude.id);
     deleteAlgo(vwap.id);
     deleteAlgo(multi.id);
+  }
+});
+
+test("Exit close sends SELL only and blocks a new BUY on every strategy", () => {
+  armLiveOrders();
+  const nifty = createAlgo({ name: `NIFTY sell ${Date.now()}`, kind: "nifty-first-candle", runMode: "live" });
+  const crude = createAlgo({ name: `CRUDE sell ${Date.now()}`, kind: "crude-first-candle", symbol: "CRUDEOIL", runMode: "live" });
+  try {
+    assert.equal(closeSideForPosition({ type: "BUY", qty: 100 }), "SELL");
+    assert.equal(closeSideForPosition({ type: "LONG", qty: 100 }), "SELL");
+    assert.equal(closeSideForPosition({ qty: 100 }), "SELL");
+    assert.equal(closeSideForPosition({ type: "SELL", qty: 100 }), "BUY");
+    assert.equal(closeSideForPosition({ type: "SHORT", qty: 1 }), "BUY");
+    replaceDhanBook([
+      {
+        id: "dhan-pos-77-INTRADAY",
+        symbol: "CRUDEOIL 6100 CE",
+        type: "LONG",
+        qty: 100,
+        avg: 90,
+        ltp: 80,
+        strategy: crude.name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 6100,
+        securityId: "77",
+        live: true,
+        lotSize: 100,
+      },
+      {
+        id: "dhan-pos-88-INTRADAY",
+        symbol: "NIFTY 22750 CE",
+        qty: 65,
+        avg: 80,
+        ltp: 90,
+        strategy: nifty.name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 22750,
+        securityId: "88",
+        live: true,
+      },
+    ]);
+    const crudeExit = queueLivePositionExit(findDeskPosition("dhan-pos-77-I"));
+    const niftyExit = queueLivePositionExit(findDeskPosition("dhan-pos-88-MIS"));
+    assert.equal(crudeExit.queued, true);
+    assert.equal(niftyExit.queued, true);
+    const pending = drainPendingLiveAlgoOrders();
+    const admin = pending.filter((row) => !row.copyUserId);
+    assert.equal(admin.every((row) => row.side === "SELL"), true);
+    assert.equal(admin.some((row) => row.side === "BUY"), false);
+    assert.equal(liveBuyAllowedForStrategy(crude.name), false);
+    assert.equal(liveBuyAllowedForStrategy(nifty.name), false);
+    const blocked = queueLiveAlgoOrder({
+      strategy: crude.name,
+      side: "BUY",
+      qty: 100,
+      symbol: "CRUDEOIL 6100 CE",
+      securityId: "77",
+      option: "CE",
+      strike: 6100,
+      brokerId: "dhan",
+    });
+    assert.equal(blocked.queued, false);
+    assert.equal(blocked.blocked, true);
+  } finally {
+    drainPendingLiveAlgoOrders();
+    replaceDhanBook([]);
+    deleteAlgo(nifty.id);
+    deleteAlgo(crude.id);
   }
 });
 

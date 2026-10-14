@@ -264,6 +264,15 @@ export const NiftyVwapStrategy = {
 
   maybeEnter({ algo, config, signal, spot, step, expiry, ceLtp, peLtp, ceSecurityId, peSecurityId, positions, adapter, now }) {
     const state = runtimeState(algo);
+    if (state.exitQueued) {
+      const queuedAt = Number(state.exitQueuedAt || 0);
+      if (!queuedAt || Number(now || Date.now()) - queuedAt < STALE_LIVE_SEND_MS) {
+        algo.lastSignal = "EXIT PENDING";
+        return { action: "skip", reason: "exit-queued" };
+      }
+      state.exitQueued = false;
+      state.exitQueuedAt = 0;
+    }
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     const crudeSignal = String(config.symbol || "").toUpperCase() === "CRUDEOIL" && config.signalMode === "first-candle";
@@ -533,6 +542,16 @@ export const NiftyVwapStrategy = {
     if (!open && (input.positions || []).some((row) => PositionManager.isOpenNiftyOption(row))) {
       algo.lastSignal = "";
       return { action: "skip", reason: "already-open" };
+    }
+
+    if (!open && state.exitQueued) {
+      const queuedAt = Number(state.exitQueuedAt || 0);
+      if (!queuedAt || now - queuedAt < STALE_LIVE_SEND_MS) {
+        algo.lastSignal = "EXIT PENDING";
+        return { action: "exit-pending" };
+      }
+      state.exitQueued = false;
+      state.exitQueuedAt = 0;
     }
 
     if (state.buyPhase === "entry" && !open) {

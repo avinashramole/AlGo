@@ -3315,6 +3315,41 @@ test("a fresh queued crude SL holds for 20s instead of sending again", () => {
   assert.equal(book.exits.length, 0);
 });
 
+test("manual Exit with no open lot holds EXIT PENDING and does not send BUY", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE EXIT no buy", initialSlPct: 10, maxTradesPerDay: 10 });
+  algo.vwapState = {
+    ...(algo.vwapState || {}),
+    sessionDate: "2026-08-21",
+    buyPhase: "open",
+    exitQueued: true,
+    exitQueuedAt: T0_0900 + BAR,
+    fillPrice: 90,
+    lockedStrike: 6100,
+    lockedOption: "CE",
+    lockedSymbol: "CRUDEOIL 6100 CE",
+  };
+  const book = bookAdapter();
+  const hold = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + 5_000,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 90,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: [],
+    adapter: book.adapter,
+  });
+  assert.equal(hold.action, "exit-pending", String(algo.lastSignal || ""));
+  assert.equal(book.places.length, 0);
+  assert.equal(book.exits.length, 0);
+});
+
 test("first candle SL uses a sane chain print when the tick is still at fill", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "SL chain mark", initialSlPct: 20 });
   const book = bookAdapter();

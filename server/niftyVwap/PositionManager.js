@@ -81,8 +81,9 @@ export function runtimeState(algo) {
 
 export function resetSession(state, sessionDate) {
   if (state.sessionDate === sessionDate) return state;
+  const keepExit = Boolean(state.exitQueued) && Number(state.exitQueuedAt || 0) > 0;
   state.sessionDate = sessionDate;
-  state.inFlight = false;
+  state.inFlight = keepExit ? true : false;
   state.lastEntryBarTime = 0;
   state.lastProcessedBarTime = 0;
   state.consecutiveAgainst = 0;
@@ -93,8 +94,10 @@ export function resetSession(state, sessionDate) {
   state.stopPrice = 0;
   state.targetPrice = 0;
   state.trailActive = false;
-  state.exitQueued = false;
-  state.exitQueuedAt = 0;
+  if (!keepExit) {
+    state.exitQueued = false;
+    state.exitQueuedAt = 0;
+  }
   state.lastEntryAt = 0;
   state.sessionTrades = 0;
   state.executedOrderIds = [];

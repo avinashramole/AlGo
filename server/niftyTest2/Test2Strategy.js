@@ -252,6 +252,10 @@ export const Test2Strategy = {
 
   maybeEnter({ algo, config, combo, expiries = {}, marks = {}, now, adapter, orders = [] }) {
     const state = test2State(algo);
+    if (state.exitQueued) {
+      algo.lastSignal = "EXIT PENDING";
+      return { action: "skip", reason: "exit-queued" };
+    }
     if (state.entered || state.lockedDay || state.inFlight) {
       algo.lastSignal = state.lockedDay ? `HOLD ${styleLabel(config)}` : "HOLD TEST2";
       return { action: "skip", reason: state.lockedDay ? "locked" : "open" };

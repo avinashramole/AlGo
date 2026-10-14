@@ -159,6 +159,15 @@ export const MultiIndexReversalStrategy = {
     const state = mirState(algo);
     const config = activeConfig(algo, input, state);
     const now = Number(input.now) || Date.now();
+    if (state.exitQueued) {
+      const queuedAt = Number(state.exitQueuedAt || 0);
+      if (!queuedAt || now - queuedAt < 20_000) {
+        algo.lastSignal = "EXIT PENDING";
+        return { action: "exit-pending" };
+      }
+      state.exitQueued = false;
+      state.exitQueuedAt = 0;
+    }
     if (!state.phase || state.phase === PHASE.IDLE || state.phase === PHASE.COMPLETED) {
       startCycle(state, now);
     }
