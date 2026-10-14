@@ -156,6 +156,7 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(memberSettings, /support@trade2smart\.com/);
   assert.match(memberSettings, /Theme/);
   assert.match(memberSettings, /Logout/);
+  assert.match(memberSettings, /Theme[\s\S]*Support[\s\S]*Logout/);
   const support = fs.readFileSync(path.join(root, "src/pages/Support.tsx"), "utf8");
   assert.match(support, /data-support-page="true"/);
   assert.match(support, /support@trade2smart\.com/);

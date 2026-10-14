@@ -38,9 +38,9 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/users", label: "Users", icon: Users, admin: true },
   { to: "/chat", label: "Messages", icon: MessageSquare, admin: true },
   { to: "/profile", label: "Profile", icon: User, admin: true },
-  { to: "/support", label: "Support", icon: Headphones, member: true },
   { to: "/profile#login-password", label: "Password", icon: KeyRound, member: true },
   { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/support", label: "Support", icon: Headphones, member: true },
 ];
 
 export function Sidebar() {

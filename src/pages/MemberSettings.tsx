@@ -16,13 +16,13 @@ export function MemberSettings() {
       </div>
       <MemberAccountSetup showProfile={false} />
       <PhoneCard data-member-settings="menu">
-        <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
         <SettingsRow
           icon={theme === "light" ? Moon : Sun}
           label="Theme"
           detail={theme === "light" ? "Light" : "Dark"}
           onClick={toggleTheme}
         />
+        <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
         <SettingsRow icon={LogOut} label="Logout" danger onClick={logout} />
       </PhoneCard>
     </div>

@@ -124,10 +124,10 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const userNavBlock = roles.slice(roles.indexOf("export const userNav"), roles.indexOf("export function navForUser"));
   assert.doesNotMatch(userNavBlock, /Alerts/);
   assert.match(userNavBlock, /Password/);
-  assert.match(userNavBlock, /Position[\s\S]*Orders[\s\S]*Support[\s\S]*Password[\s\S]*Settings/);
+  assert.match(userNavBlock, /Position[\s\S]*Orders[\s\S]*Password[\s\S]*Settings[\s\S]*Support/);
   assert.doesNotMatch(userNavBlock, /Position & Orders/);
   const sidebarNav = sidebar.slice(sidebar.indexOf("const items"), sidebar.indexOf("export function Sidebar"));
-  assert.match(sidebarNav, /label: "Password"[\s\S]*to: "\/settings", label: "Settings"/);
+  assert.match(sidebarNav, /label: "Password"[\s\S]*to: "\/settings", label: "Settings"[\s\S]*label: "Support"/);
   const loginPassword = fs.readFileSync(path.join(root, "src/components/desk/LoginPasswordCard.tsx"), "utf8");
   assert.match(loginPassword, /id="login-password"/);
   assert.match(loginPassword, /location\.hash !== "#login-password"/);

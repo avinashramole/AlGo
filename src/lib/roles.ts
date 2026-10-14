@@ -35,9 +35,9 @@ export const userNav = [
   { to: "/plans", label: "Algos" },
   { to: "/positions", label: "Position" },
   { to: "/orders", label: "Orders" },
-  { to: "/support", label: "Support" },
   { to: "/profile#login-password", label: "Password" },
   { to: "/settings", label: "Settings" },
+  { to: "/support", label: "Support" },
 ] as const;
 
 export function navForUser(user?: Pick<AuthUser, "role"> | null) {
