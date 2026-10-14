@@ -1,5 +1,71 @@
 type StrikeRow = { strike: number };
 type IdRow = { id: string };
+type BookRow = IdRow & {
+  symbol?: string;
+  securityId?: string;
+  product?: string;
+  paper?: boolean;
+  brokerId?: string;
+  live?: boolean;
+  copyUserId?: string;
+  qty?: number;
+};
+
+function isLiveBrokerRow(row: BookRow) {
+  if (row.paper || row.brokerId === "paper") return false;
+  if (row.copyUserId) return false;
+  return Boolean(row.live || row.brokerId === "dhan" || String(row.id || "").startsWith("dhan-pos-"));
+}
+
+function contractKey(row: BookRow) {
+  const securityId = String(row.securityId || "").trim();
+  if (securityId && securityId !== "0") return `sid:${securityId}`;
+  const symbol = String(row.symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return symbol ? `sym:${symbol}` : "";
+}
+
+function preferLiveRow<T extends BookRow>(rows: T[]) {
+  return [...rows].sort((left, right) => {
+    const leftId = String(left.id || "");
+    const rightId = String(right.id || "");
+    const leftIntraday = /INTRADAY|MIS/i.test(String(left.product || leftId));
+    const rightIntraday = /INTRADAY|MIS/i.test(String(right.product || rightId));
+    if (leftIntraday !== rightIntraday) return leftIntraday ? -1 : 1;
+    return Math.abs(Number(right.qty) || 0) - Math.abs(Number(left.qty) || 0);
+  })[0];
+}
+
+/** One open lot per Dhan contract. Product-alias ids must not count as 4 Crude positions. */
+export function uniqueOpenContracts<T extends BookRow>(rows: T[] = []): T[] {
+  const groups = new Map<string, T[]>();
+  for (const row of rows || []) {
+    const key = contractKey(row) || `id:${row.id}`;
+    const list = groups.get(key) || [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  return [...groups.values()].map((list) => preferLiveRow(list));
+}
+
+/** Empty poll keeps the last book. A fresh Dhan book replaces stale product-alias ids. */
+export function keepLivePositionBook<T extends BookRow>(previous: T[] = [], incoming: T[] = []): T[] {
+  const prev = Array.isArray(previous) ? previous : [];
+  const next = uniqueOpenContracts(Array.isArray(incoming) ? incoming : []);
+  if (!next.length) return uniqueOpenContracts(prev);
+  const incomingIds = new Set(next.map((row) => String(row.id)));
+  const incomingKeys = new Set(next.map(contractKey).filter(Boolean));
+  const extras = prev.filter((row) => {
+    if (incomingIds.has(String(row.id))) return false;
+    if (isLiveBrokerRow(row)) return false;
+    const key = contractKey(row);
+    if (key && incomingKeys.has(key)) return false;
+    return true;
+  });
+  return [...next, ...extras];
+}
 
 export function keepLastIndexPrices<
   T extends { symbol: string; price?: number; future?: number; change?: number; changePct?: number; prevClose?: number },

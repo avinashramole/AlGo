@@ -32,7 +32,7 @@ import {
 } from "../data/mock";
 import { defaultBrokers } from "../lib/brokers";
 import { isRemotePreviewHost, PREVIEW_DESK_MESSAGE } from "../lib/deskHost";
-import { keepLastBookRows, keepLastIndexPrices, keepStrikeWindow, patchById } from "../lib/deskFeed";
+import { keepLastBookRows, keepLastIndexPrices, keepLivePositionBook, keepStrikeWindow, patchById } from "../lib/deskFeed";
 import { OPTION_UNDERLYINGS } from "../lib/markets";
 import { presentDeskAlgo } from "../lib/strategies";
 
@@ -314,7 +314,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       optionMeta: held.optionMeta,
       optionChain,
       indices: keepLastIndexPrices(current.indices || [], incoming.indices || []),
-      positions: keepLastBookRows(current.positions || [], incoming.positions || []),
+      positions: keepLivePositionBook(current.positions || [], incoming.positions || []),
       orders: keepLastBookRows(current.orders || [], incoming.orders || []),
     };
     dataRef.current = next;
@@ -360,7 +360,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         optionChain,
         optionMeta: held.optionMeta,
         indices: keepLastIndexPrices(current.indices || [], feed.indices || current.indices || []),
-        positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
+        positions: feed.positions ? keepLivePositionBook(current.positions || [], feed.positions) : current.positions,
         orders: Array.isArray(feed.orders) ? feed.orders : current.orders,
         closedTrades: feed.closedTrades ? patchById(current.closedTrades || [], feed.closedTrades) : current.closedTrades,
         report: feed.report || current.report,

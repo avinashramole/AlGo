@@ -8,6 +8,7 @@ import { SignalFeed } from "../components/dashboard/SignalFeed";
 import { FirstCandleTimeframeBar } from "../components/dashboard/FirstCandleTimeframeBar";
 import { StrategyBuilder } from "../components/dashboard/StrategyBuilder";
 import { useMarket } from "../context/MarketContext";
+import { uniqueOpenContracts } from "../lib/deskFeed";
 import { catchDeskError } from "../lib/liveSite";
 import { brokerName, defaultBrokers } from "../lib/brokers";
 import { cn, formatInr, formatNumber } from "../lib/format";
@@ -350,7 +351,9 @@ export function Algo() {
   };
 
   const exitStrategy = async (algo: AlgoStrategy) => {
-    const open = (data.positions || []).filter((row) => row.strategy === algo.name && !row.copyUserId);
+    const open = uniqueOpenContracts(
+      (data.positions || []).filter((row) => row.strategy === algo.name && !row.copyUserId),
+    );
     if (!open.length) {
       window.alert("No open positions for this strategy.");
       return;
@@ -459,7 +462,9 @@ export function Algo() {
                   algo={algo}
                   orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
                   clientIds={knownClientIds}
-                  positions={(data.positions || []).filter((row) => row.strategy === algo.name && !row.copyUserId)}
+                  positions={uniqueOpenContracts(
+                    (data.positions || []).filter((row) => row.strategy === algo.name && !row.copyUserId),
+                  )}
                   busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}

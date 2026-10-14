@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Alert } from "react-native";
 import { activateBroker, backtestAlgo, connectBroker, createAlgo, deleteAlgo, disconnectBroker, getDeskFeed, getSnapshot, placeOrder, cancelOrder, selectOptionChain, squareOff, toggleAlgo, updateAlgo, type BacktestOptions, type Snapshot } from "./api";
 import { useAuth } from "./AuthContext";
-import { keepLastBookRows, keepStrikeWindow, patchById } from "./deskFeed";
+import { keepLastBookRows, keepLivePositionBook, keepStrikeWindow } from "./deskFeed";
 import { fallbackSnapshot } from "./fallback";
 
 type MarketContextValue = {
@@ -84,7 +84,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       ...incoming,
       algos,
       optionChain,
-      positions: keepLastBookRows(current.positions || [], incoming.positions || []),
+      positions: keepLivePositionBook(current.positions || [], incoming.positions || []),
       orders: keepLastBookRows(current.orders || [], incoming.orders || []),
     };
     dataRef.current = next;
@@ -117,7 +117,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
         algos,
         optionChain,
         optionMeta: feed.optionMeta ? { ...current.optionMeta, ...feed.optionMeta } : current.optionMeta,
-        positions: feed.positions ? patchById(current.positions || [], feed.positions) : current.positions,
+        positions: feed.positions ? keepLivePositionBook(current.positions || [], feed.positions) : current.positions,
         orders: Array.isArray(feed.orders) ? feed.orders : current.orders,
         report: current.report,
         brokers: current.brokers,

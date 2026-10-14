@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { keepLastBookRows } from "../src/lib/deskFeed.ts";
+import { keepLastBookRows, keepLivePositionBook, uniqueOpenContracts } from "../src/lib/deskFeed.ts";
 import { memberTapeHasQuotes } from "../src/lib/headerBroker.ts";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-leftover-"));
@@ -83,6 +83,22 @@ test("a 30s empty snapshot merge keeps the last admin book rows", () => {
   );
   assert.equal(kept.length, 1);
   assert.equal(kept[0].id, "dhan-pos-recent");
+});
+
+test("a fresh Crude book drops stale Dhan product-alias ids so Exit sees one lot", () => {
+  const previous = [
+    { id: "dhan-pos-99-I", symbol: "CRUDEOIL 6100 CE", securityId: "99", qty: 100, live: true, brokerId: "dhan" },
+    { id: "dhan-pos-99-INTRADAY", symbol: "CRUDEOIL 6100 CE", securityId: "99", qty: 100, live: true, brokerId: "dhan" },
+    { id: "dhan-pos-99-MIS", symbol: "CRUDEOIL 6100 CE", securityId: "99", qty: 100, live: true, brokerId: "dhan" },
+    { id: "dhan-pos-99-MARGIN", symbol: "CRUDEOIL 6100 CE", securityId: "99", qty: 100, live: true, brokerId: "dhan" },
+  ];
+  const incoming = [
+    { id: "dhan-pos-99-INTRADAY", symbol: "CRUDEOIL 6100 CE", securityId: "99", qty: 100, live: true, brokerId: "dhan" },
+  ];
+  const kept = keepLivePositionBook(previous, incoming);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].id, "dhan-pos-99-INTRADAY");
+  assert.equal(uniqueOpenContracts(previous).length, 1);
 });
 
 test("member header quotes require a live flag or a real price, not an empty card list", () => {
@@ -172,5 +188,5 @@ test("Start data feed warms user desks; Brokers shows stall without stopping LIV
   const brokers = fs.readFileSync(new URL("../src/pages/Brokers.tsx", import.meta.url), "utf8");
   assert.match(brokers, /DHAN LIVE · stalled/);
   const webDesk = fs.readFileSync(new URL("../src/context/MarketContext.tsx", import.meta.url), "utf8");
-  assert.match(webDesk, /keepLastBookRows\(current\.positions/);
+  assert.match(webDesk, /keepLivePositionBook\(current\.positions/);
 });
