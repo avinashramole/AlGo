@@ -2063,6 +2063,128 @@ test("matched crude first-candle still sends one order after the next 5m window"
   assert.equal(book.places.length, 1);
 });
 
+test("crude holds after BUY until SL or TGT is actually reached", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE hold after buy" });
+  const book = bookAdapter();
+  const now = T0_0900 + BAR;
+  const entry = NiftyVwapStrategy.tick({
+    algo,
+    now,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 80,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(entry.action, "entry");
+  assert.equal(book.places[0].qty, 100);
+  assert.equal(book.exits.length, 0);
+  const hold = NiftyVwapStrategy.tick({
+    algo,
+    now: now + 20_000,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 80,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(hold.action, "hold", String(algo.lastSignal || ""));
+  assert.equal(book.exits.length, 0);
+  const fakeTgt = NiftyVwapStrategy.tick({
+    algo,
+    now: now + 40_000,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 1000,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: book.positions,
+    adapter: book.adapter,
+  });
+  assert.equal(fakeTgt.action, "hold", String(algo.lastSignal || ""));
+  assert.equal(book.exits.length, 0);
+});
+
+test("crude does not SL when Dhan avg looks like the futures print", () => {
+  const algo = defaultCrudeFirstCandleAlgo({ name: "CRUDE futures avg" });
+  const book = bookAdapter();
+  const broker = {
+    id: "dhan-crude-fut-avg",
+    symbol: "CRUDEOIL 6100 CE",
+    type: "BUY",
+    qty: 100,
+    avg: 6120,
+    ltp: 80,
+    option: "CE",
+    strike: 6100,
+    strategy: algo.name,
+    brokerId: "dhan",
+    openedAt: new Date(T0_0900 + BAR).toISOString(),
+    ticked: true,
+  };
+  const hold = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + 10_000,
+    feedLive: true,
+    minutesToClose: 800,
+    futuresBars: [firstBar(6100, 6120)],
+    ceBars: [firstBar(80, 90)],
+    peBars: [firstBar(70, 60)],
+    ceLtp: 80,
+    peLtp: 60,
+    spot: 6120,
+    step: 50,
+    expiry: "2026-10-19",
+    positions: [broker],
+    adapter: book.adapter,
+  });
+  assert.equal(hold.action, "hold", String(algo.lastSignal || ""));
+  assert.equal(book.exits.length, 0);
+});
+
+test("crude live exit keeps MCX lot size so Dhan gets 1 lot not 1000", () => {
+  const seen = [];
+  const live = LiveTradingAdapter({
+    queueLiveOrder: (payload) => {
+      seen.push(payload);
+      return { queued: true, status: "PENDING" };
+    },
+  });
+  live.exit({
+    symbol: "CRUDEOIL 6100 CE",
+    qty: 100,
+    option: "CE",
+    strike: 6100,
+    strategy: "CRUDE OIL",
+    role: "sl",
+    brokerId: "dhan",
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].side, "SELL");
+  assert.equal(seen[0].qty, 100);
+  assert.equal(seen[0].lotSize, 100);
+  assert.equal(seen[0].exchangeSegment, "MCX_COMM");
+});
+
 test("preview candle open and close buy CE when the next candle opens", () => {
   const forming = VwapSignalEngine.evaluateFirstCandle({
     futuresBars: [firstBar(22663, 22680)],

@@ -15,6 +15,9 @@ test("NIFTY spot is not a sane option premium", () => {
   assert.equal(isSaneOptionLtp(166.5, 167.1), true);
   assert.equal(isSaneOptionLtp(130, 167.1), true);
   assert.equal(isSaneOptionLtp(80, 167.1), false);
+  assert.equal(isSaneOptionLtp(1000, 80), false);
+  assert.equal(isSaneOptionLtp(80, 6120), false);
+  assert.equal(isSaneOptionLtp(90, 80), true);
 });
 
 test("Live MTM uses broker option P&L instead of index minus fill", () => {
