@@ -72,7 +72,7 @@ export function keepLivePositionBook<T extends BookRow>(
   return [...next, ...extras];
 }
 
-export function dropClosedLivePosition<T extends BookRow>(rows: T[] = [], closed: BookRow = {}): T[] {
+export function dropClosedLivePosition<T extends BookRow>(rows: T[] = [], closed: BookRow = { id: "" }): T[] {
   const id = String(closed.id || "").trim();
   const key = contractKey(closed);
   return (rows || []).filter((row) => {
