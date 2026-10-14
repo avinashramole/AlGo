@@ -1,8 +1,7 @@
 [Unit]
 Description=Trade 2 Smart API and website
 After=network.target
-StartLimitIntervalSec=40
-StartLimitBurst=12
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

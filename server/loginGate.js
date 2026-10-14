@@ -2,6 +2,7 @@ import { loadDotEnvFiles } from "./env.js";
 import cors from "cors";
 import express from "express";
 import { attachHttpServerGuards, attachProcessGuards, httpErrorHandler, loginGatePort } from "./httpReady.js";
+import { probeDeskHealth } from "./deskHealth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 
 loadDotEnvFiles();
@@ -11,7 +12,13 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
-attachLoginRoutes(app, { healthService: "t2s-login" });
+attachLoginRoutes(app, {
+  healthService: "t2s-login",
+  healthExtra: async () => {
+    const desk = await probeDeskHealth();
+    return { deskUp: desk.ok };
+  },
+});
 app.use("/api", (req, res) => {
   res.status(404).json({ error: `${req.method} ${req.originalUrl} is not a login route.` });
 });

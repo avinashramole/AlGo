@@ -50,7 +50,9 @@ async function requestOnce<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function isTransientApiDown(error: unknown) {
-  return /API is down|API is not running|Request failed \(50[234]\)/i.test(String((error as Error)?.message || error || ""));
+  return /API is down|API is not running|Desk is reconnecting|Request failed \(50[234]\)/i.test(
+    String((error as Error)?.message || error || ""),
+  );
 }
 
 async function request<T>(path: string, init?: RequestInit, extra?: { retries?: number }) {

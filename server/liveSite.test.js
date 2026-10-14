@@ -10,6 +10,7 @@ test("a React page crash on trade2smart does not tell the user to restart t2s", 
 
 test("a real desk 502 on trade2smart asks for a refresh, not localhost", () => {
   assert.equal(isApiDownError("Request failed (504)"), true);
+  assert.equal(isApiDownError("Desk is reconnecting. Wait 10 seconds, then press Ctrl+Shift+R."), true);
   assert.match(apiDownMessage("trade2smart.com"), /Ctrl\+Shift\+R/);
   assert.equal(apiDownMessage("trade2smart.com").includes("localhost:5173"), false);
   assert.equal(apiDownMessage("trade2smart.com").includes("systemctl"), false);

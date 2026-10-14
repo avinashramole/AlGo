@@ -34,6 +34,7 @@ import { attachMemberBrokerBalance, attachMemberBrokerPnl, overlayDeskLiveMtm, r
 import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { ensureMemberDataFeedsRunning } from "./memberFeedStart.js";
+import { deskHealthPayload } from "./deskHealth.js";
 import { startKotakAdminQuoteFeed } from "./kotakAdminFeed.js";
 import { adminLiveOrderPayload } from "./brokerIsolation.js";
 import { lookupOptionSecurityId, publicCatalog, resolveFrontFutures } from "./frontFutures.js";
@@ -223,6 +224,7 @@ function deskGuard(req, res, next) {
   if (
     !pathname.startsWith("/api") ||
     pathname === "/api/health" ||
+    pathname === "/api/desk-health" ||
     pathname === "/api/internal/start-data-feed" ||
     pathname === "/api/login" ||
     pathname.startsWith("/api/auth/google") ||
@@ -680,10 +682,21 @@ app.post("/api/auth/gmail", async (req, res) => {
   }
 });
 
+let lastDeskSnapshot = null;
+
+app.get("/api/desk-health", (_req, res) => {
+  res.json(deskHealthPayload({ dhanLive: isDhanLive() }));
+});
+
 app.get("/api/snapshot", (_req, res) => {
   try {
-    res.json(snapshot());
+    lastDeskSnapshot = snapshot();
+    res.json(lastDeskSnapshot);
   } catch (error) {
+    if (lastDeskSnapshot) {
+      res.json(lastDeskSnapshot);
+      return;
+    }
     res.status(500).json({ error: error.message || "Could not load desk" });
   }
 });
@@ -823,12 +836,12 @@ app.post("/api/internal/start-data-feed", async (req, res) => {
   }
   try {
     const result = await ensureAdminDataFeedRunning("deploy");
-    const members = await ensureMemberDataFeedsRunning("deploy");
+    void ensureMemberDataFeedsRunning("deploy");
     res.json({
       ok: Boolean(result.live),
       live: Boolean(result.live),
       reason: result.reason || (result.live ? "started" : "not-live"),
-      members: { asked: members.asked, warmed: members.warmed },
+      members: { started: true },
     });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not start the Dhan data feed" });

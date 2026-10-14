@@ -3,7 +3,7 @@ export function isTrade2SmartHost(host = typeof location !== "undefined" ? locat
 }
 
 export function isApiDownError(message = "") {
-  return /API is down|API is not running|Request failed \(50[234]\)|Failed to fetch|NetworkError|ECONNRESET|connection reset/i.test(
+  return /API is down|API is not running|Desk is reconnecting|Request failed \(50[234]\)|Failed to fetch|NetworkError|ECONNRESET|connection reset/i.test(
     String(message || ""),
   );
 }

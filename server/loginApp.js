@@ -47,9 +47,18 @@ function keepSession(res, req, token) {
 }
 
 export function attachLoginRoutes(app, { healthService = "t2s-api", healthExtra } = {}) {
-  app.get("/api/health", (_req, res) => {
-    const extra =
-      typeof healthExtra === "function" ? healthExtra() : healthExtra && typeof healthExtra === "object" ? healthExtra : {};
+  app.get("/api/health", async (_req, res) => {
+    let extra = {};
+    try {
+      extra =
+        typeof healthExtra === "function"
+          ? await healthExtra()
+          : healthExtra && typeof healthExtra === "object"
+            ? healthExtra
+            : {};
+    } catch {
+      extra = {};
+    }
     res.json({ ok: true, service: healthService, time: new Date().toISOString(), ...extra });
   });
 

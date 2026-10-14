@@ -30,6 +30,7 @@ test("health-watch skips restart while backtest.busy is younger than 5 minutes",
   const script = fs.readFileSync(new URL("../deploy/t2s-health-watch.sh", import.meta.url), "utf8");
   assert.match(script, /backtest\.busy/);
   assert.match(script, /lt 300/);
+  assert.match(script, /\/api\/desk-health/);
 });
 
 test("browser does not retry Run backtest after a gateway timeout", () => {

@@ -51,8 +51,10 @@ test("nginx conf sends login and health to the 3999 gate", () => {
   const text = render("/tmp/t2s-no-certs");
   assert.match(text, /location = \/api\/login/);
   assert.match(text, /location = \/api\/health/);
+  assert.match(text, /location = \/api\/desk-health/);
   assert.match(text, /proxy_pass http:\/\/127\.0\.0\.1:3999/);
   assert.match(text, /proxy_pass http:\/\/127\.0\.0\.1:4000/);
+  assert.match(text, /proxy_read_timeout 2s/);
 });
 
 test("nginx conf enables HTTPS when Let's Encrypt files exist", () => {

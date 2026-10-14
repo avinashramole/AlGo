@@ -101,6 +101,7 @@ def _proxy_block(target: str, send_timeout: str = "15s", read_timeout: str = "15
 
 def server_locations(webroot: str) -> str:
     login = _proxy_block("http://127.0.0.1:3999", "8s", "8s")
+    desk_health = _proxy_block("http://127.0.0.1:4000", "2s", "2s")
     api = _proxy_block("http://127.0.0.1:4000", "15s", "15s")
     backtest = _proxy_block("http://127.0.0.1:4000", "180s", "180s")
     return f"""
@@ -114,6 +115,10 @@ def server_locations(webroot: str) -> str:
 
     location = /api/health {{
 {login}
+    }}
+
+    location = /api/desk-health {{
+{desk_health}
     }}
 
     location = /api/login {{
