@@ -704,13 +704,81 @@ export function releaseStaleLiveSend(algo, now = Date.now()) {
   const name = String(algo.name || "");
   if (strategyHasPendingBuy(name) || strategyHasWorkingBuy(name) || strategyHasOpenLot(name)) return false;
   const entryMs = Number(vs.lastEntryAt) || 0;
-  if (entryMs > 0 && now - entryMs < STALE_LIVE_SEND_MS) return false;
+  const waitOrderMiss = /\bWAIT ORDER\b/i.test(String(algo.lastSignal || ""));
+  if (entryMs > 0 && now - entryMs < STALE_LIVE_SEND_MS && !waitOrderMiss) return false;
   vs.buyPhase = "";
   vs.inFlight = false;
   vs.lastEntryBarTime = 0;
   vs.sentSignalBarTime = 0;
   if (!vs.fillPrice) PositionManager.clearOpen(vs);
   algo.allowFreshLiveEntry = true;
+  return true;
+}
+
+function parseWaitOrderBuy(text) {
+  const raw = String(text || "");
+  if (!/\bWAIT ORDER\b/i.test(raw)) return null;
+  const named = raw.match(/\bBUY (CE|PE)\s+(\d{3,6})\b/i);
+  if (named) return { option: named[1].toUpperCase(), strike: Number(named[2]) };
+  const struck = raw.match(/\bBUY (\d{3,6}) (CE|PE)\b/i);
+  if (struck) return { option: struck[2].toUpperCase(), strike: Number(struck[1]) };
+  const opt = raw.match(/\bBUY (CE|PE)\b/i);
+  if (opt) return { option: opt[1].toUpperCase(), strike: 0 };
+  return null;
+}
+
+export function recoverWaitOrderLiveBuy(algo, ctx = {}) {
+  if (!algo) return false;
+  const want = parseWaitOrderBuy(algo.lastSignal);
+  if (!want) return false;
+  const name = String(algo.name || "");
+  if (strategyHasPendingBuy(name) || strategyHasWorkingBuy(name) || strategyHasOpenLot(name)) {
+    kickLiveAlgoFlush();
+    return false;
+  }
+  const vs = runtimeState(algo);
+  const option = want.option || vs.lockedOption || "";
+  const strike =
+    Number(want.strike) ||
+    Number(vs.lockedStrike) ||
+    Number(option === "PE" ? ctx.peStrike : ctx.ceStrike) ||
+    0;
+  if (option !== "CE" && option !== "PE") return false;
+  if (!(strike > 0)) return false;
+  const ltp = Number(option === "PE" ? ctx.peLtp : ctx.ceLtp);
+  if (!(ltp > 0)) return false;
+  vs.buyPhase = "";
+  vs.inFlight = false;
+  vs.lastEntryBarTime = 0;
+  vs.lastEntryAt = 0;
+  vs.sentSignalBarTime = 0;
+  if (!vs.fillPrice) PositionManager.clearOpen(vs);
+  algo.allowFreshLiveEntry = true;
+  const root = String(ctx.config?.symbol || "NIFTY").toUpperCase() === "CRUDEOIL" ? "CRUDEOIL" : "NIFTY";
+  const queued = queueLiveAlgoOrder({
+    symbol: `${root} ${strike} ${option}`,
+    side: "BUY",
+    qty: ctx.config?.qty,
+    lots: ctx.config?.lots,
+    lotSize: ctx.config?.lotSize,
+    price: ltp,
+    kind: "option",
+    option,
+    strike,
+    expiry: ctx.expiry,
+    securityId: option === "PE" ? ctx.peSecurityId : ctx.ceSecurityId,
+    product: "MIS",
+    type: "MARKET",
+    strategy: algo.name,
+    brokerId: algo.brokerId || "dhan",
+    exchangeSegment: exchangeSegmentFor(root),
+  });
+  if (!queued?.queued) return false;
+  vs.buyPhase = "entry";
+  vs.inFlight = true;
+  vs.lastEntryAt = Number(ctx.now) || Date.now();
+  PositionManager.lockContract(vs, { strike, option, symbol: `${root} ${strike} ${option}` });
+  algo.lastSignal = `BUY ${option} SENDING`;
   return true;
 }
 
@@ -786,9 +854,6 @@ function sameWorkingBookOrder(payload) {
 function strategyBuyUnresolved(strategyName) {
   const name = realStrategyName(strategyName) || String(strategyName || "");
   if (!name) return false;
-  const algo = (state.algos || []).find((item) => item.name === name);
-  const phase = String(algo?.vwapState?.buyPhase || "");
-  if (phase === "entry" || phase === "open") return true;
   if (
     pendingLiveAlgoOrders.some(
       (row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === name && liveOrderSide(row) === "BUY",
@@ -1898,7 +1963,8 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const beforeTrades = Number(vs.sessionTrades || 0);
   const beforeBar = Number(vs.lastEntryBarTime || 0);
   const beforeProcessed = Number(vs.processedFirstBarTime || 0);
-  NiftyVwapStrategy.tick({
+  const pendingBuy = strategyHasPendingBuy(algo.name);
+  const tickInput = {
     algo,
     config,
     now,
@@ -1921,11 +1987,19 @@ function tickNiftyVwapAlgo(algo, mode, feedLive) {
     ceSecurityId,
     peSecurityId,
     positions,
+    pending: pendingBuy,
     orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
     adapter,
     targetResting,
-  });
+  };
+  NiftyVwapStrategy.tick(tickInput);
   showLivePreview();
+  if (mode === "live" && recoverWaitOrderLiveBuy(algo, { ceStrike, peStrike, expiry, ceLtp, peLtp, ceSecurityId, peSecurityId, config, now })) {
+    showLivePreview();
+  }
+  if (mode === "live" && /\b(?:WAIT ORDER|SENDING)\b/i.test(String(algo.lastSignal || ""))) {
+    kickLiveAlgoFlush();
+  }
   if (
     isFirstCandleAlgo(algo) &&
     (Number(vs.sessionTrades || 0) !== beforeTrades ||
@@ -3256,6 +3330,12 @@ function candlesForBacktest(tf, allowSample = true, symbol = "NIFTY") {
 export function getAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   return algo ? clone(algo) : null;
+}
+
+export function withLiveAlgo(id, fn) {
+  const algo = (state.algos || []).find((item) => item.id === id);
+  if (!algo || typeof fn !== "function") return undefined;
+  return fn(algo);
 }
 
 export function listAlgos() {

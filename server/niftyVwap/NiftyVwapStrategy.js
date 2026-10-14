@@ -23,16 +23,18 @@ function isWorkingBuy(row) {
   return !["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status);
 }
 
-function shouldReleaseEntryLock(state, { buys = [], now } = {}) {
-  const working = (buys || []).some(isWorkingBuy);
+function shouldReleaseEntryLock(state, { buys = [], now, pending = false, lastSignal = "" } = {}) {
+  const working = pending || (buys || []).some(isWorkingBuy);
   if (working) return { release: false, clearBar: false };
   const rejected = (buys || []).length > 0 && (buys || []).every(isDeadBuy);
   const entryMs = Number(state?.lastEntryAt) || 0;
   const entryDay = entryMs > 0 ? sessionKeyIST(entryMs) : "";
   const previousDay = Boolean(entryDay) && entryDay < sessionKeyIST(now);
-  const staleEmpty = entryMs > 0 && now - entryMs >= STALE_LIVE_SEND_MS;
-  if (rejected || previousDay || staleEmpty) {
-    return { release: true, clearBar: previousDay || staleEmpty };
+  const waitOrderMiss = /\bWAIT ORDER\b/i.test(String(lastSignal || ""));
+  const lostEmpty = !(entryMs > 0) && (waitOrderMiss || String(state?.buyPhase || "") === "entry");
+  const staleEmpty = lostEmpty || (entryMs > 0 && now - entryMs >= STALE_LIVE_SEND_MS);
+  if (rejected || previousDay || staleEmpty || waitOrderMiss) {
+    return { release: true, clearBar: previousDay || staleEmpty || waitOrderMiss };
   }
   return { release: false, clearBar: false };
 }
@@ -235,7 +237,7 @@ export const NiftyVwapStrategy = {
     return { action: "exit", reason, result: closed };
   },
 
-  maybeEnter({ algo, config, signal, spot, step, expiry, ceLtp, peLtp, ceSecurityId, peSecurityId, positions, adapter }) {
+  maybeEnter({ algo, config, signal, spot, step, expiry, ceLtp, peLtp, ceSecurityId, peSecurityId, positions, adapter, now }) {
     const state = runtimeState(algo);
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
@@ -317,10 +319,6 @@ export const NiftyVwapStrategy = {
       algo.lastSignal = "WAIT ATM";
       return { action: "wait", reason: "no-atm" };
     }
-    state.inFlight = true;
-    state.lastEntryBarTime = signal.barTime;
-    if (crudeSignal) state.sentSignalBarTime = signal.barTime;
-    state.lastEntryAt = Date.now();
     state.fillPrice = 0;
     state.stopPrice = 0;
     state.targetPrice = 0;
@@ -348,17 +346,26 @@ export const NiftyVwapStrategy = {
     const result = adapter.place(payload);
     if (result?.error || String(result?.status || "").toUpperCase() === "REJECTED") {
       state.inFlight = false;
+      state.lastEntryBarTime = signal.barTime;
+      if (crudeSignal) state.sentSignalBarTime = signal.barTime;
       PositionManager.clearOpen(state);
       TradeLogger.record("rejected", { message: result?.error || "broker-rejected", strategy: algo.name });
       algo.lastSignal = "REJECTED";
       return { action: "rejected", result };
     }
     if (result?.duplicate || result?.queued === false) {
-      state.buyPhase = "entry";
-      state.inFlight = true;
-      algo.lastSignal = "WAIT ORDER";
-      return { action: "skip", reason: "buy-active" };
+      state.inFlight = false;
+      state.buyPhase = "";
+      state.lastEntryBarTime = 0;
+      state.lastEntryAt = 0;
+      if (!state.fillPrice) PositionManager.clearOpen(state);
+      algo.lastSignal = `BUY ${pick.strike} ${pick.option}`;
+      return { action: "retry", reason: "queue-missed", pick, result };
     }
+    state.inFlight = true;
+    state.lastEntryBarTime = signal.barTime;
+    if (crudeSignal) state.sentSignalBarTime = signal.barTime;
+    state.lastEntryAt = Number(now) || Date.now();
     const fill = fillFromResult(result, ltp);
     if (result?.queued) {
       state.buyPhase = "entry";
@@ -509,7 +516,12 @@ export const NiftyVwapStrategy = {
       const buys = (input.orders || []).filter(
         (row) => !row?.copyUserId && String(row.strategy || "") === algo.name && String(row.side || "BUY").toUpperCase() !== "SELL",
       );
-      const decision = shouldReleaseEntryLock(state, { buys, now });
+      const decision = shouldReleaseEntryLock(state, {
+        buys,
+        now,
+        pending: input.pending === true,
+        lastSignal: algo.lastSignal,
+      });
       if (decision.release) {
         state.buyPhase = "";
         state.inFlight = false;
@@ -535,7 +547,12 @@ export const NiftyVwapStrategy = {
       const buys = (input.orders || []).filter(
         (row) => !row?.copyUserId && String(row.strategy || "") === algo.name && String(row.side || "BUY").toUpperCase() !== "SELL",
       );
-      const decision = shouldReleaseEntryLock(state, { buys, now });
+      const decision = shouldReleaseEntryLock(state, {
+        buys,
+        now,
+        pending: input.pending === true,
+        lastSignal: algo.lastSignal,
+      });
       if (decision.release) {
         state.inFlight = false;
         state.buyPhase = "";
@@ -574,6 +591,7 @@ export const NiftyVwapStrategy = {
       peSecurityId: input.peSecurityId || "",
       positions: input.positions || [],
       adapter: input.adapter,
+      now,
     });
   },
 };

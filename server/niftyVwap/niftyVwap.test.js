@@ -634,11 +634,11 @@ test("duplicate live queue does not mark the strategy as filled", () => {
     positions: [],
     adapter: { place: () => ({ ok: true, queued: false, duplicate: true, status: "PENDING" }), exit: () => ({}) },
   });
-  assert.equal(result.action, "skip");
-  assert.equal(result.reason, "buy-active");
-  assert.equal(algo.vwapState.buyPhase, "entry");
+  assert.equal(result.action, "retry");
+  assert.equal(result.reason, "queue-missed");
+  assert.notEqual(algo.vwapState.buyPhase, "open");
   assert.equal(Number(algo.vwapState.fillPrice || 0), 0);
-  assert.equal(algo.lastSignal, "WAIT ORDER");
+  assert.match(String(algo.lastSignal || ""), /BUY \d+ CE/);
 });
 
 test("backtest adapter runs without look-ahead (completed 5m bars only)", () => {
@@ -2464,6 +2464,59 @@ test("an already-rolled session still releases yesterday's entry when nothing is
   assert.equal(tick.action, "entry");
   assert.equal(book.places.length, 1);
   assert.equal(algo.vwapState.sessionTrades, 2);
+});
+
+test("WAIT ORDER with no book retries the same BUY PE bar", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Wait order PE send" });
+  const places = [];
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    buyPhase: "entry",
+    inFlight: true,
+    lastEntryAt: T0_0900 + BAR,
+    lastEntryBarTime: T0_0900,
+    lockedStrike: 22750,
+    lockedOption: "PE",
+    lockedSymbol: "NIFTY 22750 PE",
+  };
+  algo.lastSignal = "WAIT ORDER · PREVIEW NIFTY FUT RED CE 22750 RED PE 22750 GREEN O 22759.90 C 22750.00 · 12:00–12:15 IST · BUY PE 22750";
+  const peBar = { time: T0_0900, open: 24540, high: 24540, low: 22740, close: 22750, volume: 1000 };
+  const peOpt = { time: T0_0900, open: 90, high: 120, low: 88, close: 110, volume: 400 };
+  const ceOpt = { time: T0_0900, open: 118, high: 118, low: 96, close: 100, volume: 400 };
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + 5_000,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [peBar],
+    ceBars: [ceOpt],
+    peBars: [peOpt],
+    ceLtp: 100,
+    peLtp: 110,
+    spot: 22750,
+    step: 50,
+    expiry: "2026-08-27",
+    ceSecurityId: "ce-22750",
+    peSecurityId: "pe-22750",
+    positions: [],
+    orders: [],
+    adapter: {
+      place(payload) {
+        places.push(payload);
+        return { queued: true, status: "PENDING" };
+      },
+      exit() {
+        return {};
+      },
+    },
+  });
+  assert.equal(tick.action, "queued");
+  assert.equal(places.length, 1);
+  assert.equal(places[0].option, "PE");
+  assert.equal(Number(places[0].strike), 22750);
+  assert.equal(places[0].securityId, "pe-22750");
+  assert.equal(algo.lastSignal, "BUY PE SENDING");
+  assert.equal(algo.vwapState.buyPhase, "entry");
 });
 
 test("same-day entry lock stays while a fresh SENDING can still flush", () => {

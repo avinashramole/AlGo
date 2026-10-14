@@ -420,3 +420,64 @@ test("admin paper + copy trader: admin paper, user live; paper user stays paper"
   assert.equal(paperCopy.paper, true);
   updateAlgo(paperNifty.id, { enabled: false });
 });
+
+test("WAIT ORDER BUY PE 22750 queues the admin broker and the mapped user", async () => {
+  const { recoverWaitOrderLiveBuy, withLiveAlgo } = await import("./market.js");
+  const user = { id: "u-wait-pe-22750", name: "Wait PE User", email: "waitpe@t2s.app", role: "user" };
+  installLive(user, "dhan", "11002275", "wait-pe-member-token");
+  const created = createAlgo({
+    name: "NIFTY wait PE 22750",
+    kind: "nifty-first-candle",
+    runMode: "live",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
+  });
+  toggleAlgo(created.id, { enabled: true });
+  payMember(user, created);
+  drainPendingLiveAlgoOrders();
+  try {
+    const live = withLiveAlgo(created.id, (algo) => {
+      algo.lastSignal =
+        "WAIT ORDER · PREVIEW NIFTY FUT RED CE 22750 RED PE 22750 GREEN O 22759.90 C 22750.00 · 12:00–12:15 IST · BUY PE 22750";
+      algo.vwapState = {
+        ...(algo.vwapState || {}),
+        buyPhase: "entry",
+        inFlight: true,
+        lastEntryAt: Date.now(),
+        lockedStrike: 22750,
+        lockedOption: "PE",
+      };
+      return algo;
+    });
+    assert.equal(
+      recoverWaitOrderLiveBuy(live, {
+        peStrike: 22750,
+        ceStrike: 22750,
+        peLtp: 110,
+        ceLtp: 80,
+        peSecurityId: "pe-22750",
+        ceSecurityId: "ce-22750",
+        expiry: "2026-10-14",
+        config: { qty: 65, lots: 1, lotSize: 65, symbol: "NIFTY" },
+        now: Date.now(),
+      }),
+      true,
+    );
+    const queued = drainPendingLiveAlgoOrders();
+    const master = adminLegs(queued).filter((row) => row.strategy === created.name);
+    const copy = queuedFor(queued, user.id);
+    assert.equal(master.length, 1);
+    assert.equal(master[0].option, "PE");
+    assert.equal(Number(master[0].strike), 22750);
+    assert.equal(master[0].brokerId, "dhan");
+    assert.equal(master[0].securityId, "pe-22750");
+    assert.equal(copy.length, 1);
+    assert.equal(copy[0].option, "PE");
+    assert.equal(Number(copy[0].strike), 22750);
+    assert.equal(copy[0].copyUserId, user.id);
+    assert.equal(copy[0].account.accessToken, "wait-pe-member-token");
+  } finally {
+    toggleAlgo(created.id, { enabled: false });
+    drainPendingLiveAlgoOrders();
+  }
+});
