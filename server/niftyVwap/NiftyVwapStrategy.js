@@ -1,5 +1,5 @@
 import { liveExitPrice } from "../executionSpeed.js";
-import { pendingExitOnBook } from "../pendingExit.js";
+import { filledExitOnBook, pendingExitOnBook } from "../pendingExit.js";
 import { isSaneOptionLtp } from "../positionMark.js";
 import { exchangeSegmentFor } from "../optionChain.js";
 import { optionEngineConfig } from "./config.js";
@@ -179,11 +179,24 @@ export const NiftyVwapStrategy = {
         state.trailActive = true;
       }
     }
+    if (filledExitOnBook(orders, open, algo.name, state)) {
+      PositionManager.clearOpen(state);
+      algo.lastSignal = "EXIT DONE";
+      return { action: "exit", reason: "already-filled" };
+    }
     if (pendingExitOnBook(orders, open, algo.name, state)) {
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending" };
     }
-    if (state.exitQueued) state.exitQueued = false;
+    if (state.exitQueued) {
+      const queuedAt = Number(state.exitQueuedAt || 0);
+      if (queuedAt > 0 && now - queuedAt < STALE_LIVE_SEND_MS) {
+        algo.lastSignal = "EXIT PENDING";
+        return { action: "exit-pending" };
+      }
+      state.exitQueued = false;
+      state.exitQueuedAt = 0;
+    }
     const against = open.option === "PE" ? signal.againstPe : signal.againstCe;
     state.consecutiveAgainst = against;
     const tgtMark = targetHitMark(trailMark, open, state.fillPrice);
@@ -231,12 +244,14 @@ export const NiftyVwapStrategy = {
     }
     if (closed?.duplicate || closed?.queued === false) {
       state.exitQueued = true;
+      state.exitQueuedAt = Number(now) || Date.now();
       algo.lastSignal = "EXIT PENDING";
       return { action: "exit-pending", reason };
     }
     if (closed?.queued) {
       state.inFlight = true;
       state.exitQueued = true;
+      state.exitQueuedAt = Number(now) || Date.now();
       TradeLogger.record("exit-queued", { reason, mark, strategy: algo.name });
       algo.lastSignal = `EXIT ${reason.toUpperCase()} QUEUED`;
       return { action: "exit-queued", reason, result: closed };
@@ -472,6 +487,11 @@ export const NiftyVwapStrategy = {
 
     const open = PositionManager.openFor(input.positions, algo.name, state, config.symbol);
     if (open) {
+      if (filledExitOnBook(input.orders || [], open, algo.name, state)) {
+        PositionManager.clearOpen(state);
+        algo.lastSignal = "EXIT DONE";
+        return { action: "exit", reason: "already-filled" };
+      }
       state.buyPhase = "open";
       const fill = bookedFillPrice(open, state);
       if (fill > 0 && !Number(state.fillPrice)) {

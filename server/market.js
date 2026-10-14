@@ -28,7 +28,7 @@ import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
-import { isLeftoverWorkingSell } from "./pendingExit.js";
+import { filledExitOnBook, isLeftoverWorkingSell } from "./pendingExit.js";
 import { exitReasonLabel, exitRoleFromReason, keepExitReason } from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
@@ -907,6 +907,19 @@ function enqueueLiveAlgoOrder(payload) {
   if (sameContractPending || sameWorkingBookOrder(payload)) {
     return { ok: true, queued: false, status: "PENDING", duplicate: true };
   }
+  if (side === "SELL" && !paperFill) {
+    const openLot = (state.positions || []).find(
+      (row) =>
+        Number(row.qty) > 0 &&
+        String(row?.copyUserId || "") === copyUserId &&
+        sameLiveContract(payload, row),
+    );
+    const algo = (state.algos || []).find((item) => item.name === realStrategyName(payload?.strategy));
+    const entryState = algo?.vwapState || algo?.test1State || algo?.mirState || algo?.hedgeState || {};
+    if (filledExitOnBook(state.orders || [], openLot || payload, payload?.strategy, entryState)) {
+      return { ok: true, queued: false, status: "FILLED", duplicate: true, blocked: true };
+    }
+  }
   const sameStrategyRole = pendingLiveAlgoOrders.some((row) => {
     if (!sameCopy(row)) return false;
     if (orderBrokerId(row) !== brokerId) return false;
@@ -1321,7 +1334,27 @@ export function noteLiveAlgoOrderResult(payload, live, error) {
   if (isNiftyVwapHedgeAlgo(algo)) return;
   const vs = runtimeState(algo);
   vs.inFlight = false;
-  if (String(payload.side || "BUY").toUpperCase() !== "SELL" && vs.buyPhase !== "open") vs.buyPhase = "entry";
+  if (String(payload.side || "BUY").toUpperCase() === "SELL") {
+    PositionManager.clearOpen(vs);
+    state.positions = (state.positions || []).filter((row) => {
+      if (row.copyUserId || isPaperRow(row)) return true;
+      if ((realStrategyName(row.strategy) || row.strategy) !== name) return true;
+      if (!sameLiveContract(payload, row)) return true;
+      rememberClosedFromPosition(row, {
+        exit: Number(live?.price || payload.price || row.ltp || row.avg),
+        strategy: name,
+        brokerId: payload.brokerId || row.brokerId || "dhan",
+      });
+      return false;
+    });
+    algo.lastSignal = /SL|STOP/i.test(String(payload.role || payload.exitReason || ""))
+      ? "EXIT SL DONE"
+      : /TGT|TARGET/i.test(String(payload.role || payload.exitReason || ""))
+        ? "EXIT TGT DONE"
+        : "EXIT DONE";
+    return;
+  }
+  if (vs.buyPhase !== "open") vs.buyPhase = "entry";
   if (isFirstCandleAlgo(algo) && payload.side !== "SELL" && orderWasExecuted(live)) {
     rememberExecutedEntry(algo, live?.orderId);
   }

@@ -63,6 +63,7 @@ export function runtimeState(algo) {
       trailActive: false,
       feedOk: true,
       exitQueued: false,
+      exitQueuedAt: 0,
       lastEntryAt: 0,
       sessionTrades: 0,
       executedOrderIds: [],
@@ -93,6 +94,7 @@ export function resetSession(state, sessionDate) {
   state.targetPrice = 0;
   state.trailActive = false;
   state.exitQueued = false;
+  state.exitQueuedAt = 0;
   state.lastEntryAt = 0;
   state.sessionTrades = 0;
   state.executedOrderIds = [];
@@ -156,6 +158,7 @@ export const PositionManager = {
     state.trailActive = false;
     state.consecutiveAgainst = 0;
     state.exitQueued = false;
+    state.exitQueuedAt = 0;
     return state;
   },
 };
