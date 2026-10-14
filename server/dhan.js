@@ -983,6 +983,12 @@ function scheduleFastAccountSync() {
   fastAccountTimer.unref?.();
 }
 
+let lastAdminOrderAt = 0;
+
+export function noteAdminBrokerOrder(at = Date.now()) {
+  lastAdminOrderAt = Number(at) || Date.now();
+}
+
 export function applyPulledDhanAccount({
   positionsOk = false,
   positionsRaw = [],
@@ -999,8 +1005,13 @@ export function applyPulledDhanAccount({
     const holdings = mapDhanHoldings(holdingsRaw).filter(
       (hold) => !positions.some((pos) => pos.symbol === hold.symbol),
     );
-    replaceDhanBook([...positions, ...holdings]);
-    setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
+    const incoming = [...positions, ...holdings];
+    const empty = !incoming.some((row) => Number(row.qty) > 0);
+    const recentSend = lastAdminOrderAt > 0 && Date.now() - lastAdminOrderAt < 20_000;
+    if (!(empty && recentSend)) {
+      replaceDhanBook(incoming);
+      setDhanFeed({ positionCount: positions.length, holdingCount: holdings.length });
+    }
   }
   if (ordersOk) replaceDhanOrders(mapDhanOrders(ordersRaw, snapshot().algos || []));
 }
@@ -2172,6 +2183,7 @@ export async function placeDhanOrder(payload = {}) {
     throw error;
   }
   if (!account) {
+    noteAdminBrokerOrder();
     void pullAccount();
     scheduleFastAccountSync();
   }
@@ -2503,6 +2515,7 @@ async function resumeSavedFeed(session, reason, { refreshIfLive = false } = {}) 
   const useId = saved.id || session.clientId;
   if (!useToken) return;
   if (isDhanFeedLoopRunning()) return;
+  if (!shouldArmAdminDataFeed(reason, session || loadDhanSession())) return;
   armDataFeedOnBoot();
   if (!useId || (isDhanLive() && !refreshIfLive)) return;
   try {

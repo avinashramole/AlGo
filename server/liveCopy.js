@@ -47,6 +47,14 @@ function sameStrategy(left, right) {
   return Boolean(a && b && a === b);
 }
 
+export function findLiveCopyAlgo(algos = [], strategyName = "") {
+  const name = String(strategyName || "").trim();
+  const rows = Array.isArray(algos) ? algos : [];
+  const exact = rows.find((row) => String(row.name || "") === name);
+  if (exact) return exact;
+  return rows.find((row) => sameStrategy(row.name, name)) || {};
+}
+
 function subscriptionOpen(until) {
   const day = String(until || "").trim();
   if (!day) return true;
@@ -332,7 +340,6 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
   const live = [];
   const exitCopy = /^(exit|target|sl)$/i.test(String(payload.role || ""));
   for (const copy of memberCopyPayloads(payload, algo || {})) {
-    if (exitCopy && !claimMemberExitCopy(copy)) continue;
     if (copy.paper || copy.brokerId === "paper") {
       recordMemberCopyFill({ userId: copy.copyUserId, payload: copy, paper: true });
       continue;
@@ -346,6 +353,7 @@ export function dispatchMemberCopies(payload = {}, algo = {}, { enqueueLiveOrder
       console.log(`Member copy skipped ${copy.copyUserId}: ${copy.copyBlocked}`);
       continue;
     }
+    if (exitCopy && !claimMemberExitCopy(copy)) continue;
     if (typeof enqueueLiveOrder === "function") {
       enqueueLiveOrder(copy);
       continue;

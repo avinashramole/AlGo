@@ -15,7 +15,7 @@ process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
 const { adminCreateMember } = await import("./auth.js");
 const { claimEnrollmentPaid, enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { getMemberDesk, installMemberBroker, peekClientSecrets, recordMemberCopyFill, saveClientSettings, selectMemberBroker, sizeCopyQty } = await import("./memberDesk.js");
-const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload, resetMemberExitCopyLocks } = await import("./liveCopy.js");
+const { awaitMemberCopySends, dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, listCopyOnTargets, listLiveCopyTargets, memberCopyPayloads, memberExitPayload, resetMemberExitCopyLocks } = await import("./liveCopy.js");
 const { sendMemberCopyOrder } = await import("./liveCopySend.js");
 
 savePaymentSettings({
@@ -1183,4 +1183,35 @@ test("Kotak copy uses the Users-list mobile when trade-login mobile is empty", (
   assert.equal(row.brokerSession.profileMobile, "9922980000");
   assert.equal(String(row.account.mobile).includes("9922980000"), true);
   assert.equal(peekClientSecrets(created.id).brokerMobile, "+919922980000");
+});
+
+test("a short NIFTY label still finds the mapped first-candle card for user copies", () => {
+  const user = { id: "u-alias-nifty", name: "Alias Nifty", email: "aliasnifty@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100444", accessToken: "alias-nifty-token" });
+  saveClientSettings(user.id, { copy: false, tradeMode: "real", brokerId: "dhan", subscriptionUntil: "2026-12-31" });
+  const algoRow = { id: "a-first", name: "NIFTY 5m first candle", mappingScope: "clients", mappedClientIds: [user.id] };
+  const found = findLiveCopyAlgo([algoRow], "NIFTY");
+  assert.equal(found.name, "NIFTY 5m first candle");
+  const copies = memberCopyPayloads(
+    { strategy: "NIFTY", side: "BUY", symbol: "NIFTY 22700 CE", qty: 65, lotSize: 65, brokerId: "dhan" },
+    found,
+  );
+  assert.ok(copies.some((row) => row.copyUserId === user.id && row.side === "BUY"));
+});
+
+test("a blocked member exit does not lock the next copy after they install a token", () => {
+  resetMemberExitCopyLocks();
+  const user = { id: "u-exit-retry", name: "Exit Retry", email: "exitretry@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  saveClientSettings(user.id, { copy: false, tradeMode: "real", brokerId: "dhan", subscriptionUntil: "2026-12-31" });
+  const mapped = { ...algo, mappingScope: "clients", mappedClientIds: [user.id] };
+  const pos = { symbol: "NIFTY 22400 CE", type: "BUY", qty: 65, avg: 50, strategy: algo.name, securityId: "22400" };
+  const first = [];
+  dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: (copy) => first.push(copy) });
+  assert.equal(first.length, 0);
+  installMemberBroker({ user, brokerId: "dhan", clientId: "1100555", accessToken: "exit-retry-token" });
+  const second = [];
+  dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: (copy) => second.push(copy) });
+  assert.equal(second.filter((row) => row.copyUserId === user.id).length, 1);
 });

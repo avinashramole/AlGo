@@ -2,7 +2,7 @@ import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, orderBrokerForDe
 import { dhanTokenStatus } from "./dhanToken.js";
 import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
-import { dispatchMemberCopies, dispatchMemberExitCopies, memberCopyPayloads } from "./liveCopy.js";
+import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, overlayLiveUnrealized, withAdminBrokerPnl } from "./memberBrokerPnl.js";
 import {
   UNDERLYINGS,
@@ -1132,8 +1132,7 @@ function sameBookOrder(payload = {}) {
 }
 
 function liveCopyAlgo(stamped = {}) {
-  const name = String(stamped?.strategy || "");
-  return (state.algos || []).find((row) => String(row.name || "") === name) || {};
+  return findLiveCopyAlgo(state.algos || [], stamped?.strategy);
 }
 
 export function queueLiveAlgoOrder(payload) {
