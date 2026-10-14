@@ -594,8 +594,16 @@ export function liveBuyAllowedForStrategy(strategy) {
   return Boolean(algo.enabled && algo.runMode === "live");
 }
 
+export function strategyAllowsLiveMemberCopies(strategy) {
+  const name = String(strategy || "").trim();
+  if (!name) return true;
+  const algo = (state.algos || []).find((row) => String(row.name || "") === name);
+  if (!algo) return true;
+  return Boolean(algo.enabled);
+}
+
 function paperOnlyMemberCopies(payload = {}) {
-  return liveOrderSide(payload) === "BUY" && !liveBuyAllowedForStrategy(payload.strategy);
+  return liveOrderSide(payload) === "BUY" && !strategyAllowsLiveMemberCopies(payload.strategy);
 }
 
 function memberCopiesForOrder(payload = {}, algo = {}) {
@@ -617,7 +625,11 @@ export function dropStoppedStrategyLiveEntries(queued = pendingLiveAlgoOrders) {
     const row = queued[i];
     if (liveOrderSide(row) !== "BUY") continue;
     if (row?.paper || orderBrokerId(row) === "paper") continue;
-    if (liveBuyAllowedForStrategy(row.strategy)) continue;
+    if (row.copyUserId) {
+      if (strategyAllowsLiveMemberCopies(row.strategy)) continue;
+    } else if (liveBuyAllowedForStrategy(row.strategy)) {
+      continue;
+    }
     queued.splice(i, 1);
   }
   return queued;
@@ -716,13 +728,18 @@ function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
   const paperFill = payload?.paper === true || orderBrokerId(payload) === "paper";
-  if (side === "BUY" && !liveBuyAllowedForStrategy(strategy) && !paperFill) {
-    return { ok: true, queued: false, status: "PAUSED", blocked: true };
+  const copyUserId = String(payload?.copyUserId || "");
+  if (side === "BUY" && !paperFill) {
+    if (!copyUserId && !liveBuyAllowedForStrategy(strategy)) {
+      return { ok: true, queued: false, status: "PAUSED", blocked: true };
+    }
+    if (copyUserId && !strategyAllowsLiveMemberCopies(strategy)) {
+      return { ok: true, queued: false, status: "PAUSED", blocked: true };
+    }
   }
   const role = String(payload?.role || "");
   const brokerId = orderBrokerId(payload);
   const allowHedge = payload?.allowHedge === true && role === "hedge";
-  const copyUserId = String(payload?.copyUserId || "");
   const sameCopy = (row) => String(row?.copyUserId || "") === copyUserId;
   const sameContractPending = pendingLiveAlgoOrders.some(
     (row) =>
@@ -964,9 +981,11 @@ export function queueLiveAlgoOrder(payload) {
   const priced = sameBookOrder(payload);
   const securityId = contractSecurityId(priced);
   const stamped = securityId ? { ...priced, securityId } : priced;
-  const deskBroker = payload.copyUserId ? stamped.brokerId : orderBrokerForDesk(stamped.brokerId);
+  const adminPaper =
+    !payload.copyUserId && (payload.paper === true || String(stamped.brokerId || "").toLowerCase() === "paper");
+  const deskBroker = payload.copyUserId ? stamped.brokerId : adminPaper ? "paper" : orderBrokerForDesk(stamped.brokerId);
   const lane = payload.copyUserId ? (payload.lane === "individual" ? "individual" : "copy") : "master";
-  const deskStamped = { ...stamped, brokerId: deskBroker, lane };
+  const deskStamped = { ...stamped, brokerId: deskBroker, lane, ...(adminPaper ? { paper: true } : {}) };
   const brokers = liveAutoTradeBrokers({
     strategyName: deskStamped?.strategy,
     algoBrokerId: deskStamped?.brokerId || "dhan",

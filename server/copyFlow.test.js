@@ -12,7 +12,7 @@ process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
 const { enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
-const { createAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, toggleAlgo } = await import("./market.js");
+const { createAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, toggleAlgo, updateAlgo } = await import("./market.js");
 
 savePaymentSettings({
   mobile: "9876543210",
@@ -347,4 +347,76 @@ test("NIFTY run still sends the admin Dhan order when a mapped user already has 
   assert.equal(copy.length, 1);
   assert.equal(copy[0].brokerId, "upstox");
   replaceDhanBook([]);
+});
+
+test("admin live + copy trader: both queue live; paper user stays paper", () => {
+  const copier = { id: "u-mode-live-copy", name: "Live Copier", email: "livecopy@t2s.app", role: "user" };
+  const paperUser = { id: "u-mode-live-paper", name: "Paper User", email: "livepaper@t2s.app", role: "user" };
+  installLive(copier, "dhan", "1100555", "mode-live-copy-token");
+  payMember(copier, nifty);
+  selectMemberBroker({ user: paperUser, brokerId: "paper" });
+  saveClientSettings(paperUser.id, { copy: true, tradeMode: "paper", brokerId: "paper", subscriptionUntil: "2026-12-31" });
+  replaceDhanBook([]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: nifty.name,
+    side: "BUY",
+    symbol: "NIFTY 25300 CE",
+    qty: 65,
+    lotSize: 65,
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  const master = adminLegs(queued).find((row) => row.strategy === nifty.name);
+  const liveCopy = queuedFor(queued, copier.id)[0];
+  const paperCopy = queuedFor(queued, paperUser.id)[0];
+  assert.equal(master.brokerId, "dhan");
+  assert.equal(liveCopy.brokerId, "dhan");
+  assert.equal(liveCopy.paper, false);
+  assert.equal(liveCopy.account.accessToken, "mode-live-copy-token");
+  assert.equal(paperCopy.brokerId, "paper");
+  assert.equal(paperCopy.paper, true);
+});
+
+test("admin paper + copy trader: admin paper, user live; paper user stays paper", () => {
+  const copier = { id: "u-mode-paper-copy", name: "Paper Admin Copier", email: "papercopy@t2s.app", role: "user" };
+  const paperUser = { id: "u-mode-paper-paper", name: "Both Paper", email: "bothpaper@t2s.app", role: "user" };
+  const paperNifty = createAlgo({
+    id: "a-flow-nifty-paper",
+    name: "NIFTY PAPER COPY",
+    kind: "nifty-first-candle",
+    runMode: "paper",
+    mappingScope: "both",
+    mappedClientIds: [],
+  });
+  toggleAlgo(paperNifty.id, { enabled: true });
+  installLive(copier, "upstox", "UPX5500", "paper-admin-upstox-token");
+  payMember(copier, paperNifty);
+  selectMemberBroker({ user: paperUser, brokerId: "paper" });
+  saveClientSettings(paperUser.id, { copy: true, tradeMode: "paper", brokerId: "paper", subscriptionUntil: "2026-12-31" });
+  replaceDhanBook([]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: paperNifty.name,
+    side: "BUY",
+    symbol: "NIFTY 25400 CE",
+    qty: 65,
+    lotSize: 65,
+    brokerId: "paper",
+    paper: true,
+  });
+  assert.equal(result.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  const master = adminLegs(queued).find((row) => row.strategy === paperNifty.name);
+  const liveCopy = queuedFor(queued, copier.id)[0];
+  const paperCopy = queuedFor(queued, paperUser.id)[0];
+  assert.equal(master.brokerId, "paper");
+  assert.equal(master.paper || master.brokerId === "paper", true);
+  assert.equal(liveCopy.brokerId, "upstox");
+  assert.equal(liveCopy.paper, false);
+  assert.equal(liveCopy.account.accessToken, "paper-admin-upstox-token");
+  assert.equal(paperCopy.brokerId, "paper");
+  assert.equal(paperCopy.paper, true);
+  updateAlgo(paperNifty.id, { enabled: false });
 });
