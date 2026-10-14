@@ -21,6 +21,7 @@ const {
   applyKotakTradeLoginPaste,
   kotakOrderAmo,
   kotakTradingSymbol,
+  pickKotakOptionExpiry,
   kotakTotpCandidates,
   nfoTradingSymbol,
   parseDeskFutureSymbol,
@@ -118,6 +119,22 @@ test("Upstox crude copy uses the CRUDEOIL contract, not NIFTY or CRUDEOILM", () 
       { root: "CRUDEOIL", strike: 8700, option: "CE", expiry: "2026-10-15" },
     ),
     "MCX_FO|8700ce",
+  );
+  assert.equal(
+    pickUpstoxOptionHit(
+      [
+        {
+          trading_symbol: "CRUDEOIL 6100 CE 10 NOV 26",
+          underlying_symbol: "CRUDEOIL",
+          instrument_type: "CE",
+          strike_price: 6100,
+          expiry: "2026-11-10",
+          instrument_key: "MCX_FO|nov10",
+        },
+      ],
+      { root: "CRUDEOIL", strike: 6100, option: "CE", expiry: "2026-10-15" },
+    ),
+    "",
   );
 });
 
@@ -669,6 +686,11 @@ test("kotakTradingSymbol uses Neo MCX option codes, not NFO month codes", () => 
   );
   assert.equal(kotakTradingSymbol("CRUDEOIL 8800 PE", "2026-10-19", []), "CRUDEOIL15OCT268800PE");
   assert.equal(kotakTradingSymbol("CRUDEOIL 8700 CE", "2026-10-15", ["2026-10-15"]), "CRUDEOIL15OCT268700CE");
+  assert.equal(pickKotakOptionExpiry("2026-10-15", ["2026-11-10"]), "2026-10-15");
+  assert.equal(
+    kotakTradingSymbol("CRUDEOIL 6100 CE", "2026-10-15", ["2026-11-10"]),
+    "CRUDEOIL15OCT266100CE",
+  );
 });
 
 test("nfoTradingSymbol maps desk option names to Kite-style NFO codes", () => {

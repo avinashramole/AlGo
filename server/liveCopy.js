@@ -254,22 +254,10 @@ export function listLiveCopyTargets({
   const paidByUser = new Map(paid.map((row) => [row.userId, row]));
   const desks = deskCopyMatches({ strategyName, strategyId });
   const userIds = new Set();
-  if (scope === "both") {
-    for (const row of paid) userIds.add(row.userId);
-    if (!mapped.size) {
-      for (const id of desks.copyMaster) userIds.add(id);
-    }
-  }
-  if (scope === "clients" || scope === "both") {
+  if (mapped.size) {
     for (const id of mapped) userIds.add(id);
-    if (!mapped.size) {
-      for (const id of desks.mapped) userIds.add(id);
-    }
-  }
-  if (scope === "both" && mapped.size) {
-    for (const id of [...userIds]) {
-      if (!mapped.has(id)) userIds.delete(id);
-    }
+  } else {
+    for (const id of desks.mapped) userIds.add(id);
   }
   const targets = [];
   for (const userId of userIds) {
@@ -296,33 +284,17 @@ export function listCopyOnTargets({ masterQty, lotSize } = {}) {
   return targets;
 }
 
-function mergeCopyTargets(...lists) {
-  const byUser = new Map();
-  for (const list of lists) {
-    for (const row of list || []) {
-      if (row?.userId) byUser.set(row.userId, row);
-    }
-  }
-  return [...byUser.values()];
-}
-
 export function memberCopyPayloads(payload = {}, algo = {}) {
   const scope = String(algo.mappingScope || "both");
   if (scope === "master") return [];
-  const targets = mergeCopyTargets(
-    listLiveCopyTargets({
-      strategyName: payload.strategy,
-      strategyId: algo.id,
-      masterQty: payload.qty,
-      lotSize: payload.lotSize || payload.qty,
-      mappedClientIds: algo.mappedClientIds,
-      mappingScope: algo.mappingScope,
-    }),
-    listCopyOnTargets({
-      masterQty: payload.qty,
-      lotSize: payload.lotSize || payload.qty,
-    }),
-  );
+  const targets = listLiveCopyTargets({
+    strategyName: payload.strategy,
+    strategyId: algo.id,
+    masterQty: payload.qty,
+    lotSize: payload.lotSize || payload.qty,
+    mappedClientIds: algo.mappedClientIds,
+    mappingScope: algo.mappingScope,
+  });
   return targets.map((target) => ({
     ...payload,
     qty: target.qty,

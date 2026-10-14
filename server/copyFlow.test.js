@@ -12,7 +12,7 @@ process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
 const { enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
-const { createAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, toggleAlgo, updateAlgo } = await import("./market.js");
+const { createAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, toggleAlgo, updateAlgo, withLiveAlgo } = await import("./market.js");
 
 savePaymentSettings({
   mobile: "9876543210",
@@ -42,6 +42,14 @@ const crude = createAlgo({
 toggleAlgo(nifty.id, { enabled: true });
 toggleAlgo(crude.id, { enabled: true });
 
+function mapClients(strategy, ...userIds) {
+  const ids = [...new Set([...(strategy.mappedClientIds || []), ...userIds.map((id) => String(id || "").trim())].filter(Boolean))];
+  withLiveAlgo(strategy.id, (algo) => {
+    algo.mappedClientIds = ids;
+  });
+  strategy.mappedClientIds = ids;
+}
+
 function payMember(user, strategy) {
   const enrolled = enrollStrategy({
     user,
@@ -49,6 +57,7 @@ function payMember(user, strategy) {
     channel: "gpay",
     admins: [{ role: "admin", mobile: "9876543210", name: "Avinash" }],
   });
+  mapClients(strategy, user.id);
   return markEnrollmentPaid({ user: admin, enrollmentId: enrolled.enrollment.id });
 }
 
@@ -234,6 +243,8 @@ test("individual strategy and copy trading share one order queue onto Dhan, Upst
     brokerApiKey: "kotak-user-consumer",
     brokerSessionToken: "kotak-user-sid",
   });
+  mapClients(nifty, individual.id, copier.id);
+  mapClients(crude, copier.id);
   replaceDhanBook([]);
   drainPendingLiveAlgoOrders();
   queueLiveAlgoOrder({
@@ -281,6 +292,8 @@ test("copy-master member on a different broker receives both strategies with the
     tradeMode: "real",
     brokerId: "angelone",
   });
+  mapClients(nifty, user.id);
+  mapClients(crude, user.id);
   replaceDhanBook([]);
   drainPendingLiveAlgoOrders();
   queueLiveAlgoOrder({
@@ -356,6 +369,7 @@ test("admin live + copy trader: both queue live; paper user stays paper", () => 
   payMember(copier, nifty);
   selectMemberBroker({ user: paperUser, brokerId: "paper" });
   saveClientSettings(paperUser.id, { copy: true, tradeMode: "paper", brokerId: "paper", subscriptionUntil: "2026-12-31" });
+  mapClients(nifty, copier.id, paperUser.id);
   replaceDhanBook([]);
   drainPendingLiveAlgoOrders();
   const result = queueLiveAlgoOrder({
@@ -395,6 +409,7 @@ test("admin paper + copy trader: admin paper, user live; paper user stays paper"
   payMember(copier, paperNifty);
   selectMemberBroker({ user: paperUser, brokerId: "paper" });
   saveClientSettings(paperUser.id, { copy: true, tradeMode: "paper", brokerId: "paper", subscriptionUntil: "2026-12-31" });
+  mapClients(paperNifty, copier.id, paperUser.id);
   replaceDhanBook([]);
   drainPendingLiveAlgoOrders();
   const result = queueLiveAlgoOrder({
