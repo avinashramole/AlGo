@@ -1168,6 +1168,9 @@ export function queueLiveAlgoOrder(payload) {
   const stamped = securityId ? { ...priced, securityId } : priced;
   const adminPaper =
     !payload.copyUserId && (payload.paper === true || String(stamped.brokerId || "").toLowerCase() === "paper");
+  if (!adminPaper && !liveOrdersArmed) {
+    return { ok: true, queued: false, status: "FEED_DOWN", blocked: true };
+  }
   const deskBroker = payload.copyUserId ? stamped.brokerId : adminPaper ? "paper" : orderBrokerForDesk(stamped.brokerId);
   const lane = payload.copyUserId ? (payload.lane === "individual" ? "individual" : "copy") : "master";
   const deskStamped = { ...stamped, brokerId: deskBroker, lane, ...(adminPaper ? { paper: true } : {}) };
@@ -2508,6 +2511,7 @@ export function setDhanFeed(patch) {
     if (nextSource === "kotak") next.source = currentSource;
   }
   state.dhanFeed = next;
+  if (isDhanFeedLive()) liveOrdersArmed = true;
 }
 
 export function adminQuoteFeed() {
@@ -2635,6 +2639,24 @@ export function hasLastLiveBook() {
 
 function dhanTapeReady() {
   return isDhanFeedLive() || hasLastLiveBook();
+}
+
+let liveOrdersArmed = true;
+
+/** Stop data feed turns live orders off. Last Dhan quotes stay on the tape. */
+export function armLiveOrders(on = true) {
+  liveOrdersArmed = Boolean(on);
+  if (!liveOrdersArmed) drainPendingLiveAlgoOrders();
+  return liveOrdersArmed;
+}
+
+export function liveOrdersAllowed() {
+  return liveOrdersArmed;
+}
+
+/** Live BUY/SELL ticks need an actual feed. Last book is quotes only. */
+export function dhanOrdersLive() {
+  return liveOrdersArmed && isDhanFeedLive();
 }
 
 export function dhanQuotesStalled(feed = state.dhanFeed, now = Date.now()) {
@@ -2781,7 +2803,7 @@ function skipLiveAlgoTicks() {
 }
 
 function runFirstCandleLiveAlgos() {
-  const feedLive = dhanTapeReady();
+  const feedLive = dhanOrdersLive();
   for (const algo of state.algos || []) {
     if (!algo.enabled || algo.runMode !== "live") continue;
     if (isNiftyFirstCandleAlgo(algo) || isCrudeFirstCandleAlgo(algo)) {
@@ -2792,7 +2814,7 @@ function runFirstCandleLiveAlgos() {
 
 function runDeskAlgosSafely() {
   try {
-    if (dhanTapeReady()) {
+    if (dhanOrdersLive()) {
       if (skipLiveAlgoTicks()) runFirstCandleLiveAlgos();
       else runLiveAlgos();
     }
@@ -2809,7 +2831,7 @@ export function tickMarket() {
   tickBusy = true;
   try {
     runDeskAlgosSafely();
-    if (pendingLiveAlgoOrders.length) kickLiveAlgoFlush();
+    if (pendingLiveAlgoOrders.length && liveOrdersArmed) kickLiveAlgoFlush();
   } catch (error) {
     console.error(`tickMarket failed: ${error.message || error}`);
   } finally {
@@ -3727,7 +3749,7 @@ function runPaperAlgos() {
 }
 
 function runLiveAlgos() {
-  const feedLive = dhanTapeReady();
+  const feedLive = dhanOrdersLive();
   const now = Date.now();
   for (const algo of state.algos) {
     if (!algo.enabled || algo.runMode !== "live") continue;

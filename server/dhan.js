@@ -18,6 +18,7 @@ import {
   getAdminBrokerBook,
   setAdminBrokerBook,
   restoreSimulatedDesk,
+  armLiveOrders,
   livePositionQuoteTargets,
   liveSessionOpenForOrder,
   onDhanBookChanged,
@@ -2349,6 +2350,7 @@ export function stopDhanLive() {
   markDhanAutoStart(false);
   stopLiveLoop(true);
   restoreSimulatedDesk();
+  armLiveOrders(false);
   const session = loadDhanSession();
   setDhanFeed({
     live: false,
