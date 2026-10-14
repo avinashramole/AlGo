@@ -73,7 +73,11 @@ function optionColorText(option, color, strike) {
   return `${option}${price} ${String(color || "").toUpperCase()}`;
 }
 
-function istMinutesToClose(now = Date.now()) {
+function sessionCloseMinutes(symbol) {
+  return String(symbol || "").toUpperCase() === "CRUDEOIL" ? 23 * 60 + 30 : 15 * 60 + 30;
+}
+
+function istMinutesToClose(now = Date.now(), symbol = "NIFTY") {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
@@ -86,7 +90,7 @@ function istMinutesToClose(now = Date.now()) {
       .map((part) => [part.type, part.value]),
   );
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return 15 * 60 + 30 - minutes;
+  return sessionCloseMinutes(symbol) - minutes;
 }
 
 function fillFromResult(result, fallbackPrice) {
@@ -107,9 +111,9 @@ function holdLevelsText(open, state, mark) {
 
 function bookedFillPrice(open, state) {
   const avg = Number(open?.avg);
-  if (avg > 0) return avg;
+  if (avg > 0 && avg < 2000) return avg;
   const stored = Number(state?.fillPrice);
-  return stored > 0 ? stored : 0;
+  return stored > 0 && stored < 2000 ? stored : 0;
 }
 
 function targetHitMark(trailMark, open, fill) {
@@ -401,7 +405,9 @@ export const NiftyVwapStrategy = {
     const state = runtimeState(algo);
     resetSession(state, sessionKeyIST(now));
     state.feedOk = input.feedLive !== false;
-    const minutesToClose = Number.isFinite(input.minutesToClose) ? input.minutesToClose : istMinutesToClose(now);
+    const minutesToClose = Number.isFinite(input.minutesToClose)
+      ? input.minutesToClose
+      : istMinutesToClose(now, config.symbol);
 
     if (input.feedLive === false && !PositionManager.openFor(input.positions, algo.name, state, config.symbol)) {
       TradeLogger.record("feed-down", { message: "Market data disconnected — entries paused", strategy: algo.name });

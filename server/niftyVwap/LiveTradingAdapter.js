@@ -1,3 +1,5 @@
+import { exchangeSegmentFor, getUnderlying, underlyingIdFromSymbol } from "../optionChain.js";
+
 export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
   return {
     mode: "live",
@@ -20,15 +22,21 @@ export function LiveTradingAdapter({ queueLiveOrder, squareOff } = {}) {
         return squareOff(position.id, { role: position.role, exitReason: position.exitReason || position.role });
       }
       if (typeof queueLiveOrder === "function") {
+        const lotSize =
+          Number(position.lotSize) > 0
+            ? Number(position.lotSize)
+            : getUnderlying(underlyingIdFromSymbol(position.symbol)).lot;
         const queued = queueLiveOrder({
           symbol: position.symbol,
           side: "SELL",
           qty: position.qty,
+          lots: Number(position.lots) > 0 ? Number(position.lots) : undefined,
+          lotSize,
           strike: position.strike,
           option: position.option,
           expiry: position.expiry,
           securityId: position.securityId,
-          exchangeSegment: position.exchangeSegment,
+          exchangeSegment: position.exchangeSegment || exchangeSegmentFor(position.symbol),
           kind: "option",
           product: position.product || "MIS",
           type: "MARKET",
