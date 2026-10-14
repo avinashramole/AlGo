@@ -352,6 +352,7 @@ export type Snapshot = {
     openedAt?: string;
     brokerId?: string;
     securityId?: string;
+    copyUserId?: string;
     live?: boolean;
     paper?: boolean;
     sim?: boolean;
