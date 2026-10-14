@@ -133,8 +133,12 @@ if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHis
   echo "FAIL: $HOME_DIR still has the old 1m history sync."
   exit 1
 fi
-if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'FIRST_CANDLE_TIMEFRAMES\[algo.timeframe\]' "$HOME_DIR/server/niftyVwap/config.js"; then
+if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'resolveFirstCandleTimeframe' "$HOME_DIR/server/niftyVwap/config.js"; then
   echo "FAIL: $HOME_DIR still has the locked TEST1 5m timeframe."
+  exit 1
+fi
+if ! grep -q 'data-first-candle-timeframe-bar' "$HOME_DIR/src/components/dashboard/FirstCandleTimeframeBar.tsx" || ! grep -q '"30m", "60m"' "$HOME_DIR/src/lib/strategies.ts"; then
+  echo "FAIL: Nifty and Crude first-candle chips (5m 10m 15m 30m 60m Custom) are missing."
   exit 1
 fi
 if ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
@@ -212,6 +216,10 @@ if ! grep -Rql "$UI_MARKER" "$HOME_DIR/dist/assets"; then
 fi
 if ! grep -Rql "$RESULT_MARKER" "$HOME_DIR/dist/assets"; then
   echo "FAIL: dist/ does not contain $RESULT_MARKER. Build is still old."
+  exit 1
+fi
+if ! grep -Rql 'first-candle-timeframe-bar' "$HOME_DIR/dist/assets"; then
+  echo "FAIL: dist/ is missing Nifty/Crude timeframe chips. Build is still old."
   exit 1
 fi
 if [ -d "$HOME_DIR/.git" ]; then

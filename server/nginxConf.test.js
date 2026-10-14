@@ -123,6 +123,14 @@ test("website deploy installs npm packages before tsc", () => {
   assert.match(src, /@capacitor\/browser/);
 });
 
+test("website deploy accepts first-candle 30m 60m custom and does not require the old FIRST_CANDLE_TIMEFRAMES[algo.timeframe] gate", () => {
+  const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
+  assert.match(src, /resolveFirstCandleTimeframe/);
+  assert.match(src, /data-first-candle-timeframe-bar/);
+  assert.match(src, /first-candle-timeframe-bar/);
+  assert.doesNotMatch(src, /FIRST_CANDLE_TIMEFRAMES\\\[algo\.timeframe\\\]/);
+});
+
 test("website deploy hard-resets to origin/branch instead of a stale sparse pull", () => {
   const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
   assert.match(src, /git reset --hard "origin\/\$BRANCH"/);
