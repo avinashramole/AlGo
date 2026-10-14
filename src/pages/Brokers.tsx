@@ -3,12 +3,12 @@ import { useMarket } from "../context/MarketContext";
 import { formatNumber, fundsCaption } from "../lib/format";
 import { startDhanFeed, type BrokerAccount, type Snapshot } from "../api/client";
 import { displaySavedSecret, savedSecretForSubmit } from "../lib/formSecrets";
-import { brokerSelectLabel, canActivateBroker } from "../lib/brokers";
+import { brokerSelectLabel, canActivateBroker, uniqueBrokers } from "../lib/brokers";
 import { catchDeskError, isTrade2SmartHost } from "../lib/liveSite";
 
 export function Brokers() {
   const { data, connect, enableAuto, refreshToken, disconnect, activate, refresh } = useMarket();
-  const brokers = data.brokers || [];
+  const brokers = uniqueBrokers(data.brokers);
   const feed = data.dhanFeed;
   const [viewId, setViewId] = useState("");
   const [selected, setSelected] = useState<BrokerAccount | null>(null);
@@ -277,15 +277,6 @@ export function Brokers() {
                 </div>
               </div>
             </div>
-            <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                viewed.liveFeed || viewed.connected
-                  ? "bg-emerald-50 text-up dark:bg-emerald-950/40"
-                  : "bg-slate-100 text-slate-500"
-              }`}
-            >
-              {viewed.active ? "ACTIVE" : "INACTIVE"}
-            </span>
           </div>
 
           {showDhanSettings ? (

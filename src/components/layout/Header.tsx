@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
 import { Avatar } from "../phone/PhoneUi";
-import { BrokerSwitch } from "./BrokerSwitch";
 import { useAuth } from "../../context/AuthContext";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -127,7 +126,17 @@ export function Header() {
         </div>
       ) : null}
       <div className="ml-auto flex min-w-0 items-center gap-1.5 md:gap-3">
-        {admin ? <div className="t2s-desktop-only hidden md:block"><BrokerSwitch /></div> : null}
+        {admin ? (
+          <Link
+            to="/brokers"
+            className="t2s-desktop-only hidden min-w-0 items-center gap-1.5 md:flex"
+            title="Default order broker — change it on Brokers"
+            data-broker-active="header"
+          >
+            <span className="max-w-[7rem] truncate text-xs font-extrabold">{active?.name || "Dhan"}</span>
+            <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-extrabold text-brand-500">ACTIVE</span>
+          </Link>
+        ) : null}
         <div
           className={cn(
             "t2s-desktop-only hidden min-w-0 items-center gap-1.5 overflow-hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:max-w-[9rem] md:flex md:max-w-none md:gap-2 md:px-3 md:py-1.5 md:text-xs",

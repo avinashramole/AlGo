@@ -137,11 +137,21 @@ function publicAccount(meta) {
   };
 }
 
+function uniqueCatalog(rows = catalog) {
+  const seen = new Set();
+  return (rows || []).filter((item) => {
+    const id = String(item?.id || "").trim().toLowerCase();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 export function listBrokers() {
   return {
     activeBrokerId,
     mainBrokerId: MAIN_BROKER_ID,
-    brokers: catalog.map(publicAccount),
+    brokers: uniqueCatalog().map(publicAccount),
   };
 }
 

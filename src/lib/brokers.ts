@@ -126,8 +126,20 @@ export const defaultBrokers: BrokerAccount[] = [
   },
 ];
 
+export function uniqueBrokers<T extends { id?: string }>(rows: T[] | undefined): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows || []) {
+    const id = String(row?.id || "").trim().toLowerCase();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(row);
+  }
+  return out;
+}
+
 export function brokerName(brokers: BrokerAccount[] | undefined, id?: string) {
-  return brokers?.find((item) => item.id === id)?.name || id || "Dhan";
+  return uniqueBrokers(brokers).find((item) => item.id === id)?.name || id || "Dhan";
 }
 
 export function brokerSelectLabel(item: {

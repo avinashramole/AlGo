@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { adminLiveTape, headerBrokerLabel } from "../src/lib/headerBroker.ts";
-import { brokerSelectLabel, canActivateBroker } from "../src/lib/brokers.ts";
+import { brokerSelectLabel, canActivateBroker, uniqueBrokers } from "../src/lib/brokers.ts";
+import fs from "node:fs";
 
 test("admin header uses the selected broker, not a hard-coded Dhan label", () => {
   assert.equal(headerBrokerLabel({ brokerId: "dhan", live: true, hasQuotes: true }), "DHAN LIVE");
@@ -39,6 +40,22 @@ test("admin broker dropdown marks only the selected broker ACTIVE", () => {
   assert.equal(canActivateBroker({ id: "paper" }), true);
   assert.equal(canActivateBroker({ id: "upstox", connected: true }), true);
   assert.equal(canActivateBroker({ id: "upstox", connected: false, liveFeed: false }), false);
+});
+
+test("admin Brokers page keeps one broker list and drops a second copy", () => {
+  const page = fs.readFileSync(new URL("../src/pages/Brokers.tsx", import.meta.url), "utf8");
+  const header = fs.readFileSync(new URL("../src/components/layout/Header.tsx", import.meta.url), "utf8");
+  assert.equal((page.match(/data-broker-list=/g) || []).length, 1);
+  assert.equal(header.includes("BrokerSwitch"), false);
+  assert.equal(header.includes("<select"), false);
+  assert.match(header, /data-broker-active="header"/);
+  const once = uniqueBrokers([
+    { id: "dhan", name: "Dhan" },
+    { id: "dhan", name: "Dhan copy" },
+    { id: "upstox", name: "Upstox" },
+    { id: "upstox", name: "Upstox again" },
+  ]);
+  assert.deepEqual(once.map((row) => row.id), ["dhan", "upstox"]);
 });
 
 test("admin live chip uses Kotak only when that tape owns quotes", () => {
