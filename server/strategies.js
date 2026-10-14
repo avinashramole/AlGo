@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyTest1Algo, defaultNiftyTest2Algo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyFirstCandleName, isNiftyTestAlgo, isNiftyTest1Algo, isNiftyTest2Algo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, lockedCrudeFirstCandleName, lockedNiftyFirstCandleName, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTest1Config, niftyTest2Config, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, ALWAYS_ON_FIRST_CANDLE_IDS, CRUDE_FIRST_CANDLE_KIND, CRUDE_FIRST_CANDLE_NAME, NIFTY_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_NAME, NIFTY_TEST_KIND, NIFTY_TEST1_KIND, NIFTY_TEST2_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
+import { clampDailyTradeLimit, crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyTest1Algo, defaultNiftyTest2Algo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyFirstCandleName, isNiftyTestAlgo, isNiftyTest1Algo, isNiftyTest2Algo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, lockedCrudeFirstCandleName, lockedNiftyFirstCandleName, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTest1Config, niftyTest2Config, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, ALWAYS_ON_FIRST_CANDLE_IDS, CRUDE_FIRST_CANDLE_KIND, CRUDE_FIRST_CANDLE_NAME, NIFTY_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_NAME, NIFTY_TEST_KIND, NIFTY_TEST1_KIND, NIFTY_TEST2_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 import { defaultMultiIndexReversalAlgo, isMultiIndexReversalAlgo, multiIndexReversalConfig, MULTI_INDEX_REVERSAL_KIND } from "./multiIndexReversal/index.js";
 
@@ -331,7 +331,7 @@ export function summarizeAlgo(algo) {
     const sl = algo.initialSlPct || 20;
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
-    const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
+    const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
     return `CRUDE OIL FUT every ${tf} candle · monthly ATM · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT green + ATM CE green → BUY CE · CRUDE FUT red + ATM PE green → BUY PE · doji skips that candle and waits for the next · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
@@ -342,7 +342,7 @@ export function summarizeAlgo(algo) {
     const evalAt = algo.entryEvaluationIst || "09:05";
     const endAt = algo.endTimeIst || "15:15";
     const expiry = algo.expiryKind === "monthly" ? "monthly ATM" : "weekly ATM";
-    const maxTrades = algo.maxTradesPerDay > 1 ? algo.maxTradesPerDay : 5;
+    const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
     const atm = strikeOffsetLabel(algo.strikeOffset);
     const trail = niftyFirstCandleTrail(algo);
     return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
@@ -400,7 +400,13 @@ function mappingFields(input = {}, existing = {}) {
 }
 
 function withMapping(next, input, existing) {
-  return { ...next, ...mappingFields(input, existing) };
+  const fallback = isNiftyTest2Algo(next) ? 1 : 5;
+  const requested = input.maxTradesPerDay != null ? input.maxTradesPerDay : next.maxTradesPerDay ?? existing.maxTradesPerDay;
+  return {
+    ...next,
+    ...mappingFields(input, existing),
+    maxTradesPerDay: clampDailyTradeLimit(requested, fallback),
+  };
 }
 
 export function normalizeAlgo(input = {}, existing = {}) {
@@ -1037,10 +1043,6 @@ export function normalizeAlgo(input = {}, existing = {}) {
     enabled: existing.enabled ?? false,
     status: existing.status || "PAUSED",
   };
-  if (String(symbol).toUpperCase() === "CRUDEOIL" && input.maxTradesPerDay != null) {
-    const requested = Number(input.maxTradesPerDay);
-    if (Number.isFinite(requested)) next.maxTradesPerDay = Math.max(1, Math.min(20, Math.round(requested)));
-  }
   delete next.trade;
   next.summary = summarizeAlgo(next);
   return withMapping(next, input, existing);

@@ -229,7 +229,9 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
       const tf = form.timeframe || "5m";
       const evalAt = firstCandleEntryIst(firstBar, tf, form.entryEvaluationIst);
       const expiry = form.expiryKind === "monthly" ? "monthly" : "weekly";
-      const maxTrades = Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5;
+      const maxTrades = Number.isFinite(Number(form.maxTradesPerDay)) && Number(form.maxTradesPerDay) >= 1
+        ? Math.max(1, Math.min(20, Math.round(Number(form.maxTradesPerDay))))
+        : 5;
       const trail = niftyFirstCandleTrail(form);
       return `NIFTY ${tf} · ${strikeOffsetLabel(form.strikeOffset)} ${expiry} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · up to ${maxTrades} trades · ${firstBar}–${evalAt} IST · SL ${form.initialSlPct || 20}% / TGT ${form.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${start} IST`;
     }
@@ -588,22 +590,20 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           />
         </label>
 
-        {crudeFirst ? (
-          <label className="mt-2.5 block text-xs font-semibold text-slate-500" data-trade-limit="crude">
-            Trade limit
-            <input
-              type="number"
-              min={1}
-              max={20}
-              inputMode="numeric"
-              aria-label="Trade limit"
-              className={fieldClass}
-              value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
-              onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
-            />
-            <span className="desk-help mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
-          </label>
-        ) : null}
+        <label className="mt-2.5 block text-xs font-semibold text-slate-500" data-trade-limit="daily">
+          Daily trade limit
+          <input
+            type="number"
+            min={1}
+            max={20}
+            inputMode="numeric"
+            aria-label="Daily trade limit"
+            className={fieldClass}
+            value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || (isNiftyTest2Kind(form) || test2 ? 1 : 5)))}
+            onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+          />
+          <span className="desk-help mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. Saving does not start LIVE.</span>
+        </label>
 
         {test2 ? (
           <div className="mt-2.5 space-y-1.5">
@@ -1212,7 +1212,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
                   set({ trailingActivationPct: trail.activation, trailingEveryPct: trail.every, trailingShiftPct, trailingStepPct: trailingShiftPct });
                 }}
               />
-              <NumberField label="Max trades / day" value={Number(form.maxTradesPerDay) > 1 ? Number(form.maxTradesPerDay) : 5} step={1} onChange={(maxTradesPerDay) => set({ maxTradesPerDay: Math.max(1, maxTradesPerDay) })} />
               </>
               )}
               <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
@@ -1224,22 +1223,6 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
           </p>
         ) : (
         <div className="mt-2.5 space-y-2">
-          {String(form.symbol || algo?.symbol || "").toUpperCase() === "CRUDEOIL" || /crude/i.test(String(form.name || algo?.name || "")) ? (
-            <label className="block text-xs font-semibold text-slate-500" data-trade-limit="crude">
-              Trade limit
-              <input
-                type="number"
-                min={1}
-                max={20}
-                inputMode="numeric"
-                aria-label="Trade limit"
-                className={fieldClass}
-                value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
-                onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
-              />
-              <span className="desk-help mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. One signal places one order. Saving does not start LIVE.</span>
-            </label>
-          ) : null}
           <ConditionGroupEditor
             label="BUY when"
             group={

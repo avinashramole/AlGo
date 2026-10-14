@@ -319,7 +319,7 @@ export function AlgoScreen() {
       entryEvaluationIst: draft.kind === "nifty-first-candle" ? draft.entryEvaluationIst || "09:05" : draft.entryEvaluationIst,
       endTimeIst: draft.kind === "nifty-first-candle" || draft.kind === "nifty-test" ? draft.endTimeIst || "15:15" : draft.endTimeIst,
       expiryKind: draft.kind === "nifty-first-candle" ? draft.expiryKind || "weekly" : draft.expiryKind,
-      maxTradesPerDay: draft.kind === "nifty-first-candle" ? Math.max(1, Number(draft.maxTradesPerDay) || 5) : draft.maxTradesPerDay,
+      maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(draft.maxTradesPerDay) || (draft.kind === "nifty-test2" ? 1 : 5)))),
       symbol: draft.kind === "nifty-test" || isEngineKind(draft.kind) ? "NIFTY" : draft.symbol,
       buyValue: Number(draft.buyRows[0]?.value || draft.buyValue),
       sellValue: Number(draft.sellRows[0]?.value || draft.sellValue),
@@ -408,6 +408,12 @@ export function AlgoScreen() {
           />
         ) : null}
         <Field label="Name" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
+        <Field
+          label="Daily trade limit"
+          value={draft.maxTradesPerDay || (draft.kind === "nifty-test2" ? "1" : "5")}
+          keyboard="numeric"
+          onChange={(maxTradesPerDay) => setDraft({ ...draft, maxTradesPerDay })}
+        />
         <Text style={styles.muted}>Underlying · 1 lot size</Text>
         <View style={styles.chips}>
           {SYMBOLS.map((symbol) => (
@@ -605,7 +611,6 @@ export function AlgoScreen() {
             <Field label="Trailing SL to buy price at %" value={draft.trailingActivationPct || "20"} keyboard="numeric" onChange={(trailingActivationPct) => setDraft({ ...draft, trailingActivationPct, trailingEveryPct: draft.trailingEveryPct || "10", trailingShiftPct: draft.trailingShiftPct || "5" })} />
             <Field label="Trailing SL every %" value={draft.trailingEveryPct || "10"} keyboard="numeric" onChange={(trailingEveryPct) => setDraft({ ...draft, trailingActivationPct: draft.trailingActivationPct || "20", trailingEveryPct, trailingShiftPct: draft.trailingShiftPct || "5" })} />
             <Field label="Trailing SL shift %" value={draft.trailingShiftPct || "5"} keyboard="numeric" onChange={(trailingShiftPct) => setDraft({ ...draft, trailingActivationPct: draft.trailingActivationPct || "20", trailingEveryPct: draft.trailingEveryPct || "10", trailingShiftPct, trailingStepPct: trailingShiftPct })} />
-            <Field label="Max trades / day" value={draft.maxTradesPerDay && Number(draft.maxTradesPerDay) > 1 ? draft.maxTradesPerDay : "5"} keyboard="numeric" onChange={(maxTradesPerDay) => setDraft({ ...draft, maxTradesPerDay })} />
           </>
         ) : draft.kind === "nifty-vwap" ? (
           <>
@@ -845,7 +850,7 @@ export function AlgoScreen() {
                   entryEvaluationIst: String(algo.entryEvaluationIst || "09:05"),
                   endTimeIst: String(algo.endTimeIst || "15:15"),
                   expiryKind: algo.expiryKind === "monthly" ? "monthly" : "weekly",
-                  maxTradesPerDay: String(Number(algo.maxTradesPerDay) > 1 ? algo.maxTradesPerDay : 5),
+                  maxTradesPerDay: String(Math.max(1, Math.min(20, Math.round(Number(algo.maxTradesPerDay) || (algo.kind === "nifty-test2" ? 1 : 5))))),
                   buyLeft: algo.buyLeft || "price",
                   buyOp: algo.buyOp || "close_above",
                   buyRight: algo.buyRight || "vwap",

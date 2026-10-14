@@ -53,6 +53,7 @@ export function niftyVwapHedgeConfig(algo = {}) {
     maxTotalLots: 3,
     expiryKind: "weekly",
     signalMode: "reversal",
+    maxTradesPerDay: Math.max(1, Math.min(20, Math.round(num(algo.maxTradesPerDay, 5)))),
   };
 }
 

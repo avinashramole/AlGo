@@ -38,6 +38,7 @@ import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore,
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { isDhanBrokerReject } from "./dhanPlaceError.js";
 import {
+  dailyTradeLimitHit,
   isCrudeFirstCandleAlgo,
   isCrudeFirstCandleName,
   isFirstCandleAlgo,
@@ -919,6 +920,52 @@ function strategyBuyUnresolved(strategyName) {
   );
 }
 
+function entryLimitState(algo) {
+  let bag;
+  if (isNiftyTest2Algo(algo)) {
+    if (!algo.test2State || typeof algo.test2State !== "object") algo.test2State = {};
+    bag = algo.test2State;
+  } else if (isNiftyTest1Algo(algo)) {
+    if (!algo.test1State || typeof algo.test1State !== "object") algo.test1State = {};
+    bag = algo.test1State;
+  } else if (isMultiIndexReversalAlgo(algo)) {
+    bag = mirState(algo);
+  } else if (isNiftyVwapHedgeAlgo(algo)) {
+    bag = hedgeState(algo);
+  } else {
+    bag = runtimeState(algo);
+  }
+  const today = VwapSignalEngine.sessionKeyIST(Date.now());
+  if (bag.sessionDate && bag.sessionDate !== today) {
+    bag.sessionTrades = 0;
+    bag.sessionDate = today;
+  } else if (!bag.sessionDate) {
+    bag.sessionDate = today;
+  }
+  return bag;
+}
+
+function countsOwnDailyTrades(algo) {
+  return (
+    isNiftyOptionEngineAlgo(algo) ||
+    isCrudeFirstCandleAlgo(algo) ||
+    isNiftyVwapHedgeAlgo(algo) ||
+    isNiftyTest1Algo(algo) ||
+    isNiftyTest2Algo(algo) ||
+    isMultiIndexReversalAlgo(algo)
+  );
+}
+
+function dailyEntryBlocked(algo) {
+  return dailyTradeLimitHit(algo, entryLimitState(algo), isNiftyTest2Algo(algo) ? 1 : 5);
+}
+
+function noteGenericDailyEntry(algo) {
+  if (!algo || countsOwnDailyTrades(algo)) return;
+  const bag = entryLimitState(algo);
+  bag.sessionTrades = Number(bag.sessionTrades || 0) + 1;
+}
+
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
@@ -930,6 +977,13 @@ function enqueueLiveAlgoOrder(payload) {
     }
     if (copyUserId && !strategyAllowsLiveMemberCopies(strategy)) {
       return { ok: true, queued: false, status: "PAUSED", blocked: true };
+    }
+    const role = String(payload?.role || payload?.exitReason || "").toLowerCase();
+    if (!copyUserId && !["hedge", "exit", "sl", "target", "trail", "reversal"].includes(role)) {
+      const algo = strategyCard(strategy);
+      if (dailyEntryBlocked(algo)) {
+        return { ok: true, queued: false, status: "MAX_TRADES", blocked: true };
+      }
     }
   }
   const role = String(payload?.role || "");
@@ -3867,12 +3921,17 @@ function runPaperAlgos() {
       algo.lastSignal = side || "NO SIGNAL";
       if (!side) continue;
       if (algo.lastPaperAt && now - algo.lastPaperAt < 60_000) continue;
+      if (side === "BUY" && dailyEntryBlocked(algo)) {
+        algo.lastSignal = "MAX TRADES";
+        continue;
+      }
       const trade = resolveAlgoTrade(algo);
       if (!trade?.ready || !(trade.ltp > 0)) continue;
       placeOrder({
         ...algoOrderFields(algo, side, trade),
         brokerId: "paper",
       });
+      if (side === "BUY") noteGenericDailyEntry(algo);
       algo.lastPaperAt = now;
       continue;
     }
@@ -3904,6 +3963,10 @@ function runPaperAlgos() {
       continue;
     }
     const side = wantBuy ? "BUY" : "SELL";
+    if (side === "BUY" && dailyEntryBlocked(algo)) {
+      algo.lastSignal = "MAX TRADES";
+      continue;
+    }
     if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
       algo.lastSignal = "WAIT ORDER";
       continue;
@@ -3912,6 +3975,7 @@ function runPaperAlgos() {
       ...algoOrderFields(algo, side, trade),
       brokerId: "paper",
     });
+    if (side === "BUY") noteGenericDailyEntry(algo);
     algo.lastPaperAt = now;
     algo.lastSignal = side;
   }
@@ -3959,6 +4023,10 @@ function runLiveAlgos() {
         (row) => !isPaperRow(row) && row.strategy === algo.name && Number(row.qty) > 0,
       );
       if (algo.lastLiveSide === side && openLive) continue;
+      if (side === "BUY" && dailyEntryBlocked(algo)) {
+        algo.lastSignal = "MAX TRADES";
+        continue;
+      }
       if (side === "BUY" && (openLive || strategyBuyUnresolved(algo.name))) {
         algo.lastSignal = "WAIT ORDER";
         continue;
@@ -3974,10 +4042,15 @@ function runLiveAlgos() {
         ...algoOrderFields(algo, side, trade),
         brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
       });
+      if (queued?.status === "MAX_TRADES") {
+        algo.lastSignal = "MAX TRADES";
+        continue;
+      }
       if (!queued?.queued) {
         algo.lastSignal = "WAIT ORDER";
         continue;
       }
+      if (side === "BUY") noteGenericDailyEntry(algo);
       if (signalBar) algo.lastSignalBarTime = signalBar;
       algo.lastLiveAt = now;
       algo.lastLiveSide = side;
@@ -4001,6 +4074,10 @@ function runLiveAlgos() {
       (row) => !isPaperRow(row) && realStrategyName(row.strategy) === algo.name && Number(row.qty) > 0,
     );
     if (openLive) continue;
+    if (side === "BUY" && dailyEntryBlocked(algo)) {
+      algo.lastSignal = "MAX TRADES";
+      continue;
+    }
     if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
       algo.lastSignal = "WAIT ORDER";
       continue;
@@ -4019,10 +4096,15 @@ function runLiveAlgos() {
       ...algoOrderFields(algo, side, trade),
       brokerId: algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan",
     });
+    if (queued?.status === "MAX_TRADES") {
+      algo.lastSignal = "MAX TRADES";
+      continue;
+    }
     if (!queued?.queued) {
       algo.lastSignal = "";
       continue;
     }
+    if (side === "BUY") noteGenericDailyEntry(algo);
     if (signalBar) algo.lastSignalBarTime = signalBar;
     algo.lastLiveAt = now;
     algo.lastLiveSide = side;

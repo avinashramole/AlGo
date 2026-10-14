@@ -17,6 +17,17 @@ export const NIFTY_TEST2_KIND = "nifty-test2";
 export const NIFTY_TEST2_TYPE = "NIFTY_TEST2";
 export const NIFTY_TEST2_NAME = "TEST2";
 
+export function clampDailyTradeLimit(value, fallback = 5) {
+  const n = Number(value);
+  const base = Number.isFinite(n) ? n : Number(fallback);
+  return Math.max(1, Math.min(20, Math.round(Number.isFinite(base) ? base : 5)));
+}
+
+export function dailyTradeLimitHit(algo = {}, state = {}, fallback = 5) {
+  const limit = clampDailyTradeLimit(algo.maxTradesPerDay ?? state.maxTradesPerDay, fallback);
+  return Number(state.sessionTrades || 0) >= limit;
+}
+
 export const DEFAULT_NIFTY_VWAP_CONFIG = {
   timeframe: "5m",
   initialSlPct: 20,
@@ -423,6 +434,7 @@ export function niftyVwapConfig(algo = {}) {
     trailingStepPct: Math.max(0.5, num(algo.trailingStepPct, DEFAULT_NIFTY_VWAP_CONFIG.trailingStepPct)),
     vwapExitCandles: Math.max(1, Math.round(num(algo.vwapExitCandles, DEFAULT_NIFTY_VWAP_CONFIG.vwapExitCandles))),
     maxPositions: 1,
+    maxTradesPerDay: clampDailyTradeLimit(algo.maxTradesPerDay, 5),
     intradayOnly: algo.intradayOnly !== false,
     eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, DEFAULT_NIFTY_VWAP_CONFIG.eodSquareOffMinutes))),
     barMinutes: 5,
@@ -451,6 +463,7 @@ export function niftyVwapReversalConfig(algo = {}) {
     trailingStepPct: DEFAULT_NIFTY_VWAP_REVERSAL_CONFIG.trailingStepPct,
     vwapExitCandles: DEFAULT_NIFTY_VWAP_REVERSAL_CONFIG.vwapExitCandles,
     maxPositions: 1,
+    maxTradesPerDay: clampDailyTradeLimit(algo.maxTradesPerDay, 5),
     intradayOnly: algo.intradayOnly !== false,
     eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, DEFAULT_NIFTY_VWAP_REVERSAL_CONFIG.eodSquareOffMinutes))),
     barMinutes: 15,
@@ -523,11 +536,7 @@ export function niftyFirstCandleConfig(algo = {}) {
     lockToEntry: true,
     vwapExitCandles: DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.vwapExitCandles,
     maxPositions: 1,
-    maxTradesPerDay: (() => {
-      const requested = num(algo.maxTradesPerDay, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay);
-      if (!Number.isFinite(requested) || requested <= 1) return DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay;
-      return Math.max(1, Math.round(requested));
-    })(),
+    maxTradesPerDay: clampDailyTradeLimit(algo.maxTradesPerDay, DEFAULT_NIFTY_FIRST_CANDLE_CONFIG.maxTradesPerDay),
     intradayOnly: algo.intradayOnly !== false,
     eodSquareOffMinutes,
     barMinutes,
@@ -557,10 +566,7 @@ export function crudeFirstCandleConfig(algo = {}) {
   const endTimeIst = parseIstHm(algo.endTimeIst, DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.endTimeIst);
   const endParts = endTimeIst.split(":").map(Number);
   const eodFromEnd = Math.max(0, 23 * 60 + 30 - (endParts[0] * 60 + endParts[1]));
-  const requestedMax = Number(algo.maxTradesPerDay);
-  const maxTradesPerDay = Number.isFinite(requestedMax) && requestedMax >= 1
-    ? Math.max(1, Math.min(20, Math.round(requestedMax)))
-    : DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.maxTradesPerDay;
+  const maxTradesPerDay = clampDailyTradeLimit(algo.maxTradesPerDay, DEFAULT_CRUDE_FIRST_CANDLE_CONFIG.maxTradesPerDay);
   return {
     ...base,
     useTrail: false,
@@ -607,6 +613,7 @@ export function niftyTest1Config(algo = {}) {
     session: script.session,
     step: script.step,
     maxPositions: 1,
+    maxTradesPerDay: clampDailyTradeLimit(algo.maxTradesPerDay, 5),
     intradayOnly: algo.intradayOnly !== false,
     eodSquareOffMinutes: Math.max(0, Math.round(num(algo.eodSquareOffMinutes, DEFAULT_NIFTY_TEST1_CONFIG.eodSquareOffMinutes))),
     useTrail: false,
@@ -648,7 +655,7 @@ export function niftyTest2Config(algo = {}) {
     overallTarget: Math.max(0, num(algo.overallTarget, DEFAULT_NIFTY_TEST2_CONFIG.overallTarget)),
     overallTargetPct: Math.max(0, num(algo.overallTargetPct, DEFAULT_NIFTY_TEST2_CONFIG.overallTargetPct)),
     costPerCombo: Math.max(0, num(algo.costPerCombo, DEFAULT_NIFTY_TEST2_CONFIG.costPerCombo)),
-    maxTradesPerDay: 1,
+    maxTradesPerDay: clampDailyTradeLimit(algo.maxTradesPerDay, DEFAULT_NIFTY_TEST2_CONFIG.maxTradesPerDay),
     maxPositions: 4,
     holdStyle,
     product: btst ? "NRML" : "MIS",
@@ -1025,7 +1032,7 @@ export function defaultNiftyTest2Algo(patch = {}) {
     startTimeIst: cfg.startTimeIst,
     endTimeIst: cfg.endTimeIst,
     exitTimeIst: cfg.exitTimeIst,
-    maxTradesPerDay: 1,
+    maxTradesPerDay: cfg.maxTradesPerDay,
     maxPositions: 4,
     holdStyle: cfg.holdStyle,
     product: cfg.product,

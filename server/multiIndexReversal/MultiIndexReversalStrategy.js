@@ -297,6 +297,11 @@ export const MultiIndexReversalStrategy = {
       algo.lastSignal = "WAIT CYCLE CLOSE";
       return { action: "skip", reason: "cycle-open" };
     }
+    const maxTrades = Math.max(1, Number(config.maxTradesPerDay || algo.maxTradesPerDay) || 5);
+    if (Number(state.sessionTrades || 0) >= maxTrades) {
+      algo.lastSignal = "MAX TRADES";
+      return { action: "skip", reason: "max-trades" };
+    }
     if (signal.buyCe) return this.enterOriginal(input, signal, "CE");
     if (signal.buyPe) return this.enterOriginal(input, signal, "PE");
     algo.lastSignal = `NO TRADE · ${config.symbol} ${String(signal.indexColor || "").toUpperCase()} CE ${String(signal.ceColor || "—").toUpperCase()} PE ${String(signal.peColor || "—").toUpperCase()}`;
@@ -345,6 +350,7 @@ export const MultiIndexReversalStrategy = {
       return { action: "skip", reason: "queue-blocked", result };
     }
     const fill = fillFrom(result, ltp);
+    state.sessionTrades = Number(state.sessionTrades || 0) + 1;
     if (result?.queued && !(fill > 0)) {
       algo.lastSignal = `BUY ${option} SENDING`;
       state.lastBarTime = signal.barTime;

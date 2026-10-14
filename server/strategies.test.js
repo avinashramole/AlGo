@@ -342,7 +342,7 @@ test("crude oil indicator keeps the trade limit and stays paused", () => {
     { id: "a10", enabled: false, status: "PAUSED" },
   );
   assert.equal(nifty.kind, "nifty-first-candle");
-  assert.equal(nifty.maxTradesPerDay, 5);
+  assert.equal(nifty.maxTradesPerDay, 1);
 });
 
 test("hydrate rematerializes first candle saved as a generic indicator", () => {

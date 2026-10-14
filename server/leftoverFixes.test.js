@@ -20,6 +20,7 @@ const {
   dhanQuotesStalled,
   drainPendingLiveAlgoOrders,
   findDeskPosition,
+  getAlgo,
   liveBuyAllowedForStrategy,
   armLiveOrders,
   queueLiveAlgoOrder,
@@ -29,6 +30,7 @@ const {
   snapshot,
   strategyAllowsLiveMemberCopies,
   toggleAlgo,
+  withLiveAlgo,
 } = await import("./market.js");
 const { dispatchMemberCopies, findLiveCopyAlgo } = await import("./liveCopy.js");
 const { getMemberDesk, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
@@ -265,6 +267,66 @@ test("Exit close sends SELL only and blocks a new BUY on every strategy", () => 
     replaceDhanBook([]);
     deleteAlgo(nifty.id);
     deleteAlgo(crude.id);
+  }
+});
+
+test("every strategy keeps a custom daily trade limit and blocks extra BUY", () => {
+  armLiveOrders();
+  const specs = [
+    { kind: "nifty-first-candle", name: `NIFTY limit ${Date.now()}` },
+    { kind: "crude-first-candle", name: `CRUDE limit ${Date.now()}`, symbol: "CRUDEOIL" },
+    { kind: "nifty-vwap", name: `VWAP limit ${Date.now()}` },
+    { kind: "nifty-vwap-reversal", name: `REV limit ${Date.now()}` },
+    { kind: "nifty-vwap-hedge", name: `HEDGE limit ${Date.now()}` },
+    { kind: "multi-index-reversal", name: `MULTI limit ${Date.now()}`, symbol: "BANKNIFTY" },
+    { kind: "nifty-test1", name: `TEST1 limit ${Date.now()}` },
+    { kind: "nifty-test2", name: `TEST2 limit ${Date.now()}` },
+    { kind: "nifty-test", name: `TEST limit ${Date.now()}` },
+    { kind: "indicator", name: `IND limit ${Date.now()}`, indicator: "VWAP" },
+    { kind: "price-action", name: `PA limit ${Date.now()}`, pattern: "ORB" },
+  ];
+  const created = [];
+  try {
+    for (const spec of specs) {
+      const algo = createAlgo({ ...spec, runMode: "live", maxTradesPerDay: 2 });
+      created.push(algo);
+      assert.equal((getAlgo(algo.id) || algo).maxTradesPerDay, 2, spec.kind);
+    }
+    const probe = createAlgo({ name: `VWAP daily ${Date.now()}`, kind: "nifty-vwap", runMode: "live", maxTradesPerDay: 1 });
+    created.push(probe);
+    withLiveAlgo(probe.id, (algo) => {
+      algo.vwapState = { ...(algo.vwapState || {}), sessionTrades: 1 };
+    });
+    const live = getAlgo(probe.id) || probe;
+    const blocked = queueLiveAlgoOrder({
+      strategy: live.name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22700 CE",
+      option: "CE",
+      strike: 22700,
+      brokerId: "dhan",
+    });
+    assert.equal(blocked.queued, false);
+    assert.equal(blocked.status, "MAX_TRADES");
+    const hedge = queueLiveAlgoOrder({
+      strategy: live.name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 22700 PE",
+      option: "PE",
+      strike: 22700,
+      role: "hedge",
+      brokerId: "dhan",
+    });
+    assert.notEqual(hedge.status, "MAX_TRADES");
+    const algoSrc = fs.readFileSync(new URL("../src/pages/Algo.tsx", import.meta.url), "utf8");
+    assert.match(algoSrc, /data-trade-limit="daily"/);
+    const builder = fs.readFileSync(new URL("../src/components/dashboard/StrategyBuilder.tsx", import.meta.url), "utf8");
+    assert.match(builder, /data-trade-limit="daily"/);
+  } finally {
+    drainPendingLiveAlgoOrders();
+    for (const algo of created) deleteAlgo(algo.id);
   }
 });
 

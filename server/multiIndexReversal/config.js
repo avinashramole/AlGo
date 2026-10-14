@@ -86,6 +86,7 @@ export function multiIndexReversalConfig(algo = {}) {
     lotSize,
     qty: lots * lotSize,
     maxCycleLossPct: Math.max(0, num(algo.maxCycleLossPct, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.maxCycleLossPct)),
+    maxTradesPerDay: Math.max(1, Math.min(20, Math.round(num(algo.maxTradesPerDay, 5)))),
     maxOrderRetries: Math.max(1, Math.round(num(algo.maxOrderRetries, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.maxOrderRetries))),
     brokeragePerLot: Math.max(0, num(algo.brokeragePerLot, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.brokeragePerLot)),
     expiryKind: String(algo.expiryKind || "weekly") === "monthly" ? "monthly" : "weekly",

@@ -109,6 +109,11 @@ export const Test1Strategy = {
       algo.lastSignal = "EXIT PENDING";
       return { action: "skip", reason: "exit-queued" };
     }
+    const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 5);
+    if (Number(state.sessionTrades || 0) >= maxTrades) {
+      algo.lastSignal = "MAX TRADES";
+      return { action: "skip", reason: "max-trades" };
+    }
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: 1 });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     if (RiskManager.duplicateBar(state.lastEntryBarTime, signal.barTime) || RiskManager.duplicateBar(state.sentSignalBarTime, signal.barTime)) {
@@ -197,6 +202,7 @@ export const Test1Strategy = {
       algo.lastSignal = "WAIT ORDER";
       return { action: "skip", reason: "buy-active" };
     }
+    state.sessionTrades = Number(state.sessionTrades || 0) + 1;
     const fill = fillFromResult(result, ltp);
     if (result?.queued) {
       state.buyPhase = "entry";

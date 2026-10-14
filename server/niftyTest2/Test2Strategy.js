@@ -256,6 +256,11 @@ export const Test2Strategy = {
       algo.lastSignal = "EXIT PENDING";
       return { action: "skip", reason: "exit-queued" };
     }
+    const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 1);
+    if (Number(state.sessionTrades || 0) >= maxTrades) {
+      algo.lastSignal = "MAX TRADES";
+      return { action: "skip", reason: "max-trades" };
+    }
     if (state.entered || state.lockedDay || state.inFlight) {
       algo.lastSignal = state.lockedDay ? `HOLD ${styleLabel(config)}` : "HOLD TEST2";
       return { action: "skip", reason: state.lockedDay ? "locked" : "open" };
@@ -266,6 +271,7 @@ export const Test2Strategy = {
     }
     state.inFlight = true;
     state.lockedDay = true;
+    state.sessionTrades = Number(state.sessionTrades || 0) + 1;
     const placed = [];
     for (const leg of combo.legs) {
       const expiry = leg.expiryKind === "monthly" ? expiries.monthly : expiries.weekly;

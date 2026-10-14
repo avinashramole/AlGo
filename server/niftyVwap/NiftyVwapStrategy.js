@@ -276,12 +276,10 @@ export const NiftyVwapStrategy = {
     const gate = RiskManager.canEnter({ positions, inFlight: state.inFlight, maxPositions: config.maxPositions });
     if (!gate.ok) return { action: "skip", reason: gate.reason };
     const crudeSignal = String(config.symbol || "").toUpperCase() === "CRUDEOIL" && config.signalMode === "first-candle";
-    if (config.signalMode === "first-candle") {
-      const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 5);
-      if (Number(state.sessionTrades || 0) >= maxTrades) {
-        algo.lastSignal = "MAX TRADES";
-        return { action: "skip", reason: "max-trades" };
-      }
+    const maxTrades = Math.max(1, Number(config.maxTradesPerDay) || 5);
+    if (Number(state.sessionTrades || 0) >= maxTrades) {
+      algo.lastSignal = "MAX TRADES";
+      return { action: "skip", reason: "max-trades" };
     }
     if (crudeSignal && RiskManager.duplicateBar(state.sentSignalBarTime, signal.barTime)) {
       algo.lastSignal = "HOLD 1 SIGNAL";
@@ -409,9 +407,7 @@ export const NiftyVwapStrategy = {
       TrailingStopManager.initialStop(fill, config.initialSlPct),
       TrailingStopManager.targetPrice(fill, config.targetPct),
     );
-    if (config.signalMode === "first-candle") {
-      state.sessionTrades = Number(state.sessionTrades || 0) + 1;
-    }
+    state.sessionTrades = Number(state.sessionTrades || 0) + 1;
     TradeLogger.record("entry", {
       symbol: pick.symbol,
       fill,

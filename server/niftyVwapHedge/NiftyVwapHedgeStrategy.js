@@ -339,6 +339,11 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "skip", reason: "order-in-flight" };
     }
     if (positions.length) return { action: "skip", reason: "already-open" };
+    const maxTrades = Math.max(1, Number(config.maxTradesPerDay || algo.maxTradesPerDay) || 5);
+    if (Number(state.sessionTrades || 0) >= maxTrades) {
+      algo.lastSignal = "MAX TRADES";
+      return { action: "skip", reason: "max-trades" };
+    }
 
     const option = reversal.buyCe ? "CE" : "PE";
     const ltp = option === "CE" ? Number(input.ceLtp) : Number(input.peLtp);
@@ -395,6 +400,7 @@ export const NiftyVwapHedgeStrategy = {
       return { action: "rejected", result };
     }
     if (result?.queued) {
+      state.sessionTrades = Number(state.sessionTrades || 0) + 1;
       algo.lastSignal = `BUY ${option} ${pick.strike} 1 LOT QUEUED · ${formatHedgeLevels(reversal)}`;
       return { action: "queued", pick, result };
     }
@@ -403,6 +409,7 @@ export const NiftyVwapHedgeStrategy = {
       state.inFlight = false;
       return { action: "rejected", reason: "no-fill" };
     }
+    state.sessionTrades = Number(state.sessionTrades || 0) + 1;
     markCharges(state, config.lots, config.brokeragePerLot);
     attachFill(state, "primary", fill, option, pick.strike);
     state.phase = PHASE.MONITOR_PRIMARY;

@@ -1349,7 +1349,7 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(created.maxTradesPerDay, 5);
   assert.equal(created.strikeOffset, 0);
   const oldCap = normalizeAlgo({ ...created, maxTradesPerDay: 1 }, created);
-  assert.equal(oldCap.maxTradesPerDay, 5);
+  assert.equal(oldCap.maxTradesPerDay, 1);
   const updated = normalizeAlgo(
     {
       name: "Desk first candle",
@@ -2957,7 +2957,7 @@ test("crude max trades input is kept, and one signal places one order", () => {
   assert.equal(crudeFirstCandleConfig({ maxTradesPerDay: 1 }).maxTradesPerDay, 1);
   assert.equal(crudeFirstCandleConfig({ maxTradesPerDay: 3 }).maxTradesPerDay, 3);
   assert.equal(crudeFirstCandleConfig({}).maxTradesPerDay, 5);
-  assert.equal(niftyFirstCandleConfig({ maxTradesPerDay: 1 }).maxTradesPerDay, 5);
+  assert.equal(niftyFirstCandleConfig({ maxTradesPerDay: 1 }).maxTradesPerDay, 1);
   const saved = normalizeAlgo(
     { maxTradesPerDay: 2 },
     defaultCrudeFirstCandleAlgo({ name: "CRUDE OIL 5m first candle", maxTradesPerDay: 5 }),

@@ -166,14 +166,14 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-vwap-hedge" as const,
       category: "SYSTEMATIC NIFTY HEDGE",
-      config: "15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · +40% / −20% hedge · +5% · daily LIVE 09:20 IST",
+      config: `15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · +40% / −20% hedge · +5% · max ${dailyTradeLimit(algo)} trades/day · daily LIVE 09:20 IST`,
     };
   }
   if (isNiftyVwapReversalKind(algo)) {
     return {
       kind: "nifty-vwap-reversal" as const,
       category: "SYSTEMATIC NIFTY 15M",
-      config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · daily LIVE 09:20 IST`,
+      config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · max ${dailyTradeLimit(algo)} trades/day · daily LIVE 09:20 IST`,
     };
   }
   if (isNiftyTest2Kind(algo)) {
@@ -182,8 +182,8 @@ function kindMeta(algo: AlgoStrategy) {
       category: `TEST2 ${algo.symbol || "NIFTY"} PREMIUM STRANGLE`,
       config:
         algo.holdStyle === "intraday"
-          ? `${algo.symbol || "NIFTY"} INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`
-          : `${algo.symbol || "NIFTY"} BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}%`,
+          ? `${algo.symbol || "NIFTY"} INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}% · max ${dailyTradeLimit(algo)} trades/day`
+          : `${algo.symbol || "NIFTY"} BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}% · max ${dailyTradeLimit(algo)} trades/day`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -192,7 +192,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "multi-index-reversal" as const,
       category: `MULTI-INDEX ${script.label} ${script.exchange} ${String(algo.timeframe || "15m").toUpperCase()}`,
-      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · ${algo.runMode === "live" ? "Live" : "Paper"}`,
+      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live" : "Paper"}`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
@@ -201,7 +201,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test1" as const,
       category: `TEST1 ${algo.symbol || "NIFTY"} ATM ${String(algo.timeframe || "5m").toUpperCase()}`,
-      config: `${algo.symbol || "NIFTY"} ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · one order per ${algo.timeframe || "5m"}`,
+      config: `${algo.symbol || "NIFTY"} ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · max ${dailyTradeLimit(algo)} trades/day · one order per ${algo.timeframe || "5m"}`,
     };
   }
   if (isNiftyTestKind(algo)) {
@@ -209,11 +209,11 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test" as const,
       category: "NIFTY TEST",
-      config: `NIFTY FUT · ${algo.timeframe || "5m"} · live feed while started · above open BUY · below open SELL${liveSide ? ` · ${liveSide}` : " · no signal"}`,
+      config: `NIFTY FUT · ${algo.timeframe || "5m"} · live feed while started · above open BUY · below open SELL · max ${dailyTradeLimit(algo)} trades/day${liveSide ? ` · ${liveSide}` : " · no signal"}`,
     };
   }
   if (isCrudeFirstCandleKind(algo)) {
-    const maxTrades = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
+    const maxTrades = dailyTradeLimit(algo);
     return {
       kind: "crude-first-candle" as const,
       category: `CRUDE OIL EVERY ${(algo.timeframe || "5m").toUpperCase()}`,
@@ -221,7 +221,7 @@ function kindMeta(algo: AlgoStrategy) {
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
-    const maxTrades = Number(algo.maxTradesPerDay) > 1 ? Number(algo.maxTradesPerDay) : 5;
+    const maxTrades = dailyTradeLimit(algo);
     const trail = niftyFirstCandleTrail(algo);
     const tf = algo.timeframe || "5m";
     return {
@@ -234,20 +234,20 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-vwap" as const,
       category: "SYSTEMATIC NIFTY VWAP",
-      config: `ATM options · 5m · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}%`,
+      config: `ATM options · 5m · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${dailyTradeLimit(algo)} trades/day`,
     };
   }
   if (algo.kind === "price-action") {
     return {
       kind: "price-action" as const,
       category: "SYSTEMATIC PRICE ACTION",
-      config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.pattern || "ORB"}`,
+      config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.pattern || "ORB"} · max ${dailyTradeLimit(algo)} trades/day`,
     };
   }
   return {
     kind: "indicator" as const,
     category: "SYSTEMATIC INDICATOR",
-    config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.indicator || "EMA"}`,
+    config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.indicator || "EMA"} · max ${dailyTradeLimit(algo)} trades/day`,
   };
 }
 
@@ -608,9 +608,16 @@ function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
-function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
+function dailyTradeLimit(algo: { maxTradesPerDay?: number; kind?: string }) {
+  const fallback = algo.kind === "nifty-test2" ? 1 : 5;
+  const n = Number(algo.maxTradesPerDay);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(20, Math.round(n)));
+}
+
+function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
   const { refresh } = useMarket();
-  const saved = Math.max(1, Math.round(Number(algo.maxTradesPerDay) || 5));
+  const saved = dailyTradeLimit(algo);
   const [value, setValue] = useState(String(saved));
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -634,14 +641,14 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
   };
 
   return (
-    <label className="mt-2 flex w-full flex-wrap items-center gap-2 text-sm font-bold text-[var(--text)]" data-trade-limit="crude">
-      Trade limit
+    <label className="mt-2 flex w-full flex-wrap items-center gap-2 text-sm font-bold text-[var(--text)]" data-trade-limit="daily">
+      Daily trade limit
       <input
         type="number"
         min={1}
         max={20}
         inputMode="numeric"
-        aria-label="Trade limit"
+        aria-label="Daily trade limit"
         className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
         value={value}
         onChange={(event) => setValue(event.target.value)}
@@ -653,7 +660,7 @@ function CrudeMaxTrades({ algo }: { algo: AlgoStrategy }) {
           }
         }}
       />
-      <span className="font-medium text-slate-400">{saving ? "Saving..." : "Change this number. One signal places one order."}</span>
+      <span className="font-medium text-slate-400">{saving ? "Saving..." : "1–20 entries today. Hedge, reverse, and exit do not use this count."}</span>
     </label>
   );
 }
@@ -835,7 +842,7 @@ function AlgoCard({
         </div>
       </div>
       {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
-      {isCrudeFirstCandleKind(algo) ? <CrudeMaxTrades algo={algo} /> : null}
+      <DailyTradeLimit algo={algo} />
 
       <div className="metric-well mt-4 grid-cols-2 sm:grid-cols-4">
         <Metric label="Live MTM" value={rupee(liveMtm)} tone={moneyClass(liveMtm)} hint={positions.length ? `${brokerMtm ? "Dhan · " : ""}${positions.length} open` : "No open position"} />
