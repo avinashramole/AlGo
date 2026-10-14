@@ -308,3 +308,43 @@ test("copy-master member on a different broker receives both strategies with the
   assert.ok(adminLegs(queued).some((row) => row.strategy === nifty.name && row.brokerId === "dhan"));
   assert.ok(adminLegs(queued).some((row) => row.strategy === crude.name && row.brokerId === "dhan"));
 });
+
+test("NIFTY run still sends the admin Dhan order when a mapped user already has a lot", () => {
+  const user = { id: "u-flow-open-lot", name: "Open Lot", email: "openlot@t2s.app", role: "user" };
+  installLive(user, "upstox", "UPX4400", "open-lot-upstox-token");
+  payMember(user, nifty);
+  replaceDhanBook([
+    {
+      id: "copy-open-nifty",
+      symbol: "NIFTY 24600 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 80,
+      ltp: 90,
+      strategy: nifty.name,
+      brokerId: "upstox",
+      option: "CE",
+      strike: 24600,
+      live: true,
+      copyUserId: user.id,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: nifty.name,
+    side: "BUY",
+    symbol: "NIFTY 24700 CE",
+    qty: 65,
+    lotSize: 65,
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  const master = adminLegs(queued).filter((row) => row.strategy === nifty.name);
+  const copy = queuedFor(queued, user.id);
+  assert.equal(master.length, 1);
+  assert.equal(master[0].brokerId, "dhan");
+  assert.equal(copy.length, 1);
+  assert.equal(copy[0].brokerId, "upstox");
+  replaceDhanBook([]);
+});

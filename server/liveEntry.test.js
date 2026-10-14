@@ -90,6 +90,73 @@ test("an open NIFTY option on another strategy does not block this strategy's or
   drainPendingLiveAlgoOrders();
 });
 
+test("a mapped user's open lot does not block the admin NIFTY broker order", () => {
+  replaceDhanBook([
+    {
+      id: "copy-pos-user",
+      symbol: "NIFTY 23100 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 100,
+      ltp: 110,
+      strategy: "test",
+      brokerId: "dhan",
+      option: "CE",
+      strike: 23100,
+      live: true,
+      copyUserId: "u-nifty-member",
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "test",
+    side: "BUY",
+    symbol: "NIFTY 23100 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23100,
+    kind: "option",
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), true);
+  replaceDhanBook([]);
+});
+
+test("a leftover paper lot does not block the live admin NIFTY broker order", () => {
+  replaceDhanBook([
+    {
+      id: "paper-pos-test",
+      symbol: "NIFTY 23100 CE",
+      type: "BUY",
+      qty: 65,
+      avg: 100,
+      ltp: 110,
+      strategy: "test",
+      brokerId: "paper",
+      paper: true,
+      option: "CE",
+      strike: 23100,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "test",
+    side: "BUY",
+    symbol: "NIFTY 23200 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23200,
+    kind: "option",
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId && row.brokerId === "dhan"), true);
+  replaceDhanBook([]);
+});
+
 test("the same strategy does not queue a second NIFTY option while its lot is open", () => {
   replaceDhanBook([
     {

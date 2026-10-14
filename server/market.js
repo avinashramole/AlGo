@@ -704,6 +704,8 @@ function strategyBuyUnresolved(strategyName) {
   }
   return (state.positions || []).some(
     (row) =>
+      !row.copyUserId &&
+      !isPaperRow(row) &&
       (realStrategyName(row.strategy) || row.strategy) === name &&
       Number(row.qty) > 0 &&
       String(row.type || "BUY").toUpperCase() !== "CLOSED",
@@ -749,16 +751,19 @@ function enqueueLiveAlgoOrder(payload) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
   } else if (side === "BUY") {
-    if (!copyUserId && strategy && strategyBuyUnresolved(strategy)) {
+    const freshAdminEntry = !copyUserId && Boolean((state.algos || []).find((item) => item.name === strategy)?.allowFreshLiveEntry);
+    if (!copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy)) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
     const openSameStrategy =
       !copyUserId &&
+      !freshAdminEntry &&
       niftyBuy &&
       strategy &&
       (state.positions || []).some(
         (row) =>
+          !row.copyUserId &&
           !isPaperRow(row) &&
           orderBrokerId(row) === brokerId &&
           PositionManager.isOpenNiftyOption(row) &&
@@ -769,6 +774,10 @@ function enqueueLiveAlgoOrder(payload) {
     }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId, copyUserId });
+  if (!copyUserId && side === "BUY") {
+    const algo = (state.algos || []).find((item) => item.name === strategy);
+    if (algo) algo.allowFreshLiveEntry = false;
+  }
   return { ok: true, queued: true, status: "PENDING" };
 }
 
@@ -963,15 +972,15 @@ export function queueLiveAlgoOrder(payload) {
     algoBrokerId: deskStamped?.brokerId || "dhan",
   });
   const targets = brokers.length ? brokers : [orderBrokerId(deskStamped)];
-  let last = { ok: true, queued: true, status: "PENDING" };
+  let adminResult = { ok: true, queued: true, status: "PENDING" };
   for (const brokerId of targets) {
-    last = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
+    adminResult = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
   if (!payload.skipMemberCopy) {
     if (!paperOnlyMemberCopies(deskStamped)) {
       const algo = liveCopyAlgo(deskStamped);
       for (const copy of memberCopiesForOrder(deskStamped, algo || {})) {
-        last = enqueueLiveAlgoOrder(copy);
+        enqueueLiveAlgoOrder(copy);
       }
     }
   }
@@ -983,7 +992,7 @@ export function queueLiveAlgoOrder(payload) {
       console.log(`Live order flush failed: ${error?.message || error}`);
     }
   });
-  return last;
+  return adminResult;
 }
 
 export function queueLivePositionExit(pos) {
@@ -1279,6 +1288,7 @@ function positionsForStrategyName(algo, mode) {
   const legs = Array.isArray(t2?.legs) ? t2.legs : [];
   const symbol = optionAlgoSymbol(algo);
   const mine = (row) => {
+    if (row.copyUserId) return false;
     const tagged = realStrategyName(row.strategy) || row.strategy;
     if (tagged && tagged !== algo.name) return false;
     if (tagged === algo.name) return true;
@@ -1303,6 +1313,7 @@ function positionsForNiftyVwap(algo, mode) {
   const vs = runtimeState(algo);
   const symbol = optionAlgoSymbol(algo);
   const mine = (row) => {
+    if (row.copyUserId) return false;
     if (row.strategy && row.strategy !== algo.name) return false;
     if (row.strategy === algo.name) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
@@ -1317,6 +1328,7 @@ function positionsForNiftyVwap(algo, mode) {
 function positionsForHedge(algo, mode) {
   const rows = state.positions || [];
   const mine = (row) => {
+    if (row.copyUserId) return false;
     const tagged = realStrategyName(row.strategy);
     if (tagged && tagged !== algo.name) return false;
     if (tagged === algo.name) return true;
@@ -1373,6 +1385,7 @@ function dropPreviousIntradayBook(algo, today = VwapSignalEngine.sessionKeyIST(D
 }
 
 function beginStrategyRecord(algo) {
+  if (algo) algo.allowFreshLiveEntry = true;
   if (isNiftyOptionEngineAlgo(algo) || isCrudeFirstCandleAlgo(algo) || isNiftyTest1Algo(algo) || isNiftyTest2Algo(algo)) {
     const vs = runtimeState(algo);
     PositionManager.clearOpen(vs);

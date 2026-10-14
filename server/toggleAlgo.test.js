@@ -7,7 +7,7 @@ import test from "node:test";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
-const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, dropClientFromStrategies, getAlgo, listAlgos, queueLiveAlgoOrder, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
+const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, dropClientFromStrategies, getAlgo, listAlgos, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
 const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
@@ -168,6 +168,54 @@ test("paper or stopped strategies keep admin and user BUY on paper only", () => 
     assert.equal(afterStop.blocked, true);
   } finally {
     deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("starting NIFTY live sends the admin broker order even if a leftover lot is still on the book", () => {
+  setDhanFeed({ live: true });
+  const stamp = Date.now();
+  const name = `NIFTY admin run ${stamp}`;
+  const created = createAlgo({ name, kind: "nifty-first-candle", runMode: "live" });
+  drainPendingLiveAlgoOrders();
+  try {
+    replaceDhanBook([
+      {
+        id: "dhan-pos-leftover",
+        symbol: "NIFTY 23100 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 100,
+        ltp: 110,
+        strategy: name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 23100,
+        live: true,
+      },
+    ]);
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    const result = queueLiveAlgoOrder({
+      strategy: name,
+      side: "BUY",
+      qty: 65,
+      symbol: "NIFTY 23200 CE",
+      option: "CE",
+      strike: 23200,
+      brokerId: "dhan",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(result.queued, true);
+    const queued = drainPendingLiveAlgoOrders().filter((row) => row.strategy === name && !row.copyUserId);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].brokerId, "dhan");
+    assert.equal(queued[0].symbol, "NIFTY 23200 CE");
+  } finally {
+    deleteAlgo(created.id);
+    replaceDhanBook([]);
     drainPendingLiveAlgoOrders();
     setDhanFeed({ live: false });
   }
