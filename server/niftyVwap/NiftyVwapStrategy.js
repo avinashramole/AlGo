@@ -10,6 +10,33 @@ import { TradeLogger } from "./TradeLogger.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
 import { VwapSignalEngine, istWallTime, sessionKeyIST } from "./VwapSignalEngine.js";
 
+/** After this, SENDING / WAIT ORDER with no book is treated as a lost flush and can retry. */
+export const STALE_LIVE_SEND_MS = 20_000;
+
+function isDeadBuy(row) {
+  const status = String(row?.status || "").toUpperCase();
+  return ["REJECTED", "CANCELLED", "FAILED", "EXPIRED"].includes(status) && !(Number(row?.filledQty) > 0);
+}
+
+function isWorkingBuy(row) {
+  const status = String(row?.status || "").toUpperCase();
+  return !["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status);
+}
+
+function shouldReleaseEntryLock(state, { buys = [], now } = {}) {
+  const working = (buys || []).some(isWorkingBuy);
+  if (working) return { release: false, clearBar: false };
+  const rejected = (buys || []).length > 0 && (buys || []).every(isDeadBuy);
+  const entryMs = Number(state?.lastEntryAt) || 0;
+  const entryDay = entryMs > 0 ? sessionKeyIST(entryMs) : "";
+  const previousDay = Boolean(entryDay) && entryDay < sessionKeyIST(now);
+  const staleEmpty = entryMs > 0 && now - entryMs >= STALE_LIVE_SEND_MS;
+  if (rejected || previousDay || staleEmpty) {
+    return { release: true, clearBar: previousDay || staleEmpty };
+  }
+  return { release: false, clearBar: false };
+}
+
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
@@ -482,24 +509,16 @@ export const NiftyVwapStrategy = {
       const buys = (input.orders || []).filter(
         (row) => !row?.copyUserId && String(row.strategy || "") === algo.name && String(row.side || "BUY").toUpperCase() !== "SELL",
       );
-      const rejected =
-        buys.length > 0 &&
-        buys.every((row) => {
-          const status = String(row.status || "").toUpperCase();
-          return (status === "REJECTED" || status === "CANCELLED" || status === "FAILED" || status === "EXPIRED") && !(Number(row.filledQty) > 0);
-        });
-      const entryMs = Number(state.lastEntryAt) || 0;
-      const entryDay = entryMs > 0 ? sessionKeyIST(entryMs) : "";
-      const previousDay = !entryDay || entryDay < sessionKeyIST(now);
-      if ((rejected || previousDay) && !state.inFlight) {
+      const decision = shouldReleaseEntryLock(state, { buys, now });
+      if (decision.release) {
         state.buyPhase = "";
         state.inFlight = false;
-        if (previousDay) {
+        if (decision.clearBar) {
           state.lastEntryBarTime = 0;
           state.lastEntryAt = 0;
           state.sentSignalBarTime = 0;
         }
-        if (previousDay || !state.fillPrice) PositionManager.clearOpen(state);
+        if (decision.clearBar || !state.fillPrice) PositionManager.clearOpen(state);
       } else {
         algo.lastSignal = "WAIT ORDER";
         return { action: "skip", reason: "buy-active" };
@@ -513,8 +532,23 @@ export const NiftyVwapStrategy = {
     }
 
     if (state.inFlight && !open) {
-      algo.lastSignal = "WAIT ORDER";
-      return { action: "skip", reason: "buy-active" };
+      const buys = (input.orders || []).filter(
+        (row) => !row?.copyUserId && String(row.strategy || "") === algo.name && String(row.side || "BUY").toUpperCase() !== "SELL",
+      );
+      const decision = shouldReleaseEntryLock(state, { buys, now });
+      if (decision.release) {
+        state.inFlight = false;
+        state.buyPhase = "";
+        if (decision.clearBar) {
+          state.lastEntryBarTime = 0;
+          state.lastEntryAt = 0;
+          state.sentSignalBarTime = 0;
+        }
+        if (!state.fillPrice) PositionManager.clearOpen(state);
+      } else {
+        algo.lastSignal = "WAIT ORDER";
+        return { action: "skip", reason: "buy-active" };
+      }
     }
 
     if (config.intradayOnly && minutesToClose <= config.eodSquareOffMinutes) {

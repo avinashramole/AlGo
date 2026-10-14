@@ -63,6 +63,7 @@ import {
   resetSession,
   runtimeState,
   runNiftyVwapBacktest,
+  STALE_LIVE_SEND_MS,
   VwapSignalEngine,
 } from "./niftyVwap/index.js";
 import {
@@ -641,6 +642,97 @@ export function drainPendingLiveAlgoOrders() {
   return pendingLiveAlgoOrders.splice(0, pendingLiveAlgoOrders.length);
 }
 
+export function requeueLiveAlgoOrders(rows = []) {
+  let n = 0;
+  for (const row of rows || []) {
+    if (!row || typeof row !== "object") continue;
+    const already = pendingLiveAlgoOrders.some(
+      (pending) =>
+        pending === row ||
+        (String(pending?.copyUserId || "") === String(row.copyUserId || "") &&
+          orderBrokerId(pending) === orderBrokerId(row) &&
+          liveOrderSide(pending) === liveOrderSide(row) &&
+          sameLiveContract(pending, row) &&
+          String(pending.strategy || "") === String(row.strategy || "")),
+    );
+    if (already) continue;
+    pendingLiveAlgoOrders.push(row);
+    n += 1;
+  }
+  return n;
+}
+
+function strategyHasPendingBuy(name) {
+  const strategy = realStrategyName(name) || String(name || "");
+  if (!strategy) return false;
+  return pendingLiveAlgoOrders.some(
+    (row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === strategy && liveOrderSide(row) === "BUY",
+  );
+}
+
+function strategyHasWorkingBuy(name) {
+  const strategy = realStrategyName(name) || String(name || "");
+  if (!strategy) return false;
+  return (state.orders || []).some(
+    (row) =>
+      !row.copyUserId &&
+      (realStrategyName(row.strategy) || row.strategy) === strategy &&
+      liveOrderSide(row) === "BUY" &&
+      orderIsWorking(row),
+  );
+}
+
+function strategyHasOpenLot(name) {
+  const strategy = realStrategyName(name) || String(name || "");
+  if (!strategy) return false;
+  return (state.positions || []).some(
+    (row) =>
+      !row.copyUserId &&
+      !isPaperRow(row) &&
+      (realStrategyName(row.strategy) || row.strategy) === strategy &&
+      Number(row.qty) > 0 &&
+      String(row.type || "BUY").toUpperCase() !== "CLOSED",
+  );
+}
+
+export function releaseStaleLiveSend(algo, now = Date.now()) {
+  if (!algo) return false;
+  const vs = algo.vwapState || algo.test1State;
+  if (!vs) return false;
+  const locked = String(vs.buyPhase || "") === "entry" || vs.inFlight;
+  if (!locked) return false;
+  const name = String(algo.name || "");
+  if (strategyHasPendingBuy(name) || strategyHasWorkingBuy(name) || strategyHasOpenLot(name)) return false;
+  const entryMs = Number(vs.lastEntryAt) || 0;
+  if (entryMs > 0 && now - entryMs < STALE_LIVE_SEND_MS) return false;
+  vs.buyPhase = "";
+  vs.inFlight = false;
+  vs.lastEntryBarTime = 0;
+  vs.sentSignalBarTime = 0;
+  if (!vs.fillPrice) PositionManager.clearOpen(vs);
+  algo.allowFreshLiveEntry = true;
+  return true;
+}
+
+export function kickLiveAlgoFlush() {
+  try {
+    notifyLiveAlgoOrders();
+  } catch (error) {
+    console.log(`Live order flush failed: ${error?.message || error}`);
+  }
+}
+
+function scheduleLiveAlgoFlush() {
+  kickLiveAlgoFlush();
+  queueMicrotask(() => {
+    try {
+      notifyLiveAlgoOrders();
+    } catch (error) {
+      console.log(`Live order flush failed: ${error?.message || error}`);
+    }
+  });
+}
+
 function liveOrderSide(row) {
   return row?.side === "SELL" ? "SELL" : "BUY";
 }
@@ -1019,13 +1111,7 @@ export function queueLiveAlgoOrder(payload) {
     }
   }
   if (typeof onLiveBookChange === "function") onLiveBookChange();
-  queueMicrotask(() => {
-    try {
-      notifyLiveAlgoOrders();
-    } catch (error) {
-      console.log(`Live order flush failed: ${error?.message || error}`);
-    }
-  });
+  scheduleLiveAlgoFlush();
   return adminResult;
 }
 
@@ -1675,6 +1761,7 @@ function tickNiftyTest2Algo(algo, mode, feedLive) {
 
 function tickNiftyVwapAlgo(algo, mode, feedLive) {
   const now = Date.now();
+  if (mode === "live") releaseStaleLiveSend(algo, now);
   const today = VwapSignalEngine.sessionKeyIST(now);
   dropPreviousIntradayBook(algo, today);
   const crude = isCrudeFirstCandleAlgo(algo);
@@ -2602,6 +2689,7 @@ export function tickMarket() {
   tickBusy = true;
   try {
     runDeskAlgosSafely();
+    if (pendingLiveAlgoOrders.length) kickLiveAlgoFlush();
   } catch (error) {
     console.error(`tickMarket failed: ${error.message || error}`);
   } finally {

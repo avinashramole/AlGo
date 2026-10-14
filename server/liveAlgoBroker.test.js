@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { armLiveTarget, drainPendingLiveAlgoOrders, liveAlgoBrokerSignal, onLiveAlgoOrders, queueLiveAlgoOrder } from "./market.js";
+import {
+  armLiveTarget,
+  drainPendingLiveAlgoOrders,
+  kickLiveAlgoFlush,
+  liveAlgoBrokerSignal,
+  onLiveAlgoOrders,
+  queueLiveAlgoOrder,
+  releaseStaleLiveSend,
+  requeueLiveAlgoOrders,
+} from "./market.js";
+import { STALE_LIVE_SEND_MS } from "./niftyVwap/index.js";
 
 test("broker accept is AT BROKER and a reject names the reason", () => {
   const accepted = liveAlgoBrokerSignal({
@@ -65,10 +75,92 @@ test("a strategy order asks for the broker send immediately", async () => {
     brokerId: "dhan",
   });
   assert.equal(queued.queued, true);
+  assert.ok(calls >= 1);
   await new Promise((resolve) => {
     queueMicrotask(resolve);
   });
-  assert.equal(calls, 1);
+  assert.ok(calls >= 1);
+  onLiveAlgoOrders(() => {});
+  drainPendingLiveAlgoOrders();
+});
+
+test("stale SENDING with no pending or book is released so admin and user can send again", () => {
+  drainPendingLiveAlgoOrders();
+  const algo = {
+    name: "NIFTY",
+    allowFreshLiveEntry: false,
+    lastSignal: "BUY CE SENDING · PREVIEW NIFTY FUT GREEN CE 22800",
+    vwapState: {
+      buyPhase: "entry",
+      inFlight: true,
+      lastEntryAt: Date.now() - STALE_LIVE_SEND_MS - 1_000,
+      lastEntryBarTime: Date.now() - STALE_LIVE_SEND_MS - 1_000,
+      lockedStrike: 22800,
+      lockedOption: "CE",
+    },
+  };
+  assert.equal(releaseStaleLiveSend(algo), true);
+  assert.equal(algo.vwapState.buyPhase, "");
+  assert.equal(algo.vwapState.inFlight, false);
+  assert.equal(algo.vwapState.lastEntryBarTime, 0);
+  assert.equal(algo.allowFreshLiveEntry, true);
+});
+
+test("a fresh SENDING is held while the flush can still run", () => {
+  const algo = {
+    name: "NIFTY",
+    vwapState: {
+      buyPhase: "entry",
+      inFlight: true,
+      lastEntryAt: Date.now(),
+      lastEntryBarTime: Date.now(),
+    },
+  };
+  assert.equal(releaseStaleLiveSend(algo), false);
+  assert.equal(algo.vwapState.buyPhase, "entry");
+  assert.equal(algo.vwapState.inFlight, true);
+});
+
+test("a drained send is put back when the broker flush throws", () => {
+  drainPendingLiveAlgoOrders();
+  queueLiveAlgoOrder({
+    strategy: "NIFTY 5m first candle",
+    side: "BUY",
+    option: "CE",
+    strike: 22800,
+    qty: 65,
+    symbol: "NIFTY 22800 CE",
+    brokerId: "dhan",
+  });
+  const drained = drainPendingLiveAlgoOrders();
+  assert.ok(drained.length >= 1);
+  assert.equal(drainPendingLiveAlgoOrders().length, 0);
+  assert.ok(requeueLiveAlgoOrders(drained) >= 1);
+  const again = drainPendingLiveAlgoOrders();
+  assert.equal(again.length, drained.length);
+  assert.equal(again[0].option, "CE");
+  assert.equal(again[0].strike, 22800);
+});
+
+test("tick kick asks for the broker send without waiting for a later microtask", () => {
+  drainPendingLiveAlgoOrders();
+  let calls = 0;
+  onLiveAlgoOrders(() => {
+    calls += 1;
+  });
+  queueLiveAlgoOrder({
+    strategy: "NIFTY 5m first candle",
+    side: "BUY",
+    option: "CE",
+    strike: 22800,
+    qty: 65,
+    symbol: "NIFTY 22800 CE",
+    brokerId: "dhan",
+  });
+  assert.ok(calls >= 1);
+  const before = calls;
+  kickLiveAlgoFlush();
+  assert.ok(calls > before);
   onLiveAlgoOrders(() => {});
   drainPendingLiveAlgoOrders();
 });

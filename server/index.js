@@ -71,6 +71,7 @@ import {
   fanOutAdminOrderCopies,
   noteLiveAlgoOrderResult,
   onLiveAlgoOrders,
+  requeueLiveAlgoOrders,
   suppressArmedTarget,
   takeSuppressedTargetOrder,
   bookRejectedLiveOrder,
@@ -141,10 +142,17 @@ async function sendLiveBrokerOrder(payload) {
 async function flushLiveAlgoOrders() {
   const queued = drainPendingLiveAlgoOrders();
   if (!queued.length) return;
-  const outcomes = await sendQueuedLiveOrders(queued, {
-    sendAdmin: (payload) => sendLiveBrokerOrder(payload),
-    sendCopy: (payload) => sendMemberCopyOrder(payload),
-  });
+  let outcomes;
+  try {
+    outcomes = await sendQueuedLiveOrders(queued, {
+      sendAdmin: (payload) => sendLiveBrokerOrder(payload),
+      sendCopy: (payload) => sendMemberCopyOrder(payload),
+    });
+  } catch (error) {
+    requeueLiveAlgoOrders(queued);
+    console.log(`Strategy live flush failed; requeued ${queued.length}: ${error?.message || error}`);
+    return;
+  }
   for (const item of outcomes) {
       const payload = item.payload || {};
       const brokerId = item.brokerId || String(payload.brokerId || "dhan");

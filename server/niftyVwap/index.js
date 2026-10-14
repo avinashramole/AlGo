@@ -9,4 +9,4 @@ export { OrderExecutionService } from "./OrderExecutionService.js";
 export { PaperTradingAdapter } from "./PaperTradingAdapter.js";
 export { LiveTradingAdapter } from "./LiveTradingAdapter.js";
 export { BacktestAdapter, runNiftyVwapBacktest } from "./BacktestAdapter.js";
-export { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
+export { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect, STALE_LIVE_SEND_MS } from "./NiftyVwapStrategy.js";

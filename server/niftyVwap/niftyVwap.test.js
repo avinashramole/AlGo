@@ -3,7 +3,7 @@ import test from "node:test";
 import { OptionStrikeSelector } from "./OptionStrikeSelector.js";
 import { RiskManager } from "./RiskManager.js";
 import { TrailingStopManager } from "./TrailingStopManager.js";
-import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect } from "./NiftyVwapStrategy.js";
+import { NiftyVwapStrategy, noteBrokerRejection, noteFeedReconnect, STALE_LIVE_SEND_MS } from "./NiftyVwapStrategy.js";
 import { crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyOptionEngineAlgo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, niftyFirstCandleConfig, niftyVwapConfig, niftyVwapReversalConfig } from "./config.js";
 import { VwapSignalEngine, completedCandles, firstFuturesBias, lastBarVwapReversal, sessionBarOpenMs, aggregateSessionBars, sessionVwap, nextCandleEntryWindow } from "./VwapSignalEngine.js";
 import { normalizeAlgo, seedAlgos } from "../strategies.js";
@@ -2466,22 +2466,22 @@ test("an already-rolled session still releases yesterday's entry when nothing is
   assert.equal(algo.vwapState.sessionTrades, 2);
 });
 
-test("same-day entry lock stays while the order book is still empty", () => {
+test("same-day entry lock stays while a fresh SENDING can still flush", () => {
   const algo = defaultNiftyFirstCandleAlgo({ name: "Same day lock" });
   algo.vwapState = {
     sessionDate: "2026-08-21",
     buyPhase: "entry",
-    inFlight: false,
+    inFlight: true,
     lastEntryAt: T0_0900,
     lastEntryBarTime: T0_0900,
   };
   const tick = NiftyVwapStrategy.tick({
     algo,
-    now: T0_0900 + 2 * BAR,
+    now: T0_0900 + 5_000,
     feedLive: true,
     minutesToClose: 360,
-    futuresBars: [firstBar(24500, 24540), { time: T0_0900 + BAR, open: 24540, high: 24580, low: 24520, close: 24560, volume: 1000 }],
-    ceBars: [firstBar(100, 118), { time: T0_0900 + BAR, open: 118, high: 140, low: 110, close: 130, volume: 500 }],
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
     peBars: [firstBar(110, 96)],
     ceLtp: 130,
     peLtp: 96,
@@ -2494,6 +2494,52 @@ test("same-day entry lock stays while the order book is still empty", () => {
   });
   assert.equal(tick.reason, "buy-active");
   assert.equal(algo.lastSignal, "WAIT ORDER");
+  assert.equal(algo.vwapState.buyPhase, "entry");
+});
+
+test("stale SENDING with no book retries the same BUY CE", () => {
+  const algo = defaultNiftyFirstCandleAlgo({ name: "Stale sending retry" });
+  const places = [];
+  algo.vwapState = {
+    sessionDate: "2026-08-21",
+    buyPhase: "entry",
+    inFlight: true,
+    lastEntryAt: T0_0900 + BAR,
+    lastEntryBarTime: T0_0900,
+    lockedStrike: 24550,
+    lockedOption: "CE",
+    lockedSymbol: "NIFTY 24550 CE",
+  };
+  algo.lastSignal = "BUY CE SENDING · PREVIEW NIFTY FUT GREEN CE 24550";
+  const tick = NiftyVwapStrategy.tick({
+    algo,
+    now: T0_0900 + BAR + STALE_LIVE_SEND_MS + 1_000,
+    feedLive: true,
+    minutesToClose: 360,
+    futuresBars: [firstBar(24500, 24540)],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    ceLtp: 118,
+    peLtp: 96,
+    spot: 24540,
+    step: 50,
+    expiry: "2026-08-27",
+    positions: [],
+    orders: [],
+    adapter: {
+      place(payload) {
+        places.push(payload);
+        return { queued: true, status: "PENDING" };
+      },
+      exit() {
+        return {};
+      },
+    },
+  });
+  assert.equal(tick.action, "queued");
+  assert.equal(places.length, 1);
+  assert.equal(places[0].option, "CE");
+  assert.equal(algo.lastSignal, "BUY CE SENDING");
   assert.equal(algo.vwapState.buyPhase, "entry");
 });
 
