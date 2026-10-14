@@ -20,6 +20,7 @@ import {
   snapshot,
   tickMarket,
   toggleAlgo,
+  withLiveAlgo,
 } from "./market.js";
 
 const OPEN_0915 = Date.parse("2026-09-29T03:45:00.000Z");
@@ -518,4 +519,74 @@ test("a mixed NIFTY FUT bar does not print MIDCP close or a 13450 strike", () =>
   assert.match(shown, /O 22285\.70 C 22285\.70/);
   assert.doesNotMatch(shown, /13459|13450|WAIT PE 13450/);
   setNiftyFutureChartCandles([]);
+});
+
+const OPEN_1200 = Date.parse("2026-10-14T06:30:00.000Z");
+const FIFTEEN = 15 * 60 * 1000;
+
+test("12:00–12:15 WAIT ORDER BUY PE 22750 sends the live admin order", () => {
+  const after1215 = OPEN_1200 + FIFTEEN + 60_000;
+  const realNow = Date.now;
+  const created = createAlgo({
+    name: "NIFTY 15m wait PE 22750",
+    kind: "nifty-first-candle",
+    runMode: "live",
+    expiryKind: "weekly",
+    timeframe: "15m",
+  });
+  drainPendingLiveAlgoOrders();
+  try {
+    Date.now = () => after1215;
+    setDhanFeed({ live: true, source: "websocket", lastTickAt: after1215 });
+    setNiftyFutureChartCandles([
+      { time: OPEN_1200, open: 22759.9, high: 22762, low: 22748, close: 22750, volume: 40 },
+    ]);
+    setOptionDesk({
+      symbol: "NIFTY",
+      expiry: WEEKLY_EXPIRY,
+      expiries: [WEEKLY_EXPIRY],
+      rows: [{ strike: 22750, atm: true, callLtp: 80, putLtp: 110, callId: "ce-22750", putId: "pe-22750" }],
+      spot: 22750,
+      source: "dhan",
+    });
+    toggleAlgo(created.id, { enabled: true });
+    withLiveAlgo(created.id, (algo) => {
+      algo.lastSignal =
+        "WAIT ORDER · PREVIEW NIFTY FUT RED CE 22750 RED PE 22750 GREEN O 22759.90 C 22750.00 · 12:00–12:15 IST · BUY PE 22750";
+      algo.vwapState = {
+        ...(algo.vwapState || {}),
+        sessionDate: "2026-10-14",
+        buyPhase: "entry",
+        inFlight: true,
+        lastEntryAt: after1215,
+        lastEntryBarTime: OPEN_1200,
+        lockedStrike: 22750,
+        lockedOption: "PE",
+        lockedSymbol: "NIFTY 22750 PE",
+        ceStrike: 22750,
+        peStrike: 22750,
+        ceBars: [{ time: OPEN_1200, open: 100, high: 100, low: 78, close: 80, volume: 8 }],
+        peBars: [{ time: OPEN_1200, open: 90, high: 112, low: 88, close: 110, volume: 8 }],
+        sampledTimeframe: "15m",
+      };
+    });
+    tickMarket();
+    const desk = snapshot();
+    const algo = desk.algos.find((row) => row.id === created.id);
+    const queued = drainPendingLiveAlgoOrders().filter(
+      (row) => row.strategy === created.name && row.side === "BUY" && !row.copyUserId,
+    );
+    assert.equal(queued.length >= 1, true, String(algo?.lastSignal || ""));
+    assert.equal(queued[0].option, "PE");
+    assert.equal(Number(queued[0].strike), 22750);
+    assert.match(String(algo.lastSignal || ""), /BUY PE/, String(algo.lastSignal || ""));
+    assert.doesNotMatch(String(algo.lastSignal || ""), /^WAIT ORDER\b/);
+  } finally {
+    Date.now = realNow;
+    toggleAlgo(created.id, { enabled: false });
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setNiftyFutureChartCandles([]);
+    setDhanFeed({ live: false, source: "idle", lastTickAt: null });
+  }
 });

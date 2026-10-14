@@ -7,6 +7,7 @@ import {
   liveAlgoBrokerSignal,
   onLiveAlgoOrders,
   queueLiveAlgoOrder,
+  recoverWaitOrderLiveBuy,
   releaseStaleLiveSend,
   requeueLiveAlgoOrders,
 } from "./market.js";
@@ -104,6 +105,110 @@ test("stale SENDING with no pending or book is released so admin and user can se
   assert.equal(algo.vwapState.inFlight, false);
   assert.equal(algo.vwapState.lastEntryBarTime, 0);
   assert.equal(algo.allowFreshLiveEntry, true);
+});
+
+test("leftover WAIT ORDER with no book is released so admin and user can send", () => {
+  drainPendingLiveAlgoOrders();
+  const algo = {
+    name: "NIFTY",
+    allowFreshLiveEntry: false,
+    lastSignal: "WAIT ORDER · PREVIEW NIFTY FUT RED CE 22750 RED PE 22750 GREEN · BUY PE 22750",
+    vwapState: {
+      buyPhase: "entry",
+      inFlight: true,
+      lastEntryAt: Date.now(),
+      lastEntryBarTime: Date.now(),
+      lockedStrike: 22750,
+      lockedOption: "PE",
+    },
+  };
+  assert.equal(releaseStaleLiveSend(algo), true);
+  assert.equal(algo.vwapState.buyPhase, "");
+  assert.equal(algo.allowFreshLiveEntry, true);
+});
+
+test("leftover buyPhase does not block a fresh admin BUY when nothing is pending", async () => {
+  drainPendingLiveAlgoOrders();
+  const { createAlgo, deleteAlgo, toggleAlgo, setDhanFeed, withLiveAlgo } = await import("./market.js");
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    name: `NIFTY leftover phase ${Date.now()}`,
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    withLiveAlgo(created.id, (algo) => {
+      algo.vwapState = { ...(algo.vwapState || {}), buyPhase: "entry", inFlight: true };
+      algo.allowFreshLiveEntry = false;
+    });
+    const queued = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      option: "PE",
+      strike: 22750,
+      qty: 65,
+      price: 110,
+      symbol: "NIFTY 22750 PE",
+      brokerId: "dhan",
+    });
+    assert.equal(queued.queued, true);
+    const rows = drainPendingLiveAlgoOrders().filter((row) => row.strategy === created.name && !row.copyUserId);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].option, "PE");
+    assert.equal(Number(rows[0].strike), 22750);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("recoverWaitOrderLiveBuy queues BUY PE 22750 for admin when the tape is WAIT ORDER", async () => {
+  drainPendingLiveAlgoOrders();
+  const { createAlgo, deleteAlgo, toggleAlgo, setDhanFeed, withLiveAlgo } = await import("./market.js");
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    name: `NIFTY wait PE ${Date.now()}`,
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const live = withLiveAlgo(created.id, (algo) => {
+      algo.lastSignal =
+        "WAIT ORDER · PREVIEW NIFTY FUT RED CE 22750 RED PE 22750 GREEN O 22759.90 C 22750.00 · 12:00–12:15 IST · BUY PE 22750";
+      algo.vwapState = {
+        ...(algo.vwapState || {}),
+        buyPhase: "entry",
+        inFlight: true,
+        lastEntryAt: Date.now(),
+        lockedStrike: 22750,
+        lockedOption: "PE",
+      };
+      return algo;
+    });
+    const recovered = recoverWaitOrderLiveBuy(live, {
+      peStrike: 22750,
+      ceStrike: 22750,
+      peLtp: 110,
+      ceLtp: 80,
+      peSecurityId: "pe-22750",
+      ceSecurityId: "ce-22750",
+      expiry: "2026-10-14",
+      config: { qty: 65, lots: 1, lotSize: 65, symbol: "NIFTY" },
+      now: Date.now(),
+    });
+    assert.equal(recovered, true);
+    assert.match(String(live.lastSignal || ""), /BUY PE SENDING/);
+    const rows = drainPendingLiveAlgoOrders().filter((row) => row.strategy === created.name);
+    assert.ok(rows.some((row) => !row.copyUserId && row.option === "PE" && Number(row.strike) === 22750));
+    assert.equal(rows.find((row) => !row.copyUserId).securityId, "pe-22750");
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
 });
 
 test("a fresh SENDING is held while the flush can still run", () => {
