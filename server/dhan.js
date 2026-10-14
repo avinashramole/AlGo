@@ -865,7 +865,7 @@ function mapDhanOrders(raw, algos = []) {
     securityId: String(row.securityId || ""),
     live: true,
     sim: false,
-    reason: row.omsErrorDescription || row.rejectedReason || "",
+    reason: row.omsErrorDescription || row.rejectedReason || remarkText(row.remarks) || "",
     createdAt: row.createTime || row.updateTime || new Date().toISOString(),
   };
   });

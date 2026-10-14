@@ -1,3 +1,9 @@
+export function isBrokerFillNote(text?: string | null) {
+  return /trade confirmed|order confirmed|^confirmed$|^sent to dhan\b|^traded$|^filled$|^success$/.test(
+    String(text || "").trim().toLowerCase(),
+  );
+}
+
 export function orderExitReason(row?: { role?: string; reason?: string; exitReason?: string } | null) {
   const role = String(row?.role || "").toLowerCase();
   const tagged = `${row?.exitReason || ""} ${row?.reason || ""}`.toLowerCase();
@@ -6,16 +12,20 @@ export function orderExitReason(row?: { role?: string; reason?: string; exitReas
     return "TRAILING SL HIT";
   }
   if (role === "sl" || (/\bsl\b|stop[\s-]?loss|sl hit/.test(tagged) && !brokerFail)) return "SL HIT";
-  if (role === "target" || role === "tgt" || (/\btgt\b|target|tgt done/.test(tagged) && (role === "target" || role === "tgt" || !brokerFail))) {
-    return "TGT DONE";
+  if (role === "target" || role === "tgt" || (/\btgt\b|target|tgt done|tgt hit/.test(tagged) && (role === "target" || role === "tgt" || !brokerFail))) {
+    return "TGT HIT";
   }
   return "";
 }
 
 export function displayOrderReason(row?: { role?: string; reason?: string; exitReason?: string } | null) {
-  return orderExitReason(row) || String(row?.reason || "").trim();
+  const labeled = orderExitReason(row);
+  if (labeled) return labeled;
+  const text = String(row?.reason || "").trim();
+  if (isBrokerFillNote(text)) return "";
+  return text;
 }
 
 export function isExitHitReason(text: string) {
-  return text === "SL HIT" || text === "TGT DONE" || text === "TRAILING SL HIT";
+  return text === "SL HIT" || text === "TGT HIT" || text === "TGT DONE" || text === "TRAILING SL HIT";
 }

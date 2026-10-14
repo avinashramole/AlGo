@@ -1134,3 +1134,37 @@ test("local mo pending is dropped from the user book and broker rows keep strate
   assert.equal(exit.exitReason, "TRAILING SL HIT");
   assert.equal(desk.orders.some((row) => row.status === "PENDING"), false);
 });
+
+test("user book stamps SL HIT on a cheaper Dhan SELL instead of TRADE CONFIRMED", () => {
+  const member = { id: "u-book-sl-hit", name: "Book SL", email: "book.sl@t2s.app", role: "user" };
+  selectMemberBroker({ user: member, brokerId: "dhan" });
+  installMemberBroker({ user: member, brokerId: "dhan", clientId: "11009050", accessToken: "book-sl-token" });
+  applyMemberDhanOrderStatuses(member.id, [
+    {
+      orderId: "crude-user-buy",
+      tradingSymbol: "CRUDEOIL-15Oct2026-9050-PE",
+      transactionType: "BUY",
+      quantity: 1,
+      averageTradedPrice: 116.1,
+      orderStatus: "TRADED",
+      remarks: "TRADE CONFIRMED",
+      createTime: "2026-10-14T10:41:50.000Z",
+    },
+    {
+      orderId: "crude-user-sell",
+      tradingSymbol: "CRUDEOIL-15Oct2026-9050-PE",
+      transactionType: "SELL",
+      quantity: 1,
+      averageTradedPrice: 95.7,
+      orderStatus: "TRADED",
+      remarks: "TRADE CONFIRMED",
+      createTime: "2026-10-04T11:23:30.000Z",
+    },
+  ]);
+  const desk = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  const sell = (desk.orderHistory || []).find((row) => row.id === "crude-user-sell");
+  const buy = (desk.orderHistory || []).find((row) => row.id === "crude-user-buy");
+  assert.equal(sell?.reason, "SL HIT");
+  assert.equal(sell?.exitReason, "SL HIT");
+  assert.equal(buy?.reason || "", "");
+});

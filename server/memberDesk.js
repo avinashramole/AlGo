@@ -13,7 +13,7 @@ import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 import { firstCandleNameAliases } from "./niftyVwap/config.js";
 import { markContractToMarket } from "./positionMark.js";
-import { exitReasonLabel, keepExitReason } from "./exitReason.js";
+import { exitReasonLabel, keepExitReason, stampExitReasons } from "./exitReason.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1365,7 +1365,12 @@ function brokerOrderPrice(row) {
 }
 
 function brokerOrderReason(row) {
-  return String(row?.omsErrorDescription || row?.rejectedReason || row?.reason || row?.errorMessage || "").trim();
+  const remarks = row?.remarks;
+  const remarkText =
+    typeof remarks === "string"
+      ? remarks
+      : String(remarks?.error_message || remarks?.errorMessage || remarks?.message || "").trim();
+  return String(row?.omsErrorDescription || row?.rejectedReason || row?.reason || row?.errorMessage || remarkText || "").trim();
 }
 
 function dropUnfilledMemberPosition(desk, order) {
@@ -1600,6 +1605,7 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
   desk.orders = working;
   const ghostsDropped = dropGhostMemberOrders(desk);
   desk.orderHistory = (desk.orderHistory || []).filter((row) => isStoredHistoryMemberOrder(row?.status)).slice(0, 400);
+  stampExitReasons([...(desk.orders || []), ...(desk.orderHistory || [])]);
   const alertsChanged = reconcileCopyAlerts(desk);
   if (!updates.length && !alertsChanged && !ghostsDropped && !droppedStale) return [];
   persist();
@@ -2033,6 +2039,7 @@ export function getMemberDesk({ user, enrollments = [], algos = [], quote, admin
   if (book.positions.length && typeof quote === "function") {
     markMtm(book, quote);
   }
+  stampExitReasons([...(book.orders || []), ...(book.orderHistory || []), ...(book.closedTrades || [])]);
   const report = buildReport({
     closedTrades: book.closedTrades,
     positions: book.positions,

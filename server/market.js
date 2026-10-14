@@ -29,7 +29,7 @@ import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
 import { filledExitOnBook, isLeftoverWorkingSell } from "./pendingExit.js";
-import { exitReasonLabel, exitRoleFromReason, keepExitReason } from "./exitReason.js";
+import { exitReasonLabel, exitRoleFromReason, keepExitReason, stampExitReasons } from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
@@ -2784,9 +2784,9 @@ function liveDesk() {
     if ((row?.live || row?.brokerId === "dhan") && !row?.copyUserId && !isPaperRow(row)) return true;
     return !rowIsMissingStrategy(row, ids, names);
   };
-  const orders = (state.orders || []).filter(keep).map(withActualName).filter(onDesk);
+  const orders = stampExitReasons((state.orders || []).filter(keep).map(withActualName).filter(onDesk));
   const positions = (state.positions || []).filter(keep).map(withActualName).filter(onDesk);
-  const closedTrades = (state.closedTrades || []).filter(keep).map(withActualName).filter(onDesk);
+  const closedTrades = stampExitReasons((state.closedTrades || []).filter(keep).map(withActualName).filter(onDesk));
   return { live, orders, positions, closedTrades };
 }
 
@@ -4393,7 +4393,7 @@ export function replaceDhanOrders(rows) {
     });
     kept.push(strategy ? { ...normalized, strategy } : normalized);
   }
-  state.orders = [...tagged, ...kept];
+  state.orders = stampExitReasons([...tagged, ...kept]);
   for (const row of tagged) fanOutFilledTarget(row);
 }
 

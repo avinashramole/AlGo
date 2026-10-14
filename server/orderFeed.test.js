@@ -210,3 +210,72 @@ test("a live Nifty fill stays on the order book even without a matching strategy
   assert.equal(row?.symbol, "NIFTY 22500 PE");
   assert.equal(row?.qty, 65);
 });
+
+test("admin book stamps SL HIT or TGT HIT instead of TRADE CONFIRMED", () => {
+  replaceDhanOrders([
+    {
+      id: "crude-buy-9050",
+      symbol: "CRUDEOIL-15Oct2026-9050-PE",
+      side: "BUY",
+      qty: 1,
+      filledQty: 1,
+      price: 116.1,
+      status: "FILLED",
+      brokerId: "dhan",
+      live: true,
+      reason: "TRADE CONFIRMED",
+      createdAt: "2026-10-14T10:41:50.000Z",
+    },
+    {
+      id: "crude-sell-9050",
+      symbol: "CRUDEOIL-15Oct2026-9050-PE",
+      side: "SELL",
+      qty: 1,
+      filledQty: 1,
+      price: 95.7,
+      status: "FILLED",
+      brokerId: "dhan",
+      live: true,
+      reason: "TRADE CONFIRMED",
+      createdAt: "2026-10-04T11:23:30.000Z",
+    },
+  ]);
+  const orders = snapshot().orders;
+  const sell = orders.find((row) => row.id === "crude-sell-9050");
+  const buy = orders.find((row) => row.id === "crude-buy-9050");
+  assert.equal(sell?.reason, "SL HIT");
+  assert.equal(sell?.exitReason, "SL HIT");
+  assert.equal(buy?.reason, "");
+
+  replaceDhanOrders([
+    {
+      id: "crude-buy-9050-tgt",
+      symbol: "CRUDEOIL-15Oct2026-9050-PE",
+      side: "BUY",
+      qty: 1,
+      filledQty: 1,
+      price: 116.1,
+      status: "FILLED",
+      brokerId: "dhan",
+      live: true,
+      reason: "TRADE CONFIRMED",
+      createdAt: "2026-10-14T10:41:50.000Z",
+    },
+    {
+      id: "crude-sell-9050-tgt",
+      symbol: "CRUDEOIL-15Oct2026-9050-PE",
+      side: "SELL",
+      qty: 1,
+      filledQty: 1,
+      price: 140.5,
+      status: "FILLED",
+      brokerId: "dhan",
+      live: true,
+      reason: "TRADE CONFIRMED",
+      createdAt: "2026-10-14T11:00:00.000Z",
+    },
+  ]);
+  const tgt = snapshot().orders.find((row) => row.id === "crude-sell-9050-tgt");
+  assert.equal(tgt?.reason, "TGT HIT");
+  assert.equal(tgt?.exitReason, "TGT HIT");
+});
