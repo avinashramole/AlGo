@@ -18,6 +18,10 @@ function defaultBrokerFile() {
 
 export const MAIN_BROKER_ID = "dhan";
 
+function underNodeTest() {
+  return Boolean(process.env.NODE_TEST_CONTEXT) || process.env.NODE_ENV === "test";
+}
+
 export const catalog = [
   { id: "dhan", name: "Dhan", vendor: "Dhan", color: "#0f9d58", auth: "access_token", segments: ["EQ", "FNO"], main: true },
   { id: "zerodha", name: "Zerodha Kite", vendor: "Zerodha", color: "#f6461a", auth: "api_key", segments: ["EQ", "FNO", "COM"], main: false },
@@ -78,6 +82,18 @@ let activeBrokerId = savedDefaultBrokerId();
 export function reloadDefaultBroker() {
   activeBrokerId = savedDefaultBrokerId();
   return activeBrokerId;
+}
+
+export function ensureAdminDefaultBroker(id = MAIN_BROKER_ID) {
+  const asked = String(id || MAIN_BROKER_ID).trim().toLowerCase() || MAIN_BROKER_ID;
+  const meta = catalog.find((item) => item.id === asked && item.id !== "paper") || catalog.find((item) => item.id === MAIN_BROKER_ID);
+  activeBrokerId = meta?.id || MAIN_BROKER_ID;
+  persistDefaultBroker();
+  return activeBrokerId;
+}
+
+if (!underNodeTest()) {
+  ensureAdminDefaultBroker(MAIN_BROKER_ID);
 }
 
 export function orderBrokerForDesk(requested) {

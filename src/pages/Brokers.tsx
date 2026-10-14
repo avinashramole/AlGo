@@ -211,9 +211,9 @@ export function Brokers() {
         <div>
           <h1 className="text-xl font-bold md:text-2xl">Brokers</h1>
           <p className="desk-help text-sm text-slate-400">
-            Pick the default broker from the list. Only that broker is <b>ACTIVE</b> for admin orders and the admin
-            balance. The others stay <b>INACTIVE</b>. The Dhan data feed can stay on without being the default.
-            Connecting a broker does not start LIVE algos.
+            Dhan is the admin default. Pick another from the list only if you need it. Only the default is{" "}
+            <b>ACTIVE</b> for admin orders and the admin balance. The others stay <b>INACTIVE</b>. The Dhan data
+            feed can stay on without being the default. Connecting a broker does not start LIVE algos.
           </p>
         </div>
         <label className="flex min-w-[16rem] flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm sm:normal-case sm:tracking-normal">
