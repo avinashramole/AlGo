@@ -25,6 +25,8 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /● ● ●/);
   assert.match(page, /data-shivam-details/);
   assert.match(page, /export function AlgoTest/);
+  assert.match(page, /data-algo-test-tab/);
+  assert.match(page, /navigate\("\/algo-test"\)/);
   assert.match(page, /\["shivam-t2s", "SHIVAM T2S"\]/);
   assert.match(strategies, /id: SHIVAM_T2S_SEED_ID/);
   assert.match(strategies, /ALWAYS_ON_FIRST_CANDLE_IDS, SHIVAM_T2S_SEED_ID/);

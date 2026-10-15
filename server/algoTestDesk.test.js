@@ -31,10 +31,12 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(app, /AlgoTest/);
   assert.match(roles, /to: "\/algo-test", label: "Algo Test"/);
   assert.match(sidebar, /to: "\/algo-test", label: "Algo Test"/);
-  assert.match(mobile, /to: "\/algo-test", label: "Algo Test"/);
+  assert.match(mobile, /to: "\/algo-test", label: "Test"/);
   assert.match(algo, /export function AlgoTest/);
   assert.match(algo, /desk = "live"/);
   assert.match(algo, /data-algo-desk/);
+  assert.match(algo, /data-algo-test-tab/);
+  assert.match(algo, /navigate\("\/algo-test"\)/);
   assert.match(algo, /Paper test only · no live · no copy/);
   assert.match(builder, /testDesk = false/);
   assert.match(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);
