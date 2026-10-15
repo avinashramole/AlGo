@@ -39,6 +39,15 @@ const { resetKotakMcxMasterCache } = await import("./kotakMcx.js");
 
 test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
   assert.deepEqual(parseDeskOptionSymbol("NIFTY 22850 CE"), { root: "NIFTY", strike: 22850, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("NIFTY 22850 CE · 2026-10-20"), { root: "NIFTY", strike: 22850, option: "CE" });
+  assert.deepEqual(parseDeskOptionSymbol("NIFTY 22750 CE 2026-10-20"), { root: "NIFTY", strike: 22750, option: "CE" });
+  const unix = Math.floor(Date.parse("2026-09-23T00:00:00+05:30") / 1000);
+  assert.equal(upstoxExpiryDay(unix), "2026-09-23");
+  assert.equal(upstoxExpiryDay(String(unix)), "2026-09-23");
+  assert.equal(upstoxExpiryDay("23-SEP-2026"), "2026-09-23");
+  assert.equal(upstoxExpiryDay("23 Sep 2026"), "2026-09-23");
+  assert.equal(upstoxExpiryDay("20-OCT-2026"), "2026-10-20");
+  assert.equal(upstoxExpiryDay("20/10/2026"), "2026-10-20");
   assert.deepEqual(parseDeskOptionSymbol("NIFTY-Sep2026-22850-PE"), {
     root: "NIFTY",
     strike: 22850,
@@ -72,6 +81,38 @@ test("Upstox copy maps a Dhan desk option to an NSE_FO instrument key", () => {
       { root: "NIFTY", strike: 22850, option: "PE", expiry: "2026-09" },
     ),
     "NSE_FO|426269",
+  );
+  assert.equal(
+    pickUpstoxOptionHit(
+      [
+        {
+          trading_symbol: "NIFTY 23 SEP 26 22850 CE",
+          underlying_symbol: "NIFTY",
+          instrument_type: "CE",
+          strike_price: 22850,
+          expiry: unix,
+          instrument_key: "NSE_FO|unix-ce",
+        },
+      ],
+      { root: "NIFTY", strike: 22850, option: "CE", expiry: "2026-09-23" },
+    ),
+    "NSE_FO|unix-ce",
+  );
+  assert.equal(
+    pickUpstoxOptionHit(
+      [
+        {
+          trading_symbol: "NIFTY 29 SEP 26 22850 CE",
+          underlying_symbol: "NIFTY",
+          instrument_type: "CE",
+          strike_price: 22850,
+          expiry: "2026-09-29",
+          instrument_key: "NSE_FO|nearest-ce",
+        },
+      ],
+      { root: "NIFTY", strike: 22850, option: "CE", expiry: "2026-09-23" },
+    ),
+    "NSE_FO|nearest-ce",
   );
 });
 
@@ -553,6 +594,102 @@ test("placeLiveBrokerOrder searches Upstox for NIFTY 22850 CE instead of using a
   assert.equal(placed.slice, false);
 });
 
+test("placeLiveBrokerOrder maps a NIFTY algo Dhan id using unix and NFO master expiries", async () => {
+  resetUpstoxMasterCache();
+  const unix = Math.floor(Date.parse("2026-10-20T00:00:00+05:30") / 1000);
+  const unixCalls = [];
+  const unixLive = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-nifty",
+      brokerSession: { accessToken: "member-upstox-token", clientId: "UPX-NIFTY" },
+      symbol: "NIFTY 22750 CE · 2026-10-20",
+      side: "BUY",
+      qty: 65,
+      strike: 22750,
+      option: "CE",
+      expiry: unix,
+      securityId: "55123",
+      strategy: "NIFTY 5m first candle",
+    },
+    async (url, options) => {
+      unixCalls.push({ url: String(url), body: options?.body });
+      if (String(url).includes("search/instruments")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              data: [
+                {
+                  trading_symbol: "NIFTY 20 OCT 26 22750 CE",
+                  underlying_symbol: "NIFTY",
+                  instrument_type: "CE",
+                  strike_price: 22750,
+                  expiry: unix,
+                  instrument_key: "NSE_FO|22750ce",
+                },
+              ],
+            }),
+        };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: { order_id: "upx-nifty-unix" } }) };
+    },
+  );
+  assert.equal(unixLive.orderId, "upx-nifty-unix");
+  const unixPlaced = JSON.parse(unixCalls.find((row) => row.url.includes("order/place")).body);
+  assert.equal(unixPlaced.instrument_token, "NSE_FO|22750ce");
+
+  resetUpstoxMasterCache();
+  const masterCalls = [];
+  const masterLive = await placeLiveBrokerOrder(
+    "upstox",
+    {
+      copyUserId: "u-upstox-nifty-nfo",
+      brokerSession: { accessToken: "member-upstox-token", clientId: "UPX-NIFTY" },
+      symbol: "NIFTY 22750 CE",
+      side: "BUY",
+      qty: 65,
+      strike: 22750,
+      option: "CE",
+      expiry: "2026-10-20",
+      securityId: "55123",
+      strategy: "NIFTY 5m first candle",
+    },
+    async (url, options) => {
+      masterCalls.push({ url: String(url), body: options?.body });
+      if (String(url).includes("search/instruments")) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: [] }) };
+      }
+      if (String(url).includes("NFO.json")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              {
+                trading_symbol: "NIFTY 20 OCT 26 22750 CE",
+                underlying_symbol: "NIFTY",
+                instrument_type: "CE",
+                strike_price: 22750,
+                expiry: "20-OCT-2026",
+                instrument_key: "NSE_FO|nfo-22750ce",
+              },
+            ]),
+        };
+      }
+      if (String(url).includes("order/place")) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: { order_id: "upx-nifty-nfo" } }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [] }) };
+    },
+  );
+  assert.equal(masterLive.orderId, "upx-nifty-nfo");
+  assert.ok(masterCalls.some((row) => row.url.includes("NFO.json")));
+  const masterPlaced = JSON.parse(masterCalls.find((row) => row.url.includes("order/place")).body);
+  assert.equal(masterPlaced.instrument_token, "NSE_FO|nfo-22750ce");
+});
+
 test("placeLiveBrokerOrder resolves Dhan NIFTY-Sep2026-22850-PE and places on the HFT host", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
@@ -764,6 +901,7 @@ test("member copy does not use the admin Zerodha session when the member token i
         "zerodha",
         {
           copyUserId: "u-isolation",
+          leftoverSlot: true,
           brokerSession: { accessToken: "" },
           symbol: "NIFTY 24500 CE",
           expiry: "2026-09-15",
