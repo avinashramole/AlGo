@@ -1,12 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { useMarket } from "../context/MarketContext";
 import { DeskTape, TapeCell } from "../components/dashboard/DeskTape";
-import { isRetiredDeskStrategy } from "../lib/strategies";
+import { isRetiredDeskStrategy, isTestDeskAlgo } from "../lib/strategies";
 
 export function Analytics() {
   const { data } = useMarket();
   const navigate = useNavigate();
-  const algos = data.algos.filter((algo) => !isRetiredDeskStrategy(algo));
+  const algos = data.algos.filter((algo) => !isRetiredDeskStrategy(algo) && !isTestDeskAlgo(algo));
   return (
     <div className="space-y-3">
       <h1 className="text-xl font-bold">Analytics</h1>

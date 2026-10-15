@@ -3,7 +3,12 @@ export type BookRow = {
   brokerId?: string;
   sim?: boolean;
   live?: boolean;
+  testDesk?: boolean;
 };
+
+export function isTestDeskTrade(row?: { testDesk?: boolean } | null) {
+  return Boolean(row?.testDesk);
+}
 
 export function isPaperTrade(row?: BookRow | null) {
   if (!row) return false;
@@ -29,11 +34,13 @@ export function hasPaperActivity(input: {
   orders?: BookRow[] | null;
   positions?: BookRow[] | null;
   closedTrades?: BookRow[] | null;
-  algos?: Array<{ enabled?: boolean; runMode?: string }> | null;
+  algos?: Array<{ enabled?: boolean; runMode?: string; testDesk?: boolean }> | null;
   tradeMode?: string;
   brokerId?: string;
 }) {
   if (String(input.tradeMode || "") === "paper" || String(input.brokerId || "").toLowerCase() === "paper") return true;
-  if ((input.algos || []).some((algo) => algo.enabled && algo.runMode === "paper")) return true;
-  return [...(input.orders || []), ...(input.positions || []), ...(input.closedTrades || [])].some(isPaperTrade);
+  if ((input.algos || []).some((algo) => algo.enabled && algo.runMode === "paper" && !algo.testDesk)) return true;
+  return [...(input.orders || []), ...(input.positions || []), ...(input.closedTrades || [])]
+    .filter((row) => !isTestDeskTrade(row))
+    .some(isPaperTrade);
 }

@@ -20,6 +20,7 @@ export function markUserDeskDocument(user?: Pick<AuthUser, "role"> | null) {
 export const adminNav = [
   { to: "/", label: "Home" },
   { to: "/algo", label: "Algos" },
+  { to: "/algo-test", label: "Algo Test" },
   { to: "/reports", label: "Position & Orders" },
   { to: "/options", label: "Option Chain" },
   { to: "/brokers", label: "Brokers" },
@@ -52,6 +53,7 @@ const extraTitles = [
   { to: "/subscriptions", label: "My plan" },
   { to: "/markets", label: "Option Chain" },
   { to: "/signals", label: "Algos" },
+  { to: "/algo-test", label: "Algo Test" },
   { to: "/orders", label: "Orders" },
   { to: "/positions", label: "Position" },
   { to: "/portfolio", label: "Position" },

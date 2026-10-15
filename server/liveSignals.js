@@ -73,11 +73,13 @@ function isPreviewOrWaitSignal(text) {
 
 export function buildLiveSignals({ algos = [], orders = [] } = {}) {
   const rows = [];
+  const algoByName = new Map((algos || []).map((algo) => [String(algo.name || ""), algo]));
   for (const order of orders || []) {
     const status = String(order.status || "").toUpperCase();
     if (status === "REJECTED" || status === "CANCELLED") continue;
     const action = order.side === "SELL" ? "SELL" : "BUY";
     const ts = Date.parse(order.createdAt || order.ts || "") || 0;
+    const named = algoByName.get(String(order.strategy || ""));
     rows.push({
       id: `ord-${order.id || ts}`,
       action,
@@ -86,6 +88,7 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
       note: status === "FILLED" ? "" : String(order.status || ""),
       time: ts ? formatIstTime(ts) : formatIstTime(Date.now()),
       confidence: status === "FILLED" ? 90 : status === "PARTIAL" ? 75 : 70,
+      testDesk: Boolean(order.testDesk || named?.testDesk),
       ts,
     });
   }
@@ -103,6 +106,7 @@ export function buildLiveSignals({ algos = [], orders = [] } = {}) {
       note: "",
       time: formatIstTime(Date.now()),
       confidence: algo.status === "LIVE" || algo.runMode === "live" ? 88 : 72,
+      testDesk: Boolean(algo.testDesk),
       ts: 0,
     });
   }

@@ -110,6 +110,7 @@ export type AlgoStrategy = {
   mappingScope?: "master" | "clients" | "both";
   mappedClientIds?: string[];
   clientVisible?: boolean;
+  testDesk?: boolean;
   runMode?: "live" | "paper" | "backtest";
   lastBacktest?: null | {
     ranAt?: string;
@@ -587,7 +588,11 @@ export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; 
   );
 }
 
-export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string }) {
+export function isTestDeskAlgo(algo?: { testDesk?: boolean } | null) {
+  return Boolean(algo?.testDesk);
+}
+
+export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string; testDesk?: boolean }) {
   if (!algo) return false;
   if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo)) return false;
   if (isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyTestKind(algo)) return true;

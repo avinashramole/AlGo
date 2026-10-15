@@ -35,7 +35,7 @@ import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
 import { listPublicUsers } from "./auth.js";
-import { loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
+import { isTestDeskAlgo, loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { dhanFundsNeed, isDhanBrokerReject, isDhanFundsReject } from "./dhanPlaceError.js";
 import {
@@ -908,12 +908,20 @@ function sameWorkingBookOrder(payload) {
   });
 }
 
-function strategyBuyUnresolved(strategyName) {
+function sameDeskStrategyRow(row, strategyName, algo = {}) {
+  const name = realStrategyName(strategyName) || String(strategyName || "");
+  if (Boolean(row?.testDesk) !== Boolean(algo?.testDesk)) return false;
+  const strategyId = String(algo?.id || row?.strategyId || "").trim();
+  if (strategyId && row?.strategyId) return String(row.strategyId) === String(algo.id || strategyId);
+  return (realStrategyName(row?.strategy) || row?.strategy) === name;
+}
+
+function strategyBuyUnresolved(strategyName, algo = {}) {
   const name = realStrategyName(strategyName) || String(strategyName || "");
   if (!name) return false;
   if (
     pendingLiveAlgoOrders.some(
-      (row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === name && liveOrderSide(row) === "BUY",
+      (row) => !row.copyUserId && sameDeskStrategyRow(row, name, algo) && liveOrderSide(row) === "BUY",
     )
   ) {
     return true;
@@ -922,7 +930,7 @@ function strategyBuyUnresolved(strategyName) {
     (state.orders || []).some(
       (row) =>
         !row.copyUserId &&
-        (realStrategyName(row.strategy) || row.strategy) === name &&
+        sameDeskStrategyRow(row, name, algo) &&
         liveOrderSide(row) === "BUY" &&
         orderIsWorking(row),
     )
@@ -933,7 +941,7 @@ function strategyBuyUnresolved(strategyName) {
     (row) =>
       !row.copyUserId &&
       !isPaperRow(row) &&
-      (realStrategyName(row.strategy) || row.strategy) === name &&
+      sameDeskStrategyRow(row, name, algo) &&
       Number(row.qty) > 0 &&
       String(row.type || "BUY").toUpperCase() !== "CLOSED",
   );
@@ -1086,7 +1094,7 @@ function enqueueLiveAlgoOrder(payload) {
     }
   } else if (side === "BUY") {
     const freshAdminEntry = !copyUserId && Boolean(card?.allowFreshLiveEntry);
-    if (!copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy)) {
+    if (!copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy, card)) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
@@ -1320,30 +1328,58 @@ function liveCopyAlgo(stamped = {}) {
   return findLiveCopyAlgo(state.algos || [], stamped?.strategy);
 }
 
+function orderAlgo(stamped = {}) {
+  const rows = state.algos || [];
+  const strategyId = String(stamped?.strategyId || "").trim();
+  if (strategyId) {
+    const byId = rows.find((row) => row.id === strategyId);
+    if (byId) return byId;
+  }
+  const name = realStrategyName(stamped?.strategy);
+  const testDesk = Boolean(stamped?.testDesk);
+  return (
+    rows.find((row) => Boolean(row.testDesk) === testDesk && row.name === name) ||
+    rows.find((row) => row.name === name) ||
+    {}
+  );
+}
+
 export function queueLiveAlgoOrder(payload) {
   const priced = sameBookOrder(payload);
   const securityId = contractSecurityId(priced);
   const stamped = securityId ? { ...priced, securityId } : priced;
+  const algo = orderAlgo(stamped);
+  const testDesk = isTestDeskAlgo(algo) || Boolean(stamped.testDesk);
   const adminPaper =
-    !payload.copyUserId && (payload.paper === true || String(stamped.brokerId || "").toLowerCase() === "paper");
+    testDesk ||
+    (!payload.copyUserId && (payload.paper === true || String(stamped.brokerId || "").toLowerCase() === "paper"));
   if (!adminPaper && !liveOrdersArmed) {
     return { ok: true, queued: false, status: "FEED_DOWN", blocked: true };
   }
   const deskBroker = payload.copyUserId ? stamped.brokerId : adminPaper ? "paper" : orderBrokerForDesk(stamped.brokerId);
   const lane = payload.copyUserId ? (payload.lane === "individual" ? "individual" : "copy") : "master";
-  const deskStamped = { ...stamped, brokerId: deskBroker, lane, ...(adminPaper ? { paper: true } : {}) };
-  const brokers = liveAutoTradeBrokers({
-    strategyName: deskStamped?.strategy,
-    algoBrokerId: deskStamped?.brokerId || "dhan",
-  });
+  const deskStamped = {
+    ...stamped,
+    brokerId: deskBroker,
+    lane,
+    strategyId: algo.id || stamped.strategyId,
+    testDesk,
+    ...(adminPaper ? { paper: true } : {}),
+  };
+  const brokers = testDesk
+    ? ["paper"]
+    : liveAutoTradeBrokers({
+        strategyName: deskStamped?.strategy,
+        algoBrokerId: deskStamped?.brokerId || "dhan",
+      });
   const targets = brokers.length ? brokers : [orderBrokerId(deskStamped)];
   let adminResult = { ok: true, queued: true, status: "PENDING" };
   for (const brokerId of targets) {
     adminResult = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
-  if (!payload.skipMemberCopy) {
-    const algo = liveCopyAlgo(deskStamped);
-    for (const copy of memberCopiesForOrder(deskStamped, algo || {})) {
+  if (!payload.skipMemberCopy && !testDesk) {
+    const copyAlgo = liveCopyAlgo(deskStamped);
+    for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
       enqueueLiveAlgoOrder(copy);
     }
   }
@@ -2513,6 +2549,8 @@ function algoOrderFields(algo, side, trade) {
     product: "MIS",
     type: "MARKET",
     strategy: algo.name,
+    strategyId: algo.id,
+    testDesk: Boolean(algo.testDesk),
     exchangeSegment: exchangeSegmentFor(trade.symbol || algo.symbol),
   };
 }
@@ -3251,8 +3289,10 @@ function liveLtpForSymbol(symbol) {
 }
 
 function syncPaperLedger() {
-  const positions = (state.positions || []).filter(isPaperRow);
-  const closed = (state.closedTrades || []).filter(isPaperRow);
+  const positions = (state.positions || []).filter((row) => isPaperRow(row) && !row.testDesk);
+  const closed = (state.closedTrades || []).filter((row) => isPaperRow(row) && !row.testDesk);
+  const testPositions = (state.positions || []).filter((row) => isPaperRow(row) && row.testDesk);
+  const testClosed = (state.closedTrades || []).filter((row) => isPaperRow(row) && row.testDesk);
   const realized = closed.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   const unrealized = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   const marginUsed = positions.reduce((sum, row) => sum + Math.abs(Number(row.avg || 0) * Number(row.qty || 0)), 0);
@@ -3262,9 +3302,15 @@ function syncPaperLedger() {
   });
   for (const algo of state.algos || []) {
     if (algo.runMode !== "paper") continue;
-    const openPnl = positions.filter((row) => row.strategy === algo.name).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
-    const closedPnl = closed.filter((row) => row.strategy === algo.name).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
-    const trades = closed.filter((row) => row.strategy === algo.name);
+    const bookPos = isTestDeskAlgo(algo) ? testPositions : positions;
+    const bookClosed = isTestDeskAlgo(algo) ? testClosed : closed;
+    const match = (row) =>
+      row.strategy === algo.name &&
+      Boolean(row.testDesk) === Boolean(algo.testDesk) &&
+      (!row.strategyId || !algo.id || row.strategyId === algo.id);
+    const openPnl = bookPos.filter(match).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+    const closedPnl = bookClosed.filter(match).reduce((sum, row) => sum + Number(row.pnl || 0), 0);
+    const trades = bookClosed.filter(match);
     const wins = trades.filter((row) => Number(row.pnl) > 0).length;
     algo.pnl = round2(openPnl + closedPnl);
     if (trades.length) algo.winRate = Math.round((wins / trades.length) * 100);
@@ -3358,17 +3404,21 @@ export function snapshot() {
   const brokers = publicBrokers();
   const active = getActiveBroker();
   const { orders, positions, closedTrades } = liveDesk();
-  const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
+  const mainPositions = positions.filter((row) => !row.testDesk);
+  const mainOrders = orders.filter((row) => !row.testDesk);
+  const mainClosed = closedTrades.filter((row) => !row.testDesk);
+  const { totalPnl, pnlByBroker: byBroker } = bookPnl(mainPositions, mainClosed);
   const { liveCandles: _liveCandles, closedTrades: _closedTrades, bookClearedAt: _bookClearedAt, ...publicState } = clone(state);
   const liveState = { ...publicState, orders, positions, closedTrades };
   liveState.algos = (liveState.algos || []).map((algo) => ({ ...algo, trade: resolveAlgoTrade(algo) }));
   const dnaScores = buildLiveDna({ indices: publicState.indices, optionChain: publicState.optionChain });
   const signals = buildLiveSignals({ algos: liveState.algos, orders });
+  const mainSignals = signals.filter((row) => !row.testDesk);
   const watch = indexWatchRows(publicState.indices);
   return {
     ...liveState,
     signals,
-    featuredSignal: buildFeaturedSignal(signals, publicState.optionMeta, dnaScores),
+    featuredSignal: buildFeaturedSignal(mainSignals, publicState.optionMeta, dnaScores),
     dnaScores,
     fiiDii: emptyFiiDii(),
     sentiment: liveSentiment(dnaScores),
@@ -3377,7 +3427,7 @@ export function snapshot() {
     marketWatch: watch,
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
-    report: liveDeskReport(positions, orders, closedTrades),
+    report: liveDeskReport(mainPositions, mainOrders, mainClosed),
     brokers: brokers.brokers,
     activeBrokerId: brokers.activeBrokerId,
     mainBrokerId: brokers.mainBrokerId,
@@ -3402,7 +3452,9 @@ export function deskFeed() {
   syncAlgoClientMaps();
   markPaperToMarket();
   const { orders, positions, closedTrades } = liveDesk();
-  const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
+  const mainPositions = positions.filter((row) => !row.testDesk);
+  const mainClosed = closedTrades.filter((row) => !row.testDesk);
+  const { totalPnl, pnlByBroker: byBroker } = bookPnl(mainPositions, mainClosed);
   const dnaScores = buildLiveDna({ indices: state.indices, optionChain: state.optionChain });
   const algos = (state.algos || []).map((algo) => ({
     id: algo.id,
@@ -3415,6 +3467,7 @@ export function deskFeed() {
     ceColor: algo.ceColor || "",
     peColor: algo.peColor || "",
     mappedClientIds: algo.mappedClientIds || [],
+    testDesk: Boolean(algo.testDesk),
     trade: resolveAlgoTrade(algo),
   }));
   const signalAlgos = (state.algos || []).map((algo, index) => ({ ...algo, ...algos[index] }));
@@ -3432,12 +3485,12 @@ export function deskFeed() {
     closedTrades,
     algos,
     signals,
-    featuredSignal: buildFeaturedSignal(signals, state.optionMeta, dnaScores),
+    featuredSignal: buildFeaturedSignal(signals.filter((row) => !row.testDesk), state.optionMeta, dnaScores),
     dnaScores,
     sentiment: liveSentiment(dnaScores),
     totalPnl: Number(totalPnl.toFixed(2)),
     pnlByBroker: byBroker,
-    report: liveDeskReport(positions, orders, closedTrades),
+    report: liveDeskReport(mainPositions, orders.filter((row) => !row.testDesk), mainClosed),
     marketWatch: watch,
     watchlist: watch.map(({ volume: _volume, ...row }) => row),
     marketStatus: nseMarketSession().status,
@@ -3539,6 +3592,10 @@ export function armNiftyFirstCandleDailyLive(now = new Date()) {
 export function toggleAlgo(id, patch = {}) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;
+  if (isTestDeskAlgo(algo) && algo.runMode !== "backtest") {
+    algo.runMode = "paper";
+    algo.brokerId = "paper";
+  }
   if (algo.runMode === "backtest") {
     algo.enabled = false;
     algo.status = "BACKTEST";
@@ -3563,6 +3620,10 @@ export function toggleAlgo(id, patch = {}) {
   }
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
+  }
+  if (starting && algo.runMode === "live" && isTestDeskAlgo(algo)) {
+    algo.runMode = "paper";
+    algo.brokerId = "paper";
   }
   if (starting && algo.runMode === "live") {
     const brokerId = algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan";
@@ -4127,7 +4188,7 @@ function runPaperAlgos() {
     if (side === "BUY" && fundsHoldBlocks(algo, pack.candles?.[pack.candles.length - 1]?.time)) {
       continue;
     }
-    if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
+    if (side === "BUY" && strategyBuyUnresolved(algo.name, algo)) {
       algo.lastSignal = "WAIT ORDER";
       continue;
     }
@@ -4145,7 +4206,7 @@ function runLiveAlgos() {
   const feedLive = dhanOrdersLive();
   const now = Date.now();
   for (const algo of state.algos) {
-    if (!algo.enabled || algo.runMode !== "live") continue;
+    if (!algo.enabled || algo.runMode !== "live" || isTestDeskAlgo(algo)) continue;
     if (isNiftyVwapHedgeAlgo(algo)) {
       tickNiftyVwapHedgeAlgo(algo, "live", feedLive);
       continue;
@@ -4187,7 +4248,7 @@ function runLiveAlgos() {
         algo.lastSignal = "MAX TRADES";
         continue;
       }
-      if (side === "BUY" && (openLive || strategyBuyUnresolved(algo.name))) {
+      if (side === "BUY" && (openLive || strategyBuyUnresolved(algo.name, algo))) {
         algo.lastSignal = "WAIT ORDER";
         continue;
       }
@@ -4248,7 +4309,7 @@ function runLiveAlgos() {
     if (side === "BUY" && fundsHoldBlocks(algo, signalBar)) {
       continue;
     }
-    if (side === "BUY" && strategyBuyUnresolved(algo.name)) {
+    if (side === "BUY" && strategyBuyUnresolved(algo.name, algo)) {
       algo.lastSignal = "WAIT ORDER";
       continue;
     }
@@ -4421,14 +4482,15 @@ export function bookRejectedLiveOrder(payload, error) {
 
 export function placeOrder(payload) {
   const brokers = publicBrokers();
-  const requested = String(payload.brokerId || brokers.activeBrokerId || "dhan");
+  const testDesk = Boolean(payload.testDesk) || isTestDeskAlgo(orderAlgo(payload));
+  const requested = testDesk ? "paper" : String(payload.brokerId || brokers.activeBrokerId || "dhan");
   const account = brokers.brokers.find((item) => item.id === requested);
   if (!account?.connected) {
     return { error: "Connect this broker before placing an order" };
   }
-  const live = payload.live;
+  const live = testDesk ? null : payload.live;
   const brokerId = account.id;
-  const isPaper = brokerId === "paper";
+  const isPaper = brokerId === "paper" || testDesk;
   if (isPaper && !isDhanFeedLive()) {
     return { error: "Paper fills use live prices. Connect Dhan LIVE first." };
   }
@@ -4513,6 +4575,8 @@ export function placeOrder(payload) {
     live: Boolean(live),
     sim: !live && !isPaper,
     paper: isPaper,
+    testDesk,
+    strategyId: payload.strategyId || orderAlgo(payload).id || "",
     securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
     reason:
       exitReasonLabel(payload) ||
@@ -4548,6 +4612,8 @@ export function placeOrder(payload) {
       sim: !isPaper,
       live: false,
       paper: isPaper,
+      testDesk: Boolean(payload.testDesk || order.testDesk),
+      strategyId: payload.strategyId || order.strategyId || "",
     });
   }
   if (order.strategy) rememberOrderStrategy(order, order.strategy);
@@ -4815,7 +4881,7 @@ export function assignAlgoBroker(id, brokerId) {
   if (wanted !== "paper" && !isKnownLiveBroker(wanted)) return { error: "Unknown live broker" };
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Algo not found" };
-  if (algo.runMode === "paper" || algo.runMode === "backtest") {
+  if (isTestDeskAlgo(algo) || algo.runMode === "paper" || algo.runMode === "backtest") {
     algo.brokerId = "paper";
     persistAlgos();
     return clone(algo);

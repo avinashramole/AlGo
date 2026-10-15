@@ -12,7 +12,9 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
   const { data, cancel } = useMarket();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("ALL");
   const [busy, setBusy] = useState("");
-  const orders = (data.orders || []).filter((row) => (book === "paper" ? isPaperTrade(row) : isLiveBrokerTrade(row)));
+  const orders = (data.orders || []).filter(
+    (row) => !row.testDesk && (book === "paper" ? isPaperTrade(row) : isLiveBrokerTrade(row)),
+  );
   const rows = orders.filter((row) => filter === "ALL" || row.status === filter);
   const counts = {
     ALL: orders.length,

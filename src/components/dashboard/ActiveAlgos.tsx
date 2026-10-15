@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMarket } from "../../context/MarketContext";
 import { cn, formatInr } from "../../lib/format";
-import { contractLabel, isCrudeFirstCandleKind, isRetiredDeskStrategy, sortDeskAlgos } from "../../lib/strategies";
+import { contractLabel, isCrudeFirstCandleKind, isRetiredDeskStrategy, isTestDeskAlgo, sortDeskAlgos } from "../../lib/strategies";
 
 export function ActiveAlgos() {
   const { data, toggle } = useMarket();
@@ -14,14 +14,14 @@ export function ActiveAlgos() {
           <div className="text-sm font-bold">Active Algorithms</div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="text-[11px] font-semibold text-slate-400">{data.algos.filter((a) => a.enabled).length} live</div>
+          <div className="text-[11px] font-semibold text-slate-400">{data.algos.filter((a) => a.enabled && !isTestDeskAlgo(a)).length} live</div>
           <Link to="/algo" className="text-[11px] font-semibold text-brand-500">
             Builder →
           </Link>
         </div>
       </div>
       <div className="space-y-2">
-        {sortDeskAlgos(data.algos.filter((algo) => !isRetiredDeskStrategy(algo))).map((algo) => (
+        {sortDeskAlgos(data.algos.filter((algo) => !isRetiredDeskStrategy(algo) && !isTestDeskAlgo(algo))).map((algo) => (
           <div key={algo.id} className="flex items-center gap-3 rounded-lg bg-[var(--card-muted)] px-3 py-2.5">
             <div className="flex-1">
               <div className="flex items-center gap-2">

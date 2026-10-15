@@ -16,5 +16,7 @@ test("paper book helpers keep live broker rows off the paper tab", () => {
   assert.equal(hasPaperActivity({ orders: [{ brokerId: "dhan" }] }), false);
   assert.equal(hasPaperActivity({ orders: [{ paper: true }] }), true);
   assert.equal(hasPaperActivity({ algos: [{ enabled: true, runMode: "paper" }] }), true);
+  assert.equal(hasPaperActivity({ algos: [{ enabled: true, runMode: "paper", testDesk: true }] }), false);
+  assert.equal(hasPaperActivity({ orders: [{ paper: true, testDesk: true }] }), false);
   assert.equal(hasPaperActivity({ tradeMode: "paper" }), true);
 });

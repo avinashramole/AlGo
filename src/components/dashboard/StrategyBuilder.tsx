@@ -54,6 +54,7 @@ import {
 type Props = {
   open: boolean;
   algo?: AlgoStrategy | null;
+  testDesk?: boolean;
   onClose: () => void;
 };
 
@@ -87,7 +88,7 @@ function Test2ScriptSelect({
   );
 }
 
-export function StrategyBuilder({ open, algo, onClose }: Props) {
+export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props) {
   const { data, saveAlgo } = useMarket();
   const [form, setForm] = useState(emptyStrategy("nifty-first-candle"));
   const [busy, setBusy] = useState(false);
@@ -162,16 +163,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             }),
       });
     } else {
-      setForm({ ...emptyStrategy("nifty-first-candle"), brokerId: data.activeBrokerId || "dhan", runMode: "live" });
+      setForm({
+        ...emptyStrategy("nifty-first-candle"),
+        brokerId: testDesk ? "paper" : data.activeBrokerId || "dhan",
+        runMode: testDesk ? "paper" : "live",
+        testDesk,
+      });
     }
     setError("");
-  }, [open, algo, data.activeBrokerId]);
+  }, [open, algo, data.activeBrokerId, testDesk]);
 
   const connected = (data.brokers || []).filter((item) => item.connected);
   const liveBrokers = (data.brokers || []).filter((item) => item.id !== "paper");
   const kind = (form.kind || "indicator") as StrategyKind;
   const editing = Boolean(algo);
-  const title = editing ? String(algo?.name || "Edit strategy") : "Add strategy";
+  const title = editing ? String(algo?.name || "Edit strategy") : testDesk ? "Add test strategy" : "Add strategy";
 
   const lotSize = lotForSymbol(form.symbol);
   const lots = form.lots || 1;
@@ -298,8 +304,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
     }
     setBusy(true);
     setError("");
+    const seal = (payload: Record<string, unknown>) =>
+      testDesk
+        ? {
+            ...payload,
+            testDesk: true,
+            runMode: payload.runMode === "backtest" ? "backtest" : "paper",
+            brokerId: "paper",
+            mappingScope: "master",
+            mappedClientIds: [],
+            clientVisible: false,
+          }
+        : { ...payload, testDesk: Boolean(payload.testDesk) };
     try {
       await saveAlgo(
+        seal(
         mir
           ? {
               ...form,
@@ -396,6 +415,7 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
               indicator: "NIFTY_FIRST_CANDLE",
             }
           : { ...form, id: algo?.id },
+        ),
       );
       onClose();
     } catch (err) {
@@ -419,7 +439,12 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-sm font-bold sm:text-base">{title}</div>
-            {editing ? null : <div className="desk-help line-clamp-2 text-[11px] text-slate-400">{preview}</div>}
+            {editing ? null : (
+              <div className="desk-help line-clamp-2 text-[11px] text-slate-400">
+                {testDesk ? "Paper-only test desk. Does not send live Dhan or member copies. " : ""}
+                {preview}
+              </div>
+            )}
           </div>
           <button type="button" onClick={onClose} className="icon-btn">
             <X size={16} />
@@ -532,19 +557,21 @@ export function StrategyBuilder({ open, algo, onClose }: Props) {
             text="Uses the live feed. Fills stay virtual — they never go to a broker."
             onClick={() => set({ runMode: "paper", brokerId: "paper" })}
           />
+          {testDesk ? null : (
           <TypeCard
             active={form.runMode === "live"}
             title="Live"
             text="Real CE/PE orders go to the selected broker after you press Start. Saving does not start LIVE."
             onClick={() => set({ runMode: "live", brokerId: data.activeBrokerId || "dhan" })}
           />
+          )}
         </div>
         ) : (
-        <div className="mt-1.5 grid grid-cols-3 gap-1.5" data-strategy-trade-mode="true">
-          {RUN_MODES.map((mode) => (
+        <div className={`mt-1.5 grid gap-1.5 ${testDesk ? "grid-cols-2" : "grid-cols-3"}`} data-strategy-trade-mode="true">
+          {(testDesk ? RUN_MODES.filter((mode) => mode.id !== "live") : RUN_MODES).map((mode) => (
             <TypeCard
               key={mode.id}
-              active={(form.runMode || "live") === mode.id}
+              active={(form.runMode || (testDesk ? "paper" : "live")) === mode.id}
               title={mode.title}
               text={mode.text}
               onClick={() =>
