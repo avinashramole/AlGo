@@ -49,7 +49,6 @@ function downloadAndroidApk() {
   link.click();
   link.remove();
 }
-}
 
 export function Login() {
   const { login, requestOtp, verifyOtp, signup, resetPassword, startGoogleLogin } = useAuth();

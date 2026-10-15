@@ -92,6 +92,10 @@ test("login page has a real Android APK download link", () => {
   assert.match(login, /data-android-apk="download"/);
   assert.match(login, /onClick=\{downloadAndroidApk\}/);
   assert.match(login, /href = "\/Trade2Smart-web\.apk"/);
+  assert.match(
+    login,
+    /function downloadAndroidApk\(\) \{\n(?:  .+\n)+  link\.remove\(\);\n\}\n\nexport function Login\(\)/,
+  );
   assert.doesNotMatch(login, /<a className="t2s-apk-download" href="\/Trade2Smart-web\.apk"/);
   assert.match(index, /sendAndroidApk/);
   assert.match(nginx, /Trade2Smart-web\.apk/);
