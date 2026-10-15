@@ -804,6 +804,48 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </div>
         ) : null}
 
+        {shivam ? (
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5 lg:grid-cols-3" data-shivam-name-broker="true">
+            <label className="text-xs font-semibold text-slate-500">
+              Strategy name
+              <input className={fieldClass} value={SHIVAM_T2S_NAME} readOnly />
+            </label>
+            <label className="text-xs font-semibold text-slate-500" data-shivam-broker="true">
+              Broker
+              <select
+                className={fieldClass}
+                value={form.runMode === "live" ? form.brokerId || "dhan" : "paper"}
+                disabled={form.runMode !== "live"}
+                onChange={(event) => set({ brokerId: event.target.value })}
+              >
+                {(form.runMode === "live" ? liveBrokers : connected.filter((item) => item.id === "paper")).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                    {item.liveFeed ? " · LIVE" : item.connected && item.id !== "dhan" ? " · connected" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-500" data-trade-limit="daily" data-shivam-daily-limit="true">
+              Daily trade limit
+              <input
+                type="number"
+                min={1}
+                max={100}
+                inputMode="numeric"
+                aria-label="Daily trade limit"
+                className={fieldClass}
+                value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+                onChange={(event) =>
+                  set({
+                    maxTradesPerDay: Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))),
+                  })
+                }
+              />
+            </label>
+          </div>
+        ) : null}
+
         {vwap || reversal || hedge || test2 || shivam ? null : (
           <FirstCandleTimeframeBar
             timeframe={form.timeframe}
@@ -1019,45 +1061,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 </select>
               </label>
               <NumberField label={form.targetMode === "points" ? "Target points" : "Target %"} value={form.targetValue ?? 40} step={0.5} onChange={(targetValue) => set({ targetValue, targetPct: targetValue })} />
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3" data-shivam-name-broker="true">
-              <label className="text-xs font-semibold text-slate-500">
-                Strategy name
-                <input className={fieldClass} value={SHIVAM_T2S_NAME} readOnly />
-              </label>
-              <label className="text-xs font-semibold text-slate-500" data-shivam-broker="true">
-                Broker
-                <select
-                  className={fieldClass}
-                  value={form.runMode === "live" ? form.brokerId || "dhan" : "paper"}
-                  disabled={form.runMode !== "live"}
-                  onChange={(event) => set({ brokerId: event.target.value })}
-                >
-                  {(form.runMode === "live" ? liveBrokers : connected.filter((item) => item.id === "paper")).map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                      {item.liveFeed ? " · LIVE" : item.connected && item.id !== "dhan" ? " · connected" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-500" data-trade-limit="daily" data-shivam-daily-limit="true">
-                Daily trade limit
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  inputMode="numeric"
-                  aria-label="Daily trade limit"
-                  className={fieldClass}
-                  value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
-                  onChange={(event) =>
-                    set({
-                      maxTradesPerDay: Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))),
-                    })
-                  }
-                />
-              </label>
             </div>
           </div>
         ) : test1 && !test2 ? (

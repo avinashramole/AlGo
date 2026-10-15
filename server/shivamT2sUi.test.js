@@ -45,8 +45,9 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(builder, /data-shivam-daily-limit="true"/);
   assert.match(
     builder,
-    /data-shivam-name-broker="true"[\s\S]*Strategy name[\s\S]*data-shivam-broker="true"[\s\S]*data-shivam-daily-limit="true"/,
+    /data-shivam-capital="true"[\s\S]*data-shivam-name-broker="true"[\s\S]*Strategy name[\s\S]*data-shivam-broker="true"[\s\S]*data-shivam-daily-limit="true"[\s\S]*data-shivam-settings="true"/,
   );
+  assert.doesNotMatch(builder, /data-shivam-settings="true"[\s\S]*data-shivam-name-broker="true"/);
   assert.match(builder, /\{shivam \? null : \(\s*<label className="mt-2.5 block text-xs font-semibold text-slate-500" data-trade-limit="daily"/);
   assert.doesNotMatch(page, /function ShivamCardTimeframes/);
   assert.doesNotMatch(page, /data-shivam-timeframes/);
