@@ -48,7 +48,8 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(builder, /title="SHIVAM T2S"/);
   assert.match(builder, /data-shivam-capital="true"/);
   assert.match(algo, /Capital management/);
-  assert.match(algo, /1–100 filled BUY entries today/);
+  assert.doesNotMatch(algo, /1–100 filled BUY entries today/);
+  assert.doesNotMatch(algo, /Re-entries count\. Rejected orders do not/);
 });
 
 test("normalizeAlgo seals Algo Test strategies to paper with no copy mapping", () => {
