@@ -37,7 +37,7 @@ import {
 } from "../lib/strategies";
 
 type DeskTab = "copy" | "tradingview";
-type Filter = "all" | "nifty-first-candle" | "crudeoil";
+type Filter = "all" | "nifty-first-candle" | "crudeoil" | "shivam-t2s";
 type MappingScope = "master" | "clients" | "both";
 type AlgoDesk = "live" | "test";
 
@@ -370,6 +370,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
 
   const rows = sortDeskAlgos(deskAlgos).filter((algo) => {
     if (filter === "all") return true;
+    if (filter === "shivam-t2s") return isShivamT2sKind(algo);
     if (filter === "crudeoil") {
       const symbol = String(algo.symbol || "").toUpperCase();
       return (
@@ -379,7 +380,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
     }
     if (isCrudeFirstCandleKind(algo)) return false;
     if (isNiftyTest2Kind(algo) || isNiftyTest1Kind(algo)) return !["CRUDEOIL", "NATURALGAS", "COPPER"].includes(String(algo.symbol || "").toUpperCase());
-    if (isMultiIndexReversalKind(algo)) return true;
+    if (isMultiIndexReversalKind(algo) || isShivamT2sKind(algo)) return true;
     return isNiftyFirstCandleKind(algo);
   }) as AlgoStrategy[];
 
@@ -527,11 +528,16 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
           <OneMinuteHistoryBar />
           <div className="flex flex-wrap gap-2">
             {(
-              [
-                ["all", "All"],
-                ["nifty-first-candle", "NIFTY"],
-                ["crudeoil", "CRUDE OIL"],
-              ] as const
+              (testDesk
+                ? [
+                    ["all", "All"],
+                    ["shivam-t2s", "SHIVAM T2S"],
+                  ]
+                : [
+                    ["all", "All"],
+                    ["nifty-first-candle", "NIFTY"],
+                    ["crudeoil", "CRUDE OIL"],
+                  ]) as [Filter, string][]
             ).map(([id, label]) => (
               <button
                 key={id}

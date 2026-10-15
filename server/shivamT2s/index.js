@@ -6,6 +6,7 @@ export {
   SHIVAM_T2S_SCRIPTS,
   SHIVAM_T2S_TIMEFRAMES,
   SHIVAM_T2S_TYPE,
+  SHIVAM_T2S_SEED_ID,
   SHIVAM_STRIKE_POLICIES,
   clampShivamDailyTradeLimit,
   defaultShivamT2sAlgo,

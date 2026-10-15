@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { clampDailyTradeLimit, crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyTest1Algo, defaultNiftyTest2Algo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyFirstCandleName, isNiftyTestAlgo, isNiftyTest1Algo, isNiftyTest2Algo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, lockedCrudeFirstCandleName, lockedNiftyFirstCandleName, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTest1Config, niftyTest2Config, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, ALWAYS_ON_FIRST_CANDLE_IDS, CRUDE_FIRST_CANDLE_KIND, CRUDE_FIRST_CANDLE_NAME, NIFTY_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_NAME, NIFTY_TEST_KIND, NIFTY_TEST1_KIND, NIFTY_TEST2_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 import { defaultMultiIndexReversalAlgo, isMultiIndexReversalAlgo, multiIndexReversalConfig, MULTI_INDEX_REVERSAL_KIND } from "./multiIndexReversal/index.js";
-import { clampShivamDailyTradeLimit, defaultShivamT2sAlgo, isShivamT2sAlgo, shivamT2sConfig, SHIVAM_T2S_KIND, validateShivamT2s } from "./shivamT2s/index.js";
+import { clampShivamDailyTradeLimit, defaultShivamT2sAlgo, isShivamT2sAlgo, shivamT2sConfig, SHIVAM_T2S_KIND, SHIVAM_T2S_SEED_ID, validateShivamT2s } from "./shivamT2s/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
@@ -1202,6 +1202,13 @@ export function seedAlgos() {
       }),
       { id: "a15", pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
     ),
+    normalizeAlgo(
+      defaultShivamT2sAlgo({
+        runMode: "paper",
+        testDesk: true,
+      }),
+      { id: SHIVAM_T2S_SEED_ID, pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper", testDesk: true },
+    ),
   ];
 }
 
@@ -1233,7 +1240,7 @@ function readAlgoFile() {
 }
 
 export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
-  const pinned = new Set(ALWAYS_ON_FIRST_CANDLE_IDS);
+  const pinned = new Set([...ALWAYS_ON_FIRST_CANDLE_IDS, SHIVAM_T2S_SEED_ID]);
   const removedIds = uniqueIds(stored.removedIds).filter((id) => !pinned.has(id));
   const removed = new Set(removedIds);
   const hasSaved = Array.isArray(stored.algos);
