@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../AuthContext";
+import { confirmLogout } from "../confirmLogout";
 import { useMarket } from "../MarketContext";
 import { Card } from "../components/Ui";
 import { colors, formatMobile } from "../theme";
@@ -46,7 +47,7 @@ export function SettingsScreen() {
       <Pressable style={styles.link} onPress={() => void onThumb()} disabled={busy}>
         <Text style={styles.linkText}>{busy ? "Please wait..." : hasThumb ? "Reset thumb on this phone" : "Enable thumb on this phone"}</Text>
       </Pressable>
-      <Pressable style={styles.out} onPress={() => void logout()}>
+      <Pressable style={styles.out} onPress={() => confirmLogout(logout)}>
         <Text style={styles.outText}>Log out</Text>
       </Pressable>
     </View>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { getMemberDesk } from "../api";
 import { useAuth } from "../AuthContext";
+import { confirmLogout } from "../confirmLogout";
 import { Card } from "../components/Ui";
 import { colors } from "../theme";
 
@@ -65,7 +66,7 @@ export function ProfileScreen() {
           <Row label="Broker name" value={brokerName || "—"} />
         </Card>
       ) : null}
-      <Pressable style={styles.out} onPress={() => void logout()}>
+      <Pressable style={styles.out} onPress={() => confirmLogout(logout)}>
         <Text style={styles.outText}>Log out</Text>
       </Pressable>
     </ScrollView>
