@@ -839,28 +839,28 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           />
         </label>
 
+        {shivam ? null : (
         <label className="mt-2.5 block text-xs font-semibold text-slate-500" data-trade-limit="daily">
           Daily trade limit
           <input
             type="number"
             min={1}
-            max={shivam ? 100 : 20}
+            max={20}
             inputMode="numeric"
             aria-label="Daily trade limit"
             className={fieldClass}
             value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || (isNiftyTest2Kind(form) || test2 ? 1 : 5)))}
             onChange={(event) =>
               set({
-                maxTradesPerDay: Math.max(1, Math.min(shivam ? 100 : 20, Math.round(Number(event.target.value) || 1))),
+                maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))),
               })
             }
           />
-          {shivam ? null : (
-            <span className="desk-help mt-1 block font-medium text-slate-400">
-              Orders this strategy can place today, from 1 to 20. Saving does not start LIVE.
-            </span>
-          )}
+          <span className="desk-help mt-1 block font-medium text-slate-400">
+            Orders this strategy can place today, from 1 to 20. Saving does not start LIVE.
+          </span>
         </label>
+        )}
 
         {test2 ? (
           <div className="mt-2.5 space-y-1.5">
@@ -1020,6 +1020,45 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               </label>
               <NumberField label={form.targetMode === "points" ? "Target points" : "Target %"} value={form.targetValue ?? 40} step={0.5} onChange={(targetValue) => set({ targetValue, targetPct: targetValue })} />
             </div>
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3" data-shivam-name-broker="true">
+              <label className="text-xs font-semibold text-slate-500">
+                Strategy name
+                <input className={fieldClass} value={SHIVAM_T2S_NAME} readOnly />
+              </label>
+              <label className="text-xs font-semibold text-slate-500" data-shivam-broker="true">
+                Broker
+                <select
+                  className={fieldClass}
+                  value={form.runMode === "live" ? form.brokerId || "dhan" : "paper"}
+                  disabled={form.runMode !== "live"}
+                  onChange={(event) => set({ brokerId: event.target.value })}
+                >
+                  {(form.runMode === "live" ? liveBrokers : connected.filter((item) => item.id === "paper")).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {item.liveFeed ? " · LIVE" : item.connected && item.id !== "dhan" ? " · connected" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500" data-trade-limit="daily" data-shivam-daily-limit="true">
+                Daily trade limit
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  inputMode="numeric"
+                  aria-label="Daily trade limit"
+                  className={fieldClass}
+                  value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || 5))}
+                  onChange={(event) =>
+                    set({
+                      maxTradesPerDay: Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))),
+                    })
+                  }
+                />
+              </label>
+            </div>
           </div>
         ) : test1 && !test2 ? (
           <div className="mt-2.5 space-y-1.5">
@@ -1125,6 +1164,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </div>
         ) : null}
 
+        {shivam ? null : (
         <div className="mt-1.5 grid grid-cols-2 gap-1.5 lg:grid-cols-4">
           {editing && !test2 ? (
           <label className="hidden text-xs font-semibold text-slate-500 sm:block">
@@ -1239,6 +1279,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             </span>
           </label>
         </div>
+        )}
 
         {engine || niftyTest || crudeFirst || mir || shivam ? null : kind === "indicator" ? (
           <div className="mt-2.5 grid gap-2 md:grid-cols-2">
