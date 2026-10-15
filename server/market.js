@@ -666,7 +666,8 @@ export function strategyAllowsLiveMemberCopies(strategy) {
   if (!name) return true;
   const algo = strategyCard(name);
   if (!algo?.id && !algo?.name) return true;
-  if (algo.testDesk || isShivamT2sAlgo(algo)) return false;
+  if (algo.testDesk && !isShivamT2sAlgo(algo)) return false;
+  if (isShivamT2sAlgo(algo) && (algo.runMode === "paper" || algo.runMode === "backtest")) return false;
   if (algo.enabled) return true;
   if (algo.holdDailyLive) return false;
   return true;
@@ -1343,6 +1344,8 @@ function sameBookOrder(payload = {}) {
 }
 
 function liveCopyAlgo(stamped = {}) {
+  const fromOrder = orderAlgo(stamped);
+  if (isShivamT2sAlgo(fromOrder)) return fromOrder;
   return findLiveCopyAlgo(state.algos || [], stamped?.strategy);
 }
 
@@ -1399,10 +1402,10 @@ export function queueLiveAlgoOrder(payload) {
   for (const brokerId of targets) {
     adminResult = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
   }
-  if (!payload.skipMemberCopy && !testDesk) {
-    const copyAlgo = liveCopyAlgo(deskStamped);
+  if (!payload.skipMemberCopy && (!testDesk || isShivamT2sAlgo(algo))) {
+    const copyAlgo = liveCopyAlgo(deskStamped) || algo;
     for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
-      enqueueLiveAlgoOrder(copy);
+      enqueueLiveAlgoOrder({ ...copy, testDesk: false });
     }
   }
   if (typeof onLiveBookChange === "function") onLiveBookChange();

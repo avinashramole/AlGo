@@ -38,8 +38,9 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(algo, /data-algo-test-tab/);
   assert.match(algo, /navigate\("\/algo-test"\)/);
   assert.match(algo, /Paper test only · no live · no copy/);
-  assert.match(algo, /Algo Test · no member copy/);
+  assert.match(algo, /Paper test only · no live · no copy/);
   assert.match(algo, /isolated && !shivam/);
+  assert.match(algo, /data-shivam-map="true"/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk = false/);
   assert.match(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);
@@ -82,7 +83,7 @@ test("main-desk strategies stay off the test desk flag", () => {
   assert.equal(created.runMode, "live");
 });
 
-test("Shivam T2S live on Algo Test still has no member copy", () => {
+test("Shivam T2S live on Algo Test keeps mapped clients", () => {
   const locked = normalizeAlgo({
     name: "Shivam T2S Strategy",
     kind: "shivam-t2s",
@@ -107,9 +108,9 @@ test("Shivam T2S live on Algo Test still has no member copy", () => {
   assert.equal(created.runMode, "live");
   assert.equal(created.brokerId, "dhan");
   assert.equal(created.liveAuthorized, true);
-  assert.equal(created.mappingScope, "master");
-  assert.deepEqual(created.mappedClientIds, []);
-  assert.equal(created.clientVisible, false);
+  assert.equal(created.mappingScope, "both");
+  assert.deepEqual(created.mappedClientIds, ["u-1"]);
+  assert.equal(created.clientVisible, true);
   assert.equal(isTestDeskAlgo(created), true);
 });
 
@@ -119,6 +120,56 @@ test("findLiveCopyAlgo and member copies skip Algo Test strategies", () => {
   const found = findLiveCopyAlgo([testAlgo, live], "NIFTY");
   assert.equal(found.id, "live-n");
   assert.deepEqual(memberCopyPayloads({ strategy: "NIFTY", qty: 65 }, testAlgo), []);
+});
+
+test("findLiveCopyAlgo finds Shivam T2S on Algo Test and mapping still gates copies", () => {
+  const shivam = {
+    id: "shivam-1",
+    name: "Shivam T2S Strategy",
+    kind: "shivam-t2s",
+    testDesk: true,
+    enabled: true,
+    mappingScope: "clients",
+    mappedClientIds: ["u-1"],
+  };
+  assert.equal(findLiveCopyAlgo([shivam], "Shivam T2S Strategy").id, "shivam-1");
+  assert.deepEqual(
+    memberCopyPayloads({ strategy: "Shivam T2S Strategy", qty: 65 }, { ...shivam, mappingScope: "master" }),
+    [],
+  );
+});
+
+test("members mapped to Shivam T2S can see it", () => {
+  assert.equal(
+    strategyVisibleToMember(
+      {
+        id: "a16",
+        name: "Shivam T2S Strategy",
+        kind: "shivam-t2s",
+        testDesk: true,
+        clientVisible: true,
+        mappingScope: "clients",
+        mappedClientIds: ["u-1"],
+      },
+      { userId: "u-1", role: "user" },
+    ),
+    true,
+  );
+  assert.equal(
+    strategyVisibleToMember(
+      {
+        id: "a16",
+        name: "Shivam T2S Strategy",
+        kind: "shivam-t2s",
+        testDesk: true,
+        clientVisible: true,
+        mappingScope: "clients",
+        mappedClientIds: ["u-1"],
+      },
+      { userId: "u-other", role: "user" },
+    ),
+    false,
+  );
 });
 
 test("members cannot see Algo Test strategies", () => {
@@ -184,7 +235,7 @@ test("create/update/toggle keep non-Shivam Algo Test paper-only and off live bro
   }
 });
 
-test("create/update/toggle allow Shivam T2S live Dhan on Algo Test without copy", () => {
+test("create/update/toggle allow Shivam T2S live Dhan on Algo Test with mapped clients", () => {
   setDhanFeed({ live: true });
   const created = createAlgo({
     kind: "shivam-t2s",
@@ -194,14 +245,16 @@ test("create/update/toggle allow Shivam T2S live Dhan on Algo Test without copy"
     brokerId: "dhan",
     mappingScope: "clients",
     mappedClientIds: ["u-keep"],
+    clientVisible: true,
   });
   try {
     assert.equal(created.testDesk, true);
     assert.equal(created.runMode, "live");
     assert.equal(created.brokerId, "dhan");
     assert.equal(created.liveAuthorized, true);
-    assert.equal(created.mappingScope, "master");
-    assert.deepEqual(created.mappedClientIds, []);
+    assert.equal(created.mappingScope, "clients");
+    assert.deepEqual(created.mappedClientIds, ["u-keep"]);
+    assert.equal(created.clientVisible, true);
     const live = updateAlgo(created.id, { runMode: "live", enabled: true, brokerId: "dhan", liveAuthorized: true });
     assert.equal(live.error, undefined);
     assert.equal(live.testDesk, true);
@@ -215,7 +268,6 @@ test("create/update/toggle allow Shivam T2S live Dhan on Algo Test without copy"
     assert.equal(started.brokerId, "dhan");
     assert.equal(started.liveAuthorized, true);
     assert.equal(started.status, "LIVE");
-    assert.deepEqual(memberCopyPayloads({ strategy: created.name, qty: 65 }, started), []);
   } finally {
     deleteAlgo(created.id);
     setDhanFeed({ live: false });

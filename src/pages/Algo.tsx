@@ -168,7 +168,7 @@ function ShivamCapitalStrip({ algo }: { algo: AlgoStrategy }) {
         {vs.requiredFunds ? ` · required ₹${formatNumber(Number(vs.requiredFunds), 2)}` : ""}
       </div>
       <div>
-        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan" : "Paper"} · no member copy
+        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan" : "Paper"} · mapped {Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0}
       </div>
     </div>
   );
@@ -293,7 +293,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "shivam-t2s" as const,
       category: "SHIVAM T2S",
-      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ${algo.strikePolicy || "ATM"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan" : "Paper"} · no member copy`,
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ${algo.strikePolicy || "ATM"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan" : "Paper"} · map clients`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -666,7 +666,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
               <div className="text-base font-bold">No strategies in this view</div>
               <p className="mt-1 text-sm text-slate-400">
                 {testDesk
-                  ? "Add SHIVAM T2S or another test strategy. Shivam can paper or live-trade Dhan from this page. Nothing here copies members or mixes with Algos."
+                  ? "Add SHIVAM T2S or another test strategy. Shivam can paper or live-trade Dhan from this page. Map clients on the Shivam card to copy those users."
                   : "Add a NIFTY 5m or CRUDE OIL strategy to start the desk."}
               </p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -1069,7 +1069,8 @@ function AlgoCard({
                 <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
                   Test
                 </span>
-              ) : (
+              ) : null}
+              {isolated && !shivam ? null : (
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
@@ -1349,13 +1350,13 @@ function AlgoCard({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
         <div className="flex flex-wrap items-center gap-2">
-          {isolated ? (
+          {isolated && !shivam ? (
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              {shivam ? "Algo Test · no member copy" : "Paper test only · no live · no copy"}
+              Paper test only · no live · no copy
             </span>
           ) : (
             <>
-          <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold">
+          <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold" data-shivam-map="true">
             <Users size={15} />
             Map clients
           </button>

@@ -34,6 +34,7 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /\["shivam-t2s", "SHIVAM T2S"\]/);
   assert.match(page, /isolated && !shivam/);
   assert.match(page, /data-start-live="true"/);
+  assert.match(page, /data-shivam-map="true"/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk && !shivam/);
   assert.match(strategies, /id: SHIVAM_T2S_SEED_ID/);
