@@ -13,6 +13,7 @@ import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 import { firstCandleNameAliases } from "./niftyVwap/config.js";
 import { markContractToMarket } from "./positionMark.js";
+import { parseOptionContract } from "./frontFutures.js";
 import { defaultOrderRole, exitReasonLabel, keepExitReason, orderWhyLabel } from "./exitReason.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1313,13 +1314,22 @@ export function isWorkingMemberOrder(status) {
 }
 
 export function optionContractKey(symbol = "") {
+  const parsed = parseOptionContract(symbol);
+  if (parsed?.root && parsed.strike && parsed.option) {
+    return `${parsed.root} ${parsed.strike} ${parsed.option}`;
+  }
   const raw = String(symbol || "")
     .toUpperCase()
     .replace(/-/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const hit = raw.match(/\b(NIFTY|BANKNIFTY|FINNIFTY|SENSEX)\b.*?\b(\d{4,6})\b\s+(CE|PE)\b/);
-  if (hit) return `${hit[1]} ${hit[2]} ${hit[3]}`;
+  const hit = raw.match(
+    /\b(MIDCPNIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NATURALGAS|COPPER|NIFTY|CRUDE)\b.*?\b(\d{3,6})\b\s+(CE|PE)\b/,
+  );
+  if (hit) {
+    const root = hit[1] === "CRUDE" ? "CRUDEOIL" : hit[1];
+    return `${root} ${hit[2]} ${hit[3]}`;
+  }
   return raw;
 }
 
@@ -1490,28 +1500,45 @@ export function reconcileCopyAlerts(desk) {
   return changed;
 }
 
-export function overlayMemberCopyMeta(row, local) {
+function pairedMemberEntryPrice(row, book = []) {
+  if (String(row?.side || "").toUpperCase() !== "SELL") return 0;
+  const key = optionContractKey(row?.symbol);
+  const buy = (book || []).find(
+    (item) =>
+      String(item?.side || "").toUpperCase() === "BUY" &&
+      optionContractKey(item.symbol) === key &&
+      Number(item.price || item.avg || item.entry || 0) > 0,
+  );
+  return Number(buy?.price || buy?.avg || buy?.entry || 0);
+}
+
+export function overlayMemberCopyMeta(row, local, book = []) {
   if (!row) return row;
-  if (!local) return row;
-  const strategy = String(row.strategy || local.strategy || "").trim();
-  const side = row.side || local.side;
-  const status = String(row.status || local.status || "");
+  if (!local && !(book || []).length) return row;
+  const strategy = String(row.strategy || local?.strategy || "").trim();
+  const side = row.side || local?.side;
+  const status = String(row.status || local?.status || "");
+  const entryPrice =
+    Number(row.entryPrice || local?.entryPrice || 0) || pairedMemberEntryPrice({ ...local, ...row, side }, [...(book || []), local, row].filter(Boolean));
+  const slPrice = Number(row.slPrice || local?.slPrice || 0);
+  const targetPrice = Number(row.targetPrice || local?.targetPrice || 0);
+  const whyRow = { ...local, ...row, strategy, side, status, entryPrice, slPrice, targetPrice };
   const role = /REJECT|FAIL/.test(status)
-    ? String(row.role || local.role || "")
-    : defaultOrderRole({ ...local, ...row, strategy, side }) || String(row.role || local.role || "").trim();
-  const exitReason = exitReasonLabel({ ...local, ...row, role, status }) || local.exitReason || row.exitReason || "";
-  const mergedReason = keepExitReason(local.reason || local.exitReason, row.reason);
-  const reason = orderWhyLabel({
-    ...local,
-    ...row,
-    strategy,
-    side,
-    role,
-    status,
-    reason: /REJECT|FAIL/.test(status) ? row.reason || mergedReason : mergedReason,
-  }) || mergedReason;
-  const price = Number(row.price) > 0 ? Number(row.price) : Number(local.price || 0);
-  const qty = Number(row.qty) > 0 ? Number(row.qty) : Number(local.qty || 0);
+    ? String(row.role || local?.role || "")
+    : defaultOrderRole(whyRow) || String(row.role || local?.role || "").trim();
+  const exitReason = exitReasonLabel({ ...whyRow, role }) || local?.exitReason || row.exitReason || "";
+  const mergedReason = keepExitReason(local?.reason || local?.exitReason, row.reason);
+  const reason =
+    orderWhyLabel({
+      ...whyRow,
+      role,
+      reason: /REJECT|FAIL/.test(status) ? row.reason || mergedReason : mergedReason,
+    }) || mergedReason;
+  const price = Number(row.price) > 0 ? Number(row.price) : Number(local?.price || 0);
+  const qty = Number(row.qty) > 0 ? Number(row.qty) : Number(local?.qty || 0);
+  if (!local) {
+    return { ...row, role, exitReason, reason, entryPrice: entryPrice || undefined, slPrice: slPrice || undefined, targetPrice: targetPrice || undefined };
+  }
   return {
     ...row,
     symbol: String(row.symbol || local.symbol || "").trim(),
@@ -1522,6 +1549,9 @@ export function overlayMemberCopyMeta(row, local) {
     exitReason,
     reason,
     price,
+    entryPrice: entryPrice || undefined,
+    slPrice: slPrice || undefined,
+    targetPrice: targetPrice || undefined,
     createdAt: row.createdAt || local.createdAt || "",
   };
 }
@@ -1576,7 +1606,7 @@ export function applyMemberDhanOrderStatuses(userId, brokerOrders = []) {
   const seen = new Set(paper.map((row) => String(row.id)));
   for (const row of mapped) {
     const local = findCopyMeta(locals, row);
-    const next = overlayMemberCopyMeta(row, local);
+    const next = overlayMemberCopyMeta(row, local, [...mapped, ...locals]);
     if (isWorkingMemberOrder(next.status)) {
       const prev = locals.find((item) => String(item.id) === String(next.id));
       const same =
@@ -1846,6 +1876,11 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     );
     return existing || null;
   }
+  const book = [...(desk.orders || []), ...(desk.orderHistory || [])];
+  const entryPrice =
+    Number(payload.entryPrice || 0) ||
+    (side === "SELL" ? pairedMemberEntryPrice({ ...payload, side, symbol: live?.tradingSymbol || payload.symbol }, book) : 0);
+  const whyPayload = { ...payload, side, strategy: payload.strategy, status: mapped, role: payload.role, price, entryPrice };
   const order = {
     id: live?.orderId ? String(live.orderId) : `mo${crypto.randomBytes(6).toString("hex")}`,
     userId,
@@ -1861,9 +1896,10 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     live: Boolean(live?.orderId) && !paper,
     reason:
       (error ? String(error.message || error) : "") ||
-      orderWhyLabel({ ...payload, side, strategy: payload.strategy, status: mapped, role: payload.role }),
-    role: defaultOrderRole({ ...payload, side, strategy: payload.strategy }) || payload.role || "",
+      orderWhyLabel(whyPayload),
+    role: defaultOrderRole(whyPayload) || payload.role || "",
     exitReason: exitReasonLabel(payload) || payload.exitReason || "",
+    entryPrice: entryPrice || undefined,
     securityId: payload.securityId ? String(payload.securityId) : "",
     createdAt: now,
   };

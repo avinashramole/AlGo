@@ -26,14 +26,56 @@ export function isBrokerNoiseReason(text = "") {
   return BROKER_NOISE_RE.test(raw.toLowerCase());
 }
 
+export function normalizeExitRole(role = "") {
+  const raw = String(role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  if (raw === "stop-loss" || raw === "stoploss" || raw === "stop") return "sl";
+  if (raw === "tgt" || raw === "tp") return "target";
+  if (raw === "trailing" || raw === "trailing-sl") return "trail";
+  return raw;
+}
+
+export function closeWhyFromPrices(row = {}) {
+  const side = String(row.side || row.type || "").toUpperCase();
+  const fill = Number(row.price || row.exit || row.fill || row.sellPrice || 0);
+  const entry = Number(row.entryPrice || row.entry || row.avg || row.buyPrice || 0);
+  const sl = Number(row.slPrice || row.stopPrice || 0);
+  const tgt = Number(row.targetPrice || 0);
+  const pnl = Number(row.pnl);
+  const closedTrade = entry > 0 && Number(row.exit || row.sellPrice || 0) > 0;
+  if (side === "BUY" && !closedTrade) return "";
+  if (side && side !== "SELL" && !closedTrade) return "";
+  const trail = normalizeExitRole(row.role) === "trail" || TRAIL_RE.test(String(row.exitReason || row.reason || ""));
+  if (!(fill > 0) && !(Number.isFinite(pnl) && pnl !== 0 && closedTrade)) return "";
+  if (sl > 0 && tgt > 0 && fill > 0) {
+    const toSl = Math.abs(fill - sl);
+    const toTgt = Math.abs(fill - tgt);
+    if (toSl <= toTgt) return trail ? "TRAILING SL HIT" : "SL HIT";
+    return "TGT DONE";
+  }
+  if (sl > 0 && fill > 0 && fill <= sl * 1.02) return trail ? "TRAILING SL HIT" : "SL HIT";
+  if (tgt > 0 && fill > 0 && fill >= tgt * 0.98) return "TGT DONE";
+  if (entry > 0 && fill > 0) {
+    if (fill < entry) return trail ? "TRAILING SL HIT" : "SL HIT";
+    if (fill > entry) return "TGT DONE";
+  }
+  if (Number.isFinite(pnl) && pnl !== 0 && (closedTrade || side === "SELL")) {
+    if (pnl < 0) return trail ? "TRAILING SL HIT" : "SL HIT";
+    if (pnl > 0) return "TGT DONE";
+  }
+  return "";
+}
+
 export function exitReasonLabel(row = {}) {
-  const role = String(row.role || "").toLowerCase();
-  const tagged = String(row.exitReason || row.reason || "").toLowerCase();
-  if (role === "trail" || role === "trailing" || role === "trailing-sl" || (TRAIL_RE.test(tagged) && !BROKER_FAIL_RE.test(tagged))) {
+  const role = normalizeExitRole(row.role);
+  const tagged = `${row.exitReason || ""} ${row.reason || ""} ${row.role || ""}`.toLowerCase();
+  if (role === "trail" || (TRAIL_RE.test(tagged) && !BROKER_FAIL_RE.test(tagged))) {
     return "TRAILING SL HIT";
   }
   if (role === "sl" || (SL_RE.test(tagged) && !BROKER_FAIL_RE.test(tagged))) return "SL HIT";
-  if (role === "target" || role === "tgt" || (TGT_RE.test(tagged) && !BROKER_FAIL_RE.test(tagged))) return "TGT DONE";
+  if (role === "target" || (TGT_RE.test(tagged) && !BROKER_FAIL_RE.test(tagged))) return "TGT DONE";
   return "";
 }
 
@@ -43,7 +85,7 @@ function hasStrategy(row = {}) {
 }
 
 function roleWhy(role = "") {
-  const raw = String(role || "").toLowerCase();
+  const raw = normalizeExitRole(role);
   if (raw === "hedge") return "HEDGE ENTRY";
   if (raw === "reversal") return "REVERSAL ENTRY";
   if (raw === "broker-test") return "TEST ORDER";
@@ -63,12 +105,16 @@ export function orderWhyLabel(row = {}) {
   }
   const hit = exitReasonLabel(row);
   if (hit) return hit;
+  const close = closeWhyFromPrices(row);
+  if (close) return close;
   const fromRole = roleWhy(row.role);
-  if (fromRole) return fromRole;
+  if (fromRole && fromRole !== "EXIT") return fromRole;
   const recalled = recallOrderWhy(row);
-  if (recalled) return recalled;
+  if (recalled && recalled !== "EXIT") return recalled;
   const side = String(row.side || row.type || "").toUpperCase();
   if (hasStrategy(row) && side === "BUY") return "ENTRY";
+  if (fromRole) return fromRole;
+  if (recalled) return recalled;
   if (hasStrategy(row) && side === "SELL") return "EXIT";
   if (raw && !isBrokerNoiseReason(raw)) return raw;
   return "";
@@ -139,12 +185,14 @@ const ROLE_SPECIFIC = new Set([
   "entry",
   "shivam-entry",
   "primary",
+  "stop-loss",
+  "stoploss",
 ]);
 
 export function preferOrderRole(...roles) {
   for (const role of roles) {
-    const n = String(role || "").trim().toLowerCase();
-    if (ROLE_SPECIFIC.has(n)) return String(role).trim();
+    const n = normalizeExitRole(role);
+    if (ROLE_SPECIFIC.has(n) || n === "stop-loss" || n === "stoploss") return n === "stop-loss" || n === "stoploss" ? "sl" : n;
   }
   for (const role of roles) {
     const n = String(role || "").trim();
@@ -154,14 +202,18 @@ export function preferOrderRole(...roles) {
 }
 
 export function defaultOrderRole(row = {}) {
-  const existing = String(row.role || "").trim();
-  if (ROLE_SPECIFIC.has(existing.toLowerCase())) return existing;
+  const existing = normalizeExitRole(row.role);
+  if (ROLE_SPECIFIC.has(existing)) return existing;
+  const close = closeWhyFromPrices(row);
+  if (close === "TRAILING SL HIT") return "trail";
+  if (close === "SL HIT") return "sl";
+  if (close === "TGT DONE") return "target";
   const fromWhy = exitRoleFromReason(row.exitReason || row.reason || "");
-  if (["sl", "trail", "target", "eod", "vwap-exit", "entry"].includes(fromWhy) && (row.exitReason || exitReasonLabel(row))) {
+  if (["sl", "trail", "target", "eod", "vwap-exit", "entry"].includes(fromWhy) && (row.exitReason || exitReasonLabel(row) || close)) {
     return fromWhy === "entry" ? "entry" : fromWhy;
   }
   const side = String(row.side || "").toUpperCase();
   if (hasStrategy(row) && side === "BUY") return "entry";
-  if (hasStrategy(row) && side === "SELL") return "exit";
+  if (hasStrategy(row) && side === "SELL") return close ? (close === "TGT DONE" ? "target" : "sl") : "exit";
   return "";
 }

@@ -3,23 +3,77 @@ import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatNumber, hasDhanQuotes } from "../theme";
 
-function orderWhy(row: { side?: string; status?: string; strategy?: string; role?: string; reason?: string; exitReason?: string }) {
+function contractKey(row: { symbol?: string; securityId?: string } = {}) {
+  const id = String(row.securityId || "").trim();
+  if (id && id !== "0") return `id:${id}`;
+  const raw = String(row.symbol || "")
+    .toUpperCase()
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const hit = raw.match(
+    /\b(MIDCPNIFTY|BANKNIFTY|FINNIFTY|SENSEX|CRUDEOIL|NATURALGAS|COPPER|NIFTY|CRUDE)\b.*?\b(\d{3,6})\b\s*(CE|PE)\b/,
+  );
+  if (hit) {
+    const root = hit[1] === "CRUDE" ? "CRUDEOIL" : hit[1];
+    return `${root} ${hit[2]} ${hit[3]}`;
+  }
+  return raw;
+}
+
+function orderWhy(
+  row: {
+    side?: string;
+    status?: string;
+    strategy?: string;
+    role?: string;
+    reason?: string;
+    exitReason?: string;
+    symbol?: string;
+    securityId?: string;
+    copyUserId?: string;
+    price?: number;
+    entry?: number;
+    exit?: number;
+    entryPrice?: number;
+    pnl?: number;
+  },
+  book: Array<{ side?: string; symbol?: string; securityId?: string; copyUserId?: string; price?: number }> = [],
+) {
   const status = String(row.status || "").toUpperCase();
   const raw = String(row.reason || row.exitReason || "").trim();
   const noise = /trade confirmed|sent to dhan|not sent to dhan|^traded$|^success$/i.test(raw);
   if (/REJECT|FAIL/.test(status)) return raw && !noise ? raw : "REJECTED";
-  const role = String(row.role || "").toLowerCase();
-  const tagged = `${row.exitReason || ""} ${row.reason || ""}`.toLowerCase();
-  if (role === "trail" || /trail|trailing[\s-]?sl/.test(tagged)) return "TRAILING SL HIT";
-  if (role === "sl" || /\bsl\b|stop[\s-]?loss|sl hit/.test(tagged)) return "SL HIT";
+  const role = String(row.role || "")
+    .toLowerCase()
+    .replace(/_/g, "-");
+  const tagged = `${row.exitReason || ""} ${row.reason || ""} ${row.role || ""}`.toLowerCase();
+  if (role === "trail" || role === "trailing" || role === "trailing-sl" || /trail|trailing[\s-]?sl/.test(tagged)) return "TRAILING SL HIT";
+  if (role === "sl" || role === "stop-loss" || role === "stoploss" || /\bsl\b|stop[\s-]?loss|sl hit/.test(tagged)) return "SL HIT";
   if (role === "target" || role === "tgt" || /\btgt\b|target|tgt done/.test(tagged)) return "TGT DONE";
+  const side = String(row.side || "").toUpperCase();
+  const fill = Number(row.price || row.exit || 0);
+  let entry = Number(row.entryPrice || row.entry || 0);
+  if (side === "SELL" && !(entry > 0)) {
+    const buy = book.find(
+      (item) =>
+        String(item.side || "").toUpperCase() === "BUY" &&
+        String(item.copyUserId || "") === String(row.copyUserId || "") &&
+        contractKey(item) === contractKey(row) &&
+        Number(item.price || 0) > 0,
+    );
+    if (buy) entry = Number(buy.price);
+  }
+  if (side === "SELL" && fill > 0 && entry > 0) {
+    if (fill < entry) return "SL HIT";
+    if (fill > entry) return "TGT DONE";
+  }
   if (role === "shivam-entry" || role === "entry" || role === "hedge" || role === "reversal" || role === "broker-test") {
     if (role === "hedge") return "HEDGE ENTRY";
     if (role === "reversal") return "REVERSAL ENTRY";
     if (role === "broker-test") return "TEST ORDER";
     return "ENTRY";
   }
-  const side = String(row.side || "").toUpperCase();
   const strategy = String(row.strategy || "").trim();
   if (strategy && !/^(manual|auto)$/i.test(strategy) && side === "BUY") return "ENTRY";
   if (strategy && !/^(manual|auto)$/i.test(strategy) && side === "SELL") return "EXIT";
@@ -62,8 +116,8 @@ export function OrdersScreen() {
             {row.side} · {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
           </Text>
           <Text style={styles.muted}>{row.brokerName || row.brokerId || "dhan"}</Text>
-          <Text style={{ color: /SL HIT|TGT DONE/.test(orderWhy(row)) ? colors.up : colors.muted, marginTop: 6, fontWeight: "700" }}>
-            Why · {orderWhy(row) || "—"}
+          <Text style={{ color: /SL HIT|TGT DONE/.test(orderWhy(row, orders)) ? colors.up : colors.muted, marginTop: 6, fontWeight: "700" }}>
+            Why · {orderWhy(row, orders) || "—"}
           </Text>
           {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
             <Pressable

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
+import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../lib/exitReason";
 import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 import { isLiveBrokerTrade, isPaperTrade } from "../lib/paperBook";
 
@@ -97,8 +97,8 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                     <div className="mt-1 text-[11px] text-slate-400">
                       {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
                     </div>
-                    <div className={cn("mt-1 text-[11px] font-semibold", reasonTone(row))} data-order-why="true">
-                      Why: {displayOrderReason(row) || "—"}
+                    <div className={cn("mt-1 text-[11px] font-semibold", reasonTone(row, orders))} data-order-why="true">
+                      Why: {orderWhyForBook(row, orders) || "—"}
                     </div>
                     {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
                       <button
@@ -150,8 +150,8 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                             <div className="text-[10px] font-semibold text-brand-500">Copy · {row.copyUserName || row.copyUserId}</div>
                           ) : null}
                         </td>
-                        <td className={cn("px-4 py-3 text-xs font-semibold", reasonTone(row))} data-order-why="true">
-                          {displayOrderReason(row) || "—"}
+                        <td className={cn("px-4 py-3 text-xs font-semibold", reasonTone(row, orders))} data-order-why="true">
+                          {orderWhyForBook(row, orders) || "—"}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {row.filledQty || 0}/{row.qty}
@@ -197,8 +197,11 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
   );
 }
 
-function reasonTone(row: { status?: string; side?: string; strategy?: string; role?: string; reason?: string; exitReason?: string }) {
-  const text = displayOrderReason(row);
+function reasonTone(
+  row: { status?: string; side?: string; strategy?: string; role?: string; reason?: string; exitReason?: string; symbol?: string; price?: number; copyUserId?: string },
+  book: Array<{ side?: string; symbol?: string; price?: number; copyUserId?: string }> = [],
+) {
+  const text = orderWhyForBook(row, book);
   if (isExitHitReason(text)) return "text-brand-500";
   if (isEntryWhy(text)) return "text-up";
   if (row.status === "REJECTED" || row.status === "FAILED") return "text-down";

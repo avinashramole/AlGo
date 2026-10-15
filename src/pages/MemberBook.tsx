@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { downloadMemberReport, getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { catchDeskError } from "../lib/liveSite";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
-import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
+import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../lib/exitReason";
 import { cn, formatIst, formatNumber } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
 import { hasPaperActivity, isLiveBrokerTrade, memberIsPaperTrade } from "../lib/paperBook";
@@ -158,7 +158,7 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
                       Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
                     {row.product ? <div className="mt-0.5 text-xs text-slate-400">{row.product}</div> : null}
-                    <BookMeta row={row} />
+                    <BookMeta row={row} book={closed} />
                   </div>
                   <Money value={row.pnl} className="text-sm" />
                 </div>
@@ -197,7 +197,7 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
         {filtered.length ? (
           <div className="space-y-2">
             {filtered.map((row) => (
-              <OrderCard key={row.id} row={row} />
+              <OrderCard key={row.id} row={row} book={orders} />
             ))}
           </div>
         ) : (
@@ -241,7 +241,7 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
                     <div className="mt-0.5 text-xs text-slate-400">
                       Buy {row.buyQty || row.qty || 0} @ {formatNumber(row.buyPrice || row.entry)} · Sell {row.sellQty || row.qty || 0} @ {formatNumber(row.sellPrice || row.exit)}
                     </div>
-                    <BookMeta row={row} />
+                    <BookMeta row={row} book={closed} />
                   </div>
                   <Money value={row.pnl} className="text-sm" />
                 </div>
@@ -264,7 +264,7 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
         {filtered.length ? (
           <div className="space-y-2">
             {filtered.map((row) => (
-              <OrderCard key={row.id} row={row} />
+              <OrderCard key={row.id} row={row} book={orders} />
             ))}
           </div>
         ) : (
@@ -300,10 +300,23 @@ function MemberBook({ view, onDesk }: { view: View; onDesk?: (desk: MemberDesk |
 
 function BookMeta({
   row,
+  book = [],
 }: {
-  row: { strategy?: string; role?: string; reason?: string; exitReason?: string };
+  row: {
+    strategy?: string;
+    role?: string;
+    reason?: string;
+    exitReason?: string;
+    side?: string;
+    symbol?: string;
+    price?: number;
+    entry?: number;
+    exit?: number;
+    pnl?: number;
+  };
+  book?: Array<{ side?: string; symbol?: string; price?: number; entry?: number; exit?: number }>;
 }) {
-  const why = displayOrderReason(row) || "—";
+  const why = orderWhyForBook(row, book) || "—";
   return (
     <div className="mt-2 grid grid-cols-2 gap-2 text-xs" data-book-meta="strategy-exit">
       <div>
@@ -342,7 +355,7 @@ function PositionCard({ row }: { row: MemberPosition }) {
   );
 }
 
-function OrderCard({ row }: { row: DeskOrder }) {
+function OrderCard({ row, book = [] }: { row: DeskOrder; book?: DeskOrder[] }) {
   const status = String(row.status || "").toUpperCase();
   const tone = /REJECT|FAIL/.test(status) ? "down" : /FILL|TRADE|COMPLETE/.test(status) ? "up" : /PEND|OPEN|PARTIAL|TRANSIT/.test(status) ? "paper" : "muted";
   return (
@@ -354,7 +367,7 @@ function OrderCard({ row }: { row: DeskOrder }) {
             {row.side} {row.qty} @ {formatNumber(row.price)}
           </div>
           <div className="mt-1 text-xs text-slate-400">{row.createdAt ? formatIst(row.createdAt) : ""}</div>
-          <BookMeta row={row} />
+          <BookMeta row={row} book={book} />
         </div>
         <StatusPill label={status || "ORDER"} tone={tone} />
       </div>
