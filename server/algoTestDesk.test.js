@@ -41,7 +41,7 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(builder, /testDesk = false/);
   assert.match(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);
   assert.match(builder, /testDesk: true/);
-  assert.match(builder, /\{testDesk \? \(\s*<TypeCard[\s\S]*title="SHIVAM T2S"/);
+  assert.match(builder, /title="SHIVAM T2S"/);
 });
 
 test("normalizeAlgo seals Algo Test strategies to paper with no copy mapping", () => {
@@ -76,7 +76,7 @@ test("main-desk strategies stay off the test desk flag", () => {
   assert.equal(created.runMode, "live");
 });
 
-test("Shivam T2S always lands on Algo Test paper desk", () => {
+test("Shivam T2S stays paper on Algos with no live copy", () => {
   const created = normalizeAlgo({
     name: "Shivam T2S Strategy",
     kind: "shivam-t2s",
@@ -87,15 +87,14 @@ test("Shivam T2S always lands on Algo Test paper desk", () => {
     mappedClientIds: ["u-1"],
     clientVisible: true,
   });
-  assert.equal(created.testDesk, true);
+  assert.equal(created.testDesk, false);
   assert.equal(created.runMode, "paper");
   assert.equal(created.brokerId, "paper");
   assert.equal(created.liveAuthorized, false);
   assert.equal(created.mappingScope, "master");
   assert.deepEqual(created.mappedClientIds, []);
   assert.equal(created.clientVisible, false);
-  assert.equal(isTestDeskAlgo(created), true);
-  assert.equal(isTestDeskAlgo({ kind: "shivam-t2s", testDesk: false }), true);
+  assert.equal(isTestDeskAlgo(created), false);
 });
 
 test("findLiveCopyAlgo and member copies skip Algo Test strategies", () => {

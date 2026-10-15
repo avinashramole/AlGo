@@ -325,7 +325,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     setBusy(true);
     setError("");
     const seal = (payload: Record<string, unknown>) =>
-      testDesk || shivam
+      testDesk
         ? {
             ...payload,
             testDesk: true,
@@ -335,7 +335,17 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             mappedClientIds: [],
             clientVisible: false,
           }
-        : { ...payload, testDesk: Boolean(payload.testDesk) };
+        : shivam
+          ? {
+              ...payload,
+              testDesk: false,
+              runMode: payload.runMode === "backtest" ? "backtest" : "paper",
+              brokerId: "paper",
+              mappingScope: "master",
+              mappedClientIds: [],
+              clientVisible: false,
+            }
+          : { ...payload, testDesk: Boolean(payload.testDesk) };
     try {
       await saveAlgo(
         seal(
@@ -361,7 +371,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               liveAuthorized: false,
               runMode: form.runMode === "backtest" ? "backtest" : "paper",
               brokerId: "paper",
-              testDesk: true,
+              testDesk: Boolean(testDesk),
               enabled: Boolean(algo?.enabled),
             }
           : mir
@@ -575,11 +585,10 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               });
             }}
           />
-          {testDesk ? (
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
+            text="NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -588,13 +597,12 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 runMode: "paper",
                 brokerId: "paper",
                 liveAuthorized: false,
-                testDesk: true,
+                testDesk,
                 lots: form.lots || 1,
                 enabled: false,
               });
             }}
           />
-          ) : null}
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"

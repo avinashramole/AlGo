@@ -259,7 +259,7 @@ function enrolledStrategySet(value) {
 /** Admin Visible/Hidden plus mapping decides which strategies a member can see. */
 export function strategyVisibleToMember(algo, viewer) {
   if (!algo) return false;
-  if (algo.testDesk) return false;
+  if (algo.testDesk || algo.kind === "shivam-t2s") return false;
   if (!viewer || viewer.role === "admin" || !viewer.userId) return true;
   if (algo.clientVisible === false) return false;
   const userId = String(viewer.userId);
