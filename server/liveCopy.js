@@ -68,7 +68,9 @@ function sameStrategy(left, right) {
 
 export function findLiveCopyAlgo(algos = [], strategyName = "") {
   const name = String(strategyName || "").trim();
-  const rows = (Array.isArray(algos) ? algos : []).filter((row) => !row?.testDesk && row?.kind !== "shivam-t2s");
+  const rows = (Array.isArray(algos) ? algos : []).filter(
+    (row) => !row?.testDesk || row?.kind === "shivam-t2s" || row?.strategyType === "SHIVAM_T2S",
+  );
   const exact = rows.find((row) => String(row.name || "") === name);
   if (exact) return exact;
   const family = rows.filter((row) => sameStrategy(row.name, name));
@@ -285,7 +287,8 @@ export function listCopyOnTargets({ masterQty, lotSize } = {}) {
 }
 
 export function memberCopyPayloads(payload = {}, algo = {}) {
-  if (algo?.testDesk || algo?.kind === "shivam-t2s") return [];
+  const shivam = algo?.kind === "shivam-t2s" || algo?.strategyType === "SHIVAM_T2S" || String(algo?.name || "").trim() === "Shivam T2S Strategy";
+  if (algo?.testDesk && !shivam) return [];
   const scope = String(algo.mappingScope || "both");
   if (scope === "master") return [];
   const targets = listLiveCopyTargets({

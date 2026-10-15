@@ -533,8 +533,8 @@ test("normalizeAlgo keeps Shivam T2S paper unless live is authorized", () => {
   assert.equal(algo.runMode, "live");
   assert.equal(algo.brokerId, "dhan");
   assert.equal(algo.liveAuthorized, true);
-  assert.equal(algo.mappingScope, "master");
-  assert.deepEqual(algo.mappedClientIds, []);
-  assert.equal(algo.clientVisible, false);
+  assert.equal(algo.mappingScope, "both");
+  assert.deepEqual(algo.mappedClientIds, ["u-1"]);
+  assert.equal(algo.clientVisible, true);
 });
 
