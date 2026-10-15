@@ -126,6 +126,32 @@ function shivamCardReady(algo: AlgoStrategy) {
   return Boolean(algo.enabled) && vs.cardReady === true && vs.cardSignal === "● ● ●";
 }
 
+function shivamActivityText(
+  algo: AlgoStrategy,
+  orders: Array<{
+    side?: string;
+    symbol?: string;
+    status?: string;
+    role?: string;
+    reason?: string;
+    createdAt?: string;
+  }> = [],
+) {
+  const vs = algo.shivamState || {};
+  const signal = orderActivity(algo.lastSignal, "");
+  if (signal && !/^(NO Trade|● ● ●)$/i.test(signal)) return signal;
+  const last = [...orders].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).at(0);
+  if (last) {
+    const line = [last.side, last.symbol, last.status, last.role === "broker-test" ? "test" : "", last.reason]
+      .map((part) => String(part || "").trim())
+      .filter(Boolean)
+      .join(" · ");
+    if (line) return line;
+  }
+  if (vs.lastError && vs.lastError !== "live-locked") return String(vs.lastError);
+  return vs.cardSignal || (shivamCardReady(algo) ? "● ● ●" : "NO Trade");
+}
+
 function ShivamSignalChip({ algo, onOpen }: { algo: AlgoStrategy; onOpen?: () => void }) {
   const ready = shivamCardReady(algo);
   return (
@@ -1026,7 +1052,16 @@ function AlgoCard({
 }: {
   algo: AlgoStrategy;
   clientIds: Set<string> | null;
-  orders: Array<{ id: string; status?: string; filledQty?: number }>;
+  orders: Array<{
+    id: string;
+    status?: string;
+    filledQty?: number;
+    side?: string;
+    symbol?: string;
+    role?: string;
+    reason?: string;
+    createdAt?: string;
+  }>;
   positions: Array<{ type?: string; pnl?: number; live?: boolean; brokerId?: string }>;
   busy: boolean;
   rangeOpen: boolean;
@@ -1074,7 +1109,7 @@ function AlgoCard({
         ? algo.lastSignal
         : "No signal"
     : isShivamT2sKind(algo)
-      ? shivamCardReady(algo) ? "● ● ●" : "NO Trade"
+      ? shivamActivityText(algo, orders)
     : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo)
       ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
@@ -1151,6 +1186,18 @@ function AlgoCard({
       </div>
       {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
       {shivam ? <ShivamCapitalStrip algo={algo} /> : null}
+      {shivam ? (
+        <div
+          className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--card-muted)] px-3 py-2 text-xs font-semibold leading-snug text-[var(--text)]"
+          data-latest-activity="true"
+          data-shivam-activity="true"
+        >
+          <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>
+          <div className="mt-1" data-shivam-activity-text="true">
+            {activity}
+          </div>
+        </div>
+      ) : null}
       <DailyTradeLimit algo={algo} />
       {isCrudeFirstCandleKind(algo) ? <CrudeLevels algo={algo} /> : null}
 
@@ -1289,7 +1336,8 @@ function AlgoCard({
         </div>
       ) : null}
 
-      <div className="mt-4 text-xs text-slate-400" data-latest-activity="true" data-shivam-activity={shivam ? "true" : undefined}>
+      {shivam ? null : (
+      <div className="mt-4 text-xs text-slate-400" data-latest-activity="true">
         <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>
         <div className="mt-1">{activity}</div>
         {algo.lastBacktest?.timeframe || algo.lastBacktest?.optionSource ? (
@@ -1345,6 +1393,7 @@ function AlgoCard({
           </div>
         ) : null}
       </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onEdit} className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold">

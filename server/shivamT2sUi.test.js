@@ -12,6 +12,7 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   const reports = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const api = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
   const lib = fs.readFileSync(path.join(root, "src/lib/strategies.ts"), "utf8");
+  const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
   const strategies = fs.readFileSync(path.join(root, "server/strategies.js"), "utf8");
   assert.match(lib, /"shivam-t2s"/);
   assert.match(lib, /SHIVAM_T2S_NAME = "Shivam T2S Strategy"/);
@@ -39,7 +40,12 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /data-shivam-map="true"/);
   assert.match(page, /Latest activity/);
   assert.match(page, /data-latest-activity="true"/);
-  assert.match(page, /data-shivam-activity=\{shivam \? "true" : undefined\}/);
+  assert.match(page, /data-shivam-activity="true"/);
+  assert.match(page, /data-shivam-activity-text="true"/);
+  assert.match(page, /function shivamActivityText/);
+  assert.match(page, /<ShivamCapitalStrip algo=\{algo\} \/> : null\}[\s\S]{0,240}data-shivam-activity="true"/);
+  assert.match(page, /shivamActivityText\(algo, orders\)/);
+  assert.match(css, /\.blotter-card\[data-shivam-strategy="true"\][\s\S]{0,80}overflow:\s*visible/);
   assert.match(page, /data-test-broker-order="true"/);
   assert.match(page, /Mapped clients copy 1 lot on their own broker/);
   assert.doesNotMatch(page, /Mapped clients will not copy/);
