@@ -18,13 +18,68 @@ export function isLocalDeskHost(hostname = "", port = "") {
   return port !== "5173" && port !== "4173" && port !== "4000";
 }
 
-export function isNativeHybrid() {
+export function isIosDevice(userAgent = "", platform = "", maxTouchPoints = 0) {
+  const ua = String(userAgent || "");
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  return String(platform || "") === "MacIntel" && Number(maxTouchPoints || 0) > 1;
+}
+
+export function isIosSafari(userAgent = "") {
+  const ua = String(userAgent || "");
+  if (!isIosDevice(ua)) return false;
+  if (/CriOS|FxiOS|EdgiOS|OPiOS|OPT\//i.test(ua)) return false;
+  return true;
+}
+
+export function isIosHomeScreenAppFrom({
+  userAgent = "",
+  platform = "",
+  maxTouchPoints = 0,
+  standalone = false,
+  displayModeStandalone = false,
+}: {
+  userAgent?: string;
+  platform?: string;
+  maxTouchPoints?: number;
+  standalone?: boolean;
+  displayModeStandalone?: boolean;
+} = {}) {
+  if (!isIosDevice(userAgent, platform, maxTouchPoints)) return false;
+  return Boolean(standalone || displayModeStandalone);
+}
+
+export function isIosHomeScreenApp() {
+  try {
+    if (typeof navigator === "undefined") return false;
+    const standalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    const display = typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches;
+    return isIosHomeScreenAppFrom({
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      maxTouchPoints: navigator.maxTouchPoints,
+      standalone,
+      displayModeStandalone: display,
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function isCapacitorNative() {
   try {
     if (capacitorBridge()?.isNativePlatform?.()) return true;
     if (typeof window !== "undefined" && window.location.protocol === "capacitor:") return true;
     if (typeof window !== "undefined" && isLocalDeskHost(window.location.hostname, window.location.port)) return true;
     if (typeof navigator !== "undefined" && /;\s*wv\)/i.test(navigator.userAgent)) return true;
     return false;
+  } catch {
+    return false;
+  }
+}
+
+export function isNativeHybrid() {
+  try {
+    return isCapacitorNative() || isIosHomeScreenApp();
   } catch {
     return false;
   }
@@ -61,7 +116,7 @@ export function googleLoginNextFrom({ native, origin }: { native?: boolean; orig
 export function googleLoginNext() {
   if (typeof window === "undefined") return LIVE_DESK_ORIGIN;
   return googleLoginNextFrom({
-    native: isNativeHybrid(),
+    native: isCapacitorNative(),
     origin: window.location.origin,
   });
 }
@@ -94,7 +149,7 @@ export function googleQueryFromHref(href = "", search = "", hash = "") {
 }
 
 export function deskHomeUrl() {
-  return isNativeHybrid() ? "/#/" : "/";
+  return isCapacitorNative() ? "/#/" : "/";
 }
 
 export function isLiveDeskHref(href = "") {
@@ -108,7 +163,7 @@ export function isLiveDeskHref(href = "") {
 
 export function googleDeskHashUrl(params: URLSearchParams | string) {
   const q = typeof params === "string" ? String(params).replace(/^\?/, "") : params.toString();
-  if (typeof window !== "undefined" && isNativeHybrid()) return `/#/?${q}`;
+  if (typeof window !== "undefined" && isCapacitorNative()) return `/#/?${q}`;
   return `${LIVE_DESK_ORIGIN}/#/?${q}`;
 }
 

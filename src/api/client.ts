@@ -1,4 +1,4 @@
-import { apiBase, googleLoginNext, isNativeHybrid } from "../lib/hybrid";
+import { apiBase, googleLoginNext, isCapacitorNative } from "../lib/hybrid";
 import { apiDownMessage, publicDeskError } from "../lib/liveSite";
 
 function authHeaders(): HeadersInit {
@@ -654,7 +654,7 @@ export function googleAuthStatus() {
 
 export function googleAuthStartUrl() {
   const next = encodeURIComponent(googleLoginNext());
-  const native = isNativeHybrid() ? "&native=1" : "";
+  const native = isCapacitorNative() ? "&native=1" : "";
   return `${apiBase()}/auth/google?next=${next}${native}`;
 }
 
@@ -1766,7 +1766,7 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   const blob = await response.blob();
   const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
   const filename = match?.[1] || `t2s-proposal.${format === "pdf" ? "pdf" : "xlsx"}`;
-  if (isNativeHybrid()) {
+  if (isCapacitorNative()) {
     try {
       await shareNativeFile(blob, filename);
       return;
