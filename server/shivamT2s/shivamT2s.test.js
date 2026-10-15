@@ -118,10 +118,18 @@ test("defaults stay paper, disabled, and named Shivam T2S Strategy", () => {
   assert.equal(isShivamT2sAlgo(algo), true);
 });
 
-test("live runMode stays paper on the Algo Test desk", () => {
-  const cfg = shivamT2sConfig({ runMode: "live", liveAuthorized: true });
-  assert.equal(cfg.runMode, "paper");
-  assert.equal(cfg.liveAuthorized, false);
+test("live runMode stays paper until liveAuthorized", () => {
+  const locked = shivamT2sConfig({ runMode: "live" });
+  assert.equal(locked.runMode, "paper");
+  assert.equal(locked.liveAuthorized, false);
+  const live = shivamT2sConfig({ runMode: "live", liveAuthorized: true, brokerId: "dhan" });
+  assert.equal(live.runMode, "live");
+  assert.equal(live.liveAuthorized, true);
+  const algo = defaultShivamT2sAlgo({ runMode: "live", liveAuthorized: true, brokerId: "dhan" });
+  assert.equal(algo.testDesk, true);
+  assert.equal(algo.runMode, "live");
+  assert.equal(algo.liveAuthorized, true);
+  assert.equal(algo.brokerId, "dhan");
   assert.equal(validateShivamT2s({ runMode: "live", liveAuthorized: true }), "");
 });
 

@@ -222,7 +222,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     }
     if (isShivamT2sKind(form) || shivam) {
       const script = SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0];
-      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ${form.strikePolicy || "ATM"} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · paper until live is authorized`;
+      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ${form.strikePolicy || "ATM"} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan" : "Paper"} · no member copy`;
     }
     if (isMultiIndexReversalKind(form) || mir) {
       const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0];
@@ -324,28 +324,37 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     }
     setBusy(true);
     setError("");
-    const seal = (payload: Record<string, unknown>) =>
-      testDesk
-        ? {
-            ...payload,
-            testDesk: true,
-            runMode: payload.runMode === "backtest" ? "backtest" : "paper",
-            brokerId: "paper",
-            mappingScope: "master",
-            mappedClientIds: [],
-            clientVisible: false,
-          }
-        : shivam
-          ? {
-              ...payload,
-              testDesk: true,
-              runMode: payload.runMode === "backtest" ? "backtest" : "paper",
-              brokerId: "paper",
-              mappingScope: "master",
-              mappedClientIds: [],
-              clientVisible: false,
-            }
-          : { ...payload, testDesk: Boolean(payload.testDesk) };
+    const seal = (payload: Record<string, unknown>) => {
+      if (shivam) {
+        const live = payload.runMode === "live";
+        return {
+          ...payload,
+          testDesk: true,
+          runMode: payload.runMode === "backtest" ? "backtest" : live ? "live" : "paper",
+          brokerId: live
+            ? payload.brokerId && payload.brokerId !== "paper"
+              ? payload.brokerId
+              : data.activeBrokerId || "dhan"
+            : "paper",
+          liveAuthorized: live,
+          mappingScope: "master",
+          mappedClientIds: [],
+          clientVisible: false,
+        };
+      }
+      if (testDesk) {
+        return {
+          ...payload,
+          testDesk: true,
+          runMode: payload.runMode === "backtest" ? "backtest" : "paper",
+          brokerId: "paper",
+          mappingScope: "master",
+          mappedClientIds: [],
+          clientVisible: false,
+        };
+      }
+      return { ...payload, testDesk: Boolean(payload.testDesk) };
+    };
     try {
       await saveAlgo(
         seal(
@@ -368,9 +377,14 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               slMode: form.slMode === "points" ? "points" : "percentage",
               targetMode: form.targetMode === "points" ? "points" : "percentage",
               capitalMode: form.capitalMode === "percent" ? "percent" : "amount",
-              liveAuthorized: false,
-              runMode: form.runMode === "backtest" ? "backtest" : "paper",
-              brokerId: "paper",
+              liveAuthorized: form.runMode === "live",
+              runMode: form.runMode === "backtest" ? "backtest" : form.runMode === "live" ? "live" : "paper",
+              brokerId:
+                form.runMode === "live"
+                  ? form.brokerId && form.brokerId !== "paper"
+                    ? form.brokerId
+                    : data.activeBrokerId || "dhan"
+                  : "paper",
               testDesk: true,
               enabled: Boolean(algo?.enabled),
             }
@@ -589,7 +603,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
+            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper or Live Dhan after Start. No member copy. Card shows ● ● ● or NO Trade."
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -631,9 +645,9 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             active={(form.runMode || "paper") !== "live"}
             title="Paper"
             text="Uses the live feed. Fills stay virtual — they never go to a broker."
-            onClick={() => set({ runMode: "paper", brokerId: "paper" })}
+            onClick={() => set(shivam ? { runMode: "paper", brokerId: "paper", liveAuthorized: false } : { runMode: "paper", brokerId: "paper" })}
           />
-          {testDesk ? null : (
+          {testDesk && !shivam ? null : (
           <TypeCard
             active={form.runMode === "live"}
             title="Live"
@@ -641,7 +655,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             onClick={() =>
               set(
                 shivam
-                  ? { runMode: "live", brokerId: data.activeBrokerId || "dhan", liveAuthorized: form.liveAuthorized === true }
+                  ? { runMode: "live", brokerId: data.activeBrokerId || "dhan", liveAuthorized: true }
                   : { runMode: "live", brokerId: data.activeBrokerId || "dhan" },
               )
             }
@@ -1510,7 +1524,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               : mir
               ? "Multi-Index Reversal stays paper until you choose Live and press Start. Saving this form does not start LIVE and does not place an order."
               : shivam
-              ? "Shivam T2S stays paper until live is authorized and you press Start. Saving this form does not start LIVE and does not place an order."
+              ? "Shivam T2S stays on Algo Test. Choose Live, then press Start live to send real Dhan CE/PE orders. Saving this form does not start LIVE, does not place an order, and never copies members."
               : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}
