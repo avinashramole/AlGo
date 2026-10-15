@@ -7,6 +7,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 LOGO = ROOT / "public" / "t2s-logo.png"
+APP_ICON = ROOT / "mobile" / "assets" / "app-icon-source.png"
 NAVY = (7, 24, 51, 255)
 WHITE = (255, 255, 255, 255)
 
@@ -71,25 +72,26 @@ def write_splashes(logo: Image.Image) -> None:
         canvas.save(path)
 
 
-def write_web_touch(logo: Image.Image) -> None:
-    apple = opaque(fit(logo, 180, 0.08), WHITE)
+def write_web_touch(lockup: Image.Image, app_icon: Image.Image) -> None:
+    apple = opaque(fit(app_icon, 180, 0.04), WHITE)
     apple.save(ROOT / "public" / "apple-touch-icon.png")
-    fav = opaque(fit(logo, 64, 0.06), WHITE)
+    fav = opaque(fit(lockup, 64, 0.06), WHITE)
     fav.save(ROOT / "public" / "favicon.png")
     mobile = ROOT / "mobile" / "assets"
     if mobile.is_dir():
-        logo.save(mobile / "t2s-logo.png")
-        opaque(fit(logo, 1024, 0.08), WHITE).save(mobile / "icon.png")
-        opaque(fit(logo, 512, 0.08), WHITE).save(mobile / "splash-icon.png")
-        fav.save(mobile / "favicon.png")
+        lockup.save(mobile / "t2s-logo.png")
+        opaque(fit(app_icon, 1024, 0.0), WHITE).convert("RGB").save(mobile / "icon.png")
+        opaque(fit(app_icon, 512, 0.0), WHITE).convert("RGB").save(mobile / "splash-icon.png")
+        opaque(fit(app_icon, 64, 0.04), WHITE).convert("RGB").save(mobile / "favicon.png")
 
 
 def main() -> None:
-    logo = Image.open(LOGO).convert("RGBA")
-    write_launchers(logo)
-    write_splashes(logo)
-    write_web_touch(logo)
-    print(f"Brand icons updated from {LOGO}")
+    lockup = Image.open(LOGO).convert("RGBA")
+    app_icon = Image.open(APP_ICON).convert("RGBA") if APP_ICON.exists() else lockup
+    write_launchers(app_icon)
+    write_splashes(lockup)
+    write_web_touch(lockup, app_icon)
+    print(f"App icons updated from {APP_ICON if APP_ICON.exists() else LOGO}")
 
 
 if __name__ == "__main__":

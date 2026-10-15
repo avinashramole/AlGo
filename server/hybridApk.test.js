@@ -101,4 +101,12 @@ test("login page has a real Android APK download link", () => {
   assert.match(nginx, /Trade2Smart-web\.apk/);
   assert.equal(fs.existsSync(apk), true);
   assert.ok(fs.statSync(apk).size > 1000);
+  const appJson = fs.readFileSync(path.join(root, "mobile/app.json"), "utf8");
+  const renderIcons = fs.readFileSync(path.join(root, "scripts/render-brand-icons.py"), "utf8");
+  const syncIcons = fs.readFileSync(path.join(root, "scripts/sync-brand-icons.py"), "utf8");
+  assert.match(appJson, /"icon": "\.\/assets\/icon\.png"/);
+  assert.match(renderIcons, /app-icon-source\.png/);
+  assert.match(syncIcons, /app-icon-source\.png/);
+  assert.equal(fs.existsSync(path.join(root, "mobile/assets/app-icon-source.png")), true);
+  assert.equal(fs.existsSync(path.join(root, "mobile/assets/icon.png")), true);
 });
