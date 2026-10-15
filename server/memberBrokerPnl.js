@@ -520,12 +520,12 @@ export function applyBrokerPnl(desk, pnl) {
   if (Array.isArray(pnl.closed)) {
     pnl = {
       ...pnl,
-      closed: pnl.closed.map((row) => overlayMemberCopyMeta(row, matchCopyLocal(locals, row))),
+      closed: pnl.closed.map((row) => overlayMemberCopyMeta(row, matchCopyLocal(locals, row), locals)),
     };
   }
   desk.report = applyBrokerBookToReport(report, pnl);
   if (Array.isArray(desk.report?.tradeBook)) {
-    desk.report.tradeBook = desk.report.tradeBook.map((row) => overlayMemberCopyMeta(row, matchCopyLocal(locals, row)));
+    desk.report.tradeBook = desk.report.tradeBook.map((row) => overlayMemberCopyMeta(row, matchCopyLocal(locals, row), locals));
   }
   if (Array.isArray(pnl.open)) {
     const paper = (desk.positions || []).filter((row) => row?.paper || row?.brokerId === "paper");

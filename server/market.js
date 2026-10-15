@@ -889,20 +889,34 @@ function liveOrderSide(row) {
   return row?.side === "SELL" ? "SELL" : "BUY";
 }
 
+function optionRootKey(value = "") {
+  const raw = String(value || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (raw === "CRUDE" || raw === "CRUDEOIL") return "CRUDEOIL";
+  if (raw === "NG" || raw === "NATGAS" || raw === "NATURALGAS") return "NATURALGAS";
+  return raw;
+}
+
 function sameLiveContract(left, right) {
   const leftId = String(left?.securityId || "").trim();
   const rightId = String(right?.securityId || "").trim();
   if (leftId && leftId !== "0" && rightId && rightId !== "0" && leftId === rightId) return true;
   if (left?.symbol && right?.symbol && left.symbol === right.symbol) return true;
-  const a = PositionManager.niftyOptionLeg(left);
-  const b = PositionManager.niftyOptionLeg(right);
-  return Boolean(a && b && Number(a.strike) === Number(b.strike) && a.option === b.option);
+  const a = PositionManager.optionLeg(left) || PositionManager.niftyOptionLeg(left);
+  const b = PositionManager.optionLeg(right) || PositionManager.niftyOptionLeg(right);
+  if (!a || !b || Number(a.strike) !== Number(b.strike) || a.option !== b.option) return false;
+  const ar = optionRootKey(a.root);
+  const br = optionRootKey(b.root);
+  if (ar && br) return ar === br;
+  return true;
 }
 
 function roleFromAlgoSignal(algo = {}) {
   const text = String(algo?.lastSignal || "").toLowerCase();
   if (!text) return "";
   if (text.includes("trail") && (text.includes("exit") || text.includes("hit") || text.includes("queued"))) return "trail";
+  if (text.includes("stop-loss") || text.includes("stoploss")) return "sl";
   if ((/\bsl\b/.test(text) || text.includes("stop")) && (text.includes("exit") || text.includes("hit") || text.includes("queued"))) {
     return "sl";
   }
@@ -913,6 +927,43 @@ function roleFromAlgoSignal(algo = {}) {
     return "target";
   }
   return "";
+}
+
+function findPairedEntryFill(row, book = []) {
+  const side = String(row?.side || "").toUpperCase();
+  if (side !== "SELL") return null;
+  const copyUserId = String(row?.copyUserId || "");
+  const sellMs = Date.parse(row?.createdAt || 0);
+  const buys = (book || []).filter((item) => {
+    if (!item) return false;
+    if (String(item.copyUserId || "") !== copyUserId) return false;
+    if (String(item.side || item.type || "").toUpperCase() !== "BUY") return false;
+    if (!sameLiveContract(item, row)) return false;
+    return Number(item.price || item.avg || item.entry || 0) > 0;
+  });
+  if (!buys.length) return null;
+  const earlier = Number.isFinite(sellMs)
+    ? buys.filter((item) => {
+        const ms = Date.parse(item.createdAt || 0);
+        return !Number.isFinite(ms) || ms <= sellMs + 5000;
+      })
+    : buys;
+  const pool = earlier.length ? earlier : buys;
+  return [...pool].sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))[0] || null;
+}
+
+function closeLevelsForOrder(row, book = [], algo = null) {
+  const entry = findPairedEntryFill(row, book);
+  const vs = algo?.shivamState || algo?.vwapState || algo?.test1State || algo?.mirState || algo?.hedgeState || {};
+  const sameAlgoContract =
+    Boolean(vs && Object.keys(vs).length) &&
+    ((vs.securityId && row?.securityId && String(vs.securityId) === String(row.securityId)) ||
+      sameLiveContract({ symbol: vs.symbol, strike: vs.strike, option: vs.option, securityId: vs.securityId }, row));
+  return {
+    entryPrice: Number(entry?.price || entry?.avg || entry?.entry || (sameAlgoContract ? vs.fillPrice || vs.fillAvg : 0) || 0),
+    slPrice: sameAlgoContract ? Number(vs.slPrice || vs.stopPrice || 0) : 0,
+    targetPrice: sameAlgoContract ? Number(vs.targetPrice || 0) : 0,
+  };
 }
 
 function findPreviousOrderMeta(row, previous = []) {
@@ -959,6 +1010,9 @@ function stampDeskOrderWhy(order, extras = {}) {
   };
   const role = preferOrderRole(defaultOrderRole(merged), merged.role) || String(merged.role || "");
   const why = orderWhyLabel({ ...merged, role, reason: extras.reason || order.reason, exitReason: extras.exitReason || order.exitReason });
+  if (Number(merged.entryPrice) > 0) order.entryPrice = Number(merged.entryPrice);
+  if (Number(merged.slPrice) > 0) order.slPrice = Number(merged.slPrice);
+  if (Number(merged.targetPrice) > 0) order.targetPrice = Number(merged.targetPrice);
   if (role) order.role = role;
   if (why) {
     order.reason = why;
@@ -4882,6 +4936,10 @@ export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
   const reason = error
     ? String(error?.message || error || "Copy was not sent")
     : `Sent to ${name}'s broker`;
+  const closeLevels =
+    payload.side === "SELL"
+      ? closeLevelsForOrder({ ...payload, side: "SELL", copyUserId: String(payload.copyUserId) }, state.orders || [])
+      : {};
   const order = {
     id,
     symbol: payload.symbol || "",
@@ -4902,12 +4960,13 @@ export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
     copyUserId: String(payload.copyUserId),
     copyUserName: name,
     securityId: String(payload.securityId || live?.securityId || ""),
-    reason: orderWhyLabel({ ...payload, side: payload.side === "SELL" ? "SELL" : "BUY", strategy: payload.strategy, status }) || reason,
-    role: defaultOrderRole({ ...payload, side: payload.side === "SELL" ? "SELL" : "BUY", strategy: payload.strategy }) || payload.role || exitRoleFromReason(payload.exitReason || ""),
+    reason: orderWhyLabel({ ...payload, ...closeLevels, side: payload.side === "SELL" ? "SELL" : "BUY", strategy: payload.strategy, status }) || reason,
+    role: defaultOrderRole({ ...payload, ...closeLevels, side: payload.side === "SELL" ? "SELL" : "BUY", strategy: payload.strategy }) || payload.role || exitRoleFromReason(payload.exitReason || ""),
     exitReason: exitReasonLabel(payload) || payload.exitReason || "",
+    entryPrice: Number(closeLevels.entryPrice || 0) || undefined,
     createdAt: new Date().toISOString(),
   };
-  stampDeskOrderWhy(order, payload);
+  stampDeskOrderWhy(order, { ...payload, ...closeLevels });
   const existing = (state.orders || []).find((row) => String(row.id) === id && row.copyUserId === order.copyUserId);
   if (existing) {
     const createdAt = existing.createdAt;
@@ -4985,7 +5044,11 @@ export function placeOrder(payload) {
         existing.exitReason = exitReasonLabel(payload) || payload.exitReason;
         existing.reason = keepExitReason(existing.reason, existing.exitReason);
       }
-      stampDeskOrderWhy(existing, payload);
+      const closeLevels =
+        String(existing.side || payload.side || "").toUpperCase() === "SELL"
+          ? closeLevelsForOrder(existing, state.orders || [], algo)
+          : {};
+      stampDeskOrderWhy(existing, { ...payload, ...closeLevels });
       if (isPaper || live) fanOutAdminOrderCopies({ ...payload, strategy: existing.strategy }, existing);
       return existing;
     }
@@ -5006,6 +5069,10 @@ export function placeOrder(payload) {
     return { error: "No live LTP for that contract yet. Wait for the Dhan feed." };
   }
   const status = live ? mapLiveStatus(live.status) : type === "LIMIT" ? "PENDING" : "FILLED";
+  const closeLevels =
+    payload.side === "SELL"
+      ? closeLevelsForOrder({ ...payload, side: "SELL", createdAt: new Date().toISOString() }, state.orders || [], algo)
+      : {};
   const order = {
     id: live?.orderId ? String(live.orderId) : `o${Date.now()}`,
     symbol: payload.symbol || "NIFTY 24500 CE",
@@ -5041,21 +5108,28 @@ export function placeOrder(payload) {
     reason:
       orderWhyLabel({
         ...payload,
+        ...closeLevels,
         side: payload.side === "SELL" ? "SELL" : "BUY",
         strategy: stampedStrategy || payload.strategy,
         status,
         role: payload.role,
+        price,
       }) ||
       (live ? liveRejectReason(live, "") : ""),
     role: defaultOrderRole({
       ...payload,
+      ...closeLevels,
       side: payload.side === "SELL" ? "SELL" : "BUY",
       strategy: stampedStrategy || payload.strategy,
+      price,
     }),
     exitReason: exitReasonLabel(payload) || payload.exitReason || "",
+    entryPrice: Number(closeLevels.entryPrice || payload.entryPrice || 0) || undefined,
+    slPrice: Number(closeLevels.slPrice || payload.slPrice || 0) || undefined,
+    targetPrice: Number(closeLevels.targetPrice || payload.targetPrice || 0) || undefined,
     createdAt: new Date().toISOString(),
   };
-  stampDeskOrderWhy(order, payload);
+  stampDeskOrderWhy(order, { ...payload, ...closeLevels });
   state.orders.unshift(order);
   if (status === "FILLED" && !live) {
     state.positions.unshift({
@@ -5179,6 +5253,7 @@ function rememberClosedFromPosition(pos, extra = {}) {
     live: !paper && pos.live !== false,
     paper,
   };
+  stampDeskOrderWhy(closed, extra);
   state.closedTrades.unshift(closed);
   return closed;
 }
@@ -5218,12 +5293,31 @@ export function squareOff(id, extras = {}) {
     sim: !pos.paper,
     live: false,
     paper: Boolean(pos.paper || pos.brokerId === "paper"),
-    role: defaultOrderRole({ ...pos, ...extras, side: closeSide, strategy: extras.strategy || pos.strategy }) || extras.role || pos.role || extras.exitReason || "",
+    role:
+      defaultOrderRole({
+        ...pos,
+        ...extras,
+        side: closeSide,
+        strategy: extras.strategy || pos.strategy,
+        price: exit,
+        entryPrice: Number(pos.avg || 0),
+        entry: Number(pos.avg || 0),
+      }) || extras.role || pos.role || extras.exitReason || "",
     exitReason: exitReasonLabel({ ...pos, ...extras }) || extras.exitReason || "",
-    reason: orderWhyLabel({ ...pos, ...extras, side: closeSide, strategy: extras.strategy || pos.strategy }) || "",
+    reason:
+      orderWhyLabel({
+        ...pos,
+        ...extras,
+        side: closeSide,
+        strategy: extras.strategy || pos.strategy,
+        price: exit,
+        entryPrice: Number(pos.avg || 0),
+        entry: Number(pos.avg || 0),
+      }) || "",
+    entryPrice: Number(pos.avg || 0) || undefined,
     createdAt: new Date().toISOString(),
   };
-  stampDeskOrderWhy(order, extras);
+  stampDeskOrderWhy(order, { ...extras, entryPrice: Number(pos.avg || 0), entry: Number(pos.avg || 0) });
   state.orders.unshift(order);
   if (order.strategy) rememberOrderStrategy(order, order.strategy);
   rememberClosedFromPosition(pos, {
@@ -5292,7 +5386,12 @@ export function replaceDhanOrders(rows) {
       reason: keepExitReason(existing?.reason, row.reason),
       exitReason: keepExitReason(existing?.exitReason || existing?.reason, row.exitReason || row.reason),
     };
-    stampDeskOrderWhy(next, existing || {});
+    const levels =
+      String(next.side || "").toUpperCase() === "SELL" ? closeLevelsForOrder(next, [...incoming, ...previous], algo) : {};
+    if (Number(levels.entryPrice) > 0) next.entryPrice = Number(levels.entryPrice);
+    if (Number(levels.slPrice) > 0) next.slPrice = Number(levels.slPrice);
+    if (Number(levels.targetPrice) > 0) next.targetPrice = Number(levels.targetPrice);
+    stampDeskOrderWhy(next, { ...(existing || {}), ...levels });
     syncExecutedTradeCount(existing, next);
     noteFundsRejectFromBook(next, existing);
     return next;

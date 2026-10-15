@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { exitReasonLabel, exitRoleFromReason, keepExitReason, orderWhyLabel, preferOrderRole } from "./exitReason.js";
+import { closeWhyFromPrices, exitReasonLabel, exitRoleFromReason, keepExitReason, orderWhyLabel, preferOrderRole } from "./exitReason.js";
 
 test("SL and TGT exit reasons stay readable on the order book", () => {
   assert.equal(exitReasonLabel({ role: "sl" }), "SL HIT");
@@ -59,5 +59,77 @@ test("order why shows strategy entry and SL, not Dhan TRADE CONFIRMED", () => {
       reason: "TRADE CONFIRMED",
     }),
     "SL HIT",
+  );
+  assert.equal(preferOrderRole("exit", "stop-loss"), "sl");
+  assert.equal(
+    orderWhyLabel({ side: "SELL", strategy: "Shivam T2S Strategy", role: "stop-loss", reason: "TRADE CONFIRMED" }),
+    "SL HIT",
+  );
+});
+
+test("SELL why is SL HIT or TGT DONE from fill vs entry", () => {
+  assert.equal(
+    closeWhyFromPrices({ side: "SELL", price: 44.1, entryPrice: 50.7 }),
+    "SL HIT",
+  );
+  assert.equal(
+    closeWhyFromPrices({ side: "SELL", price: 58.2, entryPrice: 50.7 }),
+    "TGT DONE",
+  );
+  assert.equal(
+    closeWhyFromPrices({ side: "SELL", price: 44.1, slPrice: 45, targetPrice: 62 }),
+    "SL HIT",
+  );
+  assert.equal(
+    closeWhyFromPrices({ side: "SELL", price: 61.4, slPrice: 45, targetPrice: 62 }),
+    "TGT DONE",
+  );
+  assert.equal(
+    orderWhyLabel({
+      side: "SELL",
+      strategy: "CRUDE OIL",
+      reason: "TRADE CONFIRMED",
+      price: 44.1,
+      entryPrice: 50.7,
+    }),
+    "SL HIT",
+  );
+  assert.equal(
+    orderWhyLabel({
+      side: "SELL",
+      strategy: "CRUDE OIL",
+      reason: "TRADE CONFIRMED",
+      price: 58.2,
+      entryPrice: 50.7,
+    }),
+    "TGT DONE",
+  );
+  assert.equal(
+    orderWhyLabel({
+      side: "BUY",
+      strategy: "CRUDE OIL",
+      reason: "TRADE CONFIRMED",
+      price: 50.7,
+    }),
+    "ENTRY",
+  );
+  assert.equal(
+    orderWhyLabel({
+      side: "BUY",
+      entry: 50.7,
+      exit: 44.1,
+      strategy: "CRUDE OIL",
+    }),
+    "SL HIT",
+  );
+  assert.equal(
+    orderWhyLabel({
+      side: "BUY",
+      entry: 50.7,
+      exit: 58.2,
+      pnl: 75,
+      strategy: "CRUDE OIL",
+    }),
+    "TGT DONE",
   );
 });

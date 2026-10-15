@@ -1037,6 +1037,8 @@ test("a Kotak user's trade login stays on that user and is not returned on the p
 test("ghost PENDING SELL @ 0 is not the user broker book", () => {
   assert.equal(optionContractKey("NIFTY-Oct2026-22450-CE"), "NIFTY 22450 CE");
   assert.equal(optionContractKey("NIFTY 22450 CE"), "NIFTY 22450 CE");
+  assert.equal(optionContractKey("CRUDEOIL-15Oct2026-9250-CE"), "CRUDEOIL 9250 CE");
+  assert.equal(optionContractKey("CRUDEOIL 9250 CE"), "CRUDEOIL 9250 CE");
   assert.equal(isLocalGhostOrder({ id: "moabc", status: "PENDING", price: 0, live: false, brokerId: "dhan" }), true);
   assert.equal(isLocalGhostOrder({ id: "ord-1", status: "PENDING", price: 129, live: true, brokerId: "dhan" }), false);
   const member = { id: "u-ghost-book", name: "Ghost Book", email: "ghostbook@t2s.app", role: "user" };
@@ -1171,6 +1173,34 @@ test("member broker fills keep strategy why instead of TRADE CONFIRMED", () => {
     { strategy: "Shivam T2S Strategy", role: "sl", reason: "SL HIT", side: "SELL", qty: 1 },
   );
   assert.equal(sl.reason, "SL HIT");
+  const fromFill = overlayMemberCopyMeta(
+    {
+      symbol: "CRUDEOIL 9250 CE",
+      side: "SELL",
+      qty: 1,
+      price: 44.1,
+      status: "FILLED",
+      reason: "TRADE CONFIRMED",
+      strategy: "Shivam T2S Strategy",
+    },
+    { strategy: "Shivam T2S Strategy", side: "SELL", qty: 1 },
+    [{ symbol: "CRUDEOIL 9250 CE", side: "BUY", price: 50.7 }],
+  );
+  assert.equal(fromFill.reason, "SL HIT");
+  const tgtFill = overlayMemberCopyMeta(
+    {
+      symbol: "CRUDEOIL 9250 CE",
+      side: "SELL",
+      qty: 1,
+      price: 58.2,
+      status: "FILLED",
+      reason: "TRADE CONFIRMED",
+      strategy: "Shivam T2S Strategy",
+    },
+    { strategy: "Shivam T2S Strategy", side: "SELL", qty: 1 },
+    [{ symbol: "CRUDEOIL 9250 CE", side: "BUY", price: 50.7 }],
+  );
+  assert.equal(tgtFill.reason, "TGT DONE");
   const rejected = overlayMemberCopyMeta(
     { ...local, status: "REJECTED", reason: "Insufficient funds", id: "2" },
     { ...local, reason: "ENTRY" },

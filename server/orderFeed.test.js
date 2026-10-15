@@ -358,3 +358,103 @@ test("a Shivam BUY with TRADE CONFIRMED is stored as ENTRY, not demo Dhan text",
   });
   assert.equal(sell.reason, "SL HIT");
 });
+
+test("Dhan blotter SELL without role is SL HIT or TGT DONE from the paired BUY fill", () => {
+  const stamp = new Date().toISOString();
+  replaceDhanOrders([
+    {
+      id: "crude-pair-buy",
+      symbol: "CRUDEOIL-15Oct2026-9250-CE",
+      side: "BUY",
+      qty: 1,
+      price: 50.7,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "Shivam T2S Strategy",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+    {
+      id: "crude-pair-sell",
+      symbol: "CRUDEOIL-15Oct2026-9250-CE",
+      side: "SELL",
+      qty: 1,
+      price: 44.1,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "Shivam T2S Strategy",
+      reason: "TRADE CONFIRMED",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+  ]);
+  const loss = snapshot().orders.find((row) => row.id === "crude-pair-sell");
+  assert.equal(loss?.reason, "SL HIT");
+  assert.notEqual(loss?.reason, "EXIT");
+  replaceDhanOrders([
+    {
+      id: "crude-tgt-buy",
+      symbol: "CRUDEOIL-15Oct2026-9300-CE",
+      side: "BUY",
+      qty: 1,
+      price: 50.7,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "Shivam T2S Strategy",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+    {
+      id: "crude-tgt-sell",
+      symbol: "CRUDEOIL-15Oct2026-9300-CE",
+      side: "SELL",
+      qty: 1,
+      price: 58.2,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "Shivam T2S Strategy",
+      reason: "TRADE CONFIRMED",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+  ]);
+  const win = snapshot().orders.find((row) => row.id === "crude-tgt-sell");
+  assert.equal(win?.reason, "TGT DONE");
+  replaceDhanOrders([
+    {
+      id: "crude-fmt-buy",
+      symbol: "CRUDEOIL 9250 CE",
+      side: "BUY",
+      qty: 1,
+      price: 50.7,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "Shivam T2S Strategy",
+      option: "CE",
+      strike: 9250,
+      filledQty: 1,
+      createdAt: stamp,
+    },
+    {
+      id: "crude-fmt-sell",
+      symbol: "CRUDEOIL-15Oct2026-9250-CE",
+      side: "SELL",
+      qty: 1,
+      price: 44.1,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "Shivam T2S Strategy",
+      reason: "TRADE CONFIRMED",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+  ]);
+  const mismatched = snapshot().orders.find((row) => row.id === "crude-fmt-sell");
+  assert.equal(mismatched?.reason, "SL HIT");
+});

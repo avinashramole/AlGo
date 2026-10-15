@@ -1,6 +1,6 @@
 import { SideBadge } from "./Badges";
 import type { DeskOrder, DeskReport, MemberPosition } from "../../api/client";
-import { displayOrderReason, isEntryWhy, isExitHitReason } from "../../lib/exitReason";
+import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../../lib/exitReason";
 import { cn, formatInr, formatIst, formatNumber } from "../../lib/format";
 
 export function MemberLiveBook({
@@ -39,10 +39,14 @@ export function MemberLiveBook({
     const status = String(row.status || "").toUpperCase();
     return status === "FILLED" || status === "TRADED" || status === "REJECTED" || status === "FAILED" || status === "CANCELLED";
   }).slice(0, 40);
+  const book = [...(orders || []), ...(orderHistory || []), ...closed];
   const nameOf = brokerName || ((id?: string) => id || "Paper");
 
-  function whyClass(row: { status?: string; side?: string; strategy?: string; role?: string; reason?: string; exitReason?: string }) {
-    const why = displayOrderReason(row);
+  function whyClass(
+    row: { status?: string; side?: string; strategy?: string; role?: string; reason?: string; exitReason?: string; symbol?: string; price?: number },
+    book: Array<{ side?: string; symbol?: string; price?: number; entry?: number; exit?: number }> = [],
+  ) {
+    const why = orderWhyForBook(row, book);
     if (isExitHitReason(why)) return "text-brand-500";
     if (isEntryWhy(why)) return "text-up";
     if (/REJECT|FAIL/i.test(String(row.status || ""))) return "text-down";
@@ -98,8 +102,8 @@ export function MemberLiveBook({
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                 <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
-                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row))}>
-                  {displayOrderReason(row) || "—"}
+                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row, book))}>
+                  {orderWhyForBook(row, book) || "—"}
                 </td>
                 <td
                   className={cn(
@@ -149,8 +153,8 @@ export function MemberLiveBook({
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                 <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
-                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row))}>
-                  {displayOrderReason(row) || "—"}
+                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row, book))}>
+                  {orderWhyForBook(row, book) || "—"}
                 </td>
                 <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
               </tr>
@@ -193,8 +197,8 @@ export function MemberLiveBook({
                   {formatInr(row.pnl)}
                 </td>
                 <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
-                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row))}>
-                  {displayOrderReason(row) || "—"}
+                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row, book))}>
+                  {orderWhyForBook(row, book) || "—"}
                 </td>
                 <td className="px-4 py-3">{nameOf(row.brokerId)}</td>
               </tr>

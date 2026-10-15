@@ -42,6 +42,9 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(reportsPage, />Why</);
   assert.match(book, /Last 5 trading days/);
   assert.match(book, /liveDailyPnl/);
+  const whyLib = fs.readFileSync(path.join(root, "src/lib/exitReason.ts"), "utf8");
+  assert.match(whyLib, /export function closeWhyFromPrices/);
+  assert.match(whyLib, /export function orderWhyForBook/);
   const dailyPnl = fs.readFileSync(path.join(root, "src/lib/dailyPnl.ts"), "utf8");
   assert.match(dailyPnl, /lastTradingDayKeys/);
   assert.match(dailyPnl, /2026-08-1\[2-8\]/);
@@ -49,11 +52,12 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.doesNotMatch(book, /\{ \(report\?\.daily \|\| \[\]\)\.map/);
   assert.match(ordersPage, />Why</);
   assert.match(ordersPage, /data-order-why="true"/);
-  assert.match(ordersPage, /displayOrderReason\(row\) \|\| "—"/);
+  assert.match(ordersPage, /orderWhyForBook\(row, orders\) \|\| "—"/);
   assert.doesNotMatch(ordersPage, /Reason: \{displayOrderReason/);
   assert.match(ordersPage, /book === "paper"/);
   assert.match(ordersPage, /isLiveBrokerTrade/);
   assert.match(book, />Why</);
+  assert.match(book, /orderWhyForBook\(row, book\)/);
   assert.doesNotMatch(book, /After exit/);
   assert.match(book, /data-book-meta="strategy-exit"/);
   assert.doesNotMatch(book, /ProfitOwnerCard/);
@@ -68,6 +72,7 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(paperPage, /book="paper"/);
   const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
   assert.match(liveBook, />Why</);
+  assert.match(liveBook, /orderWhyForBook\(row,/);
   assert.doesNotMatch(liveBook, /After exit/);
   assert.match(liveBook, />Strategy</);
   const userDetail = fs.readFileSync(path.join(root, "src/components/users/UserDetailModal.tsx"), "utf8");
