@@ -658,10 +658,8 @@ export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; 
   );
 }
 
-export function isTestDeskAlgo(
-  algo?: { testDesk?: boolean; kind?: string; strategyType?: string; indicator?: string; name?: string } | null,
-) {
-  return Boolean(algo?.testDesk) || isShivamT2sKind(algo || undefined);
+export function isTestDeskAlgo(algo?: { testDesk?: boolean } | null) {
+  return Boolean(algo?.testDesk);
 }
 
 export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string; testDesk?: boolean }) {
@@ -1035,7 +1033,6 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       indicator: "SHIVAM_T2S",
       runMode: "paper",
       brokerId: "paper",
-      testDesk: true,
       enabled: false,
       status: "PAUSED",
     };

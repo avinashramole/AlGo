@@ -409,16 +409,11 @@ function mappingFields(input = {}, existing = {}) {
 }
 
 export function isTestDeskAlgo(algo) {
-  return Boolean(algo?.testDesk) || isShivamT2sAlgo(algo);
+  return Boolean(algo?.testDesk);
 }
 
 function sealTestDesk(algo, input = {}, existing = {}) {
-  const testDesk =
-    Boolean(existing.testDesk) ||
-    Boolean(input.testDesk ?? algo?.testDesk) ||
-    isShivamT2sAlgo(algo) ||
-    isShivamT2sAlgo(input) ||
-    isShivamT2sAlgo(existing);
+  const testDesk = Boolean(existing.testDesk) || Boolean(input.testDesk ?? algo?.testDesk);
   if (!testDesk) return { ...algo, testDesk: false };
   return {
     ...algo,
@@ -680,7 +675,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       ...existing,
       ...defaultShivamT2sAlgo({
         ...merged,
-        testDesk: true,
+        testDesk: Boolean(existing.testDesk) || Boolean(input.testDesk),
         runMode,
         lots: cfg.lots,
         symbol: cfg.symbol,
@@ -689,7 +684,6 @@ export function normalizeAlgo(input = {}, existing = {}) {
       }),
       id: existing.id || newAlgoId(),
       kind: SHIVAM_T2S_KIND,
-      testDesk: true,
       lastBacktest: existing.lastBacktest || null,
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
@@ -705,7 +699,16 @@ export function normalizeAlgo(input = {}, existing = {}) {
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
     next.summary = summarizeAlgo(next);
-    return withMapping(next, input, existing);
+    const mapped = withMapping(next, input, existing);
+    return {
+      ...mapped,
+      runMode: mapped.runMode === "backtest" ? "backtest" : "paper",
+      brokerId: "paper",
+      liveAuthorized: false,
+      mappingScope: "master",
+      mappedClientIds: [],
+      clientVisible: false,
+    };
   }
   const keepReversal =
     isNiftyVwapReversalAlgo(merged) &&
@@ -1205,9 +1208,8 @@ export function seedAlgos() {
     normalizeAlgo(
       defaultShivamT2sAlgo({
         runMode: "paper",
-        testDesk: true,
       }),
-      { id: SHIVAM_T2S_SEED_ID, pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper", testDesk: true },
+      { id: SHIVAM_T2S_SEED_ID, pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
     ),
   ];
 }

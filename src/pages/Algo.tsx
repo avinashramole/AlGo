@@ -417,7 +417,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
           runMode: nextMode,
           brokerId: nextMode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
           enabled: true,
-          ...(testDesk || isShivamT2sKind(algo) ? { testDesk: true } : {}),
+          ...(testDesk ? { testDesk: true } : {}),
         });
         return;
       }
@@ -553,6 +553,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                     ["all", "All"],
                     ["nifty-first-candle", "NIFTY"],
                     ["crudeoil", "CRUDE OIL"],
+                    ["shivam-t2s", "SHIVAM T2S"],
                   ]) as [Filter, string][]
             ).map(([id, label]) => (
               <button
