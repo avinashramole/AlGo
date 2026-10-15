@@ -283,8 +283,11 @@ export function isCurrentFeedSocket(current, eventSocket) {
   return Boolean(current) && current === eventSocket;
 }
 
+/** After Dhan 805 (max 5 websockets), wait before opening a new one. Keep this above the 1.5s open retry. */
+export const FEED_805_RECONNECT_MS = 3_000;
+
 export function nextFeedReconnectMs(reason, previous = 1_500) {
-  if (Number(reason) === 805) return 10_000;
+  if (Number(reason) === 805) return FEED_805_RECONNECT_MS;
   const prev = Number(previous);
   const base = Number.isFinite(prev) && prev > 0 ? prev : 1_500;
   return Math.min(30_000, Math.max(1_500, base) * 2);
@@ -1420,7 +1423,7 @@ function startSocket() {
       const dropped = parseFeedDisconnect(buffer);
       if (dropped) {
         lastSocketDisconnectReason = dropped.reason;
-        if (dropped.reason === 805) socketReconnectBackoffMs = Math.max(socketReconnectBackoffMs, 10_000);
+        if (dropped.reason === 805) socketReconnectBackoffMs = Math.max(socketReconnectBackoffMs, FEED_805_RECONNECT_MS);
         setDhanFeed({
           live: true,
           source: "rest",
@@ -1454,7 +1457,7 @@ function startSocket() {
     lastFeedSubscribeKey = "";
     if (!accessToken) return;
     setDhanFeed({ live: true, source: "rest" });
-    const wait = lastSocketDisconnectReason === 805 ? 10_000 : socketReconnectBackoffMs;
+    const wait = lastSocketDisconnectReason === 805 ? FEED_805_RECONNECT_MS : socketReconnectBackoffMs;
     socketReconnectBackoffMs = nextFeedReconnectMs(lastSocketDisconnectReason, socketReconnectBackoffMs);
     scheduleSocketReconnect(wait);
   });

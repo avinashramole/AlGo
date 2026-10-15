@@ -10,6 +10,7 @@ import {
   flattenQuotes,
   isCurrentFeedSocket,
   matchLiveInstrument,
+  FEED_805_RECONNECT_MS,
   nextFeedReconnectMs,
   parseFeedDisconnect,
   parseFeedPackets,
@@ -53,13 +54,14 @@ test("a stale websocket close does not own the replacement socket", () => {
   assert.equal(isCurrentFeedSocket(null, old), false);
 });
 
-test("Dhan 805 extra-websocket disconnect backs off 10s", () => {
+test("Dhan 805 extra-websocket disconnect waits 3s before reconnect", () => {
   const buf = Buffer.alloc(10);
   buf.writeUInt8(50, 0);
   buf.writeUInt16LE(10, 1);
   buf.writeInt16LE(805, 8);
   assert.deepEqual(parseFeedDisconnect(buf), { code: 50, reason: 805 });
-  assert.equal(nextFeedReconnectMs(805, 1_500), 10_000);
+  assert.equal(FEED_805_RECONNECT_MS, 3_000);
+  assert.equal(nextFeedReconnectMs(805, 1_500), 3_000);
   assert.equal(nextFeedReconnectMs(0, 1_500), 3_000);
   assert.equal(nextFeedReconnectMs(0, 20_000), 30_000);
 });
