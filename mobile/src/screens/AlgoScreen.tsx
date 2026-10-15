@@ -87,7 +87,8 @@ type Draft = {
   runMode: "live" | "paper" | "backtest";
 };
 
-const FIRST_CANDLE_TIMEFRAMES = ["5m", "10m", "15m", "30m", "60m"] as const;
+const FIRST_CANDLE_TIMEFRAMES = ["5m", "15m", "30m", "1H"] as const;
+const DESK_CUSTOM_BAR_MINUTES_MAX = 60;
 
 function isEngineKind(kind: Draft["kind"]) {
   return kind === "nifty-vwap" || kind === "nifty-vwap-reversal" || kind === "nifty-vwap-hedge" || kind === "nifty-first-candle";
@@ -99,29 +100,42 @@ function isFirstCandleKind(kind?: string) {
 
 function firstCandleMinutes(timeframe?: string) {
   const raw = String(timeframe || "").trim();
-  if (raw === "1H" || raw === "1h") return 60;
-  const named: Record<string, number> = { "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60 };
+  if (raw === "1H" || raw === "1h" || raw === "1hr") return 60;
+  const named: Record<string, number> = { "1m": 1, "2m": 2, "3m": 3, "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60 };
   if (named[raw]) return named[raw];
   const match = raw.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/i) || raw.match(/^(\d+)$/);
   const n = match ? Number(match[1]) : NaN;
-  if (Number.isFinite(n) && n >= 1 && n <= 240) return Math.round(n);
+  if (Number.isFinite(n) && n >= 1 && n <= DESK_CUSTOM_BAR_MINUTES_MAX) return Math.round(n);
   return 5;
 }
 
+function canonicalDeskTimeframe(minutes: number) {
+  if (minutes === 5) return "5m";
+  if (minutes === 15) return "15m";
+  if (minutes === 30) return "30m";
+  if (minutes === 60) return "1H";
+  return `${minutes}m`;
+}
+
 function firstCandleTimeframeSelect(timeframe?: string) {
-  const raw = String(timeframe || "5m");
-  if (raw === "1H" || raw === "1h") return "60m";
-  return (FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(raw) ? raw : "custom";
+  const minutes = firstCandleMinutes(timeframe);
+  if (minutes === 5) return "5m";
+  if (minutes === 15) return "15m";
+  if (minutes === 30) return "30m";
+  if (minutes === 60) return "1H";
+  return "custom";
 }
 
 function firstCandleTimeframeValue(select: string, customMinutes?: number) {
-  if ((FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(select)) return select;
-  if (select === "1H" || select === "1h") return "60m";
+  if (select === "5m" || select === "15m" || select === "30m") return select;
+  if (select === "1H" || select === "1h" || select === "1hr" || select === "60m") return "1H";
   if (select === "custom") {
-    const n = Math.max(1, Math.min(240, Math.round(Number(customMinutes) || 20)));
-    return `${n}m`;
+    const n = Math.max(1, Math.min(DESK_CUSTOM_BAR_MINUTES_MAX, Math.round(Number(customMinutes) || 20)));
+    return canonicalDeskTimeframe(n);
   }
-  if (/^\d+m$/i.test(select) || /^\d+$/.test(select)) return `${firstCandleMinutes(select)}m`;
+  if (/^\d+m$/i.test(select) || /^\d+$/.test(select) || /^(1H|1h|1hr)$/i.test(select)) {
+    return canonicalDeskTimeframe(firstCandleMinutes(select));
+  }
   return "5m";
 }
 
@@ -301,19 +315,11 @@ export function AlgoScreen() {
       timeframe:
         draft.kind === "nifty-vwap"
           ? "5m"
-          : draft.kind === "nifty-first-candle" || draft.kind === "crude-first-candle"
-            ? /^\d+m$/i.test(String(draft.timeframe || "")) || /^(1H|1h)$/.test(String(draft.timeframe || ""))
-              ? /^(1H|1h)$/.test(String(draft.timeframe || ""))
-                ? "60m"
-                : draft.timeframe
-              : "5m"
-          : draft.kind === "nifty-test"
-            ? ["1m", "5m", "15m"].includes(draft.timeframe)
-              ? draft.timeframe
-              : "5m"
+          : draft.kind === "nifty-first-candle" || draft.kind === "crude-first-candle" || draft.kind === "nifty-test"
+            ? firstCandleTimeframeValue(String(draft.timeframe || "5m"))
             : draft.kind === "nifty-vwap-reversal" || draft.kind === "nifty-vwap-hedge"
               ? "15m"
-              : draft.timeframe,
+              : firstCandleTimeframeValue(String(draft.timeframe || "5m")),
       dailyLiveIst: draft.kind === "nifty-first-candle" ? draft.dailyLiveIst || "09:00" : draft.dailyLiveIst,
       firstBarStartIst: draft.kind === "nifty-first-candle" ? draft.firstBarStartIst || "09:00" : draft.firstBarStartIst,
       entryEvaluationIst: draft.kind === "nifty-first-candle" ? draft.entryEvaluationIst || "09:05" : draft.entryEvaluationIst,
@@ -908,12 +914,12 @@ function FirstCandleTfChips({ timeframe, onPick }: { timeframe?: string; onPick:
   const selected = firstCandleTimeframeSelect(timeframe);
   return (
     <View>
-      <Text style={styles.muted}>Candle timeframe · 5m 10m 15m 30m 60m Custom</Text>
+      <Text style={styles.muted}>Candle timeframe · 5m 15m 30m 1hr Custom</Text>
       <View style={styles.chips}>
         {[...FIRST_CANDLE_TIMEFRAMES, "custom"].map((row) => (
           <Chip
             key={row}
-            label={row === "custom" ? "Custom" : row}
+            label={row === "custom" ? "Custom" : row === "1H" ? "1hr" : row}
             on={selected === row}
             onPress={() =>
               onPick(

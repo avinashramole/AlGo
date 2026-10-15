@@ -8,6 +8,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("Multi-Index Reversal settings expose four indices and locked defaults", () => {
   const builder = fs.readFileSync(path.join(root, "src/components/dashboard/StrategyBuilder.tsx"), "utf8");
+  const bar = fs.readFileSync(path.join(root, "src/components/dashboard/FirstCandleTimeframeBar.tsx"), "utf8");
   const lib = fs.readFileSync(path.join(root, "src/lib/strategies.ts"), "utf8");
   const algoPage = fs.readFileSync(path.join(root, "src/pages/Algo.tsx"), "utf8");
   const deploy = fs.readFileSync(path.join(root, "deploy/update-website.sh"), "utf8");
@@ -24,9 +25,9 @@ test("Multi-Index Reversal settings expose four indices and locked defaults", ()
   assert.match(algoPage, /data-strategy-visibility="true"/);
   assert.match(algoPage, /data-client-visible/);
   assert.match(algoPage, /clientVisible: next/);
-  assert.match(builder, /data-mir-timeframe=\{mir \? "true"/);
+  assert.match(bar, /data-mir-timeframe=\{mark === "mir" \? "true"/);
   assert.match(builder, /MULTI_INDEX_SCRIPTS/);
-  assert.match(builder, /MULTI_INDEX_TIMEFRAMES/);
+  assert.match(builder, /test1 \? "test1" : mir \? "mir"/);
   assert.match(builder, /kind: "multi-index-reversal"/);
   assert.match(builder, /runMode: "paper"/);
   assert.match(builder, /MULTI_INDEX_SCRIPTS\.map/);
@@ -34,7 +35,8 @@ test("Multi-Index Reversal settings expose four indices and locked defaults", ()
   assert.match(lib, /MULTI_INDEX_REVERSAL_NAME = "Multi-Index"/);
   assert.match(lib, /id: "NIFTY", label: "NIFTY 50"/);
   assert.match(lib, /id: "SENSEX", label: "SENSEX", exchange: "BSE"/);
-  assert.match(lib, /MULTI_INDEX_TIMEFRAMES = \["5m", "10m", "15m", "30m", "1H"\]/);
+  assert.match(lib, /DESK_TIMEFRAME_PRESETS = \["5m", "15m", "30m", "1H"\]/);
+  assert.match(lib, /MULTI_INDEX_TIMEFRAMES = DESK_TIMEFRAME_PRESETS/);
   assert.match(lib, /runMode: "paper"/);
   assert.match(algoPage, /data-mir-strategy=\{isMultiIndexReversalKind\(algo\) \? "true"/);
   assert.match(algoPage, /data-mir-monitor="true"/);

@@ -1,3 +1,7 @@
+import { DESK_TIMEFRAME_PRESETS, parseBarMinutes, resolveDeskTimeframe } from "../deskTimeframe.js";
+
+export { parseBarMinutes, resolveDeskTimeframe };
+
 export const NIFTY_VWAP_KIND = "nifty-vwap";
 export const NIFTY_VWAP_TYPE = "NIFTY_VWAP_ATM";
 export const NIFTY_VWAP_REVERSAL_KIND = "nifty-vwap-reversal";
@@ -104,24 +108,8 @@ export const DEFAULT_CRUDE_FIRST_CANDLE_CONFIG = {
   eodSquareOffMinutes: 15,
 };
 
-const FIRST_CANDLE_TIMEFRAMES = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60, "1H": 60, "1h": 60 };
-const TEST1_TIMEFRAMES = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15 };
-const NIFTY_TEST_TIMEFRAMES = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15, "1H": 60 };
-const MAX_CUSTOM_BAR_MINUTES = 240;
-
-export function parseBarMinutes(timeframe, fallback = 5) {
-  const raw = String(timeframe || "").trim();
-  if (FIRST_CANDLE_TIMEFRAMES[raw]) return FIRST_CANDLE_TIMEFRAMES[raw];
-  const match = raw.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/i) || raw.match(/^(\d+)$/);
-  const n = match ? Number(match[1]) : NaN;
-  if (Number.isFinite(n) && n >= 1 && n <= MAX_CUSTOM_BAR_MINUTES) return Math.round(n);
-  return fallback;
-}
-
 export function resolveFirstCandleTimeframe(timeframe, fallback = "5m") {
-  const minutes = parseBarMinutes(timeframe, 0);
-  if (!minutes) return fallback;
-  return `${minutes}m`;
+  return resolveDeskTimeframe(timeframe, fallback);
 }
 
 export const DEFAULT_NIFTY_TEST_CONFIG = {
@@ -264,7 +252,7 @@ export function firstCandleEntryIst(firstBarStartIst, timeframe, storedEntry) {
   const stored = String(storedEntry || "").trim();
   if (!stored) return barClose;
   const parsed = parseIstHm(stored, barClose);
-  const otherClocks = [...new Set(Object.values(FIRST_CANDLE_TIMEFRAMES))]
+  const otherClocks = [...new Set(DESK_TIMEFRAME_PRESETS.map((tf) => parseBarMinutes(tf)))]
     .filter((step) => step !== minutes)
     .map((step) => addIstMinutes(start, step, start));
   if (otherClocks.includes(parsed)) return barClose;
@@ -403,12 +391,12 @@ export function niftyTestConfig(algo = {}) {
   };
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_NIFTY_TEST_CONFIG.lots)));
   const lotSize = Math.max(1, Math.round(num(algo.lotSize, DEFAULT_NIFTY_TEST_CONFIG.lotSize)));
-  const timeframe = NIFTY_TEST_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_TEST_CONFIG.timeframe;
+  const timeframe = resolveDeskTimeframe(algo.timeframe, DEFAULT_NIFTY_TEST_CONFIG.timeframe);
   return {
     timeframe,
     slPct: Math.max(0.05, num(algo.slPct, DEFAULT_NIFTY_TEST_CONFIG.slPct)),
     targetPct: Math.max(0.1, num(algo.targetPct, DEFAULT_NIFTY_TEST_CONFIG.targetPct)),
-    barMinutes: NIFTY_TEST_TIMEFRAMES[timeframe],
+    barMinutes: parseBarMinutes(timeframe),
     symbol: "NIFTY",
     lots,
     lotSize,
@@ -593,10 +581,10 @@ export function niftyTest1Config(algo = {}) {
   const maxWickPct = Math.min(0.5, Math.max(0.01, num(algo.maxWickPct, DEFAULT_NIFTY_TEST1_CONFIG.maxWickPct)));
   const targetMultiple = Math.min(5, Math.max(0.1, num(algo.targetMultiple, DEFAULT_NIFTY_TEST1_CONFIG.targetMultiple)));
   const targetSource = String(algo.targetSource || DEFAULT_NIFTY_TEST1_CONFIG.targetSource) === "range" ? "range" : "body";
-  const timeframe = TEST1_TIMEFRAMES[algo.timeframe] ? algo.timeframe : DEFAULT_NIFTY_TEST1_CONFIG.timeframe;
+  const timeframe = resolveDeskTimeframe(algo.timeframe, DEFAULT_NIFTY_TEST1_CONFIG.timeframe);
   return {
     timeframe,
-    barMinutes: TEST1_TIMEFRAMES[timeframe] || 5,
+    barMinutes: parseBarMinutes(timeframe, 5),
     symbol: script.id,
     lots,
     lotSize,

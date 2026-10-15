@@ -5768,7 +5768,7 @@ function noteNiftyFuturePrice(price) {
 function niftyFutureBars(timeframe) {
   if (niftyFutureCandles.length < 2) return [];
   const tf = String(timeframe || "5m");
-  const minutes = tf === "1m" ? 1 : tf === "2m" ? 2 : tf === "10m" ? 10 : tf === "15m" ? 15 : tf === "1H" || tf === "1h" ? 60 : 5;
+  const minutes = parseBarMinutes(tf, 5);
   if (minutes <= 1) return niftyFutureCandles.slice();
   return VwapSignalEngine.aggregateSessionBars(niftyFutureCandles, minutes);
 }

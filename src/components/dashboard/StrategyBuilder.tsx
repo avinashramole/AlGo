@@ -10,7 +10,6 @@ import {
   SOURCES,
   STRATEGY_SYMBOLS,
   TEST1_SCRIPTS,
-  TIMEFRAMES,
   firstCandleMinutes,
   firstCandleTimeframeSelect,
   firstCandleTimeframeValue,
@@ -41,11 +40,9 @@ import {
   isShivamT2sKind,
   MULTI_INDEX_REVERSAL_NAME,
   MULTI_INDEX_SCRIPTS,
-  MULTI_INDEX_TIMEFRAMES,
   MULTI_INDEX_OFFSETS,
   SHIVAM_T2S_NAME,
   SHIVAM_T2S_SCRIPTS,
-  SHIVAM_T2S_TIMEFRAMES,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
@@ -366,10 +363,10 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               symbol: SHIVAM_T2S_SCRIPTS.some((row) => row.id === form.symbol) ? form.symbol : "NIFTY",
               instrument: "option",
               side: "BUY",
-              ceTimeframe: SHIVAM_T2S_TIMEFRAMES.includes(form.ceTimeframe as (typeof SHIVAM_T2S_TIMEFRAMES)[number]) ? form.ceTimeframe : "5m",
-              peTimeframe: SHIVAM_T2S_TIMEFRAMES.includes(form.peTimeframe as (typeof SHIVAM_T2S_TIMEFRAMES)[number]) ? form.peTimeframe : "5m",
-              indexTimeframe: SHIVAM_T2S_TIMEFRAMES.includes(form.indexTimeframe as (typeof SHIVAM_T2S_TIMEFRAMES)[number]) ? form.indexTimeframe : "5m",
-              timeframe: form.indexTimeframe || "5m",
+              ceTimeframe: firstCandleTimeframeValue(String(form.ceTimeframe || "5m")),
+              peTimeframe: firstCandleTimeframeValue(String(form.peTimeframe || "5m")),
+              indexTimeframe: firstCandleTimeframeValue(String(form.indexTimeframe || "5m")),
+              timeframe: firstCandleTimeframeValue(String(form.indexTimeframe || form.timeframe || "5m")),
               strikePolicy: form.strikePolicy === "ITM" || form.strikePolicy === "OTM" ? form.strikePolicy : "ATM",
               slMode: form.slMode === "points" ? "points" : "percentage",
               targetMode: form.targetMode === "points" ? "points" : "percentage",
@@ -396,11 +393,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               symbol: MULTI_INDEX_SCRIPTS.some((row) => row.id === form.symbol) ? form.symbol : "NIFTY",
               instrument: "option",
               side: "BUY",
-              timeframe: MULTI_INDEX_TIMEFRAMES.includes(form.timeframe as (typeof MULTI_INDEX_TIMEFRAMES)[number])
-                ? form.timeframe
-                : form.timeframe === "1h"
-                  ? "1H"
-                  : "15m",
+              timeframe: firstCandleTimeframeValue(String(form.timeframe || "15m")),
               strikeOffset: Math.max(-4, Math.min(4, Math.round(Number(form.strikeOffset) || 0))),
               initialTargetPct: Number(form.initialTargetPct) > 0 ? Number(form.initialTargetPct) : 40,
               reversalLossPct: Number(form.reversalLossPct) > 0 ? Number(form.reversalLossPct) : 20,
@@ -444,9 +437,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               instrument: "option",
               strikeOffset: 0,
               side: "BUY",
-              timeframe: ["1m", "2m", "5m", "10m", "15m"].includes(String(form.timeframe || ""))
-                ? form.timeframe
-                : "5m",
+              timeframe: firstCandleTimeframeValue(String(form.timeframe || "5m")),
             }
           : crudeFirst
           ? {
@@ -552,7 +543,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={crudeFirst}
             title="CRUDE OIL"
-            text="Pick 5, 10, 15, 30, 60, or custom minutes. Checks every completed Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
+            text="Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. Checks every completed Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
@@ -642,7 +633,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
-            text="Pick 5, 10, 15, 30, 60, or custom minutes. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
+            text="Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -760,13 +751,34 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </div>
         ) : null}
 
-        {firstCandleTf ? (
+        {vwap || reversal || hedge || test2 ? null : shivam ? (
+          <div className="space-y-1">
+            <FirstCandleTimeframeBar
+              timeframe={form.indexTimeframe || form.timeframe}
+              mark="shivam-index"
+              label="Index TF · 5m 15m 30m 1hr Custom"
+              onPick={(timeframe) => set({ indexTimeframe: timeframe, timeframe, barMinutes: firstCandleMinutes(timeframe) })}
+            />
+            <FirstCandleTimeframeBar
+              timeframe={form.ceTimeframe || "5m"}
+              mark="shivam-ce"
+              label="CE TF · 5m 15m 30m 1hr Custom"
+              onPick={(ceTimeframe) => set({ ceTimeframe })}
+            />
+            <FirstCandleTimeframeBar
+              timeframe={form.peTimeframe || "5m"}
+              mark="shivam-pe"
+              label="PE TF · 5m 15m 30m 1hr Custom"
+              onPick={(peTimeframe) => set({ peTimeframe })}
+            />
+          </div>
+        ) : (
           <FirstCandleTimeframeBar
             timeframe={form.timeframe}
-            mark={crudeFirst ? "crude" : "nifty"}
-            onPick={setFirstCandleTimeframe}
+            mark={crudeFirst ? "crude" : firstCandle ? "nifty" : test1 ? "test1" : mir ? "mir" : "form"}
+            onPick={firstCandleTf ? setFirstCandleTimeframe : (timeframe) => set({ timeframe, barMinutes: firstCandleMinutes(timeframe) })}
           />
-        ) : null}
+        )}
 
         <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2 || mir || shivam) && "sm:hidden", (test2 || mir || shivam) && "hidden")}>
           Strategy name
@@ -923,30 +935,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               <label className="text-xs font-semibold text-slate-500">
                 Futures
                 <input className={fieldClass} value={(SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0]).futures} readOnly />
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                Index TF
-                <select className={fieldClass} value={form.indexTimeframe || "5m"} onChange={(event) => set({ indexTimeframe: event.target.value, timeframe: event.target.value })}>
-                  {SHIVAM_T2S_TIMEFRAMES.map((row) => (
-                    <option key={row} value={row}>{row}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                CE TF
-                <select className={fieldClass} value={form.ceTimeframe || "5m"} onChange={(event) => set({ ceTimeframe: event.target.value })}>
-                  {SHIVAM_T2S_TIMEFRAMES.map((row) => (
-                    <option key={row} value={row}>{row}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-500">
-                PE TF
-                <select className={fieldClass} value={form.peTimeframe || "5m"} onChange={(event) => set({ peTimeframe: event.target.value })}>
-                  {SHIVAM_T2S_TIMEFRAMES.map((row) => (
-                    <option key={row} value={row}>{row}</option>
-                  ))}
-                </select>
               </label>
               <label className="text-xs font-semibold text-slate-500">
                 Strike policy
@@ -1167,34 +1155,18 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             </span>
           </label>
           )}
-          {firstCandleTf || shivam ? null : (
+          {vwap || reversal || hedge || test2 ? (
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
             <select
               className={fieldClass}
-              value={reversal || hedge ? "15m" : vwap || test2 ? "5m" : form.timeframe || "5m"}
-              disabled={(engine && !test1) || test2}
-              data-test1-timeframe={test1 ? "true" : undefined}
-              data-mir-timeframe={mir ? "true" : undefined}
-              onChange={(event) => set({ timeframe: event.target.value })}
+              value={reversal || hedge ? "15m" : "5m"}
+              disabled
             >
-              {(reversal || hedge
-                ? ["15m"]
-                : vwap
-                  ? ["5m"]
-                  : mir
-                    ? [...MULTI_INDEX_TIMEFRAMES]
-                  : test1 || test2 || niftyTest
-                    ? ["1m", "2m", "5m", "10m", "15m"]
-                    : TIMEFRAMES
-              ).map((row) => (
-                <option key={row} value={row}>
-                  {row}
-                </option>
-              ))}
+              <option value={reversal || hedge ? "15m" : "5m"}>{reversal || hedge ? "15m" : "5m"}</option>
             </select>
           </label>
-          )}
+          ) : null}
           <label className="text-xs font-semibold text-slate-500">
             Broker
             <select

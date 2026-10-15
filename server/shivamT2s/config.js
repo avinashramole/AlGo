@@ -1,3 +1,5 @@
+import { parseBarMinutes, resolveDeskTimeframe } from "../deskTimeframe.js";
+
 export const SHIVAM_T2S_KIND = "shivam-t2s";
 export const SHIVAM_T2S_TYPE = "SHIVAM_T2S";
 export const SHIVAM_T2S_NAME = "Shivam T2S Strategy";
@@ -13,11 +15,12 @@ export const SHIVAM_T2S_SCRIPTS = [
 ];
 
 export const SHIVAM_T2S_TIMEFRAMES = {
-  "1m": 1,
-  "3m": 3,
   "5m": 5,
-  "10m": 10,
   "15m": 15,
+  "30m": 30,
+  "1H": 60,
+  "1h": 60,
+  "60m": 60,
 };
 
 export const SHIVAM_STRIKE_POLICIES = ["ATM", "ITM", "OTM"];
@@ -80,12 +83,7 @@ export function isShivamT2sAlgo(algo = {}) {
 }
 
 export function resolveShivamTimeframe(value, fallback = "5m") {
-  const raw = String(value || "").trim();
-  if (SHIVAM_T2S_TIMEFRAMES[raw]) return raw;
-  const match = raw.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/i) || raw.match(/^(\d+)$/);
-  const minutes = match ? Number(match[1]) : NaN;
-  if (SHIVAM_T2S_TIMEFRAMES[`${minutes}m`]) return `${minutes}m`;
-  return fallback;
+  return resolveDeskTimeframe(value, fallback);
 }
 
 export function clampShivamDailyTradeLimit(value, fallback = DEFAULT_SHIVAM_T2S_CONFIG.maxTradesPerDay) {
@@ -130,9 +128,9 @@ export function shivamT2sConfig(algo = {}) {
     peTimeframe,
     indexTimeframe,
     timeframe: indexTimeframe,
-    ceBarMinutes: SHIVAM_T2S_TIMEFRAMES[ceTimeframe],
-    peBarMinutes: SHIVAM_T2S_TIMEFRAMES[peTimeframe],
-    indexBarMinutes: SHIVAM_T2S_TIMEFRAMES[indexTimeframe],
+    ceBarMinutes: parseBarMinutes(ceTimeframe),
+    peBarMinutes: parseBarMinutes(peTimeframe),
+    indexBarMinutes: parseBarMinutes(indexTimeframe),
     ceConfirmColor: SHIVAM_CE_CONFIRM_COLOR,
     peConfirmColor: SHIVAM_PE_CONFIRM_COLOR,
     slMode: modeOf(algo.slMode, SHIVAM_VALUE_MODES, DEFAULT_SHIVAM_T2S_CONFIG.slMode),
@@ -164,8 +162,8 @@ export function validateShivamT2s(algo = {}) {
   const cfg = shivamT2sConfig(algo);
   const tfError = (label, value) => {
     const rawTf = String(value || "").trim();
-    if (rawTf && !SHIVAM_T2S_TIMEFRAMES[rawTf] && !SHIVAM_T2S_TIMEFRAMES[resolveShivamTimeframe(rawTf, "")]) {
-      return `${label} must be 1, 3, 5, 10, or 15 minutes.`;
+    if (rawTf && !parseBarMinutes(rawTf, 0)) {
+      return `${label} must be 5m, 15m, 30m, 1hr, or custom 1–60 minutes.`;
     }
     return "";
   };

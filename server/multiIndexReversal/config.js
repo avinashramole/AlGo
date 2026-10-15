@@ -1,3 +1,5 @@
+import { parseBarMinutes, resolveDeskTimeframe } from "../deskTimeframe.js";
+
 export const MULTI_INDEX_REVERSAL_KIND = "multi-index-reversal";
 export const MULTI_INDEX_REVERSAL_TYPE = "MULTI_INDEX_REVERSAL";
 export const MULTI_INDEX_REVERSAL_NAME = "Multi-Index";
@@ -12,11 +14,11 @@ export const MULTI_INDEX_SCRIPTS = [
 
 export const MULTI_INDEX_TIMEFRAMES = {
   "5m": 5,
-  "10m": 10,
   "15m": 15,
   "30m": 30,
   "1H": 60,
   "1h": 60,
+  "60m": 60,
 };
 
 export const DEFAULT_MULTI_INDEX_REVERSAL_CONFIG = {
@@ -63,8 +65,8 @@ export function isMultiIndexReversalAlgo(algo = {}) {
 
 export function multiIndexReversalConfig(algo = {}) {
   const script = multiIndexScript(algo.symbol || algo.index || DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.symbol) || MULTI_INDEX_SCRIPTS[0];
-  const tfKey = MULTI_INDEX_TIMEFRAMES[algo.timeframe] ? (algo.timeframe === "1h" ? "1H" : algo.timeframe) : DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.timeframe;
-  const barMinutes = MULTI_INDEX_TIMEFRAMES[tfKey] || 15;
+  const tfKey = resolveDeskTimeframe(algo.timeframe, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.timeframe);
+  const barMinutes = parseBarMinutes(tfKey, 15);
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.lots)));
   const lotSize = Math.max(1, Math.round(num(algo.lotSize, script.id === "NIFTY" ? 65 : script.id === "BANKNIFTY" ? 30 : script.id === "FINNIFTY" ? 60 : 20)));
   const basis = String(algo.combinedTargetBasis || DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.combinedTargetBasis) === "combined" ? "combined" : "original";
@@ -74,7 +76,7 @@ export function multiIndexReversalConfig(algo = {}) {
     indexLabel: script.label,
     exchange: script.exchange,
     segment: script.segment,
-    timeframe: tfKey === "1h" ? "1H" : tfKey,
+    timeframe: tfKey,
     barMinutes,
     strikeOffset: Math.max(-4, Math.min(4, Math.round(num(algo.strikeOffset, 0)))),
     initialTargetPct: Math.min(200, Math.max(1, num(algo.initialTargetPct ?? algo.targetPct, DEFAULT_MULTI_INDEX_REVERSAL_CONFIG.initialTargetPct))),
@@ -101,8 +103,8 @@ export function validateMultiIndexReversal(algo = {}) {
   const cfg = multiIndexReversalConfig(algo);
   if (!MULTI_INDEX_SCRIPTS.some((row) => row.id === cfg.symbol)) return "Pick NIFTY 50, BANK NIFTY, FINNIFTY, or SENSEX.";
   const tfRaw = String(algo.timeframe || cfg.timeframe || "").trim();
-  if (tfRaw && !MULTI_INDEX_TIMEFRAMES[tfRaw] && !MULTI_INDEX_TIMEFRAMES[tfRaw.toLowerCase()]) {
-    return "Candle timeframe must be 5m, 10m, 15m, 30m, or 1h.";
+  if (tfRaw && !parseBarMinutes(tfRaw, 0)) {
+    return "Candle timeframe must be 5m, 15m, 30m, 1hr, or custom 1–60 minutes.";
   }
   if (cfg.strikeOffset < -4 || cfg.strikeOffset > 4) return "Strike offset must be between -4 and +4.";
   if (!(cfg.initialTargetPct > 0)) return "Initial target must be greater than 0.";

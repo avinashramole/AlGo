@@ -1400,17 +1400,22 @@ test("normalizeAlgo keeps first candle paused and editable SL/TGT", () => {
   assert.equal(updated.maxTradesPerDay, 2);
 });
 
-test("Nifty and Crude first candle keep 5 10 15 30 60 and custom minutes", () => {
+test("Nifty and Crude first candle keep 5m 15m 30m 1H and custom 1-60 minutes", () => {
   assert.equal(parseBarMinutes("5m"), 5);
   assert.equal(parseBarMinutes("10m"), 10);
   assert.equal(parseBarMinutes("15m"), 15);
+  assert.equal(parseBarMinutes("17m"), 17);
+  assert.equal(parseBarMinutes("19m"), 19);
   assert.equal(parseBarMinutes("30m"), 30);
   assert.equal(parseBarMinutes("60m"), 60);
   assert.equal(parseBarMinutes("1H"), 60);
   assert.equal(parseBarMinutes("20m"), 20);
   assert.equal(parseBarMinutes("20"), 20);
+  assert.equal(parseBarMinutes("61m", 0), 0);
   assert.equal(resolveFirstCandleTimeframe("20m"), "20m");
-  assert.equal(resolveFirstCandleTimeframe("1H"), "60m");
+  assert.equal(resolveFirstCandleTimeframe("1H"), "1H");
+  assert.equal(resolveFirstCandleTimeframe("60m"), "1H");
+  assert.equal(resolveFirstCandleTimeframe("17m"), "17m");
   assert.equal(resolveFirstCandleTimeframe("20"), "20m");
   assert.equal(firstCandleBarMinutes("30m"), 30);
   assert.equal(firstCandleEntryIst("09:00", "30m"), "09:30");
@@ -1426,7 +1431,10 @@ test("Nifty and Crude first candle keep 5 10 15 30 60 and custom minutes", () =>
   assert.equal(nifty30.timeframe, "30m");
   assert.equal(nifty30.entryEvaluationIst, "09:30");
   const niftyFromFive = normalizeAlgo({ timeframe: "60m" }, { id: "a10", name: "NIFTY", kind: "nifty-first-candle", timeframe: "5m" });
-  assert.equal(niftyFromFive.timeframe, "60m");
+  assert.equal(niftyFromFive.timeframe, "1H");
+  const niftyCustom = normalizeAlgo({ name: "NIFTY", kind: "nifty-first-candle", timeframe: "17m" });
+  assert.equal(niftyCustom.timeframe, "17m");
+  assert.equal(niftyCustom.barMinutes, 17);
   const crudeCustom = normalizeAlgo({ name: "CRUDE OIL", kind: "crude-first-candle", timeframe: "20m" });
   assert.equal(crudeCustom.timeframe, "20m");
   const crudeFromFive = normalizeAlgo({ timeframe: "30m" }, { id: "a12", name: "CRUDE OIL", kind: "crude-first-candle", timeframe: "5m" });
