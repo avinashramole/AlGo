@@ -983,7 +983,7 @@ function publicAlgoLiveStatus(id) {
     ...status,
     contract: preview.contract,
     lots: 1,
-    skipMemberCopy: true,
+    skipMemberCopy: false,
   };
 }
 

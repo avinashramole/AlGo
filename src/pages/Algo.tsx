@@ -513,7 +513,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
       const ready = check?.brokerReady ? `${broker} is LIVE` : `${broker} is NOT LIVE`;
       if (
         !window.confirm(
-          `Send 1 lot BUY ${contract} to ${broker} to test the broker?\n\n${algo.name} is ${label}. ${ready}. Mapped clients will not copy. This is a real order if the broker is LIVE.`,
+          `Send 1 lot BUY ${contract} to ${broker} and mapped clients?\n\n${algo.name} is ${label}. ${ready}. Mapped clients copy 1 lot on their own broker. This is a real order if the broker is LIVE.`,
         )
       ) {
         return;
@@ -521,7 +521,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
       const result = await testAlgoBrokerOrder(algo.id, true);
       await refresh();
       const sent = result.contract?.symbol || contract;
-      window.alert(result.queued || result.sentLive ? `Sent 1 lot BUY ${sent} to ${broker}. Mapped clients were not copied.` : result.error || "Test order sent");
+      window.alert(result.queued || result.sentLive ? `Sent 1 lot BUY ${sent} to ${broker} and mapped clients.` : result.error || "Test order sent");
     } catch (err) {
       window.alert(catchDeskError(err, "Could not send test order"));
     } finally {

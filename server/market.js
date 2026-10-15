@@ -1049,6 +1049,13 @@ function isBrokerTestOrder(payload) {
   return String(payload?.role || "").toLowerCase() === "broker-test";
 }
 
+function brokerTestMemberCopy(copy, master) {
+  const next = { ...copy, testDesk: false };
+  if (!isBrokerTestOrder(master)) return next;
+  const lotSize = Math.max(1, Math.round(Number(next.lotSize || master.lotSize || next.qty || master.qty) || 1));
+  return { ...next, role: "broker-test", lots: 1, lotSize, qty: lotSize };
+}
+
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
@@ -1415,7 +1422,7 @@ export function queueLiveAlgoOrder(payload) {
   if (!payload.skipMemberCopy && (!testDesk || isShivamT2sAlgo(algo))) {
     const copyAlgo = liveCopyAlgo(deskStamped) || algo;
     for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
-      enqueueLiveAlgoOrder({ ...copy, testDesk: false });
+      enqueueLiveAlgoOrder(brokerTestMemberCopy(copy, deskStamped));
     }
   }
   if (typeof onLiveBookChange === "function") onLiveBookChange();
@@ -4112,7 +4119,7 @@ export function placeStrategyBrokerTestOrder(id, patch = {}) {
   const status = strategyTradingStatus(algo);
   const trade = resolveBrokerTestTrade(algo);
   const confirm = patch.confirm === true || patch.confirm === "true";
-  const base = { ...status, contract: trade, lots: 1, skipMemberCopy: true, confirm };
+  const base = { ...status, contract: trade, lots: 1, skipMemberCopy: false, confirm };
   if (isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo)) {
     return { ...base, ok: false, error: "Algo Test paper cards cannot send a live broker test order." };
   }
@@ -4161,7 +4168,7 @@ export function placeStrategyBrokerTestOrder(id, patch = {}) {
     exchangeSegment: exchangeSegmentFor(trade.symbol || algo.symbol),
     brokerId: status.brokerId,
     role: "broker-test",
-    skipMemberCopy: true,
+    skipMemberCopy: false,
     forceLiveBroker: true,
     paper: false,
   });
