@@ -751,28 +751,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </div>
         ) : null}
 
-        {vwap || reversal || hedge || test2 ? null : shivam ? (
-          <div className="space-y-1" data-shivam-timeframes="true">
-            <FirstCandleTimeframeBar
-              timeframe={form.indexTimeframe || form.timeframe}
-              mark="shivam-index"
-              label="Index TF · 5m 15m 30m 1hr Custom"
-              onPick={(timeframe) => set({ indexTimeframe: timeframe, timeframe, barMinutes: firstCandleMinutes(timeframe) })}
-            />
-            <FirstCandleTimeframeBar
-              timeframe={form.ceTimeframe || "5m"}
-              mark="shivam-ce"
-              label="CE TF · 5m 15m 30m 1hr Custom"
-              onPick={(ceTimeframe) => set({ ceTimeframe })}
-            />
-            <FirstCandleTimeframeBar
-              timeframe={form.peTimeframe || "5m"}
-              mark="shivam-pe"
-              label="PE TF · 5m 15m 30m 1hr Custom"
-              onPick={(peTimeframe) => set({ peTimeframe })}
-            />
-          </div>
-        ) : (
+        {vwap || reversal || hedge || test2 || shivam ? null : (
           <FirstCandleTimeframeBar
             timeframe={form.timeframe}
             mark={crudeFirst ? "crude" : firstCandle ? "nifty" : test1 ? "test1" : mir ? "mir" : "form"}
@@ -913,6 +892,26 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <div className="mt-2.5 space-y-1.5" data-shivam-settings="true">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
               Index or matching future candle must be complete. BUY CE: future green and CE green. BUY PE: future red and PE green. A doji is neither. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
+            </div>
+            <div className="space-y-1" data-shivam-timeframes="true">
+              <FirstCandleTimeframeBar
+                timeframe={form.indexTimeframe || form.timeframe}
+                mark="shivam-index"
+                label="Index · 5m 15m 30m 1hr Custom 1–60"
+                onPick={(timeframe) => set({ indexTimeframe: timeframe, timeframe, barMinutes: firstCandleMinutes(timeframe) })}
+              />
+              <FirstCandleTimeframeBar
+                timeframe={form.ceTimeframe || "5m"}
+                mark="shivam-ce"
+                label="CE · 5m 15m 30m 1hr Custom 1–60"
+                onPick={(ceTimeframe) => set({ ceTimeframe })}
+              />
+              <FirstCandleTimeframeBar
+                timeframe={form.peTimeframe || "5m"}
+                mark="shivam-pe"
+                label="PE · 5m 15m 30m 1hr Custom 1–60"
+                onPick={(peTimeframe) => set({ peTimeframe })}
+              />
             </div>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-500">
