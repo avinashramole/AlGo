@@ -139,6 +139,8 @@ Sandbox connect for Zerodha / Kotak / Fyers: client ID `demo` and API key `demo1
 
 The header broker dropdown sets which account new orders use. Each algo can be routed to a different connected broker.
 
+User and admin **trade logs** (orders, order history, closed trades) clear daily after **01:01 AM IST**. Open live broker positions stay until the broker book updates. Dhan tokens still reset at 8:00 AM IST.
+
 Open **Chain** in the left menu for the full option chain (NIFTY / BANKNIFTY / FINNIFTY / SENSEX). With a Dhan Access Token connected, strikes, OI, IV, and PCR come from DhanHQ.
 
 ---
@@ -164,6 +166,8 @@ The phone APK is a **Capacitor** app. It uses the Trade 2 Smart logo on the laun
 **Google / Gmail login stays in the app.** Continue with Google opens Google inside the app WebView and returns through `t2salgo://auth`. It must not leave you on the public website login page. If a browser ever opens, tap **Open the app** to finish inside Trade 2 Smart.
 
 Login, Algo, Reports, Brokers, and Multi-Index are the same screens as the website. Live quotes and orders still use `https://trade2smart.com/api`.
+
+**Daily trade logs:** user and admin order books, order history, and closed trade books clear every day after **01:01 AM IST**. Dhan access tokens still renew at 8:00 AM IST. Rebuild this APK after that server/UI change so the phone copy matches the website.
 
 On a Linux machine with Java 17+:
 

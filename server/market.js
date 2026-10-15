@@ -1,5 +1,6 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, orderBrokerForDesk, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
+import { isFreshTradeLogRow, lastBookClearAt, msUntilBookClear, tradeLogRowMs } from "./istClock.js";
 import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, memberCopyPayloads } from "./liveCopy.js";
@@ -513,6 +514,7 @@ const state = {
   sentiment: 50,
   orders: [],
   closedTrades: [],
+  bookClearedAt: 0,
   adminBrokerBook: null,
   notifications: [],
   chat: [],
@@ -3073,7 +3075,38 @@ function rowIsMissingStrategy(row, ids, names) {
   return !names.has(match[1].trim().toLowerCase());
 }
 
+export function clearAdminDailyTradeLog(now = Date.now()) {
+  const resetAt = lastBookClearAt(now);
+  if ((Number(state.bookClearedAt) || 0) >= resetAt) return false;
+  const keepFresh = (row) => tradeLogRowMs(row) >= resetAt;
+  state.orders = (state.orders || []).filter(keepFresh);
+  state.closedTrades = (state.closedTrades || []).filter(keepFresh);
+  state.bookClearedAt = resetAt;
+  return true;
+}
+
+let adminBookSweepTimer = null;
+
+export function startAdminDailyTradeLogScheduler() {
+  if (adminBookSweepTimer) clearTimeout(adminBookSweepTimer);
+  const tick = () => {
+    try {
+      clearAdminDailyTradeLog();
+    } catch (error) {
+      console.log(`Admin daily trade log clear failed: ${error.message || error}`);
+    }
+    adminBookSweepTimer = setTimeout(tick, msUntilBookClear());
+  };
+  try {
+    clearAdminDailyTradeLog();
+  } catch (error) {
+    console.log(`Admin daily trade log clear failed: ${error.message || error}`);
+  }
+  adminBookSweepTimer = setTimeout(tick, msUntilBookClear());
+}
+
 function liveDesk() {
+  clearAdminDailyTradeLog();
   const live = isDhanFeedLive();
   const keep = (row) =>
     !isGhostCopyOrder(row) && (isPaperRow(row) || (!isSimRow(row) && row?.live !== false));
@@ -3326,7 +3359,7 @@ export function snapshot() {
   const active = getActiveBroker();
   const { orders, positions, closedTrades } = liveDesk();
   const { totalPnl, pnlByBroker: byBroker } = bookPnl(positions, closedTrades);
-  const { liveCandles: _liveCandles, closedTrades: _closedTrades, ...publicState } = clone(state);
+  const { liveCandles: _liveCandles, closedTrades: _closedTrades, bookClearedAt: _bookClearedAt, ...publicState } = clone(state);
   const liveState = { ...publicState, orders, positions, closedTrades };
   liveState.algos = (liveState.algos || []).map((algo) => ({ ...algo, trade: resolveAlgoTrade(algo) }));
   const dnaScores = buildLiveDna({ indices: publicState.indices, optionChain: publicState.optionChain });
@@ -4264,19 +4297,12 @@ function orderFeedStatus(status) {
   return raw || "PENDING";
 }
 
-function orderFeedDay(row) {
-  const ms = Date.parse(String(row?.createdAt || ""));
-  if (!Number.isFinite(ms) || ms <= 0) return "";
-  return VwapSignalEngine.sessionKeyIST(ms);
-}
-
-function keepOmittedDhanOrder(row, today) {
+function keepOmittedDhanOrder(row, now = Date.now()) {
   const status = orderFeedStatus(row?.status);
   if (status !== "FILLED" && status !== "REJECTED" && status !== "FAILED" && status !== "CANCELLED" && status !== "PARTIAL") {
     return false;
   }
-  const day = orderFeedDay(row);
-  return !day || day >= today;
+  return isFreshTradeLogRow(row, now);
 }
 
 function mapLiveStatus(status) {
@@ -4690,6 +4716,7 @@ export function squareOff(id, extras = {}) {
 }
 
 export function replaceDhanOrders(rows) {
+  clearAdminDailyTradeLog();
   const incoming = Array.isArray(rows) ? rows : [];
   const previous = state.orders || [];
   const previousDhan = new Map(
@@ -4730,15 +4757,21 @@ export function replaceDhanOrders(rows) {
     });
     if (strategy) row.strategy = strategy;
   }
-  const today = VwapSignalEngine.sessionKeyIST(Date.now());
+  const resetAt = lastBookClearAt();
+  const fresh = tagged.filter((row) => {
+    const ms = tradeLogRowMs(row);
+    return !ms || ms >= resetAt;
+  });
   const kept = [];
   for (const row of previous) {
     if (row.copyUserId || row.brokerId !== "dhan") {
+      const ms = tradeLogRowMs(row);
+      if (ms && ms < resetAt) continue;
       kept.push(row);
       continue;
     }
     if (incomingIds.has(String(row.id))) continue;
-    if (!keepOmittedDhanOrder(row, today)) continue;
+    if (!keepOmittedDhanOrder(row)) continue;
     const status = orderFeedStatus(row.status);
     const normalized = status === row.status ? row : { ...row, status };
     if (realStrategyName(normalized.strategy)) {
@@ -4747,14 +4780,14 @@ export function replaceDhanOrders(rows) {
     }
     const strategy = resolveOrderStrategy(normalized, {
       previous,
-      orders: [...tagged, ...kept],
+      orders: [...fresh, ...kept],
       algos: state.algos || [],
       positions: state.positions || [],
     });
     kept.push(strategy ? { ...normalized, strategy } : normalized);
   }
-  state.orders = [...tagged, ...kept];
-  for (const row of tagged) fanOutFilledTarget(row);
+  state.orders = [...fresh, ...kept];
+  for (const row of fresh) fanOutFilledTarget(row);
 }
 
 export function refreshCopyOrdersFromBroker(userId, updates = []) {
