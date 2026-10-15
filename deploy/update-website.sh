@@ -149,8 +149,8 @@ if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/FirstCan
   echo "FAIL: $HOME_DIR still has the locked TEST1 5m timeframe."
   exit 1
 fi
-if ! grep -q 'data-first-candle-timeframe-bar' "$HOME_DIR/src/components/dashboard/FirstCandleTimeframeBar.tsx" || ! grep -q '"30m", "60m"' "$HOME_DIR/src/lib/strategies.ts"; then
-  echo "FAIL: Nifty and Crude first-candle chips (5m 10m 15m 30m 60m Custom) are missing."
+if ! grep -q 'data-first-candle-timeframe-bar' "$HOME_DIR/src/components/dashboard/FirstCandleTimeframeBar.tsx" || ! grep -q 'DESK_TIMEFRAME_PRESETS = \["5m", "15m", "30m", "1H"\]' "$HOME_DIR/src/lib/strategies.ts"; then
+  echo "FAIL: Nifty and Crude first-candle chips (5m 15m 30m 1hr Custom) are missing."
   exit 1
 fi
 if ! grep -q 'overlayLiveUnrealized' "$HOME_DIR/server/memberBrokerPnl.js" || ! grep -q 'unrealizedPnl: Number(report?.unrealizedPnl || 0)' "$HOME_DIR/server/market.js"; then
