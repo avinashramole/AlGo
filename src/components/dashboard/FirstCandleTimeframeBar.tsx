@@ -37,6 +37,7 @@ export function FirstCandleTimeframeBar({
       data-desk-timeframe-bar={mark || "form"}
       data-test1-timeframe={mark === "test1" ? "true" : undefined}
       data-mir-timeframe={mark === "mir" ? "true" : undefined}
+      data-shivam-timeframe={mark === "shivam-index" || mark === "shivam-ce" || mark === "shivam-pe" ? mark : undefined}
     >
       <div className="text-xs font-extrabold uppercase tracking-wide text-slate-600">{label}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">

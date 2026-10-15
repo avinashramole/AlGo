@@ -16,6 +16,7 @@ import {
   protectivePrices,
   renderShivamExcel,
   renderShivamPdf,
+  resolveShivamTimeframe,
   shivamT2sConfig,
   sizeShivamLots,
   strikeForPolicy,
@@ -329,6 +330,25 @@ test("reports strip secrets and stay tenant-scoped", () => {
   const xlsx = renderShivamExcel(report);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.equal(xlsx.subarray(0, 2).toString("utf8"), "PK");
+});
+
+test("Shivam T2S keeps 5m 15m 30m 1H and custom 1-60 minutes including 17 and 19", () => {
+  assert.equal(resolveShivamTimeframe("5m"), "5m");
+  assert.equal(resolveShivamTimeframe("15m"), "15m");
+  assert.equal(resolveShivamTimeframe("30m"), "30m");
+  assert.equal(resolveShivamTimeframe("1hr"), "1H");
+  assert.equal(resolveShivamTimeframe("17m"), "17m");
+  assert.equal(resolveShivamTimeframe("19"), "19m");
+  const cfg = shivamT2sConfig({ ceTimeframe: "17m", peTimeframe: "19m", indexTimeframe: "1H" });
+  assert.equal(cfg.ceTimeframe, "17m");
+  assert.equal(cfg.peTimeframe, "19m");
+  assert.equal(cfg.indexTimeframe, "1H");
+  assert.equal(cfg.timeframe, "1H");
+  assert.equal(cfg.ceBarMinutes, 17);
+  assert.equal(cfg.peBarMinutes, 19);
+  assert.equal(cfg.indexBarMinutes, 60);
+  assert.equal(validateShivamT2s({ ceTimeframe: "17m", peTimeframe: "19m", indexTimeframe: "30m" }), "");
+  assert.match(validateShivamT2s({ ceTimeframe: "90m" }), /CE candle timeframe/);
 });
 
 test("daily limit and capital fields validate on the backend", () => {
