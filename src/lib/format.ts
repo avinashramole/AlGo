@@ -264,6 +264,9 @@ export function vwapTone(vwap: number, base: number) {
   return "text-slate-400";
 }
 
+/** Fit Why to the label so the column does not soak leftover table width. */
+export const whyColClass = "w-px whitespace-nowrap";
+
 export function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }

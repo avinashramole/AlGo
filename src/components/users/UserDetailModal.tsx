@@ -10,7 +10,7 @@ import {
 import { SideBadge } from "../desk/Badges";
 import { liveDailyPnl } from "../../lib/dailyPnl";
 import { displayOrderReason, isEntryWhy, isExitHitReason } from "../../lib/exitReason";
-import { cn, formatInr, formatIst, formatIstDate, formatMobile, formatNumber, formatPlanTerm } from "../../lib/format";
+import { cn, formatInr, formatIst, formatIstDate, formatMobile, formatNumber, formatPlanTerm, whyColClass } from "../../lib/format";
 
 export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () => void }) {
   const [detail, setDetail] = useState<ClientDetail | null>(null);
@@ -240,7 +240,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                         <th className="px-3 py-2 text-right">Exit</th>
                         <th className="px-3 py-2 text-right">P&L</th>
                         <th className="px-3 py-2">Strategy</th>
-                        <th className="px-3 py-2">Why</th>
+                        <th className={cn("px-3 py-2", whyColClass)}>Why</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -261,6 +261,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                           <td
                             className={cn(
                               "px-3 py-2 text-xs font-semibold",
+                              whyColClass,
                               isExitHitReason(displayOrderReason(item))
                                 ? "text-brand-500"
                                 : isEntryWhy(displayOrderReason(item))

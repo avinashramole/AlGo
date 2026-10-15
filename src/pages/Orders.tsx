@@ -3,7 +3,7 @@ import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../lib/exitReason";
-import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
+import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName, whyColClass } from "../lib/format";
 import { isLiveBrokerTrade, isPaperTrade } from "../lib/paperBook";
 
 const FILTERS = ["ALL", "PENDING", "PARTIAL", "FILLED", "REJECTED", "FAILED", "CANCELLED"] as const;
@@ -122,7 +122,7 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                     <th className="px-4 py-3 font-semibold">Symbol</th>
                     <th className="px-4 py-3 font-semibold">Buy / Sell</th>
                     <th className="px-4 py-3 font-semibold">Strategy</th>
-                    <th className="px-4 py-3 font-semibold">Why</th>
+                    <th className={cn("px-4 py-3 font-semibold", whyColClass)}>Why</th>
                     <th className="px-4 py-3 text-right font-semibold">Qty</th>
                     <th className="px-4 py-3 font-semibold">Type</th>
                     <th className="px-4 py-3 text-right font-semibold">Avg fill</th>
@@ -150,7 +150,7 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                             <div className="text-[10px] font-semibold text-brand-500">Copy · {row.copyUserName || row.copyUserId}</div>
                           ) : null}
                         </td>
-                        <td className={cn("px-4 py-3 text-xs font-semibold", reasonTone(row, orders))} data-order-why="true">
+                        <td className={cn("px-4 py-3 text-xs font-semibold", whyColClass, reasonTone(row, orders))} data-order-why="true">
                           {orderWhyForBook(row, orders) || "—"}
                         </td>
                         <td className="px-4 py-3 text-right">

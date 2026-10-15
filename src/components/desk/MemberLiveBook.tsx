@@ -1,7 +1,7 @@
 import { SideBadge } from "./Badges";
 import type { DeskOrder, DeskReport, MemberPosition } from "../../api/client";
 import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../../lib/exitReason";
-import { cn, formatInr, formatIst, formatNumber } from "../../lib/format";
+import { cn, formatInr, formatIst, formatNumber, whyColClass } from "../../lib/format";
 
 export function MemberLiveBook({
   positions,
@@ -87,7 +87,7 @@ export function MemberLiveBook({
               <th className="px-4 py-3 text-right font-semibold">Qty</th>
               <th className="px-4 py-3 text-right font-semibold">Price</th>
               <th className="px-4 py-3 font-semibold">Strategy</th>
-              <th className="px-4 py-3 font-semibold">Why</th>
+              <th className={cn("px-4 py-3 font-semibold", whyColClass)}>Why</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -102,7 +102,7 @@ export function MemberLiveBook({
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                 <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
-                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row, book))}>
+                <td className={cn("px-4 py-3 text-xs font-semibold", whyColClass, whyClass(row, book))}>
                   {orderWhyForBook(row, book) || "—"}
                 </td>
                 <td
@@ -138,7 +138,7 @@ export function MemberLiveBook({
               <th className="px-4 py-3 text-right font-semibold">Qty</th>
               <th className="px-4 py-3 text-right font-semibold">Price</th>
               <th className="px-4 py-3 font-semibold">Strategy</th>
-              <th className="px-4 py-3 font-semibold">Why</th>
+              <th className={cn("px-4 py-3 font-semibold", whyColClass)}>Why</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -153,7 +153,7 @@ export function MemberLiveBook({
                 <td className="px-4 py-3 text-right">{row.qty}</td>
                 <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                 <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
-                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row, book))}>
+                <td className={cn("px-4 py-3 text-xs font-semibold", whyColClass, whyClass(row, book))}>
                   {orderWhyForBook(row, book) || "—"}
                 </td>
                 <td className="px-4 py-3 text-xs font-bold uppercase">{row.status}</td>
@@ -178,7 +178,7 @@ export function MemberLiveBook({
               <th className="px-4 py-3 text-right font-semibold">Exit</th>
               <th className="px-4 py-3 text-right font-semibold">P&L</th>
               <th className="px-4 py-3 font-semibold">Strategy</th>
-              <th className="px-4 py-3 font-semibold">Why</th>
+              <th className={cn("px-4 py-3 font-semibold", whyColClass)}>Why</th>
               <th className="px-4 py-3 font-semibold">Broker</th>
             </tr>
           </thead>
@@ -197,7 +197,7 @@ export function MemberLiveBook({
                   {formatInr(row.pnl)}
                 </td>
                 <td className="px-4 py-3 text-xs font-semibold">{row.strategy || "—"}</td>
-                <td className={cn("px-4 py-3 text-xs font-semibold", whyClass(row, book))}>
+                <td className={cn("px-4 py-3 text-xs font-semibold", whyColClass, whyClass(row, book))}>
                   {orderWhyForBook(row, book) || "—"}
                 </td>
                 <td className="px-4 py-3">{nameOf(row.brokerId)}</td>

@@ -6,7 +6,7 @@ import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { catchDeskError } from "../lib/liveSite";
 import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
-import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
+import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName, whyColClass } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
 import { isLiveBrokerTrade } from "../lib/paperBook";
 
@@ -145,7 +145,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
               <th className="px-4 py-3 text-right font-semibold">Exit</th>
               <th className="px-4 py-3 text-right font-semibold">P&L</th>
               <th className="px-4 py-3 font-semibold">Strategy</th>
-              <th className="px-4 py-3 font-semibold">Why</th>
+              <th className={cn("px-4 py-3 font-semibold", whyColClass)}>Why</th>
               <th className="px-4 py-3 font-semibold">Broker</th>
             </tr>
           </thead>
@@ -165,6 +165,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
                 <td
                   className={cn(
                     "px-4 py-3 text-xs font-semibold",
+                    whyColClass,
                     isExitHitReason(displayOrderReason(row))
                       ? "text-brand-500"
                       : isEntryWhy(displayOrderReason(row))
