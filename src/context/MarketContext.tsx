@@ -184,7 +184,7 @@ type MarketContextValue = {
   live: boolean;
   refresh: () => Promise<void>;
   toggle: (id: string, enabled?: boolean) => Promise<void>;
-  setAll: (enabled: boolean) => Promise<void>;
+  setAll: (enabled: boolean, opts?: { testDesk?: boolean }) => Promise<void>;
   order: (payload: Record<string, unknown>) => Promise<PlaceOrderResult>;
   connect: (
     id: string,
@@ -487,9 +487,11 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           throw err;
         }
       },
-      setAll: async (enabled: boolean) => {
+      setAll: async (enabled: boolean, opts?: { testDesk?: boolean }) => {
+        const wantTest = Boolean(opts?.testDesk);
         const rows = (dataRef.current.algos || []).filter((row) => {
           if (row.runMode === "backtest") return false;
+          if (Boolean(row.testDesk) !== wantTest) return false;
           return Boolean(row.enabled) !== enabled;
         });
         if (!rows.length) return;

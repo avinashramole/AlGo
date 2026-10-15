@@ -9,9 +9,9 @@ function actionClass(action: string) {
   return "bg-[var(--card)] text-slate-500";
 }
 
-export function SignalFeed() {
+export function SignalFeed({ testDesk = false }: { testDesk?: boolean }) {
   const { data } = useMarket();
-  const signals = data.signals || [];
+  const signals = (data.signals || []).filter((row) => Boolean(row.testDesk) === testDesk);
   return (
     <section className="card p-4" data-algo-live-signals="recent-2">
       <div className="mb-3 flex items-end justify-between gap-3">

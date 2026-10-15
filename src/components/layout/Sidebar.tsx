@@ -5,6 +5,7 @@ import {
   Building2,
   Cpu,
   FileText,
+  FlaskConical,
   Headphones,
   Home,
   KeyRound,
@@ -28,6 +29,7 @@ import { cn } from "../../lib/format";
 const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean; member?: boolean }> = [
   { to: "/", label: "Home", icon: Home },
   { to: "/algo", label: "Algos", icon: Cpu, admin: true },
+  { to: "/algo-test", label: "Algo Test", icon: FlaskConical, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
   { to: "/reports", label: "Position & Orders", icon: FileText, admin: true },
   { to: "/positions", label: "Position", icon: Briefcase, member: true },

@@ -20,6 +20,7 @@ const MemberPositions = lazyPage(() => import("./pages/MemberBook"), "MemberPosi
 const MemberOrders = lazyPage(() => import("./pages/MemberBook"), "MemberOrders");
 const Options = lazyPage(() => import("./pages/Options"), "Options");
 const Algo = lazyPage(() => import("./pages/Algo"), "Algo");
+const AlgoTest = lazyPage(() => import("./pages/Algo"), "AlgoTest");
 const ReportsHub = lazyPage(() => import("./pages/ReportsHub"), "ReportsHub");
 const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="options" element={<AdminOnly><Options /></AdminOnly>} />
           <Route path="signals" element={<Navigate to="/algo" replace />} />
           <Route path="algo" element={<AdminOnly><Algo /></AdminOnly>} />
+          <Route path="algo-test" element={<AdminOnly><AlgoTest /></AdminOnly>} />
           <Route path="orders" element={<RoleOrders />} />
           <Route path="positions" element={<RolePositions />} />
           <Route path="reports" element={<RoleReports />} />

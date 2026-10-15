@@ -33,6 +33,7 @@ test("buildLiveSignals uses desk orders and skips rejected rows", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].action, "BUY");
   assert.equal(rows[0].symbol, "NIFTY 24500 CE");
+  assert.equal(rows[0].testDesk, false);
   assert.equal(rows.some((row) => row.action === "WAIT"), false);
   assert.equal(rows.some((row) => row.action === "SELL"), false);
 });

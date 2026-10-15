@@ -399,14 +399,36 @@ function mappingFields(input = {}, existing = {}) {
   return { mappingScope, mappedClientIds, clientVisible: clientVisibleValue(input, existing) };
 }
 
+export function isTestDeskAlgo(algo) {
+  return Boolean(algo?.testDesk);
+}
+
+function sealTestDesk(algo, input = {}, existing = {}) {
+  const testDesk = Boolean(existing.testDesk) || Boolean(input.testDesk ?? algo?.testDesk);
+  if (!testDesk) return { ...algo, testDesk: false };
+  return {
+    ...algo,
+    testDesk: true,
+    runMode: algo.runMode === "backtest" ? "backtest" : "paper",
+    brokerId: "paper",
+    mappingScope: "master",
+    mappedClientIds: [],
+    clientVisible: false,
+  };
+}
+
 function withMapping(next, input, existing) {
   const fallback = isNiftyTest2Algo(next) ? 1 : 5;
   const requested = input.maxTradesPerDay != null ? input.maxTradesPerDay : next.maxTradesPerDay ?? existing.maxTradesPerDay;
-  return {
-    ...next,
-    ...mappingFields(input, existing),
-    maxTradesPerDay: clampDailyTradeLimit(requested, fallback),
-  };
+  return sealTestDesk(
+    {
+      ...next,
+      ...mappingFields(input, existing),
+      maxTradesPerDay: clampDailyTradeLimit(requested, fallback),
+    },
+    input,
+    existing,
+  );
 }
 
 export function normalizeAlgo(input = {}, existing = {}) {

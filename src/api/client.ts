@@ -94,6 +94,8 @@ export type DeskOrder = {
   paper?: boolean;
   sim?: boolean;
   live?: boolean;
+  testDesk?: boolean;
+  strategyId?: string;
 };
 
 export type DeskReport = {
@@ -258,6 +260,7 @@ export type Snapshot = {
     mappingScope?: "master" | "clients" | "both";
     mappedClientIds?: string[];
     clientVisible?: boolean;
+    testDesk?: boolean;
     runMode?: "live" | "paper" | "backtest";
     lastBacktest?: null | {
       ranAt?: string;
@@ -356,6 +359,8 @@ export type Snapshot = {
     live?: boolean;
     paper?: boolean;
     sim?: boolean;
+    testDesk?: boolean;
+    strategyId?: string;
   }>;
   closedTrades?: Array<{
     id: string;
@@ -373,6 +378,8 @@ export type Snapshot = {
     paper?: boolean;
     live?: boolean;
     sim?: boolean;
+    testDesk?: boolean;
+    strategyId?: string;
   }>;
   orders: DeskOrder[];
   report?: DeskReport;
@@ -384,6 +391,7 @@ export type Snapshot = {
     note?: string;
     time: string;
     confidence: number;
+    testDesk?: boolean;
   }>;
   watchlist: Array<{ symbol: string; ltp: number; chg: number }>;
   fiiDii: {

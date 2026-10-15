@@ -143,7 +143,7 @@ export function applyHedgeDailyLive(algos = [], { now = new Date(), feedLive = f
   }
   const armedIds = [];
   const next = (algos || []).map((algo) => {
-    if (!isNiftyDailyLiveAlgo(algo) || algo.runMode !== "live" || algo.enabled || algo.holdDailyLive) return algo;
+    if (algo.testDesk || !isNiftyDailyLiveAlgo(algo) || algo.runMode !== "live" || algo.enabled || algo.holdDailyLive) return algo;
     armedIds.push(algo.id);
     return {
       ...algo,
@@ -248,7 +248,7 @@ export function applyFirstCandleDailyLive(algos = [], { now = new Date(), feedLi
   }
   const armedIds = [];
   const next = (algos || []).map((algo) => {
-    if (!isNiftyFirstCandleAlgo(algo) || algo.runMode !== "live" || algo.enabled || algo.holdDailyLive) return algo;
+    if (algo.testDesk || !isNiftyFirstCandleAlgo(algo) || algo.runMode !== "live" || algo.enabled || algo.holdDailyLive) return algo;
     armedIds.push(algo.id);
     return {
       ...algo,

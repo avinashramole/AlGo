@@ -5,10 +5,11 @@ import { DeskTape, TapeCell } from "./DeskTape";
 export function RecentSignals() {
   const { data } = useMarket();
   const navigate = useNavigate();
+  const signals = (data.signals || []).filter((row) => !row.testDesk);
   return (
     <DeskTape kicker="Signals" extra="Tap → Algo" testId="recent-signals">
-      {!data.signals.length ? <TapeCell title="Recent" value="—" detail="No live signals yet" onClick={() => navigate("/algo")} /> : null}
-      {data.signals.map((signal) => (
+      {!signals.length ? <TapeCell title="Recent" value="—" detail="No live signals yet" onClick={() => navigate("/algo")} /> : null}
+      {signals.map((signal) => (
         <TapeCell
           key={signal.id}
           title={signal.action}

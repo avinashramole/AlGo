@@ -26,6 +26,7 @@ import {
   isNiftyVwapKind,
   isNiftyVwapReversalKind,
   isRetiredDeskStrategy,
+  isTestDeskAlgo,
   firstCandleEntryIst,
   firstCandleMinutes,
   showsFirstCandleTimeframe,
@@ -37,6 +38,16 @@ import {
 type DeskTab = "copy" | "tradingview";
 type Filter = "all" | "nifty-first-candle" | "crudeoil";
 type MappingScope = "master" | "clients" | "both";
+type AlgoDesk = "live" | "test";
+
+function belongsToDeskAlgo(
+  row: { strategy?: string; strategyId?: string; testDesk?: boolean; copyUserId?: string },
+  algo: AlgoStrategy,
+) {
+  if (Boolean(row.testDesk) !== Boolean(algo.testDesk)) return false;
+  if (row.strategyId) return row.strategyId === algo.id;
+  return row.strategy === algo.name;
+}
 
 function rupee(value: number) {
   const n = Number(value) || 0;
@@ -257,7 +268,12 @@ function kindMeta(algo: AlgoStrategy) {
   };
 }
 
-export function Algo() {
+export function AlgoTest() {
+  return <Algo desk="test" />;
+}
+
+export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
+  const testDesk = desk === "test";
   const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, unlockBacktest, closePosition, refresh, saveAlgo } = useMarket();
   const [tab, setTab] = useState<DeskTab>("copy");
   const [filter, setFilter] = useState<Filter>("all");
@@ -284,7 +300,7 @@ export function Algo() {
     };
   }, []);
 
-  const deskAlgos = data.algos.filter((row) => !isRetiredDeskStrategy(row));
+  const deskAlgos = data.algos.filter((row) => !isRetiredDeskStrategy(row) && isTestDeskAlgo(row) === testDesk);
   const rangeFor = deskAlgos.find((item) => item.id === rangeId) || null;
   const canStartAll = deskAlgos.some((row) => row.runMode !== "backtest" && !row.enabled);
   const canStopAll = deskAlgos.some((row) => row.enabled);
@@ -326,14 +342,16 @@ export function Algo() {
   };
 
   const startInMode = async (algo: AlgoStrategy, mode: "paper" | "live") => {
+    const nextMode = testDesk ? "paper" : mode;
     setBusyId(algo.id);
     try {
-      if (algo.runMode !== mode) {
+      if (algo.runMode !== nextMode) {
         await saveAlgo({
           id: algo.id,
-          runMode: mode,
-          brokerId: mode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
+          runMode: nextMode,
+          brokerId: nextMode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
           enabled: true,
+          ...(testDesk ? { testDesk: true } : {}),
         });
         return;
       }
@@ -348,7 +366,7 @@ export function Algo() {
   const startOrStopAll = async (enabled: boolean) => {
     setBusyId("all");
     try {
-      await setAll(enabled);
+      await setAll(enabled, { testDesk });
     } catch (err) {
       window.alert(catchDeskError(err, enabled ? "Could not start strategies" : "Could not stop strategies"));
     } finally {
@@ -358,7 +376,7 @@ export function Algo() {
 
   const exitStrategy = async (algo: AlgoStrategy) => {
     const open = uniqueOpenContracts(
-      (data.positions || []).filter((row) => row.strategy === algo.name && !row.copyUserId),
+      (data.positions || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId),
     );
     if (!open.length) {
       window.alert("No open positions for this strategy.");
@@ -379,11 +397,13 @@ export function Algo() {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-algo-desk={testDesk ? "test" : "live"}>
+      {testDesk ? null : (
       <div className="desk-tabs">
         <TabChip label="Copy Algos" on={tab === "copy"} onClick={() => setTab("copy")} />
         <TabChip label="TradingView Integration" on={tab === "tradingview"} onClick={() => setTab("tradingview")} />
       </div>
+      )}
 
       {tab === "tradingview" ? (
         <section className="card p-8">
@@ -396,10 +416,12 @@ export function Algo() {
         <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="desk-kicker">Strategy blotter</div>
-              <h1 className="text-xl font-bold">Algo Strategies</h1>
+              <div className="desk-kicker">{testDesk ? "Isolated paper desk" : "Strategy blotter"}</div>
+              <h1 className="text-xl font-bold">{testDesk ? "Algo Test" : "Algo Strategies"}</h1>
               <p className="text-sm text-slate-400">
-                {deskAlgos.filter((row) => row.enabled).length} live · {deskAlgos.length} strategies
+                {testDesk
+                  ? `${deskAlgos.filter((row) => row.enabled).length} paper · ${deskAlgos.length} test strategies · not live, not copy, not the main blotter`
+                  : `${deskAlgos.filter((row) => row.enabled).length} live · ${deskAlgos.length} strategies`}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -461,18 +483,19 @@ export function Algo() {
               </button>
             ))}
           </div>
-          <SignalFeed />
+          <SignalFeed testDesk={testDesk} />
           {rows.length ? (
             <div className="flex flex-col gap-4">
               {rows.map((algo) => (
                 <AlgoCard
                   key={algo.id}
                   algo={algo}
-                  orders={(data.orders || []).filter((row) => row.strategy === algo.name)}
+                  orders={(data.orders || []).filter((row) => belongsToDeskAlgo(row, algo))}
                   clientIds={knownClientIds}
                   positions={uniqueOpenContracts(
-                    (data.positions || []).filter((row) => row.strategy === algo.name && !row.copyUserId),
+                    (data.positions || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId),
                   )}
+                  isolated={testDesk}
                   busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
@@ -521,7 +544,11 @@ export function Algo() {
           ) : (
             <section className="card p-8 text-center">
               <div className="text-base font-bold">No strategies in this view</div>
-              <p className="mt-1 text-sm text-slate-400">Add a NIFTY 5m or CRUDE OIL strategy to start the desk.</p>
+              <p className="mt-1 text-sm text-slate-400">
+                {testDesk
+                  ? "Add a paper-only test strategy. It does not send live Dhan orders or member copies."
+                  : "Add a NIFTY 5m or CRUDE OIL strategy to start the desk."}
+              </p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
                 Add strategy
               </button>
@@ -533,6 +560,7 @@ export function Algo() {
       <StrategyBuilder
         open={builderOpen}
         algo={editing}
+        testDesk={testDesk}
         onClose={() => {
           setBuilderOpen(false);
           setEditing(null);
@@ -819,6 +847,7 @@ function AlgoCard({
   busy,
   rangeOpen,
   rangeError,
+  isolated = false,
   onEdit,
   onMap,
   onBacktest,
@@ -839,6 +868,7 @@ function AlgoCard({
   busy: boolean;
   rangeOpen: boolean;
   rangeError: string;
+  isolated?: boolean;
   onEdit: () => void;
   onMap: () => void;
   onBacktest: () => void;
@@ -903,6 +933,11 @@ function AlgoCard({
               <span className="rounded bg-[var(--card-muted)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                 {positionLabel}
               </span>
+              {isolated ? (
+                <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
+                  Test
+                </span>
+              ) : (
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
@@ -912,6 +947,7 @@ function AlgoCard({
               >
                 {algo.clientVisible === false ? "Hidden" : "Visible"}
               </span>
+              )}
             </div>
             {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
             <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
@@ -1178,11 +1214,17 @@ function AlgoCard({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
         <div className="flex flex-wrap items-center gap-2">
+          {isolated ? (
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Paper test only · no live · no copy</span>
+          ) : (
+            <>
           <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold">
             <Users size={15} />
             Map clients
           </button>
           <ClientVisibleToggle algo={algo} />
+            </>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy} onClick={onExit} className="h-10 rounded-xl px-3 text-sm font-semibold text-down disabled:opacity-60">
@@ -1200,6 +1242,16 @@ function AlgoCard({
               className="btn-halt h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60"
             >
               Stop strategy
+            </button>
+          ) : isolated ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onStartPaper}
+              className="btn-go h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60"
+              data-start-paper="true"
+            >
+              Start paper
             </button>
           ) : (
             <>
