@@ -9,6 +9,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   const builder = fs.readFileSync(path.join(root, "src/components/dashboard/StrategyBuilder.tsx"), "utf8");
   const page = fs.readFileSync(path.join(root, "src/pages/Algo.tsx"), "utf8");
+  const bar = fs.readFileSync(path.join(root, "src/components/dashboard/FirstCandleTimeframeBar.tsx"), "utf8");
   const reports = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const api = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
   const lib = fs.readFileSync(path.join(root, "src/lib/strategies.ts"), "utf8");
@@ -26,6 +27,19 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(builder, /data-mir-trade-mode="true"/);
   assert.match(builder, /emptyStrategy\(testDesk \? "shivam-t2s"/);
   assert.match(builder, /data-shivam-settings="true"/);
+  assert.match(builder, /data-shivam-timeframes="true"/);
+  assert.match(builder, /mark="shivam-index"/);
+  assert.match(builder, /mark="shivam-ce"/);
+  assert.match(builder, /mark="shivam-pe"/);
+  assert.match(builder, /Index TF · 5m 15m 30m 1hr Custom/);
+  assert.match(page, /data-shivam-timeframes="true"/);
+  assert.match(page, /function ShivamCardTimeframes/);
+  assert.match(page, /mark="shivam-index"/);
+  assert.match(page, /mark="shivam-ce"/);
+  assert.match(page, /mark="shivam-pe"/);
+  assert.match(bar, /data-shivam-timeframe=\{mark === "shivam-index"/);
+  assert.match(bar, /DESK_TIMEFRAME_PRESETS, "custom"/);
+  assert.match(lib, /SHIVAM_T2S_TIMEFRAMES = DESK_TIMEFRAME_PRESETS/);
   assert.doesNotMatch(builder, /Authorize live after paper trading/);
   assert.match(page, /data-shivam-signal/);
   assert.match(page, /NO Trade/);

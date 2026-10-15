@@ -752,7 +752,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         ) : null}
 
         {vwap || reversal || hedge || test2 ? null : shivam ? (
-          <div className="space-y-1">
+          <div className="space-y-1" data-shivam-timeframes="true">
             <FirstCandleTimeframeBar
               timeframe={form.indexTimeframe || form.timeframe}
               mark="shivam-index"

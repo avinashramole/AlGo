@@ -507,6 +507,16 @@ test("normalizeAlgo keeps Shivam T2S paper, disabled, and daily limit 1-100", ()
   assert.equal(algo.maxTradesPerDay, 100);
   assert.equal(algo.ceTimeframe, "3m");
   assert.match(algo.summary, /Shivam T2S/);
+  const custom = normalizeAlgo({
+    kind: "shivam-t2s",
+    ceTimeframe: "17m",
+    peTimeframe: "19m",
+    indexTimeframe: "1H",
+  });
+  assert.equal(custom.ceTimeframe, "17m");
+  assert.equal(custom.peTimeframe, "19m");
+  assert.equal(custom.indexTimeframe, "1H");
+  assert.equal(custom.timeframe, "1H");
 });
 
 test("normalizeAlgo keeps Shivam T2S paper unless live is authorized", () => {
