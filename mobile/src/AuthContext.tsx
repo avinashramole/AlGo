@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import {
   enableThumb as enableThumbApi,
   getMe,
+  logoutSession,
   login as loginRequest,
   loginThumb as loginThumbApi,
   requestOtp as requestOtpApi,
@@ -147,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(result.user);
       },
       logout: async () => {
+        await logoutSession();
         setApiToken("");
         await AsyncStorage.multiRemove(["t2s-user", "t2s-token"]);
         setUser(null);

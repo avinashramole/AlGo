@@ -1257,8 +1257,9 @@ export function listWalletTopups() {
 }
 
 export function getMe(token: string) {
-  const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
-  return request<{ user: AuthUser }>(`/me${suffix}`);
+  return request<{ user: AuthUser }>("/me", {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
 }
 
 export function logoutSession() {

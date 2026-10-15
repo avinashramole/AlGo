@@ -425,7 +425,13 @@ export function loginThumb(thumbToken: string) {
 }
 
 export function getMe(token: string) {
-  return request<{ user: AuthUser }>(`/me?token=${encodeURIComponent(token)}`);
+  return request<{ user: AuthUser }>("/me", {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
+
+export function logoutSession() {
+  return request<{ ok: boolean }>("/logout", { method: "POST" }).catch(() => ({ ok: false }));
 }
 
 export type PlanTerm = "monthly" | "quarterly" | "yearly";

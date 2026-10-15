@@ -20,6 +20,7 @@ import {
   clientAddress,
   recordLoginIp,
   requestToken,
+  revokeSession,
   sessionUser,
   setLoginPassword,
   updateProfile,
@@ -44,6 +45,49 @@ function sessionCookie(token, req, { maxAge = 60 * 60 * 24 * 30 } = {}) {
 function keepSession(res, req, token) {
   if (!token) return;
   res.setHeader("Set-Cookie", sessionCookie(token, req));
+}
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILS_ID = 8;
+const LOGIN_MAX_FAILS_IP = 40;
+const loginFails = new Map();
+
+function loginFailBucket(key) {
+  const row = loginFails.get(key);
+  if (!row || nowMs() - row.from > LOGIN_WINDOW_MS) {
+    const next = { n: 0, from: nowMs() };
+    loginFails.set(key, next);
+    return next;
+  }
+  return row;
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+function assertLoginNotLocked(req, identifier) {
+  const ip = String(clientAddress(req) || "0").trim() || "0";
+  const id = String(identifier || "").trim().toLowerCase();
+  const byIp = loginFailBucket(`ip:${ip}`);
+  const byId = id ? loginFailBucket(`id:${id}`) : { n: 0 };
+  if (byIp.n >= LOGIN_MAX_FAILS_IP || byId.n >= LOGIN_MAX_FAILS_ID) {
+    throw Object.assign(new Error("Too many sign-in attempts. Wait a few minutes and try again."), { status: 429 });
+  }
+}
+
+function noteLoginFailure(req, identifier) {
+  const ip = String(clientAddress(req) || "0").trim() || "0";
+  const id = String(identifier || "").trim().toLowerCase();
+  loginFailBucket(`ip:${ip}`).n += 1;
+  if (id) loginFailBucket(`id:${id}`).n += 1;
+}
+
+function clearLoginFailures(req, identifier) {
+  const ip = String(clientAddress(req) || "0").trim() || "0";
+  const id = String(identifier || "").trim().toLowerCase();
+  loginFails.delete(`ip:${ip}`);
+  if (id) loginFails.delete(`id:${id}`);
 }
 
 export function attachLoginRoutes(app, { healthService = "t2s-api", healthExtra } = {}) {
@@ -115,14 +159,18 @@ export function attachLoginRoutes(app, { healthService = "t2s-api", healthExtra 
   });
 
   app.post("/api/login", (req, res) => {
+    const identifier = req.body?.identifier || req.body?.email || req.body?.mobile;
     try {
-      const result = loginWithPassword(req.body?.identifier || req.body?.email || req.body?.mobile, req.body?.password);
+      assertLoginNotLocked(req, identifier);
+      const result = loginWithPassword(identifier, req.body?.password);
+      clearLoginFailures(req, identifier);
       const noted = recordLoginIp(result.token, clientAddress(req));
       if (noted) result.user = noted;
       queueLoginNotice(result.user);
       keepSession(res, req, result.token);
       res.json(result);
     } catch (error) {
+      if (error.status !== 429) noteLoginFailure(req, identifier);
       res.status(error.status || 401).json({ error: error.message || "Login failed" });
     }
   });
@@ -198,17 +246,25 @@ export function attachLoginRoutes(app, { healthService = "t2s-api", healthExtra 
 
   app.post("/api/auth/thumb", (req, res) => {
     try {
+      assertLoginNotLocked(req, "thumb");
       const result = loginWithThumb(req.body?.thumbToken);
+      clearLoginFailures(req, "thumb");
       queueLoginNotice(result.user);
       keepSession(res, req, result.token);
       res.json(result);
     } catch (error) {
+      if (error.status !== 429) noteLoginFailure(req, "thumb");
       res.status(error.status || 401).json({ error: error.message || "Thumb login failed" });
     }
   });
 
-  app.post("/api/logout", (_req, res) => {
-    res.setHeader("Set-Cookie", sessionCookie("", _req, { maxAge: 0 }));
+  app.post("/api/logout", (req, res) => {
+    try {
+      revokeSession(readToken(req));
+    } catch {
+      /* still clear the browser cookie */
+    }
+    res.setHeader("Set-Cookie", sessionCookie("", req, { maxAge: 0 }));
     res.json({ ok: true });
   });
 
