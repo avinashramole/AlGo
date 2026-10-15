@@ -2,7 +2,7 @@ import { useState } from "react";
 import { SideBadge, StatusBadge } from "../components/desk/Badges";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
-import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
+import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 import { isLiveBrokerTrade, isPaperTrade } from "../lib/paperBook";
 
@@ -81,7 +81,7 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold">{row.symbol}</div>
-                        {strategy ? <div className="text-[11px] text-slate-400">{strategy}</div> : null}
+                        <div className="text-[11px] text-slate-400">Strategy · {strategy || "—"}</div>
                         {row.copyUserId ? (
                           <div className="text-[11px] font-semibold text-brand-500">Copy · {row.copyUserName || row.copyUserId}</div>
                         ) : null}
@@ -97,11 +97,9 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                     <div className="mt-1 text-[11px] text-slate-400">
                       {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
                     </div>
-                    {displayOrderReason(row) ? (
-                      <div className={cn("mt-1 text-[11px] font-semibold", reasonTone(row))}>
-                        Reason: {displayOrderReason(row)}
-                      </div>
-                    ) : null}
+                    <div className={cn("mt-1 text-[11px] font-semibold", reasonTone(row))} data-order-why="true">
+                      Why: {displayOrderReason(row) || "—"}
+                    </div>
                     {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
                       <button
                         type="button"
@@ -117,13 +115,14 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
               })}
             </div>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[1080px] text-left text-sm">
                 <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Time</th>
                     <th className="px-4 py-3 font-semibold">Symbol</th>
                     <th className="px-4 py-3 font-semibold">Buy / Sell</th>
                     <th className="px-4 py-3 font-semibold">Strategy</th>
+                    <th className="px-4 py-3 font-semibold">Why</th>
                     <th className="px-4 py-3 text-right font-semibold">Qty</th>
                     <th className="px-4 py-3 font-semibold">Type</th>
                     <th className="px-4 py-3 text-right font-semibold">Avg fill</th>
@@ -151,6 +150,9 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                             <div className="text-[10px] font-semibold text-brand-500">Copy · {row.copyUserName || row.copyUserId}</div>
                           ) : null}
                         </td>
+                        <td className={cn("px-4 py-3 text-xs font-semibold", reasonTone(row))} data-order-why="true">
+                          {displayOrderReason(row) || "—"}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           {row.filledQty || 0}/{row.qty}
                         </td>
@@ -158,11 +160,6 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
                         <td className="px-4 py-3 text-right">{formatNumber(row.price)}</td>
                         <td className="px-4 py-3">
                           <StatusBadge status={row.status} />
-                          {displayOrderReason(row) ? (
-                            <div className={cn("mt-1 text-[10px] font-semibold", reasonTone(row))}>
-                              Reason: {displayOrderReason(row)}
-                            </div>
-                          ) : null}
                         </td>
                         <td className="px-4 py-3">{row.brokerName || brokerName(data.brokers, row.brokerId)}</td>
                         <td className="px-4 py-3 text-right">
@@ -200,9 +197,10 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
   );
 }
 
-function reasonTone(row: { status?: string; role?: string; reason?: string; exitReason?: string }) {
+function reasonTone(row: { status?: string; side?: string; strategy?: string; role?: string; reason?: string; exitReason?: string }) {
   const text = displayOrderReason(row);
   if (isExitHitReason(text)) return "text-brand-500";
+  if (isEntryWhy(text)) return "text-up";
   if (row.status === "REJECTED" || row.status === "FAILED") return "text-down";
   return "text-slate-500";
 }

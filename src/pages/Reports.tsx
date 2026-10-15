@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { catchDeskError } from "../lib/liveSite";
+import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
 import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
 import { isLiveBrokerTrade } from "../lib/paperBook";
@@ -144,6 +145,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
               <th className="px-4 py-3 text-right font-semibold">Exit</th>
               <th className="px-4 py-3 text-right font-semibold">P&L</th>
               <th className="px-4 py-3 font-semibold">Strategy</th>
+              <th className="px-4 py-3 font-semibold">Why</th>
               <th className="px-4 py-3 font-semibold">Broker</th>
             </tr>
           </thead>
@@ -160,6 +162,18 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
                 <td className="px-4 py-3 text-right">{formatNumber(row.exit)}</td>
                 <td className={cn("px-4 py-3 text-right font-semibold", row.pnl >= 0 ? "text-up" : "text-down")}>{formatInr(row.pnl)}</td>
                 <td className="px-4 py-3 font-semibold">{deskStrategyName(row.strategy, data.algos) || "—"}</td>
+                <td
+                  className={cn(
+                    "px-4 py-3 text-xs font-semibold",
+                    isExitHitReason(displayOrderReason(row))
+                      ? "text-brand-500"
+                      : isEntryWhy(displayOrderReason(row))
+                        ? "text-up"
+                        : "text-slate-500",
+                  )}
+                >
+                  {displayOrderReason(row) || "—"}
+                </td>
                 <td className="px-4 py-3">{brokerName(data.brokers, row.brokerId)}</td>
               </tr>
             ))}

@@ -40,6 +40,7 @@ import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
 import { dhanPlaceErrorMessage } from "./dhanPlaceError.js";
 import { isSaneOptionLtp } from "./positionMark.js";
 import { orderCorrelationId, rememberOrderStrategy, strategyForPlacedOrder, strategyFromCorrelation } from "./orderStrategy.js";
+import { isBrokerNoiseReason } from "./exitReason.js";
 import { chooseDeskExpiry, collapseDhanPositionRows, dhanOrderQuantity, dhanPositionBookId, dhanPositionProduct, dhanPositionQuantity, dropExpired, exchangeSegmentFor, getUnderlying, normalizeExpiry, parseDhanChain, upcomingExpiries } from "./optionChain.js";
 import { dhanOrderCredentials, dhanSendOptions, isMemberScopedOrder } from "./brokerIsolation.js";
 import { peekAdminBrokerSecrets } from "./memberDesk.js";
@@ -923,7 +924,10 @@ function mapDhanOrders(raw, algos = []) {
     securityId: String(row.securityId || ""),
     live: true,
     sim: false,
-    reason: row.omsErrorDescription || row.rejectedReason || "",
+    reason: (() => {
+      const text = String(row.omsErrorDescription || row.rejectedReason || "").trim();
+      return isBrokerNoiseReason(text) ? "" : text;
+    })(),
     createdAt: row.createTime || row.updateTime || new Date().toISOString(),
   };
   });

@@ -30,7 +30,15 @@ import { runReplayInWorker } from "./backtestJob.js";
 import { isOptionContract, isSaneOptionLtp, markContractToMarket, preferMarkLtp } from "./positionMark.js";
 import { liveExitPrice, planTargetExit, setLivePriceReader } from "./executionSpeed.js";
 import { filledExitOnBook, isLeftoverWorkingSell, pendingExitOnBook } from "./pendingExit.js";
-import { exitReasonLabel, exitRoleFromReason, keepExitReason } from "./exitReason.js";
+import {
+  defaultOrderRole,
+  exitReasonLabel,
+  exitRoleFromReason,
+  keepExitReason,
+  orderWhyLabel,
+  preferOrderRole,
+  rememberOrderWhy,
+} from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
@@ -891,6 +899,90 @@ function sameLiveContract(left, right) {
   return Boolean(a && b && Number(a.strike) === Number(b.strike) && a.option === b.option);
 }
 
+function roleFromAlgoSignal(algo = {}) {
+  const text = String(algo?.lastSignal || "").toLowerCase();
+  if (!text) return "";
+  if (text.includes("trail") && (text.includes("exit") || text.includes("hit") || text.includes("queued"))) return "trail";
+  if ((/\bsl\b/.test(text) || text.includes("stop")) && (text.includes("exit") || text.includes("hit") || text.includes("queued"))) {
+    return "sl";
+  }
+  if (
+    (text.includes("tgt") || text.includes("target")) &&
+    (text.includes("exit") || text.includes("done") || text.includes("queued") || text.includes("broker"))
+  ) {
+    return "target";
+  }
+  return "";
+}
+
+function findPreviousOrderMeta(row, previous = []) {
+  const id = String(row?.id || "");
+  const side = String(row?.side || "").toUpperCase();
+  const corr = String(row?.correlationId || "").trim();
+  const pool = (previous || []).filter((item) => item && !item.copyUserId);
+  if (id) {
+    const byId = pool.find((item) => String(item.id) === id);
+    if (byId) return byId;
+  }
+  if (corr) {
+    const byCorr = pool.find(
+      (item) => String(item.correlationId || "").trim() === corr && String(item.side || "").toUpperCase() === side,
+    );
+    if (byCorr) return byCorr;
+  }
+  const sameSideContract = (item) =>
+    String(item.side || "").toUpperCase() === side && sameLiveContract(item, row);
+  const pending = pool.find(
+    (item) =>
+      sameSideContract(item) &&
+      /PENDING|PARTIAL|TRANSIT/i.test(String(item.status || "")) &&
+      (item.role || item.exitReason || realStrategyName(item.strategy)),
+  );
+  if (pending) return pending;
+  const recent = pool.find((item) => {
+    if (!sameSideContract(item) || !(item.role || item.exitReason)) return false;
+    const age = Date.now() - Date.parse(item.createdAt || 0);
+    return Number.isFinite(age) && age >= 0 && age < 30 * 60 * 1000;
+  });
+  return recent || null;
+}
+
+function stampDeskOrderWhy(order, extras = {}) {
+  if (!order) return order;
+  const merged = {
+    ...extras,
+    ...order,
+    strategy: order.strategy || extras.strategy,
+    side: order.side || extras.side,
+    status: order.status || extras.status,
+    role: preferOrderRole(order.role, extras.role),
+  };
+  const role = preferOrderRole(defaultOrderRole(merged), merged.role) || String(merged.role || "");
+  const why = orderWhyLabel({ ...merged, role, reason: extras.reason || order.reason, exitReason: extras.exitReason || order.exitReason });
+  if (role) order.role = role;
+  if (why) {
+    order.reason = why;
+    const hit = exitReasonLabel({ ...merged, role, reason: why, exitReason: merged.exitReason });
+    order.exitReason = hit || why;
+    rememberOrderWhy(order, why);
+  }
+  return order;
+}
+
+function findAlgoForOrder(row = {}, strategy = "") {
+  const rows = state.algos || [];
+  const named = rows.find((item) => String(item.name || "") === String(strategy || ""));
+  if (named && roleFromAlgoSignal(named)) return named;
+  const shivam = rows.find((item) => {
+    if (!isShivamT2sAlgo(item)) return false;
+    const vs = item.shivamState || {};
+    if (vs.securityId && row.securityId && String(vs.securityId) === String(row.securityId)) return true;
+    return sameLiveContract({ symbol: vs.symbol, strike: vs.strike, option: vs.option }, row);
+  });
+  if (shivam && roleFromAlgoSignal(shivam)) return shivam;
+  return named || shivam || null;
+}
+
 function orderBrokerId(row) {
   return String(row?.brokerId || "dhan").trim().toLowerCase() || "dhan";
 }
@@ -1406,6 +1498,7 @@ export function queueLiveAlgoOrder(payload) {
     testDesk,
     ...(adminPaper ? { paper: true } : {}),
   };
+  stampDeskOrderWhy(deskStamped);
   const brokers = forceLiveBroker
     ? [orderBrokerForDesk(deskStamped?.brokerId || "dhan")]
     : testDesk && !shivamLive
@@ -4740,7 +4833,10 @@ function liveRejectReason(live, fallback) {
     data.error_message ||
     remarks;
   const clean = String(text || "").trim();
-  return clean || fallback;
+  const why = orderWhyLabel({ reason: clean, exitReason: clean, status: live?.status, role: live?.role });
+  if (why) return why;
+  const fallbackWhy = orderWhyLabel({ reason: fallback, exitReason: fallback, status: live?.status });
+  return fallbackWhy || "";
 }
 
 function copyDeskStatus(live, error) {
@@ -4806,11 +4902,12 @@ export function bookMemberCopyOnAdminDesk(payload = {}, { live, error } = {}) {
     copyUserId: String(payload.copyUserId),
     copyUserName: name,
     securityId: String(payload.securityId || live?.securityId || ""),
-    reason: exitReasonLabel(payload) || reason,
-    role: payload.role || exitRoleFromReason(payload.exitReason || ""),
+    reason: orderWhyLabel({ ...payload, side: payload.side === "SELL" ? "SELL" : "BUY", strategy: payload.strategy, status }) || reason,
+    role: defaultOrderRole({ ...payload, side: payload.side === "SELL" ? "SELL" : "BUY", strategy: payload.strategy }) || payload.role || exitRoleFromReason(payload.exitReason || ""),
     exitReason: exitReasonLabel(payload) || payload.exitReason || "",
     createdAt: new Date().toISOString(),
   };
+  stampDeskOrderWhy(order, payload);
   const existing = (state.orders || []).find((row) => String(row.id) === id && row.copyUserId === order.copyUserId);
   if (existing) {
     const createdAt = existing.createdAt;
@@ -4888,6 +4985,7 @@ export function placeOrder(payload) {
         existing.exitReason = exitReasonLabel(payload) || payload.exitReason;
         existing.reason = keepExitReason(existing.reason, existing.exitReason);
       }
+      stampDeskOrderWhy(existing, payload);
       if (isPaper || live) fanOutAdminOrderCopies({ ...payload, strategy: existing.strategy }, existing);
       return existing;
     }
@@ -4941,18 +5039,23 @@ export function placeOrder(payload) {
     strategyId: payload.strategyId || orderAlgo(payload).id || "",
     securityId: payload.securityId != null ? String(payload.securityId) : live?.securityId || "",
     reason:
-      exitReasonLabel(payload) ||
-      (live
-        ? liveRejectReason(live, `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`)
-        : demoDhan
-          ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
-          : brokerId === "paper"
-            ? "Paper fill at live LTP"
-            : "Desk fill at LTP"),
-    role: payload.role || "",
+      orderWhyLabel({
+        ...payload,
+        side: payload.side === "SELL" ? "SELL" : "BUY",
+        strategy: stampedStrategy || payload.strategy,
+        status,
+        role: payload.role,
+      }) ||
+      (live ? liveRejectReason(live, "") : ""),
+    role: defaultOrderRole({
+      ...payload,
+      side: payload.side === "SELL" ? "SELL" : "BUY",
+      strategy: stampedStrategy || payload.strategy,
+    }),
     exitReason: exitReasonLabel(payload) || payload.exitReason || "",
     createdAt: new Date().toISOString(),
   };
+  stampDeskOrderWhy(order, payload);
   state.orders.unshift(order);
   if (status === "FILLED" && !live) {
     state.positions.unshift({
@@ -5067,6 +5170,9 @@ function rememberClosedFromPosition(pos, extra = {}) {
     pnl,
     product: pos.product || "MIS",
     strategy: extra.strategy || pos.strategy || "",
+    role: extra.role || pos.role || "",
+    reason: extra.reason || extra.exitReason || pos.reason || pos.exitReason || "",
+    exitReason: extra.exitReason || pos.exitReason || extra.reason || "",
     brokerId: extra.brokerId || pos.brokerId || "dhan",
     closedAt: extra.closedAt || new Date().toISOString(),
     sim: !paper && Boolean(pos.sim),
@@ -5112,11 +5218,12 @@ export function squareOff(id, extras = {}) {
     sim: !pos.paper,
     live: false,
     paper: Boolean(pos.paper || pos.brokerId === "paper"),
-    role: extras.role || pos.role || extras.exitReason || "",
+    role: defaultOrderRole({ ...pos, ...extras, side: closeSide, strategy: extras.strategy || pos.strategy }) || extras.role || pos.role || extras.exitReason || "",
     exitReason: exitReasonLabel({ ...pos, ...extras }) || extras.exitReason || "",
-    reason: exitReasonLabel({ ...pos, ...extras }) || "",
+    reason: orderWhyLabel({ ...pos, ...extras, side: closeSide, strategy: extras.strategy || pos.strategy }) || "",
     createdAt: new Date().toISOString(),
   };
+  stampDeskOrderWhy(order, extras);
   state.orders.unshift(order);
   if (order.strategy) rememberOrderStrategy(order, order.strategy);
   rememberClosedFromPosition(pos, {
@@ -5124,6 +5231,9 @@ export function squareOff(id, extras = {}) {
     exit,
     pnl,
     strategy: order.strategy,
+    role: order.role,
+    reason: order.reason,
+    exitReason: order.exitReason,
     brokerId: account.id,
     closedAt: order.createdAt,
   });
@@ -5154,23 +5264,35 @@ export function replaceDhanOrders(rows) {
   const tagged = incoming.map((row) => {
     const id = String(row.id);
     incomingIds.add(id);
-    const existing = previousDhan.get(id);
+    const existing = previousDhan.get(id) || findPreviousOrderMeta(row, previous);
+    const strategy = resolveOrderStrategy(
+      { ...row, strategy: existing?.strategy || row.strategy },
+      {
+        previous,
+        orders: previous,
+        algos: state.algos || [],
+        positions: state.positions || [],
+      },
+    );
+    const algo = findAlgoForOrder(row, strategy);
+    const inferredRole = preferOrderRole(
+      existing?.role,
+      row.role,
+      String(row.side || "").toUpperCase() === "SELL" ? roleFromAlgoSignal(algo) : "",
+      defaultOrderRole({ ...row, ...existing, strategy, side: row.side }),
+    );
     const next = {
       ...row,
       status: orderFeedStatus(row.status),
       createdAt: existing?.createdAt || row.createdAt || new Date().toISOString(),
       price: mergeDhanOrderPrice(row, existing),
       filledQty: Number(row.filledQty || existing?.filledQty || 0),
+      strategy,
+      role: inferredRole,
       reason: keepExitReason(existing?.reason, row.reason),
-      role: existing?.role || row.role || "",
       exitReason: keepExitReason(existing?.exitReason || existing?.reason, row.exitReason || row.reason),
-      strategy: resolveOrderStrategy(row, {
-        previous,
-        orders: previous,
-        algos: state.algos || [],
-        positions: state.positions || [],
-      }),
     };
+    stampDeskOrderWhy(next, existing || {});
     syncExecutedTradeCount(existing, next);
     noteFundsRejectFromBook(next, existing);
     return next;

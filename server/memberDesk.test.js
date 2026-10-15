@@ -32,6 +32,7 @@ const {
   isLocalGhostOrder,
   memberWorkingDhanCopies,
   optionContractKey,
+  overlayMemberCopyMeta,
   recordMemberCopyFill,
   saveClientSettings,
   saveMemberStaticIp,
@@ -1139,4 +1140,40 @@ test("local mo pending is dropped from the user book and broker rows keep strate
   assert.equal(exit.strategy, "NIFTY 5m first candle");
   assert.equal(exit.exitReason, "TRAILING SL HIT");
   assert.equal(desk.orders.some((row) => row.status === "PENDING"), false);
+});
+
+test("member broker fills keep strategy why instead of TRADE CONFIRMED", () => {
+  const local = {
+    strategy: "Shivam T2S Strategy",
+    role: "entry",
+    reason: "ENTRY",
+    side: "BUY",
+    qty: 1,
+    price: 50.7,
+    symbol: "CRUDEOIL 9250 CE",
+  };
+  const next = overlayMemberCopyMeta(
+    { ...local, status: "FILLED", reason: "TRADE CONFIRMED", id: "1" },
+    local,
+  );
+  assert.equal(next.strategy, "Shivam T2S Strategy");
+  assert.equal(next.reason, "ENTRY");
+  const sl = overlayMemberCopyMeta(
+    {
+      symbol: "CRUDEOIL 9250 CE",
+      side: "SELL",
+      qty: 1,
+      price: 44.1,
+      status: "FILLED",
+      reason: "TRADE CONFIRMED",
+      strategy: "Shivam T2S Strategy",
+    },
+    { strategy: "Shivam T2S Strategy", role: "sl", reason: "SL HIT", side: "SELL", qty: 1 },
+  );
+  assert.equal(sl.reason, "SL HIT");
+  const rejected = overlayMemberCopyMeta(
+    { ...local, status: "REJECTED", reason: "Insufficient funds", id: "2" },
+    { ...local, reason: "ENTRY" },
+  );
+  assert.equal(rejected.reason, "Insufficient funds");
 });

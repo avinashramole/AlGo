@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { SideBadge } from "../desk/Badges";
 import { liveDailyPnl } from "../../lib/dailyPnl";
+import { displayOrderReason, isEntryWhy, isExitHitReason } from "../../lib/exitReason";
 import { cn, formatInr, formatIst, formatIstDate, formatMobile, formatNumber, formatPlanTerm } from "../../lib/format";
 
 export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () => void }) {
@@ -238,6 +239,8 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                         <th className="px-3 py-2 text-right">Entry</th>
                         <th className="px-3 py-2 text-right">Exit</th>
                         <th className="px-3 py-2 text-right">P&L</th>
+                        <th className="px-3 py-2">Strategy</th>
+                        <th className="px-3 py-2">Why</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -253,6 +256,19 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                           <td className="px-3 py-2 text-right">{formatNumber(item.exit)}</td>
                           <td className={cn("px-3 py-2 text-right font-semibold", item.pnl >= 0 ? "text-up" : "text-down")}>
                             {formatInr(item.pnl)}
+                          </td>
+                          <td className="px-3 py-2 text-xs font-semibold">{item.strategy || "—"}</td>
+                          <td
+                            className={cn(
+                              "px-3 py-2 text-xs font-semibold",
+                              isExitHitReason(displayOrderReason(item))
+                                ? "text-brand-500"
+                                : isEntryWhy(displayOrderReason(item))
+                                  ? "text-up"
+                                  : "text-slate-500",
+                            )}
+                          >
+                            {displayOrderReason(item) || "—"}
                           </td>
                         </tr>
                       ))}
