@@ -4,7 +4,7 @@ const TGT_RE = /\btgt\b|target|tgt done|primary-target|combined-target|initial-t
 const BROKER_FAIL_RE = /udapi|too many|reject|fail|unauthorized|token|429|rate limit/;
 const BROKER_ERROR_RE = /udapi|too many|reject|fail|unauthorized|token|429|rate limit|insufficient|rms |notional|margin|\bfunds\b|not sent/;
 const BROKER_NOISE_RE =
-  /trade confirmed|sent to dhan|sent to kotak|oms success|order placed|order traded|^traded$|^success$|^ok$|^submitted$|desk fill at ltp|paper fill at live ltp/;
+  /trade confirmed|sent to dhan|sent to kotak|not sent to dhan|desk demo|oms success|order placed|order traded|^traded$|^success$|^ok$|^submitted$|desk fill at ltp|paper fill at live ltp/;
 const WHY_RANK = {
   "TRAILING SL HIT": 90,
   "SL HIT": 80,

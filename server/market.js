@@ -949,9 +949,16 @@ function findPreviousOrderMeta(row, previous = []) {
 
 function stampDeskOrderWhy(order, extras = {}) {
   if (!order) return order;
-  const merged = { ...order, ...extras };
+  const merged = {
+    ...extras,
+    ...order,
+    strategy: order.strategy || extras.strategy,
+    side: order.side || extras.side,
+    status: order.status || extras.status,
+    role: preferOrderRole(order.role, extras.role),
+  };
   const role = preferOrderRole(defaultOrderRole(merged), merged.role) || String(merged.role || "");
-  const why = orderWhyLabel({ ...merged, role });
+  const why = orderWhyLabel({ ...merged, role, reason: extras.reason || order.reason, exitReason: extras.exitReason || order.exitReason });
   if (role) order.role = role;
   if (why) {
     order.reason = why;
@@ -5039,13 +5046,7 @@ export function placeOrder(payload) {
         status,
         role: payload.role,
       }) ||
-      (live
-        ? liveRejectReason(live, `Sent to Dhan (${live.status || "submitted"}). Order ${live.orderId}`)
-        : demoDhan
-          ? "Not sent to Dhan. Connect a live Access Token on Brokers, then BUY/SELL again."
-          : brokerId === "paper"
-            ? "Paper fill at live LTP"
-            : "Desk fill at LTP"),
+      (live ? liveRejectReason(live, "") : ""),
     role: defaultOrderRole({
       ...payload,
       side: payload.side === "SELL" ? "SELL" : "BUY",

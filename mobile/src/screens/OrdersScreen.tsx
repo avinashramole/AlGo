@@ -6,7 +6,7 @@ import { colors, formatNumber, hasDhanQuotes } from "../theme";
 function orderWhy(row: { side?: string; status?: string; strategy?: string; role?: string; reason?: string; exitReason?: string }) {
   const status = String(row.status || "").toUpperCase();
   const raw = String(row.reason || row.exitReason || "").trim();
-  const noise = /trade confirmed|sent to dhan|^traded$|^success$/i.test(raw);
+  const noise = /trade confirmed|sent to dhan|not sent to dhan|^traded$|^success$/i.test(raw);
   if (/REJECT|FAIL/.test(status)) return raw && !noise ? raw : "REJECTED";
   const role = String(row.role || "").toLowerCase();
   const tagged = `${row.exitReason || ""} ${row.reason || ""}`.toLowerCase();

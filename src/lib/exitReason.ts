@@ -3,7 +3,7 @@ const SL_RE = /\bsl\b|stop[\s-]?loss|sl hit|hit stop/;
 const TGT_RE = /\btgt\b|target|tgt done|primary-target|combined-target|initial-target/;
 const BROKER_FAIL_RE = /udapi|too many|reject|fail|unauthorized|token|429|rate limit/;
 const BROKER_NOISE_RE =
-  /trade confirmed|sent to dhan|sent to kotak|oms success|order placed|order traded|^traded$|^success$|^ok$|^submitted$|desk fill at ltp|paper fill at live ltp/;
+  /trade confirmed|sent to dhan|sent to kotak|not sent to dhan|desk demo|oms success|order placed|order traded|^traded$|^success$|^ok$|^submitted$|desk fill at ltp|paper fill at live ltp/;
 
 export type OrderWhyRow = {
   side?: string;

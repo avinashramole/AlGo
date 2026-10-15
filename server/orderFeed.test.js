@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clearAdminDailyTradeLog, replaceDhanOrders, snapshot } from "./market.js";
+import { clearAdminDailyTradeLog, placeOrder, replaceDhanOrders, setDhanFeed, snapshot } from "./market.js";
 import { lastBookClearAt } from "./dhanToken.js";
 
 test("today's filled, rejected, and failed orders stay on the book when a Dhan poll omits them", () => {
@@ -322,4 +322,39 @@ test("Dhan TRADE CONFIRMED keeps strategy why as ENTRY or SL HIT", () => {
   assert.equal(buy?.reason, "ENTRY");
   assert.equal(sell?.strategy, "CRUDE OIL");
   assert.equal(sell?.reason, "SL HIT");
+});
+
+test("a Shivam BUY with TRADE CONFIRMED is stored as ENTRY, not demo Dhan text", () => {
+  setDhanFeed({ live: true });
+  const buy = placeOrder({
+    symbol: "CRUDEOIL-15Oct2026-9250-CE",
+    side: "BUY",
+    qty: 1,
+    price: 50.7,
+    type: "MARKET",
+    product: "MIS",
+    strategy: "Shivam T2S Strategy",
+    role: "entry",
+    reason: "TRADE CONFIRMED",
+    brokerId: "dhan",
+    live: { orderId: "crude-why-buy", status: "TRADED", price: 50.7, filledQty: 1 },
+  });
+  assert.equal(buy.error, undefined);
+  assert.equal(buy.strategy, "Shivam T2S Strategy");
+  assert.equal(buy.reason, "ENTRY");
+  const sell = placeOrder({
+    symbol: "CRUDEOIL-15Oct2026-9250-CE",
+    side: "SELL",
+    qty: 1,
+    price: 44.1,
+    type: "MARKET",
+    product: "MIS",
+    strategy: "Shivam T2S Strategy",
+    role: "sl",
+    exitReason: "sl",
+    reason: "TRADE CONFIRMED",
+    brokerId: "dhan",
+    live: { orderId: "crude-why-sell", status: "TRADED", price: 44.1, filledQty: 1 },
+  });
+  assert.equal(sell.reason, "SL HIT");
 });
