@@ -141,6 +141,15 @@ test("website deploy hard-resets to origin/branch instead of a stale sparse pull
   assert.doesNotMatch(src, /git pull origin "\$BRANCH" \|\| true/);
 });
 
+test("website deploy skips GitHub file dumps when git already matches origin", () => {
+  const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
+  assert.match(src, /git checkout is current; skipping GitHub file downloads/);
+  assert.match(src, /data-test1-timeframe.*FirstCandleTimeframeBar/);
+  assert.doesNotMatch(src, /data-test1-timeframe.*StrategyBuilder/);
+  assert.doesNotMatch(src, /TEST1 Save still hardcodes 5m/);
+  assert.doesNotMatch(src, /timeframe: \["1m", "2m", "5m", "10m", "15m"\]\.includes/);
+});
+
 test("install-t2s-service still restarts t2s if the nginx writer fails", () => {
   const src = fs.readFileSync(path.join(deployDir, "install-t2s-service.sh"), "utf8");
   assert.match(src, /if ! python3 .*write_nginx_trade2smart\.py/s);

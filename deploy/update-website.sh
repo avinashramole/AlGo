@@ -65,10 +65,20 @@ pull_raw() {
   echo "downloaded $rel"
 }
 
-if [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
-  echo "Git checkout did not bring the one-script TEST2 form. Downloading files from GitHub."
+GIT_MATCHED=0
+if [ -d "$HOME_DIR/.git" ] && git -C "$HOME_DIR" rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+  if [ "$(git -C "$HOME_DIR" rev-parse HEAD)" = "$(git -C "$HOME_DIR" rev-parse "origin/$BRANCH")" ]; then
+    GIT_MATCHED=1
+  fi
+fi
+
+if [ "$GIT_MATCHED" = "1" ]; then
+  echo "git checkout is current; skipping GitHub file downloads"
+elif [ ! -f "$HOME_DIR/src/pages/Algo.tsx" ] || ! grep -q "$RESULT_MARKER" "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q "$UI_MARKER" "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'data-first-candle-timeframe-bar' "$HOME_DIR/src/components/dashboard/FirstCandleTimeframeBar.tsx"; then
+  echo "Git checkout did not bring the desk. Downloading files from GitHub."
   pull_raw src/components/dashboard/StrategyBuilder.tsx
   pull_raw src/components/dashboard/OneMinuteHistoryBar.tsx
+  pull_raw src/components/dashboard/FirstCandleTimeframeBar.tsx
   pull_raw src/pages/Algo.tsx
   pull_raw src/pages/ReportsHub.tsx
   pull_raw src/context/MarketContext.tsx
@@ -135,16 +145,12 @@ if ! grep -q "1m history store" "$HOME_DIR/src/components/dashboard/OneMinuteHis
   echo "FAIL: $HOME_DIR still has the old 1m history sync."
   exit 1
 fi
-if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'resolveFirstCandleTimeframe' "$HOME_DIR/server/niftyVwap/config.js"; then
+if ! grep -q 'data-test1-timeframe' "$HOME_DIR/src/components/dashboard/FirstCandleTimeframeBar.tsx" || ! grep -q 'resolveFirstCandleTimeframe' "$HOME_DIR/server/niftyVwap/config.js"; then
   echo "FAIL: $HOME_DIR still has the locked TEST1 5m timeframe."
   exit 1
 fi
 if ! grep -q 'data-first-candle-timeframe-bar' "$HOME_DIR/src/components/dashboard/FirstCandleTimeframeBar.tsx" || ! grep -q '"30m", "60m"' "$HOME_DIR/src/lib/strategies.ts"; then
   echo "FAIL: Nifty and Crude first-candle chips (5m 10m 15m 30m 60m Custom) are missing."
-  exit 1
-fi
-if ! grep -q 'timeframe: \["1m", "2m", "5m", "10m", "15m"\].includes' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
-  echo "FAIL: TEST1 Save still hardcodes 5m. Deploy cursor/test1-save-timeframe-6826."
   exit 1
 fi
 if ! grep -q 'overlayLiveUnrealized' "$HOME_DIR/server/memberBrokerPnl.js" || ! grep -q 'unrealizedPnl: Number(report?.unrealizedPnl || 0)' "$HOME_DIR/server/market.js"; then
