@@ -41,6 +41,9 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /data-latest-activity="true"/);
   assert.match(page, /data-shivam-activity=\{shivam \? "true" : undefined\}/);
   assert.match(page, /data-test-broker-order="true"/);
+  assert.match(page, /Mapped clients copy 1 lot on their own broker/);
+  assert.doesNotMatch(page, /Mapped clients will not copy/);
+  assert.doesNotMatch(page, /Mapped clients were not copied/);
   assert.match(page, /data-shivam-live-check/);
   assert.match(page, /algo.enabled && algo.runMode === "live"/);
   assert.doesNotMatch(page, /algo.enabled \|\| algo.status === "LIVE"/);

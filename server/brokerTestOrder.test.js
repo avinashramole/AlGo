@@ -7,6 +7,8 @@ import { nearestWeeklyExpiry, upcomingExpiries } from "./optionChain.js";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-broker-test-order-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
+process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
+process.env.T2S_USERS_FILE = path.join(dir, "users.json");
 
 const {
   createAlgo,
@@ -18,8 +20,17 @@ const {
   strategyTradingStatus,
   toggleAlgo,
 } = await import("./market.js");
+const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
 
 const EXPIRY = nearestWeeklyExpiry(upcomingExpiries("NIFTY", 12), "NIFTY");
+
+function liveMappedUser(id = "u-copy") {
+  const user = { id, name: "Copy", email: `${id}@t2s.app`, role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11008899", accessToken: "member-dhan-token" });
+  saveClientSettings(user.id, { copy: true });
+  return user;
+}
 
 function pinAtmChain() {
   setOptionDesk({
@@ -73,10 +84,11 @@ test("strategyTradingStatus is LIVE only when enabled and runMode is live", () =
   }
 });
 
-test("Test 1 order queues 1 ATM lot to Dhan and skips member copy", () => {
+test("Test 1 order queues 1 ATM lot to Dhan and copies mapped clients", () => {
   setDhanFeed({ live: true });
   pinAtmChain();
   drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-keep");
   const created = createAlgo({
     kind: "shivam-t2s",
     testDesk: true,
@@ -84,7 +96,7 @@ test("Test 1 order queues 1 ATM lot to Dhan and skips member copy", () => {
     liveAuthorized: true,
     brokerId: "dhan",
     mappingScope: "both",
-    mappedClientIds: ["u-keep"],
+    mappedClientIds: [user.id],
   });
   try {
     const preview = placeStrategyBrokerTestOrder(created.id, { confirm: false });
@@ -96,7 +108,7 @@ test("Test 1 order queues 1 ATM lot to Dhan and skips member copy", () => {
     assert.equal(preview.contract?.option, "CE");
     assert.equal(preview.contract?.strike, 25000);
     assert.equal(preview.contract?.securityId, "ce-25000");
-    assert.equal(preview.skipMemberCopy, true);
+    assert.equal(preview.skipMemberCopy, false);
 
     const started = toggleAlgo(created.id, { enabled: true });
     assert.equal(started.status, "LIVE");
@@ -105,19 +117,27 @@ test("Test 1 order queues 1 ATM lot to Dhan and skips member copy", () => {
     assert.equal(sent.queued, true);
     assert.equal(sent.live, true);
     assert.equal(sent.lots, 1);
-    assert.equal(sent.skipMemberCopy, true);
+    assert.equal(sent.skipMemberCopy, false);
     const queued = drainPendingLiveAlgoOrders();
-    assert.equal(queued.length, 1);
-    assert.ok(!queued[0].copyUserId);
-    assert.equal(queued[0].role, "broker-test");
-    assert.equal(queued[0].brokerId, "dhan");
-    assert.equal(queued[0].qty, 65);
-    assert.equal(queued[0].lots, 1);
-    assert.equal(queued[0].option, "CE");
-    assert.equal(queued[0].securityId, "ce-25000");
-    assert.equal(queued[0].skipMemberCopy, true);
-    assert.notEqual(queued[0].brokerId, "paper");
-    assert.notEqual(queued[0].paper, true);
+    assert.equal(queued.length, 2);
+    const admin = queued.find((row) => !row.copyUserId);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(admin);
+    assert.ok(copy);
+    assert.equal(admin.role, "broker-test");
+    assert.equal(admin.brokerId, "dhan");
+    assert.equal(admin.qty, 65);
+    assert.equal(admin.lots, 1);
+    assert.equal(admin.option, "CE");
+    assert.equal(admin.securityId, "ce-25000");
+    assert.notEqual(admin.brokerId, "paper");
+    assert.notEqual(admin.paper, true);
+    assert.equal(copy.role, "broker-test");
+    assert.equal(copy.brokerId, "dhan");
+    assert.equal(copy.qty, 65);
+    assert.equal(copy.lots, 1);
+    assert.equal(copy.account?.accessToken, "member-dhan-token");
+    assert.notEqual(copy.paper, true);
   } finally {
     deleteAlgo(created.id);
     drainPendingLiveAlgoOrders();
