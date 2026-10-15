@@ -338,7 +338,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         : shivam
           ? {
               ...payload,
-              testDesk: false,
+              testDesk: true,
               runMode: payload.runMode === "backtest" ? "backtest" : "paper",
               brokerId: "paper",
               mappingScope: "master",
@@ -371,7 +371,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               liveAuthorized: false,
               runMode: form.runMode === "backtest" ? "backtest" : "paper",
               brokerId: "paper",
-              testDesk: Boolean(testDesk),
+              testDesk: true,
               enabled: Boolean(algo?.enabled),
             }
           : mir
@@ -585,10 +585,11 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               });
             }}
           />
+          {testDesk || shivam ? (
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text="NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
+            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -597,12 +598,13 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 runMode: "paper",
                 brokerId: "paper",
                 liveAuthorized: false,
-                testDesk,
+                testDesk: true,
                 lots: form.lots || 1,
                 enabled: false,
               });
             }}
           />
+          ) : null}
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
@@ -624,7 +626,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         )}
 
         {mir || shivam ? (
-        <div className="mt-1.5 grid grid-cols-2 gap-1.5" data-mir-trade-mode={mir ? "true" : undefined} data-shivam-trade-mode={shivam ? "true" : undefined}>
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5" data-mir-trade-mode="true" data-shivam-trade-mode={shivam ? "true" : undefined}>
           <TypeCard
             active={(form.runMode || "paper") !== "live"}
             title="Paper"

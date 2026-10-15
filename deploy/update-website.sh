@@ -165,6 +165,10 @@ if ! grep -q 'data-mir-trade-mode="true"' "$HOME_DIR/src/components/dashboard/St
   echo "FAIL: Multi-Index Edit has no Paper/Live selector. Deploy cursor/multi-index-paper-live-6826."
   exit 1
 fi
+if ! grep -q 'export function AlgoTest' "$HOME_DIR/src/pages/Algo.tsx" || ! grep -q 'SHIVAM_T2S_SEED_ID' "$HOME_DIR/server/strategies.js"; then
+  echo "FAIL: Algo Test page is missing the seeded Shivam T2S card."
+  exit 1
+fi
 if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx"; then
   echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
   exit 1

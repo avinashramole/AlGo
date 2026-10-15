@@ -234,7 +234,7 @@ export function defaultShivamT2sAlgo(patch = {}) {
     strategyType: SHIVAM_T2S_TYPE,
     indicator: "SHIVAM_T2S",
     symbol: cfg.symbol,
-    testDesk: patch.testDesk === true,
+    testDesk: true,
     runMode: cfg.runMode === "backtest" || patch.runMode === "backtest" ? "backtest" : "paper",
     liveAuthorized: false,
     brokerId: "paper",

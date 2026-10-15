@@ -110,7 +110,7 @@ test("defaults stay paper, disabled, and named Shivam T2S Strategy", () => {
   assert.equal(algo.enabled, false);
   assert.equal(algo.runMode, "paper");
   assert.equal(algo.liveAuthorized, false);
-  assert.equal(algo.testDesk, false);
+  assert.equal(algo.testDesk, true);
   assert.equal(cfg.symbol, "NIFTY");
   assert.equal(cfg.ceConfirmColor, "GREEN");
   assert.equal(cfg.peConfirmColor, "GREEN");

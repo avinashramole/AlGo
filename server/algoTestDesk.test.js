@@ -76,7 +76,7 @@ test("main-desk strategies stay off the test desk flag", () => {
   assert.equal(created.runMode, "live");
 });
 
-test("Shivam T2S stays paper on Algos with no live copy", () => {
+test("Shivam T2S stays paper on Algo Test with no live copy", () => {
   const created = normalizeAlgo({
     name: "Shivam T2S Strategy",
     kind: "shivam-t2s",
@@ -87,14 +87,14 @@ test("Shivam T2S stays paper on Algos with no live copy", () => {
     mappedClientIds: ["u-1"],
     clientVisible: true,
   });
-  assert.equal(created.testDesk, false);
+  assert.equal(created.testDesk, true);
   assert.equal(created.runMode, "paper");
   assert.equal(created.brokerId, "paper");
   assert.equal(created.liveAuthorized, false);
   assert.equal(created.mappingScope, "master");
   assert.deepEqual(created.mappedClientIds, []);
   assert.equal(created.clientVisible, false);
-  assert.equal(isTestDeskAlgo(created), false);
+  assert.equal(isTestDeskAlgo(created), true);
 });
 
 test("findLiveCopyAlgo and member copies skip Algo Test strategies", () => {

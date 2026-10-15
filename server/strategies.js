@@ -409,11 +409,16 @@ function mappingFields(input = {}, existing = {}) {
 }
 
 export function isTestDeskAlgo(algo) {
-  return Boolean(algo?.testDesk);
+  return Boolean(algo?.testDesk) || isShivamT2sAlgo(algo);
 }
 
 function sealTestDesk(algo, input = {}, existing = {}) {
-  const testDesk = Boolean(existing.testDesk) || Boolean(input.testDesk ?? algo?.testDesk);
+  const testDesk =
+    Boolean(existing.testDesk) ||
+    Boolean(input.testDesk ?? algo?.testDesk) ||
+    isShivamT2sAlgo(algo) ||
+    isShivamT2sAlgo(input) ||
+    isShivamT2sAlgo(existing);
   if (!testDesk) return { ...algo, testDesk: false };
   return {
     ...algo,
@@ -675,7 +680,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
       ...existing,
       ...defaultShivamT2sAlgo({
         ...merged,
-        testDesk: Boolean(existing.testDesk) || Boolean(input.testDesk),
+        testDesk: true,
         runMode,
         lots: cfg.lots,
         symbol: cfg.symbol,
@@ -698,10 +703,12 @@ export function normalizeAlgo(input = {}, existing = {}) {
       next.status = "BACKTEST";
     } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
     delete next.trade;
+    next.testDesk = true;
     next.summary = summarizeAlgo(next);
     const mapped = withMapping(next, input, existing);
     return {
       ...mapped,
+      testDesk: true,
       runMode: mapped.runMode === "backtest" ? "backtest" : "paper",
       brokerId: "paper",
       liveAuthorized: false,
@@ -1208,8 +1215,9 @@ export function seedAlgos() {
     normalizeAlgo(
       defaultShivamT2sAlgo({
         runMode: "paper",
+        testDesk: true,
       }),
-      { id: SHIVAM_T2S_SEED_ID, pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper" },
+      { id: SHIVAM_T2S_SEED_ID, pnl: 0, winRate: 0, enabled: false, status: "PAUSED", brokerId: "paper", runMode: "paper", testDesk: true },
     ),
   ];
 }
