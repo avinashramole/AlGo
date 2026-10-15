@@ -13,7 +13,7 @@ import { buildUpiLinks, enrollmentActive, listEnrollments, publicPayments } from
 import { sessionKeyIST } from "./niftyVwap/VwapSignalEngine.js";
 import { firstCandleNameAliases } from "./niftyVwap/config.js";
 import { markContractToMarket } from "./positionMark.js";
-import { exitReasonLabel, keepExitReason } from "./exitReason.js";
+import { defaultOrderRole, exitReasonLabel, keepExitReason, orderWhyLabel } from "./exitReason.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1494,15 +1494,28 @@ export function overlayMemberCopyMeta(row, local) {
   if (!row) return row;
   if (!local) return row;
   const strategy = String(row.strategy || local.strategy || "").trim();
-  const role = String(row.role || local.role || "").trim();
-  const exitReason = exitReasonLabel(local) || exitReasonLabel(row) || local.exitReason || row.exitReason || "";
-  const reason = keepExitReason(local.reason || local.exitReason, row.reason);
+  const side = row.side || local.side;
+  const status = String(row.status || local.status || "");
+  const role = /REJECT|FAIL/.test(status)
+    ? String(row.role || local.role || "")
+    : defaultOrderRole({ ...local, ...row, strategy, side }) || String(row.role || local.role || "").trim();
+  const exitReason = exitReasonLabel({ ...local, ...row, role, status }) || local.exitReason || row.exitReason || "";
+  const mergedReason = keepExitReason(local.reason || local.exitReason, row.reason);
+  const reason = orderWhyLabel({
+    ...local,
+    ...row,
+    strategy,
+    side,
+    role,
+    status,
+    reason: /REJECT|FAIL/.test(status) ? row.reason || mergedReason : mergedReason,
+  }) || mergedReason;
   const price = Number(row.price) > 0 ? Number(row.price) : Number(local.price || 0);
   const qty = Number(row.qty) > 0 ? Number(row.qty) : Number(local.qty || 0);
   return {
     ...row,
     symbol: String(row.symbol || local.symbol || "").trim(),
-    side: row.side || local.side,
+    side,
     qty,
     strategy,
     role,
@@ -1846,8 +1859,10 @@ export function recordMemberCopyFill({ userId, payload = {}, live, error, paper 
     brokerId,
     paper: Boolean(paper),
     live: Boolean(live?.orderId) && !paper,
-    reason: exitReasonLabel(payload) || (error ? String(error.message || error) : String(live?.reason || "")),
-    role: payload.role || "",
+    reason:
+      (error ? String(error.message || error) : "") ||
+      orderWhyLabel({ ...payload, side, strategy: payload.strategy, status: mapped, role: payload.role }),
+    role: defaultOrderRole({ ...payload, side, strategy: payload.strategy }) || payload.role || "",
     exitReason: exitReasonLabel(payload) || payload.exitReason || "",
     securityId: payload.securityId ? String(payload.securityId) : "",
     createdAt: now,

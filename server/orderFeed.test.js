@@ -265,3 +265,61 @@ test("admin trade log drops fills from before 8:00 AM IST and clears again the n
   assert.equal(clearAdminDailyTradeLog(reset + 24 * 60 * 60 * 1000 + 1_000), true);
   assert.equal(snapshot().orders.some((row) => row.id === "admin-fresh-fill"), false);
 });
+
+test("Dhan TRADE CONFIRMED keeps strategy why as ENTRY or SL HIT", () => {
+  const stamp = new Date().toISOString();
+  replaceDhanOrders([
+    {
+      id: "crude-ce-buy",
+      symbol: "CRUDEOIL-15Oct2026-9250-CE",
+      side: "BUY",
+      qty: 1,
+      price: 50.7,
+      status: "FILLED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "CRUDE OIL",
+      role: "entry",
+      reason: "ENTRY",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+  ]);
+  replaceDhanOrders([
+    {
+      id: "crude-ce-buy",
+      symbol: "CRUDEOIL-15Oct2026-9250-CE",
+      side: "BUY",
+      qty: 1,
+      price: 50.7,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      reason: "TRADE CONFIRMED",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+    {
+      id: "crude-ce-sell",
+      symbol: "CRUDEOIL-15Oct2026-9250-CE",
+      side: "SELL",
+      qty: 1,
+      price: 44.1,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      strategy: "CRUDE OIL",
+      role: "sl",
+      reason: "TRADE CONFIRMED",
+      filledQty: 1,
+      createdAt: stamp,
+    },
+  ]);
+  const orders = snapshot().orders;
+  const buy = orders.find((row) => row.id === "crude-ce-buy");
+  const sell = orders.find((row) => row.id === "crude-ce-sell");
+  assert.equal(buy?.strategy, "CRUDE OIL");
+  assert.equal(buy?.reason, "ENTRY");
+  assert.equal(sell?.strategy, "CRUDE OIL");
+  assert.equal(sell?.reason, "SL HIT");
+});

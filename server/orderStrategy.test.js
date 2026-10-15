@@ -219,6 +219,24 @@ test("remembers strategy by Dhan correlation when the poll row has no name", () 
   assert.equal(name, "NIFTY 15m VWAP hedge");
 });
 
+test("Shivam T2S crude contract keeps Shivam strategy, not CRUDE OIL first candle", () => {
+  const name = resolveOrderStrategy(
+    { id: "dhan-crude-ce", symbol: "CRUDEOIL-15Oct2026-9250-CE", strategy: "", option: "CE", strike: 9250 },
+    {
+      algos: [
+        { id: "a12", name: "CRUDE OIL", kind: "crude-first-candle" },
+        {
+          id: "shivam",
+          name: "Shivam T2S Strategy",
+          kind: "shivam-t2s",
+          shivamState: { symbol: "CRUDEOIL 9250 CE", option: "CE", strike: 9250, fillQty: 1 },
+        },
+      ],
+    },
+  );
+  assert.equal(name, "Shivam T2S Strategy");
+});
+
 test("placed-order strategy stays the payload name and ignores Manual", () => {
   assert.equal(
     strategyForPlacedOrder({ strategy: "NIFTY 15m VWAP hedge" }, [hedgeAlgo]),

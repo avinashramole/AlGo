@@ -3,6 +3,30 @@ import { useMarket } from "../MarketContext";
 import { Card, Pill } from "../components/Ui";
 import { colors, formatNumber, hasDhanQuotes } from "../theme";
 
+function orderWhy(row: { side?: string; status?: string; strategy?: string; role?: string; reason?: string; exitReason?: string }) {
+  const status = String(row.status || "").toUpperCase();
+  const raw = String(row.reason || row.exitReason || "").trim();
+  const noise = /trade confirmed|sent to dhan|^traded$|^success$/i.test(raw);
+  if (/REJECT|FAIL/.test(status)) return raw && !noise ? raw : "REJECTED";
+  const role = String(row.role || "").toLowerCase();
+  const tagged = `${row.exitReason || ""} ${row.reason || ""}`.toLowerCase();
+  if (role === "trail" || /trail|trailing[\s-]?sl/.test(tagged)) return "TRAILING SL HIT";
+  if (role === "sl" || /\bsl\b|stop[\s-]?loss|sl hit/.test(tagged)) return "SL HIT";
+  if (role === "target" || role === "tgt" || /\btgt\b|target|tgt done/.test(tagged)) return "TGT DONE";
+  if (role === "shivam-entry" || role === "entry" || role === "hedge" || role === "reversal" || role === "broker-test") {
+    if (role === "hedge") return "HEDGE ENTRY";
+    if (role === "reversal") return "REVERSAL ENTRY";
+    if (role === "broker-test") return "TEST ORDER";
+    return "ENTRY";
+  }
+  const side = String(row.side || "").toUpperCase();
+  const strategy = String(row.strategy || "").trim();
+  if (strategy && !/^(manual|auto)$/i.test(strategy) && side === "BUY") return "ENTRY";
+  if (strategy && !/^(manual|auto)$/i.test(strategy) && side === "SELL") return "EXIT";
+  if (raw && !noise) return raw;
+  return "";
+}
+
 function strategyLabel(row: { strategy?: string }, algos: Array<{ id?: string; name?: string }> = []) {
   const raw = String(row.strategy || "").trim();
   if (!raw || /^(manual|auto)$/i.test(raw)) return "";
@@ -32,12 +56,15 @@ export function OrdersScreen() {
             <Pill text={row.status} up={row.status === "FILLED"} />
           </View>
           <Text style={styles.strategy}>{row.side === "SELL" ? "SELL" : "BUY"}</Text>
+          {strategyLabel(row, data.algos) ? <Text style={styles.muted}>Strategy · {strategyLabel(row, data.algos)}</Text> : null}
           {row.copyUserId ? <Text style={styles.muted}>Copy · {row.copyUserName || row.copyUserId}</Text> : null}
           <Text style={styles.muted}>
             {row.side} · {row.filledQty || 0}/{row.qty} · {row.type || "MARKET"} · {formatNumber(row.price)}
           </Text>
           <Text style={styles.muted}>{row.brokerName || row.brokerId || "dhan"}</Text>
-          {row.reason ? <Text style={{ color: colors.down, marginTop: 6, fontWeight: "700" }}>{row.reason}</Text> : null}
+          <Text style={{ color: /SL HIT|TGT DONE/.test(orderWhy(row)) ? colors.up : colors.muted, marginTop: 6, fontWeight: "700" }}>
+            Why · {orderWhy(row) || "—"}
+          </Text>
           {(row.status === "PENDING" || row.status === "PARTIAL") && !row.copyUserId ? (
             <Pressable
               style={styles.btn}

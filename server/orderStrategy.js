@@ -159,6 +159,31 @@ function inferFromLastOrderId(row = {}, algos = []) {
   return "";
 }
 
+function isShivamAlgo(algo = {}) {
+  return (
+    algo.kind === "shivam-t2s" ||
+    algo.strategyType === "SHIVAM_T2S" ||
+    String(algo.name || "").trim() === "Shivam T2S Strategy"
+  );
+}
+
+function inferShivamOwner(row = {}, algos = []) {
+  const owners = [];
+  for (const algo of algos || []) {
+    if (!isShivamAlgo(algo)) continue;
+    const vs = algo.shivamState || {};
+    if (vs.securityId && row.securityId && String(vs.securityId) === String(row.securityId)) {
+      owners.push(namedAlgo(algo));
+      continue;
+    }
+    if (sameContract({ symbol: vs.symbol, strike: vs.strike, option: vs.option, securityId: vs.securityId }, row)) {
+      owners.push(namedAlgo(algo));
+    }
+  }
+  const names = [...new Set(owners.filter(Boolean))];
+  return names.length === 1 ? names[0] : "";
+}
+
 function inferPendingInFlight(row = {}, algos = []) {
   if (!isPendingRow(row) || !looksLikeNiftyOption(row)) return "";
   const inflight = (algos || []).filter((algo) => algo.hedgeState?.inFlight || algo.vwapState?.inFlight);
@@ -204,8 +229,9 @@ export function resolveOrderStrategy(row = {}, { previous = [], algos = [], posi
       ownerAlgoForOpenPosition(row, algos);
   }
   if (!name && !forPosition) {
-    name = inferFromLastOrderId(row, algos) || inferPendingInFlight(row, algos);
+    name = inferFromLastOrderId(row, algos) || inferPendingInFlight(row, algos) || inferShivamOwner(row, algos);
   }
+  if (!name) name = inferShivamOwner(row, algos);
   if (!name && String(row.side || "").toUpperCase() === "SELL") {
     name = exitStrategyFromBook(row, [orders, previous, positions]);
   }

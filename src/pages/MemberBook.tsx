@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { downloadMemberReport, getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { catchDeskError } from "../lib/liveSite";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
-import { displayOrderReason, isExitHitReason } from "../lib/exitReason";
+import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
 import { cn, formatIst, formatNumber } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
 import { hasPaperActivity, isLiveBrokerTrade, memberIsPaperTrade } from "../lib/paperBook";
@@ -303,7 +303,7 @@ function BookMeta({
 }: {
   row: { strategy?: string; role?: string; reason?: string; exitReason?: string };
 }) {
-  const afterExit = displayOrderReason(row) || "—";
+  const why = displayOrderReason(row) || "—";
   return (
     <div className="mt-2 grid grid-cols-2 gap-2 text-xs" data-book-meta="strategy-exit">
       <div>
@@ -311,9 +311,14 @@ function BookMeta({
         <div className="font-semibold text-slate-600">{row.strategy || "—"}</div>
       </div>
       <div>
-        <div className="uppercase tracking-wide text-slate-400">After exit</div>
-        <div className={cn("font-semibold", isExitHitReason(afterExit) ? "text-brand-500" : afterExit === "—" ? "text-slate-500" : "text-down")}>
-          {afterExit}
+        <div className="uppercase tracking-wide text-slate-400">Why</div>
+        <div
+          className={cn(
+            "font-semibold",
+            isExitHitReason(why) ? "text-brand-500" : isEntryWhy(why) ? "text-up" : why === "—" ? "text-slate-500" : "text-down",
+          )}
+        >
+          {why}
         </div>
       </div>
     </div>
