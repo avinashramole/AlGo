@@ -14,6 +14,15 @@ SOURCE = PUBLIC / "t2s-logo.png"
 APP_ICON = MOBILE / "app-icon-source.png"
 OUTPUT = PUBLIC / "t2s-logo.png"
 LIGHT = (255, 255, 255, 255)
+CREAM = (255, 248, 241, 255)
+IOS_ASSETS = ROOT / "ios" / "App" / "App" / "Assets.xcassets"
+APPLE_SPLASH = (
+    (1290, 2796),
+    (1179, 2556),
+    (1170, 2532),
+    (1284, 2778),
+    (2048, 2732),
+)
 
 
 def load_source() -> Image.Image:
@@ -111,6 +120,27 @@ def load_app_icon() -> Image.Image:
     return knock_white(load_source())
 
 
+def cream_splash(app: Image.Image, width: int, height: int) -> Image.Image:
+    canvas = Image.new("RGBA", (width, height), CREAM)
+    box = max(64, int(min(width, height) * 0.38))
+    mark = fit(app, box)
+    canvas.alpha_composite(mark, ((width - mark.width) // 2, (height - mark.height) // 2))
+    return canvas.convert("RGB")
+
+
+def write_ios_and_pwa(app: Image.Image) -> None:
+    save(fit(app, 192, LIGHT), PUBLIC / "pwa-192.png")
+    save(fit(app, 512, LIGHT), PUBLIC / "pwa-512.png")
+    for width, height in APPLE_SPLASH:
+        save(cream_splash(app, width, height), PUBLIC / f"apple-splash-{width}x{height}.png")
+    iconset = IOS_ASSETS / "AppIcon.appiconset"
+    if iconset.is_dir():
+        save(fit(app, 1024, LIGHT), iconset / "AppIcon-512@2x.png")
+    splash_dir = IOS_ASSETS / "Splash.imageset"
+    if splash_dir.is_dir():
+        save(cream_splash(app, 2732, 2732), splash_dir / "splash-2732x2732.png")
+
+
 def main() -> None:
     src = knock_white(load_source())
     logo = fit(src, 800)
@@ -128,6 +158,7 @@ def main() -> None:
     save(Image.new("RGB", (1024, 1024), (255, 255, 255)), MOBILE / "android-icon-background.png")
     mono = fit(app, 1024, LIGHT).convert("L").convert("RGB")
     save(mono, MOBILE / "android-icon-monochrome.png")
+    write_ios_and_pwa(app)
 
 
 if __name__ == "__main__":

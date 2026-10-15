@@ -9,6 +9,7 @@ import {
   Lock,
   Mail,
   Phone,
+  Share,
   Shield,
   Smartphone,
   User,
@@ -20,6 +21,7 @@ import { LoginHeroArt } from "../components/LoginHeroArt";
 import { useAuth } from "../context/AuthContext";
 import type { SocialProvider } from "../api/client";
 import { PreviewDeskBanner } from "../lib/deskHost";
+import { isIosSafari, isNativeHybrid } from "../lib/hybrid";
 import { catchDeskError } from "../lib/liveSite";
 import "../login.css";
 
@@ -73,7 +75,27 @@ export function Login() {
     }
   });
   const [loading, setLoading] = useState(false);
+  const [iosInstall, setIosInstall] = useState<"guide" | "installed" | "">("");
   const [remember, setRemember] = useState(() => localStorage.getItem("t2s-remember") !== "0");
+
+  function installIosApp() {
+    setError("");
+    setHint("");
+    if (isNativeHybrid()) {
+      setIosInstall("installed");
+      return;
+    }
+    setIosInstall("guide");
+  }
+
+  useEffect(() => {
+    if (!iosInstall) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIosInstall("");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [iosInstall]);
 
   const channel = channelOf(identifier);
 
@@ -523,14 +545,7 @@ export function Login() {
                 <Smartphone size={18} />
                 Download Android App
               </button>
-              <button
-                type="button"
-                className="t2s-apk-download"
-                data-ios-app="install"
-                onClick={() => {
-                  setHint("iPhone: open this site in Safari → Share → Add to Home Screen. Same email login as the website.");
-                }}
-              >
+              <button type="button" className="t2s-apk-download" data-ios-app="install" onClick={installIosApp}>
                 <Apple size={18} />
                 Download iPhone App
               </button>
@@ -538,6 +553,8 @@ export function Login() {
           </div>
         </section>
       </div>
+
+      {iosInstall ? <IosInstallSheet mode={iosInstall} onClose={() => setIosInstall("")} /> : null}
 
       <section className="t2s-benefits">
         <Benefit icon={<Shield size={22} />} tone="blue" title="Trusted Platform" text="Built for serious traders and investors" />
@@ -651,6 +668,38 @@ function Notice({ error, hint, devOtp }: { error: string; hint: string; devOtp: 
       {devOtp ? <div className="t2s-alert t2s-alert-ok">Temporary code: {devOtp}</div> : null}
       {error ? <div className="t2s-alert t2s-alert-err">{error}</div> : null}
     </>
+  );
+}
+
+function IosInstallSheet({ mode, onClose }: { mode: "guide" | "installed"; onClose: () => void }) {
+  const safari = typeof navigator === "undefined" ? false : isIosSafari(navigator.userAgent);
+  return (
+    <div className="t2s-ios-install" data-ios-install="sheet" role="dialog" aria-modal="true" aria-labelledby="t2s-ios-install-title">
+      <button type="button" className="t2s-ios-install-backdrop" aria-label="Close" onClick={onClose} />
+      <div className="t2s-ios-install-card">
+        <Apple size={28} />
+        <h3 id="t2s-ios-install-title">{mode === "installed" ? "T2S is already installed" : "Install the iPhone app"}</h3>
+        {mode === "installed" ? (
+          <p>Open the Trade 2 Smart icon on your Home Screen. Sign in with the same email as the website.</p>
+        ) : safari ? (
+          <>
+            <p>Add Trade 2 Smart to your Home Screen. Same desk, logo, and email login as Android.</p>
+            <ol>
+              <li>
+                Tap <Share size={14} /> Share
+              </li>
+              <li>Tap Add to Home Screen</li>
+              <li>Tap Add</li>
+            </ol>
+          </>
+        ) : (
+          <p>On iPhone, open this site in Safari → Share → Add to Home Screen. Apple does not allow installing an iPhone app from a website the way Android installs an APK.</p>
+        )}
+        <button type="button" className="t2s-submit" onClick={onClose}>
+          Got it
+        </button>
+      </div>
+    </div>
   );
 }
 

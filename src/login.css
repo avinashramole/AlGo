@@ -740,3 +740,65 @@ html.t2s-hybrid .t2s-login-card {
     max-height: 82vh;
   }
 }
+
+.t2s-ios-install {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 767px) {
+  .t2s-ios-install {
+    align-items: flex-end;
+  }
+}
+
+.t2s-ios-install-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(8, 37, 75, 0.45);
+  cursor: pointer;
+}
+
+.t2s-ios-install-card {
+  position: relative;
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 22px 20px 18px;
+  border-radius: 20px 20px 16px 16px;
+  background: #fff;
+  color: #08254b;
+  box-shadow: 0 18px 48px rgba(8, 37, 75, 0.22);
+}
+
+.t2s-ios-install-card h3 {
+  margin: 10px 0 8px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.t2s-ios-install-card p,
+.t2s-ios-install-card li {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.t2s-ios-install-card ol {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.t2s-ios-install-card li {
+  margin-top: 6px;
+}
+
+.t2s-ios-install-card .t2s-submit {
+  margin-top: 16px;
+}

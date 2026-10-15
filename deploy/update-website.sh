@@ -181,6 +181,14 @@ if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx"; then
   echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
   exit 1
 fi
+if ! grep -q 'function installIosApp' "$HOME_DIR/src/pages/Login.tsx" || ! grep -q 't2s-ios-install' "$HOME_DIR/src/pages/Login.tsx"; then
+  echo "FAIL: iPhone app install is missing."
+  exit 1
+fi
+if [ ! -d "$HOME_DIR/ios/App/App.xcodeproj" ]; then
+  echo "FAIL: Capacitor iOS project is missing."
+  exit 1
+fi
 if [ ! -f "$HOME_DIR/releases/Trade2Smart-web.apk" ]; then
   echo "WARN: releases/Trade2Smart-web.apk is missing. Website still publishes."
 fi

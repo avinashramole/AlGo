@@ -12,6 +12,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const client = fs.readFileSync(path.join(root, "src/api/client.ts"), "utf8");
   const main = fs.readFileSync(path.join(root, "src/main.tsx"), "utf8");
   const build = fs.readFileSync(path.join(root, "scripts/build-hybrid-apk.sh"), "utf8");
+  const iosBuild = fs.readFileSync(path.join(root, "scripts/build-hybrid-ios.sh"), "utf8");
   const login = fs.readFileSync(path.join(root, "src/pages/Login.tsx"), "utf8");
 
   assert.match(cap, /webDir:\s*"dist"/);
@@ -52,12 +53,30 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(client, /Directory.Cache/);
   assert.match(main, /HashRouter/);
   assert.match(build, /cap sync android/);
+  assert.match(iosBuild, /cap sync ios/);
+  assert.match(iosBuild, /xcodebuild/);
   assert.match(login, /data-android-apk="download"/);
   assert.match(login, /data-ios-app="install"/);
+  assert.match(login, /function installIosApp/);
+  assert.match(login, /t2s-ios-install/);
+  assert.match(login, /Add to Home Screen/);
+  assert.match(login, /onClick=\{installIosApp\}/);
   assert.doesNotMatch(login, /123456/);
   assert.match(login, /placeholder="Enter your password"/);
   assert.match(login, /secret/);
   assert.match(cap, /iosScheme:\s*"https"/);
+  assert.match(cap, /scheme:\s*"t2salgo"/);
+  const infoPlist = fs.readFileSync(path.join(root, "ios/App/App/Info.plist"), "utf8");
+  assert.match(infoPlist, /<string>t2salgo<\/string>/);
+  assert.match(infoPlist, /NSFaceIDUsageDescription/);
+  const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
+  assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
+  assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);
+  const appDelegate = fs.readFileSync(path.join(root, "ios/App/App/AppDelegate.swift"), "utf8");
+  assert.match(appDelegate, /ApplicationDelegateProxy/);
+  assert.match(hybrid, /isIosHomeScreenApp/);
+  assert.match(hybrid, /isCapacitorNative/);
+  assert.match(hybrid, /native: isCapacitorNative\(\)/);
   const shell = fs.readFileSync(path.join(root, "src/components/layout/AppShell.tsx"), "utf8");
   const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
   const hybridSrc = fs.readFileSync(path.join(root, "src/lib/hybrid.ts"), "utf8");
@@ -65,6 +84,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const loginCss = fs.readFileSync(path.join(root, "src/login.css"), "utf8");
   const styles = fs.readFileSync(path.join(root, "android/app/src/main/res/values/styles.xml"), "utf8");
   assert.match(loginCss, /html\.t2s-hybrid \.t2s-app-downloads/);
+  assert.match(loginCss, /t2s-ios-install/);
   assert.match(loginCss, /#fff8f1/);
   assert.match(styles, /Theme.AppCompat.Light.NoActionBar/);
   assert.match(styles, /navigationBarColor/);
@@ -92,6 +112,8 @@ test("login page has a real Android APK download link", () => {
   assert.match(login, /data-android-apk="download"/);
   assert.match(login, /onClick=\{downloadAndroidApk\}/);
   assert.match(login, /href = "\/Trade2Smart-web\.apk"/);
+  assert.match(login, /function installIosApp/);
+  assert.doesNotMatch(login, /setHint\("iPhone: open this site in Safari/);
   assert.match(
     login,
     /function downloadAndroidApk\(\) \{\n(?:  .+\n)+  link\.remove\(\);\n\}\n\nexport function Login\(\)/,
@@ -107,6 +129,15 @@ test("login page has a real Android APK download link", () => {
   assert.match(appJson, /"icon": "\.\/assets\/icon\.png"/);
   assert.match(renderIcons, /app-icon-source\.png/);
   assert.match(syncIcons, /app-icon-source\.png/);
+  assert.match(syncIcons, /AppIcon-512@2x\.png/);
+  assert.match(renderIcons, /pwa-512\.png/);
   assert.equal(fs.existsSync(path.join(root, "mobile/assets/app-icon-source.png")), true);
   assert.equal(fs.existsSync(path.join(root, "mobile/assets/icon.png")), true);
+  assert.equal(fs.existsSync(path.join(root, "public/pwa-512.png")), true);
+  const webManifest = fs.readFileSync(path.join(root, "public/manifest.webmanifest"), "utf8");
+  assert.match(webManifest, /pwa-512\.png/);
+  assert.match(webManifest, /standalone/);
+  const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.match(indexHtml, /apple-touch-startup-image/);
+  assert.match(indexHtml, /apple-mobile-web-app-capable/);
 });

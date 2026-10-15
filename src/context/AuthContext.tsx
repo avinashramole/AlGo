@@ -22,6 +22,7 @@ import {
   deskHomeUrl,
   googleQueryFromHref,
   handoffGoogleToAndroidApp,
+  isCapacitorNative,
   isNativeHybrid,
   shouldHandoffGoogleToApp,
 } from "../lib/hybrid";
@@ -366,7 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void importCapacitorPlugin<CapacitorBrowserPlugin>("@capacitor/browser").then((mod) => {
         void mod?.Browser.close();
       });
-      if (isNativeHybrid()) {
+      if (isCapacitorNative()) {
         window.location.replace(deskHomeUrl());
       }
     };
@@ -449,7 +450,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
         const url = googleAuthStartUrl();
-        if (isNativeHybrid()) {
+        if (isCapacitorNative()) {
           try {
             const cap = await importCapacitorPlugin<CapacitorBrowserPlugin>("@capacitor/browser");
             if (cap) {

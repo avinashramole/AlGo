@@ -50,4 +50,5 @@ android/captures/
 *.apk
 !releases/Trade2Smart-web.apk
 *.aab
+*.ipa
 deploy/__pycache__/

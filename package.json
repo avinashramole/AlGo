@@ -15,14 +15,16 @@
     "start:vps": "npm --prefix server start",
     "vps": "npm run build && npm run start:vps",
     "preview": "vite preview",
-    "cap:sync": "npx cap sync android",
-    "apk": "bash scripts/build-hybrid-apk.sh"
+    "cap:sync": "npx cap sync",
+    "apk": "bash scripts/build-hybrid-apk.sh",
+    "ios": "bash scripts/build-hybrid-ios.sh"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.2",
     "@capacitor/browser": "^8.0.5",
     "@capacitor/core": "^8.5.3",
     "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/ios": "^8.5.3",
     "@capacitor/share": "^8.0.3",
     "@capacitor/splash-screen": "^8.0.2",
     "lucide-react": "^0.544.0",
