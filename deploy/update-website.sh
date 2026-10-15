@@ -41,7 +41,9 @@ if [ -d .git ]; then
     echo "FAIL: origin/$BRANCH is missing after fetch."
     exit 1
   fi
-  git checkout -B "$BRANCH" "origin/$BRANCH"
+  echo "discarding local VPS checkout edits so origin/$BRANCH can land"
+  git reset --hard HEAD || true
+  git checkout -f -B "$BRANCH" "origin/$BRANCH"
   git reset --hard "origin/$BRANCH"
   WANTED=$(git rev-parse "origin/$BRANCH")
   HAVE=$(git rev-parse HEAD)
