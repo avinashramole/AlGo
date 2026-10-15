@@ -41,6 +41,9 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(algo, /Paper test only · no live · no copy/);
   assert.match(algo, /isolated && !shivam/);
   assert.match(algo, /data-shivam-map="true"/);
+  assert.match(algo, /data-test-broker-order="true"/);
+  assert.match(algo, /data-shivam-live-check/);
+  assert.match(algo, /algo.enabled && algo.runMode === "live"/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk = false/);
   assert.match(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);

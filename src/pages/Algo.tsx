@@ -1,7 +1,7 @@
 import { Activity, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { downloadBacktestReport, downloadShivamT2sReport, updateAlgo, type ClientRow } from "../api/client";
+import { downloadBacktestReport, downloadShivamT2sReport, getAlgoLiveStatus, testAlgoBrokerOrder, updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { OneMinuteHistoryBar } from "../components/dashboard/OneMinuteHistoryBar";
@@ -258,9 +258,10 @@ function MirMonitor({ algo }: { algo: AlgoStrategy }) {
 
 function statusLabel(algo: AlgoStrategy) {
   if (algo.runMode === "backtest" || algo.status === "BACKTEST") return "RESEARCH";
+  if (algo.enabled && algo.runMode === "live") return "LIVE";
   if (algo.enabled && algo.runMode === "paper") return "PAPER";
-  if (algo.enabled || algo.status === "LIVE") return "LIVE";
-  if (algo.status === "PAPER") return "PAPER";
+  if (algo.enabled && algo.status === "PAPER") return "PAPER";
+  if (algo.enabled && algo.status === "LIVE") return "LIVE";
   return "STOPPED";
 }
 
@@ -496,6 +497,38 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
     }
   };
 
+  const testBroker = async (algo: AlgoStrategy) => {
+    const current = statusLabel(algo);
+    setBusyId(`test-${algo.id}`);
+    try {
+      let check: Awaited<ReturnType<typeof getAlgoLiveStatus>> | null = null;
+      try {
+        check = await getAlgoLiveStatus(algo.id);
+      } catch {
+        check = null;
+      }
+      const label = check?.status || current;
+      const contract = check?.contract?.symbol || "ATM CE";
+      const broker = check?.brokerName || check?.brokerId || "Dhan";
+      const ready = check?.brokerReady ? `${broker} is LIVE` : `${broker} is NOT LIVE`;
+      if (
+        !window.confirm(
+          `Send 1 lot BUY ${contract} to ${broker} to test the broker?\n\n${algo.name} is ${label}. ${ready}. Mapped clients will not copy. This is a real order if the broker is LIVE.`,
+        )
+      ) {
+        return;
+      }
+      const result = await testAlgoBrokerOrder(algo.id, true);
+      await refresh();
+      const sent = result.contract?.symbol || contract;
+      window.alert(result.queued || result.sentLive ? `Sent 1 lot BUY ${sent} to ${broker}. Mapped clients were not copied.` : result.error || "Test order sent");
+    } catch (err) {
+      window.alert(catchDeskError(err, "Could not send test order"));
+    } finally {
+      setBusyId("");
+    }
+  };
+
   return (
     <div className="space-y-3" data-algo-desk={testDesk ? "test" : "live"}>
       <div className="desk-tabs" data-algo-tabs="true">
@@ -615,7 +648,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                     (data.positions || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId),
                   )}
                   isolated={testDesk || isShivamT2sKind(algo)}
-                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === "all"}
+                  busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === `test-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
                   onEdit={() => {
@@ -656,6 +689,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                   onStart={() => void startOrPause(algo)}
                   onStartPaper={() => void startInMode(algo, "paper")}
                   onStartLive={() => void startInMode(algo, "live")}
+                  onTestBroker={() => void testBroker(algo)}
                   onExit={() => void exitStrategy(algo)}
                   onDelete={() => void remove(algo)}
                 />
@@ -986,6 +1020,7 @@ function AlgoCard({
   onStart,
   onStartPaper,
   onStartLive,
+  onTestBroker,
   onExit,
   onDelete,
 }: {
@@ -1007,10 +1042,13 @@ function AlgoCard({
   onStart: () => void;
   onStartPaper: () => void;
   onStartLive: () => void;
+  onTestBroker: () => void;
   onExit: () => void;
   onDelete: () => void;
 }) {
   const [shivamDetails, setShivamDetails] = useState(false);
+  const { data } = useMarket();
+  const dhanLive = Boolean(data.dhanFeed?.live);
   const meta = kindMeta(algo);
   const shivam = isShivamT2sKind(algo);
   const liveMtm = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
@@ -1044,7 +1082,7 @@ function AlgoCard({
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"} data-mir-strategy={isMultiIndexReversalKind(algo) ? "true" : undefined} data-shivam-strategy={shivam ? "true" : undefined}>
+    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={status === "LIVE" ? "true" : "false"} data-run-status={status} data-mir-strategy={isMultiIndexReversalKind(algo) ? "true" : undefined} data-shivam-strategy={shivam ? "true" : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--card-muted)] text-slate-400">
@@ -1088,6 +1126,15 @@ function AlgoCard({
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
+              </div>
+            ) : null}
+            {shivam ? (
+              <div
+                className="mt-1 text-[11px] font-semibold text-slate-500"
+                data-shivam-live-check={status === "LIVE" ? "live" : status === "PAPER" ? "paper" : "stopped"}
+              >
+                {status === "LIVE" ? "Strategy is LIVE" : status === "PAPER" ? "Strategy is PAPER — not live" : "Strategy is STOPPED — not live"}
+                {dhanLive ? " · Dhan LIVE" : " · Dhan not LIVE"}
               </div>
             ) : null}
             {shivam ? null : <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>}
@@ -1365,6 +1412,17 @@ function AlgoCard({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          {shivam ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onTestBroker}
+              className="h-10 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-60"
+              data-test-broker-order="true"
+            >
+              Test 1 order
+            </button>
+          ) : null}
           <button type="button" disabled={busy} onClick={onExit} className="h-10 rounded-xl px-3 text-sm font-semibold text-down disabled:opacity-60">
             Exit position
           </button>

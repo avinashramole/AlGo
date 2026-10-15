@@ -1331,6 +1331,50 @@ export function toggleAlgo(id: string, enabled?: boolean) {
   });
 }
 
+export type AlgoLiveStatus = {
+  id?: string;
+  name?: string;
+  enabled?: boolean;
+  runMode?: string;
+  status?: string;
+  live?: boolean;
+  paper?: boolean;
+  stopped?: boolean;
+  research?: boolean;
+  brokerId?: string;
+  brokerName?: string;
+  brokerReady?: boolean;
+  liveAuthorized?: boolean;
+  lots?: number;
+  skipMemberCopy?: boolean;
+  queued?: boolean;
+  sentLive?: boolean;
+  ok?: boolean;
+  error?: string;
+  contract?: {
+    symbol?: string;
+    option?: string;
+    strike?: number;
+    expiry?: string;
+    qty?: number;
+    lots?: number;
+    securityId?: string;
+  };
+  order?: DeskOrder;
+  snapshot?: Snapshot;
+};
+
+export function getAlgoLiveStatus(id: string) {
+  return request<AlgoLiveStatus>(`/algos/${id}/live-status`);
+}
+
+export function testAlgoBrokerOrder(id: string, confirm = true) {
+  return request<AlgoLiveStatus>(`/algos/${id}/test-order`, {
+    method: "POST",
+    body: JSON.stringify({ confirm }),
+  });
+}
+
 export type PlaceOrderResult = {
   ok: boolean;
   live?: boolean;

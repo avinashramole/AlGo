@@ -683,6 +683,7 @@ function memberCopiesForOrder(payload = {}, algo = {}) {
 export function dropStoppedStrategyLiveEntries(queued = pendingLiveAlgoOrders) {
   for (let i = queued.length - 1; i >= 0; i -= 1) {
     const row = queued[i];
+    if (isBrokerTestOrder(row)) continue;
     if (liveOrderSide(row) !== "BUY") continue;
     if (row?.paper || orderBrokerId(row) === "paper") continue;
     if (row.copyUserId) {
@@ -1044,20 +1045,25 @@ export function fundsHoldBlocks(algo, barTime) {
   return t > 0 ? t === hold : false;
 }
 
+function isBrokerTestOrder(payload) {
+  return String(payload?.role || "").toLowerCase() === "broker-test";
+}
+
 function enqueueLiveAlgoOrder(payload) {
   const strategy = String(payload?.strategy || "");
   const side = liveOrderSide(payload);
   const paperFill = payload?.paper === true || orderBrokerId(payload) === "paper";
   const copyUserId = String(payload?.copyUserId || "");
+  const brokerTest = isBrokerTestOrder(payload);
   if (side === "BUY" && !paperFill) {
-    if (!copyUserId && !liveBuyAllowedForStrategy(strategy)) {
+    if (!brokerTest && !copyUserId && !liveBuyAllowedForStrategy(strategy)) {
       return { ok: true, queued: false, status: "PAUSED", blocked: true };
     }
-    if (copyUserId && !strategyAllowsLiveMemberCopies(strategy)) {
+    if (!brokerTest && copyUserId && !strategyAllowsLiveMemberCopies(strategy)) {
       return { ok: true, queued: false, status: "PAUSED", blocked: true };
     }
     const role = String(payload?.role || payload?.exitReason || "").toLowerCase();
-    if (!copyUserId && !["hedge", "exit", "sl", "target", "trail", "reversal"].includes(role)) {
+    if (!brokerTest && !copyUserId && !["hedge", "exit", "sl", "target", "trail", "reversal"].includes(role)) {
       const algo = strategyCard(strategy);
       if (dailyEntryBlocked(algo)) {
         return { ok: true, queued: false, status: "MAX_TRADES", blocked: true };
@@ -1113,11 +1119,12 @@ function enqueueLiveAlgoOrder(payload) {
     }
   } else if (side === "BUY") {
     const freshAdminEntry = !copyUserId && Boolean(card?.allowFreshLiveEntry);
-    if (!copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy, card)) {
+    if (!brokerTest && !copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy, card)) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
     const niftyBuy = Boolean(PositionManager.niftyOptionLeg(payload));
     const openSameStrategy =
+      !brokerTest &&
       !copyUserId &&
       !freshAdminEntry &&
       niftyBuy &&
@@ -1135,7 +1142,7 @@ function enqueueLiveAlgoOrder(payload) {
     }
   }
   pendingLiveAlgoOrders.push({ ...payload, brokerId, copyUserId });
-  if (!copyUserId && side === "BUY" && (card?.id || card?.name)) {
+  if (!brokerTest && !copyUserId && side === "BUY" && (card?.id || card?.name)) {
     card.allowFreshLiveEntry = false;
   }
   return { ok: true, queued: true, status: "PENDING" };
@@ -1371,8 +1378,9 @@ export function queueLiveAlgoOrder(payload) {
   const stamped = securityId ? { ...priced, securityId } : priced;
   const algo = orderAlgo(stamped);
   const testDesk = isTestDeskAlgo(algo) || Boolean(stamped.testDesk);
+  const forceLiveBroker = payload.forceLiveBroker === true && payload.paper !== true;
   const shivamLive =
-    shivamLiveDesk(algo) &&
+    (shivamLiveDesk(algo) || forceLiveBroker) &&
     payload.paper !== true &&
     String(stamped.brokerId || algo.brokerId || "").toLowerCase() !== "paper";
   const adminPaper =
@@ -1391,7 +1399,9 @@ export function queueLiveAlgoOrder(payload) {
     testDesk,
     ...(adminPaper ? { paper: true } : {}),
   };
-  const brokers = testDesk && !shivamLive
+  const brokers = forceLiveBroker
+    ? [orderBrokerForDesk(deskStamped?.brokerId || "dhan")]
+    : testDesk && !shivamLive
     ? ["paper"]
     : liveAutoTradeBrokers({
         strategyName: deskStamped?.strategy,
@@ -3994,6 +4004,180 @@ function candlesForBacktest(tf, allowSample = true, symbol = "NIFTY") {
 export function getAlgo(id) {
   const algo = state.algos.find((item) => item.id === id);
   return algo ? clone(algo) : null;
+}
+
+function liveBrokerIdForAlgo(algo) {
+  const requested = String(algo?.brokerId || "").toLowerCase();
+  if (requested && requested !== "paper") return requested;
+  return "dhan";
+}
+
+export function strategyTradingStatus(algoOrId) {
+  const algo =
+    typeof algoOrId === "string"
+      ? (state.algos || []).find((row) => row.id === algoOrId)
+      : algoOrId && typeof algoOrId === "object"
+        ? (state.algos || []).find((row) => row.id === algoOrId.id) || algoOrId
+        : null;
+  if (!algo) return { error: "Strategy not found" };
+  const enabled = Boolean(algo.enabled);
+  const runMode = String(algo.runMode || "paper");
+  const live = enabled && runMode === "live";
+  const paper = enabled && runMode === "paper";
+  const research = runMode === "backtest";
+  const stopped = !enabled && !research;
+  const brokerId = liveBrokerIdForAlgo(algo);
+  const brokerReady = brokerId === "dhan" ? isDhanFeedLive() : isLiveBrokerReady(brokerId);
+  const brokerName = publicBrokers().brokers.find((row) => row.id === brokerId)?.name || brokerId;
+  return {
+    id: algo.id,
+    name: algo.name,
+    enabled,
+    runMode,
+    status: research ? "BACKTEST" : live ? "LIVE" : paper ? "PAPER" : "STOPPED",
+    live,
+    paper,
+    stopped,
+    research,
+    brokerId,
+    brokerName,
+    brokerReady,
+    liveAuthorized: algo.liveAuthorized === true,
+    testDesk: Boolean(algo.testDesk),
+  };
+}
+
+function resolveBrokerTestTrade(algo) {
+  if (isShivamT2sAlgo(algo)) {
+    const config = shivamT2sConfig(algo);
+    const root = config.symbol;
+    const vs = shivamState(algo);
+    const und = getUnderlying(root);
+    const pack = chainForSymbol(root);
+    const listed = niftyListedExpiries(pack, root);
+    const expiry =
+      config.expiryKind === "weekly"
+        ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
+        : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
+    const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
+    const spot = Number(getChainSpot(root)) || Number(pack?.meta?.spot) || Number(lastIndex?.close) || 0;
+    const step = Number(und.step) || 50;
+    const option = vs.cardReady === true && (vs.option === "PE" || vs.option === "CE") ? vs.option : "CE";
+    const strike =
+      vs.cardReady === true && Number(vs.strike) > 0
+        ? Number(vs.strike)
+        : strikeForPolicy(spot, step, config.strikePolicy, config.strikeOffset, option);
+    const securityId = optionLegId(strike, option, root, expiry) || (vs.cardReady ? String(vs.securityId || "") : "");
+    const lotSize = instrumentLotSize(root, strike, Number(und.lot) || 65) || 65;
+    const ltp = optionPremium(root, strike, option) || Number(vs.premium) || 0;
+    const symbol = strike ? `${root} ${strike} ${option}` : `${root} ATM ${option}`;
+    return {
+      kind: "option",
+      symbol,
+      option,
+      strike,
+      expiry,
+      securityId: securityId ? String(securityId) : "",
+      lotSize,
+      lots: 1,
+      qty: lotSize,
+      ltp,
+      ready: Boolean(strike) && Boolean(securityId),
+    };
+  }
+  const trade = resolveAlgoTrade(algo) || {};
+  const root = String(algo.symbol || "NIFTY");
+  const option = trade.option === "PE" ? "PE" : "CE";
+  const strike = Number(trade.strike) || 0;
+  const lotSize = instrumentLotSize(root, strike, Number(getUnderlying(root)?.lot) || 65) || 65;
+  const securityId = String(trade.securityId || optionLegId(strike, option, root, trade.expiry) || "");
+  return {
+    kind: trade.kind || "option",
+    symbol: trade.symbol || `${root} ${strike || "ATM"} ${option}`,
+    option,
+    strike,
+    expiry: trade.expiry || "",
+    securityId,
+    lotSize,
+    lots: 1,
+    qty: lotSize,
+    ltp: Number(trade.ltp) || 0,
+    ready: Boolean(securityId) && (trade.kind === "future" || Boolean(strike)),
+  };
+}
+
+export function placeStrategyBrokerTestOrder(id, patch = {}) {
+  const algo = (state.algos || []).find((row) => row.id === id);
+  if (!algo) return { error: "Strategy not found" };
+  const status = strategyTradingStatus(algo);
+  const trade = resolveBrokerTestTrade(algo);
+  const confirm = patch.confirm === true || patch.confirm === "true";
+  const base = { ...status, contract: trade, lots: 1, skipMemberCopy: true, confirm };
+  if (isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo)) {
+    return { ...base, ok: false, error: "Algo Test paper cards cannot send a live broker test order." };
+  }
+  if (!confirm) {
+    return { ...base, ok: false, error: "Confirm Test 1 order to send 1 lot to the broker." };
+  }
+  if (!status.brokerReady) {
+    return {
+      ...base,
+      ok: false,
+      error: `Test 1 order needs ${status.brokerName || status.brokerId} LIVE — connect that broker on Brokers first.`,
+    };
+  }
+  if (!liveOrdersArmed) {
+    return { ...base, ok: false, error: "Live orders are disarmed. Start the Dhan feed on Brokers first." };
+  }
+  if (trade.kind !== "future" && !(Number(trade.strike) > 0)) {
+    return { ...base, ok: false, error: "No ATM strike yet. Wait for the live NIFTY feed, then try again." };
+  }
+  if (!trade.securityId) {
+    const when = trade.expiry ? ` (${trade.expiry})` : "";
+    return {
+      ...base,
+      ok: false,
+      error: `No live Dhan contract for ${trade.symbol}${when}. Pick the contract on Chain, then try again.`,
+    };
+  }
+  const result = queueLiveAlgoOrder({
+    symbol: trade.symbol,
+    name: trade.symbol,
+    side: "BUY",
+    qty: trade.qty,
+    lots: 1,
+    lotSize: trade.lotSize,
+    price: trade.ltp || 0,
+    kind: trade.kind || "option",
+    option: trade.option,
+    strike: trade.strike,
+    expiry: trade.expiry,
+    securityId: trade.securityId,
+    product: "MIS",
+    type: "MARKET",
+    strategy: algo.name,
+    strategyId: algo.id,
+    testDesk: Boolean(algo.testDesk),
+    exchangeSegment: exchangeSegmentFor(trade.symbol || algo.symbol),
+    brokerId: status.brokerId,
+    role: "broker-test",
+    skipMemberCopy: true,
+    forceLiveBroker: true,
+    paper: false,
+  });
+  const queued = Boolean(result?.queued);
+  return {
+    ...base,
+    ok: queued,
+    queued,
+    sentLive: queued,
+    result,
+    error: queued
+      ? undefined
+      : result?.status === "FEED_DOWN"
+        ? "Dhan feed is down."
+        : `Test order was not queued (${result?.status || "blocked"}).`,
+  };
 }
 
 export function withLiveAlgo(id, fn) {
