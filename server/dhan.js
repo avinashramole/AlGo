@@ -33,7 +33,7 @@ import {
   nseMarketSession,
   mcxMarketSession,
 } from "./market.js";
-import { buildScripChain, chainUnderlyingRequest, fallbackFrontFutures, listFutures, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripExpiries, scripMasterLoaded } from "./frontFutures.js";
+import { buildScripChain, chainUnderlyingRequest, fallbackFrontFutures, listFutures, optionScripReady, parseOptionContract, reloadScripMaster, resolveFrontFutures, resolveTradableSecurityId, scripCacheFresh, scripExpiries } from "./frontFutures.js";
 import { recordLiveChainSnapshot } from "./niftyOptionHistory.js";
 import { recordLiveIndexHistory } from "./indexHistory.js";
 import { dhanFilledQty, dhanOrderFillPrice } from "./dhanOrderPrice.js";
@@ -2074,7 +2074,7 @@ export async function placeDhanOrder(payload = {}) {
       option: payload.option,
       kind: payload.kind,
     });
-    if ((!scripSecurityId || scripSecurityId === "0") && !scripMasterLoaded()) {
+    if ((!scripSecurityId || scripSecurityId === "0") && !optionScripReady() && !scripCacheFresh()) {
       await reloadScripMaster();
       scripSecurityId = await resolveTradableSecurityId({
         symbol: payload.symbol,

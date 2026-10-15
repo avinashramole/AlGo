@@ -8,6 +8,8 @@ const SCRIP_FRONT_FILE = process.env.T2S_SCRIP_CACHE || path.join(__dirname, "da
 
 const SCRIP_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const CACHE_MS = 12 * 60 * 60 * 1000;
+/** After a failed CSV parse the disk cache has futures but no option ids. Retry soon, not in 12h. */
+const EMPTY_OPTIONS_RETRY_MS = 30_000;
 
 const UNDERLYINGS = [
   { parent: "NIFTY 50", root: "NIFTY", exchange: "NSE", segment: "NSE_FNO", lot: 65, indexId: 13, indexSegment: "IDX_I", futInstrument: "FUTIDX", optInstrument: "OPTIDX" },
@@ -240,8 +242,20 @@ function withStaleFlag(instruments, stale) {
   return (instruments || []).map((row) => ({ ...row, stale: Boolean(stale) }));
 }
 
+export function optionScripReady(bag = cache) {
+  return bag?.options instanceof Map && bag.options.size > 0;
+}
+
+export function scripCacheFresh(bag = cache, now = Date.now()) {
+  const at = Number(bag?.at) || 0;
+  if (!at) return false;
+  const age = now - at;
+  if (optionScripReady(bag)) return age < CACHE_MS;
+  return age < EMPTY_OPTIONS_RETRY_MS;
+}
+
 async function loadScripMaster() {
-  if (cache.at && Date.now() - cache.at < CACHE_MS) return cache;
+  if (scripCacheFresh()) return cache;
   if (loading) return loading;
 
   loading = (async () => {
@@ -513,21 +527,45 @@ export function scripMasterLoaded() {
   return Number(cache.at) > 0;
 }
 
-export function seedOptionScripForTests(entries = []) {
+export function indexOptionScrip(entries = []) {
   if (!cache.options || !(cache.options instanceof Map)) cache.options = new Map();
   if (!cache.byExpiry || !(cache.byExpiry instanceof Map)) cache.byExpiry = new Map();
+  let n = 0;
   for (const row of entries) {
     const root = optionRoot(row.symbol || row.root);
     const exp = normalizeExpiry(row.expiry);
     const px = Number(row.strike);
     const opt = optionType(row.option);
     const id = String(row.securityId || "").trim();
-    if (!root || !exp || !px || (opt !== "CE" && opt !== "PE") || !id) continue;
+    if (!root || !exp || !px || (opt !== "CE" && opt !== "PE") || !id || id === "0") continue;
     cache.options.set(optionKey(root, exp, px, opt), id);
     const bucket = strikeBucket(cache.byExpiry, root, exp, px);
     if (opt === "PE") bucket.putId = id;
     else bucket.callId = id;
+    n += 1;
   }
+  return n;
+}
+
+/** Keep CE/PE security ids from a live chain so a later desk expiry cannot wipe this week's contract. */
+export function rememberChainOptionIds(rows = [], { symbol, expiry } = {}) {
+  const root = optionRoot(symbol);
+  const exp = normalizeExpiry(expiry);
+  if (!root || !exp) return 0;
+  const entries = [];
+  for (const row of rows || []) {
+    const strike = Number(row?.strike);
+    if (!(strike > 0)) continue;
+    const callId = String(row.callId || row.callSecurityId || "").trim();
+    const putId = String(row.putId || row.putSecurityId || "").trim();
+    if (callId && callId !== "0") entries.push({ root, expiry: exp, strike, option: "CE", securityId: callId });
+    if (putId && putId !== "0") entries.push({ root, expiry: exp, strike, option: "PE", securityId: putId });
+  }
+  return indexOptionScrip(entries);
+}
+
+export function seedOptionScripForTests(entries = []) {
+  return indexOptionScrip(entries);
 }
 
 export async function reloadScripMaster() {
