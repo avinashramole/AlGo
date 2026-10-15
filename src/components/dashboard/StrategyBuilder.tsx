@@ -38,10 +38,14 @@ import {
   isNiftyTest1Kind,
   isNiftyTest2Kind,
   isMultiIndexReversalKind,
+  isShivamT2sKind,
   MULTI_INDEX_REVERSAL_NAME,
   MULTI_INDEX_SCRIPTS,
   MULTI_INDEX_TIMEFRAMES,
   MULTI_INDEX_OFFSETS,
+  SHIVAM_T2S_NAME,
+  SHIVAM_T2S_SCRIPTS,
+  SHIVAM_T2S_TIMEFRAMES,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
@@ -108,6 +112,8 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 ? "nifty-first-candle"
               : isMultiIndexReversalKind(algo)
                 ? "multi-index-reversal"
+              : isShivamT2sKind(algo)
+                ? "shivam-t2s"
               : isNiftyTest2Kind(algo)
                 ? "nifty-test2"
               : isNiftyTest1Kind(algo)
@@ -164,7 +170,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
       });
     } else {
       setForm({
-        ...emptyStrategy("nifty-first-candle"),
+        ...emptyStrategy(testDesk ? "shivam-t2s" : "nifty-first-candle"),
         brokerId: testDesk ? "paper" : data.activeBrokerId || "dhan",
         runMode: testDesk ? "paper" : "live",
         testDesk,
@@ -191,6 +197,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
   const test1 = isNiftyTest1Kind(form) || isNiftyTest1Kind(algo || undefined);
   const test2 = isNiftyTest2Kind(form) || isNiftyTest2Kind(algo || undefined);
   const mir = isMultiIndexReversalKind(form) || isMultiIndexReversalKind(algo || undefined);
+  const shivam = isShivamT2sKind(form) || isShivamT2sKind(algo || undefined);
   const engine = isNiftyOptionEngineKind(form) || test1 || test2;
   const preview = useMemo(() => {
     if (isNiftyVwapHedgeKind(form)) {
@@ -212,6 +219,10 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           ? `${root} INTRADAY · enter ${form.startTimeIst || "09:35"} IST · square-off ${form.endTimeIst || "15:15"} IST · MIS same day`
           : `${root} BTST · buy today ${form.startTimeIst || "09:35"} IST · sell tomorrow ${form.exitTimeIst || "15:15"} IST · NRML overnight`;
       return `TEST2 · ${hold} · SELL ${sellOpt} CE+PE premium ≥${form.sellPremium || 80} · BUY ${hedgeOpt} CE+PE premium ≥${form.hedgePremium || 20} · hedge SL ${form.hedgeSlPct || 20}% · overall +${form.overallTargetPct ?? 5}% exits all`;
+    }
+    if (isShivamT2sKind(form) || shivam) {
+      const script = SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0];
+      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ${form.strikePolicy || "ATM"} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · paper until live is authorized`;
     }
     if (isMultiIndexReversalKind(form) || mir) {
       const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0];
@@ -257,7 +268,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
       value: form.sellValue,
     });
     return `${contractLabel(form)} · ${lots} lot × ${lotSize} = ${lots * lotSize} qty · BUY when ${buy} · SELL when ${sell}`;
-  }, [form, lotSize, lots, crudeFirst, test1, test2, mir]);
+  }, [form, lotSize, lots, crudeFirst, test1, test2, mir, shivam]);
 
   const set = (patch: Partial<AlgoStrategy>) => setForm((current) => ({ ...current, ...patch }));
   const setFirstCandleTimeframe = (picked: string, customMinutes?: number) => {
@@ -288,7 +299,16 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
   };
 
   const submit = async () => {
-    if (mir) {
+    if (shivam) {
+      if (!SHIVAM_T2S_SCRIPTS.some((row) => row.id === (form.symbol || "NIFTY"))) {
+        setError("Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, or SENSEX.");
+        return;
+      }
+      if (!(Number(form.slValue) > 0) || !(Number(form.targetValue) > 0)) {
+        setError("Stop-loss and target must be greater than 0.");
+        return;
+      }
+    } else if (mir) {
       if (!MULTI_INDEX_SCRIPTS.some((row) => row.id === (form.symbol || "NIFTY"))) {
         setError("Pick NIFTY 50, BANK NIFTY, FINNIFTY, or SENSEX.");
         return;
@@ -305,7 +325,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     setBusy(true);
     setError("");
     const seal = (payload: Record<string, unknown>) =>
-      testDesk
+      testDesk || shivam
         ? {
             ...payload,
             testDesk: true,
@@ -319,7 +339,32 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     try {
       await saveAlgo(
         seal(
-        mir
+        shivam
+          ? {
+              ...form,
+              id: algo?.id,
+              name: SHIVAM_T2S_NAME,
+              kind: "shivam-t2s",
+              strategyType: "SHIVAM_T2S",
+              indicator: "SHIVAM_T2S",
+              symbol: SHIVAM_T2S_SCRIPTS.some((row) => row.id === form.symbol) ? form.symbol : "NIFTY",
+              instrument: "option",
+              side: "BUY",
+              ceTimeframe: SHIVAM_T2S_TIMEFRAMES.includes(form.ceTimeframe as (typeof SHIVAM_T2S_TIMEFRAMES)[number]) ? form.ceTimeframe : "5m",
+              peTimeframe: SHIVAM_T2S_TIMEFRAMES.includes(form.peTimeframe as (typeof SHIVAM_T2S_TIMEFRAMES)[number]) ? form.peTimeframe : "5m",
+              indexTimeframe: SHIVAM_T2S_TIMEFRAMES.includes(form.indexTimeframe as (typeof SHIVAM_T2S_TIMEFRAMES)[number]) ? form.indexTimeframe : "5m",
+              timeframe: form.indexTimeframe || "5m",
+              strikePolicy: form.strikePolicy === "ITM" || form.strikePolicy === "OTM" ? form.strikePolicy : "ATM",
+              slMode: form.slMode === "points" ? "points" : "percentage",
+              targetMode: form.targetMode === "points" ? "points" : "percentage",
+              capitalMode: form.capitalMode === "percent" ? "percent" : "amount",
+              liveAuthorized: false,
+              runMode: form.runMode === "backtest" ? "backtest" : "paper",
+              brokerId: "paper",
+              testDesk: true,
+              enabled: Boolean(algo?.enabled),
+            }
+          : mir
           ? {
               ...form,
               id: algo?.id,
@@ -434,6 +479,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         data-edit-strategy={editing ? algo?.id || "open" : "new"}
         data-test2-edit={test2 ? "true" : "false"}
         data-mir-strategy={mir ? "true" : undefined}
+        data-shivam-strategy={shivam ? "true" : undefined}
         data-ui={test2 ? "test2-script-v5" : undefined}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -529,6 +575,26 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               });
             }}
           />
+          {testDesk ? (
+          <TypeCard
+            active={shivam}
+            title="SHIVAM T2S"
+            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
+            onClick={() => {
+              const next = emptyStrategy("shivam-t2s");
+              set({
+                ...next,
+                name: SHIVAM_T2S_NAME,
+                runMode: "paper",
+                brokerId: "paper",
+                liveAuthorized: false,
+                testDesk: true,
+                lots: form.lots || 1,
+                enabled: false,
+              });
+            }}
+          />
+          ) : null}
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
@@ -549,8 +615,8 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         </div>
         )}
 
-        {mir ? (
-        <div className="mt-1.5 grid grid-cols-2 gap-1.5" data-mir-trade-mode="true">
+        {mir || shivam ? (
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5" data-mir-trade-mode={mir ? "true" : undefined} data-shivam-trade-mode={shivam ? "true" : undefined}>
           <TypeCard
             active={(form.runMode || "paper") !== "live"}
             title="Paper"
@@ -562,7 +628,13 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             active={form.runMode === "live"}
             title="Live"
             text="Real CE/PE orders go to the selected broker after you press Start. Saving does not start LIVE."
-            onClick={() => set({ runMode: "live", brokerId: data.activeBrokerId || "dhan" })}
+            onClick={() =>
+              set(
+                shivam
+                  ? { runMode: "live", brokerId: data.activeBrokerId || "dhan", liveAuthorized: form.liveAuthorized === true }
+                  : { runMode: "live", brokerId: data.activeBrokerId || "dhan" },
+              )
+            }
           />
           )}
         </div>
@@ -593,14 +665,16 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           />
         ) : null}
 
-        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2 || mir) && "sm:hidden", (test2 || mir) && "hidden")}>
+        <label className={cn("mt-2.5 block text-xs font-semibold text-slate-500", (editing || test2 || mir || shivam) && "sm:hidden", (test2 || mir || shivam) && "hidden")}>
           Strategy name
           <input
             className={fieldClass}
-            value={mir ? MULTI_INDEX_REVERSAL_NAME : test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
+            value={shivam ? SHIVAM_T2S_NAME : mir ? MULTI_INDEX_REVERSAL_NAME : test2 ? "TEST2" : test1 ? "TEST1" : firstCandle ? NIFTY_FIRST_CANDLE_NAME : crudeFirst ? CRUDE_FIRST_CANDLE_NAME : form.name || ""}
             onChange={(event) =>
               set({
-                name: mir
+                name: shivam
+                  ? SHIVAM_T2S_NAME
+                  : mir
                   ? MULTI_INDEX_REVERSAL_NAME
                   : test2
                   ? "TEST2"
@@ -613,7 +687,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                         : event.target.value,
               })
             }
-            readOnly={mir || test2 || test1 || firstCandle || crudeFirst}
+            readOnly={shivam || mir || test2 || test1 || firstCandle || crudeFirst}
             placeholder="My NIFTY VWAP"
           />
         </label>
@@ -623,14 +697,22 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <input
             type="number"
             min={1}
-            max={20}
+            max={shivam ? 100 : 20}
             inputMode="numeric"
             aria-label="Daily trade limit"
             className={fieldClass}
             value={Math.max(1, Math.round(Number(form.maxTradesPerDay) || (isNiftyTest2Kind(form) || test2 ? 1 : 5)))}
-            onChange={(event) => set({ maxTradesPerDay: Math.max(1, Math.min(20, Math.round(Number(event.target.value) || 1))) })}
+            onChange={(event) =>
+              set({
+                maxTradesPerDay: Math.max(1, Math.min(shivam ? 100 : 20, Math.round(Number(event.target.value) || 1))),
+              })
+            }
           />
-          <span className="desk-help mt-1 block font-medium text-slate-400">Orders this strategy can place today, from 1 to 20. Saving does not start LIVE.</span>
+          <span className="desk-help mt-1 block font-medium text-slate-400">
+            {shivam
+              ? `Filled BUY entries today count toward the limit, including re-entries. Rejected orders do not. Used ${Number(algo?.shivamState?.sessionTrades || 0)} · remaining ${Math.max(0, Number(form.maxTradesPerDay || 5) - Number(algo?.shivamState?.sessionTrades || 0))}. Range 1–100.`
+              : "Orders this strategy can place today, from 1 to 20. Saving does not start LIVE."}
+          </span>
         </label>
 
         {test2 ? (
@@ -712,6 +794,109 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               </label>
             </div>
           </div>
+        ) : shivam ? (
+          <div className="mt-2.5 space-y-1.5" data-shivam-settings="true">
+            <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
+              Index or matching future candle must be complete. BUY CE: future green and CE green. BUY PE: future red and PE green. A doji is neither. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+              <label className="text-xs font-semibold text-slate-500">
+                Index
+                <select
+                  className={fieldClass}
+                  value={form.symbol || "NIFTY"}
+                  onChange={(event) => {
+                    const row = SHIVAM_T2S_SCRIPTS.find((item) => item.id === event.target.value) || SHIVAM_T2S_SCRIPTS[0];
+                    set({ symbol: row.id, instrument: "option", side: "BUY" });
+                  }}
+                >
+                  {SHIVAM_T2S_SCRIPTS.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label} · {row.futures}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Futures
+                <input className={fieldClass} value={(SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0]).futures} readOnly />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Index TF
+                <select className={fieldClass} value={form.indexTimeframe || "5m"} onChange={(event) => set({ indexTimeframe: event.target.value, timeframe: event.target.value })}>
+                  {SHIVAM_T2S_TIMEFRAMES.map((row) => (
+                    <option key={row} value={row}>{row}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                CE TF
+                <select className={fieldClass} value={form.ceTimeframe || "5m"} onChange={(event) => set({ ceTimeframe: event.target.value })}>
+                  {SHIVAM_T2S_TIMEFRAMES.map((row) => (
+                    <option key={row} value={row}>{row}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                PE TF
+                <select className={fieldClass} value={form.peTimeframe || "5m"} onChange={(event) => set({ peTimeframe: event.target.value })}>
+                  {SHIVAM_T2S_TIMEFRAMES.map((row) => (
+                    <option key={row} value={row}>{row}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Strike policy
+                <select className={fieldClass} value={form.strikePolicy || "ATM"} onChange={(event) => set({ strikePolicy: event.target.value as "ATM" | "ITM" | "OTM" })}>
+                  <option value="ATM">ATM</option>
+                  <option value="ITM">ITM offset</option>
+                  <option value="OTM">OTM offset</option>
+                </select>
+              </label>
+              <NumberField label="Strike offset" value={form.strikeOffset ?? 0} step={1} onChange={(strikeOffset) => set({ strikeOffset: Math.max(0, Math.min(8, strikeOffset)) })} />
+              <label className="text-xs font-semibold text-slate-500">
+                CE confirm
+                <input className={fieldClass} value="GREEN" readOnly />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                PE confirm
+                <input className={fieldClass} value="GREEN" readOnly />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                SL mode
+                <select className={fieldClass} value={form.slMode || "percentage"} onChange={(event) => set({ slMode: event.target.value === "points" ? "points" : "percentage" })}>
+                  <option value="percentage">Percentage</option>
+                  <option value="points">Points</option>
+                </select>
+              </label>
+              <NumberField label={form.slMode === "points" ? "SL points" : "SL %"} value={form.slValue ?? 20} step={0.5} onChange={(slValue) => set({ slValue, slPct: slValue, initialSlPct: slValue })} />
+              <label className="text-xs font-semibold text-slate-500">
+                Target mode
+                <select className={fieldClass} value={form.targetMode || "percentage"} onChange={(event) => set({ targetMode: event.target.value === "points" ? "points" : "percentage" })}>
+                  <option value="percentage">Percentage</option>
+                  <option value="points">Points</option>
+                </select>
+              </label>
+              <NumberField label={form.targetMode === "points" ? "Target points" : "Target %"} value={form.targetValue ?? 40} step={0.5} onChange={(targetValue) => set({ targetValue, targetPct: targetValue })} />
+              <label className="text-xs font-semibold text-slate-500">
+                Capital
+                <select className={fieldClass} value={form.capitalMode || "amount"} onChange={(event) => set({ capitalMode: event.target.value === "percent" ? "percent" : "amount" })}>
+                  <option value="amount">Amount ₹</option>
+                  <option value="percent">Percent of funds</option>
+                </select>
+              </label>
+              <NumberField label={form.capitalMode === "percent" ? "Allocation %" : "Allocation ₹"} value={form.capitalValue ?? 50000} step={form.capitalMode === "percent" ? 1 : 1000} onChange={(capitalValue) => set({ capitalValue })} />
+              <label className="text-xs font-semibold text-slate-500 lg:col-span-2">
+                <input
+                  type="checkbox"
+                  className="mr-2 align-middle"
+                  checked={form.autoSizeLots === true}
+                  onChange={(event) => set({ autoSizeLots: event.target.checked })}
+                />
+                Auto-size lots down to the calculated maximum (off = reject oversized requests)
+              </label>
+            </div>
+          </div>
         ) : test1 && !test2 ? (
           <div className="mt-2.5 space-y-1.5">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
@@ -749,7 +934,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
           </div>
-        ) : crudeFirst || firstCandle || test2 || mir ? null : engine ? (
+        ) : crudeFirst || firstCandle || test2 || mir || shivam ? null : engine ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             {hedge
               ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
@@ -774,7 +959,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         </div>
         )}
 
-        {!engine && !crudeFirst && !niftyTest && !mir && form.instrument === "option" ? (
+        {!engine && !crudeFirst && !niftyTest && !mir && !shivam && form.instrument === "option" ? (
           <div className="mt-2.5 grid gap-2 md:grid-cols-2">
             <div>
               <div className="text-xs font-semibold text-slate-500">Call or put</div>
@@ -841,7 +1026,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             />
           </label>
           ) : null}
-          {engine || mir ? null : (
+          {engine || mir || shivam ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Underlying
             <select
@@ -863,7 +1048,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             </select>
           </label>
           )}
-          {engine || mir ? null : (
+          {engine || mir || shivam ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Side
             <select className={fieldClass} value={niftyTest ? "BOTH" : form.side || "BUY"} disabled={engine || niftyTest || crudeFirst} onChange={(event) => set({ side: event.target.value as AlgoStrategy["side"] })}>
@@ -894,7 +1079,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
-          {firstCandleTf ? null : (
+          {firstCandleTf || shivam ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
             <select
@@ -945,7 +1130,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </label>
         </div>
 
-        {engine || niftyTest || crudeFirst || mir ? null : kind === "indicator" ? (
+        {engine || niftyTest || crudeFirst || mir || shivam ? null : kind === "indicator" ? (
           <div className="mt-2.5 grid gap-2 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-500 md:col-span-2">
               Indicator
@@ -1295,7 +1480,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
 
         )}
 
-        {engine || crudeFirst || mir ? null : (
+        {engine || crudeFirst || mir || shivam ? null : (
         <div className="mt-2.5 grid gap-2 md:grid-cols-2">
           <NumberField label="Stop loss %" value={form.slPct || 0.4} step={0.05} onChange={(slPct) => set({ slPct })} />
           <NumberField label="Target %" value={form.targetPct || 0.8} step={0.05} onChange={(targetPct) => set({ targetPct })} />
@@ -1314,6 +1499,8 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               ? "nifty test stays off until you press Start strategy. Orders are NIFTY futures. Saving this form does not place orders."
               : mir
               ? "Multi-Index Reversal stays paper until you choose Live and press Start. Saving this form does not start LIVE and does not place an order."
+              : shivam
+              ? "Shivam T2S stays paper until live is authorized and you press Start. Saving this form does not start LIVE and does not place an order."
               : "Live stays off until you press Start strategy on the algo card. Saving this form does not place orders."}
           </p>
         ) : null}

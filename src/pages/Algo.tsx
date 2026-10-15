@@ -1,6 +1,6 @@
 import { Activity, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { downloadBacktestReport, updateAlgo, type ClientRow } from "../api/client";
+import { downloadBacktestReport, downloadShivamT2sReport, updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
 import { OneMinuteHistoryBar } from "../components/dashboard/OneMinuteHistoryBar";
@@ -21,6 +21,7 @@ import {
   isNiftyTest1Kind,
   isNiftyTest2Kind,
   isMultiIndexReversalKind,
+  isShivamT2sKind,
   MULTI_INDEX_SCRIPTS,
   isNiftyVwapHedgeKind,
   isNiftyVwapKind,
@@ -119,6 +120,61 @@ function ConditionDot({ label, color, ok }: { label: string; color: string; ok: 
   );
 }
 
+function shivamCardReady(algo: AlgoStrategy) {
+  const vs = algo.shivamState || {};
+  return Boolean(algo.enabled) && vs.cardReady === true && vs.cardSignal === "● ● ●";
+}
+
+function ShivamSignalChip({ algo, onOpen }: { algo: AlgoStrategy; onOpen?: () => void }) {
+  const ready = shivamCardReady(algo);
+  return (
+    <button
+      type="button"
+      data-shivam-signal={ready ? "ready" : "no-trade"}
+      onClick={() => {
+        if (ready) onOpen?.();
+      }}
+      className={cn(
+        "inline-flex items-center rounded bg-[var(--card-muted)] px-1.5 py-0.5 text-[11px] font-extrabold tracking-[0.2em]",
+        ready ? "text-emerald-600" : "text-slate-500 tracking-normal",
+      )}
+    >
+      {ready ? "● ● ●" : "NO Trade"}
+    </button>
+  );
+}
+
+function ShivamTradeDetails({ algo, onClose }: { algo: AlgoStrategy; onClose: () => void }) {
+  const vs = algo.shivamState || {};
+  const when = (ms?: number) =>
+    ms ? new Date(ms).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
+  return (
+    <div className="desk-overlay" data-shivam-details="true">
+      <div className="desk-sheet card max-w-lg p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-sm font-bold">Shivam T2S trade details</div>
+          <button type="button" className="icon-btn" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="grid gap-1 text-sm font-semibold text-slate-600">
+          <div>Index {vs.indexLabel || algo.symbol} · {vs.futuresInstrument || `${algo.symbol} FUT`}</div>
+          <div>{vs.option ? `BUY ${vs.option}` : "—"}</div>
+          <div>Contract {vs.symbol || "—"} · ID {vs.securityId || "—"}</div>
+          <div>Strike {vs.strike || "—"} · Expiry {vs.expiry || "—"}</div>
+          <div>Premium {Number(vs.premium || 0).toFixed(2)} · {when(vs.quoteAt)}</div>
+          <div>Lots requested {vs.requestedLots || 0} · approved {vs.approvedLots || 0} · exchange lot {vs.lotSize || "—"}</div>
+          <div>Order value ₹{Number(vs.orderValue || 0).toFixed(2)} · funds ₹{Number(vs.requiredFunds || 0).toFixed(2)}</div>
+          <div>
+            SL {Number(vs.slPrice || 0).toFixed(2)} ({vs.slStatus || "not broker-confirmed"}) · TGT {Number(vs.targetPrice || 0).toFixed(2)}
+          </div>
+          <div>Index candle {when(vs.indexBarTime)} · CE {when(vs.ceBarTime)} · PE {when(vs.peBarTime)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FutureCandleChip({ algo }: { algo: AlgoStrategy }) {
   const { fut, ce, pe, buy } = firstCandleDotColors(algo);
   const futOk = fut === "green" || fut === "red";
@@ -201,6 +257,13 @@ function kindMeta(algo: AlgoStrategy) {
         algo.holdStyle === "intraday"
           ? `${algo.symbol || "NIFTY"} INTRADAY · enter ${algo.startTimeIst || "09:35"} IST · square-off ${algo.endTimeIst || "15:15"} IST · MIS same day · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}% · max ${dailyTradeLimit(algo)} trades/day`
           : `${algo.symbol || "NIFTY"} BTST · buy today ${algo.startTimeIst || "09:35"} IST · sell tomorrow ${algo.exitTimeIst || "15:15"} IST · NRML overnight · SELL ${algo.sellExpiryKind === "weekly" ? "weekly" : "monthly"} CE/PE premium ≥${algo.sellPremium || 80} · BUY ${algo.hedgeExpiryKind === "monthly" ? "monthly" : "weekly"} CE/PE premium ≥${algo.hedgePremium || 20} · hedge SL ${algo.hedgeSlPct || 20}% · max ${dailyTradeLimit(algo)} trades/day`,
+    };
+  }
+  if (isShivamT2sKind(algo)) {
+    return {
+      kind: "shivam-t2s" as const,
+      category: "SHIVAM T2S",
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ${algo.strikePolicy || "ATM"} · max ${dailyTradeLimit(algo)} trades/day · paper until live is authorized`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -342,7 +405,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
   };
 
   const startInMode = async (algo: AlgoStrategy, mode: "paper" | "live") => {
-    const nextMode = testDesk ? "paper" : mode;
+    const nextMode = testDesk || isShivamT2sKind(algo) ? "paper" : mode;
     setBusyId(algo.id);
     try {
       if (algo.runMode !== nextMode) {
@@ -351,7 +414,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
           runMode: nextMode,
           brokerId: nextMode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
           enabled: true,
-          ...(testDesk ? { testDesk: true } : {}),
+          ...(testDesk || isShivamT2sKind(algo) ? { testDesk: true } : {}),
         });
         return;
       }
@@ -495,7 +558,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                   positions={uniqueOpenContracts(
                     (data.positions || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId),
                   )}
-                  isolated={testDesk}
+                  isolated={testDesk || isShivamT2sKind(algo)}
                   busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
@@ -517,8 +580,9 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                   }}
                   onReport={(format) => {
                     setBusyId(`report-${algo.id}`);
-                    void downloadBacktestReport(algo.id, format)
-                      .catch((err: unknown) => window.alert(catchDeskError(err, "Could not download backtest report")))
+                    const download = isShivamT2sKind(algo) ? downloadShivamT2sReport(algo.id, format) : downloadBacktestReport(algo.id, format);
+                    void download
+                      .catch((err: unknown) => window.alert(catchDeskError(err, "Could not download report")))
                       .finally(() => setBusyId(""));
                   }}
                   onCancelRange={() => {
@@ -546,7 +610,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
               <div className="text-base font-bold">No strategies in this view</div>
               <p className="mt-1 text-sm text-slate-400">
                 {testDesk
-                  ? "Add a paper-only test strategy. It does not send live Dhan orders or member copies."
+                  ? "Add SHIVAM T2S or another paper-only test strategy. It does not send live Dhan orders or member copies."
                   : "Add a NIFTY 5m or CRUDE OIL strategy to start the desk."}
               </p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -647,7 +711,8 @@ function dailyTradeLimit(algo: { maxTradesPerDay?: number; kind?: string }) {
   const fallback = algo.kind === "nifty-test2" ? 1 : 5;
   const n = Number(algo.maxTradesPerDay);
   if (!Number.isFinite(n)) return fallback;
-  return Math.max(1, Math.min(20, Math.round(n)));
+  const max = algo.kind === "shivam-t2s" ? 100 : 20;
+  return Math.max(1, Math.min(max, Math.round(n)));
 }
 
 function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
@@ -660,7 +725,8 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
   }, [algo.id, saved]);
 
   const save = async () => {
-    const next = Math.max(1, Math.min(20, Math.round(Number(value) || saved)));
+    const cap = algo.kind === "shivam-t2s" ? 100 : 20;
+    const next = Math.max(1, Math.min(cap, Math.round(Number(value) || saved)));
     setValue(String(next));
     if (next === saved) return;
     setSaving(true);
@@ -681,7 +747,7 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
       <input
         type="number"
         min={1}
-        max={20}
+        max={algo.kind === "shivam-t2s" ? 100 : 20}
         inputMode="numeric"
         aria-label="Daily trade limit"
         className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
@@ -882,7 +948,9 @@ function AlgoCard({
   onExit: () => void;
   onDelete: () => void;
 }) {
+  const [shivamDetails, setShivamDetails] = useState(false);
   const meta = kindMeta(algo);
+  const shivam = isShivamT2sKind(algo);
   const liveMtm = positions.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   const mappedIds = algo.mappedClientIds || [];
   const mapped = clientIds ? mappedIds.filter((id) => clientIds.has(id)).length : mappedIds.length;
@@ -905,6 +973,8 @@ function AlgoCard({
       ? algo.enabled && (algo.lastSignal === "BUY" || algo.lastSignal === "SELL")
         ? algo.lastSignal
         : "No signal"
+    : isShivamT2sKind(algo)
+      ? shivamCardReady(algo) ? "● ● ●" : "NO Trade"
     : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo)
       ? orderActivity(algo.lastSignal, "Waiting for the next signal")
       : orderActivity(algo.enabled ? algo.lastSignal : "", "Waiting for the next signal");
@@ -912,7 +982,7 @@ function AlgoCard({
   const contract = algo.instrument === "option" ? algo.trade?.label || contractLabel(algo) : `${algo.symbol || "NIFTY"} FUT`;
 
   return (
-    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"} data-mir-strategy={isMultiIndexReversalKind(algo) ? "true" : undefined}>
+    <section className="card blotter-card flex w-full flex-col p-4" data-strategy-card={algo.id} data-live={algo.enabled ? "true" : "false"} data-mir-strategy={isMultiIndexReversalKind(algo) ? "true" : undefined} data-shivam-strategy={shivam ? "true" : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--card-muted)] text-slate-400">
@@ -921,7 +991,7 @@ function AlgoCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-base font-bold">{algo.name}</h2>
-              {isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <FutureCandleChip algo={algo} /> : null}
+              {shivam ? <ShivamSignalChip algo={algo} onOpen={() => setShivamDetails(true)} /> : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <FutureCandleChip algo={algo} /> : null}
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",
@@ -950,14 +1020,14 @@ function AlgoCard({
               )}
             </div>
             {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
-            <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>
-            <div className="desk-help mt-2 text-sm text-slate-400">{meta.config}</div>
+            {shivam ? null : <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>}
+            {shivam ? null : <div className="desk-help mt-2 text-sm text-slate-400">{meta.config}</div>}
             {algo.runMode === "live" ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500">
                 Live broker: {brokerName(defaultBrokers, algo.brokerId || "dhan")}
               </div>
             ) : null}
-            <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>
+            {shivam ? null : <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>}
             {isMultiIndexReversalKind(algo) ? <MirMonitor algo={algo} /> : null}
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
               <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{algo.trade.hint}</div>
@@ -1108,6 +1178,7 @@ function AlgoCard({
         </div>
       ) : null}
 
+      {shivam ? null : (
       <div className="mt-4 text-xs text-slate-400">
         <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>
         <div className="mt-1">{activity}</div>
@@ -1164,6 +1235,7 @@ function AlgoCard({
           </div>
         ) : null}
       </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onEdit} className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold">
@@ -1184,7 +1256,7 @@ function AlgoCard({
         </button>
         <button
           type="button"
-          disabled={busy || !algo.lastBacktest}
+          disabled={busy || (!shivam && !algo.lastBacktest)}
           onClick={() => onReport("pdf")}
           className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-60"
         >
@@ -1193,7 +1265,7 @@ function AlgoCard({
         </button>
         <button
           type="button"
-          disabled={busy || !algo.lastBacktest}
+          disabled={busy || (!shivam && !algo.lastBacktest)}
           onClick={() => onReport("xlsx")}
           className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-60"
         >
@@ -1264,6 +1336,7 @@ function AlgoCard({
               >
                 Start paper
               </button>
+              {shivam ? null : (
               <button
                 type="button"
                 disabled={busy}
@@ -1273,6 +1346,7 @@ function AlgoCard({
               >
                 Start live
               </button>
+              )}
             </>
           )}
         </div>
@@ -1282,6 +1356,7 @@ function AlgoCard({
           Saving or mapping clients does not start LIVE. LIVE arms automatically at 09:20 IST on session days.
         </div>
       ) : null}
+      {shivam && shivamDetails ? <ShivamTradeDetails algo={algo} onClose={() => setShivamDetails(false)} /> : null}
     </section>
   );
 }

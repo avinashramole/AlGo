@@ -453,3 +453,52 @@ test("a saved nifty test is dropped with the retired strategies", () => {
   assert.equal(next.algos.some((item) => item.id === "a10"), true);
 });
 
+test("normalizeAlgo keeps Shivam T2S paper, disabled, and daily limit 1-100", () => {
+  const algo = normalizeAlgo({
+    kind: "shivam-t2s",
+    symbol: "BANKNIFTY",
+    ceTimeframe: "3m",
+    peTimeframe: "5m",
+    indexTimeframe: "15m",
+    slMode: "points",
+    slValue: 12,
+    targetMode: "percentage",
+    targetValue: 30,
+    maxTradesPerDay: 100,
+    capitalMode: "amount",
+    capitalValue: 50000,
+    lots: 2,
+    runMode: "paper",
+  });
+  assert.equal(algo.kind, "shivam-t2s");
+  assert.equal(algo.name, "Shivam T2S Strategy");
+  assert.equal(algo.symbol, "BANKNIFTY");
+  assert.equal(algo.enabled, false);
+  assert.equal(algo.runMode, "paper");
+  assert.equal(algo.brokerId, "paper");
+  assert.equal(algo.liveAuthorized, false);
+  assert.equal(algo.testDesk, true);
+  assert.equal(algo.maxTradesPerDay, 100);
+  assert.equal(algo.ceTimeframe, "3m");
+  assert.match(algo.summary, /Shivam T2S/);
+});
+
+test("normalizeAlgo keeps Shivam T2S on Algo Test paper even if live is requested", () => {
+  const algo = normalizeAlgo({
+    kind: "shivam-t2s",
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "both",
+    mappedClientIds: ["u-1"],
+    clientVisible: true,
+  });
+  assert.equal(algo.testDesk, true);
+  assert.equal(algo.runMode, "paper");
+  assert.equal(algo.brokerId, "paper");
+  assert.equal(algo.liveAuthorized, false);
+  assert.equal(algo.mappingScope, "master");
+  assert.deepEqual(algo.mappedClientIds, []);
+  assert.equal(algo.clientVisible, false);
+});
+

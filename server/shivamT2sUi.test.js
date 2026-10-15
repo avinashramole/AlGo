@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("Shivam T2S card, builder, APIs, and reports are wired", () => {
+  const builder = fs.readFileSync(path.join(root, "src/components/dashboard/StrategyBuilder.tsx"), "utf8");
+  const page = fs.readFileSync(path.join(root, "src/pages/Algo.tsx"), "utf8");
+  const reports = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
+  const api = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
+  const lib = fs.readFileSync(path.join(root, "src/lib/strategies.ts"), "utf8");
+  assert.match(lib, /"shivam-t2s"/);
+  assert.match(lib, /SHIVAM_T2S_NAME = "Shivam T2S Strategy"/);
+  assert.match(builder, /title="SHIVAM T2S"/);
+  assert.match(builder, /\{testDesk \? \(\s*<TypeCard[\s\S]*title="SHIVAM T2S"/);
+  assert.match(builder, /emptyStrategy\(testDesk \? "shivam-t2s"/);
+  assert.match(builder, /data-shivam-settings="true"/);
+  assert.doesNotMatch(builder, /Authorize live after paper trading/);
+  assert.match(page, /data-shivam-signal/);
+  assert.match(page, /NO Trade/);
+  assert.match(page, /● ● ●/);
+  assert.match(page, /data-shivam-details/);
+  assert.match(page, /export function AlgoTest/);
+  assert.doesNotMatch(reports, /data-shivam-report/);
+  assert.doesNotMatch(reports, /downloadShivamT2sReport/);
+  assert.match(api, /\/api\/strategies\/shivam-t2s\/config/);
+  assert.match(api, /\/api\/strategies\/shivam-t2s\/reports\/pdf/);
+  assert.match(api, /\/api\/strategies\/shivam-t2s\/reports\/excel/);
+});
