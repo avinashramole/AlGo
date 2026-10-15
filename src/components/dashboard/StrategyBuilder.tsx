@@ -43,6 +43,7 @@ import {
   MULTI_INDEX_OFFSETS,
   SHIVAM_T2S_NAME,
   SHIVAM_T2S_SCRIPTS,
+  DESK_TIMEFRAME_PRESETS,
   isNiftyOptionEngineKind,
   type AlgoStrategy,
   type ConditionJoin,
@@ -62,6 +63,58 @@ type Props = {
 const fieldClass = "mt-0.5 h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold";
 
 const TEST2_SCRIPT_LABEL = "Script · NIFTY BANKNIFTY SENSEX";
+
+function DeskTimeframeSelect({
+  label,
+  timeframe,
+  mark,
+  onPick,
+}: {
+  label: string;
+  timeframe?: string;
+  mark: "shivam-index" | "shivam-ce" | "shivam-pe";
+  onPick: (timeframe: string) => void;
+}) {
+  const selected = firstCandleTimeframeSelect(timeframe);
+  return (
+    <label className="text-xs font-semibold text-slate-500" data-shivam-timeframe={mark}>
+      {label}
+      <select
+        className={fieldClass}
+        value={selected}
+        onChange={(event) => {
+          const picked = event.target.value;
+          onPick(
+            firstCandleTimeframeValue(
+              picked,
+              picked === "custom" ? (selected === "custom" ? firstCandleMinutes(timeframe) : 20) : undefined,
+            ),
+          );
+        }}
+      >
+        {DESK_TIMEFRAME_PRESETS.map((row) => (
+          <option key={row} value={row}>
+            {row === "1H" ? "1hr" : row}
+          </option>
+        ))}
+        <option value="custom">Custom</option>
+      </select>
+      {selected === "custom" ? (
+        <span className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500" data-first-candle-custom-minutes="true">
+          Minutes 1–60
+          <input
+            className="h-8 w-20 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 text-xs font-semibold text-[var(--text)]"
+            type="number"
+            min={1}
+            max={60}
+            value={firstCandleMinutes(timeframe)}
+            onChange={(event) => onPick(firstCandleTimeframeValue("custom", Number(event.target.value)))}
+          />
+        </span>
+      ) : null}
+    </label>
+  );
+}
 
 function Test2ScriptSelect({
   value,
@@ -893,27 +946,25 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
               Index or matching future candle must be complete. BUY CE: future green and CE green. BUY PE: future red and PE green. A doji is neither. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
             </div>
-            <div className="space-y-1" data-shivam-timeframes="true">
-              <FirstCandleTimeframeBar
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4" data-shivam-timeframes="true">
+              <DeskTimeframeSelect
+                label="Index timeframe"
                 timeframe={form.indexTimeframe || form.timeframe}
                 mark="shivam-index"
-                label="Index · 5m 15m 30m 1hr Custom 1–60"
                 onPick={(timeframe) => set({ indexTimeframe: timeframe, timeframe, barMinutes: firstCandleMinutes(timeframe) })}
               />
-              <FirstCandleTimeframeBar
+              <DeskTimeframeSelect
+                label="CE timeframe"
                 timeframe={form.ceTimeframe || "5m"}
                 mark="shivam-ce"
-                label="CE · 5m 15m 30m 1hr Custom 1–60"
                 onPick={(ceTimeframe) => set({ ceTimeframe })}
               />
-              <FirstCandleTimeframeBar
+              <DeskTimeframeSelect
+                label="PE timeframe"
                 timeframe={form.peTimeframe || "5m"}
                 mark="shivam-pe"
-                label="PE · 5m 15m 30m 1hr Custom 1–60"
                 onPick={(peTimeframe) => set({ peTimeframe })}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
               <label className="text-xs font-semibold text-slate-500">
                 Index
                 <select
@@ -1494,7 +1545,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               <NumberField label={crudeFirst ? "EOD square-off (min before 23:30)" : "EOD square-off (min before 15:30)"} value={form.eodSquareOffMinutes ?? 10} step={1} onChange={(eodSquareOffMinutes) => set({ eodSquareOffMinutes })} />
             </div>
           </div>
-        ) : hedge ? (
+        ) : shivam ? null : hedge ? (
           <p className="desk-help mt-2.5 text-[11px] font-semibold text-slate-400">
             Completed 15-minute NIFTY futures candle only. Open below VWAP and close above buys 1 lot weekly ATM CE. Open above VWAP and close below buys 1 lot weekly ATM PE. Primary target is fill × 1.40. There is no stop on the primary. At fill × 0.80 buy 2 lots of the opposite ATM weekly option once. Exit every open leg when realized + unrealized − charges reaches 5% of cycle starting capital.
           </p>
