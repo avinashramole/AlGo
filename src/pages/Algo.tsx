@@ -784,80 +784,10 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
   );
 }
 
-function ShivamCardTimeframes({ algo }: { algo: AlgoStrategy }) {
-  const { refresh } = useMarket();
-  const savedIndex = algo.indexTimeframe || algo.timeframe || "5m";
-  const savedCe = algo.ceTimeframe || "5m";
-  const savedPe = algo.peTimeframe || "5m";
-  const [indexTf, setIndexTf] = useState(savedIndex);
-  const [ceTf, setCeTf] = useState(savedCe);
-  const [peTf, setPeTf] = useState(savedPe);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    setIndexTf(savedIndex);
-    setCeTf(savedCe);
-    setPeTf(savedPe);
-  }, [algo.id, savedIndex, savedCe, savedPe]);
-
-  const save = async (next: { indexTimeframe?: string; ceTimeframe?: string; peTimeframe?: string; timeframe?: string; barMinutes?: number }, revert: () => void) => {
-    setSaving(true);
-    try {
-      await updateAlgo(algo.id, next);
-      await refresh();
-    } catch (err) {
-      window.alert(catchDeskError(err, "Could not save timeframe"));
-      revert();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="space-y-1" data-shivam-timeframes="true">
-      <FirstCandleTimeframeBar
-        timeframe={indexTf}
-        saving={saving}
-        commitCustomOnBlur
-        mark="shivam-index"
-        label="Index TF · 5m 15m 30m 1hr Custom"
-        onPick={(timeframe) => {
-          if (timeframe === indexTf) return;
-          const prev = indexTf;
-          setIndexTf(timeframe);
-          void save(
-            { indexTimeframe: timeframe, timeframe, barMinutes: firstCandleMinutes(timeframe) },
-            () => setIndexTf(prev),
-          );
-        }}
-      />
-      <FirstCandleTimeframeBar
-        timeframe={ceTf}
-        saving={saving}
-        commitCustomOnBlur
-        mark="shivam-ce"
-        label="CE TF · 5m 15m 30m 1hr Custom"
-        onPick={(timeframe) => {
-          if (timeframe === ceTf) return;
-          const prev = ceTf;
-          setCeTf(timeframe);
-          void save({ ceTimeframe: timeframe }, () => setCeTf(prev));
-        }}
-      />
-      <FirstCandleTimeframeBar
-        timeframe={peTf}
-        saving={saving}
-        commitCustomOnBlur
-        mark="shivam-pe"
-        label="PE TF · 5m 15m 30m 1hr Custom"
-        onPick={(timeframe) => {
-          if (timeframe === peTf) return;
-          const prev = peTf;
-          setPeTf(timeframe);
-          void save({ peTimeframe: timeframe }, () => setPeTf(prev));
-        }}
-      />
-    </div>
-  );
+function deskTfLabel(timeframe?: string) {
+  const raw = String(timeframe || "5m").trim();
+  if (raw === "1H" || raw === "1h" || raw === "1hr" || raw === "60m") return "1hr";
+  return raw;
 }
 
 function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
@@ -1248,6 +1178,11 @@ function AlgoCard({
                 {dhanLive ? " · Dhan LIVE" : " · Dhan not LIVE"}
               </div>
             ) : null}
+            {shivam ? (
+              <div className="mt-1 text-[11px] font-semibold text-slate-500" data-shivam-tf="true">
+                IDX {deskTfLabel(algo.indexTimeframe || algo.timeframe)} · CE {deskTfLabel(algo.ceTimeframe)} · PE {deskTfLabel(algo.peTimeframe)}
+              </div>
+            ) : null}
             {shivam ? null : <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>}
             {isMultiIndexReversalKind(algo) ? <MirMonitor algo={algo} /> : null}
             {isNiftyVwapHedgeKind(algo) && algo.trade?.hint && algo.trade.hint !== contract ? (
@@ -1261,7 +1196,6 @@ function AlgoCard({
         </div>
       </div>
       {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
-      {shivam ? <ShivamCardTimeframes algo={algo} /> : null}
       {shivam ? <ShivamCapitalStrip algo={algo} /> : null}
       {shivam ? (
         <div
