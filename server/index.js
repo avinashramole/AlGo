@@ -82,7 +82,9 @@ import {
   queueLivePositionExit,
   findDeskPosition,
   routeManualOrderBrokerId,
+  shivamT2sReportFile,
 } from "./market.js";
+import { isShivamT2sAlgo, shivamT2sConfig, shivamState, validateShivamT2s } from "./shivamT2s/index.js";
 import { startFirstCandleDailyLiveScheduler, startHedgeDailyLiveScheduler } from "./niftyVwapHedge/dailyLive.js";
 import { startUpstoxDailyTokenScheduler } from "./upstoxDailyToken.js";
 import {
@@ -999,6 +1001,189 @@ app.put("/api/algos/:id", async (req, res) => {
     res.status(error.status || 400).json({ error: error.message || "Could not save strategy" });
   }
 });
+
+function findShivamAlgo(id) {
+  const want = String(id || "").trim();
+  const rows = listAlgos().filter(isShivamT2sAlgo);
+  if (want) {
+    const row = rows.find((item) => item.id === want) || getAlgo(want);
+    return row && isShivamT2sAlgo(row) ? row : null;
+  }
+  return rows[0] || null;
+}
+
+function publicShivamConfig(algo) {
+  const cfg = shivamT2sConfig(algo);
+  const vs = shivamState(algo);
+  return {
+    id: algo.id,
+    ...cfg,
+    enabled: Boolean(algo.enabled),
+    tradesUsed: Number(vs.sessionTrades || 0),
+    tradesRemaining: Math.max(0, Number(cfg.maxTradesPerDay) - Number(vs.sessionTrades || 0)),
+    sessionDate: vs.sessionDate || "",
+  };
+}
+
+function publicShivamSignal(algo) {
+  const vs = shivamState(algo);
+  const ready = vs.cardReady === true && vs.cardSignal === "● ● ●";
+  return {
+    id: algo.id,
+    card: ready ? "● ● ●" : "NO Trade",
+    ready,
+    details: ready
+      ? {
+          index: vs.indexLabel || algo.symbol,
+          futures: vs.futuresInstrument || "",
+          direction: vs.option ? `BUY ${vs.option}` : "",
+          symbol: vs.symbol || "",
+          securityId: vs.securityId || "",
+          strike: vs.strike || 0,
+          expiry: vs.expiry || "",
+          premium: vs.premium || 0,
+          quoteAt: vs.quoteAt || 0,
+          requestedLots: vs.requestedLots || 0,
+          approvedLots: vs.approvedLots || 0,
+          lotSize: vs.lotSize || 0,
+          orderValue: vs.orderValue || 0,
+          requiredFunds: vs.requiredFunds || 0,
+          slPrice: vs.slPrice || 0,
+          targetPrice: vs.targetPrice || 0,
+          slStatus: vs.slStatus || "",
+          indexBarTime: vs.indexBarTime || vs.lastIndexBarTime || 0,
+          ceBarTime: vs.ceBarTime || vs.lastCeBarTime || 0,
+          peBarTime: vs.peBarTime || vs.lastPeBarTime || 0,
+        }
+      : null,
+  };
+}
+
+app.get("/api/strategies/shivam-t2s/config", (req, res) => {
+  const algo = findShivamAlgo(req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  res.json(publicShivamConfig(algo));
+});
+
+app.put("/api/strategies/shivam-t2s/config", (req, res) => {
+  const body = req.body || {};
+  const invalid = validateShivamT2s({ ...body, kind: "shivam-t2s" });
+  if (invalid) {
+    res.status(400).json({ error: invalid });
+    return;
+  }
+  const existing = findShivamAlgo(body.id || req.query.id);
+  try {
+    const algo = existing
+      ? updateAlgo(existing.id, { ...body, kind: "shivam-t2s" })
+      : createAlgo({ ...body, kind: "shivam-t2s", runMode: body.runMode === "live" && body.liveAuthorized ? "live" : "paper" });
+    if (algo?.error) {
+      res.status(400).json({ error: algo.error });
+      return;
+    }
+    res.json({ ok: true, config: publicShivamConfig(algo) });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not save Shivam T2S config" });
+  }
+});
+
+app.get("/api/strategies/shivam-t2s/status", (req, res) => {
+  const algo = findShivamAlgo(req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  const cfg = publicShivamConfig(algo);
+  res.json({
+    ...cfg,
+    status: algo.status,
+    runMode: algo.runMode,
+    signal: publicShivamSignal(algo),
+  });
+});
+
+app.get("/api/strategies/shivam-t2s/signal", (req, res) => {
+  const algo = findShivamAlgo(req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  res.json(publicShivamSignal(algo));
+});
+
+app.post("/api/strategies/shivam-t2s/start", async (req, res) => {
+  const algo = findShivamAlgo(req.body?.id || req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  req.params = { ...req.params, id: algo.id };
+  req.body = { ...req.body, enabled: true };
+  const current = getAlgo(algo.id);
+  if (current?.runMode === "live" && current.liveAuthorized !== true) {
+    res.status(400).json({ error: "Live trading stays locked until paper trading and safety validation are authorized." });
+    return;
+  }
+  try {
+    const next = toggleAlgo(algo.id, { enabled: true });
+    if (next?.error) {
+      res.status(400).json({ error: next.error });
+      return;
+    }
+    res.json({ ok: true, algo: next });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not start Shivam T2S" });
+  }
+});
+
+app.post("/api/strategies/shivam-t2s/stop", (req, res) => {
+  const algo = findShivamAlgo(req.body?.id || req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  const next = toggleAlgo(algo.id, { enabled: false });
+  res.json({ ok: true, algo: next });
+});
+
+app.get("/api/strategies/shivam-t2s/trades", (req, res) => {
+  const algo = findShivamAlgo(req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  const snap = snapshot();
+  const mine = (rows = []) =>
+    (rows || []).filter((row) => {
+      if (row.copyUserId) return false;
+      if (row.strategyId) return row.strategyId === algo.id;
+      return row.strategy === algo.name;
+    });
+  res.json({
+    id: algo.id,
+    orders: mine(snap.orders),
+    positions: mine(snap.positions),
+    closed: mine(snap.closedTrades || snap.trades),
+  });
+});
+
+function sendShivamReport(req, res, format) {
+  const algo = findShivamAlgo(req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  const file = shivamT2sReportFile(algo, req.authUser, format);
+  res.setHeader("Content-Type", file.type);
+  res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+  res.send(file.body);
+}
+
+app.get("/api/strategies/shivam-t2s/reports/pdf", (req, res) => sendShivamReport(req, res, "pdf"));
+app.get("/api/strategies/shivam-t2s/reports/excel", (req, res) => sendShivamReport(req, res, "xlsx"));
 
 app.delete("/api/algos/:id", (req, res) => {
   try {

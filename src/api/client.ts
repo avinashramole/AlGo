@@ -1732,6 +1732,14 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   clickDownloadLink(blob, filename);
 }
 
+export function downloadShivamT2sReport(id: string, format: "pdf" | "xlsx") {
+  return downloadBrandedFile(
+    `/strategies/shivam-t2s/reports/${format === "pdf" ? "pdf" : "excel"}?id=${encodeURIComponent(id)}`,
+    format,
+    "Could not download the Shivam T2S report.",
+  );
+}
+
 export function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
   return downloadBrandedFile(
     `/algos/${id}/backtest/report`,

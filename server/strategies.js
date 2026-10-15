@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { clampDailyTradeLimit, crudeFirstCandleConfig, defaultCrudeFirstCandleAlgo, defaultNiftyFirstCandleAlgo, defaultNiftyTestAlgo, defaultNiftyTest1Algo, defaultNiftyTest2Algo, defaultNiftyVwapAlgo, defaultNiftyVwapReversalAlgo, isCrudeFirstCandleAlgo, isNiftyFirstCandleAlgo, isNiftyFirstCandleName, isNiftyTestAlgo, isNiftyTest1Algo, isNiftyTest2Algo, isNiftyVwapAlgo, isNiftyVwapReversalAlgo, lockedCrudeFirstCandleName, lockedNiftyFirstCandleName, niftyFirstCandleConfig, niftyFirstCandleTrail, niftyTest1Config, niftyTest2Config, niftyTestConfig, niftyVwapConfig, niftyVwapReversalConfig, ALWAYS_ON_FIRST_CANDLE_IDS, CRUDE_FIRST_CANDLE_KIND, CRUDE_FIRST_CANDLE_NAME, NIFTY_FIRST_CANDLE_KIND, NIFTY_FIRST_CANDLE_NAME, NIFTY_TEST_KIND, NIFTY_TEST1_KIND, NIFTY_TEST2_KIND, NIFTY_VWAP_KIND, NIFTY_VWAP_REVERSAL_KIND } from "./niftyVwap/config.js";
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 import { defaultMultiIndexReversalAlgo, isMultiIndexReversalAlgo, multiIndexReversalConfig, MULTI_INDEX_REVERSAL_KIND } from "./multiIndexReversal/index.js";
+import { clampShivamDailyTradeLimit, defaultShivamT2sAlgo, isShivamT2sAlgo, shivamT2sConfig, SHIVAM_T2S_KIND, validateShivamT2s } from "./shivamT2s/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
@@ -259,6 +260,10 @@ export function contractLabel(algo) {
   if (isNiftyVwapHedgeAlgo(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalAlgo(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
+  if (isShivamT2sAlgo(algo)) {
+    const cfg = shivamT2sConfig(algo);
+    return `${cfg.symbol} ${cfg.futuresInstrument} ${cfg.strikePolicy} CE/PE`;
+  }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
     return `${cfg.indexLabel} ${cfg.exchange} ${cfg.timeframe} ATM${cfg.strikeOffset ? (cfg.strikeOffset > 0 ? `+${cfg.strikeOffset}` : cfg.strikeOffset) : ""} CE/PE`;
@@ -322,6 +327,10 @@ export function summarizeAlgo(algo) {
         : `${root} BTST · buy today ${start} IST · sell tomorrow ${exit} IST · NRML overnight`;
     const overall = Number(algo.overallTargetPct) > 0 ? Number(algo.overallTargetPct) : 5;
     return `TEST2 · ${hold} · SELL 1 ${sellOpt} CE + PE premium ≥${sell} · BUY 1 ${hedgeOpt} CE + PE premium ≥${hedge} · hedge SL ${sl}% · overall +${overall}% of required margin exits all legs · ${size}`;
+  }
+  if (isShivamT2sAlgo(algo)) {
+    const cfg = shivamT2sConfig(algo);
+    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ${cfg.strikePolicy} · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · paper until live is authorized · ${size}`;
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
@@ -424,7 +433,9 @@ function withMapping(next, input, existing) {
     {
       ...next,
       ...mappingFields(input, existing),
-      maxTradesPerDay: clampDailyTradeLimit(requested, fallback),
+      maxTradesPerDay: isShivamT2sAlgo(next)
+        ? clampShivamDailyTradeLimit(requested)
+        : clampDailyTradeLimit(requested, fallback),
     },
     input,
     existing,
@@ -443,7 +454,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "crude-first-candle" ||
     input.kind === "nifty-test" ||
     input.kind === "nifty-test2" ||
-    input.kind === "multi-index-reversal";
+    input.kind === "multi-index-reversal" ||
+    input.kind === "shivam-t2s";
   const keepTest1 = (isNiftyTest1Algo(merged) || isNiftyTest1Algo(existing)) && !switchingAwayFromTest1;
   if (keepTest1) {
     const cfg = niftyTest1Config(merged);
@@ -492,7 +504,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "crude-first-candle" ||
     input.kind === "nifty-test" ||
     input.kind === "nifty-test1" ||
-    input.kind === "multi-index-reversal";
+    input.kind === "multi-index-reversal" ||
+    input.kind === "shivam-t2s";
   const keepTest2 = (isNiftyTest2Algo(merged) || isNiftyTest2Algo(existing)) && !switchingAwayFromTest2;
   if (keepTest2) {
     const cfg = niftyTest2Config(merged);
@@ -542,7 +555,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "nifty-test" &&
     input.kind !== "nifty-test1" &&
     input.kind !== "nifty-test2" &&
-    input.kind !== "multi-index-reversal";
+    input.kind !== "multi-index-reversal" &&
+    input.kind !== "shivam-t2s";
   if (keepHedge) {
     const cfg = niftyVwapHedgeConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -594,7 +608,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "crude-first-candle" &&
     input.kind !== "nifty-test" &&
     input.kind !== "nifty-test1" &&
-    input.kind !== "nifty-test2";
+    input.kind !== "nifty-test2" &&
+    input.kind !== "shivam-t2s";
   if (keepMir || input.kind === MULTI_INDEX_REVERSAL_KIND) {
     const cfg = multiIndexReversalConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -633,6 +648,57 @@ export function normalizeAlgo(input = {}, existing = {}) {
     next.summary = summarizeAlgo(next);
     return withMapping(next, input, existing);
   }
+  const keepShivam =
+    (isShivamT2sAlgo(merged) || isShivamT2sAlgo(existing) || input.kind === SHIVAM_T2S_KIND) &&
+    input.kind !== "indicator" &&
+    input.kind !== "price-action" &&
+    input.kind !== "nifty-vwap" &&
+    input.kind !== "nifty-vwap-reversal" &&
+    input.kind !== "nifty-vwap-hedge" &&
+    input.kind !== "nifty-first-candle" &&
+    input.kind !== "crude-first-candle" &&
+    input.kind !== "nifty-test" &&
+    input.kind !== "nifty-test1" &&
+    input.kind !== "nifty-test2" &&
+    input.kind !== "multi-index-reversal";
+  if (keepShivam || input.kind === SHIVAM_T2S_KIND) {
+    const invalid = validateShivamT2s(merged);
+    if (invalid) {
+      const err = new Error(invalid);
+      err.status = 400;
+      throw err;
+    }
+    const cfg = shivamT2sConfig(merged);
+    const runMode = cfg.runMode;
+    const creating = !existing.id;
+    const next = {
+      ...existing,
+      ...defaultShivamT2sAlgo({
+        ...merged,
+        runMode,
+        lots: cfg.lots,
+        symbol: cfg.symbol,
+        liveAuthorized: cfg.liveAuthorized,
+      }),
+      id: existing.id || newAlgoId(),
+      kind: SHIVAM_T2S_KIND,
+      lastBacktest: existing.lastBacktest || null,
+      pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
+      winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,
+      shivamState: existing.shivamState,
+      enabled: creating ? false : existing.runMode && existing.runMode !== runMode ? false : Boolean(existing.enabled),
+      status: creating ? (runMode === "backtest" ? "BACKTEST" : "PAUSED") : existing.status || "PAUSED",
+    };
+    if (next.enabled && next.runMode === "live") next.status = "LIVE";
+    else if (next.enabled && next.runMode === "paper") next.status = "PAPER";
+    else if (next.runMode === "backtest") {
+      next.enabled = false;
+      next.status = "BACKTEST";
+    } else if (!next.enabled) next.status = next.runMode === "backtest" ? "BACKTEST" : "PAUSED";
+    delete next.trade;
+    next.summary = summarizeAlgo(next);
+    return withMapping(next, input, existing);
+  }
   const keepReversal =
     isNiftyVwapReversalAlgo(merged) &&
     input.kind !== "indicator" &&
@@ -644,7 +710,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "nifty-test" &&
     input.kind !== "nifty-test1" &&
     input.kind !== "nifty-test2" &&
-    input.kind !== "multi-index-reversal";
+    input.kind !== "multi-index-reversal" &&
+    input.kind !== "shivam-t2s";
   if (keepReversal) {
     const cfg = niftyVwapReversalConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -697,7 +764,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind !== "nifty-test" &&
     input.kind !== "nifty-test1" &&
     input.kind !== "nifty-test2" &&
-    input.kind !== "multi-index-reversal";
+    input.kind !== "multi-index-reversal" &&
+    input.kind !== "shivam-t2s";
   if (keepNiftyVwap) {
     const cfg = niftyVwapConfig(merged);
     const runMode = ["live", "paper", "backtest"].includes(input.runMode)
@@ -754,7 +822,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
       input.kind === "nifty-test" ||
       input.kind === "nifty-test1" ||
       input.kind === "nifty-test2" ||
-      input.kind === "multi-index-reversal");
+      input.kind === "multi-index-reversal" ||
+      input.kind === "shivam-t2s");
   const keepCrude =
     (isCrudeFirstCandleAlgo(merged) || isCrudeFirstCandleAlgo(existing) || crudeByName) && !switchingAwayFromCrude;
   if (keepCrude) {
@@ -836,7 +905,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "nifty-test" ||
     input.kind === "nifty-test1" ||
     input.kind === "nifty-test2" ||
-    input.kind === "multi-index-reversal";
+    input.kind === "multi-index-reversal" ||
+    input.kind === "shivam-t2s";
   const firstCandleName = String(merged.name || existing.name || "");
   const keepFirstCandle =
     (isNiftyFirstCandleAlgo(merged) ||
@@ -910,7 +980,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
     input.kind === "crude-first-candle" ||
     input.kind === "nifty-test1" ||
     input.kind === "nifty-test2" ||
-    input.kind === "multi-index-reversal";
+    input.kind === "multi-index-reversal" ||
+    input.kind === "shivam-t2s";
   const keepNiftyTest =
     (isNiftyTestAlgo(merged) ||
       isNiftyTestAlgo(existing) ||

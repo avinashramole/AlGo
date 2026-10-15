@@ -1,4 +1,4 @@
-export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test" | "nifty-test1" | "nifty-test2" | "multi-index-reversal";
+export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test" | "nifty-test1" | "nifty-test2" | "multi-index-reversal" | "shivam-t2s";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"
@@ -99,6 +99,53 @@ export type AlgoStrategy = {
   reversalQtyMultiple?: number;
   combinedTargetPct?: number;
   combinedTargetBasis?: "original" | "combined";
+  ceTimeframe?: string;
+  peTimeframe?: string;
+  indexTimeframe?: string;
+  slMode?: "percentage" | "points";
+  slValue?: number;
+  targetMode?: "percentage" | "points";
+  targetValue?: number;
+  capitalMode?: "amount" | "percent";
+  capitalValue?: number;
+  autoSizeLots?: boolean;
+  strikePolicy?: "ATM" | "ITM" | "OTM";
+  liveAuthorized?: boolean;
+  shivamState?: {
+    sessionDate?: string;
+    sessionTrades?: number;
+    cardReady?: boolean;
+    cardSignal?: string;
+    lastError?: string;
+    option?: string;
+    strike?: number;
+    expiry?: string;
+    securityId?: string;
+    symbol?: string;
+    premium?: number;
+    quoteAt?: number;
+    requestedLots?: number;
+    approvedLots?: number;
+    maxLots?: number;
+    lotSize?: number;
+    orderValue?: number;
+    requiredFunds?: number;
+    slPrice?: number;
+    targetPrice?: number;
+    slStatus?: string;
+    targetStatus?: string;
+    indexColor?: string;
+    ceColor?: string;
+    peColor?: string;
+    futuresInstrument?: string;
+    indexLabel?: string;
+    indexBarTime?: number;
+    ceBarTime?: number;
+    peBarTime?: number;
+    lastIndexColor?: string;
+    lastCeColor?: string;
+    lastPeColor?: string;
+  };
   maxCycleLossPct?: number;
   sellExpiryKind?: "weekly" | "monthly";
   hedgeExpiryKind?: "weekly" | "monthly";
@@ -306,6 +353,18 @@ export const MULTI_INDEX_SCRIPTS = [
 export const MULTI_INDEX_TIMEFRAMES = ["5m", "10m", "15m", "30m", "1H"] as const;
 
 export const MULTI_INDEX_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4] as const;
+
+export const SHIVAM_T2S_NAME = "Shivam T2S Strategy";
+
+export const SHIVAM_T2S_SCRIPTS = [
+  { id: "NIFTY", label: "NIFTY 50", futures: "NIFTY FUT" },
+  { id: "BANKNIFTY", label: "BANK NIFTY", futures: "BANKNIFTY FUT" },
+  { id: "FINNIFTY", label: "FINNIFTY", futures: "FINNIFTY FUT" },
+  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", futures: "MIDCPNIFTY FUT" },
+  { id: "SENSEX", label: "SENSEX", futures: "SENSEX FUT" },
+];
+
+export const SHIVAM_T2S_TIMEFRAMES = ["1m", "3m", "5m", "10m", "15m"] as const;
 
 export const INDICATORS = [
   { id: "VWAP", label: "VWAP" },
@@ -573,6 +632,17 @@ export function isMultiIndexReversalKind(algo?: { kind?: string; strategyType?: 
   );
 }
 
+export function isShivamT2sKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
+  const name = String(algo?.name || "").trim();
+  return (
+    algo?.kind === "shivam-t2s" ||
+    algo?.strategyType === "SHIVAM_T2S" ||
+    algo?.indicator === "SHIVAM_T2S" ||
+    name === "Shivam T2S Strategy" ||
+    name === "Shivam T2S"
+  );
+}
+
 export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; tag?: string }) {
   const name = String(algo?.name || "").trim().toUpperCase();
   const tag = String(algo?.tag || "").trim().toUpperCase();
@@ -594,7 +664,7 @@ export function isTestDeskAlgo(algo?: { testDesk?: boolean } | null) {
 
 export function isRetiredDeskStrategy(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; symbol?: string; testDesk?: boolean }) {
   if (!algo) return false;
-  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo)) return false;
+  if (isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) || isNiftyTest1Kind(algo) || isNiftyTest2Kind(algo) || isMultiIndexReversalKind(algo) || isShivamT2sKind(algo)) return false;
   if (isNiftyVwapKind(algo) || isNiftyVwapReversalKind(algo) || isNiftyVwapHedgeKind(algo) || isNiftyTestKind(algo)) return true;
   const kind = String(algo.kind || "");
   return kind === "indicator" || kind === "price-action" || kind === "";
@@ -622,6 +692,7 @@ export function contractLabel(algo: {
   instrument?: string;
   optionType?: string;
   strikeOffset?: number;
+  strikePolicy?: "ATM" | "ITM" | "OTM";
   timeframe?: string;
   sellExpiryKind?: "weekly" | "monthly";
   hedgeExpiryKind?: "weekly" | "monthly";
@@ -629,6 +700,9 @@ export function contractLabel(algo: {
   if (isNiftyVwapHedgeKind(algo)) return "NIFTY weekly ATM CE/PE hedge";
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
+  if (isShivamT2sKind(algo)) {
+    return `${algo.symbol || "NIFTY"} ${algo.strikePolicy || "ATM"} CE/PE`;
+  }
   if (isMultiIndexReversalKind(algo)) {
     const off = Number(algo.strikeOffset || 0);
     return `${algo.symbol || "NIFTY"} ${algo.timeframe || "15m"} ${off ? `ATM${off > 0 ? `+${off}` : off}` : "ATM"} CE/PE`;
@@ -921,6 +995,44 @@ export const emptyStrategy = (kind: StrategyKind = "indicator"): Partial<AlgoStr
       indicator: "NIFTY_TEST2",
       runMode: "live",
       brokerId: "dhan",
+      enabled: false,
+      status: "PAUSED",
+    };
+  }
+  if (kind === "shivam-t2s") {
+    return {
+      name: "Shivam T2S Strategy",
+      kind: "shivam-t2s",
+      tag: "shivam-t2s",
+      strategyType: "SHIVAM_T2S",
+      symbol: "NIFTY",
+      instrument: "option",
+      optionType: "CE",
+      strikePolicy: "ATM",
+      strikeOffset: 0,
+      side: "BUY",
+      lots: 1,
+      ceTimeframe: "5m",
+      peTimeframe: "5m",
+      indexTimeframe: "5m",
+      timeframe: "5m",
+      slMode: "percentage",
+      slValue: 20,
+      slPct: 20,
+      initialSlPct: 20,
+      targetMode: "percentage",
+      targetValue: 40,
+      targetPct: 40,
+      maxTradesPerDay: 5,
+      maxPositions: 1,
+      capitalMode: "amount",
+      capitalValue: 50000,
+      autoSizeLots: false,
+      expiryKind: "weekly",
+      liveAuthorized: false,
+      indicator: "SHIVAM_T2S",
+      runMode: "paper",
+      brokerId: "paper",
       enabled: false,
       status: "PAUSED",
     };

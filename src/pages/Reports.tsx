@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { SideBadge } from "../components/desk/Badges";
-import { downloadDeskReport, getPositionsDesk, type PositionLedger } from "../api/client";
+import { downloadDeskReport, downloadShivamT2sReport, getPositionsDesk, type PositionLedger } from "../api/client";
+import { isShivamT2sKind } from "../lib/strategies";
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
@@ -77,6 +78,38 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
           >
             Download Excel
           </button>
+          {(data.algos || []).some(isShivamT2sKind) ? (
+            <>
+              <button
+                type="button"
+                data-shivam-report="pdf"
+                onClick={() => {
+                  const id = (data.algos || []).find(isShivamT2sKind)?.id;
+                  if (!id) return;
+                  void downloadShivamT2sReport(id, "pdf").catch((error) => {
+                    window.alert(catchDeskError(error, "Could not download the Shivam T2S PDF"));
+                  });
+                }}
+                className="h-10 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white"
+              >
+                Shivam PDF
+              </button>
+              <button
+                type="button"
+                data-shivam-report="xlsx"
+                onClick={() => {
+                  const id = (data.algos || []).find(isShivamT2sKind)?.id;
+                  if (!id) return;
+                  void downloadShivamT2sReport(id, "xlsx").catch((error) => {
+                    window.alert(catchDeskError(error, "Could not download the Shivam T2S Excel"));
+                  });
+                }}
+                className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold"
+              >
+                Shivam Excel
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
       <section className="card overflow-x-auto p-0" data-profit-people="true">

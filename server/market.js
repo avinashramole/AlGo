@@ -82,6 +82,14 @@ import {
 import { Test2Strategy, optionMarksFromChain, runTest2Backtest } from "./niftyTest2/index.js";
 import { Test1Strategy } from "./niftyTest1/index.js";
 import { isMultiIndexReversalAlgo, MultiIndexReversalStrategy, multiIndexReversalConfig, mirState, strikeForIndexOffset, validateMultiIndexReversal } from "./multiIndexReversal/index.js";
+import {
+  isShivamT2sAlgo,
+  ShivamT2sStrategy,
+  shivamT2sConfig,
+  shivamState,
+  strikeForPolicy,
+} from "./shivamT2s/index.js";
+import { buildShivamReport, renderShivamExcel, renderShivamPdf } from "./shivamT2s/reports.js";
 import { runMultiIndexReversalBacktest } from "./multiIndexReversal/backtest.js";
 import {
   applyHedgeDailyLive,
@@ -980,7 +988,8 @@ function countsOwnDailyTrades(algo) {
     isNiftyVwapHedgeAlgo(algo) ||
     isNiftyTest1Algo(algo) ||
     isNiftyTest2Algo(algo) ||
-    isMultiIndexReversalAlgo(algo)
+    isMultiIndexReversalAlgo(algo) ||
+    isShivamT2sAlgo(algo)
   );
 }
 
@@ -2034,6 +2043,126 @@ function tickMultiIndexReversalAlgo(algo, mode, feedLive) {
     adapter,
   });
   if (JSON.stringify(algo.mirState || {}) !== before) persistAlgos();
+}
+
+function instrumentLotSize(root, strike, fallback = 0) {
+  const pack = chainForSymbol(root);
+  const row = (pack?.rows || []).find((item) => Number(item.strike) === Number(strike));
+  const live = Number(row?.lotSize || row?.lot_size);
+  if (live > 0) return Math.round(live);
+  const und = getUnderlying(root);
+  const catalog = Number(und?.lot);
+  if (catalog > 0) return Math.round(catalog);
+  return Math.max(0, Math.round(Number(fallback) || 0));
+}
+
+function tickShivamT2sAlgo(algo, mode, feedLive) {
+  const now = Date.now();
+  const config = shivamT2sConfig(algo);
+  const root = config.symbol;
+  const session = nseMarketSession();
+  const positions = (state.positions || []).filter((row) => {
+    if (row.copyUserId) return false;
+    if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
+    if (mode === "paper") return row.paper || row.brokerId === "paper";
+    return row.live || row.brokerId === (algo.brokerId || "dhan");
+  });
+  const open = positions.some((row) => Number(row.qty) > 0);
+  if (mode === "live" && !session.open && !open) return;
+  if (mode === "live" && !config.liveAuthorized) {
+    algo.lastSignal = "NO Trade";
+    const vs = shivamState(algo);
+    vs.cardReady = false;
+    vs.cardSignal = "NO Trade";
+    vs.lastError = "live-locked";
+    return;
+  }
+  const und = getUnderlying(root);
+  const pack = chainForSymbol(root);
+  const listed = niftyListedExpiries(pack, root);
+  const expiry =
+    config.expiryKind === "weekly"
+      ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || ""
+      : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
+  const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
+  const spot = Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
+  const step = Number(und.step) || 50;
+  const vs = shivamState(algo);
+  const ceStrike = strikeForPolicy(spot, step, config.strikePolicy, config.strikeOffset, "CE");
+  const peStrike = strikeForPolicy(spot, step, config.strikePolicy, config.strikeOffset, "PE");
+  if (vs.ceStrike !== ceStrike) {
+    vs.ceBars = [];
+    vs.ceStrike = ceStrike;
+  }
+  if (vs.peStrike !== peStrike) {
+    vs.peBars = [];
+    vs.peStrike = peStrike;
+  }
+  const ceLtp = optionPremium(root, ceStrike, "CE");
+  const peLtp = optionPremium(root, peStrike, "PE");
+  const ceBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.ceBarMinutes || 5) || 0;
+  const peBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.peBarMinutes || 5) || 0;
+  vs.ceBars = upsertOptionBar(vs.ceBars, ceBarTime, ceLtp);
+  vs.peBars = upsertOptionBar(vs.peBars, peBarTime, peLtp);
+  const lotSize = instrumentLotSize(root, ceStrike || peStrike, Number(und.lot) || 0);
+  const before = JSON.stringify(vs);
+  const adapter =
+    mode === "live"
+      ? LiveTradingAdapter({
+          queueLiveOrder: (payload) =>
+            queueLiveAlgoOrder({
+              ...payload,
+              strategy: realStrategyName(payload.strategy) || algo.name,
+              brokerId: algo.brokerId || "dhan",
+            }),
+          squareOff,
+        })
+      : PaperTradingAdapter({ placeOrder, squareOff });
+  ShivamT2sStrategy.tick({
+    algo,
+    config,
+    now,
+    sessionDate: VwapSignalEngine.sessionKeyIST(now),
+    feedLive: Boolean(feedLive),
+    authorized: Boolean(algo.enabled),
+    availableFunds: hedgeCapital(mode),
+    minutesToClose: minutesUntilIst(15 * 60 + 30, new Date(now)),
+    indexBars: getCandles(config.indexTimeframe, root) || [],
+    ceBars: vs.ceBars,
+    peBars: vs.peBars,
+    spot,
+    step,
+    expiry,
+    lotSize,
+    ceLtp,
+    peLtp,
+    quoteAgeMs: feedLive ? 0 : 60_000,
+    ceSecurityId: optionLegId(ceStrike, "CE", root, expiry),
+    peSecurityId: optionLegId(peStrike, "PE", root, expiry),
+    requireSecurityId: pack?.meta?.source === "dhan" && mode === "live",
+    positions,
+    orders: (state.orders || []).filter((row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === algo.name),
+    adapter,
+  });
+  if (JSON.stringify(algo.shivamState || {}) !== before) persistAlgos();
+}
+
+export function shivamT2sReportFile(algo, user, format) {
+  const report = buildShivamReport({
+    algo,
+    user,
+    orders: state.orders || [],
+    positions: state.positions || [],
+    closed: state.closedTrades || [],
+  });
+  if (format === "pdf") {
+    return { type: "application/pdf", name: "shivam-t2s-report.pdf", body: renderShivamPdf(report) };
+  }
+  return {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    name: "shivam-t2s-report.xlsx",
+    body: renderShivamExcel(report),
+  };
 }
 
 function vsLockStrike(algo, option) {
@@ -4122,6 +4251,10 @@ function runPaperAlgos() {
       tickMultiIndexReversalAlgo(algo, "paper", feedLive);
       continue;
     }
+    if (isShivamT2sAlgo(algo)) {
+      tickShivamT2sAlgo(algo, "paper", feedLive);
+      continue;
+    }
     if (isNiftyTest2Algo(algo)) {
       tickNiftyTest2Algo(algo, "paper", feedLive);
       continue;
@@ -4217,6 +4350,10 @@ function runLiveAlgos() {
     }
     if (isMultiIndexReversalAlgo(algo)) {
       tickMultiIndexReversalAlgo(algo, "live", feedLive);
+      continue;
+    }
+    if (isShivamT2sAlgo(algo)) {
+      tickShivamT2sAlgo(algo, "live", feedLive);
       continue;
     }
     if (isNiftyTest2Algo(algo)) {
