@@ -12,6 +12,7 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   const reports = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const api = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
   const lib = fs.readFileSync(path.join(root, "src/lib/strategies.ts"), "utf8");
+  const strategies = fs.readFileSync(path.join(root, "server/strategies.js"), "utf8");
   assert.match(lib, /"shivam-t2s"/);
   assert.match(lib, /SHIVAM_T2S_NAME = "Shivam T2S Strategy"/);
   assert.match(builder, /title="SHIVAM T2S"/);
@@ -24,6 +25,9 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /● ● ●/);
   assert.match(page, /data-shivam-details/);
   assert.match(page, /export function AlgoTest/);
+  assert.match(page, /\["shivam-t2s", "SHIVAM T2S"\]/);
+  assert.match(strategies, /id: SHIVAM_T2S_SEED_ID/);
+  assert.match(strategies, /ALWAYS_ON_FIRST_CANDLE_IDS, SHIVAM_T2S_SEED_ID/);
   assert.doesNotMatch(reports, /data-shivam-report/);
   assert.doesNotMatch(reports, /downloadShivamT2sReport/);
   assert.match(api, /\/api\/strategies\/shivam-t2s\/config/);

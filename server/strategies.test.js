@@ -70,8 +70,8 @@ test("mappedClientIdsForMembers keeps only clients that still exist", () => {
 
 test("hydrate first boot seeds the paused catalog", () => {
   const next = hydrateAlgos({}, seedAlgos());
-  assert.equal(next.algos.length, 5);
-  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12,a13,a14,a15");
+  assert.equal(next.algos.length, 6);
+  assert.equal(next.algos.map((row) => row.id).join(","), "a10,a12,a13,a14,a15,a16");
   assert.equal(next.removedIds.length, 0);
 });
 
@@ -82,11 +82,12 @@ test("hydrate does not resurrect a deleted catalog strategy after deploy", () =>
   assert.equal(next.algos.some((row) => row.id === "a13"), false);
   assert.equal(next.algos.some((row) => row.name === "TEST1"), false);
   assert.deepEqual(next.removedIds, ["a13"]);
-  assert.equal(next.algos.length, 4);
+  assert.equal(next.algos.length, 5);
   assert.equal(next.algos.some((row) => row.id === "a10"), true);
   assert.equal(next.algos.some((row) => row.id === "a12"), true);
   assert.equal(next.algos.some((row) => row.id === "a14"), true);
   assert.equal(next.algos.some((row) => row.id === "a15"), true);
+  assert.equal(next.algos.some((row) => row.id === "a16"), true);
 });
 
 test("hydrate always shows NIFTY and CRUDE OIL even if they were deleted", () => {
@@ -99,6 +100,7 @@ test("hydrate always shows NIFTY and CRUDE OIL even if they were deleted", () =>
   assert.equal(next.algos.some((row) => row.id === "a13"), false);
   assert.equal(next.algos.some((row) => row.id === "a14"), true);
   assert.equal(next.algos.some((row) => row.id === "a15"), true);
+  assert.equal(next.algos.some((row) => row.id === "a16"), true);
   assert.deepEqual(next.removedIds, ["a13"]);
 });
 
@@ -113,6 +115,10 @@ test("hydrate still adds a new catalog strategy that was never deleted", () => {
   assert.equal(next.algos.some((row) => row.id === "a15"), true);
   assert.equal(next.algos.find((row) => row.id === "a15").kind, "multi-index-reversal");
   assert.equal(next.algos.find((row) => row.id === "a15").enabled, false);
+  assert.equal(next.algos.some((row) => row.id === "a16"), true);
+  assert.equal(next.algos.find((row) => row.id === "a16").kind, "shivam-t2s");
+  assert.equal(next.algos.find((row) => row.id === "a16").testDesk, true);
+  assert.equal(next.algos.find((row) => row.id === "a16").enabled, false);
 });
 
 test("hydrate keeps a user-created strategy and a started LIVE algo after reload", () => {
@@ -157,6 +163,7 @@ test("hydrate drops retired strategies and records them as removed", () => {
   assert.equal(next.algos.some((row) => row.id === "a13"), true);
   assert.equal(next.algos.some((row) => row.id === "a14"), true);
   assert.equal(next.algos.some((row) => row.id === "a15"), true);
+  assert.equal(next.algos.some((row) => row.id === "a16"), true);
 });
 
 test("seed includes paused CRUDE OIL option strategies", () => {
@@ -229,6 +236,25 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(mir.runMode, "paper");
   assert.equal(mir.brokerId, "paper");
   assert.equal(mir.status, "PAUSED");
+  const shivam = seeded.find((row) => row.id === "a16");
+  assert.equal(shivam.name, "Shivam T2S Strategy");
+  assert.equal(shivam.kind, "shivam-t2s");
+  assert.equal(shivam.testDesk, true);
+  assert.equal(shivam.runMode, "paper");
+  assert.equal(shivam.brokerId, "paper");
+  assert.equal(shivam.enabled, false);
+  assert.equal(shivam.status, "PAUSED");
+});
+
+test("hydrate always shows Shivam T2S on Algo Test even if it was deleted", () => {
+  const catalog = seedAlgos();
+  const next = hydrateAlgos({ algos: [], removedIds: ["a16"] }, catalog);
+  const shivam = next.algos.find((row) => row.id === "a16");
+  assert.equal(shivam.kind, "shivam-t2s");
+  assert.equal(shivam.testDesk, true);
+  assert.equal(shivam.runMode, "paper");
+  assert.equal(shivam.brokerId, "paper");
+  assert.equal(next.removedIds.includes("a16"), false);
 });
 
 test("crude oil 5m name stays crude and does not become the nifty first candle", () => {

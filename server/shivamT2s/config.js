@@ -2,6 +2,7 @@ export const SHIVAM_T2S_KIND = "shivam-t2s";
 export const SHIVAM_T2S_TYPE = "SHIVAM_T2S";
 export const SHIVAM_T2S_NAME = "Shivam T2S Strategy";
 export const SHIVAM_T2S_NAMES = [SHIVAM_T2S_NAME, "Shivam T2S", "SHIVAM T2S"];
+export const SHIVAM_T2S_SEED_ID = "a16";
 
 export const SHIVAM_T2S_SCRIPTS = [
   { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", segment: "NSE_FNO", futures: "NIFTY FUT" },
