@@ -40,6 +40,17 @@ function socialHint(provider: SocialProvider) {
   return "Enter your email id first.";
 }
 
+function downloadAndroidApk() {
+  const link = document.createElement("a");
+  link.href = "/Trade2Smart-web.apk";
+  link.setAttribute("download", "Trade2Smart-web.apk");
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+}
+
 export function Login() {
   const { login, requestOtp, verifyOtp, signup, resetPassword, startGoogleLogin } = useAuth();
   const navigate = useNavigate();
@@ -509,10 +520,10 @@ export function Login() {
 
             <p className="t2s-download-label">Download our App</p>
             <div className="t2s-app-downloads">
-              <a className="t2s-apk-download" href="/Trade2Smart-web.apk" download="Trade2Smart-web.apk" data-android-apk="download">
+              <button type="button" className="t2s-apk-download" data-android-apk="download" onClick={downloadAndroidApk}>
                 <Smartphone size={18} />
                 Download Android App
-              </a>
+              </button>
               <button
                 type="button"
                 className="t2s-apk-download"

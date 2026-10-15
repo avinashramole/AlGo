@@ -88,7 +88,11 @@ test("login page has a real Android APK download link", () => {
   const nginx = fs.readFileSync(path.join(root, "deploy/nginx-trade2smart.conf"), "utf8");
   const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
   const apk = path.join(root, "releases/Trade2Smart-web.apk");
-  assert.match(login, /href="\/Trade2Smart-web\.apk"/);
+  assert.match(login, /function downloadAndroidApk/);
+  assert.match(login, /data-android-apk="download"/);
+  assert.match(login, /onClick=\{downloadAndroidApk\}/);
+  assert.match(login, /href = "\/Trade2Smart-web\.apk"/);
+  assert.doesNotMatch(login, /<a className="t2s-apk-download" href="\/Trade2Smart-web\.apk"/);
   assert.match(index, /sendAndroidApk/);
   assert.match(nginx, /Trade2Smart-web\.apk/);
   assert.equal(fs.existsSync(apk), true);
