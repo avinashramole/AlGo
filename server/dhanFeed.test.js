@@ -3,7 +3,18 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fetchDhanTapeQuotes, flattenQuotes, matchLiveInstrument, parseFeedPackets, staleQuoteFamilies } from "./dhan.js";
+import {
+  feedInstrumentKey,
+  feedSubscribeBatches,
+  fetchDhanTapeQuotes,
+  flattenQuotes,
+  isCurrentFeedSocket,
+  matchLiveInstrument,
+  nextFeedReconnectMs,
+  parseFeedDisconnect,
+  parseFeedPackets,
+  staleQuoteFamilies,
+} from "./dhan.js";
 import { fallbackFrontFutures } from "./frontFutures.js";
 import { applyLiveQuotes, persistLastIndexQuotes, restoreLastIndexQuotes, snapshot } from "./market.js";
 
@@ -22,6 +33,36 @@ function tickerPacket({ code = 2, segment, securityId, ltp }) {
   buf.writeFloatLE(ltp, 8);
   return buf;
 }
+
+test("quote subscribe is batched at 100 instruments", () => {
+  const list = Array.from({ length: 250 }, (_, i) => ({ ExchangeSegment: "NSE_FNO", SecurityId: String(i) }));
+  const batches = feedSubscribeBatches(list);
+  assert.equal(batches.length, 3);
+  assert.equal(batches[0].length, 100);
+  assert.equal(batches[1].length, 100);
+  assert.equal(batches[2].length, 50);
+  assert.equal(feedInstrumentKey(list), feedInstrumentKey([...list].reverse()));
+  assert.notEqual(feedInstrumentKey(list), feedInstrumentKey(list.slice(1)));
+});
+
+test("a stale websocket close does not own the replacement socket", () => {
+  const live = { id: "new" };
+  const old = { id: "old" };
+  assert.equal(isCurrentFeedSocket(live, live), true);
+  assert.equal(isCurrentFeedSocket(live, old), false);
+  assert.equal(isCurrentFeedSocket(null, old), false);
+});
+
+test("Dhan 805 extra-websocket disconnect backs off 10s", () => {
+  const buf = Buffer.alloc(10);
+  buf.writeUInt8(50, 0);
+  buf.writeUInt16LE(10, 1);
+  buf.writeInt16LE(805, 8);
+  assert.deepEqual(parseFeedDisconnect(buf), { code: 50, reason: 805 });
+  assert.equal(nextFeedReconnectMs(805, 1_500), 10_000);
+  assert.equal(nextFeedReconnectMs(0, 1_500), 3_000);
+  assert.equal(nextFeedReconnectMs(0, 20_000), 30_000);
+});
 
 test("matchLiveInstrument keeps NSE and MCX ids on different segments", () => {
   assert.equal(matchLiveInstrument(BOTH, 565899, "MCX_COMM").symbol, "CRUDEOIL FUT");

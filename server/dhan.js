@@ -115,6 +115,9 @@ const persistedBackoff = loadTokenBackoff();
 let keepAliveBackoffUntil = persistedBackoff.generateBackoffUntil;
 let socket = null;
 let reconnectTimer = null;
+let lastFeedSubscribeKey = "";
+let socketReconnectBackoffMs = 1_500;
+let lastSocketDisconnectReason = 0;
 let usedFallback = false;
 let futureInstruments = [];
 let lastTickAt = 0;
@@ -258,6 +261,52 @@ function instrumentsForFamilies(families, instruments = liveInstruments()) {
   return instruments.filter((row) => wanted.has(quoteFamily(row.segment)));
 }
 
+export const FEED_SUBSCRIBE_BATCH = 100;
+
+export function feedSubscribeBatches(list, size = FEED_SUBSCRIBE_BATCH) {
+  const rows = Array.isArray(list) ? list : [];
+  const n = Math.max(1, Number(size) || FEED_SUBSCRIBE_BATCH);
+  const batches = [];
+  for (let i = 0; i < rows.length; i += n) batches.push(rows.slice(i, i + n));
+  return batches;
+}
+
+export function feedInstrumentKey(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((row) => `${row?.ExchangeSegment || ""}:${row?.SecurityId || ""}`)
+    .filter((key) => key !== ":")
+    .sort()
+    .join("|");
+}
+
+export function isCurrentFeedSocket(current, eventSocket) {
+  return Boolean(current) && current === eventSocket;
+}
+
+export function nextFeedReconnectMs(reason, previous = 1_500) {
+  if (Number(reason) === 805) return 10_000;
+  const prev = Number(previous);
+  const base = Number.isFinite(prev) && prev > 0 ? prev : 1_500;
+  return Math.min(30_000, Math.max(1_500, base) * 2);
+}
+
+/** Dhan feed disconnect packet (response code 50). Reason 805 = too many websockets. */
+export function parseFeedDisconnect(buffer) {
+  if (!buffer || buffer.length < 10) return null;
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  let offset = 0;
+  while (offset + 10 <= buf.length) {
+    const code = buf.readUInt8(offset);
+    const length = buf.readUInt16LE(offset + 1);
+    const packetLen = length >= 8 ? length : 10;
+    if (code === 50) {
+      return { code: 50, reason: buf.readInt16LE(offset + 8) };
+    }
+    offset += Math.max(packetLen, 8);
+  }
+  return null;
+}
+
 function feedInstrumentList() {
   const seen = new Set();
   const list = [];
@@ -272,18 +321,23 @@ function feedInstrumentList() {
   return list;
 }
 
-function subscribeFeedInstruments() {
+function subscribeFeedInstruments({ force = false } = {}) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   const list = feedInstrumentList();
   if (!list.length) return;
+  const key = feedInstrumentKey(list);
+  if (!force && key && key === lastFeedSubscribeKey) return;
+  lastFeedSubscribeKey = key;
   try {
-    socket.send(
-      JSON.stringify({
-        RequestCode: 17,
-        InstrumentCount: list.length,
-        InstrumentList: list,
-      }),
-    );
+    for (const batch of feedSubscribeBatches(list)) {
+      socket.send(
+        JSON.stringify({
+          RequestCode: 17,
+          InstrumentCount: batch.length,
+          InstrumentList: batch,
+        }),
+      );
+    }
   } catch {
     /* socket dropped */
   }
@@ -1241,14 +1295,22 @@ function stopSocket() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  if (socket) {
-    try {
-      socket.removeAllListeners();
-      socket.close();
-    } catch {
-      /* ignore */
+  lastFeedSubscribeKey = "";
+  if (!socket) return;
+  const prev = socket;
+  socket = null;
+  try {
+    prev.removeAllListeners();
+    if (prev.readyState === WebSocket.OPEN) {
+      try {
+        prev.send(JSON.stringify({ RequestCode: 12 }));
+      } catch {
+        /* already closing */
+      }
     }
-    socket = null;
+    prev.close();
+  } catch {
+    /* ignore */
   }
 }
 
@@ -1308,19 +1370,25 @@ export function parseFeedPackets(buffer, instruments = liveInstruments()) {
 }
 
 function startSocket() {
-  stopSocket();
   if (!accessToken || !clientId) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  stopSocket();
   const url = `${DHAN_FEED_WS}?version=2&token=${encodeURIComponent(accessToken)}&clientId=${encodeURIComponent(clientId)}&authType=2`;
+  let mine;
   try {
-    socket = new WebSocket(url);
+    mine = new WebSocket(url);
   } catch (error) {
     setDhanFeed({ error: `Dhan websocket failed: ${error.message}. Reconnecting.` });
-    scheduleSocketReconnect(2_000);
+    scheduleSocketReconnect(socketReconnectBackoffMs);
     return;
   }
+  socket = mine;
 
-  socket.on("open", () => {
-    subscribeFeedInstruments();
+  mine.on("open", () => {
+    if (!isCurrentFeedSocket(socket, mine)) return;
+    socketReconnectBackoffMs = 1_500;
+    lastSocketDisconnectReason = 0;
+    subscribeFeedInstruments({ force: true });
     setDhanFeed({ live: true, source: "websocket", error: null });
   });
 
@@ -1345,9 +1413,21 @@ function startSocket() {
       quoteCount: quotes.length,
     });
   };
-  socket.on("message", (data) => {
+  mine.on("message", (data) => {
+    if (!isCurrentFeedSocket(socket, mine)) return;
     try {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      const dropped = parseFeedDisconnect(buffer);
+      if (dropped) {
+        lastSocketDisconnectReason = dropped.reason;
+        if (dropped.reason === 805) socketReconnectBackoffMs = Math.max(socketReconnectBackoffMs, 10_000);
+        setDhanFeed({
+          live: true,
+          source: "rest",
+          error: dropped.reason === 805 ? "Dhan closed an extra websocket (max 5). Reconnecting." : `Dhan feed disconnect ${dropped.reason}`,
+        });
+        return;
+      }
       const quotes = parseFeedPackets(buffer);
       if (!quotes.length) return;
       pendingQuotes.push(...quotes);
@@ -1359,16 +1439,29 @@ function startSocket() {
     }
   });
 
-  socket.on("close", () => {
-    socket = null;
-    if (!accessToken) return;
-    setDhanFeed({ live: true, source: "rest" });
-    scheduleSocketReconnect(1_500);
+  mine.on("ping", (data) => {
+    if (!isCurrentFeedSocket(socket, mine)) return;
+    try {
+      mine.pong(data);
+    } catch {
+      /* drop */
+    }
   });
 
-  socket.on("error", () => {
+  mine.on("close", () => {
+    if (!isCurrentFeedSocket(socket, mine)) return;
+    socket = null;
+    lastFeedSubscribeKey = "";
+    if (!accessToken) return;
     setDhanFeed({ live: true, source: "rest" });
-    scheduleSocketReconnect(1_500);
+    const wait = lastSocketDisconnectReason === 805 ? 10_000 : socketReconnectBackoffMs;
+    socketReconnectBackoffMs = nextFeedReconnectMs(lastSocketDisconnectReason, socketReconnectBackoffMs);
+    scheduleSocketReconnect(wait);
+  });
+
+  mine.on("error", () => {
+    if (!isCurrentFeedSocket(socket, mine)) return;
+    setDhanFeed({ live: true, source: "rest" });
   });
 }
 
@@ -1560,7 +1653,7 @@ function startLiveLoop() {
   if (!(futureInstruments || []).some((row) => row?.securityId)) {
     futureInstruments = fallbackFrontFutures();
   }
-  onDhanBookChanged(subscribeFeedInstruments);
+  onDhanBookChanged(() => subscribeFeedInstruments());
   startSocket();
   void pullQuotes();
   void (async () => {
