@@ -365,6 +365,8 @@ export function parseDeskOptionSymbol(symbol, extras = {}) {
   const raw = String(symbol || "")
     .toUpperCase()
     .replace(/,/g, " ")
+    .replace(/\s*[·•].*$/, " ")
+    .replace(/\s+\d{4}-\d{2}-\d{2}\b.*$/, " ")
     .replace(/\s+/g, " ")
     .trim();
   const compact = raw.replace(/\s+/g, "-");
@@ -423,7 +425,18 @@ export function upstoxExpiryDay(value) {
   if (value == null || value === "") return "";
   const raw = String(value).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  if (typeof value === "number" || /^\d{11,}$/.test(raw)) {
+  const named = raw
+    .toUpperCase()
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .match(/^(\d{1,2})[-\s]([A-Z]{3})[-\s]?(\d{2}|\d{4})$/);
+  if (named) return parseSymbolExpiry(`${named[1]}${named[2]}${named[3]}`);
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
+  if (dmy) {
+    const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+    return `${year}-${String(dmy[2]).padStart(2, "0")}-${String(dmy[1]).padStart(2, "0")}`;
+  }
+  if (typeof value === "number" || /^\d{10,}$/.test(raw)) {
     const n = Number(value);
     if (!Number.isFinite(n) || n <= 0) return "";
     const ms = n < 1e11 ? n * 1000 : n;
@@ -500,7 +513,8 @@ function selectUpstoxInstrumentRow(rows = [], { root, strike, option, expiry, se
     const exact = scored.find((row) => row.exact);
     if (exact) return exact.row;
     const nseCommodity = String(segment || "").toUpperCase() === "NSE";
-    if (!nseCommodity) return null;
+    const indexOption = Boolean(UPSTOX_INDEX_KEYS[wantRoot]);
+    if (!nseCommodity && !indexOption) return null;
   }
   const monthHits = wantMonth ? scored.filter((row) => row.month) : [];
   const pool = monthHits.length ? monthHits : scored;
@@ -552,12 +566,16 @@ function isAuthError(error) {
 
 function contractExpiryWanted(parsed, expiry) {
   const raw = String(expiry || parsed.expiry || "").trim();
+  const day = upstoxExpiryDay(raw);
+  if (day) return day;
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
   if (parsed.root === "CRUDEOIL") return raw.slice(0, 7);
   return upstoxExpiryDate(raw, parsed.root) || raw.slice(0, 10);
 }
 
 const UPSTOX_MASTER_FILES = [
+  "https://assets.upstox.com/market-quote/instruments/exchange/NFO.json.gz",
+  "https://assets.upstox.com/market-quote/instruments/exchange/BFO.json.gz",
   "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz",
   "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json.gz",
 ];
@@ -682,14 +700,22 @@ async function resolveUpstoxInstrumentKey({ symbol, expiry, strike, option, acce
   if (authError) throw authError;
   const indexKey = UPSTOX_INDEX_KEYS[parsed.root];
   const day = wanted.length >= 10 ? wanted : "";
-  if (!headers || !indexKey || !day || parsed.option === "FUT") return null;
-  try {
+  if (!headers || !indexKey || parsed.option === "FUT") return null;
+  const loadContracts = async (expiryDay) => {
+    const query = expiryDay ? `&expiry_date=${encodeURIComponent(expiryDay)}` : "";
     const body = await httpJson(
       fetchImpl,
-      `https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(indexKey)}&expiry_date=${encodeURIComponent(day)}`,
+      `https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(indexKey)}${query}`,
       { headers },
     );
-    return pickFrom(body.data || body, day);
+    return pickFrom(body.data || body, expiryDay || wanted);
+  };
+  try {
+    if (day) {
+      const hit = await loadContracts(day);
+      if (hit) return hit;
+    }
+    return await loadContracts("");
   } catch (error) {
     if (isAuthError(error)) throw error;
     return null;
@@ -1473,7 +1499,12 @@ async function placeConnectedLiveBrokerOrder(id, payload, session, fetchImpl, la
       });
       instrument = resolved?.key || "";
     }
-    if (!instrument) throw fail("Upstox live orders need an instrument key or security id.");
+    if (!instrument) {
+      const hint = [symbol, payload.strike && payload.option ? `${payload.strike} ${payload.option}` : "", expiry]
+        .filter(Boolean)
+        .join(" · ");
+      throw fail(`Upstox live orders need an instrument key or security id${hint ? ` for ${hint}` : ""}.`);
+    }
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
