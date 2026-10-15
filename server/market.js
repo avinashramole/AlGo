@@ -2093,7 +2093,8 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   const now = Date.now();
   const config = shivamT2sConfig(algo);
   const root = config.symbol;
-  const session = nseMarketSession();
+  const mcx = config.session === "mcx" || isMcxSymbol(root);
+  const session = mcx ? mcxMarketSession() : nseMarketSession();
   const positions = (state.positions || []).filter((row) => {
     if (row.copyUserId) return false;
     if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
@@ -2114,9 +2115,9 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   const pack = chainForSymbol(root);
   const listed = niftyListedExpiries(pack, root);
   const expiry =
-    config.expiryKind === "weekly"
-      ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || ""
-      : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
+    mcx || config.expiryKind !== "weekly"
+      ? pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
+      : nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || "";
   const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
   const spot = Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
   const step = Number(und.step) || 50;
@@ -2133,8 +2134,9 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   }
   const ceLtp = optionPremium(root, ceStrike, "CE");
   const peLtp = optionPremium(root, peStrike, "PE");
-  const ceBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.ceBarMinutes || 5) || 0;
-  const peBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.peBarMinutes || 5) || 0;
+  const barOpts = mcx ? { sessionOpenMinutes: 9 * 60, sessionCloseMinutes: 23 * 60 + 30 } : undefined;
+  const ceBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.ceBarMinutes || 5, barOpts) || 0;
+  const peBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.peBarMinutes || 5, barOpts) || 0;
   vs.ceBars = upsertOptionBar(vs.ceBars, ceBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, peBarTime, peLtp);
   const lotSize = instrumentLotSize(root, ceStrike || peStrike, Number(und.lot) || 0);
@@ -2161,7 +2163,7 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
     feedLive: Boolean(feedLive),
     authorized: Boolean(algo.enabled),
     availableFunds: hedgeCapital(mode),
-    minutesToClose: minutesUntilIst(15 * 60 + 30, new Date(now)),
+    minutesToClose: minutesUntilIst(mcx ? 23 * 60 + 30 : 15 * 60 + 30, new Date(now)),
     indexBars: getCandles(config.indexTimeframe, root) || [],
     ceBars: vs.ceBars,
     peBars: vs.peBars,
@@ -4062,8 +4064,9 @@ function resolveBrokerTestTrade(algo) {
     const und = getUnderlying(root);
     const pack = chainForSymbol(root);
     const listed = niftyListedExpiries(pack, root);
+    const mcx = config.session === "mcx" || isMcxSymbol(root);
     const expiry =
-      config.expiryKind === "weekly"
+      !mcx && config.expiryKind === "weekly"
         ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
         : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
     const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);

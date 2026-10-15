@@ -517,6 +517,15 @@ test("normalizeAlgo keeps Shivam T2S paper, disabled, and daily limit 1-100", ()
   assert.equal(custom.peTimeframe, "19m");
   assert.equal(custom.indexTimeframe, "1H");
   assert.equal(custom.timeframe, "1H");
+  const crude = normalizeAlgo({ kind: "shivam-t2s", symbol: "CRUDEOIL", expiryKind: "weekly" });
+  assert.equal(crude.symbol, "CRUDEOIL");
+  assert.equal(crude.expiryKind, "monthly");
+  const copper = normalizeAlgo({ kind: "shivam-t2s", symbol: "COPPER" });
+  assert.equal(copper.symbol, "COPPER");
+  assert.equal(copper.expiryKind, "monthly");
+  const gas = normalizeAlgo({ kind: "shivam-t2s", symbol: "NATURALGAS" });
+  assert.equal(gas.symbol, "NATURALGAS");
+  assert.equal(gas.expiryKind, "monthly");
 });
 
 test("normalizeAlgo keeps Shivam T2S paper unless live is authorized", () => {
