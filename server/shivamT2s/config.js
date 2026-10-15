@@ -116,8 +116,9 @@ export function shivamT2sConfig(algo = {}) {
     DEFAULT_SHIVAM_T2S_CONFIG.indexTimeframe,
   );
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_SHIVAM_T2S_CONFIG.lots)));
-  const liveAuthorized = false;
-  const runMode = String(algo.runMode) === "backtest" ? "backtest" : "paper";
+  const liveAuthorized = algo.liveAuthorized === true;
+  const requested = String(algo.runMode || "paper").toLowerCase();
+  const runMode = requested === "backtest" ? "backtest" : requested === "live" && liveAuthorized ? "live" : "paper";
   return {
     name: SHIVAM_T2S_NAME,
     symbol: script.id,
@@ -235,9 +236,14 @@ export function defaultShivamT2sAlgo(patch = {}) {
     indicator: "SHIVAM_T2S",
     symbol: cfg.symbol,
     testDesk: true,
-    runMode: cfg.runMode === "backtest" || patch.runMode === "backtest" ? "backtest" : "paper",
-    liveAuthorized: false,
-    brokerId: "paper",
+    runMode: cfg.runMode,
+    liveAuthorized: cfg.liveAuthorized,
+    brokerId:
+      cfg.runMode === "live"
+        ? patch.brokerId && String(patch.brokerId).toLowerCase() !== "paper"
+          ? String(patch.brokerId)
+          : "dhan"
+        : "paper",
     enabled: patch.enabled === true,
   };
 }

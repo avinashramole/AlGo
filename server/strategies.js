@@ -330,7 +330,7 @@ export function summarizeAlgo(algo) {
   }
   if (isShivamT2sAlgo(algo)) {
     const cfg = shivamT2sConfig(algo);
-    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ${cfg.strikePolicy} · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · paper until live is authorized · ${size}`;
+    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ${cfg.strikePolicy} · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · ${cfg.runMode === "live" ? "Live Dhan" : "Paper"} · no member copy · ${size}`;
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
@@ -420,11 +420,16 @@ function sealTestDesk(algo, input = {}, existing = {}) {
     isShivamT2sAlgo(input) ||
     isShivamT2sAlgo(existing);
   if (!testDesk) return { ...algo, testDesk: false };
+  const shivamLive = isShivamT2sAlgo(algo) && algo.runMode === "live";
   return {
     ...algo,
     testDesk: true,
-    runMode: algo.runMode === "backtest" ? "backtest" : "paper",
-    brokerId: "paper",
+    runMode: algo.runMode === "backtest" ? "backtest" : shivamLive ? "live" : "paper",
+    brokerId: shivamLive
+      ? algo.brokerId && String(algo.brokerId).toLowerCase() !== "paper"
+        ? algo.brokerId
+        : "dhan"
+      : "paper",
     mappingScope: "master",
     mappedClientIds: [],
     clientVisible: false,
@@ -674,7 +679,8 @@ export function normalizeAlgo(input = {}, existing = {}) {
       throw err;
     }
     const cfg = shivamT2sConfig(merged);
-    const runMode = cfg.runMode === "backtest" ? "backtest" : "paper";
+    const runMode = cfg.runMode;
+    const live = runMode === "live";
     const creating = !existing.id;
     const next = {
       ...existing,
@@ -684,8 +690,12 @@ export function normalizeAlgo(input = {}, existing = {}) {
         runMode,
         lots: cfg.lots,
         symbol: cfg.symbol,
-        liveAuthorized: false,
-        brokerId: "paper",
+        liveAuthorized: live,
+        brokerId: live
+          ? merged.brokerId && String(merged.brokerId).toLowerCase() !== "paper"
+            ? merged.brokerId
+            : "dhan"
+          : "paper",
       }),
       id: existing.id || newAlgoId(),
       kind: SHIVAM_T2S_KIND,
@@ -709,9 +719,13 @@ export function normalizeAlgo(input = {}, existing = {}) {
     return {
       ...mapped,
       testDesk: true,
-      runMode: mapped.runMode === "backtest" ? "backtest" : "paper",
-      brokerId: "paper",
-      liveAuthorized: false,
+      runMode: mapped.runMode === "backtest" ? "backtest" : live ? "live" : "paper",
+      brokerId: live
+        ? mapped.brokerId && String(mapped.brokerId).toLowerCase() !== "paper"
+          ? mapped.brokerId
+          : "dhan"
+        : "paper",
+      liveAuthorized: live,
       mappingScope: "master",
       mappedClientIds: [],
       clientVisible: false,
