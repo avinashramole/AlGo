@@ -123,11 +123,13 @@ test("website deploy installs npm packages before tsc", () => {
   assert.match(src, /@capacitor\/browser/);
 });
 
-test("website deploy accepts first-candle 30m 60m custom and does not require the old FIRST_CANDLE_TIMEFRAMES[algo.timeframe] gate", () => {
+test("website deploy accepts first-candle 5m 15m 30m 1H custom and does not require the old FIRST_CANDLE_TIMEFRAMES[algo.timeframe] gate", () => {
   const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
   assert.match(src, /resolveFirstCandleTimeframe/);
   assert.match(src, /data-first-candle-timeframe-bar/);
   assert.match(src, /first-candle-timeframe-bar/);
+  assert.match(src, /DESK_TIMEFRAME_PRESETS = \\\["5m", "15m", "30m", "1H"\\\]/);
+  assert.doesNotMatch(src, /"30m", "60m"/);
   assert.doesNotMatch(src, /FIRST_CANDLE_TIMEFRAMES\\\[algo\.timeframe\\\]/);
 });
 
