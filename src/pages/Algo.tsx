@@ -1289,8 +1289,7 @@ function AlgoCard({
         </div>
       ) : null}
 
-      {shivam ? null : (
-      <div className="mt-4 text-xs text-slate-400">
+      <div className="mt-4 text-xs text-slate-400" data-latest-activity="true" data-shivam-activity={shivam ? "true" : undefined}>
         <span className="font-bold uppercase tracking-[0.12em] text-slate-500">Latest activity</span>
         <div className="mt-1">{activity}</div>
         {algo.lastBacktest?.timeframe || algo.lastBacktest?.optionSource ? (
@@ -1346,7 +1345,6 @@ function AlgoCard({
           </div>
         ) : null}
       </div>
-      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onEdit} className="inline-flex h-9 items-center gap-1 rounded-full border border-[var(--border)] px-3 text-xs font-semibold">
