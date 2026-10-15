@@ -405,7 +405,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
   };
 
   const startInMode = async (algo: AlgoStrategy, mode: "paper" | "live") => {
-    const nextMode = testDesk ? "paper" : mode;
+    const nextMode = testDesk || isShivamT2sKind(algo) ? "paper" : mode;
     setBusyId(algo.id);
     try {
       if (algo.runMode !== nextMode) {
@@ -414,7 +414,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
           runMode: nextMode,
           brokerId: nextMode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
           enabled: true,
-          ...(testDesk ? { testDesk: true } : {}),
+          ...(testDesk || isShivamT2sKind(algo) ? { testDesk: true } : {}),
         });
         return;
       }
@@ -558,7 +558,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                   positions={uniqueOpenContracts(
                     (data.positions || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId),
                   )}
-                  isolated={testDesk}
+                  isolated={testDesk || isShivamT2sKind(algo)}
                   busy={busyId === algo.id || busyId === `exit-${algo.id}` || busyId === `reset-${algo.id}` || busyId === `report-${algo.id}` || busyId === "all"}
                   rangeOpen={rangeId === algo.id}
                   rangeError={rangeId === algo.id ? rangeError : ""}
@@ -610,7 +610,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
               <div className="text-base font-bold">No strategies in this view</div>
               <p className="mt-1 text-sm text-slate-400">
                 {testDesk
-                  ? "Add a paper-only test strategy. It does not send live Dhan orders or member copies."
+                  ? "Add SHIVAM T2S or another paper-only test strategy. It does not send live Dhan orders or member copies."
                   : "Add a NIFTY 5m or CRUDE OIL strategy to start the desk."}
               </p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -1336,7 +1336,7 @@ function AlgoCard({
               >
                 Start paper
               </button>
-              {shivam && algo.liveAuthorized !== true ? null : (
+              {shivam ? null : (
               <button
                 type="button"
                 disabled={busy}

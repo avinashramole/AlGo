@@ -115,9 +115,8 @@ export function shivamT2sConfig(algo = {}) {
     DEFAULT_SHIVAM_T2S_CONFIG.indexTimeframe,
   );
   const lots = Math.max(1, Math.round(num(algo.lots, DEFAULT_SHIVAM_T2S_CONFIG.lots)));
-  const liveAuthorized = algo.liveAuthorized === true;
-  const requestedLive = String(algo.runMode || "") === "live";
-  const runMode = requestedLive && liveAuthorized ? "live" : String(algo.runMode) === "backtest" ? "backtest" : "paper";
+  const liveAuthorized = false;
+  const runMode = String(algo.runMode) === "backtest" ? "backtest" : "paper";
   return {
     name: SHIVAM_T2S_NAME,
     symbol: script.id,
@@ -186,9 +185,6 @@ export function validateShivamT2s(algo = {}) {
     return "Capital allocation percent must be between 0 and 100.";
   }
   if (cfg.capitalMode === "amount" && !(cfg.capitalValue > 0)) return "Capital allocation amount must be greater than 0.";
-  if (String(algo.runMode) === "live" && algo.liveAuthorized !== true) {
-    return "Live trading stays locked until paper trading and safety validation are authorized.";
-  }
   return "";
 }
 
@@ -231,15 +227,17 @@ export function defaultShivamT2sAlgo(patch = {}) {
     status: "PAUSED",
     intradayOnly: true,
     eodSquareOffMinutes: 15,
+    testDesk: true,
     ...patch,
     name: SHIVAM_T2S_NAME,
     kind: SHIVAM_T2S_KIND,
     strategyType: SHIVAM_T2S_TYPE,
     indicator: "SHIVAM_T2S",
     symbol: cfg.symbol,
-    runMode: cfg.runMode === "live" ? "live" : patch.runMode === "backtest" ? "backtest" : "paper",
-    liveAuthorized: cfg.liveAuthorized,
-    brokerId: cfg.runMode === "live" ? patch.brokerId || "dhan" : "paper",
+    testDesk: true,
+    runMode: cfg.runMode === "backtest" || patch.runMode === "backtest" ? "backtest" : "paper",
+    liveAuthorized: false,
+    brokerId: "paper",
     enabled: patch.enabled === true,
   };
 }

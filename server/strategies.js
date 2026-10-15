@@ -409,11 +409,16 @@ function mappingFields(input = {}, existing = {}) {
 }
 
 export function isTestDeskAlgo(algo) {
-  return Boolean(algo?.testDesk);
+  return Boolean(algo?.testDesk) || isShivamT2sAlgo(algo);
 }
 
 function sealTestDesk(algo, input = {}, existing = {}) {
-  const testDesk = Boolean(existing.testDesk) || Boolean(input.testDesk ?? algo?.testDesk);
+  const testDesk =
+    Boolean(existing.testDesk) ||
+    Boolean(input.testDesk ?? algo?.testDesk) ||
+    isShivamT2sAlgo(algo) ||
+    isShivamT2sAlgo(input) ||
+    isShivamT2sAlgo(existing);
   if (!testDesk) return { ...algo, testDesk: false };
   return {
     ...algo,
@@ -669,19 +674,22 @@ export function normalizeAlgo(input = {}, existing = {}) {
       throw err;
     }
     const cfg = shivamT2sConfig(merged);
-    const runMode = cfg.runMode;
+    const runMode = cfg.runMode === "backtest" ? "backtest" : "paper";
     const creating = !existing.id;
     const next = {
       ...existing,
       ...defaultShivamT2sAlgo({
         ...merged,
+        testDesk: true,
         runMode,
         lots: cfg.lots,
         symbol: cfg.symbol,
-        liveAuthorized: cfg.liveAuthorized,
+        liveAuthorized: false,
+        brokerId: "paper",
       }),
       id: existing.id || newAlgoId(),
       kind: SHIVAM_T2S_KIND,
+      testDesk: true,
       lastBacktest: existing.lastBacktest || null,
       pnl: Number.isFinite(Number(existing.pnl)) ? Number(existing.pnl) : 0,
       winRate: Number.isFinite(Number(existing.winRate)) ? Number(existing.winRate) : 0,

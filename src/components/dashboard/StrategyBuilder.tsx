@@ -170,7 +170,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
       });
     } else {
       setForm({
-        ...emptyStrategy("nifty-first-candle"),
+        ...emptyStrategy(testDesk ? "shivam-t2s" : "nifty-first-candle"),
         brokerId: testDesk ? "paper" : data.activeBrokerId || "dhan",
         runMode: testDesk ? "paper" : "live",
         testDesk,
@@ -308,10 +308,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         setError("Stop-loss and target must be greater than 0.");
         return;
       }
-      if (form.runMode === "live" && form.liveAuthorized !== true) {
-        setError("Live trading stays locked until paper trading and safety validation are authorized.");
-        return;
-      }
     } else if (mir) {
       if (!MULTI_INDEX_SCRIPTS.some((row) => row.id === (form.symbol || "NIFTY"))) {
         setError("Pick NIFTY 50, BANK NIFTY, FINNIFTY, or SENSEX.");
@@ -329,7 +325,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     setBusy(true);
     setError("");
     const seal = (payload: Record<string, unknown>) =>
-      testDesk
+      testDesk || shivam
         ? {
             ...payload,
             testDesk: true,
@@ -362,9 +358,10 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               slMode: form.slMode === "points" ? "points" : "percentage",
               targetMode: form.targetMode === "points" ? "points" : "percentage",
               capitalMode: form.capitalMode === "percent" ? "percent" : "amount",
-              liveAuthorized: form.liveAuthorized === true,
-              runMode: form.runMode === "live" && form.liveAuthorized === true ? "live" : form.runMode === "backtest" ? "backtest" : "paper",
-              brokerId: form.runMode === "live" && form.liveAuthorized === true ? form.brokerId || data.activeBrokerId || "dhan" : "paper",
+              liveAuthorized: false,
+              runMode: form.runMode === "backtest" ? "backtest" : "paper",
+              brokerId: "paper",
+              testDesk: true,
               enabled: Boolean(algo?.enabled),
             }
           : mir
@@ -578,10 +575,11 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               });
             }}
           />
+          {testDesk ? (
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text="NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper until live is authorized. Card shows ● ● ● or NO Trade."
+            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper-only — no live Dhan, no member copy. Card shows ● ● ● or NO Trade."
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -590,11 +588,13 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 runMode: "paper",
                 brokerId: "paper",
                 liveAuthorized: false,
+                testDesk: true,
                 lots: form.lots || 1,
                 enabled: false,
               });
             }}
           />
+          ) : null}
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
@@ -894,15 +894,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                   onChange={(event) => set({ autoSizeLots: event.target.checked })}
                 />
                 Auto-size lots down to the calculated maximum (off = reject oversized requests)
-              </label>
-              <label className="text-xs font-semibold text-slate-500 lg:col-span-2">
-                <input
-                  type="checkbox"
-                  className="mr-2 align-middle"
-                  checked={form.liveAuthorized === true}
-                  onChange={(event) => set({ liveAuthorized: event.target.checked, runMode: event.target.checked ? form.runMode : "paper", brokerId: event.target.checked && form.runMode === "live" ? form.brokerId || data.activeBrokerId || "dhan" : "paper" })}
-                />
-                Authorize live after paper trading and safety validation
               </label>
             </div>
           </div>

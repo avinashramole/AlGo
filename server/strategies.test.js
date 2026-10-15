@@ -477,20 +477,28 @@ test("normalizeAlgo keeps Shivam T2S paper, disabled, and daily limit 1-100", ()
   assert.equal(algo.runMode, "paper");
   assert.equal(algo.brokerId, "paper");
   assert.equal(algo.liveAuthorized, false);
+  assert.equal(algo.testDesk, true);
   assert.equal(algo.maxTradesPerDay, 100);
   assert.equal(algo.ceTimeframe, "3m");
   assert.match(algo.summary, /Shivam T2S/);
 });
 
-test("normalizeAlgo rejects unauthorized Shivam live", () => {
-  assert.throws(
-    () =>
-      normalizeAlgo({
-        kind: "shivam-t2s",
-        runMode: "live",
-        liveAuthorized: false,
-      }),
-    /Live trading stays locked/,
-  );
+test("normalizeAlgo keeps Shivam T2S on Algo Test paper even if live is requested", () => {
+  const algo = normalizeAlgo({
+    kind: "shivam-t2s",
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "both",
+    mappedClientIds: ["u-1"],
+    clientVisible: true,
+  });
+  assert.equal(algo.testDesk, true);
+  assert.equal(algo.runMode, "paper");
+  assert.equal(algo.brokerId, "paper");
+  assert.equal(algo.liveAuthorized, false);
+  assert.equal(algo.mappingScope, "master");
+  assert.deepEqual(algo.mappedClientIds, []);
+  assert.equal(algo.clientVisible, false);
 });
 

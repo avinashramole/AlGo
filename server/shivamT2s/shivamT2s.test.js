@@ -110,6 +110,7 @@ test("defaults stay paper, disabled, and named Shivam T2S Strategy", () => {
   assert.equal(algo.enabled, false);
   assert.equal(algo.runMode, "paper");
   assert.equal(algo.liveAuthorized, false);
+  assert.equal(algo.testDesk, true);
   assert.equal(cfg.symbol, "NIFTY");
   assert.equal(cfg.ceConfirmColor, "GREEN");
   assert.equal(cfg.peConfirmColor, "GREEN");
@@ -117,10 +118,11 @@ test("defaults stay paper, disabled, and named Shivam T2S Strategy", () => {
   assert.equal(isShivamT2sAlgo(algo), true);
 });
 
-test("live runMode without liveAuthorized stays paper", () => {
-  const cfg = shivamT2sConfig({ runMode: "live", liveAuthorized: false });
+test("live runMode stays paper on the Algo Test desk", () => {
+  const cfg = shivamT2sConfig({ runMode: "live", liveAuthorized: true });
   assert.equal(cfg.runMode, "paper");
-  assert.match(validateShivamT2s({ runMode: "live", liveAuthorized: false }), /Live trading stays locked/);
+  assert.equal(cfg.liveAuthorized, false);
+  assert.equal(validateShivamT2s({ runMode: "live", liveAuthorized: true }), "");
 });
 
 test("candle colors treat equal open/close as doji, not green or red", () => {
