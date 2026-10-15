@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   DEFAULT_SHIVAM_T2S_CONFIG,
   SHIVAM_T2S_NAME,
+  SHIVAM_T2S_SCRIPTS,
+  SHIVAM_SCRIPT_PICK_ERROR,
   ShivamT2sStrategy,
   atmStrike,
   averageFillPrice,
@@ -17,6 +19,7 @@ import {
   renderShivamExcel,
   renderShivamPdf,
   resolveShivamTimeframe,
+  shivamScript,
   shivamT2sConfig,
   sizeShivamLots,
   strikeForPolicy,
@@ -352,8 +355,43 @@ test("Shivam T2S keeps 5m 15m 30m 1H and custom 1-60 minutes including 17 and 19
 });
 
 test("daily limit and capital fields validate on the backend", () => {
-  assert.equal(validateShivamT2s({ symbol: "FOO" }), "Unsupported index. Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, or SENSEX.");
+  assert.equal(validateShivamT2s({ symbol: "FOO" }), SHIVAM_SCRIPT_PICK_ERROR);
   assert.match(validateShivamT2s({ slValue: 0 }), /Stop-loss/);
   assert.equal(shivamT2sConfig({ maxTradesPerDay: 100 }).maxTradesPerDay, 100);
   assert.equal(DEFAULT_SHIVAM_T2S_CONFIG.liveAuthorized, false);
+});
+
+test("Shivam T2S lists Crude Oil, Copper, and Natural Gas as monthly MCX scripts", () => {
+  assert.deepEqual(
+    SHIVAM_T2S_SCRIPTS.filter((row) => row.session === "mcx").map((row) => row.id),
+    ["CRUDEOIL", "COPPER", "NATURALGAS"],
+  );
+  assert.equal(shivamScript("CRUDE OIL")?.id, "CRUDEOIL");
+  assert.equal(shivamScript("CRUDE")?.id, "CRUDEOIL");
+  assert.equal(shivamScript("COPPER FUT")?.id, "COPPER");
+  assert.equal(shivamScript("NATGAS")?.id, "NATURALGAS");
+  assert.equal(shivamScript("NATURAL GAS")?.id, "NATURALGAS");
+  assert.equal(shivamScript("CRUDEOILM"), null);
+  assert.equal(validateShivamT2s({ symbol: "CRUDEOIL" }), "");
+  assert.equal(validateShivamT2s({ symbol: "COPPER" }), "");
+  assert.equal(validateShivamT2s({ symbol: "NATURALGAS" }), "");
+  const crude = shivamT2sConfig({ symbol: "CRUDEOIL", expiryKind: "weekly" });
+  assert.equal(crude.symbol, "CRUDEOIL");
+  assert.equal(crude.session, "mcx");
+  assert.equal(crude.segment, "MCX_COMM");
+  assert.equal(crude.exchange, "MCX");
+  assert.equal(crude.expiryKind, "monthly");
+  assert.equal(crude.futuresInstrument, "CRUDEOIL FUT");
+  const copper = shivamT2sConfig({ symbol: "COPPER" });
+  assert.equal(copper.segment, "MCX_COMM");
+  assert.equal(copper.expiryKind, "monthly");
+  assert.equal(copper.futuresInstrument, "COPPER FUT");
+  const gas = shivamT2sConfig({ symbol: "NATURALGAS" });
+  assert.equal(gas.session, "mcx");
+  assert.equal(gas.expiryKind, "monthly");
+  assert.equal(gas.futuresInstrument, "NATURALGAS FUT");
+  const nifty = shivamT2sConfig({ symbol: "NIFTY" });
+  assert.equal(nifty.session, "nse");
+  assert.equal(nifty.expiryKind, "weekly");
+  assert.equal(nifty.segment, "NSE_FNO");
 });

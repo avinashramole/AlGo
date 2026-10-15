@@ -7,12 +7,37 @@ export const SHIVAM_T2S_NAMES = [SHIVAM_T2S_NAME, "Shivam T2S", "SHIVAM T2S"];
 export const SHIVAM_T2S_SEED_ID = "a16";
 
 export const SHIVAM_T2S_SCRIPTS = [
-  { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", segment: "NSE_FNO", futures: "NIFTY FUT" },
-  { id: "BANKNIFTY", label: "BANK NIFTY", exchange: "NSE", segment: "NSE_FNO", futures: "BANKNIFTY FUT" },
-  { id: "FINNIFTY", label: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", futures: "FINNIFTY FUT" },
-  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", exchange: "NSE", segment: "NSE_FNO", futures: "MIDCPNIFTY FUT" },
-  { id: "SENSEX", label: "SENSEX", exchange: "BSE", segment: "BSE_FNO", futures: "SENSEX FUT" },
+  { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "NIFTY FUT" },
+  { id: "BANKNIFTY", label: "BANK NIFTY", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "BANKNIFTY FUT" },
+  { id: "FINNIFTY", label: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "FINNIFTY FUT" },
+  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "MIDCPNIFTY FUT" },
+  { id: "SENSEX", label: "SENSEX", exchange: "BSE", segment: "BSE_FNO", session: "nse", expiryKind: "weekly", futures: "SENSEX FUT" },
+  { id: "CRUDEOIL", label: "CRUDE OIL", exchange: "MCX", segment: "MCX_COMM", session: "mcx", expiryKind: "monthly", futures: "CRUDEOIL FUT" },
+  { id: "COPPER", label: "COPPER", exchange: "MCX", segment: "MCX_COMM", session: "mcx", expiryKind: "monthly", futures: "COPPER FUT" },
+  { id: "NATURALGAS", label: "NATURAL GAS", exchange: "MCX", segment: "MCX_COMM", session: "mcx", expiryKind: "monthly", futures: "NATURALGAS FUT" },
 ];
+
+export const SHIVAM_SCRIPT_PICK_ERROR =
+  "Unsupported index. Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS.";
+
+const SHIVAM_SCRIPT_ALIASES = {
+  NIFTY: "NIFTY",
+  NIFTY50: "NIFTY",
+  BANKNIFTY: "BANKNIFTY",
+  BANKNIFTY50: "BANKNIFTY",
+  FINNIFTY: "FINNIFTY",
+  MIDCPNIFTY: "MIDCPNIFTY",
+  MIDCAPNIFTY: "MIDCPNIFTY",
+  SENSEX: "SENSEX",
+  CRUDE: "CRUDEOIL",
+  CRUDEOIL: "CRUDEOIL",
+  CRUDEOILFUT: "CRUDEOIL",
+  COPPER: "COPPER",
+  COPPERFUT: "COPPER",
+  NATURALGAS: "NATURALGAS",
+  NATGAS: "NATURALGAS",
+  NATURALGASFUT: "NATURALGAS",
+};
 
 export const SHIVAM_T2S_TIMEFRAMES = {
   "5m": 5,
@@ -67,12 +92,9 @@ export function shivamScript(symbol = "") {
   const raw = String(symbol || "")
     .toUpperCase()
     .replace(/\s+/g, "");
-  if (!raw || raw === "NIFTY50" || raw === "NIFTY") return SHIVAM_T2S_SCRIPTS[0];
-  if (raw === "BANKNIFTY" || raw === "BANKNIFTY50") return SHIVAM_T2S_SCRIPTS[1];
-  if (raw === "FINNIFTY") return SHIVAM_T2S_SCRIPTS[2];
-  if (raw === "MIDCPNIFTY" || raw === "MIDCAPNIFTY") return SHIVAM_T2S_SCRIPTS[3];
-  if (raw === "SENSEX") return SHIVAM_T2S_SCRIPTS[4];
-  return null;
+  if (!raw) return SHIVAM_T2S_SCRIPTS[0];
+  const id = SHIVAM_SCRIPT_ALIASES[raw] || "";
+  return SHIVAM_T2S_SCRIPTS.find((row) => row.id === id) || null;
 }
 
 export function isShivamT2sAlgo(algo = {}) {
@@ -117,6 +139,7 @@ export function shivamT2sConfig(algo = {}) {
   const liveAuthorized = algo.liveAuthorized === true;
   const requested = String(algo.runMode || "paper").toLowerCase();
   const runMode = requested === "backtest" ? "backtest" : requested === "live" && liveAuthorized ? "live" : "paper";
+  const mcx = script.session === "mcx" || script.segment === "MCX_COMM";
   return {
     name: SHIVAM_T2S_NAME,
     symbol: script.id,
@@ -124,6 +147,7 @@ export function shivamT2sConfig(algo = {}) {
     futuresInstrument: script.futures,
     exchange: script.exchange,
     segment: script.segment,
+    session: mcx ? "mcx" : "nse",
     ceTimeframe,
     peTimeframe,
     indexTimeframe,
@@ -146,7 +170,7 @@ export function shivamT2sConfig(algo = {}) {
     strikeOffset: Math.max(0, Math.min(8, Math.round(num(algo.strikeOffset, 0)))),
     tickSize: Math.max(0.01, num(algo.tickSize, DEFAULT_SHIVAM_T2S_CONFIG.tickSize)),
     brokeragePerLot: Math.max(0, num(algo.brokeragePerLot, DEFAULT_SHIVAM_T2S_CONFIG.brokeragePerLot)),
-    expiryKind: String(algo.expiryKind || "weekly") === "monthly" ? "monthly" : "weekly",
+    expiryKind: mcx ? "monthly" : String(algo.expiryKind || "weekly") === "monthly" ? "monthly" : "weekly",
     protectivePolicy: String(algo.protectivePolicy || DEFAULT_SHIVAM_T2S_CONFIG.protectivePolicy),
     liveAuthorized,
     runMode,
@@ -158,7 +182,7 @@ export function shivamT2sConfig(algo = {}) {
 
 export function validateShivamT2s(algo = {}) {
   const raw = String(algo.symbol || algo.index || "").trim();
-  if (raw && !shivamScript(raw)) return "Unsupported index. Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, or SENSEX.";
+  if (raw && !shivamScript(raw)) return SHIVAM_SCRIPT_PICK_ERROR;
   const cfg = shivamT2sConfig(algo);
   const tfError = (label, value) => {
     const rawTf = String(value || "").trim();
@@ -233,6 +257,7 @@ export function defaultShivamT2sAlgo(patch = {}) {
     strategyType: SHIVAM_T2S_TYPE,
     indicator: "SHIVAM_T2S",
     symbol: cfg.symbol,
+    expiryKind: cfg.expiryKind,
     testDesk: true,
     autoSizeLots: cfg.autoSizeLots,
     runMode: cfg.runMode,

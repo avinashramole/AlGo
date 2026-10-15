@@ -360,11 +360,14 @@ export const MULTI_INDEX_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4] as const;
 export const SHIVAM_T2S_NAME = "Shivam T2S Strategy";
 
 export const SHIVAM_T2S_SCRIPTS = [
-  { id: "NIFTY", label: "NIFTY 50", futures: "NIFTY FUT" },
-  { id: "BANKNIFTY", label: "BANK NIFTY", futures: "BANKNIFTY FUT" },
-  { id: "FINNIFTY", label: "FINNIFTY", futures: "FINNIFTY FUT" },
-  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", futures: "MIDCPNIFTY FUT" },
-  { id: "SENSEX", label: "SENSEX", futures: "SENSEX FUT" },
+  { id: "NIFTY", label: "NIFTY 50", futures: "NIFTY FUT", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "BANKNIFTY", label: "BANK NIFTY", futures: "BANKNIFTY FUT", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "FINNIFTY", label: "FINNIFTY", futures: "FINNIFTY FUT", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", futures: "MIDCPNIFTY FUT", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "SENSEX", label: "SENSEX", futures: "SENSEX FUT", session: "nse" as const, expiryKind: "weekly" as const },
+  { id: "CRUDEOIL", label: "CRUDE OIL", futures: "CRUDEOIL FUT", session: "mcx" as const, expiryKind: "monthly" as const },
+  { id: "COPPER", label: "COPPER", futures: "COPPER FUT", session: "mcx" as const, expiryKind: "monthly" as const },
+  { id: "NATURALGAS", label: "NATURAL GAS", futures: "NATURALGAS FUT", session: "mcx" as const, expiryKind: "monthly" as const },
 ];
 
 export const SHIVAM_T2S_TIMEFRAMES = DESK_TIMEFRAME_PRESETS;

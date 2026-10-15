@@ -351,7 +351,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
   const submit = async () => {
     if (shivam) {
       if (!SHIVAM_T2S_SCRIPTS.some((row) => row.id === (form.symbol || "NIFTY"))) {
-        setError("Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, or SENSEX.");
+        setError("Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS.");
         return;
       }
       if (!(Number(form.slValue) > 0) || !(Number(form.targetValue) > 0)) {
@@ -1008,13 +1008,19 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 onPick={(peTimeframe) => set({ peTimeframe })}
               />
               <label className="text-xs font-semibold text-slate-500">
-                Index
+                Script
                 <select
                   className={fieldClass}
                   value={form.symbol || "NIFTY"}
+                  data-shivam-script="true"
                   onChange={(event) => {
                     const row = SHIVAM_T2S_SCRIPTS.find((item) => item.id === event.target.value) || SHIVAM_T2S_SCRIPTS[0];
-                    set({ symbol: row.id, instrument: "option", side: "BUY" });
+                    set({
+                      symbol: row.id,
+                      instrument: "option",
+                      side: "BUY",
+                      expiryKind: row.session === "mcx" ? "monthly" : "weekly",
+                    });
                   }}
                 >
                   {SHIVAM_T2S_SCRIPTS.map((row) => (

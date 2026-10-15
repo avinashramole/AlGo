@@ -16,6 +16,13 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   const strategies = fs.readFileSync(path.join(root, "server/strategies.js"), "utf8");
   assert.match(lib, /"shivam-t2s"/);
   assert.match(lib, /SHIVAM_T2S_NAME = "Shivam T2S Strategy"/);
+  assert.match(lib, /id: "CRUDEOIL", label: "CRUDE OIL", futures: "CRUDEOIL FUT"/);
+  assert.match(lib, /id: "COPPER", label: "COPPER", futures: "COPPER FUT"/);
+  assert.match(lib, /id: "NATURALGAS", label: "NATURAL GAS", futures: "NATURALGAS FUT"/);
+  assert.match(builder, /data-shivam-script="true"/);
+  assert.match(builder, /Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS\./);
+  assert.match(builder, />\s*Script\s*<select/);
+  assert.match(builder, /expiryKind: row\.session === "mcx" \? "monthly" : "weekly"/);
   assert.match(builder, /title="SHIVAM T2S"/);
   assert.match(builder, /data-shivam-capital="true"/);
   assert.match(builder, /Capital management/);
