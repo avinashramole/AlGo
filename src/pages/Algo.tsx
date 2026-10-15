@@ -1,5 +1,6 @@
 import { Activity, FileSpreadsheet, FileText, Pencil, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { downloadBacktestReport, downloadShivamT2sReport, updateAlgo, type ClientRow } from "../api/client";
 import { loadClientList, peekClientList } from "../lib/clientsCache";
 import { BacktestRange, BacktestRangeInline, type BacktestRangePayload } from "../components/dashboard/BacktestRange";
@@ -337,6 +338,7 @@ export function AlgoTest() {
 
 export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
   const testDesk = desk === "test";
+  const navigate = useNavigate();
   const { data, toggle, setAll, removeAlgo, backtest, resetBacktest, unlockBacktest, closePosition, refresh, saveAlgo } = useMarket();
   const [tab, setTab] = useState<DeskTab>("copy");
   const [filter, setFilter] = useState<Filter>("all");
@@ -462,12 +464,26 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
 
   return (
     <div className="space-y-3" data-algo-desk={testDesk ? "test" : "live"}>
-      {testDesk ? null : (
-      <div className="desk-tabs">
-        <TabChip label="Copy Algos" on={tab === "copy"} onClick={() => setTab("copy")} />
-        <TabChip label="TradingView Integration" on={tab === "tradingview"} onClick={() => setTab("tradingview")} />
+      <div className="desk-tabs" data-algo-tabs="true">
+        <TabChip
+          label="Copy Algos"
+          on={!testDesk && tab !== "tradingview"}
+          onClick={() => (testDesk ? navigate("/algo") : setTab("copy"))}
+        />
+        <TabChip
+          label="Algo Test"
+          on={testDesk}
+          accent
+          onClick={() => {
+            if (!testDesk) navigate("/algo-test");
+          }}
+        />
+        <TabChip
+          label="TradingView Integration"
+          on={!testDesk && tab === "tradingview"}
+          onClick={() => (testDesk ? navigate("/algo") : setTab("tradingview"))}
+        />
       </div>
-      )}
 
       {tab === "tradingview" ? (
         <section className="card p-8">
@@ -1537,12 +1553,23 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
   );
 }
 
-function TabChip({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+function TabChip({
+  label,
+  on,
+  onClick,
+  accent,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  accent?: boolean;
+}) {
   return (
     <button
       type="button"
+      data-algo-test-tab={accent ? "true" : undefined}
       onClick={onClick}
-      className={cn(on ? "bg-navy-900 text-white" : "text-slate-400")}
+      className={cn(on ? (accent ? "bg-brand-500 text-white" : "bg-navy-900 text-white") : accent ? "text-brand-500" : "text-slate-400")}
     >
       {label}
     </button>
