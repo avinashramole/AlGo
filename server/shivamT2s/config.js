@@ -219,7 +219,7 @@ export function defaultShivamT2sAlgo(patch = {}) {
     maxPositions: 1,
     capitalMode: cfg.capitalMode,
     capitalValue: cfg.capitalValue,
-    autoSizeLots: false,
+    autoSizeLots: cfg.autoSizeLots,
     expiryKind: cfg.expiryKind,
     indicator: "SHIVAM_T2S",
     runMode: "paper",
@@ -236,6 +236,7 @@ export function defaultShivamT2sAlgo(patch = {}) {
     indicator: "SHIVAM_T2S",
     symbol: cfg.symbol,
     testDesk: true,
+    autoSizeLots: cfg.autoSizeLots,
     runMode: cfg.runMode,
     liveAuthorized: cfg.liveAuthorized,
     brokerId:

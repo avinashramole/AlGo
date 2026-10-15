@@ -132,9 +132,7 @@ function ShivamSignalChip({ algo, onOpen }: { algo: AlgoStrategy; onOpen?: () =>
     <button
       type="button"
       data-shivam-signal={ready ? "ready" : "no-trade"}
-      onClick={() => {
-        if (ready) onOpen?.();
-      }}
+      onClick={() => onOpen?.()}
       className={cn(
         "inline-flex items-center rounded bg-[var(--card-muted)] px-1.5 py-0.5 text-[11px] font-extrabold tracking-[0.2em]",
         ready ? "text-emerald-600" : "text-slate-500 tracking-normal",
@@ -142,6 +140,37 @@ function ShivamSignalChip({ algo, onOpen }: { algo: AlgoStrategy; onOpen?: () =>
     >
       {ready ? "● ● ●" : "NO Trade"}
     </button>
+  );
+}
+
+function ShivamCapitalStrip({ algo }: { algo: AlgoStrategy }) {
+  const { data } = useMarket();
+  const vs = algo.shivamState || {};
+  const dhan = (data.brokers || []).find((row) => row.id === "dhan");
+  const funds = Number(dhan?.funds || 0);
+  const capitalValue = Number(algo.capitalValue ?? 50000);
+  const allocation = algo.capitalMode === "percent" ? funds * (capitalValue / 100) : capitalValue;
+  const approved = funds > 0 ? Math.min(allocation, funds) : allocation;
+  const used = Number(vs.sessionTrades || 0);
+  const limit = dailyTradeLimit(algo);
+  return (
+    <div className="mt-2 rounded-lg border border-brand-500/30 bg-[var(--card-muted)] px-3 py-2 text-[11px] font-semibold leading-snug text-slate-600" data-shivam-capital="true">
+      <div className="font-extrabold uppercase tracking-wide text-brand-600">Capital management</div>
+      <div>
+        {algo.capitalMode === "percent" ? `${formatNumber(capitalValue, 0)}% of funds` : `₹${formatNumber(capitalValue, 0)}`} · lots {algo.lots || 1}
+        {vs.approvedLots ? ` · approved ${vs.approvedLots}` : ""}
+        {vs.maxLots ? ` · max ${vs.maxLots}` : ""}
+        {vs.lotSize ? ` · lot ${vs.lotSize}` : " · lot size from instrument master"}
+      </div>
+      <div>
+        Dhan funds {funds > 0 ? `₹${formatNumber(funds, 0)}` : "connect LIVE"} · allocation ₹{formatNumber(Math.max(0, approved), 0)}
+        {vs.orderValue ? ` · order ₹${formatNumber(Number(vs.orderValue), 2)}` : ""}
+        {vs.requiredFunds ? ` · required ₹${formatNumber(Number(vs.requiredFunds), 2)}` : ""}
+      </div>
+      <div>
+        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan" : "Paper"} · no member copy
+      </div>
+    </div>
   );
 }
 
@@ -558,7 +587,6 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                     ["all", "All"],
                     ["nifty-first-candle", "NIFTY"],
                     ["crudeoil", "CRUDE OIL"],
-                    ["shivam-t2s", "SHIVAM T2S"],
                   ]) as [Filter, string][]
             ).map(([id, label]) => (
               <button
@@ -735,11 +763,11 @@ function CardTimeframe({ algo }: { algo: AlgoStrategy }) {
   );
 }
 
-function dailyTradeLimit(algo: { maxTradesPerDay?: number; kind?: string }) {
+function dailyTradeLimit(algo: { maxTradesPerDay?: number; kind?: string; strategyType?: string; indicator?: string; name?: string }) {
   const fallback = algo.kind === "nifty-test2" ? 1 : 5;
   const n = Number(algo.maxTradesPerDay);
   if (!Number.isFinite(n)) return fallback;
-  const max = algo.kind === "shivam-t2s" ? 100 : 20;
+  const max = isShivamT2sKind(algo) ? 100 : 20;
   return Math.max(1, Math.min(max, Math.round(n)));
 }
 
@@ -753,7 +781,7 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
   }, [algo.id, saved]);
 
   const save = async () => {
-    const cap = algo.kind === "shivam-t2s" ? 100 : 20;
+    const cap = isShivamT2sKind(algo) ? 100 : 20;
     const next = Math.max(1, Math.min(cap, Math.round(Number(value) || saved)));
     setValue(String(next));
     if (next === saved) return;
@@ -775,7 +803,7 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
       <input
         type="number"
         min={1}
-        max={algo.kind === "shivam-t2s" ? 100 : 20}
+        max={isShivamT2sKind(algo) ? 100 : 20}
         inputMode="numeric"
         aria-label="Daily trade limit"
         className="h-10 w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-bold text-[var(--text)]"
@@ -789,7 +817,13 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
           }
         }}
       />
-      <span className="font-medium text-slate-400">{saving ? "Saving..." : "1–20 entries today. Hedge, reverse, and exit do not use this count."}</span>
+      <span className="font-medium text-slate-400">
+        {saving
+          ? "Saving..."
+          : isShivamT2sKind(algo)
+            ? `1–100 filled BUY entries today. Used ${Number(algo.shivamState?.sessionTrades || 0)} · remaining ${Math.max(0, saved - Number(algo.shivamState?.sessionTrades || 0))}. Re-entries count. Rejected orders do not.`
+            : "1–20 entries today. Hedge, reverse, and exit do not use this count."}
+      </span>
     </label>
   );
 }
@@ -1068,6 +1102,7 @@ function AlgoCard({
         </div>
       </div>
       {showsFirstCandleTimeframe(algo) ? <CardTimeframe algo={algo} /> : null}
+      {shivam ? <ShivamCapitalStrip algo={algo} /> : null}
       <DailyTradeLimit algo={algo} />
       {isCrudeFirstCandleKind(algo) ? <CrudeLevels algo={algo} /> : null}
 

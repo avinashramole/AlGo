@@ -16,6 +16,10 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(lib, /"shivam-t2s"/);
   assert.match(lib, /SHIVAM_T2S_NAME = "Shivam T2S Strategy"/);
   assert.match(builder, /title="SHIVAM T2S"/);
+  assert.match(builder, /data-shivam-capital="true"/);
+  assert.match(builder, /Capital management/);
+  assert.match(page, /data-shivam-capital="true"/);
+  assert.match(page, /1–100 filled BUY entries today/);
   assert.match(builder, /data-mir-trade-mode="true"/);
   assert.match(builder, /emptyStrategy\(testDesk \? "shivam-t2s"/);
   assert.match(builder, /data-shivam-settings="true"/);

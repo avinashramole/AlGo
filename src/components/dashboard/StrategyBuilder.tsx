@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FirstCandleTimeframeBar } from "./FirstCandleTimeframeBar";
 import { useMarket } from "../../context/MarketContext";
-import { cn } from "../../lib/format";
+import { cn, formatNumber, fundsCaption } from "../../lib/format";
 import {
   INDICATORS,
   OPERATORS,
@@ -527,7 +527,30 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </div>
         ) : null}
 
-        {editing ? null : (
+        {editing ? null : testDesk ? (
+        <div className="grid grid-cols-1 gap-1.5">
+          <TypeCard
+            active={shivam}
+            title="SHIVAM T2S"
+            text="Live trading strategy on Algo Test. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM/ITM/OTM from the instrument master. Paper or Live Dhan after Start. Capital management uses Dhan funds and the live lot size. No member copy. Card shows ● ● ● or NO Trade."
+            onClick={() => {
+              const next = emptyStrategy("shivam-t2s");
+              set({
+                ...next,
+                name: SHIVAM_T2S_NAME,
+                runMode: form.runMode === "live" ? "live" : "paper",
+                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
+                liveAuthorized: form.runMode === "live",
+                testDesk: true,
+                lots: form.lots || 1,
+                capitalMode: form.capitalMode || "amount",
+                capitalValue: form.capitalValue ?? 50000,
+                enabled: false,
+              });
+            }}
+          />
+        </div>
+        ) : (
         <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
           <TypeCard
             active={crudeFirst}
@@ -599,7 +622,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               });
             }}
           />
-          {testDesk || shivam ? (
+          {shivam ? (
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
@@ -680,6 +703,65 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           ))}
         </div>
         )}
+
+        {shivam ? (
+          <div className="mt-2.5 space-y-1.5 rounded-lg border border-brand-500/40 bg-[var(--bg)] px-2.5 py-2" data-shivam-capital="true">
+            <div className="text-[11px] font-extrabold uppercase tracking-wide text-brand-600">Capital management</div>
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+              <label className="text-xs font-semibold text-slate-500">
+                Lots per entry
+                <input
+                  className={fieldClass}
+                  type="number"
+                  min={1}
+                  value={lots}
+                  onChange={(event) => {
+                    const nextLots = Math.max(1, Number(event.target.value) || 1);
+                    set({ lots: nextLots });
+                  }}
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Capital
+                <select className={fieldClass} value={form.capitalMode || "amount"} onChange={(event) => set({ capitalMode: event.target.value === "percent" ? "percent" : "amount" })}>
+                  <option value="amount">Amount ₹</option>
+                  <option value="percent">Percent of funds</option>
+                </select>
+              </label>
+              <NumberField label={form.capitalMode === "percent" ? "Allocation %" : "Allocation ₹"} value={form.capitalValue ?? 50000} step={form.capitalMode === "percent" ? 1 : 1000} onChange={(capitalValue) => set({ capitalValue })} />
+              <label className="text-xs font-semibold text-slate-500">
+                Dhan funds
+                <input
+                  className={fieldClass}
+                  readOnly
+                  value={(() => {
+                    const dhan = (data.brokers || []).find((row) => row.id === "dhan");
+                    return dhan && Number(dhan.funds) > 0 ? fundsCaption(dhan) : "Connect Dhan LIVE";
+                  })()}
+                />
+              </label>
+            </div>
+            <label className="block text-xs font-semibold text-slate-500">
+              <input
+                type="checkbox"
+                className="mr-2 align-middle"
+                checked={form.autoSizeLots === true}
+                onChange={(event) => set({ autoSizeLots: event.target.checked })}
+              />
+              Auto-size lots down to the calculated maximum (off = reject oversized requests)
+            </label>
+            <p className="text-[11px] font-semibold leading-snug text-slate-500">
+              {(() => {
+                const dhan = (data.brokers || []).find((row) => row.id === "dhan");
+                const funds = Number(dhan?.funds || 0);
+                const capitalValue = Number(form.capitalValue ?? 50000);
+                const allocation = form.capitalMode === "percent" ? funds * (capitalValue / 100) : capitalValue;
+                const approved = funds > 0 ? Math.min(allocation, funds) : allocation;
+                return `Approved allocation ₹${formatNumber(Math.max(0, approved), 0)}. Max lots use live premium × instrument-master lot size — never a hardcoded NIFTY size. Requested lots ${lots} are rejected if they exceed that maximum unless auto-size is on.`;
+              })()}
+            </p>
+          </div>
+        ) : null}
 
         {firstCandleTf ? (
           <FirstCandleTimeframeBar
@@ -902,23 +984,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 </select>
               </label>
               <NumberField label={form.targetMode === "points" ? "Target points" : "Target %"} value={form.targetValue ?? 40} step={0.5} onChange={(targetValue) => set({ targetValue, targetPct: targetValue })} />
-              <label className="text-xs font-semibold text-slate-500">
-                Capital
-                <select className={fieldClass} value={form.capitalMode || "amount"} onChange={(event) => set({ capitalMode: event.target.value === "percent" ? "percent" : "amount" })}>
-                  <option value="amount">Amount ₹</option>
-                  <option value="percent">Percent of funds</option>
-                </select>
-              </label>
-              <NumberField label={form.capitalMode === "percent" ? "Allocation %" : "Allocation ₹"} value={form.capitalValue ?? 50000} step={form.capitalMode === "percent" ? 1 : 1000} onChange={(capitalValue) => set({ capitalValue })} />
-              <label className="text-xs font-semibold text-slate-500 lg:col-span-2">
-                <input
-                  type="checkbox"
-                  className="mr-2 align-middle"
-                  checked={form.autoSizeLots === true}
-                  onChange={(event) => set({ autoSizeLots: event.target.checked })}
-                />
-                Auto-size lots down to the calculated maximum (off = reject oversized requests)
-              </label>
             </div>
           </div>
         ) : test1 && !test2 ? (
@@ -1082,6 +1147,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             </select>
           </label>
           )}
+          {shivam ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Lots
             <input
@@ -1103,6 +1169,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                   : `1 lot = ${lotSize} qty · order qty ${lots * lotSize}`}
             </span>
           </label>
+          )}
           {firstCandleTf || shivam ? null : (
           <label className="text-xs font-semibold text-slate-500">
             Timeframe
