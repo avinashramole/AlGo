@@ -41,7 +41,7 @@ export function Orders({ embedded = false, book = "live" }: { embedded?: boolean
         <div>
           <h1 className="text-xl font-bold">Orders</h1>
           <p className="text-sm text-slate-400">
-            {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))} Price is the Dhan average fill, not the LTP at send.
+            {liveBookCopy(data.dhanFeed?.live, hasDhanQuotes(data))} Price is the Dhan average fill, not the LTP at send. Admin and user trade logs clear daily at 8:00 AM IST.
           </p>
         </div>
       </div>

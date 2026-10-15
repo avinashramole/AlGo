@@ -5,6 +5,7 @@ import { writeFileAtomic } from "./atomicWrite.js";
 import { upsertDhanEnv } from "./env.js";
 import { peekAdminBrokerSecrets, persistAdminBrokerSecrets } from "./memberDesk.js";
 import { ipv4Request } from "./ipv4.js";
+import { lastDailyResetAt, nextDailyRenewalAt } from "./istClock.js";
 import { normalizeTotpSecret, totpCodes } from "./totp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -198,45 +199,20 @@ export function clearTokenBackoff() {
   return saveTokenBackoff({ generateBackoffUntil: 0, credentialsBlockedUntil: 0 });
 }
 
-export const TOKEN_RENEW_HOUR_IST = 8;
-
-function kolkataParts(date) {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-      hourCycle: "h23",
-    })
-      .formatToParts(date)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-}
-
-export function nextDailyRenewalAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
-  const parts = kolkataParts(new Date(from));
-  const today = Date.parse(
-    `${parts.year}-${parts.month}-${parts.day}T${String(hour).padStart(2, "0")}:00:00+05:30`,
-  );
-  if (!Number.isFinite(today)) return from + 24 * 60 * 60 * 1000;
-  if (from < today) return today;
-  return today + 24 * 60 * 60 * 1000;
-}
-
-export function lastDailyResetAt(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
-  const parts = kolkataParts(new Date(from));
-  const today = Date.parse(
-    `${parts.year}-${parts.month}-${parts.day}T${String(hour).padStart(2, "0")}:00:00+05:30`,
-  );
-  if (!Number.isFinite(today)) return from;
-  return from >= today ? today : today - 24 * 60 * 60 * 1000;
-}
+export {
+  BOOK_CLEAR_HOUR_IST,
+  BOOK_CLEAR_LABEL,
+  BOOK_CLEAR_MINUTE_IST,
+  TOKEN_RENEW_HOUR_IST,
+  isFreshTradeLogRow,
+  lastBookClearAt,
+  lastDailyResetAt,
+  msUntilBookClear,
+  msUntilDailyRenewal,
+  nextBookClearAt,
+  nextDailyRenewalAt,
+  tradeLogRowMs,
+} from "./istClock.js";
 
 export function tokenGeneratedAtMs({ accessToken, expiryTime, generatedAt } = {}) {
   // The JWT iat is the token's real age. An older generatedAt stamp must not
@@ -261,10 +237,6 @@ export function needsFreshAccessToken(session = {}, from = Date.now()) {
   const generated = tokenGeneratedAtMs(session);
   const reset = lastDailyResetAt(from);
   return generated < reset;
-}
-
-export function msUntilDailyRenewal(from = Date.now(), hour = TOKEN_RENEW_HOUR_IST) {
-  return Math.max(5_000, nextDailyRenewalAt(from, hour) - from);
 }
 
 const TOKEN_STILL_GOOD_MS = 20 * 60 * 1000;

@@ -1,4 +1,5 @@
 import { resolveOrderStrategy } from "./orderStrategy.js";
+import { lastBookClearAt, tradeLogRowMs } from "./istClock.js";
 
 function round2(value) {
   return Number((Number(value) || 0).toFixed(2));
@@ -279,8 +280,12 @@ export function istDayKey(iso) {
 }
 
 export function closedTradesToday(rows = [], now = new Date()) {
-  const today = istDayKey(now.toISOString());
-  return (rows || []).filter((row) => row && istDayKey(row.closedAt) === today);
+  const resetAt = lastBookClearAt(now instanceof Date ? now.getTime() : now);
+  return (rows || []).filter((row) => {
+    if (!row) return false;
+    const ms = tradeLogRowMs(row);
+    return ms >= resetAt;
+  });
 }
 
 export function isSimClosed(row) {

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { writeFileAtomic } from "./atomicWrite.js";
 import { catalog, isKnownLiveBroker, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { buildReport, closedTradesToday } from "./desk.js";
-import { lastDailyResetAt, msUntilDailyRenewal, TOKEN_RENEW_HOUR_IST } from "./dhanToken.js";
+import { lastBookClearAt, msUntilBookClear } from "./istClock.js";
 import { sessionUsesAdminKotak } from "./brokerIsolation.js";
 import { LIVE_BROKER_CATALOG, applyKotakTradeLoginPaste, kotakMobileNumber, liveBrokerSession } from "./liveBrokers.js";
 import { buildCopyAlertText, queueCopyAlertToMemberAndAdmin, queueMemberCopyNotify } from "./copyNotify.js";
@@ -1220,6 +1220,7 @@ function loadDesk(userId) {
     cleared: desk.bookClearedAt,
     orders: desk.orders.length,
     history: desk.orderHistory.length,
+    closed: desk.closedTrades.length,
     alerts: desk.alerts.length,
   };
   splitMemberOrderBook(desk);
@@ -1228,6 +1229,7 @@ function loadDesk(userId) {
     desk.bookClearedAt !== before.cleared ||
     desk.orders.length !== before.orders ||
     desk.orderHistory.length !== before.history ||
+    desk.closedTrades.length !== before.closed ||
     desk.alerts.length !== before.alerts
   ) {
     persist();
@@ -1624,13 +1626,14 @@ function splitMemberOrderBook(desk) {
 
 export function clearMemberDailyBook(desk, now = Date.now()) {
   if (!desk) return desk;
-  const resetAt = lastDailyResetAt(now, TOKEN_RENEW_HOUR_IST);
+  const resetAt = lastBookClearAt(now);
   if ((Number(desk.bookClearedAt) || 0) >= resetAt) return desk;
   splitMemberOrderBook(desk);
   desk.orders = [];
   desk.positions = [];
   desk.alerts = [];
-  desk.orderHistory = desk.orderHistory.filter((row) => isExecutedMemberOrder(row?.status)).slice(0, 400);
+  desk.closedTrades = [];
+  desk.orderHistory = [];
   desk.bookClearedAt = resetAt;
   return desk;
 }
@@ -1641,12 +1644,14 @@ export function sweepMemberDailyBooks(now = Date.now()) {
     if (!desk) continue;
     desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
     desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
+    desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];
     desk.positions = Array.isArray(desk.positions) ? desk.positions : [];
     desk.alerts = Array.isArray(desk.alerts) ? desk.alerts : [];
     const before = {
       cleared: Number(desk.bookClearedAt) || 0,
       orders: desk.orders.length,
       history: desk.orderHistory.length,
+      closed: desk.closedTrades.length,
       positions: desk.positions.length,
       alerts: desk.alerts.length,
     };
@@ -1656,6 +1661,7 @@ export function sweepMemberDailyBooks(now = Date.now()) {
       desk.bookClearedAt !== before.cleared ||
       desk.orders.length !== before.orders ||
       desk.orderHistory.length !== before.history ||
+      desk.closedTrades.length !== before.closed ||
       desk.positions.length !== before.positions ||
       desk.alerts.length !== before.alerts
     ) {
@@ -1676,14 +1682,14 @@ export function startMemberDailyBookScheduler() {
     } catch (error) {
       console.log(`Member daily book clear failed: ${error.message || error}`);
     }
-    bookSweepTimer = setTimeout(tick, msUntilDailyRenewal());
+    bookSweepTimer = setTimeout(tick, msUntilBookClear());
   };
   try {
     sweepMemberDailyBooks();
   } catch (error) {
     console.log(`Member daily book clear failed: ${error.message || error}`);
   }
-  bookSweepTimer = setTimeout(tick, msUntilDailyRenewal());
+  bookSweepTimer = setTimeout(tick, msUntilBookClear());
 }
 
 function placeMemberOrder(desk, order) {

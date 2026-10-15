@@ -10,7 +10,9 @@ import {
   isDhanInvalidTotpError,
   isDhanRateLimitError,
   jwtExpiryIso,
+  lastBookClearAt,
   lastDailyResetAt,
+  nextBookClearAt,
   keepAlivePlan,
   savedTokenBootAction,
   loadDhanSession,
@@ -214,6 +216,19 @@ test("lastDailyResetAt is today's 8:00 IST after the reset, yesterday's before",
   assert.equal(lastDailyResetAt(sevenAm), prevEight);
   assert.equal(lastDailyResetAt(eightAm), eightAm);
   assert.equal(lastDailyResetAt(nineAm), eightAm);
+});
+
+test("trade logs reset at 8:00 AM IST with the Dhan token window", () => {
+  const eightAm = Date.parse("2026-08-21T02:30:00.000Z");
+  const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
+  const eightOhTwo = Date.parse("2026-08-21T02:32:00.000Z");
+  const nextEight = Date.parse("2026-08-22T02:30:00.000Z");
+  const prevEight = Date.parse("2026-08-20T02:30:00.000Z");
+  assert.equal(lastBookClearAt(sevenAm), prevEight);
+  assert.equal(lastBookClearAt(eightAm), eightAm);
+  assert.equal(lastBookClearAt(eightOhTwo), eightAm);
+  assert.equal(nextBookClearAt(sevenAm), eightAm);
+  assert.equal(nextBookClearAt(eightOhTwo), nextEight);
 });
 
 test("needsFreshAccessToken is true at 9:00 IST when the token was issued yesterday", () => {

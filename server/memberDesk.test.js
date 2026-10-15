@@ -39,7 +39,7 @@ const {
   startWalletTopup,
   sweepMemberDailyBooks,
 } = await import("./memberDesk.js");
-const { lastDailyResetAt, TOKEN_RENEW_HOUR_IST } = await import("./dhanToken.js");
+const { lastBookClearAt } = await import("./dhanToken.js");
 
 savePaymentSettings({
   mobile: "9876543210",
@@ -672,7 +672,7 @@ test("fills and broker refusals stay on the member book; expired tickets stay of
   assert.equal(desk.orders.some((row) => row.status === "FILLED" || row.status === "REJECTED" || row.status === "FAILED"), false);
 });
 
-test("8:00 AM IST reset clears member positions and leftover working orders without expired history", () => {
+test("8:00 AM IST reset clears user trade logs, positions, and leftover working orders", () => {
   const member = { id: "u-daily-clear", name: "Daily Clear", email: "dailyclear@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "dhan" });
   recordMemberCopyFill({
@@ -689,14 +689,20 @@ test("8:00 AM IST reset clears member positions and leftover working orders with
   assert.ok(open.positions.some((row) => row.symbol === "NIFTY 24500 CE"));
   assert.ok(open.orders.some((row) => row.symbol === "NIFTY 24550 CE" && row.status === "PENDING"));
   assert.ok((open.alerts || []).some((row) => row.symbol === "NIFTY 24500 CE"));
-  const nextOpen = lastDailyResetAt(Date.now(), TOKEN_RENEW_HOUR_IST) + 24 * 60 * 60 * 1000 + 1_000;
+  assert.ok(open.orderHistory.some((row) => row.symbol === "NIFTY 24500 CE" && row.status === "FILLED"));
+  const beforeClear = lastBookClearAt(Date.now()) + 60 * 1000;
+  assert.equal(sweepMemberDailyBooks(beforeClear), 0);
+  const stillOpen = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
+  assert.ok(stillOpen.orderHistory.some((row) => row.symbol === "NIFTY 24500 CE" && row.status === "FILLED"));
+  const nextOpen = lastBookClearAt(Date.now()) + 24 * 60 * 60 * 1000 + 1_000;
   assert.equal(sweepMemberDailyBooks(nextOpen) >= 1, true);
   const after = getMemberDesk({ user: member, enrollments: [], algos: [algo], quote: () => 0, ownBookOnly: true });
   assert.equal(after.positions.length, 0);
   assert.equal(after.orders.length, 0);
   assert.equal((after.alerts || []).length, 0);
-  assert.ok(after.orderHistory.some((row) => row.symbol === "NIFTY 24500 CE" && row.status === "FILLED"));
-  assert.equal(after.orderHistory.some((row) => row.symbol === "NIFTY 24550 CE" || row.status === "EXPIRED"), false);
+  assert.equal(after.orderHistory.length, 0);
+  assert.equal((after.closedTrades || []).length, 0);
+  assert.equal((after.report?.tradeBook || []).length, 0);
 });
 
 test("admin Dhan client ID and access token persist on the admin desk, not the login id", () => {

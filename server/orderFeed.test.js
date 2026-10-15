@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { replaceDhanOrders, snapshot } from "./market.js";
+import { clearAdminDailyTradeLog, replaceDhanOrders, snapshot } from "./market.js";
+import { lastBookClearAt } from "./dhanToken.js";
 
 test("today's filled, rejected, and failed orders stay on the book when a Dhan poll omits them", () => {
   const stamp = new Date().toISOString();
@@ -209,4 +210,58 @@ test("a live Nifty fill stays on the order book even without a matching strategy
   assert.equal(row?.status, "FILLED");
   assert.equal(row?.symbol, "NIFTY 22500 PE");
   assert.equal(row?.qty, 65);
+});
+
+test("admin trade log drops fills from before 8:00 AM IST and clears again the next day", () => {
+  const reset = lastBookClearAt();
+  const stale = new Date(reset - 2 * 60 * 60 * 1000).toISOString();
+  const fresh = new Date(reset + 60 * 60 * 1000).toISOString();
+  replaceDhanOrders([
+    {
+      id: "admin-stale-fill",
+      symbol: "NIFTY 22100 PE",
+      side: "BUY",
+      qty: 65,
+      price: 40,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      createdAt: stale,
+    },
+    {
+      id: "admin-fresh-fill",
+      symbol: "NIFTY 22200 CE",
+      side: "BUY",
+      qty: 65,
+      price: 55,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      createdAt: fresh,
+    },
+  ]);
+  assert.equal(snapshot().orders.some((row) => row.id === "admin-stale-fill"), false);
+  assert.equal(snapshot().orders.some((row) => row.id === "admin-fresh-fill" && row.status === "FILLED"), true);
+
+  replaceDhanOrders([
+    {
+      id: "admin-stale-fill",
+      symbol: "NIFTY 22100 PE",
+      side: "BUY",
+      qty: 65,
+      price: 40,
+      status: "TRADED",
+      brokerId: "dhan",
+      live: true,
+      filledQty: 65,
+      createdAt: stale,
+    },
+  ]);
+  assert.equal(snapshot().orders.some((row) => row.id === "admin-stale-fill"), false);
+  assert.equal(snapshot().orders.some((row) => row.id === "admin-fresh-fill"), true);
+
+  assert.equal(clearAdminDailyTradeLog(reset + 24 * 60 * 60 * 1000 + 1_000), true);
+  assert.equal(snapshot().orders.some((row) => row.id === "admin-fresh-fill"), false);
 });

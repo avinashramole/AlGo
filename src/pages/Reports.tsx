@@ -132,6 +132,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
       </section>
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Trade book</div>
+        <p className="px-4 pt-1 text-xs text-slate-400">Admin and user closed trades. Trade logs clear daily at 8:00 AM IST.</p>
         <table className="mt-2 w-full min-w-[860px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
             <tr>

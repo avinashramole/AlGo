@@ -58,6 +58,7 @@ import {
   snapshot,
   deskFeed,
   deskMtm,
+  startAdminDailyTradeLogScheduler,
   getAdminBrokerBook,
   squareOff,
   tickMarket,
@@ -1586,6 +1587,7 @@ async function bootBackground() {
   }
   startUpstoxDailyTokenScheduler();
   startMemberDailyBookScheduler();
+  startAdminDailyTradeLogScheduler();
   if (skipLiveAlgos()) {
     console.log("NIFTY daily LIVE schedulers off (T2S_SKIP_LIVE_ALGOS). Login stays answering.");
   } else {

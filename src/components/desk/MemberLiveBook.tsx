@@ -64,7 +64,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order book</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Status is the broker order book. A fill stays here as FILLED, a rejection as REJECTED, and a failure as FAILED. The book and open positions clear at 8:00 AM IST.
+          Status is the broker order book. A fill stays here as FILLED, a rejection as REJECTED, and a failure as FAILED. User and admin trade logs clear daily at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -120,7 +120,7 @@ export function MemberLiveBook({
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Order history</div>
         <p className="px-4 pt-1 text-xs text-slate-400">
-          Fills and broker answers from this account. A rejected copy shows the reason. This is not the admin order book.
+          Fills and broker answers from this account. A rejected copy shows the reason. This is not the admin order book. History clears daily at 8:00 AM IST.
         </p>
         <table className="mt-2 w-full min-w-[720px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
@@ -164,7 +164,7 @@ export function MemberLiveBook({
 
       <section className="card overflow-x-auto">
         <div className="px-4 pt-4 text-sm font-bold">Trade book</div>
-        <p className="px-4 pt-1 text-xs text-slate-400">Today's closed trades with entry, exit, and P&L.</p>
+        <p className="px-4 pt-1 text-xs text-slate-400">Today's closed trades with entry, exit, and P&L. Clears daily at 8:00 AM IST.</p>
         <table className="mt-2 w-full min-w-[760px] text-left text-sm">
           <thead className="bg-[var(--bg)] text-[11px] uppercase tracking-wide text-slate-400">
             <tr>
