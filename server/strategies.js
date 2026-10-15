@@ -6,6 +6,7 @@ import { clampDailyTradeLimit, crudeFirstCandleConfig, defaultCrudeFirstCandleAl
 import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, NIFTY_VWAP_HEDGE_KIND } from "./niftyVwapHedge/config.js";
 import { defaultMultiIndexReversalAlgo, isMultiIndexReversalAlgo, multiIndexReversalConfig, MULTI_INDEX_REVERSAL_KIND } from "./multiIndexReversal/index.js";
 import { clampShivamDailyTradeLimit, defaultShivamT2sAlgo, isShivamT2sAlgo, shivamT2sConfig, SHIVAM_T2S_KIND, SHIVAM_T2S_SEED_ID, validateShivamT2s } from "./shivamT2s/index.js";
+import { DESK_TIMEFRAME_PRESETS, resolveDeskTimeframe } from "./deskTimeframe.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
@@ -27,7 +28,7 @@ const SYMBOLS = [
 
 const INDICATORS = ["RSI", "EMA", "VWAP", "MACD", "SUPERTREND"];
 const PATTERNS = ["ORB", "BREAKOUT", "PINBAR", "ENGULFING", "SR_BOUNCE"];
-const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "30m", "60m", "1H"];
+const TIMEFRAMES = [...DESK_TIMEFRAME_PRESETS];
 const OPERATORS = ["close_above", "close_below", "crosses_above", "crosses_below", "above", "below", "gt", "lt", "gte", "lte", "eq"];
 const SOURCES = [
   "price",
@@ -1083,7 +1084,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   const indicator = INDICATORS.includes(input.indicator) ? input.indicator : existing.indicator || "VWAP";
   const pattern = PATTERNS.includes(input.pattern) ? input.pattern : existing.pattern || "ORB";
   const side = ["BUY", "SELL", "BOTH"].includes(input.side) ? input.side : existing.side || "BUY";
-  const timeframe = TIMEFRAMES.includes(input.timeframe) ? input.timeframe : existing.timeframe || "5m";
+  const timeframe = resolveDeskTimeframe(input.timeframe != null ? input.timeframe : existing.timeframe, existing.timeframe || "5m");
   const defaults = defaultConditions(kind, indicator, pattern);
   const hasBuy = Boolean(
     input.buyOp ||

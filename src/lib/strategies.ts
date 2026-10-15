@@ -350,7 +350,10 @@ export const MULTI_INDEX_SCRIPTS = [
   { id: "SENSEX", label: "SENSEX", exchange: "BSE", lot: 20 },
 ];
 
-export const MULTI_INDEX_TIMEFRAMES = ["5m", "10m", "15m", "30m", "1H"] as const;
+export const DESK_TIMEFRAME_PRESETS = ["5m", "15m", "30m", "1H"] as const;
+export const DESK_CUSTOM_BAR_MINUTES_MAX = 60;
+
+export const MULTI_INDEX_TIMEFRAMES = DESK_TIMEFRAME_PRESETS;
 
 export const MULTI_INDEX_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4] as const;
 
@@ -364,7 +367,7 @@ export const SHIVAM_T2S_SCRIPTS = [
   { id: "SENSEX", label: "SENSEX", futures: "SENSEX FUT" },
 ];
 
-export const SHIVAM_T2S_TIMEFRAMES = ["1m", "3m", "5m", "10m", "15m"] as const;
+export const SHIVAM_T2S_TIMEFRAMES = DESK_TIMEFRAME_PRESETS;
 
 export const INDICATORS = [
   { id: "VWAP", label: "VWAP" },
@@ -382,24 +385,37 @@ export const PATTERNS = [
   { id: "SR_BOUNCE", label: "Support / resistance bounce" },
 ];
 
-export const TIMEFRAMES = ["1m", "2m", "5m", "10m", "15m", "30m", "60m", "1H"];
+export const TIMEFRAMES = [...DESK_TIMEFRAME_PRESETS];
 
-export const FIRST_CANDLE_TIMEFRAMES = ["5m", "10m", "15m", "30m", "60m"] as const;
+export const FIRST_CANDLE_TIMEFRAMES = DESK_TIMEFRAME_PRESETS;
+
+function canonicalDeskTimeframe(minutes: number) {
+  if (minutes === 5) return "5m";
+  if (minutes === 15) return "15m";
+  if (minutes === 30) return "30m";
+  if (minutes === 60) return "1H";
+  return `${minutes}m`;
+}
 
 export function firstCandleTimeframeSelect(timeframe?: string) {
-  const raw = String(timeframe || "5m");
-  if (raw === "1H" || raw === "1h") return "60m";
-  return (FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(raw) ? raw : "custom";
+  const minutes = firstCandleMinutes(timeframe);
+  if (minutes === 5) return "5m";
+  if (minutes === 15) return "15m";
+  if (minutes === 30) return "30m";
+  if (minutes === 60) return "1H";
+  return "custom";
 }
 
 export function firstCandleTimeframeValue(select: string, customMinutes?: number) {
-  if ((FIRST_CANDLE_TIMEFRAMES as readonly string[]).includes(select)) return select;
-  if (select === "1H" || select === "1h") return "60m";
+  if (select === "5m" || select === "15m" || select === "30m") return select;
+  if (select === "1H" || select === "1h" || select === "1hr" || select === "60m") return "1H";
   if (select === "custom") {
-    const n = Math.max(1, Math.min(240, Math.round(Number(customMinutes) || 20)));
-    return `${n}m`;
+    const n = Math.max(1, Math.min(DESK_CUSTOM_BAR_MINUTES_MAX, Math.round(Number(customMinutes) || 20)));
+    return canonicalDeskTimeframe(n);
   }
-  if (/^\d+m$/i.test(select) || /^\d+$/.test(select)) return `${firstCandleMinutes(select)}m`;
+  if (/^\d+m$/i.test(select) || /^\d+$/.test(select) || /^(1H|1h|1hr)$/i.test(select)) {
+    return canonicalDeskTimeframe(firstCandleMinutes(select));
+  }
   return "5m";
 }
 
@@ -514,12 +530,12 @@ export function isNiftyFirstCandleKind(algo?: { kind?: string; strategyType?: st
 
 export function firstCandleMinutes(timeframe?: string) {
   const raw = String(timeframe || "").trim();
-  if (raw === "1H" || raw === "1h") return 60;
-  const named: Record<string, number> = { "1m": 1, "2m": 2, "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60 };
+  if (raw === "1H" || raw === "1h" || raw === "1hr") return 60;
+  const named: Record<string, number> = { "1m": 1, "2m": 2, "3m": 3, "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60 };
   if (named[raw]) return named[raw];
   const match = raw.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/i) || raw.match(/^(\d+)$/);
   const n = match ? Number(match[1]) : NaN;
-  if (Number.isFinite(n) && n >= 1 && n <= 240) return Math.round(n);
+  if (Number.isFinite(n) && n >= 1 && n <= DESK_CUSTOM_BAR_MINUTES_MAX) return Math.round(n);
   return 5;
 }
 

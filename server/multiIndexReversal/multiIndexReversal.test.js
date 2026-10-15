@@ -356,17 +356,17 @@ test("BANKNIFTY FINNIFTY and SENSEX keep their own exchange and lot", () => {
 });
 
 test("every supported timeframe and strike offset stays in range", () => {
-  for (const tf of ["5m", "10m", "15m", "30m", "1H", "1h"]) {
+  for (const tf of ["5m", "10m", "15m", "17m", "19m", "30m", "1H", "1h"]) {
     const cfg = multiIndexReversalConfig({ timeframe: tf });
     assert.ok(cfg.barMinutes >= 5);
-    assert.ok(["5m", "10m", "15m", "30m", "1H"].includes(cfg.timeframe));
+    assert.ok(["5m", "10m", "15m", "17m", "19m", "30m", "1H"].includes(cfg.timeframe));
   }
   for (const offset of [-4, -3, -2, -1, 0, 1, 2, 3, 4]) {
     assert.equal(strikeForIndexOffset(25000, 50, offset, "CE"), 25000 + offset * 50);
     assert.equal(strikeForIndexOffset(25000, 50, offset, "PE"), 25000 - offset * 50);
   }
   assert.match(validateMultiIndexReversal({ symbol: "MIDCPNIFTY" }), /Unsupported|index/i);
-  assert.match(validateMultiIndexReversal({ timeframe: "2m" }), /timeframe/i);
+  assert.match(validateMultiIndexReversal({ timeframe: "61m" }), /timeframe/i);
   assert.equal(validateMultiIndexReversal({}), "");
 });
 

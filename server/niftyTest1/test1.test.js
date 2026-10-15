@@ -82,7 +82,10 @@ test("TEST1 name and ATM-only config stay locked", () => {
   assert.equal(niftyTest1Config({ timeframe: "2m" }).timeframe, "2m");
   assert.equal(niftyTest1Config({ timeframe: "10m" }).barMinutes, 10);
   assert.equal(niftyTest1Config({ timeframe: "15m" }).barMinutes, 15);
-  assert.equal(niftyTest1Config({ timeframe: "1H" }).timeframe, "5m");
+  assert.equal(niftyTest1Config({ timeframe: "1H" }).timeframe, "1H");
+  assert.equal(niftyTest1Config({ timeframe: "1H" }).barMinutes, 60);
+  assert.equal(niftyTest1Config({ timeframe: "17m" }).timeframe, "17m");
+  assert.equal(niftyTest1Config({ timeframe: "19m" }).barMinutes, 19);
   assert.equal(defaultNiftyTest1Algo({ timeframe: "1m" }).timeframe, "1m");
   assert.equal(normalizeAlgo({ name: "TEST1", timeframe: "10m" }).timeframe, "10m");
 });

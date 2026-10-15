@@ -1,12 +1,18 @@
 import { cn } from "../../lib/format";
 import {
-  FIRST_CANDLE_TIMEFRAMES,
+  DESK_TIMEFRAME_PRESETS,
   firstCandleMinutes,
   firstCandleTimeframeSelect,
   firstCandleTimeframeValue,
 } from "../../lib/strategies";
 
-const CHOICES = [...FIRST_CANDLE_TIMEFRAMES, "custom"] as const;
+const CHOICES = [...DESK_TIMEFRAME_PRESETS, "custom"] as const;
+
+function presetLabel(row: string) {
+  if (row === "custom") return "Custom";
+  if (row === "1H") return "1hr";
+  return row;
+}
 
 export function FirstCandleTimeframeBar({
   timeframe,
@@ -14,17 +20,25 @@ export function FirstCandleTimeframeBar({
   saving = false,
   mark,
   commitCustomOnBlur = false,
+  label = "Candle timeframe · 5m 15m 30m 1hr Custom",
 }: {
   timeframe?: string;
   onPick: (timeframe: string) => void;
   saving?: boolean;
-  mark?: "nifty" | "crude" | "form";
+  mark?: "nifty" | "crude" | "form" | "test1" | "mir" | "shivam-index" | "shivam-ce" | "shivam-pe";
   commitCustomOnBlur?: boolean;
+  label?: string;
 }) {
   const selected = firstCandleTimeframeSelect(timeframe);
   return (
-    <div className="mt-2 w-full min-w-0 overflow-visible" data-first-candle-timeframe-bar={mark || "form"}>
-      <div className="text-xs font-extrabold uppercase tracking-wide text-slate-600">Candle timeframe · 5m 10m 15m 30m 60m Custom</div>
+    <div
+      className="mt-2 w-full min-w-0 overflow-visible"
+      data-first-candle-timeframe-bar={mark || "form"}
+      data-desk-timeframe-bar={mark || "form"}
+      data-test1-timeframe={mark === "test1" ? "true" : undefined}
+      data-mir-timeframe={mark === "mir" ? "true" : undefined}
+    >
+      <div className="text-xs font-extrabold uppercase tracking-wide text-slate-600">{label}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {CHOICES.map((row) => (
           <button
@@ -44,7 +58,7 @@ export function FirstCandleTimeframeBar({
               selected === row ? "bg-brand-500 text-white" : "border border-[var(--border)] bg-[var(--card)] text-[var(--text)]",
             )}
           >
-            {row === "custom" ? "Custom" : row}
+            {presetLabel(row)}
           </button>
         ))}
         {selected === "custom" ? (
@@ -54,7 +68,7 @@ export function FirstCandleTimeframeBar({
               className="h-9 w-20 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-sm font-bold text-[var(--text)]"
               type="number"
               min={1}
-              max={240}
+              max={60}
               key={commitCustomOnBlur ? `${timeframe}-custom` : "custom"}
               {...(commitCustomOnBlur
                 ? { defaultValue: firstCandleMinutes(timeframe) }
