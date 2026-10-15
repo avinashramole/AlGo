@@ -1078,8 +1078,8 @@ app.put("/api/strategies/shivam-t2s/config", (req, res) => {
   const existing = findShivamAlgo(body.id || req.query.id);
   try {
     const algo = existing
-      ? updateAlgo(existing.id, { ...body, kind: "shivam-t2s" })
-      : createAlgo({ ...body, kind: "shivam-t2s", runMode: body.runMode === "backtest" ? "backtest" : "paper" });
+      ? updateAlgo(existing.id, { ...body, kind: "shivam-t2s", testDesk: true })
+      : createAlgo({ ...body, kind: "shivam-t2s", testDesk: true, runMode: body.runMode === "backtest" ? "backtest" : "paper" });
     if (algo?.error) {
       res.status(400).json({ error: algo.error });
       return;

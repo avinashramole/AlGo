@@ -365,7 +365,11 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
     };
   }, []);
 
-  const deskAlgos = data.algos.filter((row) => !isRetiredDeskStrategy(row) && isTestDeskAlgo(row) === testDesk);
+  const deskAlgos = data.algos.filter((row) => {
+    if (isRetiredDeskStrategy(row)) return false;
+    if (isShivamT2sKind(row)) return testDesk;
+    return isTestDeskAlgo(row) === testDesk;
+  });
   const rangeFor = deskAlgos.find((item) => item.id === rangeId) || null;
   const canStartAll = deskAlgos.some((row) => row.runMode !== "backtest" && !row.enabled);
   const canStopAll = deskAlgos.some((row) => row.enabled);

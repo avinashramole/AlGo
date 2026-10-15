@@ -117,7 +117,7 @@ test("hydrate still adds a new catalog strategy that was never deleted", () => {
   assert.equal(next.algos.find((row) => row.id === "a15").enabled, false);
   assert.equal(next.algos.some((row) => row.id === "a16"), true);
   assert.equal(next.algos.find((row) => row.id === "a16").kind, "shivam-t2s");
-  assert.equal(next.algos.find((row) => row.id === "a16").testDesk, false);
+  assert.equal(next.algos.find((row) => row.id === "a16").testDesk, true);
   assert.equal(next.algos.find((row) => row.id === "a16").enabled, false);
 });
 
@@ -239,7 +239,7 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   const shivam = seeded.find((row) => row.id === "a16");
   assert.equal(shivam.name, "Shivam T2S Strategy");
   assert.equal(shivam.kind, "shivam-t2s");
-  assert.equal(shivam.testDesk, false);
+  assert.equal(shivam.testDesk, true);
   assert.equal(shivam.runMode, "paper");
   assert.equal(shivam.brokerId, "paper");
   assert.equal(shivam.enabled, false);
@@ -251,7 +251,7 @@ test("hydrate always shows Shivam T2S on Algos even if it was deleted", () => {
   const next = hydrateAlgos({ algos: [], removedIds: ["a16"] }, catalog);
   const shivam = next.algos.find((row) => row.id === "a16");
   assert.equal(shivam.kind, "shivam-t2s");
-  assert.equal(shivam.testDesk, false);
+  assert.equal(shivam.testDesk, true);
   assert.equal(shivam.runMode, "paper");
   assert.equal(shivam.brokerId, "paper");
   assert.equal(next.removedIds.includes("a16"), false);
@@ -503,7 +503,7 @@ test("normalizeAlgo keeps Shivam T2S paper, disabled, and daily limit 1-100", ()
   assert.equal(algo.runMode, "paper");
   assert.equal(algo.brokerId, "paper");
   assert.equal(algo.liveAuthorized, false);
-  assert.equal(algo.testDesk, false);
+  assert.equal(algo.testDesk, true);
   assert.equal(algo.maxTradesPerDay, 100);
   assert.equal(algo.ceTimeframe, "3m");
   assert.match(algo.summary, /Shivam T2S/);
@@ -519,7 +519,7 @@ test("normalizeAlgo keeps Shivam T2S paper on Algos even if live is requested", 
     mappedClientIds: ["u-1"],
     clientVisible: true,
   });
-  assert.equal(algo.testDesk, false);
+  assert.equal(algo.testDesk, true);
   assert.equal(algo.runMode, "paper");
   assert.equal(algo.brokerId, "paper");
   assert.equal(algo.liveAuthorized, false);
