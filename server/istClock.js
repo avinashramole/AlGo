@@ -1,7 +1,7 @@
 export const TOKEN_RENEW_HOUR_IST = 8;
-export const BOOK_CLEAR_HOUR_IST = 1;
-export const BOOK_CLEAR_MINUTE_IST = 1;
-export const BOOK_CLEAR_LABEL = "01:01 AM IST";
+export const BOOK_CLEAR_HOUR_IST = TOKEN_RENEW_HOUR_IST;
+export const BOOK_CLEAR_MINUTE_IST = 0;
+export const BOOK_CLEAR_LABEL = "8:00 AM IST";
 
 function kolkataParts(date) {
   return Object.fromEntries(

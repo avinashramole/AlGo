@@ -155,9 +155,9 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const ordersPage = fs.readFileSync(path.join(root, "src/pages/Orders.tsx"), "utf8");
   const reportsPage = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const indexJs = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
-  assert.match(liveBook, /01:01 AM IST/);
-  assert.match(ordersPage, /01:01 AM IST/);
-  assert.match(reportsPage, /01:01 AM IST/);
+  assert.match(liveBook, /8:00 AM IST/);
+  assert.match(ordersPage, /8:00 AM IST/);
+  assert.match(reportsPage, /8:00 AM IST/);
   assert.match(indexJs, /startAdminDailyTradeLogScheduler/);
   assert.match(indexJs, /startMemberDailyBookScheduler/);
   assert.match(book, /data-member-book="orders"/);

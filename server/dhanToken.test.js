@@ -218,17 +218,17 @@ test("lastDailyResetAt is today's 8:00 IST after the reset, yesterday's before",
   assert.equal(lastDailyResetAt(nineAm), eightAm);
 });
 
-test("trade logs reset at 01:01 AM IST, not midnight and not 8:00", () => {
-  const oneAm = Date.parse("2026-08-20T19:30:00.000Z");
-  const oneOhOne = Date.parse("2026-08-20T19:31:00.000Z");
-  const oneOhTwo = Date.parse("2026-08-20T19:32:00.000Z");
-  const nextOneOhOne = Date.parse("2026-08-21T19:31:00.000Z");
-  const prevOneOhOne = Date.parse("2026-08-19T19:31:00.000Z");
-  assert.equal(lastBookClearAt(oneAm), prevOneOhOne);
-  assert.equal(lastBookClearAt(oneOhOne), oneOhOne);
-  assert.equal(lastBookClearAt(oneOhTwo), oneOhOne);
-  assert.equal(nextBookClearAt(oneAm), oneOhOne);
-  assert.equal(nextBookClearAt(oneOhTwo), nextOneOhOne);
+test("trade logs reset at 8:00 AM IST with the Dhan token window", () => {
+  const eightAm = Date.parse("2026-08-21T02:30:00.000Z");
+  const sevenAm = Date.parse("2026-08-21T01:30:00.000Z");
+  const eightOhTwo = Date.parse("2026-08-21T02:32:00.000Z");
+  const nextEight = Date.parse("2026-08-22T02:30:00.000Z");
+  const prevEight = Date.parse("2026-08-20T02:30:00.000Z");
+  assert.equal(lastBookClearAt(sevenAm), prevEight);
+  assert.equal(lastBookClearAt(eightAm), eightAm);
+  assert.equal(lastBookClearAt(eightOhTwo), eightAm);
+  assert.equal(nextBookClearAt(sevenAm), eightAm);
+  assert.equal(nextBookClearAt(eightOhTwo), nextEight);
 });
 
 test("needsFreshAccessToken is true at 9:00 IST when the token was issued yesterday", () => {

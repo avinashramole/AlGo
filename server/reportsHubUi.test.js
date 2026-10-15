@@ -64,10 +64,9 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
   assert.match(liveBook, /After exit/);
   assert.match(liveBook, />Strategy</);
-  assert.match(liveBook, /01:01 AM IST/);
-  assert.doesNotMatch(liveBook, /clear at 8:00 AM IST/);
-  assert.match(ordersPage, /01:01 AM IST/);
-  assert.match(reportsPage, /01:01 AM IST/);
+  assert.match(liveBook, /8:00 AM IST/);
+  assert.match(ordersPage, /8:00 AM IST/);
+  assert.match(reportsPage, /8:00 AM IST/);
 });
 
 test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () => {

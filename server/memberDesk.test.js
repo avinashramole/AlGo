@@ -672,7 +672,7 @@ test("fills and broker refusals stay on the member book; expired tickets stay of
   assert.equal(desk.orders.some((row) => row.status === "FILLED" || row.status === "REJECTED" || row.status === "FAILED"), false);
 });
 
-test("01:01 AM IST reset clears user trade logs, positions, and leftover working orders", () => {
+test("8:00 AM IST reset clears user trade logs, positions, and leftover working orders", () => {
   const member = { id: "u-daily-clear", name: "Daily Clear", email: "dailyclear@t2s.app", role: "user" };
   selectMemberBroker({ user: member, brokerId: "dhan" });
   recordMemberCopyFill({

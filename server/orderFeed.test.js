@@ -212,7 +212,7 @@ test("a live Nifty fill stays on the order book even without a matching strategy
   assert.equal(row?.qty, 65);
 });
 
-test("admin trade log drops fills from before 01:01 AM IST and clears again the next day", () => {
+test("admin trade log drops fills from before 8:00 AM IST and clears again the next day", () => {
   const reset = lastBookClearAt();
   const stale = new Date(reset - 2 * 60 * 60 * 1000).toISOString();
   const fresh = new Date(reset + 60 * 60 * 1000).toISOString();
