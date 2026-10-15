@@ -318,12 +318,12 @@ function BookMeta({
 }) {
   const why = orderWhyForBook(row, book) || "—";
   return (
-    <div className="mt-2 grid grid-cols-2 gap-2 text-xs" data-book-meta="strategy-exit">
-      <div>
+    <div className="mt-2 flex flex-wrap items-start gap-x-6 gap-y-2 text-xs" data-book-meta="strategy-exit">
+      <div className="min-w-0">
         <div className="uppercase tracking-wide text-slate-400">Strategy</div>
         <div className="font-semibold text-slate-600">{row.strategy || "—"}</div>
       </div>
-      <div>
+      <div className="w-max shrink-0 whitespace-nowrap">
         <div className="uppercase tracking-wide text-slate-400">Why</div>
         <div
           className={cn(
