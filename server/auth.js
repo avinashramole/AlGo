@@ -12,6 +12,7 @@ const GMAIL_FILE = process.env.T2S_GMAIL_FILE || path.join(__dirname, "data", "g
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESEND_MS = 45_000;
 const MAX_ATTEMPTS = 5;
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const GMAIL_SMTP_TIMEOUT_MS = 4000;
 
 export const SOLE_ADMIN_ID = "admin";
@@ -100,19 +101,35 @@ function persistSessions() {
   withFileLock(`${SESSIONS_FILE}.lock`, () => {
     const fromDisk = loadSessions();
     for (const [token, value] of fromDisk) {
-      if (!sessions.has(token) && !revokedSessionTokens.has(token)) sessions.set(token, value);
+      if (sessions.has(token) || revokedSessionTokens.has(token) || !sessionFresh(value)) continue;
+      sessions.set(token, value);
     }
     const kept = new Map();
     for (const [token, value] of sessions) {
-      if (!revokedSessionTokens.has(token)) kept.set(token, value);
+      if (revokedSessionTokens.has(token) || !sessionFresh(value)) continue;
+      kept.set(token, value);
     }
     writeFileAtomic(SESSIONS_FILE, `${JSON.stringify(Object.fromEntries(kept), null, 2)}\n`);
   });
 }
 
+function sessionFresh(row) {
+  const at = Number(row?.at) || 0;
+  if (!at) return true;
+  return now() - at < SESSION_TTL_MS;
+}
+
+function dropStaleSession(token, row) {
+  if (sessionFresh(row)) return false;
+  sessions.delete(token);
+  revokedSessionTokens.add(token);
+  return true;
+}
+
 function mergeSessionsFromDisk() {
   const fromDisk = loadSessions();
   for (const [token, value] of fromDisk) {
+    if (revokedSessionTokens.has(token) || !sessionFresh(value)) continue;
     if (!sessions.has(token)) sessions.set(token, value);
   }
 }
@@ -503,13 +520,17 @@ function issueSession(user) {
 
 function userFromToken(token) {
   const clean = String(token || "").replace(/^Bearer\s+/i, "").trim();
-  if (!clean) return null;
+  if (!clean || revokedSessionTokens.has(clean)) return null;
   let row = sessions.get(clean);
   if (!row) {
     mergeSessionsFromDisk();
     row = sessions.get(clean);
   }
-  if (!row) return null;
+  if (!row || revokedSessionTokens.has(clean)) return null;
+  if (dropStaleSession(clean, row)) {
+    persistSessions();
+    return null;
+  }
   let user = store.byId.get(row.userId) || findUser(row.email || row.mobile);
   if (!user) {
     const next = loadUsers();
@@ -537,10 +558,26 @@ function readCookie(req, name) {
 
 function sessionRow(token) {
   const clean = String(token || "").replace(/^Bearer\s+/i, "").trim();
-  if (!clean) return null;
-  if (sessions.has(clean)) return sessions.get(clean);
+  if (!clean || revokedSessionTokens.has(clean)) return null;
+  if (sessions.has(clean)) {
+    const row = sessions.get(clean);
+    if (dropStaleSession(clean, row)) return null;
+    return row;
+  }
   mergeSessionsFromDisk();
-  return sessions.get(clean) || null;
+  const row = sessions.get(clean);
+  if (!row || revokedSessionTokens.has(clean) || dropStaleSession(clean, row)) return null;
+  return row;
+}
+
+export function revokeSession(token) {
+  const clean = String(token || "").replace(/^Bearer\s+/i, "").trim();
+  if (!clean) return { ok: true, revoked: false };
+  const known = sessions.has(clean);
+  sessions.delete(clean);
+  revokedSessionTokens.add(clean);
+  persistSessions();
+  return { ok: true, revoked: known };
 }
 
 export function requestToken(req) {

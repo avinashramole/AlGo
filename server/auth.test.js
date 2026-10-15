@@ -37,6 +37,8 @@ const {
   clientAddress,
   recordLoginIp,
   requestToken,
+  revokeSession,
+  SESSION_TTL_MS,
   sessionUser,
   upsertGoogleUser,
   updateProfile,
@@ -662,6 +664,36 @@ test("member can set a Settings password and still sign in with Google or that p
   assert.equal(google.user.id, client.id);
   const still = loginWithPassword(email, "secret12");
   assert.equal(still.user.id, client.id);
+});
+
+test("logout revokes the session and a new login still works", () => {
+  const session = loginWithPassword("trades2smart@gmail.com", "demo123");
+  assert.equal(sessionUser(session.token).id, "admin");
+  assert.equal(revokeSession(session.token).revoked, true);
+  assert.equal(sessionUser(session.token), null);
+  const again = loginWithPassword("trades2smart@gmail.com", "demo123");
+  assert.equal(sessionUser(again.token).id, "admin");
+  assert.notEqual(again.token, session.token);
+});
+
+test("sessions older than 30 days are ignored so daily logins still work", () => {
+  assert.equal(SESSION_TTL_MS, 30 * 24 * 60 * 60 * 1000);
+  const saved = JSON.parse(fs.readFileSync(sessionsFile, "utf8"));
+  saved["t2s-stale-session"] = {
+    userId: "admin",
+    email: "trades2smart@gmail.com",
+    mobile: "",
+    at: Date.now() - SESSION_TTL_MS - 1000,
+  };
+  saved["t2s-fresh-session"] = {
+    userId: "admin",
+    email: "trades2smart@gmail.com",
+    mobile: "",
+    at: Date.now(),
+  };
+  fs.writeFileSync(sessionsFile, `${JSON.stringify(saved, null, 2)}\n`);
+  assert.equal(sessionUser("t2s-stale-session"), null);
+  assert.equal(sessionUser("t2s-fresh-session")?.id, "admin");
 });
 
 test("notifyLogin returns quickly when Gmail is not configured", async () => {

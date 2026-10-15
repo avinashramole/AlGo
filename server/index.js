@@ -31,7 +31,14 @@ import {
 import { broadcastMessaging, getThread, messagingStatus, saveMessagingConfig, sendMessaging, upsertMessagingContact } from "./messaging.js";
 import { ensurePlanLedger, getMemberDesk, installMemberBroker, listTopups, markTopupPaid, peekBrokerAccount, peekClientSecrets, selectMemberBroker, startMemberDailyBookScheduler, startWalletTopup } from "./memberDesk.js";
 import { attachMemberBrokerBalance, attachMemberBrokerPnl, overlayDeskLiveMtm, readMemberBrokerBalance, readMemberBrokerPnl } from "./memberBrokerPnl.js";
-import { exchangeUpstoxAuthCode, receiveUpstoxAccessToken, startMemberUpstoxToken, upstoxNotifierUri, upstoxOauthCreds } from "./upstoxAuth.js";
+import {
+  exchangeUpstoxAuthCode,
+  parseUpstoxOAuthState,
+  receiveUpstoxAccessToken,
+  startMemberUpstoxToken,
+  upstoxNotifierUri,
+  upstoxOauthCreds,
+} from "./upstoxAuth.js";
 import { memberQuotesForUser } from "./memberQuotesFeed.js";
 import { ensureMemberDataFeedsRunning } from "./memberFeedStart.js";
 import { deskHealthPayload } from "./deskHealth.js";
@@ -441,8 +448,7 @@ app.post("/api/upstox/token", (req, res) => {
 
 app.get("/api/upstox/callback", async (req, res) => {
   try {
-    const userId = String(req.query?.state || "").trim();
-    if (!userId) throw Object.assign(new Error("Upstox login is missing the member state."), { status: 400 });
+    const userId = parseUpstoxOAuthState(req.query?.state);
     const desk = peekClientSecrets(userId);
     const slot = peekBrokerAccount(userId, "upstox");
     const creds = upstoxOauthCreds(slot, desk);

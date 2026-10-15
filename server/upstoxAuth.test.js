@@ -9,13 +9,17 @@ process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_PUBLIC_URL = "https://trade2smart.com";
+process.env.T2S_OAUTH_STATE_SECRET = "test-upstox-oauth-state-secret";
 
 const { installMemberBroker, peekBrokerAccount, peekClientSecrets, selectMemberBroker } = await import("./memberDesk.js");
 const {
   exchangeUpstoxAuthCode,
+  parseUpstoxOAuthState,
   receiveUpstoxAccessToken,
   requestUpstoxTradingToken,
+  signUpstoxOAuthState,
   startMemberUpstoxToken,
+  UPSTOX_OAUTH_STATE_TTL_MS,
   upstoxAuthorizeUrl,
   upstoxNotifierPayload,
   upstoxNotifierUri,
@@ -155,6 +159,62 @@ test("saving an Upstox webhook token does not switch the selected Dhan desk", ()
   assert.equal(peekClientSecrets(dual.id).brokerId, "dhan");
   assert.equal(peekClientSecrets(dual.id).brokerToken, "dhan-keep-this-token");
   assert.equal(peekBrokerAccount(dual.id, "upstox").brokerToken, "upstox-arrived-while-dhan-selected");
+});
+
+test("OAuth state is signed so a raw user id is rejected", () => {
+  const signed = signUpstoxOAuthState(member.id);
+  assert.equal(parseUpstoxOAuthState(signed), member.id);
+  assert.throws(() => parseUpstoxOAuthState(member.id), /Get today's token again/);
+  assert.throws(() => parseUpstoxOAuthState(`${signed}x`), /Get today's token again/);
+  assert.throws(() => parseUpstoxOAuthState(signUpstoxOAuthState(member.id, Date.now() - UPSTOX_OAUTH_STATE_TTL_MS - 1000)), /Get today's token again/);
+});
+
+test("Get today's token puts a signed member state on the Upstox URL", async () => {
+  const signedMember = { id: "u-upx-signed", name: "Signed", email: "upxsigned@t2s.app", role: "user" };
+  installMemberBroker({
+    user: signedMember,
+    brokerId: "upstox",
+    clientId: "393230",
+    apiKey: "upstox-api-key-99999999",
+    sessionToken: "upstox-api-secret-00000000",
+  });
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ status: "success", data: { notifier_url: "https://trade2smart.com/api/upstox/token" } }),
+  });
+  const started = await startMemberUpstoxToken(signedMember, fetchImpl);
+  const state = new URL(started.loginUrl).searchParams.get("state");
+  assert.notEqual(state, signedMember.id);
+  assert.equal(parseUpstoxOAuthState(state), signedMember.id);
+});
+
+test("notifier rejects an API key and UCC that belong to different members", () => {
+  const left = { id: "u-upx-left", name: "Left", email: "upxleft@t2s.app", role: "user" };
+  const right = { id: "u-upx-right", name: "Right", email: "upxright@t2s.app", role: "user" };
+  installMemberBroker({
+    user: left,
+    brokerId: "upstox",
+    clientId: "393240",
+    apiKey: "upstox-api-key-aaaaaaa1",
+    sessionToken: "upstox-api-secret-aaaaaaa1",
+  });
+  installMemberBroker({
+    user: right,
+    brokerId: "upstox",
+    clientId: "393241",
+    apiKey: "upstox-api-key-bbbbbbb2",
+    sessionToken: "upstox-api-secret-bbbbbbb2",
+  });
+  assert.throws(
+    () =>
+      receiveUpstoxAccessToken({
+        client_id: "upstox-api-key-aaaaaaa1",
+        user_id: "393241",
+        access_token: "should-not-save",
+      }),
+    /same member/,
+  );
 });
 
 test("Get today's token says it is waiting when no trading token exists yet", async () => {

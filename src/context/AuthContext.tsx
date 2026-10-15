@@ -503,9 +503,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyUser,
       refreshMe,
       logout: () => {
-        void logoutSession();
-        clearStoredSession();
-        setUser(null);
+        void (async () => {
+          await logoutSession();
+          clearStoredSession();
+          setUser(null);
+        })();
       },
     }),
     [user, ready, hasThumb, applyUser, refreshMe],

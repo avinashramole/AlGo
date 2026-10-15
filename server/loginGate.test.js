@@ -122,6 +122,41 @@ test("login gate answers health and login without Dhan", async (t) => {
       assert.equal(memberSave.status, 200);
       const memberProfile = await memberSave.json();
       assert.equal(memberProfile.user.name, "New Member Saved");
+      const me = await fetch(`http://127.0.0.1:${port}/api/me`, {
+        headers: { Authorization: `Bearer ${member.token}` },
+      });
+      assert.equal(me.status, 200);
+      const loggedOut = await fetch(`http://127.0.0.1:${port}/api/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${member.token}` },
+      });
+      assert.equal(loggedOut.status, 200);
+      const afterLogout = await fetch(`http://127.0.0.1:${port}/api/me`, {
+        headers: { Authorization: `Bearer ${member.token}` },
+      });
+      assert.equal(afterLogout.status, 401);
+      const queryMe = await fetch(`http://127.0.0.1:${port}/api/me?token=${encodeURIComponent(session.token)}`);
+      assert.equal(queryMe.status, 200);
+      for (let i = 0; i < 8; i += 1) {
+        const bad = await fetch(`http://127.0.0.1:${port}/api/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: "locked.out@gmail.com", password: "wrong-pass" }),
+        });
+        assert.equal(bad.status, 401);
+      }
+      const locked = await fetch(`http://127.0.0.1:${port}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "locked.out@gmail.com", password: "wrong-pass" }),
+      });
+      assert.equal(locked.status, 429);
+      const stillAdmin = await fetch(`http://127.0.0.1:${port}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "trades2smart@gmail.com", password: "demo123" }),
+      });
+      assert.equal(stillAdmin.status, 200);
       return;
     } catch (error) {
       lastError = error;
