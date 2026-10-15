@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "public"
 MOBILE = ROOT / "mobile" / "assets"
 SOURCE = PUBLIC / "t2s-logo.png"
+APP_ICON = MOBILE / "app-icon-source.png"
 OUTPUT = PUBLIC / "t2s-logo.png"
 LIGHT = (255, 255, 255, 255)
 
@@ -80,9 +81,15 @@ def knock_white(im: Image.Image, thresh: int = 18) -> Image.Image:
     return im
 
 
-def fit(src: Image.Image, size: int, background: tuple[int, int, int, int] | None = None) -> Image.Image:
+def fit(
+    src: Image.Image,
+    size: int,
+    background: tuple[int, int, int, int] | None = None,
+    pad: float = 0.0,
+) -> Image.Image:
+    inner = max(1, int(size * (1 - pad * 2)))
     fitted = src.copy()
-    fitted.thumbnail((size, size), Image.Resampling.LANCZOS)
+    fitted.thumbnail((inner, inner), Image.Resampling.LANCZOS)
     canvas = Image.new("RGBA", (size, size), background or (0, 0, 0, 0))
     x = (size - fitted.width) // 2
     y = (size - fitted.height) // 2
@@ -98,21 +105,28 @@ def save(img: Image.Image, path: Path) -> None:
     print(path.relative_to(ROOT))
 
 
+def load_app_icon() -> Image.Image:
+    if APP_ICON.exists():
+        return Image.open(APP_ICON).convert("RGBA")
+    return knock_white(load_source())
+
+
 def main() -> None:
     src = knock_white(load_source())
     logo = fit(src, 800)
     save(logo, OUTPUT)
     save(logo, MOBILE / "t2s-logo.png")
     save(fit(src, 32, LIGHT), PUBLIC / "favicon.png")
-    save(fit(src, 180, LIGHT), PUBLIC / "apple-touch-icon.png")
-    icon = fit(src, 1024, LIGHT)
+    app = load_app_icon()
+    save(fit(app, 180, LIGHT), PUBLIC / "apple-touch-icon.png")
+    icon = fit(app, 1024, LIGHT)
     save(icon, MOBILE / "icon.png")
     save(icon, MOBILE / "icon-light.png")
-    save(icon, MOBILE / "splash-icon.png")
-    save(icon, MOBILE / "android-icon-foreground.png")
-    save(fit(src, 48, LIGHT), MOBILE / "favicon.png")
+    save(fit(app, 512, LIGHT), MOBILE / "splash-icon.png")
+    save(fit(app, 1024, LIGHT, pad=0.18), MOBILE / "android-icon-foreground.png")
+    save(fit(app, 48, LIGHT), MOBILE / "favicon.png")
     save(Image.new("RGB", (1024, 1024), (255, 255, 255)), MOBILE / "android-icon-background.png")
-    mono = fit(src, 1024, LIGHT).convert("L").convert("RGB")
+    mono = fit(app, 1024, LIGHT).convert("L").convert("RGB")
     save(mono, MOBILE / "android-icon-monochrome.png")
 
 
