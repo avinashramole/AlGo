@@ -37,6 +37,13 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(page, /isolated && !shivam/);
   assert.match(page, /data-start-live="true"/);
   assert.match(page, /data-shivam-map="true"/);
+  assert.match(page, /data-test-broker-order="true"/);
+  assert.match(page, /data-shivam-live-check/);
+  assert.match(page, /algo.enabled && algo.runMode === "live"/);
+  assert.doesNotMatch(page, /algo.enabled \|\| algo.status === "LIVE"/);
+  assert.match(api, /\/api\/algos\/:id\/test-order/);
+  assert.match(api, /\/api\/strategies\/shivam-t2s\/live-status/);
+  assert.match(api, /\/api\/strategies\/shivam-t2s\/test-order/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk && !shivam/);
   assert.match(strategies, /id: SHIVAM_T2S_SEED_ID/);

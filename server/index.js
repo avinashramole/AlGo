@@ -52,6 +52,8 @@ import {
   getOptionMeta,
   getAlgo,
   listAlgos,
+  placeStrategyBrokerTestOrder,
+  strategyTradingStatus,
   purgeStrategiesNotOnDesk,
   quoteSymbol,
   placeOrder,
@@ -973,6 +975,59 @@ app.post("/api/algos/:id/toggle", async (req, res) => {
   }
 });
 
+function publicAlgoLiveStatus(id) {
+  const status = strategyTradingStatus(id);
+  if (status.error && !status.id) return status;
+  const preview = placeStrategyBrokerTestOrder(id, { confirm: false });
+  return {
+    ...status,
+    contract: preview.contract,
+    lots: 1,
+    skipMemberCopy: true,
+  };
+}
+
+app.get("/api/algos/:id/live-status", (req, res) => {
+  const status = publicAlgoLiveStatus(req.params.id);
+  if (status.error && !status.id) {
+    res.status(404).json(status);
+    return;
+  }
+  res.json(status);
+});
+
+async function sendBrokerTestOrder(req, res, id) {
+  try {
+    if (isPreviewRequest(req)) {
+      const status = publicAlgoLiveStatus(id);
+      res.status(400).json({ ok: false, live: false, error: PREVIEW_ORDER_ERROR, ...status });
+      return;
+    }
+    const result = placeStrategyBrokerTestOrder(id, { confirm: req.body?.confirm });
+    if (result.error && !result.queued) {
+      res.status(result.id ? 400 : 404).json(result);
+      return;
+    }
+    if (result.queued) await flushLiveAlgoOrders();
+    const snap = snapshot();
+    const order = (snap.orders || []).find(
+      (row) =>
+        !row.copyUserId &&
+        (row.strategyId === result.id || row.strategy === result.name) &&
+        String(row.role || "") === "broker-test",
+    );
+    res.status(201).json({ ...result, order, snapshot: snap });
+  } catch (error) {
+    res.status(error.status || 400).json({
+      ok: false,
+      error: error.message || "Could not send test order",
+      snapshot: snapshot(),
+    });
+  }
+}
+
+app.post("/api/algos/:id/test-order", (req, res) => sendBrokerTestOrder(req, res, req.params.id));
+
 app.post("/api/algos", (req, res) => {
   try {
     const algo = createAlgo(req.body || {});
@@ -1147,6 +1202,24 @@ app.post("/api/strategies/shivam-t2s/stop", (req, res) => {
   }
   const next = toggleAlgo(algo.id, { enabled: false });
   res.json({ ok: true, algo: next });
+});
+
+app.get("/api/strategies/shivam-t2s/live-status", (req, res) => {
+  const algo = findShivamAlgo(req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  res.json(publicAlgoLiveStatus(algo.id));
+});
+
+app.post("/api/strategies/shivam-t2s/test-order", (req, res) => {
+  const algo = findShivamAlgo(req.body?.id || req.query.id);
+  if (!algo) {
+    res.status(404).json({ error: "Shivam T2S strategy not found" });
+    return;
+  }
+  return sendBrokerTestOrder(req, res, algo.id);
 });
 
 app.get("/api/strategies/shivam-t2s/trades", (req, res) => {
