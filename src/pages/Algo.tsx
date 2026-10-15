@@ -817,13 +817,13 @@ function DailyTradeLimit({ algo }: { algo: AlgoStrategy }) {
           }
         }}
       />
-      <span className="font-medium text-slate-400">
-        {saving
-          ? "Saving..."
-          : isShivamT2sKind(algo)
-            ? `1–100 filled BUY entries today. Used ${Number(algo.shivamState?.sessionTrades || 0)} · remaining ${Math.max(0, saved - Number(algo.shivamState?.sessionTrades || 0))}. Re-entries count. Rejected orders do not.`
-            : "1–20 entries today. Hedge, reverse, and exit do not use this count."}
-      </span>
+      {saving ? (
+        <span className="font-medium text-slate-400">Saving...</span>
+      ) : isShivamT2sKind(algo) ? null : (
+        <span className="font-medium text-slate-400">
+          1–20 entries today. Hedge, reverse, and exit do not use this count.
+        </span>
+      )}
     </label>
   );
 }

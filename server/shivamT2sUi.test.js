@@ -19,7 +19,9 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(builder, /data-shivam-capital="true"/);
   assert.match(builder, /Capital management/);
   assert.match(page, /data-shivam-capital="true"/);
-  assert.match(page, /1–100 filled BUY entries today/);
+  assert.doesNotMatch(page, /1–100 filled BUY entries today/);
+  assert.doesNotMatch(page, /Re-entries count\. Rejected orders do not/);
+  assert.doesNotMatch(builder, /Filled BUY entries today count toward the limit/);
   assert.match(builder, /data-mir-trade-mode="true"/);
   assert.match(builder, /emptyStrategy\(testDesk \? "shivam-t2s"/);
   assert.match(builder, /data-shivam-settings="true"/);

@@ -811,11 +811,11 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               })
             }
           />
-          <span className="desk-help mt-1 block font-medium text-slate-400">
-            {shivam
-              ? `Filled BUY entries today count toward the limit, including re-entries. Rejected orders do not. Used ${Number(algo?.shivamState?.sessionTrades || 0)} · remaining ${Math.max(0, Number(form.maxTradesPerDay || 5) - Number(algo?.shivamState?.sessionTrades || 0))}. Range 1–100.`
-              : "Orders this strategy can place today, from 1 to 20. Saving does not start LIVE."}
-          </span>
+          {shivam ? null : (
+            <span className="desk-help mt-1 block font-medium text-slate-400">
+              Orders this strategy can place today, from 1 to 20. Saving does not start LIVE.
+            </span>
+          )}
         </label>
 
         {test2 ? (
