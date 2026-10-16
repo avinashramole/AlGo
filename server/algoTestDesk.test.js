@@ -47,6 +47,8 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(algo, /data-test-broker-order="true"/);
   assert.match(algo, /data-shivam-live-check/);
   assert.match(algo, /algo.enabled && algo.runMode === "live"/);
+  assert.match(algo, /Live Dhan · admin \+ mapped brokers/);
+  assert.match(builder, /Live entries go to the admin broker and mapped user brokers/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk = false/);
   assert.match(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);
@@ -140,10 +142,15 @@ test("findLiveCopyAlgo finds Shivam T2S on Algo Test and mapping still gates cop
     mappedClientIds: ["u-1"],
   };
   assert.equal(findLiveCopyAlgo([shivam], "Shivam T2S Strategy").id, "shivam-1");
+  assert.equal(findLiveCopyAlgo([shivam], "Shivam T2S").id, "shivam-1");
+  assert.equal(findLiveCopyAlgo([shivam], "SHIVAM T2S").id, "shivam-1");
   assert.deepEqual(
     memberCopyPayloads({ strategy: "Shivam T2S Strategy", qty: 65 }, { ...shivam, mappingScope: "master" }),
     [],
   );
+  const copies = memberCopyPayloads({ strategy: "Shivam T2S", qty: 65, lotSize: 65 }, shivam);
+  assert.equal(copies.length, 1);
+  assert.equal(copies[0].copyUserId, "u-1");
 });
 
 test("members mapped to Shivam T2S can see it", () => {

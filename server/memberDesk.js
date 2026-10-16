@@ -15,6 +15,7 @@ import { firstCandleNameAliases } from "./niftyVwap/config.js";
 import { markContractToMarket } from "./positionMark.js";
 import { parseOptionContract } from "./frontFutures.js";
 import { defaultOrderRole, exitReasonLabel, keepExitReason, orderWhyLabel } from "./exitReason.js";
+import { isShivamT2sName } from "./shivamT2s/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1746,6 +1747,7 @@ function placeMemberOrder(desk, order) {
 function strategyLabel(name) {
   const text = String(name || "").trim().toLowerCase();
   if (!text) return "";
+  if (isShivamT2sName(name) || isShivamT2sName(text)) return "shivam t2s";
   if (text === "nifty" || (/nifty/.test(text) && /first\s*candle/.test(text) && !/crude/.test(text))) return "nifty";
   if (text === "crude oil" || text === "crudeoil" || (/crude/.test(text) && /first\s*candle/.test(text))) return "crude oil";
   return text;

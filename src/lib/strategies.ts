@@ -656,15 +656,19 @@ export function isMultiIndexReversalKind(algo?: { kind?: string; strategyType?: 
   );
 }
 
+export function isShivamT2sName(name = "") {
+  const text = String(name || "").trim();
+  if (!text) return false;
+  if (text === SHIVAM_T2S_NAME || text === "Shivam T2S" || text === "SHIVAM T2S") return true;
+  const compact = text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return compact === "shivamt2s" || compact === "shivamt2sstrategy";
+}
+
 export function isShivamT2sKind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string }) {
-  const name = String(algo?.name || "").trim();
-  return (
-    algo?.kind === "shivam-t2s" ||
-    algo?.strategyType === "SHIVAM_T2S" ||
-    algo?.indicator === "SHIVAM_T2S" ||
-    name === "Shivam T2S Strategy" ||
-    name === "Shivam T2S"
-  );
+  if (algo?.kind === "shivam-t2s" || algo?.strategyType === "SHIVAM_T2S" || algo?.indicator === "SHIVAM_T2S") {
+    return true;
+  }
+  return isShivamT2sName(algo?.name);
 }
 
 export function isNiftyTest2Kind(algo?: { kind?: string; strategyType?: string; indicator?: string; name?: string; tag?: string }) {

@@ -5,6 +5,7 @@ import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMem
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { exchangeSegmentFor } from "./optionChain.js";
+import { isShivamT2sAlgo, isShivamT2sName } from "./shivamT2s/config.js";
 
 let pendingCopySends = [];
 const sentMemberExits = new Map();
@@ -55,6 +56,7 @@ export function clearMemberExitCopiesForEntry(copy = {}) {
 function strategyLabel(name) {
   const text = String(name || "").trim().toLowerCase();
   if (!text) return "";
+  if (isShivamT2sName(name) || isShivamT2sName(text)) return "shivam t2s";
   if (isNiftyFirstCandleName(text)) return "nifty";
   if (isCrudeFirstCandleName(text)) return "crude oil";
   return text;
@@ -69,7 +71,7 @@ function sameStrategy(left, right) {
 export function findLiveCopyAlgo(algos = [], strategyName = "") {
   const name = String(strategyName || "").trim();
   const rows = (Array.isArray(algos) ? algos : []).filter(
-    (row) => !row?.testDesk || row?.kind === "shivam-t2s" || row?.strategyType === "SHIVAM_T2S",
+    (row) => !row?.testDesk || isShivamT2sAlgo(row),
   );
   const exact = rows.find((row) => String(row.name || "") === name);
   if (exact) return exact;
@@ -287,7 +289,7 @@ export function listCopyOnTargets({ masterQty, lotSize } = {}) {
 }
 
 export function memberCopyPayloads(payload = {}, algo = {}) {
-  const shivam = algo?.kind === "shivam-t2s" || algo?.strategyType === "SHIVAM_T2S" || String(algo?.name || "").trim() === "Shivam T2S Strategy";
+  const shivam = isShivamT2sAlgo(algo) || isShivamT2sName(payload.strategy);
   if (algo?.testDesk && !shivam) return [];
   const scope = String(algo.mappingScope || "both");
   if (scope === "master") return [];

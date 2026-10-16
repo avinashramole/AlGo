@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isShivamT2sAlgo, isShivamT2sName } from "./shivamT2s/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAYMENTS_FILE = process.env.T2S_PAYMENTS_FILE || path.join(__dirname, "data", "payments.json");
@@ -248,7 +249,10 @@ export function catalogStrategy(algo, settings = payments) {
 }
 
 function sameStrategyName(left, right) {
-  return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
+  const a = String(left || "").trim();
+  const b = String(right || "").trim();
+  if (a && b && a.toLowerCase() === b.toLowerCase()) return true;
+  return isShivamT2sName(a) && isShivamT2sName(b);
 }
 
 function enrolledStrategySet(value) {
@@ -259,8 +263,7 @@ function enrolledStrategySet(value) {
 /** Admin Visible/Hidden plus mapping decides which strategies a member can see. */
 export function strategyVisibleToMember(algo, viewer) {
   if (!algo) return false;
-  const shivam =
-    algo.kind === "shivam-t2s" || algo.strategyType === "SHIVAM_T2S" || String(algo.name || "").trim() === "Shivam T2S Strategy";
+  const shivam = isShivamT2sAlgo(algo);
   if (algo.testDesk && !shivam) return false;
   if (!viewer || viewer.role === "admin" || !viewer.userId) return true;
   if (algo.clientVisible === false) return false;

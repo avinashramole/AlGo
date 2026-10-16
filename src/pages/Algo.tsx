@@ -213,7 +213,7 @@ function ShivamCapitalStrip({ algo }: { algo: AlgoStrategy }) {
         {vs.requiredFunds ? ` · required ₹${formatNumber(Number(vs.requiredFunds), 2)}` : ""}
       </div>
       <div>
-        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan" : "Paper"} · mapped {Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0}
+        Trades {used} / {limit} · remaining {Math.max(0, limit - used)} · {algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · mapped {Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds.length : 0}
       </div>
     </div>
   );
@@ -340,7 +340,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "shivam-t2s" as const,
       category: "SHIVAM T2S",
-      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan" : "Paper"} · map clients`,
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
