@@ -278,6 +278,41 @@ test("Shivam alias Shivam T2S still queues admin Dhan and mapped user copy", () 
   }
 });
 
+test("Shivam mapped clients receive the user-broker copy when admin entry queues", () => {
+  setDhanFeed({ live: true });
+  pinAtmChain();
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-shivam-map");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const sent = tickStyleShivamEntry(created);
+    assert.equal(sent.queued, true);
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.find((row) => !row.copyUserId);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(admin);
+    assert.ok(copy);
+    assert.equal(admin.brokerId, "dhan");
+    assert.equal(copy.brokerId, "dhan");
+    assert.equal(copy.account?.accessToken, "member-dhan-token");
+    assert.equal(copy.account?.clientId, "11008899");
+    assert.notEqual(copy.paper, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
 test("Algo Test paper cards cannot send a live broker test order", () => {
   setDhanFeed({ live: true });
   pinAtmChain();

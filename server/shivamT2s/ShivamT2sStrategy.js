@@ -1,5 +1,5 @@
 import { pendingExitOnBook } from "../pendingExit.js";
-import { shivamT2sConfig } from "./config.js";
+import { isShivamT2sName, shivamT2sConfig } from "./config.js";
 import { sizeShivamLots } from "./lots.js";
 import { protectivePrices, slIsActive } from "./risk.js";
 import { barIsStale, barIsValid, evaluateShivamEntry, lastCompletedBar } from "./signals.js";
@@ -10,17 +10,25 @@ function round2(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+function shivamOwnedRow(row, name) {
+  const tagged = String(row?.strategy || "").trim();
+  if (!tagged) return false;
+  return tagged === name || isShivamT2sName(tagged);
+}
+
 function owned(positions = [], name) {
   return (positions || []).filter(
     (row) =>
       Number(row.qty) > 0 &&
       String(row.type || "BUY").toUpperCase() !== "CLOSED" &&
-      (row.strategy === name || !row.strategy),
+      shivamOwnedRow(row, name),
   );
 }
 
-function workingBuy(orders = []) {
+function workingBuy(orders = [], name) {
   return (orders || []).some((row) => {
+    const tagged = String(row.strategy || "").trim();
+    if (name && tagged && !shivamOwnedRow(row, name)) return false;
     if (String(row.side || "BUY").toUpperCase() === "SELL") return false;
     const status = String(row.status || "").toUpperCase();
     return !["REJECTED", "CANCELLED", "FAILED", "EXPIRED", "FILLED", "TRADED"].includes(status);
@@ -189,7 +197,7 @@ export const ShivamT2sStrategy = {
     if (state.lastEntryBarKey === key) {
       return markNoTrade(algo, state, "duplicate", signal);
     }
-    if (workingBuy(orders) || state.inFlight) {
+    if (workingBuy(orders, name) || state.inFlight) {
       return markNoTrade(algo, state, "in-flight", signal);
     }
     if (Number(state.sessionTrades || 0) >= Number(config.maxTradesPerDay)) {

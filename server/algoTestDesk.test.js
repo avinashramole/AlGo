@@ -16,7 +16,17 @@ process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 
-const { assignAlgoBroker, createAlgo, deleteAlgo, setDhanFeed, toggleAlgo, updateAlgo } = await import("./market.js");
+const {
+  assignAlgoBroker,
+  createAlgo,
+  deleteAlgo,
+  drainPendingLiveAlgoOrders,
+  queueLiveAlgoOrder,
+  replaceDhanBook,
+  setDhanFeed,
+  toggleAlgo,
+  updateAlgo,
+} = await import("./market.js");
 
 const FRI_0900 = Date.parse("2026-08-21T03:30:00.000Z");
 
@@ -285,5 +295,73 @@ test("create/update/toggle allow Shivam T2S live Dhan on Algo Test with mapped c
   } finally {
     deleteAlgo(created.id);
     setDhanFeed({ live: false });
+  }
+});
+
+test("Algo Test paper strategy does not fire a second trade while its lot is open", () => {
+  const created = createAlgo({
+    name: `Algo Test paper ${Date.now()}`,
+    kind: "nifty-first-candle",
+    testDesk: true,
+    runMode: "paper",
+  });
+  const other = createAlgo({
+    name: `Algo Test paper other ${Date.now()}`,
+    kind: "nifty-first-candle",
+    testDesk: true,
+    runMode: "paper",
+  });
+  try {
+    replaceDhanBook([
+      {
+        id: "paper-pos-test-desk",
+        symbol: "NIFTY 23100 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 100,
+        ltp: 110,
+        strategy: created.name,
+        brokerId: "paper",
+        paper: true,
+        testDesk: true,
+        option: "CE",
+        strike: 23100,
+      },
+    ]);
+    drainPendingLiveAlgoOrders();
+    const blocked = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      testDesk: true,
+      paper: true,
+      side: "BUY",
+      symbol: "NIFTY 23200 CE",
+      qty: 65,
+      option: "CE",
+      strike: 23200,
+      kind: "option",
+      brokerId: "paper",
+    });
+    assert.equal(blocked.queued, false);
+    assert.equal(blocked.duplicate, true);
+    const otherQueued = queueLiveAlgoOrder({
+      strategy: other.name,
+      strategyId: other.id,
+      testDesk: true,
+      paper: true,
+      side: "BUY",
+      symbol: "NIFTY 23300 CE",
+      qty: 65,
+      option: "CE",
+      strike: 23300,
+      kind: "option",
+      brokerId: "paper",
+    });
+    assert.equal(otherQueued.queued, true);
+  } finally {
+    replaceDhanBook([]);
+    drainPendingLiveAlgoOrders();
+    deleteAlgo(created.id);
+    deleteAlgo(other.id);
   }
 });

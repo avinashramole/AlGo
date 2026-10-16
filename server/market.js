@@ -607,15 +607,22 @@ export function peekOptionChain(symbol) {
   return optionChainCache.get(String(symbol || "").toUpperCase()) || null;
 }
 
-function strategyCard(strategy) {
+function strategyCard(strategy, hint = {}) {
   const name = String(strategy || "").trim();
-  if (!name) return {};
+  const strategyId = String(hint.strategyId || "").trim();
   const rows = state.algos || [];
+  if (strategyId) {
+    const byId = rows.find((row) => row.id === strategyId);
+    if (byId) return byId;
+  }
+  if (!name) return {};
   const shivam = rows.find(
     (row) => isShivamT2sAlgo(row) && (String(row.name || "").trim() === name || isShivamT2sName(name)),
   );
   if (shivam) return shivam;
-  return findLiveCopyAlgo(rows, name);
+  const live = findLiveCopyAlgo(rows, name);
+  if (live?.id || live?.name) return live;
+  return rows.find((row) => String(row.name || "").trim() === name || sameOneLotFamily(row.name, name)) || {};
 }
 
 function shivamLiveDesk(algo, payload = {}) {
@@ -755,7 +762,10 @@ function strategyHasPendingBuy(name) {
   const strategy = realStrategyName(name) || String(name || "");
   if (!strategy) return false;
   return pendingLiveAlgoOrders.some(
-    (row) => !row.copyUserId && (realStrategyName(row.strategy) || row.strategy) === strategy && liveOrderSide(row) === "BUY",
+    (row) =>
+      !row.copyUserId &&
+      sameOneLotFamily(row.strategy, strategy) &&
+      liveOrderSide(row) === "BUY",
   );
 }
 
@@ -765,7 +775,7 @@ function strategyHasWorkingBuy(name) {
   return (state.orders || []).some(
     (row) =>
       !row.copyUserId &&
-      (realStrategyName(row.strategy) || row.strategy) === strategy &&
+      sameOneLotFamily(row.strategy, strategy) &&
       liveOrderSide(row) === "BUY" &&
       orderIsWorking(row),
   );
@@ -778,7 +788,7 @@ function strategyHasOpenLot(name) {
     (row) =>
       !row.copyUserId &&
       !isPaperRow(row) &&
-      (realStrategyName(row.strategy) || row.strategy) === strategy &&
+      sameOneLotFamily(row.strategy, strategy) &&
       Number(row.qty) > 0 &&
       String(row.type || "BUY").toUpperCase() !== "CLOSED",
   );
@@ -790,9 +800,36 @@ function sameOneLotFamily(left, right) {
   if (a && b && a === b) return true;
   if (isNiftyFirstCandleName(a) && isNiftyFirstCandleName(b)) return true;
   if (isCrudeFirstCandleName(a) && isCrudeFirstCandleName(b)) return true;
+  if (isShivamT2sName(a) && isShivamT2sName(b)) return true;
   const aliases = new Set(firstCandleNameAliases(a).map((name) => String(name || "").toLowerCase()));
   if (!aliases.size) return false;
   return firstCandleNameAliases(b).some((name) => aliases.has(String(name || "").toLowerCase()));
+}
+
+function adminLotStrategyName(algo = {}, payload = {}) {
+  return (
+    realStrategyName(payload?.strategy) ||
+    realStrategyName(algo?.name) ||
+    String(payload?.strategy || algo?.name || "").trim()
+  );
+}
+
+function paperDeskAlgo(algo = {}) {
+  if (!algo || (!algo.id && !algo.name && !algo.runMode && !algo.testDesk)) return false;
+  if (isShivamT2sAlgo(algo) && String(algo.runMode || "").toLowerCase() === "live") return false;
+  return String(algo.runMode || "").toLowerCase() === "paper" || (Boolean(algo.testDesk) && !isShivamT2sAlgo(algo));
+}
+
+function adminOpenLotBelongsToStrategy(row = {}, algo = {}, payload = {}) {
+  const strategy = adminLotStrategyName(algo, payload);
+  if (!strategy) return false;
+  const tagged = realStrategyName(row.strategy) || String(row.strategy || "").trim();
+  const algoId = String(algo?.id || payload?.strategyId || "").trim();
+  const rowId = String(row.strategyId || "").trim();
+  if (algoId && rowId && algoId === rowId) return true;
+  if (tagged && sameOneLotFamily(tagged, strategy)) return true;
+  if (!tagged && isNiftyFirstCandleName(strategy) && PositionManager.isOpenNiftyOption(row)) return true;
+  return false;
 }
 
 function adminHasOpenOptionLot(algo = {}, payload = {}) {
@@ -801,7 +838,7 @@ function adminHasOpenOptionLot(algo = {}, payload = {}) {
     if (row.copyUserId || isPaperRow(row)) return false;
     if (!(Number(row.qty) > 0)) return false;
     if (String(row.type || "BUY").toUpperCase() === "CLOSED") return false;
-    return true;
+    return adminOpenLotBelongsToStrategy(row, algo, payload);
   });
 }
 
@@ -1181,10 +1218,11 @@ function sameWorkingBookOrder(payload) {
 
 function sameDeskStrategyRow(row, strategyName, algo = {}) {
   const name = realStrategyName(strategyName) || String(strategyName || "");
-  if (Boolean(row?.testDesk) !== Boolean(algo?.testDesk)) return false;
-  const strategyId = String(algo?.id || row?.strategyId || "").trim();
-  if (strategyId && row?.strategyId) return String(row.strategyId) === String(algo.id || strategyId);
-  return (realStrategyName(row?.strategy) || row?.strategy) === name;
+  if (row?.testDesk != null && algo?.testDesk != null && Boolean(row.testDesk) !== Boolean(algo.testDesk)) {
+    return false;
+  }
+  if (algo?.id && row?.strategyId) return String(row.strategyId) === String(algo.id);
+  return sameOneLotFamily(row?.strategy, name);
 }
 
 function strategyBuyUnresolved(strategyName, algo = {}) {
@@ -1208,10 +1246,11 @@ function strategyBuyUnresolved(strategyName, algo = {}) {
   ) {
     return true;
   }
+  const wantPaper = paperDeskAlgo(algo);
   return (state.positions || []).some(
     (row) =>
       !row.copyUserId &&
-      !isPaperRow(row) &&
+      isPaperRow(row) === wantPaper &&
       sameDeskStrategyRow(row, name, algo) &&
       Number(row.qty) > 0 &&
       String(row.type || "BUY").toUpperCase() !== "CLOSED",
@@ -1329,7 +1368,7 @@ function enqueueLiveAlgoOrder(payload) {
     }
     const role = String(payload?.role || payload?.exitReason || "").toLowerCase();
     if (!brokerTest && !copyUserId && !["hedge", "exit", "sl", "target", "trail", "reversal"].includes(role)) {
-      const algo = strategyCard(strategy);
+      const algo = strategyCard(strategy, payload);
       if (dailyEntryBlocked(algo)) {
         return { ok: true, queued: false, status: "MAX_TRADES", blocked: true };
       }
@@ -1341,7 +1380,7 @@ function enqueueLiveAlgoOrder(payload) {
   const role = String(payload?.role || "");
   const brokerId = orderBrokerId(payload);
   const allowHedge = payload?.allowHedge === true && role === "hedge";
-  const card = strategyCard(strategy);
+  const card = strategyCard(strategy, payload);
   const sameCopy = (row) => String(row?.copyUserId || "") === copyUserId;
   const sameContractPending = pendingLiveAlgoOrders.some(
     (row) =>

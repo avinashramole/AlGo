@@ -652,7 +652,7 @@ test("master exit closes every mapped paper client on that strategy", () => {
   }
 });
 
-test("member live BUY is not sent when the master desk already has a Nifty option", async () => {
+test("member live BUY is not sent when this strategy already has a Nifty option", async () => {
   const user = { id: "u-nifty-copy", name: "Nifty Copy", email: "niftycopy@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   installMemberBroker({ user, brokerId: "dhan", clientId: "1100777", accessToken: "member-buy-token" });
@@ -670,6 +670,7 @@ test("member live BUY is not sent when the master desk already has a Nifty optio
         product: "MIS",
         brokerId: "dhan",
         live: true,
+        strategy: algo.name,
       },
     ]);
     drainPendingLiveAlgoOrders();

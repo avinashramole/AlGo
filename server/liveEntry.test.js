@@ -58,7 +58,7 @@ test("first-candle option samples use the forming 09:15 bar, not the previous co
   assert.equal(liveOptionSampleTime(during, 5, "09:00"), T0);
 });
 
-test("an open lot on another strategy still blocks this strategy and books the error", () => {
+test("an open lot on another strategy does not block this strategy", () => {
   replaceDhanBook([
     {
       id: "dhan-pos-other",
@@ -85,17 +85,15 @@ test("an open lot on another strategy still blocks this strategy and books the e
     kind: "option",
     brokerId: "dhan",
   });
-  assert.equal(result.queued, false);
-  assert.equal(result.blocked, true);
-  assert.equal(result.status, "REJECTED");
-  assert.equal(result.reason, OPEN_LOT_BLOCK_REASON);
+  assert.equal(result.queued, true);
+  assert.notEqual(result.blocked, true);
   const queued = drainPendingLiveAlgoOrders();
-  assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), false);
+  assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), true);
   assert.equal(
     snapshot().orders.some(
       (row) => row.strategy === "test" && row.status === "REJECTED" && String(row.reason || "") === OPEN_LOT_BLOCK_REASON,
     ),
-    true,
+    false,
   );
   replaceDhanBook([]);
   drainPendingLiveAlgoOrders();
@@ -318,6 +316,8 @@ test("leftover PENDING SELLs from earlier SL hits do not block a new SL close", 
 });
 
 test("a FILLED SL SELL blocks another close of the same crude contract", () => {
+  const openedAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const filledAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   replaceDhanBook([
     {
       id: "crude-ghost-1",
@@ -331,7 +331,7 @@ test("a FILLED SL SELL blocks another close of the same crude contract", () => {
       option: "CE",
       strike: 6100,
       live: true,
-      openedAt: "2026-08-21T04:00:00.000Z",
+      openedAt,
     },
   ]);
   replaceDhanOrders([
@@ -347,7 +347,7 @@ test("a FILLED SL SELL blocks another close of the same crude contract", () => {
       option: "CE",
       strike: 6100,
       securityId: "sec-crude-6100-ce",
-      createdAt: "2026-08-21T04:05:00.000Z",
+      createdAt: filledAt,
     },
   ]);
   drainPendingLiveAlgoOrders();
@@ -561,4 +561,128 @@ test("a hedge BUY can still add the second NIFTY leg", () => {
   const queued = drainPendingLiveAlgoOrders();
   assert.equal(queued.some((row) => row.strategy === "hedge-test" && row.option === "CE" && !row.copyUserId), true);
   replaceDhanBook([]);
+});
+
+test("Shivam T2S still fires for admin while another strategy lot is open", async () => {
+  const { createAlgo, deleteAlgo, setDhanFeed, toggleAlgo } = await import("./market.js");
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    replaceDhanBook([
+      {
+        id: "dhan-pos-nifty-open",
+        symbol: "NIFTY 23100 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 100,
+        ltp: 110,
+        strategy: "NIFTY 5m first candle",
+        brokerId: "dhan",
+        option: "CE",
+        strike: 23100,
+        live: true,
+      },
+    ]);
+    drainPendingLiveAlgoOrders();
+    const result = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "shivam-t2s",
+      testDesk: true,
+      paper: false,
+      side: "BUY",
+      symbol: "NIFTY 25000 CE",
+      qty: 65,
+      option: "CE",
+      strike: 25000,
+      brokerId: "dhan",
+      role: "shivam-entry",
+    });
+    assert.equal(result.queued, true);
+    assert.notEqual(result.status, "REJECTED");
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => row.strategy === created.name && !row.copyUserId && row.brokerId === "dhan"), true);
+  } finally {
+    replaceDhanBook([]);
+    drainPendingLiveAlgoOrders();
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false });
+  }
+});
+
+test("Shivam T2S does not fire a second live BUY until its own broker lot is closed", async () => {
+  const { createAlgo, deleteAlgo, setDhanFeed, toggleAlgo } = await import("./market.js");
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    replaceDhanBook([
+      {
+        id: "dhan-pos-shivam-open",
+        symbol: "NIFTY 25000 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 110,
+        ltp: 112,
+        strategy: "Shivam T2S",
+        brokerId: "dhan",
+        option: "CE",
+        strike: 25000,
+        live: true,
+      },
+    ]);
+    drainPendingLiveAlgoOrders();
+    const blocked = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "shivam-t2s",
+      testDesk: true,
+      paper: false,
+      side: "BUY",
+      symbol: "NIFTY 25050 CE",
+      qty: 65,
+      option: "CE",
+      strike: 25050,
+      brokerId: "dhan",
+      role: "shivam-entry",
+    });
+    assert.equal(blocked.queued, false);
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.status, "REJECTED");
+    assert.equal(blocked.reason, OPEN_LOT_BLOCK_REASON);
+    replaceDhanBook([]);
+    const again = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "shivam-t2s",
+      testDesk: true,
+      paper: false,
+      side: "BUY",
+      symbol: "NIFTY 25050 CE",
+      qty: 65,
+      option: "CE",
+      strike: 25050,
+      brokerId: "dhan",
+      role: "shivam-entry",
+    });
+    assert.equal(again.queued, true);
+  } finally {
+    replaceDhanBook([]);
+    drainPendingLiveAlgoOrders();
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false });
+  }
 });
