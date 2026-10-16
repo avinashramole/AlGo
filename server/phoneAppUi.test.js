@@ -178,4 +178,7 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(app, /path="tape"/);
   assert.match(app, /path="broker"/);
   assert.match(app, /Navigate to="\/reports\?tab=orders"/);
+  const algoUi = fs.readFileSync(path.join(root, "src/pages/Algo.tsx"), "utf8");
+  assert.match(algoUi, /position is open/i);
+  assert.match(algoUi, /HOLD OPEN/);
 });

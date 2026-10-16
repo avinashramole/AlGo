@@ -69,6 +69,7 @@ function orderActivity(signal: string | undefined, fallback: string) {
     .replace(/\s*·\s*NO TRADE\b.*$/i, "")
     .trim();
   if (/\b(?:GREEN|RED)\b/i.test(text)) return text;
+  if (/position is open/i.test(text) || /^HOLD OPEN\b/i.test(text)) return text;
   if (!text || /^hold\b/i.test(text)) return fallback;
   return text;
 }

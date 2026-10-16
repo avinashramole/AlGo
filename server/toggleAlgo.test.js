@@ -173,7 +173,7 @@ test("paper or stopped strategies keep admin and user BUY on paper only", () => 
   }
 });
 
-test("starting NIFTY live sends the admin broker order even if a leftover lot is still on the book", () => {
+test("starting NIFTY live does not send a new broker order while a leftover lot is open", () => {
   setDhanFeed({ live: true });
   const stamp = Date.now();
   const name = `NIFTY admin run ${stamp}`;
@@ -197,6 +197,7 @@ test("starting NIFTY live sends the admin broker order even if a leftover lot is
     ]);
     const started = toggleAlgo(created.id, { enabled: true });
     assert.equal(started.enabled, true);
+    assert.equal(started.allowFreshLiveEntry, false);
     const result = queueLiveAlgoOrder({
       strategy: name,
       side: "BUY",
@@ -208,11 +209,16 @@ test("starting NIFTY live sends the admin broker order even if a leftover lot is
       product: "MIS",
       type: "MARKET",
     });
-    assert.equal(result.queued, true);
+    assert.equal(result.queued, false);
+    assert.equal(result.blocked, true);
     const queued = drainPendingLiveAlgoOrders().filter((row) => row.strategy === name && !row.copyUserId);
-    assert.equal(queued.length, 1);
-    assert.equal(queued[0].brokerId, "dhan");
-    assert.equal(queued[0].symbol, "NIFTY 23200 CE");
+    assert.equal(queued.length, 0);
+    assert.equal(
+      snapshot().orders.some(
+        (row) => row.status === "REJECTED" && /position is open on the broker/i.test(String(row.reason || "")),
+      ),
+      true,
+    );
   } finally {
     deleteAlgo(created.id);
     replaceDhanBook([]);
@@ -366,6 +372,85 @@ test("a deleted client is removed from every strategy map", () => {
     assert.equal((saved.mappedClientIds || []).includes("u-missing"), false);
   } finally {
     deleteAlgo(created.id);
+  }
+});
+
+test("start keeps an earlier-session broker lot and still holds", () => {
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    name: `Open Lot Keep ${Date.now()}`,
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    replaceDhanBook([
+      {
+        id: "dhan-pos-yesterday",
+        symbol: "NIFTY 22950 PE",
+        type: "BUY",
+        qty: 65,
+        avg: 120,
+        ltp: 110,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "PE",
+        strike: 22950,
+        live: true,
+        createdAt: "2026-10-15T04:00:00.000Z",
+      },
+    ]);
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    assert.equal(started.allowFreshLiveEntry, false);
+    assert.match(String(started.lastSignal || ""), /other position is open on broker/i);
+    assert.equal(
+      snapshot().positions.some((row) => row.id === "dhan-pos-yesterday" && Number(row.qty) > 0),
+      true,
+    );
+  } finally {
+    replaceDhanBook([]);
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false });
+  }
+});
+
+test("start and stop hold when a broker lot is already open", () => {
+  setDhanFeed({ live: true });
+  const created = createAlgo({
+    name: `Open Lot Toggle ${Date.now()}`,
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    replaceDhanBook([
+      {
+        id: "dhan-pos-toggle-open",
+        symbol: "NIFTY 22950 PE",
+        type: "BUY",
+        qty: 65,
+        avg: 120,
+        ltp: 110,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "PE",
+        strike: 22950,
+        live: true,
+      },
+    ]);
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.enabled, true);
+    assert.equal(started.status, "LIVE");
+    assert.equal(started.allowFreshLiveEntry, false);
+    assert.match(String(started.lastSignal || ""), /other position is open on broker/i);
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => row.strategy === created.name && row.side === "BUY"), false);
+    const stopped = toggleAlgo(created.id, { enabled: false });
+    assert.equal(stopped.enabled, false);
+    assert.match(String(stopped.lastSignal || ""), /other position is open on broker/i);
+  } finally {
+    replaceDhanBook([]);
+    deleteAlgo(created.id);
+    setDhanFeed({ live: false });
   }
 });
 

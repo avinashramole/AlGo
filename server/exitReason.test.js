@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { closeWhyFromPrices, exitReasonLabel, exitRoleFromReason, keepExitReason, orderWhyLabel, preferOrderRole } from "./exitReason.js";
+import { closeWhyFromPrices, exitReasonLabel, exitRoleFromReason, keepExitReason, OPEN_LOT_BLOCK_REASON, orderWhyLabel, preferOrderRole } from "./exitReason.js";
 
 test("SL and TGT exit reasons stay readable on the order book", () => {
   assert.equal(exitReasonLabel({ role: "sl" }), "SL HIT");
@@ -48,6 +48,7 @@ test("order why shows strategy entry and SL, not Dhan TRADE CONFIRMED", () => {
     "ENTRY",
   );
   assert.equal(orderWhyLabel({ status: "REJECTED", reason: "RMS rejected" }), "RMS rejected");
+  assert.equal(orderWhyLabel({ status: "REJECTED", reason: OPEN_LOT_BLOCK_REASON, side: "BUY", strategy: "NIFTY" }), OPEN_LOT_BLOCK_REASON);
   assert.equal(orderWhyLabel({ status: "REJECTED", reason: "TRADE CONFIRMED", strategy: "CRUDE OIL", side: "BUY" }), "");
   assert.equal(preferOrderRole("exit", "sl"), "sl");
   assert.equal(preferOrderRole("sl", "exit"), "sl");

@@ -1,5 +1,6 @@
 import { liveExitPrice } from "../executionSpeed.js";
 import { filledExitOnBook, pendingExitOnBook } from "../pendingExit.js";
+import { OPEN_LOT_HOLD_SIGNAL } from "../exitReason.js";
 import { isSaneOptionLtp } from "../positionMark.js";
 import { exchangeSegmentFor } from "../optionChain.js";
 import { optionEngineConfig } from "./config.js";
@@ -408,7 +409,7 @@ export const NiftyVwapStrategy = {
       state.inFlight = false;
       state.buyPhase = "";
       PositionManager.clearOpen(state);
-      algo.lastSignal = "HOLD OPEN";
+      algo.lastSignal = OPEN_LOT_HOLD_SIGNAL;
       return { action: "skip", reason: "already-open", pick, result };
     }
     if (result?.duplicate || result?.queued === false) {
@@ -572,7 +573,7 @@ export const NiftyVwapStrategy = {
     }
 
     if (!open && (input.positions || []).some((row) => PositionManager.isOpenOption(row, config.symbol))) {
-      algo.lastSignal = "HOLD OPEN";
+      algo.lastSignal = OPEN_LOT_HOLD_SIGNAL;
       return { action: "skip", reason: "already-open" };
     }
 
