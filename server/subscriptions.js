@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { isShivamT2sAlgo, isShivamT2sName } from "./shivamT2s/config.js";
+import { isShivamT2sName } from "./shivamT2s/config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAYMENTS_FILE = process.env.T2S_PAYMENTS_FILE || path.join(__dirname, "data", "payments.json");
@@ -263,8 +263,6 @@ function enrolledStrategySet(value) {
 /** Admin Visible/Hidden plus mapping decides which strategies a member can see. */
 export function strategyVisibleToMember(algo, viewer) {
   if (!algo) return false;
-  const shivam = isShivamT2sAlgo(algo);
-  if (algo.testDesk && !shivam) return false;
   if (!viewer || viewer.role === "admin" || !viewer.userId) return true;
   if (algo.clientVisible === false) return false;
   const userId = String(viewer.userId);

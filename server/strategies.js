@@ -422,27 +422,16 @@ function sealTestDesk(algo, input = {}, existing = {}) {
     isShivamT2sAlgo(existing);
   if (!testDesk) return { ...algo, testDesk: false };
   const shivam = isShivamT2sAlgo(algo);
-  const shivamLive = shivam && algo.runMode === "live";
-  if (shivam) {
-    return {
-      ...algo,
-      testDesk: true,
-      runMode: algo.runMode === "backtest" ? "backtest" : shivamLive ? "live" : "paper",
-      brokerId: shivamLive
-        ? algo.brokerId && String(algo.brokerId).toLowerCase() !== "paper"
-          ? algo.brokerId
-          : "dhan"
-        : "paper",
-    };
-  }
+  const wantLive = algo.runMode === "live" && (!shivam || algo.liveAuthorized === true);
   return {
     ...algo,
     testDesk: true,
-    runMode: algo.runMode === "backtest" ? "backtest" : "paper",
-    brokerId: "paper",
-    mappingScope: "master",
-    mappedClientIds: [],
-    clientVisible: false,
+    runMode: algo.runMode === "backtest" ? "backtest" : wantLive ? "live" : "paper",
+    brokerId: wantLive
+      ? algo.brokerId && String(algo.brokerId).toLowerCase() !== "paper"
+        ? algo.brokerId
+        : "dhan"
+      : "paper",
   };
 }
 

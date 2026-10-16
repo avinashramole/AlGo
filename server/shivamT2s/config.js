@@ -10,7 +10,6 @@ export const SHIVAM_T2S_SCRIPTS = [
   { id: "NIFTY", label: "NIFTY 50", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "NIFTY FUT" },
   { id: "BANKNIFTY", label: "BANK NIFTY", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "BANKNIFTY FUT" },
   { id: "FINNIFTY", label: "FINNIFTY", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "FINNIFTY FUT" },
-  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", exchange: "NSE", segment: "NSE_FNO", session: "nse", expiryKind: "weekly", futures: "MIDCPNIFTY FUT" },
   { id: "SENSEX", label: "SENSEX", exchange: "BSE", segment: "BSE_FNO", session: "nse", expiryKind: "weekly", futures: "SENSEX FUT" },
   { id: "CRUDEOIL", label: "CRUDE OIL", exchange: "MCX", segment: "MCX_COMM", session: "mcx", expiryKind: "monthly", futures: "CRUDEOIL FUT" },
   { id: "COPPER", label: "COPPER", exchange: "MCX", segment: "MCX_COMM", session: "mcx", expiryKind: "monthly", futures: "COPPER FUT" },
@@ -18,7 +17,7 @@ export const SHIVAM_T2S_SCRIPTS = [
 ];
 
 export const SHIVAM_SCRIPT_PICK_ERROR =
-  "Unsupported index. Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS.";
+  "Unsupported index. Pick NIFTY, BANKNIFTY, FINNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS.";
 
 const SHIVAM_SCRIPT_ALIASES = {
   NIFTY: "NIFTY",
@@ -26,8 +25,6 @@ const SHIVAM_SCRIPT_ALIASES = {
   BANKNIFTY: "BANKNIFTY",
   BANKNIFTY50: "BANKNIFTY",
   FINNIFTY: "FINNIFTY",
-  MIDCPNIFTY: "MIDCPNIFTY",
-  MIDCAPNIFTY: "MIDCPNIFTY",
   SENSEX: "SENSEX",
   CRUDE: "CRUDEOIL",
   CRUDEOIL: "CRUDEOIL",

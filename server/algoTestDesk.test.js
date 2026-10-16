@@ -27,10 +27,19 @@ const {
   toggleAlgo,
   updateAlgo,
 } = await import("./market.js");
+const { installMemberBroker, saveClientSettings, selectMemberBroker } = await import("./memberDesk.js");
 
 const FRI_0900 = Date.parse("2026-08-21T03:30:00.000Z");
 
-test("Algo Test page, admin menu, and paper-only builder are wired", () => {
+function liveMappedUser(id = "u-algo-test") {
+  const user = { id, name: "Copy", email: `${id}@t2s.app`, role: "user" };
+  selectMemberBroker({ user, brokerId: "dhan" });
+  installMemberBroker({ user, brokerId: "dhan", clientId: "11008899", accessToken: "member-dhan-token" });
+  saveClientSettings(user.id, { copy: true });
+  return user;
+}
+
+test("Algo Test page, admin menu, and live+copy builder are wired", () => {
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
   const roles = fs.readFileSync(path.join(root, "src/lib/roles.ts"), "utf8");
   const sidebar = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
@@ -47,10 +56,10 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(algo, /data-algo-desk/);
   assert.match(algo, /data-algo-test-tab/);
   assert.match(algo, /navigate\("\/algo-test"\)/);
-  assert.match(algo, /Paper test only · no live · no copy/);
-  assert.match(algo, /Paper test only · no live · no copy/);
-  assert.match(algo, /isolated && !shivam/);
+  assert.doesNotMatch(algo, /Paper test only · no live · no copy/);
+  assert.doesNotMatch(algo, /isolated && !shivam/);
   assert.match(algo, /data-shivam-map="true"/);
+  assert.match(algo, /data-start-live="true"/);
   assert.match(algo, /Selected clients only/);
   assert.match(algo, /Live orders go to enrolled mapped clients on their own brokers/);
   assert.match(algo, /Latest activity/);
@@ -63,7 +72,9 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(builder, /Live entries go to the admin broker and mapped user brokers/);
   assert.match(builder, /liveAuthorized: true/);
   assert.match(builder, /testDesk = false/);
-  assert.match(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);
+  assert.match(builder, /RUN_MODES\.map/);
+  assert.doesNotMatch(builder, /RUN_MODES.filter\(\(mode\) => mode.id !== "live"\)/);
+  assert.doesNotMatch(builder, /Paper-only test desk/);
   assert.match(builder, /testDesk: true/);
   assert.match(builder, /title="SHIVAM T2S"/);
   assert.match(builder, /data-shivam-capital="true"/);
@@ -72,7 +83,7 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.doesNotMatch(algo, /Re-entries count\. Rejected orders do not/);
 });
 
-test("normalizeAlgo seals Algo Test strategies to paper with no copy mapping", () => {
+test("normalizeAlgo keeps Algo Test live plus mapped clients on the test desk", () => {
   const created = normalizeAlgo({
     name: "NIFTY",
     kind: "nifty-first-candle",
@@ -84,18 +95,18 @@ test("normalizeAlgo seals Algo Test strategies to paper with no copy mapping", (
     clientVisible: true,
   });
   assert.equal(created.testDesk, true);
-  assert.equal(created.runMode, "paper");
-  assert.equal(created.brokerId, "paper");
-  assert.equal(created.mappingScope, "master");
-  assert.deepEqual(created.mappedClientIds, []);
-  assert.equal(created.clientVisible, false);
+  assert.equal(created.runMode, "live");
+  assert.equal(created.brokerId, "dhan");
+  assert.equal(created.mappingScope, "both");
+  assert.deepEqual(created.mappedClientIds, ["u-1"]);
+  assert.equal(created.clientVisible, true);
   assert.equal(isTestDeskAlgo(created), true);
 
   const kept = normalizeAlgo({ runMode: "live", brokerId: "dhan", testDesk: false, clientVisible: true }, created);
   assert.equal(kept.testDesk, true);
-  assert.equal(kept.runMode, "paper");
-  assert.equal(kept.brokerId, "paper");
-  assert.equal(kept.clientVisible, false);
+  assert.equal(kept.runMode, "live");
+  assert.equal(kept.brokerId, "dhan");
+  assert.equal(kept.clientVisible, true);
 });
 
 test("main-desk strategies stay off the test desk flag", () => {
@@ -135,12 +146,24 @@ test("Shivam T2S live on Algo Test keeps mapped clients", () => {
   assert.equal(isTestDeskAlgo(created), true);
 });
 
-test("findLiveCopyAlgo and member copies skip Algo Test strategies", () => {
+test("findLiveCopyAlgo prefers the main-desk card but Algo Test still copies mapped clients", () => {
   const live = { id: "live-n", name: "NIFTY", enabled: true, mappingScope: "both", mappedClientIds: ["u-1"] };
-  const testAlgo = { id: "test-n", name: "NIFTY", testDesk: true, enabled: true, mappingScope: "both", mappedClientIds: ["u-1"] };
+  const testAlgo = {
+    id: "test-n",
+    name: "NIFTY",
+    testDesk: true,
+    enabled: true,
+    runMode: "live",
+    mappingScope: "both",
+    mappedClientIds: ["u-1"],
+  };
   const found = findLiveCopyAlgo([testAlgo, live], "NIFTY");
   assert.equal(found.id, "live-n");
-  assert.deepEqual(memberCopyPayloads({ strategy: "NIFTY", qty: 65 }, testAlgo), []);
+  assert.equal(findLiveCopyAlgo([testAlgo], "NIFTY").id, "test-n");
+  const copies = memberCopyPayloads({ strategy: "NIFTY", qty: 65, lotSize: 65 }, testAlgo);
+  assert.equal(copies.length, 1);
+  assert.equal(copies[0].copyUserId, "u-1");
+  assert.deepEqual(memberCopyPayloads({ strategy: "NIFTY", qty: 65 }, { ...testAlgo, runMode: "paper" }), []);
 });
 
 test("findLiveCopyAlgo finds Shivam T2S on Algo Test and mapping still gates copies", () => {
@@ -198,10 +221,24 @@ test("members mapped to Shivam T2S can see it", () => {
   );
 });
 
-test("members cannot see Algo Test strategies", () => {
+test("members see mapped visible Algo Test strategies", () => {
   assert.equal(
     strategyVisibleToMember(
-      { id: "t1", name: "NIFTY", testDesk: true, clientVisible: true, mappingScope: "both" },
+      { id: "t1", name: "NIFTY", testDesk: true, clientVisible: true, mappingScope: "both", mappedClientIds: ["u-1"] },
+      { userId: "u-1", role: "user" },
+    ),
+    true,
+  );
+  assert.equal(
+    strategyVisibleToMember(
+      { id: "t1", name: "NIFTY", testDesk: true, clientVisible: true, mappingScope: "both", mappedClientIds: ["u-1"] },
+      { userId: "u-other", role: "user" },
+    ),
+    false,
+  );
+  assert.equal(
+    strategyVisibleToMember(
+      { id: "t1", name: "NIFTY", testDesk: true, clientVisible: false, mappingScope: "both", mappedClientIds: ["u-1"] },
       { userId: "u-1", role: "user" },
     ),
     false,
@@ -223,11 +260,11 @@ test("daily LIVE 09:00 does not arm an Algo Test first-candle card", () => {
   const result = applyFirstCandleDailyLive(algos, { now: FRI_0900, feedLive: true });
   assert.equal(result.armedIds.includes("test-fc"), false);
   assert.equal(result.algos[0].enabled, false);
-  assert.equal(result.algos[0].runMode, "paper");
+  assert.equal(result.algos[0].runMode, "live");
   assert.equal(result.algos[0].testDesk, true);
 });
 
-test("create/update/toggle keep non-Shivam Algo Test paper-only and off live brokers", () => {
+test("create/update/toggle allow non-Shivam Algo Test live Dhan with mapped clients", () => {
   setDhanFeed({ live: true });
   const created = createAlgo({
     name: `Algo Test ${Date.now()}`,
@@ -237,24 +274,27 @@ test("create/update/toggle keep non-Shivam Algo Test paper-only and off live bro
     brokerId: "dhan",
     mappingScope: "clients",
     mappedClientIds: ["u-keep"],
+    clientVisible: true,
   });
   try {
     assert.equal(created.testDesk, true);
-    assert.equal(created.runMode, "paper");
-    assert.equal(created.brokerId, "paper");
-    assert.equal(created.mappingScope, "master");
-    assert.deepEqual(created.mappedClientIds, []);
+    assert.equal(created.runMode, "live");
+    assert.equal(created.brokerId, "dhan");
+    assert.equal(created.mappingScope, "clients");
+    assert.deepEqual(created.mappedClientIds, ["u-keep"]);
+    assert.equal(created.clientVisible, true);
     const live = updateAlgo(created.id, { runMode: "live", enabled: true, brokerId: "dhan" });
     assert.equal(live.error, undefined);
     assert.equal(live.testDesk, true);
-    assert.equal(live.runMode, "paper");
-    assert.equal(live.brokerId, "paper");
+    assert.equal(live.runMode, "live");
+    assert.equal(live.brokerId, "dhan");
+    assert.equal(live.status, "LIVE");
     const routed = assignAlgoBroker(created.id, "dhan");
-    assert.equal(routed.brokerId, "paper");
+    assert.equal(routed.brokerId, "dhan");
     const started = toggleAlgo(created.id, { enabled: true });
-    assert.equal(started.runMode, "paper");
-    assert.equal(started.brokerId, "paper");
-    assert.notEqual(started.status, "LIVE");
+    assert.equal(started.runMode, "live");
+    assert.equal(started.brokerId, "dhan");
+    assert.equal(started.status, "LIVE");
   } finally {
     deleteAlgo(created.id);
     setDhanFeed({ live: false });
@@ -365,5 +405,108 @@ test("Algo Test paper strategy does not fire a second trade while its lot is ope
     drainPendingLiveAlgoOrders();
     deleteAlgo(created.id);
     deleteAlgo(other.id);
+  }
+});
+
+test("Algo Test live first-candle queues admin Dhan and mapped user copy", () => {
+  setDhanFeed({ live: true });
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-test-live");
+  const created = createAlgo({
+    name: `Algo Test live ${Date.now()}`,
+    kind: "nifty-first-candle",
+    testDesk: true,
+    runMode: "live",
+    brokerId: "dhan",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
+    clientVisible: true,
+  });
+  try {
+    const started = toggleAlgo(created.id, { enabled: true });
+    assert.equal(started.status, "LIVE");
+    const sent = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "nifty-first-candle",
+      testDesk: true,
+      paper: false,
+      brokerId: "dhan",
+      side: "BUY",
+      symbol: "NIFTY 25000 CE",
+      qty: 65,
+      lots: 1,
+      lotSize: 65,
+      option: "CE",
+      strike: 25000,
+      securityId: "ce-25000",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(sent.queued, true);
+    assert.notEqual(sent.status, "FEED_DOWN");
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.find((row) => !row.copyUserId && row.strategy === created.name);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(admin);
+    assert.ok(copy);
+    assert.equal(admin.brokerId, "dhan");
+    assert.notEqual(admin.paper, true);
+    assert.equal(admin.testDesk, true);
+    assert.equal(copy.brokerId, "dhan");
+    assert.equal(copy.qty, 65);
+    assert.equal(copy.account?.accessToken, "member-dhan-token");
+    assert.notEqual(copy.paper, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("Algo Test clients-only skips the admin broker and still copies the mapped user", () => {
+  setDhanFeed({ live: true });
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-test-clients");
+  const created = createAlgo({
+    name: `Algo Test clients ${Date.now()}`,
+    kind: "nifty-first-candle",
+    testDesk: true,
+    runMode: "live",
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+    clientVisible: true,
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const sent = queueLiveAlgoOrder({
+      strategy: created.name,
+      strategyId: created.id,
+      kind: "nifty-first-candle",
+      testDesk: true,
+      paper: false,
+      brokerId: "dhan",
+      side: "BUY",
+      symbol: "NIFTY 25000 CE",
+      qty: 65,
+      lots: 1,
+      lotSize: 65,
+      option: "CE",
+      strike: 25000,
+      securityId: "ce-25000",
+      product: "MIS",
+      type: "MARKET",
+    });
+    assert.equal(sent.skippedAdmin, true);
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => !row.copyUserId && row.strategy === created.name), false);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(copy);
+    assert.equal(copy.brokerId, "dhan");
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
   }
 });
