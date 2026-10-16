@@ -409,12 +409,14 @@ html:has(.t2s-login) #root {
 .t2s-switch {
   display: block;
   width: 100%;
-  margin-top: 12px;
+  margin-top: 20px;
+  padding: 2px 0;
   border: 0;
   background: transparent;
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
   text-align: center;
 }
