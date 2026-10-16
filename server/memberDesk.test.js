@@ -11,6 +11,7 @@ process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
 process.env.T2S_USERS_FILE = path.join(dir, "users.json");
 process.env.T2S_SESSIONS_FILE = path.join(dir, "sessions.json");
+process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
 const { enrollStrategy, markEnrollmentPaid, savePaymentSettings } = await import("./subscriptions.js");
 const {
@@ -317,23 +318,37 @@ test("queueLiveAlgoOrder places the desk broker order without member tokens", as
   });
   markEnrollmentPaid({ user, enrollmentId: enrolled.enrollment.id });
   selectMemberBroker({ user, brokerId: "zerodha" });
-  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder } = await import("./market.js");
-  drainPendingLiveAlgoOrders();
-  queueLiveAlgoOrder({
-    strategy: "NIFTY VWAP ATM",
-    side: "SELL",
-    symbol: "BANKNIFTY 52000 PE",
-    qty: 30,
-    brokerId: "dhan",
+  const { createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, setDhanFeed } = await import("./market.js");
+  setDhanFeed({ live: true });
+  const card = createAlgo({
+    name: algo.name,
+    kind: "indicator",
+    runMode: "live",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
   });
-  const queued = drainPendingLiveAlgoOrders();
-  const admin = queued.filter((row) => !row.copyUserId);
-  assert.deepEqual(admin.map((row) => row.brokerId), ["dhan"]);
-  const copy = queued.find((row) => row.copyUserId === user.id);
-  assert.ok(copy);
-  assert.equal(copy.brokerId, "zerodha");
-  assert.match(copy.copyBlocked, /access token/);
-  assert.equal(copy.account, undefined);
+  try {
+    drainPendingLiveAlgoOrders();
+    queueLiveAlgoOrder({
+      strategy: card.name,
+      side: "SELL",
+      symbol: "BANKNIFTY 52000 PE",
+      qty: 30,
+      brokerId: "dhan",
+    });
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.filter((row) => !row.copyUserId);
+    assert.deepEqual(admin.map((row) => row.brokerId), ["dhan"]);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(copy);
+    assert.equal(copy.brokerId, "zerodha");
+    assert.match(copy.copyBlocked, /access token/);
+    assert.equal(copy.account, undefined);
+  } finally {
+    deleteAlgo(card.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
 });
 
 test("installMemberBroker stores API key and access token hints without secrets", () => {
@@ -397,24 +412,38 @@ test("installMemberBroker on an already selected broker replaces the token and e
 
 test("queueLiveAlgoOrder queues a sized copy on the member token", async () => {
   saveClientSettings(user.id, { sizingKind: "multiplier", sizingValue: 2, copy: true });
-  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder } = await import("./market.js");
-  drainPendingLiveAlgoOrders();
-  queueLiveAlgoOrder({
-    strategy: "NIFTY VWAP ATM",
-    side: "SELL",
-    symbol: "BANKNIFTY 52000 PE",
-    qty: 30,
-    lotSize: 30,
-    brokerId: "dhan",
+  const { createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, queueLiveAlgoOrder, setDhanFeed } = await import("./market.js");
+  setDhanFeed({ live: true });
+  const card = createAlgo({
+    name: algo.name,
+    kind: "indicator",
+    runMode: "live",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
   });
-  const queued = drainPendingLiveAlgoOrders();
-  const desk = queued.find((row) => !row.copyUserId);
-  const copy = queued.find((row) => row.copyUserId === user.id);
-  assert.equal(desk.brokerId, "dhan");
-  assert.equal(copy.brokerId, "zerodha");
-  assert.equal(copy.qty, 60);
-  assert.equal(copy.account.accessToken, "kite-access-token-value");
-  assert.equal(copy.brokerSession.accessToken, "kite-access-token-value");
+  try {
+    drainPendingLiveAlgoOrders();
+    queueLiveAlgoOrder({
+      strategy: card.name,
+      side: "SELL",
+      symbol: "BANKNIFTY 52000 PE",
+      qty: 30,
+      lotSize: 30,
+      brokerId: "dhan",
+    });
+    const queued = drainPendingLiveAlgoOrders();
+    const desk = queued.find((row) => !row.copyUserId);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.equal(desk.brokerId, "dhan");
+    assert.equal(copy.brokerId, "zerodha");
+    assert.equal(copy.qty, 60);
+    assert.equal(copy.account.accessToken, "kite-access-token-value");
+    assert.equal(copy.brokerSession.accessToken, "kite-access-token-value");
+  } finally {
+    deleteAlgo(card.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
 });
 
 test("a member can keep Dhan and Upstox tokens and update Dhan without losing Upstox", () => {
@@ -1020,7 +1049,7 @@ test("a Kotak user's trade login stays on that user and is not returned on the p
   const { memberCopyPayloads } = await import("./liveCopy.js");
   const copies = memberCopyPayloads(
     { strategy: "CRUDE", symbol: "CRUDEOIL 8800 PE", side: "BUY", qty: 100, lotSize: 100, brokerId: "dhan" },
-    { id: "crude", mappingScope: "master" },
+    { id: "crude", mappingScope: "both", mappedClientIds: [member.id] },
   );
   const row = copies.find((item) => item.copyUserId === member.id);
   assert.ok(row);

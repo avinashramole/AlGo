@@ -4,4 +4,8 @@
     <string name="title_activity_main">Trade 2 Smart</string>
     <string name="package_name">com.t2s.algo</string>
     <string name="custom_url_scheme">com.t2s.algo</string>
+    <string name="logout_title">Log out?</string>
+    <string name="logout_message">Are you sure you want to log out?</string>
+    <string name="logout_cancel">Cancel</string>
+    <string name="logout_confirm">Log out</string>
 </resources>

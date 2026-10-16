@@ -95,12 +95,16 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const userHome = fs.readFileSync(path.join(root, "src/pages/UserHome.tsx"), "utf8");
   const memberHome = fs.readFileSync(path.join(root, "src/components/home/UserHomeBoard.tsx"), "utf8");
   assert.match(userHome, /UserHomeBoard/);
-  assert.match(memberHome, /data-home-workspace="algos-tape"/);
+  assert.match(memberHome, /data-home-workspace="algos-broker-tape"/);
   assert.doesNotMatch(memberHome, /display: none/);
   assert.match(hybridSrc, /markHybridDocument/);
   const activity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(activity, /BridgeActivity/);
+  assert.match(activity, /TinyConfirmChromeClient/);
+  assert.match(activity, /onJsConfirm/);
   assert.equal(activity.includes("trade2smart.com"), false);
+  assert.match(styles, /postSplashScreenTheme/);
+  assert.match(styles, /TinyConfirmDialog/);
 });
 
 test("login page has a real Android APK download link", () => {

@@ -1,4 +1,4 @@
-import { Activity, Cpu } from "lucide-react";
+import { Activity, Building2, Cpu } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn, formatPct, formatPlanTerm, formatRupee, greetingIst } from "../../lib/format";
 import { StatusPill } from "../phone/PhoneUi";
@@ -86,8 +86,9 @@ export function UserHomeBoard({
 
       <section className="space-y-2">
         <h2 className="text-sm font-extrabold">Trading Workspace</h2>
-        <div className="grid grid-cols-2 gap-2" data-home-workspace="algos-tape">
+        <div className="grid grid-cols-2 gap-2" data-home-workspace="algos-broker-tape">
           <WorkspaceLink to={algosTo} icon={Cpu} title="Algorithmic Strategies" detail="Manage & monitor strategies" />
+          <WorkspaceLink to="/broker" icon={Building2} title="Broker" detail="Connect your broker for live copy" />
           <WorkspaceLink to="/tape" icon={Activity} title="Market tape" detail="Live market activity" />
         </div>
       </section>

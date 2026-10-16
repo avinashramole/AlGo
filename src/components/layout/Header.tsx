@@ -12,7 +12,7 @@ import { adminLiveTape, cn, formatIstClock, formatMobile, headerBrokerLabel, isM
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { logout, requestLogout, user } = useAuth();
+  const { requestLogout, user } = useAuth();
   const admin = isAdminUser(user);
   const { data } = useMarket();
   const location = useLocation();
@@ -93,7 +93,7 @@ export function Header() {
     ? `Admin live tape ${feedLabel || "DHAN"}. Default order broker ${active?.name || adminBrokerId}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
     : memberFeed?.hasQuotes
       ? `Live tape ${feedLabel || memberFeed?.brokerId || "desk"}. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`
-      : `Install your own broker on Profile to see live quotes. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`;
+      : `Install your own broker on Broker to see live quotes. NSE ${nseOpen ? "open" : "closed"} 09:15–15:30 IST · MCX ${mcxOpen ? "open" : "closed"} 09:00–23:30 IST.`;
   const tickAt = admin ? tape.lastTickAt : memberFeed?.lastTickAt;
   const lastTick = tickAt
     ? new Date(tickAt).toLocaleTimeString("en-IN", {
@@ -205,7 +205,7 @@ export function Header() {
             <span className="hidden text-xs font-bold md:inline">Profile</span>
           </Link>
         )}
-        <button type="button" onClick={logout} className="t2s-desktop-only icon-btn hidden md:flex" title="Log out">
+        <button type="button" onClick={requestLogout} className="t2s-desktop-only icon-btn hidden md:flex" title="Log out">
           <LogOut size={17} />
         </button>
       </div>
