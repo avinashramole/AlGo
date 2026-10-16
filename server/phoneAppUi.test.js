@@ -26,6 +26,10 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const sidebar = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
   assert.match(brand, /\/t2s-emblem\.png/);
   assert.match(brand, /\/t2s-logo\.png/);
+  assert.match(brand, /h-14 w-14/);
+  assert.match(brand, /h-10 w-10/);
+  assert.doesNotMatch(brand, /w-24/);
+  assert.doesNotMatch(brand, /w-\[4\.4rem\]/);
   assert.match(sidebar, /variant="emblem"/);
   assert.match(home, /data-home-overview="phone"/);
   assert.match(home, /Hello,/);

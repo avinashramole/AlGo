@@ -142,10 +142,13 @@ def write_ios_and_pwa(app: Image.Image) -> None:
 
 
 def main() -> None:
-    src = knock_white(load_source())
-    logo = fit(src, 800)
+    # Keep the official app icon plate. Do not punch out the white rounded square.
+    src = load_source()
+    logo = fit(src, 1024, LIGHT)
     save(logo, OUTPUT)
     save(logo, MOBILE / "t2s-logo.png")
+    save(logo, PUBLIC / "t2s-emblem.png")
+    save(logo, MOBILE / "t2s-emblem.png")
     save(fit(src, 32, LIGHT), PUBLIC / "favicon.png")
     app = load_app_icon()
     save(fit(app, 180, LIGHT), PUBLIC / "apple-touch-icon.png")

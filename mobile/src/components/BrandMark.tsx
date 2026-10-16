@@ -16,6 +16,6 @@ export function BrandMark({
 }
 
 const styles = StyleSheet.create({
-  lockup: { width: "100%", maxWidth: 280, height: 280, marginBottom: 12 },
-  emblem: { width: 72, height: 46 },
+  lockup: { width: "100%", maxWidth: 220, height: 220, marginBottom: 12 },
+  emblem: { width: 48, height: 48 },
 });

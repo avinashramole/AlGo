@@ -116,6 +116,7 @@ def write_web_touch(lockup: Image.Image, app_icon: Image.Image) -> None:
     mobile = ROOT / "mobile" / "assets"
     if mobile.is_dir():
         lockup.save(mobile / "t2s-logo.png")
+        lockup.save(mobile / "t2s-emblem.png")
         opaque(fit(app_icon, 1024, 0.0), WHITE).convert("RGB").save(mobile / "icon.png")
         opaque(fit(app_icon, 1024, 0.0), WHITE).convert("RGB").save(mobile / "icon-light.png")
         opaque(fit(app_icon, 512, 0.0), WHITE).convert("RGB").save(mobile / "splash-icon.png")

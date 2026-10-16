@@ -138,6 +138,8 @@ test("login page has a real Android APK download link", () => {
   assert.match(syncIcons, /ADAPTIVE_PAD = 0\.12/);
   assert.match(renderIcons, /pwa-512\.png/);
   assert.match(renderIcons, /pad=0\.12/);
+  assert.match(renderIcons, /Keep the official app icon plate/);
+  assert.doesNotMatch(renderIcons, /src = knock_white\(load_source\(\)\)/);
   assert.equal(fs.existsSync(path.join(root, "mobile/assets/app-icon-source.png")), true);
   assert.equal(fs.existsSync(path.join(root, "mobile/assets/icon.png")), true);
   assert.equal(fs.existsSync(path.join(root, "public/pwa-512.png")), true);
