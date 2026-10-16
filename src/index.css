@@ -583,15 +583,75 @@ main > .desk-page {
   background: #071018;
 }
 
-@media (max-width: 767px) {
-  .desk-overlay[data-logout-confirm="true"] {
-    padding: 0.35rem;
-    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
-    align-items: flex-end;
-  }
+.logout-confirm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  backdrop-filter: none;
+  padding: 0.85rem;
+  padding-bottom: max(0.85rem, env(safe-area-inset-bottom));
+}
 
-  .desk-overlay[data-logout-confirm="true"] .desk-sheet {
-    width: 100%;
+.logout-confirm-card {
+  width: min(15.25rem, calc(100vw - 2rem));
+  border-radius: 12px;
+  border: 1px solid rgba(15, 39, 68, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 22px rgba(15, 39, 68, 0.1);
+  padding: 0.7rem 0.75rem 0.65rem;
+}
+
+.logout-confirm-card h2 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #0f2744;
+}
+
+.logout-confirm-card p {
+  margin: 0.2rem 0 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #64748b;
+}
+
+.logout-confirm-actions {
+  margin-top: 0.65rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.logout-confirm-actions button {
+  height: 2rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.logout-confirm-actions [data-logout-confirm-no="true"] {
+  border: 1px solid rgba(15, 39, 68, 0.12);
+  background: transparent;
+  color: #475569;
+}
+
+.logout-confirm-actions [data-logout-confirm-yes="true"] {
+  border: 1px solid rgba(225, 29, 72, 0.28);
+  background: transparent;
+  color: #e11d48;
+}
+
+@media (max-width: 767px) {
+  .logout-confirm-scrim {
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 0.65rem;
+    padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
   }
 }
 
@@ -643,14 +703,17 @@ html.t2s-hybrid .t2s-desktop-only {
   display: none !important;
 }
 
-html.t2s-hybrid .desk-overlay[data-logout-confirm="true"] {
-  padding: 0.35rem;
-  padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+html.t2s-hybrid .logout-confirm-scrim {
+  background: transparent;
+  backdrop-filter: none;
   align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0.65rem;
+  padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
 }
 
-html.t2s-hybrid .desk-overlay[data-logout-confirm="true"] .desk-sheet {
-  width: 100%;
+html.t2s-hybrid .logout-confirm-card {
+  width: min(15.25rem, calc(100vw - 1.4rem));
 }
 
 html.t2s-hybrid .desk-header {

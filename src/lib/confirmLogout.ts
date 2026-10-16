@@ -4,12 +4,14 @@ export const LOGOUT_CONFIRM_MESSAGE = "Are you sure you want to log out?";
 
 export function shouldAskLogoutConfirm() {
   if (isNativeHybrid()) return true;
+  if (typeof document !== "undefined" && document.documentElement.classList.contains("t2s-hybrid")) return true;
   if (typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "")) {
     return true;
   }
   if (typeof window === "undefined") return false;
   try {
-    return window.matchMedia("(max-width: 767px)").matches;
+    if (window.matchMedia("(max-width: 767px)").matches) return true;
+    return Number(window.innerWidth || 0) > 0 && window.innerWidth <= 767;
   } catch {
     return false;
   }
