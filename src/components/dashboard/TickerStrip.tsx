@@ -1,5 +1,5 @@
 import { cn, formatQuote, quoteDayChange, quoteTone, tapeScriptTitle, vwapTone } from "../../lib/format";
-import { chainIdFromIndex, OPTION_UNDERLYINGS } from "../../lib/markets";
+import { chainIdFromIndex, MEMBER_TAPE_UNDERLYINGS } from "../../lib/markets";
 import { useMarket } from "../../context/MarketContext";
 import { DeskTape } from "./DeskTape";
 import { TapeTodayChange } from "./TapeTodayChange";
@@ -18,8 +18,8 @@ export function TickerStrip({ selectedId, onSelect }: TickerStripProps = {}) {
   const { data } = useMarket();
   const liveLots = data.optionMeta?.underlyings || [];
   const underlyings = [
-    ...OPTION_UNDERLYINGS.map((row) => liveLots.find((item) => item.id === row.id) || row),
-    ...liveLots.filter((item) => !OPTION_UNDERLYINGS.some((row) => row.id === item.id)),
+    ...MEMBER_TAPE_UNDERLYINGS.map((row) => liveLots.find((item) => item.id === row.id) || row),
+    ...liveLots.filter((item) => item.id !== "MIDCPNIFTY" && !MEMBER_TAPE_UNDERLYINGS.some((row) => row.id === item.id)),
   ];
   const quotes = data.indices || [];
   const tape = [

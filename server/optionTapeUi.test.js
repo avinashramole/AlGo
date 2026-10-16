@@ -11,7 +11,8 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   const options = fs.readFileSync(path.join(root, "src/pages/Options.tsx"), "utf8");
   const markets = fs.readFileSync(path.join(root, "src/lib/markets.ts"), "utf8");
 
-  assert.match(tape, /OPTION_UNDERLYINGS\.map/);
+  assert.match(tape, /MEMBER_TAPE_UNDERLYINGS\.map/);
+  assert.match(tape, /item\.id !== "MIDCPNIFTY"/);
   assert.match(tape, /tapeScriptTitle/);
   assert.doesNotMatch(tape, /tapeLotLine/);
   assert.doesNotMatch(tape, />Lot</);
@@ -41,7 +42,11 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.match(markets, /\{ id: "NIFTY", label: "NIFTY", lot: 65 \}/);
   assert.match(markets, /\{ id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 \}/);
   assert.match(markets, /\{ id: "FINNIFTY", label: "FINNIFTY", lot: 60 \}/);
-  assert.match(markets, /\{ id: "MIDCPNIFTY", label: "MIDCPNIFTY", lot: 50 \}/);
+  assert.doesNotMatch(markets, /\{ id: "MIDCPNIFTY"/);
+  assert.match(markets, /MEMBER_TAPE_UNDERLYINGS = OPTION_UNDERLYINGS.filter\(\(row\) => row.id !== "MIDCPNIFTY"\)/);
+  const market = fs.readFileSync(path.join(root, "server/market.js"), "utf8");
+  assert.match(market, /function tapeUnderlyings/);
+  assert.match(market, /row\.id !== "MIDCPNIFTY"/);
   assert.match(markets, /\{ id: "SENSEX", label: "SENSEX", lot: 20 \}/);
   assert.match(markets, /\{ id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 \}/);
   assert.match(markets, /\{ id: "NATURALGAS", label: "NATURAL GAS", lot: 1250 \}/);

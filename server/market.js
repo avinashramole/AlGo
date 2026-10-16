@@ -475,6 +475,14 @@ function inferTimeframe(candles, fallback = "1H") {
   return "1D";
 }
 
+function tapeUnderlyings() {
+  return UNDERLYINGS.filter((row) => row.id !== "MIDCPNIFTY").map((row) => ({
+    id: row.id,
+    label: row.label,
+    lot: row.lot,
+  }));
+}
+
 const state = {
   indices: [
     emptyDeskIndex("NIFTY 50", "NIFTY"),
@@ -506,7 +514,7 @@ const state = {
     atmIv: 0,
     source: "idle",
     lastAt: null,
-    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+    underlyings: tapeUnderlyings(),
   }),
   algos: algoStore.algos,
   positions: [],
@@ -6354,7 +6362,7 @@ export function applySyntheticOptionChain(symbol = state.optionMeta.symbol, expi
     source: "demo",
     lastAt: Date.now(),
     contractIds: 0,
-    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+    underlyings: tapeUnderlyings(),
   });
   rememberOptionChain(meta.id, rows, state.optionMeta);
   return clone(state.optionMeta);
@@ -6391,7 +6399,7 @@ export function setOptionDesk({ symbol, expiry, expiries, rows, spot, source, ex
     source: source || cached?.meta?.source || state.optionMeta.source,
     lastAt: Date.now(),
     contractIds: nextRows.filter((row) => row.callId || row.putId).length,
-    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+    underlyings: tapeUnderlyings(),
   });
   if (nextRows.length) rememberOptionChain(meta.id, nextRows, state.optionMeta);
   return clone(state.optionMeta);
@@ -6410,7 +6418,7 @@ export function cacheOptionDesk({ symbol, expiry, expiries, rows, spot, source }
     source: source || "dhan",
     lastAt: Date.now(),
     contractIds: nextRows.filter((row) => row.callId || row.putId).length,
-    underlyings: UNDERLYINGS.map((row) => ({ id: row.id, label: row.label, lot: row.lot })),
+    underlyings: tapeUnderlyings(),
   });
   rememberOptionChain(meta.id, nextRows, nextMeta);
   return clone(nextMeta);

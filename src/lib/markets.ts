@@ -2,7 +2,6 @@ export const OPTION_UNDERLYINGS = [
   { id: "NIFTY", label: "NIFTY", lot: 65 },
   { id: "BANKNIFTY", label: "BANKNIFTY", lot: 30 },
   { id: "FINNIFTY", label: "FINNIFTY", lot: 60 },
-  { id: "MIDCPNIFTY", label: "MIDCPNIFTY", lot: 50 },
   { id: "SENSEX", label: "SENSEX", lot: 20 },
   { id: "CRUDEOIL", label: "CRUDE OIL", lot: 100 },
   { id: "NATURALGAS", label: "NATURAL GAS", lot: 1250 },
