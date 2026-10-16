@@ -23,7 +23,7 @@ import {
   withExpiryLabels,
   keepStrikeWindow,
 } from "./optionChain.js";
-import { listIndexContracts, optionCount, parseOptionContract, peekOptionSecurityId, publicFutures, publicIndices, publicOptionRows } from "./frontFutures.js";
+import { listIndexContracts, optionCount, parseOptionContract, peekOptionSecurityId, publicFutures, publicIndices, publicOptionRows, rememberChainOptionIds } from "./frontFutures.js";
 import { optionBacktestWindow } from "./niftyOptionHistory.js";
 import { aggregateIndexBars } from "./indexHistory.js";
 import { runReplayInWorker } from "./backtestJob.js";
@@ -580,6 +580,7 @@ function rememberOptionChain(symbol, rows, meta) {
   const id = String(symbol || "").toUpperCase();
   if (!id || !Array.isArray(rows) || !rows.length) return;
   optionChainCache.set(id, { rows, meta, at: Date.now() });
+  rememberChainOptionIds(rows, { symbol: id, expiry: meta?.expiry });
 }
 
 function seedCachedChains() {
