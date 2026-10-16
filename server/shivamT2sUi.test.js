@@ -20,7 +20,8 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(lib, /id: "COPPER", label: "COPPER", futures: "COPPER FUT"/);
   assert.match(lib, /id: "NATURALGAS", label: "NATURAL GAS", futures: "NATURALGAS FUT"/);
   assert.match(builder, /data-shivam-script="true"/);
-  assert.match(builder, /Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS\./);
+  assert.match(builder, /Pick NIFTY, BANKNIFTY, FINNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS\./);
+  assert.doesNotMatch(builder, /MIDCPNIFTY/);
   assert.match(builder, />\s*Script\s*<select/);
   assert.match(builder, /expiryKind: row\.session === "mcx" \? "monthly" : "weekly"/);
   assert.match(builder, /title="SHIVAM T2S"/);

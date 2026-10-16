@@ -42,7 +42,7 @@ function isYmd(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
-export const ONE_MINUTE_HISTORY_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "CRUDEOIL"];
+export const ONE_MINUTE_HISTORY_SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "CRUDEOIL"];
 export const ONE_MINUTE_CHUNK_DAYS = 30;
 
 export function historySymbol(symbol) {

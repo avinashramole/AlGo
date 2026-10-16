@@ -132,7 +132,6 @@ function Test2ScriptSelect({
         <option value="NIFTY">NIFTY · CE/PE</option>
         <option value="BANKNIFTY">BANKNIFTY · CE/PE</option>
         <option value="FINNIFTY">FINNIFTY · CE/PE</option>
-        <option value="MIDCPNIFTY">MIDCPNIFTY · CE/PE</option>
         <option value="SENSEX">SENSEX · CE/PE</option>
         <option value="CRUDEOIL">CRUDE OIL · CE/PE</option>
         <option value="NATURALGAS">NATURAL GAS · CE/PE</option>
@@ -351,7 +350,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
   const submit = async () => {
     if (shivam) {
       if (!SHIVAM_T2S_SCRIPTS.some((row) => row.id === (form.symbol || "NIFTY"))) {
-        setError("Pick NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS.");
+        setError("Pick NIFTY, BANKNIFTY, FINNIFTY, SENSEX, CRUDEOIL, COPPER, or NATURALGAS.");
         return;
       }
       if (!(Number(form.slValue) > 0) || !(Number(form.targetValue) > 0)) {
