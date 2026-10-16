@@ -354,6 +354,36 @@ test("BUY CE places against the resolved contract and BUY PE on index red + PE g
   assert.equal(pe.option, "PE");
 });
 
+test("an open Shivam lot holds a new entry, but an untagged NIFTY lot does not", () => {
+  const holdAlgo = defaultShivamT2sAlgo({ enabled: true, capitalValue: 50_000 });
+  const holdEnv = book();
+  holdEnv.positions.push({
+    qty: 65,
+    type: "BUY",
+    avg: 110,
+    option: "CE",
+    strike: 25050,
+    strategy: "Shivam T2S",
+  });
+  const hold = tick(holdAlgo, holdEnv);
+  assert.equal(hold.action, "hold");
+  const otherEnv = book();
+  otherEnv.positions.push({
+    qty: 65,
+    type: "BUY",
+    avg: 100,
+    option: "CE",
+    strike: 23100,
+    strategy: "NIFTY 5m first candle",
+  });
+  const other = tick(defaultShivamT2sAlgo({ enabled: true, capitalValue: 50_000 }), otherEnv);
+  assert.equal(other.action, "entered");
+  const untaggedEnv = book();
+  untaggedEnv.positions.push({ qty: 65, type: "BUY", avg: 100, option: "CE", strike: 23100 });
+  const untagged = tick(defaultShivamT2sAlgo({ enabled: true, capitalValue: 50_000 }), untaggedEnv);
+  assert.equal(untagged.action, "entered");
+});
+
 test("duplicate signal on the same completed candle is blocked", () => {
   const algo = defaultShivamT2sAlgo({ enabled: true, capitalValue: 50_000, maxTradesPerDay: 5 });
   const env = book();
