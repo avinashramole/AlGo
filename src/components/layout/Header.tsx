@@ -205,7 +205,7 @@ export function Header() {
             <span className="hidden text-xs font-bold md:inline">Profile</span>
           </Link>
         )}
-        <button type="button" onClick={logout} className="t2s-desktop-only icon-btn hidden md:flex" title="Log out">
+        <button type="button" onClick={requestLogout} className="t2s-desktop-only icon-btn hidden md:flex" title="Log out">
           <LogOut size={17} />
         </button>
       </div>
