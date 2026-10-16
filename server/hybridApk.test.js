@@ -130,10 +130,22 @@ test("login page has a real Android APK download link", () => {
   assert.match(renderIcons, /app-icon-source\.png/);
   assert.match(syncIcons, /app-icon-source\.png/);
   assert.match(syncIcons, /AppIcon-512@2x\.png/);
+  assert.match(syncIcons, /LAUNCHER_PAD = 0\.0/);
+  assert.match(syncIcons, /ADAPTIVE_PAD = 0\.12/);
   assert.match(renderIcons, /pwa-512\.png/);
+  assert.match(renderIcons, /pad=0\.12/);
   assert.equal(fs.existsSync(path.join(root, "mobile/assets/app-icon-source.png")), true);
   assert.equal(fs.existsSync(path.join(root, "mobile/assets/icon.png")), true);
   assert.equal(fs.existsSync(path.join(root, "public/pwa-512.png")), true);
+  assert.equal(fs.existsSync(path.join(root, "public/apple-touch-icon.png")), true);
+  assert.equal(
+    fs.existsSync(path.join(root, "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png")),
+    true,
+  );
+  assert.equal(
+    fs.existsSync(path.join(root, "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png")),
+    true,
+  );
   const webManifest = fs.readFileSync(path.join(root, "public/manifest.webmanifest"), "utf8");
   assert.match(webManifest, /pwa-512\.png/);
   assert.match(webManifest, /standalone/);
