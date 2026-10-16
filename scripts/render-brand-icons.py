@@ -153,7 +153,7 @@ def main() -> None:
     save(icon, MOBILE / "icon.png")
     save(icon, MOBILE / "icon-light.png")
     save(fit(app, 512, LIGHT), MOBILE / "splash-icon.png")
-    save(fit(app, 1024, LIGHT, pad=0.18), MOBILE / "android-icon-foreground.png")
+    save(fit(app, 1024, LIGHT, pad=0.12), MOBILE / "android-icon-foreground.png")
     save(fit(app, 48, LIGHT), MOBILE / "favicon.png")
     save(Image.new("RGB", (1024, 1024), (255, 255, 255)), MOBILE / "android-icon-background.png")
     mono = fit(app, 1024, LIGHT).convert("L").convert("RGB")

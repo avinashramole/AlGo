@@ -20,6 +20,12 @@ APPLE_SPLASH = (
     (2048, 2732),
 )
 
+# Square / round mipmaps already get an OS mask, so fill the canvas.
+# Adaptive foreground is 108dp with a 72dp safe zone; 0.12 keeps T2S, robot,
+# and rings fully visible without shrinking the mark into a white hole.
+LAUNCHER_PAD = 0.0
+ADAPTIVE_PAD = 0.12
+
 LAUNCHERS = {
     "mdpi": 48,
     "hdpi": 72,
@@ -63,10 +69,10 @@ def write_launchers(logo: Image.Image) -> None:
     for density, size in LAUNCHERS.items():
         folder = res / f"mipmap-{density}"
         folder.mkdir(parents=True, exist_ok=True)
-        icon = opaque(fit(logo, size, 0.08), WHITE)
+        icon = opaque(fit(logo, size, LAUNCHER_PAD), WHITE)
         icon.save(folder / "ic_launcher.png")
         icon.save(folder / "ic_launcher_round.png")
-        foreground = fit(logo, size * 2, 0.18)
+        foreground = fit(logo, size * 2, ADAPTIVE_PAD)
         foreground.save(folder / "ic_launcher_foreground.png")
 
 
@@ -103,7 +109,7 @@ def write_ios_and_pwa(app_icon: Image.Image) -> None:
 
 
 def write_web_touch(lockup: Image.Image, app_icon: Image.Image) -> None:
-    apple = opaque(fit(app_icon, 180, 0.04), WHITE)
+    apple = opaque(fit(app_icon, 180, 0.0), WHITE)
     apple.save(ROOT / "public" / "apple-touch-icon.png")
     fav = opaque(fit(lockup, 64, 0.06), WHITE)
     fav.save(ROOT / "public" / "favicon.png")
@@ -111,8 +117,13 @@ def write_web_touch(lockup: Image.Image, app_icon: Image.Image) -> None:
     if mobile.is_dir():
         lockup.save(mobile / "t2s-logo.png")
         opaque(fit(app_icon, 1024, 0.0), WHITE).convert("RGB").save(mobile / "icon.png")
+        opaque(fit(app_icon, 1024, 0.0), WHITE).convert("RGB").save(mobile / "icon-light.png")
         opaque(fit(app_icon, 512, 0.0), WHITE).convert("RGB").save(mobile / "splash-icon.png")
-        opaque(fit(app_icon, 64, 0.04), WHITE).convert("RGB").save(mobile / "favicon.png")
+        opaque(fit(app_icon, 64, 0.0), WHITE).convert("RGB").save(mobile / "favicon.png")
+        fit(app_icon, 1024, ADAPTIVE_PAD).save(mobile / "android-icon-foreground.png")
+        opaque(fit(app_icon, 1024, 0.0), WHITE).convert("L").convert("RGB").save(
+            mobile / "android-icon-monochrome.png"
+        )
     write_ios_and_pwa(app_icon)
 
 
