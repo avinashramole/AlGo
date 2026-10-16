@@ -170,6 +170,14 @@ def server_locations(webroot: str) -> str:
         add_header Content-Disposition 'attachment; filename="Trade2Smart-web.apk"';
     }}
 
+    location = /deploy/github.sh {{
+        root {webroot};
+        default_type text/plain;
+        add_header Content-Type "text/plain; charset=utf-8";
+        add_header Cache-Control "no-cache";
+        try_files /deploy/github.sh =404;
+    }}
+
     location ^~ /assets/ {{
         root {webroot};
         expires 30d;
