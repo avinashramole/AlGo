@@ -1,3 +1,6 @@
+export const OPEN_LOT_BLOCK_REASON = "Another position is open on the broker. Not sent.";
+export const OPEN_LOT_HOLD_SIGNAL = "HOLD OPEN · other position is open on broker";
+
 const TRAIL_RE = /trail|trailing[\s-]?sl/;
 const SL_RE = /\bsl\b|stop[\s-]?loss|sl hit|hit stop/;
 const TGT_RE = /\btgt\b|target|tgt done|primary-target|combined-target|initial-target/;

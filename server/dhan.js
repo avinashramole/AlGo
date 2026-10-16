@@ -655,6 +655,21 @@ export async function refreshAdminBrokerBook() {
   return adminBookRefresh;
 }
 
+export async function refreshAdminLivePositions() {
+  const saved = savedDhanAccess();
+  const token = accessToken || saved.token;
+  const id = clientId || saved.id;
+  if (!token || !id) return false;
+  try {
+    const positionsRaw = await dhanGet("/positions", token, id, { lane: "admin", attempts: 1, timeoutMs: 8000 });
+    const incoming = mapDhanPositions(positionsRaw);
+    replaceDhanBook(incoming);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function loadAdminBrokerBook() {
   const saved = savedDhanAccess();
   const token = accessToken || saved.token;

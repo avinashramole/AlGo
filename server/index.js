@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { activateBroker, connectBroker, disconnectBroker, ensureAdminDefaultBroker, idleDhan, isLiveBrokerReady, publicBrokers } from "./brokers.js";
 import { placeLiveBrokerOrder } from "./liveBrokers.js";
-import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureAdminDataFeedRunning, ensureDhanLiveFromSavedToken, ensureDhanOrderSession, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, scheduleAdminDataFeedWatchdog, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
+import { bootDhanFromEnv, cancelDhanOrder, enableDhanAuto, ensureAdminDataFeedRunning, ensureDhanLiveFromSavedToken, ensureDhanOrderSession, fetchDhanHistory, fetchDhanRollingOption, fetchDhanSecurityHistory, isDhanLive, placeDhanOrder, refreshAdminBrokerBook, refreshAdminLivePositions, requestMemberOrderSync, rotateDhanAccessToken, saveDhanAccessToken, scheduleAdminDataFeedWatchdog, selectOptionDesk, startDhanFeedFromSavedToken, stopDhanLive } from "./dhan.js";
 import { downloadOptionHistoryRange, optionBacktestWindow, optionHistoryCoverage } from "./niftyOptionHistory.js";
 import { ensureReplayBars } from "./indexHistory.js";
 import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
@@ -955,6 +955,10 @@ app.post("/api/algos/:id/toggle", async (req, res) => {
     const current = getAlgo(req.params.id);
     const wantEnabled = req.body?.enabled;
     const starting = current && !current.enabled && wantEnabled !== false && current.runMode !== "backtest";
+    const stopping = current && current.enabled && wantEnabled === false;
+    if ((starting || stopping) && current.runMode === "live") {
+      await refreshAdminLivePositions().catch(() => undefined);
+    }
     if (starting && !isDhanLive()) {
       const feed = await ensureAdminDataFeedRunning(current.runMode === "paper" ? "paper-start" : "live-start");
       if (!feed.live && current.runMode === "live") {

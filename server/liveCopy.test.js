@@ -652,47 +652,56 @@ test("master exit closes every mapped paper client on that strategy", () => {
   }
 });
 
-test("member live BUY still queues when the master desk already has a Nifty option", async () => {
+test("member live BUY is not sent when the master desk already has a Nifty option", async () => {
   const user = { id: "u-nifty-copy", name: "Nifty Copy", email: "niftycopy@t2s.app", role: "user" };
   selectMemberBroker({ user, brokerId: "dhan" });
   installMemberBroker({ user, brokerId: "dhan", clientId: "1100777", accessToken: "member-buy-token" });
   payMember(user);
-  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook } = await import("./market.js");
-  replaceDhanBook([
-    {
-      id: "p-master-nifty",
-      symbol: "NIFTY 24600 CE",
-      type: "BUY",
+  const { drainPendingLiveAlgoOrders, queueLiveAlgoOrder, replaceDhanBook, snapshot } = await import("./market.js");
+  try {
+    replaceDhanBook([
+      {
+        id: "p-master-nifty",
+        symbol: "NIFTY 24600 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 80,
+        ltp: 90,
+        product: "MIS",
+        brokerId: "dhan",
+        live: true,
+      },
+    ]);
+    drainPendingLiveAlgoOrders();
+    const result = queueLiveAlgoOrder({
+      strategy: algo.name,
+      side: "BUY",
+      symbol: "NIFTY 24700 CE",
       qty: 65,
-      avg: 80,
-      ltp: 90,
-      product: "MIS",
+      lotSize: 65,
+      price: 248.27,
+      type: "MARKET",
       brokerId: "dhan",
-      live: true,
-    },
-  ]);
-  drainPendingLiveAlgoOrders();
-  queueLiveAlgoOrder({
-    strategy: algo.name,
-    side: "BUY",
-    symbol: "NIFTY 24700 CE",
-    qty: 65,
-    lotSize: 65,
-    price: 248.27,
-    type: "MARKET",
-    brokerId: "dhan",
-  });
-  const queued = drainPendingLiveAlgoOrders();
-  const copy = queued.find((row) => row.copyUserId === user.id);
-  assert.ok(copy);
-  assert.equal(copy.account.accessToken, "member-buy-token");
-  assert.equal(copy.type, "LIMIT");
-  assert.equal(copy.price, 248.25);
-  for (const row of queued) {
-    assert.equal(row.type, "LIMIT");
-    assert.equal(row.price, 248.25);
+    });
+    assert.equal(result.queued, false);
+    assert.equal(result.blocked, true);
+    assert.equal(result.status, "REJECTED");
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => row.copyUserId === user.id), false);
+    assert.equal(queued.some((row) => !row.copyUserId && row.strategy === algo.name), false);
+    assert.equal(
+      snapshot().orders.some(
+        (row) =>
+          row.strategy === algo.name &&
+          row.status === "REJECTED" &&
+          /position is open on the broker/i.test(String(row.reason || "")),
+      ),
+      true,
+    );
+  } finally {
+    replaceDhanBook([]);
+    drainPendingLiveAlgoOrders();
   }
-  replaceDhanBook([]);
 });
 
 test("sendMemberCopyOrder paper path writes the member book", async () => {

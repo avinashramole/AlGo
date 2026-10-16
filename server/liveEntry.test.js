@@ -8,7 +8,9 @@ import {
   queueLiveAlgoOrder,
   replaceDhanBook,
   replaceDhanOrders,
+  snapshot,
 } from "./market.js";
+import { OPEN_LOT_BLOCK_REASON } from "./exitReason.js";
 
 const BAR = 5 * 60 * 1000;
 const T0 = Date.parse("2026-08-21T03:45:00.000Z");
@@ -56,7 +58,7 @@ test("first-candle option samples use the forming 09:15 bar, not the previous co
   assert.equal(liveOptionSampleTime(during, 5, "09:00"), T0);
 });
 
-test("an open NIFTY option on another strategy does not block this strategy's order", () => {
+test("an open lot on another strategy still blocks this strategy and books the error", () => {
   replaceDhanBook([
     {
       id: "dhan-pos-other",
@@ -83,9 +85,18 @@ test("an open NIFTY option on another strategy does not block this strategy's or
     kind: "option",
     brokerId: "dhan",
   });
-  assert.equal(result.queued, true);
+  assert.equal(result.queued, false);
+  assert.equal(result.blocked, true);
+  assert.equal(result.status, "REJECTED");
+  assert.equal(result.reason, OPEN_LOT_BLOCK_REASON);
   const queued = drainPendingLiveAlgoOrders();
-  assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), true);
+  assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), false);
+  assert.equal(
+    snapshot().orders.some(
+      (row) => row.strategy === "test" && row.status === "REJECTED" && String(row.reason || "") === OPEN_LOT_BLOCK_REASON,
+    ),
+    true,
+  );
   replaceDhanBook([]);
   drainPendingLiveAlgoOrders();
 });
@@ -186,8 +197,33 @@ test("the same strategy does not queue a second NIFTY option while its lot is op
   });
   assert.equal(result.queued, false);
   assert.equal(result.duplicate, true);
+  assert.equal(result.blocked, true);
+  assert.equal(result.status, "REJECTED");
+  assert.equal(result.reason, OPEN_LOT_BLOCK_REASON);
   const queued = drainPendingLiveAlgoOrders();
   assert.equal(queued.some((row) => row.strategy === "test" && !row.copyUserId), false);
+  const booked = snapshot().orders.filter(
+    (row) => row.strategy === "test" && row.status === "REJECTED" && String(row.reason || "").includes("position is open"),
+  );
+  assert.equal(booked.length, 1);
+  assert.equal(booked[0].live, true);
+  const again = queueLiveAlgoOrder({
+    strategy: "test",
+    side: "BUY",
+    symbol: "NIFTY 23300 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23300,
+    kind: "option",
+    brokerId: "dhan",
+  });
+  assert.equal(again.queued, false);
+  assert.equal(
+    snapshot().orders.filter(
+      (row) => row.strategy === "test" && row.status === "REJECTED" && String(row.reason || "").includes("position is open"),
+    ).length,
+    1,
+  );
   replaceDhanBook([]);
 });
 
@@ -368,8 +404,15 @@ test("NIFTY first candle does not queue a CE while a PE lot is open", () => {
   assert.equal(result.queued, false);
   assert.equal(result.duplicate, true);
   assert.equal(result.blocked, true);
+  assert.equal(result.reason, OPEN_LOT_BLOCK_REASON);
   const queued = drainPendingLiveAlgoOrders();
   assert.equal(queued.some((row) => !row.copyUserId && row.option === "CE"), false);
+  assert.equal(
+    snapshot().orders.some(
+      (row) => row.status === "REJECTED" && String(row.reason || "") === OPEN_LOT_BLOCK_REASON && !row.copyUserId,
+    ),
+    true,
+  );
   replaceDhanBook([]);
 });
 
