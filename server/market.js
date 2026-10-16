@@ -820,6 +820,52 @@ function paperDeskAlgo(algo = {}) {
   return String(algo.runMode || "").toLowerCase() === "paper" || (Boolean(algo.testDesk) && !isShivamT2sAlgo(algo));
 }
 
+function algoMappingScope(algo = {}) {
+  const scope = String(algo?.mappingScope || "both").toLowerCase();
+  return ["master", "clients", "both"].includes(scope) ? scope : "both";
+}
+
+function clientsOnlyAlgo(algo = {}) {
+  return algoMappingScope(algo) === "clients";
+}
+
+function skipAdminBrokerOrder(algo = {}, payload = {}) {
+  if (payload?.copyUserId) return false;
+  if (isBrokerTestOrder(payload)) return false;
+  if (payload?.forceLiveBroker === true) return false;
+  if (!clientsOnlyAlgo(algo)) return false;
+  if (liveOrderSide(payload) === "SELL" && adminHasOpenOptionLot(algo, payload)) return false;
+  return true;
+}
+
+function memberOpenLotsForAlgo(algo = {}) {
+  const name = realStrategyName(algo?.name) || String(algo?.name || "");
+  const algoId = String(algo?.id || "").trim();
+  return (state.positions || []).filter((row) => {
+    if (!row.copyUserId) return false;
+    if (isPaperRow(row)) return false;
+    if (!(Number(row.qty) > 0)) return false;
+    if (String(row.type || "BUY").toUpperCase() === "CLOSED") return false;
+    if (algoId && row.strategyId && String(row.strategyId) === algoId) return true;
+    return sameOneLotFamily(row.strategy, name);
+  });
+}
+
+function signalLotsFromMemberCopies(algo = {}) {
+  return memberOpenLotsForAlgo(algo).map((row) => ({
+    ...row,
+    copyUserId: "",
+    signalLot: true,
+  }));
+}
+
+function withClientSignalLots(algo, mode, adminPositions = []) {
+  if (mode !== "live" || !clientsOnlyAlgo(algo)) return adminPositions;
+  if (adminPositions.some((row) => Number(row.qty) > 0)) return adminPositions;
+  const signal = signalLotsFromMemberCopies(algo);
+  return signal.length ? signal : adminPositions;
+}
+
 function adminOpenLotBelongsToStrategy(row = {}, algo = {}, payload = {}) {
   const strategy = adminLotStrategyName(algo, payload);
   if (!strategy) return false;
@@ -1247,11 +1293,46 @@ function strategyBuyUnresolved(strategyName, algo = {}) {
     return true;
   }
   const wantPaper = paperDeskAlgo(algo);
+  if (
+    (state.positions || []).some(
+      (row) =>
+        !row.copyUserId &&
+        isPaperRow(row) === wantPaper &&
+        sameDeskStrategyRow(row, name, algo) &&
+        Number(row.qty) > 0 &&
+        String(row.type || "BUY").toUpperCase() !== "CLOSED",
+    )
+  ) {
+    return true;
+  }
+  if (!clientsOnlyAlgo(algo)) return false;
+  return strategyCopyBuyUnresolved(name, algo);
+}
+
+function strategyCopyBuyUnresolved(strategyName, algo = {}, copyUserId = "") {
+  const name = realStrategyName(strategyName) || String(strategyName || "");
+  if (!name) return false;
+  const uid = String(copyUserId || "").trim();
+  const mine = (row) => {
+    if (uid) {
+      if (String(row?.copyUserId || "") !== uid) return false;
+    } else if (!row?.copyUserId) {
+      return false;
+    }
+    return sameOneLotFamily(row?.strategy, name) || (algo?.id && row?.strategyId && String(row.strategyId) === String(algo.id));
+  };
+  if (pendingLiveAlgoOrders.some((row) => mine(row) && liveOrderSide(row) === "BUY")) return true;
+  if (
+    (state.orders || []).some(
+      (row) => mine(row) && liveOrderSide(row) === "BUY" && orderIsWorking(row),
+    )
+  ) {
+    return true;
+  }
   return (state.positions || []).some(
     (row) =>
-      !row.copyUserId &&
-      isPaperRow(row) === wantPaper &&
-      sameDeskStrategyRow(row, name, algo) &&
+      mine(row) &&
+      !isPaperRow(row) &&
       Number(row.qty) > 0 &&
       String(row.type || "BUY").toUpperCase() !== "CLOSED",
   );
@@ -1381,6 +1462,9 @@ function enqueueLiveAlgoOrder(payload) {
   const brokerId = orderBrokerId(payload);
   const allowHedge = payload?.allowHedge === true && role === "hedge";
   const card = strategyCard(strategy, payload);
+  if (side === "BUY" && !paperFill && !brokerTest && copyUserId && strategy && strategyCopyBuyUnresolved(strategy, card, copyUserId)) {
+    return { ok: true, queued: false, status: "PENDING", duplicate: true };
+  }
   const sameCopy = (row) => String(row?.copyUserId || "") === copyUserId;
   const sameContractPending = pendingLiveAlgoOrders.some(
     (row) =>
@@ -1730,9 +1814,14 @@ export function queueLiveAlgoOrder(payload) {
         algoBrokerId: deskStamped?.brokerId || "dhan",
       });
   const targets = brokers.length ? brokers : [orderBrokerId(deskStamped)];
+  const skipAdmin = skipAdminBrokerOrder(algo, stamped);
   let adminResult = { ok: true, queued: true, status: "PENDING" };
-  for (const brokerId of targets) {
-    adminResult = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
+  if (skipAdmin) {
+    adminResult = { ok: true, queued: true, status: "COPIED", skippedAdmin: true };
+  } else {
+    for (const brokerId of targets) {
+      adminResult = enqueueLiveAlgoOrder({ ...deskStamped, brokerId });
+    }
   }
   const copyAlgo = liveCopyAlgo(deskStamped) || algo;
   const shivamCopy =
@@ -1746,7 +1835,7 @@ export function queueLiveAlgoOrder(payload) {
     });
   if (!payload.skipMemberCopy && (!testDesk || shivamCopy)) {
     const copyBuy = liveOrderSide(deskStamped) === "BUY";
-    if (!copyBuy || adminResult?.queued) {
+    if (!copyBuy || adminResult?.queued || skipAdmin) {
       for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
         enqueueLiveAlgoOrder(brokerTestMemberCopy(copy, deskStamped));
       }
@@ -2225,7 +2314,11 @@ function positionsForStrategyName(algo, mode) {
   };
   const rows = state.positions || [];
   if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
-  return rows.filter((row) => !isPaperRow(row) && mine(row));
+  return withClientSignalLots(
+    algo,
+    mode,
+    rows.filter((row) => !isPaperRow(row) && mine(row)),
+  );
 }
 
 function minutesUntilIst(closeMinutes, date = new Date()) {
@@ -2247,7 +2340,11 @@ function positionsForNiftyVwap(algo, mode) {
   };
   const rows = state.positions || [];
   if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
-  return rows.filter((row) => !isPaperRow(row) && mine(row));
+  return withClientSignalLots(
+    algo,
+    mode,
+    rows.filter((row) => !isPaperRow(row) && mine(row)),
+  );
 }
 
 function positionsForHedge(algo, mode) {
@@ -2266,7 +2363,11 @@ function positionsForHedge(algo, mode) {
     return !row.option;
   };
   if (mode === "paper") return rows.filter((row) => isPaperRow(row) && mine(row));
-  return rows.filter((row) => !isPaperRow(row) && mine(row));
+  return withClientSignalLots(
+    algo,
+    mode,
+    rows.filter((row) => !isPaperRow(row) && mine(row)),
+  );
 }
 
 let lastNiftyVwapFeed = true;
@@ -2338,12 +2439,16 @@ function tickMultiIndexReversalAlgo(algo, mode, feedLive) {
   const config = multiIndexReversalConfig(algo);
   const root = config.symbol;
   const session = nseMarketSession();
-  const positions = (state.positions || []).filter((row) => {
-    if (row.copyUserId) return false;
-    if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
-    if (mode === "paper") return row.paper || row.brokerId === "paper";
-    return row.live || row.brokerId === (algo.brokerId || "dhan");
-  });
+  const positions = withClientSignalLots(
+    algo,
+    mode,
+    (state.positions || []).filter((row) => {
+      if (row.copyUserId) return false;
+      if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
+      if (mode === "paper") return row.paper || row.brokerId === "paper";
+      return row.live || row.brokerId === (algo.brokerId || "dhan");
+    }),
+  );
   const open = positions.some((row) => Number(row.qty) > 0);
   if (mode === "live" && !session.open && !open) return;
   const und = getUnderlying(root);
@@ -2428,12 +2533,16 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   const root = config.symbol;
   const mcx = config.session === "mcx" || isMcxSymbol(root);
   const session = mcx ? mcxMarketSession() : nseMarketSession();
-  const positions = (state.positions || []).filter((row) => {
-    if (row.copyUserId) return false;
-    if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
-    if (mode === "paper") return row.paper || row.brokerId === "paper";
-    return row.live || row.brokerId === (algo.brokerId || "dhan");
-  });
+  const positions = withClientSignalLots(
+    algo,
+    mode,
+    (state.positions || []).filter((row) => {
+      if (row.copyUserId) return false;
+      if ((realStrategyName(row.strategy) || row.strategy) !== algo.name) return false;
+      if (mode === "paper") return row.paper || row.brokerId === "paper";
+      return row.live || row.brokerId === (algo.brokerId || "dhan");
+    }),
+  );
   const open = positions.some((row) => Number(row.qty) > 0);
   if (mode === "live" && !session.open && !open) return;
   if (mode === "live" && !config.liveAuthorized) {

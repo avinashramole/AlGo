@@ -16,6 +16,7 @@ const {
   drainPendingLiveAlgoOrders,
   placeStrategyBrokerTestOrder,
   queueLiveAlgoOrder,
+  replaceDhanBook,
   setDhanFeed,
   setOptionDesk,
   strategyTradingStatus,
@@ -255,7 +256,7 @@ test("Shivam alias Shivam T2S still queues admin Dhan and mapped user copy", () 
     runMode: "live",
     liveAuthorized: true,
     brokerId: "dhan",
-    mappingScope: "clients",
+    mappingScope: "both",
     mappedClientIds: [user.id],
   });
   try {
@@ -289,7 +290,7 @@ test("Shivam mapped clients receive the user-broker copy when admin entry queues
     runMode: "live",
     liveAuthorized: true,
     brokerId: "dhan",
-    mappingScope: "clients",
+    mappingScope: "both",
     mappedClientIds: [user.id],
   });
   try {
@@ -306,6 +307,158 @@ test("Shivam mapped clients receive the user-broker copy when admin entry queues
     assert.equal(copy.account?.accessToken, "member-dhan-token");
     assert.equal(copy.account?.clientId, "11008899");
     assert.notEqual(copy.paper, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("clients-only mapping skips the admin broker and sends the user copy", () => {
+  setDhanFeed({ live: true });
+  pinAtmChain();
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-clients-only");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const sent = tickStyleShivamEntry(created);
+    assert.equal(sent.queued, true);
+    assert.equal(sent.skippedAdmin, true);
+    assert.equal(sent.status, "COPIED");
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => !row.copyUserId), false);
+    const copy = queued.find((row) => row.copyUserId === user.id);
+    assert.ok(copy, "mapped user copy missing");
+    assert.equal(copy.brokerId, "dhan");
+    assert.equal(copy.account?.accessToken, "member-dhan-token");
+    assert.notEqual(copy.paper, true);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("master-only mapping sends admin Dhan and no user copy", () => {
+  setDhanFeed({ live: true });
+  pinAtmChain();
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-master-only");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "master",
+    mappedClientIds: [user.id],
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    const sent = tickStyleShivamEntry(created);
+    assert.equal(sent.queued, true);
+    const queued = drainPendingLiveAlgoOrders();
+    const admin = queued.find((row) => !row.copyUserId);
+    assert.ok(admin);
+    assert.equal(admin.brokerId, "dhan");
+    assert.equal(queued.some((row) => row.copyUserId === user.id), false);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("clients-only still copies when admin already has a leftover lot on this strategy", () => {
+  setDhanFeed({ live: true });
+  pinAtmChain();
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-clients-leftover");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    replaceDhanBook([
+      {
+        id: "dhan-pos-admin-leftover",
+        symbol: "NIFTY 25000 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 110,
+        ltp: 112,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 25000,
+        live: true,
+      },
+    ]);
+    const sent = tickStyleShivamEntry(created);
+    assert.equal(sent.queued, true);
+    assert.equal(sent.skippedAdmin, true);
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => !row.copyUserId), false);
+    assert.equal(queued.some((row) => row.copyUserId === user.id), true);
+    replaceDhanBook([]);
+  } finally {
+    deleteAlgo(created.id);
+    drainPendingLiveAlgoOrders();
+    setDhanFeed({ live: false });
+  }
+});
+
+test("clients-only does not send a second user BUY while that user lot is open", () => {
+  setDhanFeed({ live: true });
+  pinAtmChain();
+  drainPendingLiveAlgoOrders();
+  const user = liveMappedUser("u-clients-open");
+  const created = createAlgo({
+    kind: "shivam-t2s",
+    testDesk: true,
+    runMode: "live",
+    liveAuthorized: true,
+    brokerId: "dhan",
+    mappingScope: "clients",
+    mappedClientIds: [user.id],
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    replaceDhanBook([
+      {
+        id: "copy-pos-user-open",
+        symbol: "NIFTY 25000 CE",
+        type: "BUY",
+        qty: 65,
+        avg: 110,
+        ltp: 112,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "CE",
+        strike: 25000,
+        live: true,
+        copyUserId: user.id,
+      },
+    ]);
+    tickStyleShivamEntry(created);
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(queued.some((row) => row.copyUserId === user.id && row.side === "BUY"), false);
+    replaceDhanBook([]);
   } finally {
     deleteAlgo(created.id);
     drainPendingLiveAlgoOrders();

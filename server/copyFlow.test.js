@@ -357,8 +357,7 @@ test("NIFTY run still sends the admin Dhan order when a mapped user already has 
   const copy = queuedFor(queued, user.id);
   assert.equal(master.length, 1);
   assert.equal(master[0].brokerId, "dhan");
-  assert.equal(copy.length, 1);
-  assert.equal(copy[0].brokerId, "upstox");
+  assert.equal(copy.length, 0);
   replaceDhanBook([]);
 });
 
