@@ -114,6 +114,7 @@ export function Profile() {
             <span className="text-sm text-slate-400">Broker name</span>
             <span className="text-right text-sm font-semibold">{brokerName || "—"}</span>
           </div>
+          <SettingsRow icon={Building2} label="Add broker" to="/broker" detail="Connect Dhan, Upstox, or Kotak for live copy" />
         </PhoneCard>
       ) : null}
 

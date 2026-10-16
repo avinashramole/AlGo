@@ -34,6 +34,7 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
   { to: "/reports", label: "Position & Orders", icon: FileText, admin: true },
   { to: "/positions", label: "Position", icon: Briefcase, member: true },
   { to: "/orders", label: "Orders", icon: FileText, member: true },
+  { to: "/broker", label: "Broker", icon: Building2, member: true },
   { to: "/options", label: "Option Chain", icon: Layers, admin: true },
   { to: "/brokers", label: "Brokers", icon: Building2, admin: true },
   { to: "/analytics", label: "Analytics", icon: PieChart, admin: true },

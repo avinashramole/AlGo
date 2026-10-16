@@ -17,6 +17,7 @@ test("user home opens a dedicated tape page and APK splits Position, Orders, Bro
   const book = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");
 
   assert.match(home, /to="\/tape"/);
+  assert.match(home, /to="\/broker"/);
   assert.doesNotMatch(home, /id="market-tape"/);
   assert.doesNotMatch(userHome, /MemberIndexBoard/);
   assert.match(tape, /data-member-tape-page="true"/);

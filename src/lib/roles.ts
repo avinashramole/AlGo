@@ -36,6 +36,7 @@ export const userNav = [
   { to: "/plans", label: "Algos" },
   { to: "/positions", label: "Position" },
   { to: "/orders", label: "Orders" },
+  { to: "/broker", label: "Broker" },
   { to: "/profile#login-password", label: "Password" },
   { to: "/settings", label: "Settings" },
   { to: "/support", label: "Support" },

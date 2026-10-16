@@ -14,6 +14,7 @@ const tabs: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean
   { to: "/reports", label: "Position & Orders", icon: FileText, admin: true },
   { to: "/positions", label: "Position", icon: Briefcase, member: true },
   { to: "/orders", label: "Orders", icon: FileText, member: true },
+  { to: "/broker", label: "Broker", icon: Building2, member: true },
   { to: "/profile", label: "Profile", icon: User, admin: true },
 ];
 
