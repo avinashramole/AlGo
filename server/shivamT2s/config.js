@@ -97,11 +97,19 @@ export function shivamScript(symbol = "") {
   return SHIVAM_T2S_SCRIPTS.find((row) => row.id === id) || null;
 }
 
+export function isShivamT2sName(name = "") {
+  const text = String(name || "").trim();
+  if (!text) return false;
+  if (SHIVAM_T2S_NAMES.includes(text)) return true;
+  const compact = text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return compact === "shivamt2s" || compact === "shivamt2sstrategy";
+}
+
 export function isShivamT2sAlgo(algo = {}) {
   if (algo.kind === SHIVAM_T2S_KIND || algo.strategyType === SHIVAM_T2S_TYPE || algo.indicator === "SHIVAM_T2S") {
     return true;
   }
-  return SHIVAM_T2S_NAMES.includes(String(algo.name || "").trim());
+  return isShivamT2sName(algo.name);
 }
 
 export function resolveShivamTimeframe(value, fallback = "5m") {

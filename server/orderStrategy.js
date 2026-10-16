@@ -1,4 +1,5 @@
 import { parseOptionContract } from "./frontFutures.js";
+import { isShivamT2sAlgo } from "./shivamT2s/config.js";
 
 const CORR_MAX = 25;
 const GENERIC_NAME = /^(manual|auto)$/i;
@@ -160,11 +161,7 @@ function inferFromLastOrderId(row = {}, algos = []) {
 }
 
 function isShivamAlgo(algo = {}) {
-  return (
-    algo.kind === "shivam-t2s" ||
-    algo.strategyType === "SHIVAM_T2S" ||
-    String(algo.name || "").trim() === "Shivam T2S Strategy"
-  );
+  return isShivamT2sAlgo(algo);
 }
 
 function inferShivamOwner(row = {}, algos = []) {

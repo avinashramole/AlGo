@@ -304,14 +304,22 @@ export const ShivamT2sStrategy = {
       product: "MIS",
       type: "MARKET",
       strategy: name,
+      strategyId: algo.id,
       barTime,
       role: "shivam-entry",
       exchangeSegment: config.segment,
     });
-    const rejected = !result || result.error || ["REJECTED", "FAILED", "CANCELLED"].includes(String(result.status || "").toUpperCase());
-    if (rejected) {
+    const status = String(result?.status || "").toUpperCase();
+    const notQueued = result?.queued === false && result?.duplicate !== true;
+    const rejected =
+      !result ||
+      result.error ||
+      notQueued ||
+      ["REJECTED", "FAILED", "CANCELLED", "FEED_DOWN", "PAUSED", "MAX_TRADES", "MARGIN"].includes(status);
+    if (rejected || result?.duplicate) {
       state.inFlight = false;
       state.sessionTrades = Math.max(0, Number(state.sessionTrades) - 1);
+      if (result?.duplicate) return markNoTrade(algo, state, "in-flight", signal);
       noteShivamEvent(state, "rejected", { error: result?.error || result?.status || "rejected" });
       return markNoTrade(algo, state, "rejected", signal);
     }

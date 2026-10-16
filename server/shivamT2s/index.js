@@ -12,6 +12,7 @@ export {
   clampShivamDailyTradeLimit,
   defaultShivamT2sAlgo,
   isShivamT2sAlgo,
+  isShivamT2sName,
   resolveShivamTimeframe,
   shivamScript,
   shivamT2sConfig,

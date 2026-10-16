@@ -14,6 +14,7 @@ import {
   defaultShivamT2sAlgo,
   evaluateShivamEntry,
   isShivamT2sAlgo,
+  isShivamT2sName,
   maxAffordableLots,
   protectivePrices,
   renderShivamExcel,
@@ -106,6 +107,25 @@ function tick(algo, env, extra = {}) {
     minutesToClose: extra.minutesToClose,
   });
 }
+
+test("Shivam T2S names match the strategy card and short aliases", () => {
+  assert.equal(isShivamT2sName("Shivam T2S Strategy"), true);
+  assert.equal(isShivamT2sName("Shivam T2S"), true);
+  assert.equal(isShivamT2sName("SHIVAM T2S"), true);
+  assert.equal(isShivamT2sName("shivam-t2s"), true);
+  assert.equal(isShivamT2sAlgo({ name: "Shivam T2S" }), true);
+  assert.equal(isShivamT2sAlgo({ name: "shivam t2s strategy" }), true);
+  assert.equal(isShivamT2sName("NIFTY"), false);
+});
+
+test("a live queue miss is rejected so the next candle can retry", () => {
+  const algo = defaultShivamT2sAlgo({ enabled: true, capitalValue: 50_000 });
+  const env = book();
+  env.adapter.place = () => ({ ok: true, queued: false, status: "FEED_DOWN" });
+  const missed = tick(algo, env);
+  assert.equal(missed.reason, "rejected");
+  assert.equal(algo.shivamState.sessionTrades, 0);
+});
 
 test("defaults stay paper, disabled, and named Shivam T2S Strategy", () => {
   const algo = defaultShivamT2sAlgo();
