@@ -140,11 +140,15 @@ export type AlgoStrategy = {
     futuresInstrument?: string;
     indexLabel?: string;
     indexBarTime?: number;
+    futureBarTime?: number;
+    lastFutureBarTime?: number;
     ceBarTime?: number;
     peBarTime?: number;
     lastIndexColor?: string;
+    lastFutureColor?: string;
     lastCeColor?: string;
     lastPeColor?: string;
+    atmStrike?: number;
   };
   maxCycleLossPct?: number;
   sellExpiryKind?: "weekly" | "monthly";
@@ -301,6 +305,7 @@ export type AlgoStrategy = {
     symbol?: string;
     lastTransitionReason?: string;
   };
+  indexColor?: "green" | "red" | "doji" | "";
   futureColor?: "green" | "red" | "doji" | "";
   ceColor?: "green" | "red" | "doji" | "";
   peColor?: "green" | "red" | "doji" | "";
@@ -722,7 +727,7 @@ export function contractLabel(algo: {
   if (isNiftyVwapReversalKind(algo)) return "NIFTY weekly ATM CE/PE";
   if (isNiftyTestKind(algo)) return "NIFTY FUT";
   if (isShivamT2sKind(algo)) {
-    return `${algo.symbol || "NIFTY"} ${algo.strikePolicy || "ATM"} CE/PE`;
+    return `${algo.symbol || "NIFTY"} ATM CE/PE`;
   }
   if (isMultiIndexReversalKind(algo)) {
     const off = Number(algo.strikeOffset || 0);

@@ -95,7 +95,6 @@ import {
   ShivamT2sStrategy,
   shivamT2sConfig,
   shivamState,
-  strikeForPolicy,
   validateShivamT2s,
 } from "./shivamT2s/index.js";
 import { buildShivamReport, renderShivamExcel, renderShivamPdf } from "./shivamT2s/reports.js";
@@ -2266,11 +2265,12 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
       ? pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
       : nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || "";
   const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
-  const spot = Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
+  const futLtp = liveLtpForSymbol(config.futuresInstrument) || 0;
+  const spot = futLtp || Number(getChainSpot(root)) || Number(lastIndex?.close) || 0;
   const step = Number(und.step) || 50;
   const vs = shivamState(algo);
-  const ceStrike = strikeForPolicy(spot, step, config.strikePolicy, config.strikeOffset, "CE");
-  const peStrike = strikeForPolicy(spot, step, config.strikePolicy, config.strikeOffset, "PE");
+  const ceStrike = atmStrike(spot, step);
+  const peStrike = ceStrike;
   if (vs.ceStrike !== ceStrike) {
     vs.ceBars = [];
     vs.ceStrike = ceStrike;
@@ -2286,6 +2286,8 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
   const peBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.peBarMinutes || 5, barOpts) || 0;
   vs.ceBars = upsertOptionBar(vs.ceBars, ceBarTime, ceLtp);
   vs.peBars = upsertOptionBar(vs.peBars, peBarTime, peLtp);
+  const futBarTime = VwapSignalEngine.sessionBarOpenMs(now, config.indexBarMinutes || 5, barOpts) || 0;
+  vs.futBars = upsertOptionBar(vs.futBars, futBarTime, futLtp);
   const lotSize = instrumentLotSize(root, ceStrike || peStrike, Number(und.lot) || 0);
   const before = JSON.stringify(vs);
   const adapter =
@@ -2312,6 +2314,7 @@ function tickShivamT2sAlgo(algo, mode, feedLive) {
     availableFunds: hedgeCapital(mode),
     minutesToClose: minutesUntilIst(mcx ? 23 * 60 + 30 : 15 * 60 + 30, new Date(now)),
     indexBars: getCandles(config.indexTimeframe, root) || [],
+    futureBars: vs.futBars || [],
     ceBars: vs.ceBars,
     peBars: vs.peBars,
     spot,
@@ -3776,6 +3779,7 @@ export function deskFeed() {
     pnl: algo.pnl,
     winRate: algo.winRate,
     lastSignal: algo.lastSignal,
+    indexColor: algo.indexColor || "",
     futureColor: algo.futureColor || "",
     ceColor: algo.ceColor || "",
     peColor: algo.peColor || "",
@@ -4217,13 +4221,11 @@ function resolveBrokerTestTrade(algo) {
         ? nearestWeeklyExpiry(listed, root) || pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || ""
         : pack?.meta?.expiry || listed[0] || upcomingExpiries(root)[0] || "";
     const lastIndex = (getCandles(config.indexTimeframe, root) || []).at(-1);
-    const spot = Number(getChainSpot(root)) || Number(pack?.meta?.spot) || Number(lastIndex?.close) || 0;
+    const futLtp = liveLtpForSymbol(config.futuresInstrument) || 0;
+    const spot = futLtp || Number(getChainSpot(root)) || Number(pack?.meta?.spot) || Number(lastIndex?.close) || 0;
     const step = Number(und.step) || 50;
     const option = vs.cardReady === true && (vs.option === "PE" || vs.option === "CE") ? vs.option : "CE";
-    const strike =
-      vs.cardReady === true && Number(vs.strike) > 0
-        ? Number(vs.strike)
-        : strikeForPolicy(spot, step, config.strikePolicy, config.strikeOffset, option);
+    const strike = atmStrike(spot, step);
     const securityId = optionLegId(strike, option, root, expiry) || (vs.cardReady ? String(vs.securityId || "") : "");
     const lotSize = instrumentLotSize(root, strike, Number(und.lot) || 65) || 65;
     const ltp = optionPremium(root, strike, option) || Number(vs.premium) || 0;

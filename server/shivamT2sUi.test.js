@@ -42,6 +42,13 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(builder, /label="Index timeframe"/);
   assert.match(builder, /label="CE timeframe"/);
   assert.match(builder, /label="PE timeframe"/);
+  assert.match(builder, /data-shivam-atm="true"/);
+  assert.match(builder, /ATM auto/);
+  assert.match(builder, /Do not trade a doji on the index, future, or option candle/);
+  assert.doesNotMatch(builder, /ITM offset/);
+  assert.doesNotMatch(builder, /NumberField label="Strike offset"/);
+  assert.match(page, /data-shivam-candles="idx-fut-opt"/);
+  assert.match(page, /ATM auto/);
   assert.match(builder, /<option value="custom">Custom<\/option>/);
   assert.match(builder, /Minutes 1–60/);
   assert.doesNotMatch(builder, /mark="shivam-index"[\s\S]{0,200}<FirstCandleTimeframeBar/);

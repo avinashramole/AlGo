@@ -4,7 +4,7 @@ import { sizeShivamLots } from "./lots.js";
 import { protectivePrices, slIsActive } from "./risk.js";
 import { barIsStale, barIsValid, evaluateShivamEntry, lastCompletedBar } from "./signals.js";
 import { entryBarKey, noteShivamEvent, resetShivamSession, shivamState } from "./state.js";
-import { isLotMultiple, qtyForLots, strikeForPolicy } from "./strikes.js";
+import { atmStrike, isLotMultiple, qtyForLots } from "./strikes.js";
 
 function round2(value) {
   return Math.round(Number(value) * 100) / 100;
@@ -32,7 +32,8 @@ function markNoTrade(algo, state, reason, extra = {}) {
   state.cardSignal = "NO Trade";
   state.lastError = reason || "";
   algo.lastSignal = extra.signal || "NO Trade";
-  algo.futureColor = extra.indexColor || state.lastIndexColor || "";
+  algo.indexColor = extra.indexColor || state.lastIndexColor || "";
+  algo.futureColor = extra.futureColor || extra.indexColor || state.lastFutureColor || state.lastIndexColor || "";
   algo.ceColor = extra.ceColor || state.lastCeColor || "";
   algo.peColor = extra.peColor || state.lastPeColor || "";
   return { action: "no-trade", reason, ...extra };
@@ -43,7 +44,8 @@ function markReady(algo, state, details) {
   state.cardSignal = "● ● ●";
   Object.assign(state, details);
   algo.lastSignal = `BUY ${details.option} ${details.strike}`;
-  algo.futureColor = details.indexColor;
+  algo.indexColor = details.indexColor;
+  algo.futureColor = details.futureColor || details.indexColor;
   algo.ceColor = details.ceColor;
   algo.peColor = details.peColor;
 }
@@ -52,24 +54,31 @@ export const ShivamT2sStrategy = {
   evaluate(input = {}) {
     const config = input.config || shivamT2sConfig(input.algo || {});
     const now = Number(input.now) || Date.now();
-    const indexBar = lastCompletedBar(input.indexBars || [], config.indexBarMinutes * 60 * 1000, now);
+    const indexMs = config.indexBarMinutes * 60 * 1000;
+    const indexBar = lastCompletedBar(input.indexBars || [], indexMs, now);
+    const futureSource =
+      Array.isArray(input.futureBars) && input.futureBars.length ? input.futureBars : input.indexBars || [];
+    const futureBar = lastCompletedBar(futureSource, indexMs, now);
     const ceBar = lastCompletedBar(input.ceBars || [], config.ceBarMinutes * 60 * 1000, now);
     const peBar = lastCompletedBar(input.peBars || [], config.peBarMinutes * 60 * 1000, now);
     const stale =
       !indexBar ||
+      !futureBar ||
       !ceBar ||
       !peBar ||
-      barIsStale(indexBar, config.indexBarMinutes * 60 * 1000, now) ||
+      barIsStale(indexBar, indexMs, now) ||
+      barIsStale(futureBar, indexMs, now) ||
       barIsStale(ceBar, config.ceBarMinutes * 60 * 1000, now) ||
       barIsStale(peBar, config.peBarMinutes * 60 * 1000, now);
-    const incomplete = !barIsValid(indexBar) || (!barIsValid(ceBar) && !barIsValid(peBar));
+    const incomplete = !barIsValid(indexBar) || !barIsValid(futureBar) || (!barIsValid(ceBar) && !barIsValid(peBar));
     return {
       stale,
       incomplete,
       indexBar,
+      futureBar,
       ceBar,
       peBar,
-      ...evaluateShivamEntry({ indexBar, ceBar, peBar }),
+      ...evaluateShivamEntry({ indexBar, futureBar, ceBar, peBar }),
     };
   },
 
@@ -152,13 +161,18 @@ export const ShivamT2sStrategy = {
     }
 
     const signal = this.evaluate({ ...input, config, now });
+    const liveStrike = atmStrike(input.spot, input.step);
+    if (liveStrike > 0) state.atmStrike = liveStrike;
     state.lastIndexColor = signal.indexColor;
+    state.lastFutureColor = signal.futureColor;
     state.lastCeColor = signal.ceColor;
     state.lastPeColor = signal.peColor;
     state.lastIndexBarTime = signal.indexBarTime;
+    state.lastFutureBarTime = signal.futureBarTime;
     state.lastCeBarTime = signal.ceBarTime;
     state.lastPeBarTime = signal.peBarTime;
-    algo.futureColor = signal.indexColor;
+    algo.indexColor = signal.indexColor;
+    algo.futureColor = signal.futureColor;
     algo.ceColor = signal.ceColor;
     algo.peColor = signal.peColor;
 
@@ -186,7 +200,7 @@ export const ShivamT2sStrategy = {
     const premium = option === "PE" ? Number(input.peLtp) : Number(input.ceLtp);
     const securityId = option === "PE" ? input.peSecurityId : input.ceSecurityId;
     const lotSize = Math.max(0, Math.round(Number(input.lotSize) || 0));
-    const strike = strikeForPolicy(input.spot, input.step, config.strikePolicy, config.strikeOffset, option);
+    const strike = atmStrike(input.spot, input.step);
     if (!(strike > 0) || !(premium > 0) || (input.requireSecurityId && !securityId)) {
       noteShivamEvent(state, "contract", { strike, premium, securityId: securityId || "" });
       return markNoTrade(algo, state, "contract", signal);
@@ -241,9 +255,11 @@ export const ShivamT2sStrategy = {
       slPrice: planned.slPrice,
       targetPrice: planned.targetPrice,
       indexColor: signal.indexColor,
+      futureColor: signal.futureColor,
       ceColor: signal.ceColor,
       peColor: signal.peColor,
       indexBarTime: signal.indexBarTime,
+      futureBarTime: signal.futureBarTime,
       ceBarTime: signal.ceBarTime,
       peBarTime: signal.peBarTime,
       futuresInstrument: config.futuresInstrument,

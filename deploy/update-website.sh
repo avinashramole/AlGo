@@ -177,6 +177,14 @@ if ! grep -q 'export function AlgoTest' "$HOME_DIR/src/pages/Algo.tsx" || ! grep
   echo "FAIL: Algo Test page is missing the seeded Shivam T2S card."
   exit 1
 fi
+if ! grep -q 'Do not trade a doji on the index, future, or option candle' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+  echo "FAIL: Shivam T2S must skip doji candles on index, future, and option."
+  exit 1
+fi
+if ! grep -q 'data-shivam-atm="true"' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" || ! grep -q 'const strike = atmStrike' "$HOME_DIR/server/shivamT2s/ShivamT2sStrategy.js"; then
+  echo "FAIL: Shivam T2S must always auto-select the live ATM strike."
+  exit 1
+fi
 if ! grep -q 'data-android-apk="download"' "$HOME_DIR/src/pages/Login.tsx"; then
   echo "FAIL: Android APK download is missing. Deploy cursor/capacitor-hybrid-apk-6826."
   exit 1

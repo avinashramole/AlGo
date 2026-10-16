@@ -169,6 +169,54 @@ test("BUY CE needs index green and CE green; doji blocks both sides", () => {
   assert.equal(doji.indexColor, "doji");
 });
 
+test("doji on index, future, or option candle is no trade", () => {
+  const indexDoji = evaluateShivamEntry({
+    indexBar: bar(T0, 25000, 25000),
+    futureBar: bar(T0, 25010, 25040),
+    ceBar: bar(T0, 100, 110),
+    peBar: bar(T0, 100, 110),
+  });
+  assert.equal(indexDoji.buyCe, false);
+  assert.equal(indexDoji.buyPe, false);
+  const futureDoji = evaluateShivamEntry({
+    indexBar: bar(T0, 25000, 25040),
+    futureBar: bar(T0, 25020, 25020),
+    ceBar: bar(T0, 100, 110),
+    peBar: bar(T0, 100, 90),
+  });
+  assert.equal(futureDoji.buyCe, false);
+  assert.equal(futureDoji.buyPe, false);
+  assert.equal(futureDoji.futureColor, "doji");
+  const ceDoji = evaluateShivamEntry({
+    indexBar: bar(T0, 25000, 25040),
+    futureBar: bar(T0, 25010, 25040),
+    ceBar: bar(T0, 100, 100),
+    peBar: bar(T0, 100, 90),
+  });
+  assert.equal(ceDoji.buyCe, false);
+  assert.equal(ceDoji.ceColor, "doji");
+  const peDoji = evaluateShivamEntry({
+    indexBar: bar(T0, 25040, 25000),
+    futureBar: bar(T0, 25040, 25010),
+    ceBar: bar(T0, 100, 90),
+    peBar: bar(T0, 80, 80),
+  });
+  assert.equal(peDoji.buyPe, false);
+  assert.equal(peDoji.peColor, "doji");
+});
+
+test("ITM/OTM settings are ignored; live ATM is always auto-selected", () => {
+  const cfg = shivamT2sConfig({ strikePolicy: "ITM", strikeOffset: 3 });
+  assert.equal(cfg.strikePolicy, "ATM");
+  assert.equal(cfg.strikeOffset, 0);
+  const algo = defaultShivamT2sAlgo({ enabled: true, strikePolicy: "OTM", strikeOffset: 2 });
+  const first = tick(algo, book(), { spot: 25040 });
+  assert.equal(first.action, "entered");
+  assert.equal(first.strike, 25050);
+  const next = tick(defaultShivamT2sAlgo({ enabled: true, strikePolicy: "ITM", strikeOffset: 4 }), book(), { spot: 25110 });
+  assert.equal(next.strike, 25100);
+});
+
 test("stale or incomplete candles do not qualify", () => {
   const algo = defaultShivamT2sAlgo({ enabled: true });
   const env = book();

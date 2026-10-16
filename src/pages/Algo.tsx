@@ -152,6 +152,25 @@ function shivamActivityText(
   return vs.cardSignal || (shivamCardReady(algo) ? "● ● ●" : "NO Trade");
 }
 
+function ShivamCandleDots({ algo }: { algo: AlgoStrategy }) {
+  const vs = algo.shivamState || {};
+  const idx = candleTone(vs.lastIndexColor || algo.indexColor);
+  const fut = candleTone(vs.lastFutureColor || algo.futureColor);
+  const ce = candleTone(vs.lastCeColor || algo.ceColor);
+  const pe = candleTone(vs.lastPeColor || algo.peColor);
+  return (
+    <span
+      className="inline-flex flex-wrap items-center gap-2 rounded bg-[var(--card-muted)] px-1.5 py-0.5"
+      data-shivam-candles="idx-fut-opt"
+    >
+      <ConditionDot label="IDX" color={idx} ok={idx === "green" || idx === "red"} />
+      <ConditionDot label="FUT" color={fut} ok={fut === "green" || fut === "red"} />
+      <ConditionDot label="CE" color={ce} ok={ce === "green"} />
+      <ConditionDot label="PE" color={pe} ok={pe === "green"} />
+    </span>
+  );
+}
+
 function ShivamSignalChip({ algo, onOpen }: { algo: AlgoStrategy; onOpen?: () => void }) {
   const ready = shivamCardReady(algo);
   return (
@@ -217,14 +236,15 @@ function ShivamTradeDetails({ algo, onClose }: { algo: AlgoStrategy; onClose: ()
           <div>Index {vs.indexLabel || algo.symbol} · {vs.futuresInstrument || `${algo.symbol} FUT`}</div>
           <div>{vs.option ? `BUY ${vs.option}` : "—"}</div>
           <div>Contract {vs.symbol || "—"} · ID {vs.securityId || "—"}</div>
-          <div>Strike {vs.strike || "—"} · Expiry {vs.expiry || "—"}</div>
+          <div>ATM auto {vs.atmStrike || vs.strike || "—"} · Expiry {vs.expiry || "—"}</div>
           <div>Premium {Number(vs.premium || 0).toFixed(2)} · {when(vs.quoteAt)}</div>
           <div>Lots requested {vs.requestedLots || 0} · approved {vs.approvedLots || 0} · exchange lot {vs.lotSize || "—"}</div>
           <div>Order value ₹{Number(vs.orderValue || 0).toFixed(2)} · funds ₹{Number(vs.requiredFunds || 0).toFixed(2)}</div>
           <div>
             SL {Number(vs.slPrice || 0).toFixed(2)} ({vs.slStatus || "not broker-confirmed"}) · TGT {Number(vs.targetPrice || 0).toFixed(2)}
           </div>
-          <div>Index candle {when(vs.indexBarTime)} · CE {when(vs.ceBarTime)} · PE {when(vs.peBarTime)}</div>
+          <div>Index {when(vs.indexBarTime)} · Future {when(vs.futureBarTime || vs.lastFutureBarTime)} · CE {when(vs.ceBarTime)} · PE {when(vs.peBarTime)}</div>
+          <div>Doji on index, future, or option = no trade</div>
         </div>
       </div>
     </div>
@@ -320,7 +340,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "shivam-t2s" as const,
       category: "SHIVAM T2S",
-      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ${algo.strikePolicy || "ATM"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan" : "Paper"} · map clients`,
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan" : "Paper"} · map clients`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -1132,7 +1152,14 @@ function AlgoCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-base font-bold">{algo.name}</h2>
-              {shivam ? <ShivamSignalChip algo={algo} onOpen={() => setShivamDetails(true)} /> : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? <FutureCandleChip algo={algo} /> : null}
+              {shivam ? (
+                <>
+                  <ShivamSignalChip algo={algo} onOpen={() => setShivamDetails(true)} />
+                  <ShivamCandleDots algo={algo} />
+                </>
+              ) : isCrudeFirstCandleKind(algo) || isNiftyFirstCandleKind(algo) ? (
+                <FutureCandleChip algo={algo} />
+              ) : null}
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide",
@@ -1180,7 +1207,8 @@ function AlgoCard({
             ) : null}
             {shivam ? (
               <div className="mt-1 text-[11px] font-semibold text-slate-500" data-shivam-tf="true">
-                IDX {deskTfLabel(algo.indexTimeframe || algo.timeframe)} · CE {deskTfLabel(algo.ceTimeframe)} · PE {deskTfLabel(algo.peTimeframe)}
+                IDX {deskTfLabel(algo.indexTimeframe || algo.timeframe)} · CE {deskTfLabel(algo.ceTimeframe)} · PE {deskTfLabel(algo.peTimeframe)} · ATM auto
+                {algo.shivamState?.atmStrike || algo.shivamState?.strike ? ` ${algo.shivamState?.atmStrike || algo.shivamState?.strike}` : ""}
               </div>
             ) : null}
             {shivam ? null : <div className="mt-1 text-[11px] font-semibold text-slate-500">{contract}</div>}

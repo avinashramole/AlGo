@@ -272,7 +272,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
     }
     if (isShivamT2sKind(form) || shivam) {
       const script = SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0];
-      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ${form.strikePolicy || "ATM"} · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan" : "Paper"} · map clients`;
+      return `Shivam T2S · ${script.label} ${script.futures} · IDX ${form.indexTimeframe || "5m"} CE ${form.ceTimeframe || "5m"} PE ${form.peTimeframe || "5m"} · ATM auto · SL ${form.slValue || 20}${form.slMode === "points" ? " pts" : "%"} / TGT ${form.targetValue || 40}${form.targetMode === "points" ? " pts" : "%"} · max ${form.maxTradesPerDay || 5} trades/day · ${form.runMode === "live" ? "Live Dhan" : "Paper"} · map clients`;
     }
     if (isMultiIndexReversalKind(form) || mir) {
       const script = MULTI_INDEX_SCRIPTS.find((row) => row.id === form.symbol) || MULTI_INDEX_SCRIPTS[0];
@@ -420,7 +420,8 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               peTimeframe: firstCandleTimeframeValue(String(form.peTimeframe || "5m")),
               indexTimeframe: firstCandleTimeframeValue(String(form.indexTimeframe || "5m")),
               timeframe: firstCandleTimeframeValue(String(form.indexTimeframe || form.timeframe || "5m")),
-              strikePolicy: form.strikePolicy === "ITM" || form.strikePolicy === "OTM" ? form.strikePolicy : "ATM",
+              strikePolicy: "ATM",
+              strikeOffset: 0,
               slMode: form.slMode === "points" ? "points" : "percentage",
               targetMode: form.targetMode === "points" ? "points" : "percentage",
               capitalMode: form.capitalMode === "percent" ? "percent" : "amount",
@@ -986,7 +987,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         ) : shivam ? (
           <div className="mt-2.5 space-y-1.5" data-shivam-settings="true">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              Index or matching future candle must be complete. BUY CE: future green and CE green. BUY PE: future red and PE green. A doji is neither. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
+              Do not trade a doji on the index, future, or option candle. BUY CE: index green, future green, CE green. BUY PE: index red, future red, PE green. ATM strike is always auto-selected from the live future/index and changes with the market. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
             </div>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4" data-shivam-timeframes="true">
               <DeskTimeframeSelect
@@ -1035,14 +1036,9 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 <input className={fieldClass} value={(SHIVAM_T2S_SCRIPTS.find((row) => row.id === form.symbol) || SHIVAM_T2S_SCRIPTS[0]).futures} readOnly />
               </label>
               <label className="text-xs font-semibold text-slate-500">
-                Strike policy
-                <select className={fieldClass} value={form.strikePolicy || "ATM"} onChange={(event) => set({ strikePolicy: event.target.value as "ATM" | "ITM" | "OTM" })}>
-                  <option value="ATM">ATM</option>
-                  <option value="ITM">ITM offset</option>
-                  <option value="OTM">OTM offset</option>
-                </select>
+                Strike
+                <input className={fieldClass} value="ATM auto" readOnly data-shivam-atm="true" />
               </label>
-              <NumberField label="Strike offset" value={form.strikeOffset ?? 0} step={1} onChange={(strikeOffset) => set({ strikeOffset: Math.max(0, Math.min(8, strikeOffset)) })} />
               <label className="text-xs font-semibold text-slate-500">
                 CE confirm
                 <input className={fieldClass} value="GREEN" readOnly />

@@ -263,7 +263,7 @@ export function contractLabel(algo) {
   if (isNiftyTestAlgo(algo)) return "NIFTY FUT";
   if (isShivamT2sAlgo(algo)) {
     const cfg = shivamT2sConfig(algo);
-    return `${cfg.symbol} ${cfg.futuresInstrument} ${cfg.strikePolicy} CE/PE`;
+    return `${cfg.symbol} ${cfg.futuresInstrument} ATM CE/PE`;
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
@@ -331,7 +331,7 @@ export function summarizeAlgo(algo) {
   }
   if (isShivamT2sAlgo(algo)) {
     const cfg = shivamT2sConfig(algo);
-    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ${cfg.strikePolicy} · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · ${cfg.runMode === "live" ? "Live Dhan" : "Paper"} · mapped clients · ${size}`;
+    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ATM auto · no doji on index, future, or option · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · ${cfg.runMode === "live" ? "Live Dhan" : "Paper"} · mapped clients · ${size}`;
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
