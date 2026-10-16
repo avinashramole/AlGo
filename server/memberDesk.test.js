@@ -627,8 +627,7 @@ test("broker order book replaces a pending copy with REJECTED and keeps the limi
   assert.match(row.reason, /Insufficient funds/);
   assert.equal(desk.positions.some((item) => item.symbol === "NIFTY 22650 CE"), false);
   const admin = snapshot().orders.find((item) => item.copyUserId === member.id && String(item.id).endsWith("ord-22570"));
-  assert.equal(admin.status, "REJECTED");
-  assert.match(admin.reason, /Insufficient funds/);
+  assert.equal(admin, undefined);
   assert.equal(memberWorkingDhanCopies().some((item) => item.userId === member.id), false);
   const alert = (desk.alerts || []).find((row) => row.symbol === "NIFTY 22650 CE");
   assert.equal(alert.status, "REJECTED");

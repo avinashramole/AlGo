@@ -102,7 +102,7 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(nav, /label: "Orders"/);
   assert.match(nav, /label: "Broker"/);
   assert.match(nav, /data-apk-logout="true"/);
-  assert.match(nav, /requestLogout\(logout\)/);
+  assert.match(nav, /onClick=\{requestLogout\}/);
   assert.match(mobileProfile, /confirmLogout\(logout\)/);
   assert.match(nav, /to: "\/positions"/);
   assert.match(nav, /to: "\/orders"/);

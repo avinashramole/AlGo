@@ -781,6 +781,43 @@ function strategyHasOpenLot(name) {
   );
 }
 
+function sameOneLotFamily(left, right) {
+  const a = realStrategyName(left) || String(left || "").trim();
+  const b = realStrategyName(right) || String(right || "").trim();
+  if (a && b && a === b) return true;
+  if (isNiftyFirstCandleName(a) && isNiftyFirstCandleName(b)) return true;
+  if (isCrudeFirstCandleName(a) && isCrudeFirstCandleName(b)) return true;
+  const aliases = new Set(firstCandleNameAliases(a).map((name) => String(name || "").toLowerCase()));
+  if (!aliases.size) return false;
+  return firstCandleNameAliases(b).some((name) => aliases.has(String(name || "").toLowerCase()));
+}
+
+function isOneLotLiveAlgo(algo = {}, payload = {}) {
+  if (isNiftyVwapHedgeAlgo(algo) || isNiftyTest2Algo(algo) || isMultiIndexReversalAlgo(algo)) return false;
+  return (
+    isNiftyOptionEngineAlgo(algo) ||
+    isCrudeFirstCandleAlgo(algo) ||
+    isNiftyTest1Algo(algo) ||
+    isNiftyFirstCandleName(payload?.strategy) ||
+    isCrudeFirstCandleName(payload?.strategy)
+  );
+}
+
+function adminHasOpenOptionLot(algo = {}, payload = {}) {
+  if (!isOneLotLiveAlgo(algo, payload)) return false;
+  const crude = isCrudeFirstCandleAlgo(algo) || isCrudeFirstCandleName(payload?.strategy);
+  const symbol = crude ? "CRUDEOIL" : optionAlgoSymbol(algo) || "NIFTY";
+  const name = algo?.name || payload?.strategy || "";
+  return (state.positions || []).some((row) => {
+    if (row.copyUserId || isPaperRow(row)) return false;
+    if (!(Number(row.qty) > 0)) return false;
+    if (String(row.type || "BUY").toUpperCase() === "CLOSED") return false;
+    const tagged = realStrategyName(row.strategy) || row.strategy;
+    if (tagged) return sameOneLotFamily(tagged, name) || tagged === name;
+    return PositionManager.isOpenOption(row, symbol);
+  });
+}
+
 export function releaseStaleLiveSend(algo, now = Date.now()) {
   if (!algo) return false;
   const vs = algo.vwapState || algo.test1State;
@@ -824,7 +861,12 @@ export function recoverWaitOrderLiveBuy(algo, ctx = {}) {
   const want = parseWaitOrderBuy(algo.lastSignal);
   if (!want) return false;
   const name = String(algo.name || "");
-  if (strategyHasPendingBuy(name) || strategyHasWorkingBuy(name) || strategyHasOpenLot(name)) {
+  if (
+    strategyHasPendingBuy(name) ||
+    strategyHasWorkingBuy(name) ||
+    strategyHasOpenLot(name) ||
+    adminHasOpenOptionLot(algo)
+  ) {
     kickLiveAlgoFlush();
     return false;
   }
@@ -1297,6 +1339,9 @@ function enqueueLiveAlgoOrder(payload) {
     }
   } else if (side === "BUY") {
     const freshAdminEntry = !copyUserId && Boolean(card?.allowFreshLiveEntry);
+    if (!brokerTest && !copyUserId && adminHasOpenOptionLot(card, payload)) {
+      return { ok: true, queued: false, status: "PENDING", duplicate: true, blocked: true };
+    }
     if (!brokerTest && !copyUserId && !freshAdminEntry && strategy && strategyBuyUnresolved(strategy, card)) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
     }
@@ -1313,7 +1358,7 @@ function enqueueLiveAlgoOrder(payload) {
           !isPaperRow(row) &&
           orderBrokerId(row) === brokerId &&
           PositionManager.isOpenNiftyOption(row) &&
-          realStrategyName(row.strategy) === strategy,
+          (realStrategyName(row.strategy) === strategy || sameOneLotFamily(row.strategy, strategy)),
       );
     if (openSameStrategy) {
       return { ok: true, queued: false, status: "PENDING", duplicate: true };
@@ -1606,8 +1651,11 @@ export function queueLiveAlgoOrder(payload) {
       strategyType: deskStamped?.strategyType,
     });
   if (!payload.skipMemberCopy && (!testDesk || shivamCopy)) {
-    for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
-      enqueueLiveAlgoOrder(brokerTestMemberCopy(copy, deskStamped));
+    const copyBuy = liveOrderSide(deskStamped) === "BUY";
+    if (!copyBuy || adminResult?.queued) {
+      for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
+        enqueueLiveAlgoOrder(brokerTestMemberCopy(copy, deskStamped));
+      }
     }
   }
   if (typeof onLiveBookChange === "function") onLiveBookChange();
@@ -2096,8 +2144,9 @@ function positionsForNiftyVwap(algo, mode) {
   const symbol = optionAlgoSymbol(algo);
   const mine = (row) => {
     if (row.copyUserId) return false;
-    if (row.strategy && row.strategy !== algo.name) return false;
-    if (row.strategy === algo.name) return true;
+    const tagged = realStrategyName(row.strategy) || row.strategy;
+    if (tagged && tagged !== algo.name && !sameOneLotFamily(tagged, algo.name)) return false;
+    if (tagged === algo.name || sameOneLotFamily(tagged, algo.name)) return true;
     if (vs.lockedSymbol && row.symbol === vs.lockedSymbol) return true;
     if (PositionManager.isOpenOption(row, symbol)) return true;
     return false;
@@ -3504,7 +3553,9 @@ function liveDesk() {
   clearAdminDailyTradeLog();
   const live = isDhanFeedLive();
   const keep = (row) =>
-    !isGhostCopyOrder(row) && (isPaperRow(row) || (!isSimRow(row) && row?.live !== false));
+    !row?.copyUserId &&
+    !isGhostCopyOrder(row) &&
+    (isPaperRow(row) || (!isSimRow(row) && row?.live !== false));
   const algos = state.algos || [];
   const { ids, names } = strategySets(algos);
   const withActualName = (row) => ({ ...row, strategy: canonicalStrategyName(row.strategy, algos) });

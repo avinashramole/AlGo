@@ -404,6 +404,13 @@ export const NiftyVwapStrategy = {
       algo.lastSignal = "REJECTED";
       return { action: "rejected", result };
     }
+    if (result?.blocked) {
+      state.inFlight = false;
+      state.buyPhase = "";
+      PositionManager.clearOpen(state);
+      algo.lastSignal = "HOLD OPEN";
+      return { action: "skip", reason: "already-open", pick, result };
+    }
     if (result?.duplicate || result?.queued === false) {
       state.inFlight = true;
       state.buyPhase = "entry";
@@ -564,8 +571,8 @@ export const NiftyVwapStrategy = {
       });
     }
 
-    if (!open && (input.positions || []).some((row) => PositionManager.isOpenNiftyOption(row))) {
-      algo.lastSignal = "";
+    if (!open && (input.positions || []).some((row) => PositionManager.isOpenOption(row, config.symbol))) {
+      algo.lastSignal = "HOLD OPEN";
       return { action: "skip", reason: "already-open" };
     }
 

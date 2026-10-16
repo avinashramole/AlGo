@@ -1298,3 +1298,74 @@ test("a blocked member exit does not lock the next copy after they install a tok
   dispatchMemberExitCopies(pos, mapped, { enqueueLiveOrder: (copy) => second.push(copy) });
   assert.equal(second.filter((row) => row.copyUserId === user.id).length, 1);
 });
+
+test("NIFTY first candle skips copy BUY when an admin lot is already open", async () => {
+  const user = { id: "u-nifty-hold-open", name: "Hold Open", email: "holdopen@t2s.app", role: "user" };
+  selectMemberBroker({ user, brokerId: "upstox" });
+  installMemberBroker({ user, brokerId: "upstox", clientId: "UPXHOLD", accessToken: "hold-upstox-token" });
+  const {
+    createAlgo,
+    deleteAlgo,
+    drainPendingLiveAlgoOrders,
+    queueLiveAlgoOrder,
+    replaceDhanBook,
+    snapshot,
+    toggleAlgo,
+    withLiveAlgo,
+  } = await import("./market.js");
+  const created = createAlgo({
+    name: "NIFTY HOLD OPEN COPY",
+    kind: "nifty-first-candle",
+    runMode: "live",
+    mappingScope: "both",
+    mappedClientIds: [user.id],
+  });
+  try {
+    toggleAlgo(created.id, { enabled: true });
+    withLiveAlgo(created.id, (algo) => {
+      algo.mappedClientIds = [user.id];
+      algo.mappingScope = "both";
+      return algo;
+    });
+    payMember(user, { id: created.id, name: created.name, mappingScope: "both", mappedClientIds: [user.id] });
+    replaceDhanBook([
+      {
+        id: "dhan-pos-nifty-pe-hold",
+        symbol: "NIFTY 22950 PE",
+        type: "BUY",
+        qty: 65,
+        avg: 126.65,
+        ltp: 109.5,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "PE",
+        strike: 22950,
+        live: true,
+      },
+    ]);
+    drainPendingLiveAlgoOrders();
+    const result = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      symbol: "NIFTY 23000 CE",
+      qty: 65,
+      option: "CE",
+      strike: 23000,
+      kind: "option",
+      brokerId: "dhan",
+    });
+    assert.equal(result.queued, false);
+    const queued = drainPendingLiveAlgoOrders();
+    assert.equal(
+      queued.some((row) => !row.copyUserId && String(row.option || "").toUpperCase() === "CE"),
+      false,
+    );
+    assert.equal(queued.some((row) => row.copyUserId === user.id), false);
+    assert.equal(snapshot().orders.some((row) => row.copyUserId === user.id), false);
+    assert.equal(snapshot().positions.some((row) => row.copyUserId), false);
+  } finally {
+    replaceDhanBook([]);
+    drainPendingLiveAlgoOrders();
+    deleteAlgo(created.id);
+  }
+});

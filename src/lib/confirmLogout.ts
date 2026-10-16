@@ -17,11 +17,15 @@ export function shouldAskLogoutConfirm() {
 
 export function confirmLogout() {
   if (!shouldAskLogoutConfirm()) return true;
-  if (typeof window === "undefined" || typeof window.confirm !== "function") return true;
-  return window.confirm(LOGOUT_CONFIRM_MESSAGE);
+  return false;
 }
 
-export function requestLogout(logout: () => void) {
-  if (!confirmLogout()) return;
-  logout();
+export function requestLogout(logout: () => void, ask?: (next: () => void) => void) {
+  if (!shouldAskLogoutConfirm()) {
+    logout();
+    return;
+  }
+  if (typeof ask === "function") {
+    ask(logout);
+  }
 }
