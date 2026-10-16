@@ -48,7 +48,7 @@ export const SHIVAM_T2S_TIMEFRAMES = {
   "60m": 60,
 };
 
-export const SHIVAM_STRIKE_POLICIES = ["ATM", "ITM", "OTM"];
+export const SHIVAM_STRIKE_POLICIES = ["ATM"];
 export const SHIVAM_VALUE_MODES = ["percentage", "points"];
 export const SHIVAM_CAPITAL_MODES = ["amount", "percent"];
 export const SHIVAM_CE_CONFIRM_COLOR = "GREEN";
@@ -122,9 +122,8 @@ function modeOf(value, allowed, fallback) {
   return allowed.includes(raw) ? raw : fallback;
 }
 
-function strikePolicyOf(value) {
-  const raw = String(value || "ATM").trim().toUpperCase();
-  return SHIVAM_STRIKE_POLICIES.includes(raw) ? raw : "ATM";
+function strikePolicyOf(_value) {
+  return "ATM";
 }
 
 export function shivamT2sConfig(algo = {}) {
@@ -167,7 +166,7 @@ export function shivamT2sConfig(algo = {}) {
     capitalValue: Math.max(0, num(algo.capitalValue, DEFAULT_SHIVAM_T2S_CONFIG.capitalValue)),
     autoSizeLots: algo.autoSizeLots === true,
     strikePolicy: strikePolicyOf(algo.strikePolicy),
-    strikeOffset: Math.max(0, Math.min(8, Math.round(num(algo.strikeOffset, 0)))),
+    strikeOffset: 0,
     tickSize: Math.max(0.01, num(algo.tickSize, DEFAULT_SHIVAM_T2S_CONFIG.tickSize)),
     brokeragePerLot: Math.max(0, num(algo.brokeragePerLot, DEFAULT_SHIVAM_T2S_CONFIG.brokeragePerLot)),
     expiryKind: mcx ? "monthly" : String(algo.expiryKind || "weekly") === "monthly" ? "monthly" : "weekly",
@@ -222,8 +221,8 @@ export function defaultShivamT2sAlgo(patch = {}) {
     symbol: cfg.symbol,
     instrument: "option",
     optionType: "CE",
-    strikePolicy: cfg.strikePolicy,
-    strikeOffset: cfg.strikeOffset,
+    strikePolicy: "ATM",
+    strikeOffset: 0,
     side: "BUY",
     lots: cfg.lots,
     ceTimeframe: cfg.ceTimeframe,

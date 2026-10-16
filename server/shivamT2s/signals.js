@@ -37,22 +37,33 @@ export function barIsValid(bar) {
   return open > 0 && close > 0 && high > 0 && low > 0 && Number(bar?.time) > 0;
 }
 
-export function evaluateShivamEntry({ indexBar, ceBar, peBar } = {}) {
+export function isDojiColor(color) {
+  return String(color || "") === "doji";
+}
+
+export function evaluateShivamEntry({ indexBar, futureBar, ceBar, peBar } = {}) {
+  const futBar = futureBar || indexBar;
   const indexColor = candleColor(indexBar);
+  const futureColor = candleColor(futBar);
   const ceColor = candleColor(ceBar);
   const peColor = candleColor(peBar);
-  const indexReady = barIsValid(indexBar) && indexColor && indexColor !== "doji";
-  const ceReady = barIsValid(ceBar) && ceColor === "green";
-  const peReady = barIsValid(peBar) && peColor === "green";
+  const indexReady = barIsValid(indexBar) && indexColor && !isDojiColor(indexColor);
+  const futureReady = barIsValid(futBar) && futureColor && !isDojiColor(futureColor);
+  const ceReady = barIsValid(ceBar) && ceColor === "green" && !isDojiColor(ceColor);
+  const peReady = barIsValid(peBar) && peColor === "green" && !isDojiColor(peColor);
   return {
     indexColor,
+    futureColor,
     ceColor,
     peColor,
-    buyCe: indexReady && indexColor === "green" && ceReady,
-    buyPe: indexReady && indexColor === "red" && peReady,
+    buyCe: indexReady && futureReady && indexColor === "green" && futureColor === "green" && ceReady,
+    buyPe: indexReady && futureReady && indexColor === "red" && futureColor === "red" && peReady,
     indexOpen: Number(indexBar?.open) || 0,
     indexClose: Number(indexBar?.close) || 0,
+    futureOpen: Number(futBar?.open) || 0,
+    futureClose: Number(futBar?.close) || 0,
     indexBarTime: Number(indexBar?.time) || 0,
+    futureBarTime: Number(futBar?.time) || 0,
     ceBarTime: Number(ceBar?.time) || 0,
     peBarTime: Number(peBar?.time) || 0,
   };

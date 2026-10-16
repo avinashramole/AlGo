@@ -226,7 +226,7 @@ export function buildShivamReport({ algo, user, orders = [], positions = [], clo
       ceTimeframe: cfg.ceTimeframe,
       peTimeframe: cfg.peTimeframe,
       indexTimeframe: cfg.indexTimeframe,
-      strikePolicy: cfg.strikePolicy,
+      strikePolicy: "ATM",
       slMode: cfg.slMode,
       slValue: cfg.slValue,
       targetMode: cfg.targetMode,

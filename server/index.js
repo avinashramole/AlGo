@@ -1100,7 +1100,7 @@ function publicShivamSignal(algo) {
           direction: vs.option ? `BUY ${vs.option}` : "",
           symbol: vs.symbol || "",
           securityId: vs.securityId || "",
-          strike: vs.strike || 0,
+          strike: vs.atmStrike || vs.strike || 0,
           expiry: vs.expiry || "",
           premium: vs.premium || 0,
           quoteAt: vs.quoteAt || 0,
@@ -1113,6 +1113,7 @@ function publicShivamSignal(algo) {
           targetPrice: vs.targetPrice || 0,
           slStatus: vs.slStatus || "",
           indexBarTime: vs.indexBarTime || vs.lastIndexBarTime || 0,
+          futureBarTime: vs.futureBarTime || vs.lastFutureBarTime || 0,
           ceBarTime: vs.ceBarTime || vs.lastCeBarTime || 0,
           peBarTime: vs.peBarTime || vs.lastPeBarTime || 0,
         }
