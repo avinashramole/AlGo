@@ -14,12 +14,11 @@ import { getMemberDesk } from "../api/client";
 import { LoginPasswordCard } from "../components/desk/LoginPasswordCard";
 import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
-import { requestLogout } from "../lib/confirmLogout";
 import { useTheme } from "../context/ThemeContext";
 import { isAdminUser } from "../lib/roles";
 
 export function Profile() {
-  const { user, updateProfile, refreshMe, logout } = useAuth();
+  const { user, updateProfile, refreshMe, requestLogout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const admin = isAdminUser(user);
   const [name, setName] = useState(user?.name || "");
@@ -136,7 +135,7 @@ export function Profile() {
           />
           <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
           <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Desk settings" />
-          <SettingsRow icon={LogOut} label="Logout" danger onClick={() => requestLogout(logout)} />
+          <SettingsRow icon={LogOut} label="Logout" danger onClick={requestLogout} />
         </PhoneCard>
       ) : null}
     </div>

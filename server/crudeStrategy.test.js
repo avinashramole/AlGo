@@ -772,7 +772,7 @@ test("a mapped user refusal does not change the crude strategy signal", () => {
   }
 });
 
-test("a user copy stays on the admin order book after the Dhan refresh", () => {
+test("a user copy stays off the admin order book after the Dhan refresh", () => {
   const booked = bookMemberCopyOnAdminDesk(
     {
       copyUserId: "u-show",
@@ -806,7 +806,11 @@ test("a user copy stays on the admin order book after the Dhan refresh", () => {
   ]);
   const orders = snapshot().orders;
   assert.ok(orders.some((row) => row.id === "admin-crude-1"));
-  assert.ok(orders.some((row) => row.copyUserId === "u-show" && row.status === "REJECTED" && row.symbol === "CRUDEOIL 6100 CE"));
+  assert.equal(
+    orders.some((row) => row.copyUserId === "u-show"),
+    false,
+    "mapped-user copy tickets stay off the admin order book",
+  );
 });
 
 test("an accepted crude SL SELL clears the open lot so another SELL is not sent", () => {

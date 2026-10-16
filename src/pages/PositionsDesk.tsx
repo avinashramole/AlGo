@@ -209,8 +209,8 @@ export function PositionsDesk({ embedded = false, book }: { embedded?: boolean; 
     }
   };
 
-  const keepSnap = (row: { paper?: boolean; brokerId?: string; sim?: boolean; testDesk?: boolean }) =>
-    !row.testDesk && (book === "paper" ? isPaperTrade(row) : book === "live" ? isLiveBrokerTrade(row) : !isSimTrade(row));
+  const keepSnap = (row: { paper?: boolean; brokerId?: string; sim?: boolean; testDesk?: boolean; copyUserId?: string }) =>
+    !row.testDesk && !row.copyUserId && (book === "paper" ? isPaperTrade(row) : book === "live" ? isLiveBrokerTrade(row) : !isSimTrade(row));
   const liveMaster = useMemo(
     () => (data.positions || []).filter(keepSnap).map(asLiveLedgerPosition),
     [data.positions, book],
@@ -223,8 +223,8 @@ export function PositionsDesk({ embedded = false, book }: { embedded?: boolean; 
   const ledgers = useMemo(() => {
     const rows: Array<{ ledger: PositionLedger; positions: LedgerPosition[]; mtm: number; realized: number; unrealized: number }> = [];
     const useBrokerMtm = Number.isFinite(desk.master.brokerMtm) && book !== "paper";
-    const keepLedger = (row: LedgerPosition & { testDesk?: boolean }) =>
-      !row.testDesk && (book === "paper" ? isPaperTrade(row) : book === "live" ? isLiveBrokerTrade(row) : !isSimTrade(row));
+    const keepLedger = (row: LedgerPosition & { testDesk?: boolean; copyUserId?: string }) =>
+      !row.testDesk && !row.copyUserId && (book === "paper" ? isPaperTrade(row) : book === "live" ? isLiveBrokerTrade(row) : !isSimTrade(row));
     const masterSource = (desk.master.positions || []).filter(keepLedger);
     const closedById = new Map<string, LedgerPosition>();
     const closedSource = useBrokerMtm

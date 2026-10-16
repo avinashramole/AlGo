@@ -4,7 +4,6 @@ import { Link, useLocation } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
 import { Avatar } from "../phone/PhoneUi";
 import { useAuth } from "../../context/AuthContext";
-import { requestLogout } from "../../lib/confirmLogout";
 import { useMarket } from "../../context/MarketContext";
 import { useTheme } from "../../context/ThemeContext";
 import { isAdminUser, pageTitleForPath } from "../../lib/roles";
@@ -13,7 +12,7 @@ import { adminLiveTape, cn, formatIstClock, formatMobile, headerBrokerLabel, isM
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { logout, user } = useAuth();
+  const { logout, requestLogout, user } = useAuth();
   const admin = isAdminUser(user);
   const { data } = useMarket();
   const location = useLocation();
@@ -187,7 +186,14 @@ export function Header() {
                 <Link to="/profile" onClick={() => setOpen(false)} className="mt-4 flex h-10 items-center justify-center rounded-xl bg-brand-50 text-sm font-semibold text-brand-500">
                   Open profile
                 </Link>
-                <button type="button" onClick={() => requestLogout(logout)} className="mt-2 flex h-10 w-full items-center justify-center rounded-xl bg-rose-50 text-sm font-semibold text-down">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    requestLogout();
+                  }}
+                  className="mt-2 flex h-10 w-full items-center justify-center rounded-xl bg-rose-50 text-sm font-semibold text-down"
+                >
                   Log out
                 </button>
               </div>

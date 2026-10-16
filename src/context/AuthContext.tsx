@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { LogoutConfirmDialog } from "../components/layout/LogoutConfirm";
+import { shouldAskLogoutConfirm } from "../lib/confirmLogout";
 import {
   enableThumb as enableThumbApi,
   getMe,
@@ -63,6 +65,7 @@ type AuthContextValue = {
   refreshMe: () => Promise<void>;
   hasThumb: boolean;
   logout: () => void;
+  requestLogout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -292,6 +295,7 @@ async function listenAppGoogleReturn(apply: (href: string) => void) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => bootFromWindow());
   const [hasThumb, setHasThumb] = useState(() => Boolean(localStorage.getItem("t2s-thumb-token")));
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [ready, setReady] = useState(() => {
     const token = readToken();
     if (token === "t2s-offline-token") return true;
@@ -302,6 +306,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistUser(next);
     setUser(next);
   }, []);
+
+  const logout = useCallback(() => {
+    void (async () => {
+      await logoutSession();
+      clearStoredSession();
+      setUser(null);
+    })();
+  }, []);
+
+  const requestLogout = useCallback(() => {
+    if (shouldAskLogoutConfirm()) {
+      setLogoutOpen(true);
+      return;
+    }
+    logout();
+  }, [logout]);
 
   const refreshMe = useCallback(async () => {
     const token = readToken();
@@ -503,18 +523,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       applyUser,
       refreshMe,
-      logout: () => {
-        void (async () => {
-          await logoutSession();
-          clearStoredSession();
-          setUser(null);
-        })();
-      },
+      logout,
+      requestLogout,
     }),
-    [user, ready, hasThumb, applyUser, refreshMe],
+    [user, ready, hasThumb, applyUser, refreshMe, logout, requestLogout],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {logoutOpen ? (
+        <LogoutConfirmDialog
+          onCancel={() => setLogoutOpen(false)}
+          onConfirm={() => {
+            setLogoutOpen(false);
+            logout();
+          }}
+        />
+      ) : null}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

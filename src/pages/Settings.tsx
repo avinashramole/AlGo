@@ -1,12 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { connectGmail, getGmailStatus } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { requestLogout } from "../lib/confirmLogout";
 import { useMarket } from "../context/MarketContext";
 import { hasDhanQuotes } from "../lib/format";
 
 export function Settings() {
-  const { user, logout } = useAuth();
+  const { user, requestLogout } = useAuth();
   const { data } = useMarket();
   const [mailConnected, setMailConnected] = useState(false);
   const [mailFrom, setMailFrom] = useState("");
@@ -88,7 +87,7 @@ export function Settings() {
         </form>
         {mailNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{mailNote}</p> : null}
       </section>
-      <button type="button" onClick={() => requestLogout(logout)} className="h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
+      <button type="button" onClick={requestLogout} className="h-10 rounded-xl bg-rose-50 px-4 text-sm font-semibold text-down">
         Log out
       </button>
     </div>

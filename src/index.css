@@ -583,6 +583,18 @@ main > .desk-page {
   background: #071018;
 }
 
+@media (max-width: 767px) {
+  .desk-overlay[data-logout-confirm="true"] {
+    padding: 0.35rem;
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+    align-items: flex-end;
+  }
+
+  .desk-overlay[data-logout-confirm="true"] .desk-sheet {
+    width: 100%;
+  }
+}
+
 @media (max-width: 639px) {
   .desk-overlay {
     padding: 0.35rem;
@@ -629,6 +641,16 @@ html.t2s-hybrid [data-user-home] [data-home-shortcuts] {
 
 html.t2s-hybrid .t2s-desktop-only {
   display: none !important;
+}
+
+html.t2s-hybrid .desk-overlay[data-logout-confirm="true"] {
+  padding: 0.35rem;
+  padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  align-items: flex-end;
+}
+
+html.t2s-hybrid .desk-overlay[data-logout-confirm="true"] .desk-sheet {
+  width: 100%;
 }
 
 html.t2s-hybrid .desk-header {

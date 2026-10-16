@@ -2,11 +2,10 @@ import { Headphones, LogOut, Moon, Sun } from "lucide-react";
 import { MemberAccountSetup } from "../components/desk/MemberAccountSetup";
 import { PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
-import { requestLogout } from "../lib/confirmLogout";
 import { useTheme } from "../context/ThemeContext";
 
 export function MemberSettings() {
-  const { logout } = useAuth();
+  const { requestLogout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -24,7 +23,7 @@ export function MemberSettings() {
           onClick={toggleTheme}
         />
         <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
-        <SettingsRow icon={LogOut} label="Logout" danger onClick={() => requestLogout(logout)} />
+        <SettingsRow icon={LogOut} label="Logout" danger onClick={requestLogout} />
       </PhoneCard>
     </div>
   );

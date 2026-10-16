@@ -109,7 +109,7 @@ test("today's filled, rejected, and failed orders stay on the book when a Dhan p
   assert.match(failed?.reason || "", /Order failed/);
   assert.equal(orders.some((row) => row.id === "pe-22600-pend"), false);
   assert.equal(orders.some((row) => row.id === "pe-old-fill"), false);
-  assert.equal(orders.some((row) => row.copyUserId === "u-feed" && row.status === "REJECTED"), true);
+  assert.equal(orders.some((row) => row.copyUserId === "u-feed"), false);
   assert.equal(orders.some((row) => row.id === "other-pending" && row.status === "PENDING"), true);
 
   replaceDhanOrders([

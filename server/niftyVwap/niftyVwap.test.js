@@ -616,6 +616,30 @@ test("live exit does not treat a duplicate queue as a new close", () => {
   assert.equal(result.duplicate, true);
 });
 
+test("a blocked live BUY while a lot is open stays HOLD OPEN", () => {
+  const algo = defaultNiftyVwapAlgo({ name: "NIFTY" });
+  const result = NiftyVwapStrategy.tick({
+    algo,
+    now: T0 + 6 * BAR,
+    feedLive: true,
+    minutesToClose: 120,
+    futuresBars: risingFutures(6),
+    ceBars: optionAboveVwap(6, "CE"),
+    peBars: optionAboveVwap(6, "PE"),
+    spot: 23000,
+    step: 50,
+    expiry: "2026-10-19",
+    ceLtp: 91.3,
+    peLtp: 109.5,
+    positions: [],
+    adapter: { place: () => ({ ok: true, queued: false, duplicate: true, blocked: true, status: "PENDING" }), exit: () => ({}) },
+  });
+  assert.equal(result.action, "skip");
+  assert.equal(result.reason, "already-open");
+  assert.equal(algo.vwapState.inFlight, false);
+  assert.match(String(algo.lastSignal || ""), /HOLD OPEN/);
+});
+
 test("duplicate live queue does not mark the strategy as filled", () => {
   const algo = defaultNiftyVwapAlgo({ name: "Dup Queue" });
   const result = NiftyVwapStrategy.tick({

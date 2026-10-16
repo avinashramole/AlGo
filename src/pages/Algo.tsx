@@ -688,7 +688,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
                 <AlgoCard
                   key={algo.id}
                   algo={algo}
-                  orders={(data.orders || []).filter((row) => belongsToDeskAlgo(row, algo))}
+                  orders={(data.orders || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId)}
                   clientIds={knownClientIds}
                   positions={uniqueOpenContracts(
                     (data.positions || []).filter((row) => belongsToDeskAlgo(row, algo) && !row.copyUserId),

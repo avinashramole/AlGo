@@ -337,3 +337,185 @@ test("a FILLED SL SELL blocks another close of the same crude contract", () => {
   replaceDhanBook([]);
   replaceDhanOrders([]);
 });
+
+test("NIFTY first candle does not queue a CE while a PE lot is open", () => {
+  replaceDhanBook([
+    {
+      id: "dhan-pos-nifty-pe",
+      symbol: "NIFTY 22950 PE",
+      type: "BUY",
+      qty: 65,
+      avg: 126.65,
+      ltp: 109.5,
+      strategy: "NIFTY",
+      brokerId: "dhan",
+      option: "PE",
+      strike: 22950,
+      live: true,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "NIFTY",
+    side: "BUY",
+    symbol: "NIFTY 23000 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23000,
+    kind: "option",
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, false);
+  assert.equal(result.duplicate, true);
+  assert.equal(result.blocked, true);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.some((row) => !row.copyUserId && row.option === "CE"), false);
+  replaceDhanBook([]);
+});
+
+test("a first-candle alias lot still blocks the next NIFTY BUY", () => {
+  replaceDhanBook([
+    {
+      id: "dhan-pos-nifty-alias",
+      symbol: "NIFTY 22950 PE",
+      type: "BUY",
+      qty: 65,
+      avg: 126.65,
+      ltp: 109.5,
+      strategy: "NIFTY 5m first candle",
+      brokerId: "dhan",
+      option: "PE",
+      strike: 22950,
+      live: true,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "NIFTY",
+    side: "BUY",
+    symbol: "NIFTY 23000 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23000,
+    kind: "option",
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, false);
+  assert.equal(result.blocked, true);
+  replaceDhanBook([]);
+  drainPendingLiveAlgoOrders();
+});
+
+test("an untagged NIFTY lot still blocks the next first-candle BUY", () => {
+  replaceDhanBook([
+    {
+      id: "dhan-pos-nifty-bare",
+      symbol: "NIFTY 22950 PE",
+      type: "BUY",
+      qty: 65,
+      avg: 126.65,
+      ltp: 109.5,
+      brokerId: "dhan",
+      option: "PE",
+      strike: 22950,
+      live: true,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "NIFTY",
+    side: "BUY",
+    symbol: "NIFTY 23000 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23000,
+    kind: "option",
+    brokerId: "dhan",
+  });
+  assert.equal(result.queued, false);
+  assert.equal(result.blocked, true);
+  replaceDhanBook([]);
+  drainPendingLiveAlgoOrders();
+});
+
+test("allowFreshLiveEntry cannot open a second NIFTY first-candle lot", async () => {
+  const { createAlgo, deleteAlgo, withLiveAlgo } = await import("./market.js");
+  const created = createAlgo({
+    name: `NIFTY fresh ${Date.now()}`,
+    kind: "nifty-first-candle",
+    runMode: "live",
+  });
+  try {
+    withLiveAlgo(created.id, (algo) => {
+      algo.allowFreshLiveEntry = true;
+      return algo;
+    });
+    replaceDhanBook([
+      {
+        id: "dhan-pos-nifty-fresh",
+        symbol: "NIFTY 22950 PE",
+        type: "BUY",
+        qty: 65,
+        avg: 126.65,
+        ltp: 109.5,
+        strategy: created.name,
+        brokerId: "dhan",
+        option: "PE",
+        strike: 22950,
+        live: true,
+      },
+    ]);
+    drainPendingLiveAlgoOrders();
+    const result = queueLiveAlgoOrder({
+      strategy: created.name,
+      side: "BUY",
+      symbol: "NIFTY 23000 CE",
+      qty: 65,
+      option: "CE",
+      strike: 23000,
+      kind: "option",
+      brokerId: "dhan",
+    });
+    assert.equal(result.queued, false);
+    assert.equal(result.blocked, true);
+  } finally {
+    replaceDhanBook([]);
+    drainPendingLiveAlgoOrders();
+    deleteAlgo(created.id);
+  }
+});
+
+test("a hedge BUY can still add the second NIFTY leg", () => {
+  replaceDhanBook([
+    {
+      id: "dhan-pos-hedge-pe",
+      symbol: "NIFTY 22950 PE",
+      type: "BUY",
+      qty: 65,
+      avg: 120,
+      ltp: 110,
+      strategy: "hedge-test",
+      brokerId: "dhan",
+      option: "PE",
+      strike: 22950,
+      live: true,
+    },
+  ]);
+  drainPendingLiveAlgoOrders();
+  const result = queueLiveAlgoOrder({
+    strategy: "hedge-test",
+    side: "BUY",
+    symbol: "NIFTY 23000 CE",
+    qty: 65,
+    option: "CE",
+    strike: 23000,
+    kind: "option",
+    brokerId: "dhan",
+    allowHedge: true,
+    role: "hedge",
+  });
+  assert.equal(result.queued, true);
+  const queued = drainPendingLiveAlgoOrders();
+  assert.equal(queued.some((row) => row.strategy === "hedge-test" && row.option === "CE" && !row.copyUserId), true);
+  replaceDhanBook([]);
+});

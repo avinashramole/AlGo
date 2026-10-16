@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import { Briefcase, Building2, Cpu, FileText, FlaskConical, Home, LogOut, User } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { requestLogout } from "../../lib/confirmLogout";
 import { isNativeHybrid } from "../../lib/hybrid";
 import { isAdminUser } from "../../lib/roles";
 import { cn } from "../../lib/format";
@@ -49,7 +48,7 @@ function NavItems({ items }: { items: Array<{ to: string; label: string; icon: L
 }
 
 export function MobileNav() {
-  const { user, logout } = useAuth();
+  const { user, requestLogout } = useAuth();
   const admin = isAdminUser(user);
   const apkMember = isNativeHybrid() && !admin;
   const visible = tabs.filter((item) => (admin ? !item.member : !item.admin));
@@ -65,7 +64,7 @@ export function MobileNav() {
           <button
             type="button"
             data-apk-logout="true"
-            onClick={() => requestLogout(logout)}
+            onClick={requestLogout}
             className="flex min-h-12 max-w-full flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] font-semibold leading-tight text-down"
           >
             <LogOut size={18} />
