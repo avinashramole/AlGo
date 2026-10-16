@@ -127,6 +127,11 @@ export function Login() {
     setIdentifier("");
   };
 
+  const openSignin = () => {
+    setPage("signin");
+    resetNotice();
+  };
+
   const applyOtpResult = (result: { to?: string; hint?: string; devOtp?: string }) => {
     setSentTo(result.to || identifier);
     setHint(result.hint || "Enter the 6-digit code we sent.");
@@ -345,40 +350,8 @@ export function Login() {
             <div className="t2s-login-avatar">
               <BrandMark variant="stacked" size="sm" className="t2s-login-logo" />
             </div>
-            {page === "reset" ? (
-              <>
-                <h2 className="t2s-login-title">{title}</h2>
-                {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
-              </>
-            ) : (
-              <>
-                <div className="t2s-auth-tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={page === "signin"}
-                    className={page === "signin" ? "on" : ""}
-                    onClick={() => {
-                      setPage("signin");
-                      resetNotice();
-                    }}
-                  >
-                    Login
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={page === "signup"}
-                    className={page === "signup" ? "on" : ""}
-                    onClick={openSignup}
-                  >
-                    Register
-                  </button>
-                </div>
-                <h2 className="t2s-login-title">{title}</h2>
-                {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
-              </>
-            )}
+            <h2 className="t2s-login-title">{title}</h2>
+            {sub ? <p className="t2s-login-sub">{sub}</p> : <div className="t2s-login-sub t2s-login-sub-empty" />}
 
             <form
               onSubmit={(event) => {
@@ -506,6 +479,27 @@ export function Login() {
                 {page === "signin" && !sentTo && !loading ? <ArrowRight size={18} /> : null}
               </button>
             </form>
+
+            <button
+              type="button"
+              className="t2s-switch"
+              data-auth-switch={page === "signup" || page === "reset" ? "signin" : "signup"}
+              onClick={page === "signup" || page === "reset" ? openSignin : openSignup}
+            >
+              {page === "signup" ? (
+                <>
+                  Already have an account? <b>Login</b>
+                </>
+              ) : page === "reset" ? (
+                <>
+                  Remembered it? <b>Login</b>
+                </>
+              ) : (
+                <>
+                  Don&apos;t have an account? <b>Register</b>
+                </>
+              )}
+            </button>
 
             {page === "signin" && !sentTo ? (
               <>

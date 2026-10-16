@@ -45,7 +45,7 @@ html:has(.t2s-login) #root {
   display: none !important;
 }
 
-.t2s-auth-tabs button:focus-visible,
+.t2s-switch:focus-visible,
 .t2s-submit:focus-visible,
 .t2s-alt-btn:focus-visible,
 .t2s-apk-download:focus-visible,
@@ -190,33 +190,6 @@ html:has(.t2s-login) #root {
 .t2s-login-wordmark {
   justify-content: center;
   margin: 4px auto 18px;
-}
-
-.t2s-auth-tabs {
-  display: flex;
-  margin: 0 auto 18px;
-  padding: 0;
-  width: 100%;
-  gap: 10px;
-  background: transparent;
-}
-
-.t2s-auth-tabs button {
-  flex: 1;
-  height: 44px;
-  border: 1.5px solid var(--orange);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--orange);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.t2s-auth-tabs button.on {
-  background: var(--orange);
-  color: #fff;
-  box-shadow: 0 8px 18px rgba(255, 105, 0, 0.28);
 }
 
 .t2s-login-avatar {
@@ -436,11 +409,14 @@ html:has(.t2s-login) #root {
 .t2s-switch {
   display: block;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 20px;
+  padding: 2px 0;
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
   text-align: center;
 }

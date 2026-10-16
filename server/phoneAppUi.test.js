@@ -136,7 +136,12 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(loginPassword, /id="login-password"/);
   assert.match(loginPassword, /location\.hash !== "#login-password"/);
   assert.match(loginPassword, /scrollIntoView/);
-  assert.match(login, /t2s-auth-tabs/);
+  assert.doesNotMatch(login, /t2s-auth-tabs/);
+  assert.doesNotMatch(login, /role="tablist"/);
+  assert.match(login, /t2s-switch/);
+  assert.match(login, /Don&apos;t have an account\?/);
+  assert.match(login, /<b>Register<\/b>/);
+  assert.match(login, /Already have an account\?/);
   assert.match(login, /Login with Google/);
   assert.match(login, /Welcome Back!/);
   assert.match(login, /Sign in to your Trade2Smart account/);
@@ -155,6 +160,8 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(login, /login-hero-bg/);
   const loginCss = fs.readFileSync(path.join(root, "src/login.css"), "utf8");
   assert.match(loginCss, /login-page-bg\.jpg/);
+  assert.match(loginCss, /\.t2s-switch/);
+  assert.doesNotMatch(loginCss, /\.t2s-auth-tabs/);
   const liveBook = fs.readFileSync(path.join(root, "src/components/desk/MemberLiveBook.tsx"), "utf8");
   const ordersPage = fs.readFileSync(path.join(root, "src/pages/Orders.tsx"), "utf8");
   const reportsPage = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
