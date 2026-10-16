@@ -41,6 +41,22 @@ test("NIFTY nearest-expiry ATM uses this week's weekly, not the pinned 3 Nov des
   if (WEEKLY < NOV3) assert.notEqual(expiry, NOV3);
 });
 
+test("weekly PE 22750 contract id survives when the desk later pins 3 Nov", () => {
+  const weekly = WEEKLY || "2026-10-20";
+  setOptionDesk({
+    symbol: "NIFTY",
+    expiry: weekly,
+    expiries: [weekly, NOV3],
+    rows: [
+      { strike: 22750, callId: "weekly-ce-22750", putId: "weekly-pe-22750", callLtp: 80, putLtp: 95, atm: true },
+    ],
+    source: "dhan",
+  });
+  pinNov3Desk();
+  assert.equal(optionLegId(22750, "PE", "NIFTY", weekly), "weekly-pe-22750");
+  assert.notEqual(optionLegId(22750, "PE", "NIFTY", weekly), "nov3-pe-25000");
+});
+
 test("NIFTY live admin order uses this week's contract, not the 3 Nov desk id", () => {
   pinNov3Desk();
   seedOptionScripForTests([
