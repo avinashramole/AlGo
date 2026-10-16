@@ -1698,6 +1698,13 @@ function MapClientsModal({ algo, onClose, onSaved }: { algo: AlgoStrategy; onClo
               <option value="clients">Selected clients only</option>
             </select>
           </label>
+          <p className="text-[11px] font-semibold leading-snug text-slate-500">
+            {scope === "master"
+              ? "Orders go to the admin broker only. Mapped clients do not receive a copy."
+              : scope === "clients"
+                ? "Admin stays on the signal only. Live orders go to enrolled mapped clients on their own brokers — not the admin account."
+                : "Admin broker and selected clients both receive the live order."}
+          </p>
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {clients.map((row) => {
               const checked = picked.includes(row.id);

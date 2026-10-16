@@ -51,6 +51,8 @@ test("Algo Test page, admin menu, and paper-only builder are wired", () => {
   assert.match(algo, /Paper test only · no live · no copy/);
   assert.match(algo, /isolated && !shivam/);
   assert.match(algo, /data-shivam-map="true"/);
+  assert.match(algo, /Selected clients only/);
+  assert.match(algo, /Live orders go to enrolled mapped clients on their own brokers/);
   assert.match(algo, /Latest activity/);
   assert.match(algo, /data-latest-activity="true"/);
   assert.match(algo, /data-shivam-activity/);
