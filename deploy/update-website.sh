@@ -3,6 +3,9 @@
 # Chrome reads /var/www/trade2smart. Restarting t2s alone does not change the page.
 # Always download THIS script from GitHub first. The copy already on the VPS is often old
 # and only sparse-updates a few files, so last deploys built a stale desk.
+# Do not pipe https://trade2smart.com/deploy/github.sh until this file exists in the webroot
+# (nginx otherwise serves index.html and bash errors on `<!doctype html>`).
+#   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/github.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/avinashramole/AlGo/main/deploy/update-website.sh -o /tmp/update-website.sh
 #   bash /tmp/update-website.sh main
 # One TEST2 Script window (do not deploy main until this is merged):
@@ -265,6 +268,10 @@ fi
 
 mkdir -p "$WEBROOT"
 /bin/cp -af "$HOME_DIR/dist/." "$WEBROOT/"
+mkdir -p "$WEBROOT/deploy"
+if [ -f "$HOME_DIR/deploy/github.sh" ]; then
+  cp -f "$HOME_DIR/deploy/github.sh" "$WEBROOT/deploy/github.sh"
+fi
 chmod -R a+rX "$WEBROOT" || true
 chown -R nginx:nginx "$WEBROOT" 2>/dev/null || true
 

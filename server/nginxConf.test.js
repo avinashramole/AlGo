@@ -133,6 +133,20 @@ test("website deploy accepts first-candle 5m 15m 30m 1H custom and does not requ
   assert.doesNotMatch(src, /FIRST_CANDLE_TIMEFRAMES\\\[algo\.timeframe\\\]/);
 });
 
+test("nginx serves /deploy/github.sh as a script and never falls back to index.html", () => {
+  const text = render("/tmp/t2s-no-certs");
+  assert.match(text, /location = \/deploy\/github\.sh/);
+  assert.match(text, /try_files \/deploy\/github\.sh =404/);
+  const github = fs.readFileSync(path.join(deployDir, "github.sh"), "utf8");
+  assert.match(github, /^#!/);
+  assert.doesNotMatch(github, /<!doctype html>/i);
+  assert.match(github, /raw\.githubusercontent\.com\/avinashramole\/AlGo\/\$\{BRANCH\}\/deploy\/update-website\.sh/);
+  const published = fs.readFileSync(path.join(deployDir, "..", "public", "deploy", "github.sh"), "utf8");
+  assert.equal(published, github);
+  const updater = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
+  assert.match(updater, /WEBROOT\/deploy\/github\.sh/);
+});
+
 test("website deploy hard-resets to origin/branch instead of a stale sparse pull", () => {
   const src = fs.readFileSync(path.join(deployDir, "update-website.sh"), "utf8");
   assert.match(src, /git reset --hard HEAD \|\| true/);
