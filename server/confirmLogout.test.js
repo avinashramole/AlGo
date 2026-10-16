@@ -28,6 +28,8 @@ test("native iOS and Android logout buttons ask for confirmation", () => {
   assert.doesNotMatch(settings, /onPress=\{\(\) => void logout\(\)\}/);
   assert.match(nav, /onClick=\{requestLogout\}/);
   assert.match(nav, /data-apk-logout="true"/);
+  assert.match(header, /const \{ requestLogout, user \}/);
+  assert.doesNotMatch(header, /const \{ logout,/);
   assert.match(header, /requestLogout\(\)/);
   assert.match(header, /t2s-desktop-only[\s\S]*onClick=\{requestLogout\}/);
   assert.match(webHelper, /isNativeHybrid\(\)/);

@@ -12,7 +12,7 @@ import { adminLiveTape, cn, formatIstClock, formatMobile, headerBrokerLabel, isM
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { logout, requestLogout, user } = useAuth();
+  const { requestLogout, user } = useAuth();
   const admin = isAdminUser(user);
   const { data } = useMarket();
   const location = useLocation();
