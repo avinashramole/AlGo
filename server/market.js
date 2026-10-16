@@ -625,12 +625,15 @@ function strategyCard(strategy, hint = {}) {
   return rows.find((row) => String(row.name || "").trim() === name || sameOneLotFamily(row.name, name)) || {};
 }
 
-function shivamLiveDesk(algo, payload = {}) {
-  const shivam =
+function testDeskLive(algo, payload = {}) {
+  const testDesk =
+    Boolean(algo?.testDesk) ||
+    Boolean(payload?.testDesk) ||
+    isTestDeskAlgo(algo) ||
     isShivamT2sAlgo(algo) ||
     isShivamT2sAlgo({ name: payload?.strategy, kind: payload?.kind, strategyType: payload?.strategyType }) ||
     isShivamT2sName(payload?.strategy);
-  if (!shivam) return false;
+  if (!testDesk) return false;
   if (payload?.paper === true) return false;
   const mode = String(algo?.runMode || payload?.runMode || "").toLowerCase();
   if (mode === "backtest" || mode === "paper") return false;
@@ -698,21 +701,28 @@ export function liveBuyAllowedForStrategy(strategy) {
   return true;
 }
 
-export function strategyAllowsLiveMemberCopies(strategy) {
-  const name = String(strategy || "").trim();
-  if (!name) return true;
-  const algo = strategyCard(name);
+function liveMemberCopiesAllowedOnAlgo(algo) {
   if (!algo?.id && !algo?.name) return true;
-  if (algo.testDesk && !isShivamT2sAlgo(algo)) return false;
-  if (isShivamT2sAlgo(algo) && (algo.runMode === "paper" || algo.runMode === "backtest")) return false;
+  if ((algo.testDesk || isShivamT2sAlgo(algo)) && (algo.runMode === "paper" || algo.runMode === "backtest")) {
+    return false;
+  }
   if (algo.enabled) return true;
   if (algo.holdDailyLive) return false;
   return true;
 }
 
+export function strategyAllowsLiveMemberCopies(strategy) {
+  const name = String(strategy || "").trim();
+  if (!name) return true;
+  return liveMemberCopiesAllowedOnAlgo(strategyCard(name));
+}
+
 function memberCopiesForOrder(payload = {}, algo = {}) {
-  if (liveOrderSide(payload) === "BUY" && !strategyAllowsLiveMemberCopies(payload.strategy)) {
-    return [];
+  if (liveOrderSide(payload) === "BUY") {
+    const gate = algo?.id || algo?.name ? algo : null;
+    if (!(gate ? liveMemberCopiesAllowedOnAlgo(gate) : strategyAllowsLiveMemberCopies(payload.strategy))) {
+      return [];
+    }
   }
   return memberCopyPayloads(payload, algo || {});
 }
@@ -816,8 +826,9 @@ function adminLotStrategyName(algo = {}, payload = {}) {
 
 function paperDeskAlgo(algo = {}) {
   if (!algo || (!algo.id && !algo.name && !algo.runMode && !algo.testDesk)) return false;
-  if (isShivamT2sAlgo(algo) && String(algo.runMode || "").toLowerCase() === "live") return false;
-  return String(algo.runMode || "").toLowerCase() === "paper" || (Boolean(algo.testDesk) && !isShivamT2sAlgo(algo));
+  const mode = String(algo.runMode || "").toLowerCase();
+  if (mode === "live") return false;
+  return mode === "paper" || mode === "backtest";
 }
 
 function algoMappingScope(algo = {}) {
@@ -1753,7 +1764,7 @@ function sameBookOrder(payload = {}) {
 
 function liveCopyAlgo(stamped = {}) {
   const fromOrder = orderAlgo(stamped);
-  if (isShivamT2sAlgo(fromOrder)) return fromOrder;
+  if (fromOrder?.id || fromOrder?.name) return fromOrder;
   return findLiveCopyAlgo(state.algos || [], stamped?.strategy);
 }
 
@@ -1785,11 +1796,11 @@ export function queueLiveAlgoOrder(payload) {
   const testDesk = isTestDeskAlgo(algo) || Boolean(stamped.testDesk);
   const forceLiveBroker = payload.forceLiveBroker === true && payload.paper !== true;
   const shivamLive =
-    (shivamLiveDesk(algo, stamped) || forceLiveBroker) &&
+    (testDeskLive(algo, stamped) || forceLiveBroker) &&
     payload.paper !== true &&
     String(stamped.brokerId || algo.brokerId || "").toLowerCase() !== "paper";
   const adminPaper =
-    (!shivamLive && testDesk) ||
+    (!shivamLive && testDesk && String(stamped.brokerId || algo.brokerId || "").toLowerCase() === "paper") ||
     (!payload.copyUserId && (payload.paper === true || String(stamped.brokerId || "").toLowerCase() === "paper"));
   if (!adminPaper && !liveOrdersArmed) {
     return { ok: true, queued: false, status: "FEED_DOWN", blocked: true };
@@ -1833,7 +1844,7 @@ export function queueLiveAlgoOrder(payload) {
       kind: deskStamped?.kind,
       strategyType: deskStamped?.strategyType,
     });
-  if (!payload.skipMemberCopy && (!testDesk || shivamCopy)) {
+  if (!payload.skipMemberCopy && (!testDesk || shivamLive || shivamCopy)) {
     const copyBuy = liveOrderSide(deskStamped) === "BUY";
     if (!copyBuy || adminResult?.queued || skipAdmin) {
       for (const copy of memberCopiesForOrder(deskStamped, copyAlgo || {})) {
@@ -4209,10 +4220,6 @@ export function armNiftyFirstCandleDailyLive(now = new Date()) {
 export function toggleAlgo(id, patch = {}) {
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return null;
-  if (isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo) && algo.runMode !== "backtest") {
-    algo.runMode = "paper";
-    algo.brokerId = "paper";
-  }
   if (algo.runMode === "backtest") {
     algo.enabled = false;
     algo.status = "BACKTEST";
@@ -4241,10 +4248,6 @@ export function toggleAlgo(id, patch = {}) {
   }
   if (starting && algo.runMode === "paper" && !isDhanFeedLive()) {
     return { error: "Paper trading uses the live Dhan feed. Connect Access Token on Brokers first." };
-  }
-  if (starting && algo.runMode === "live" && isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo)) {
-    algo.runMode = "paper";
-    algo.brokerId = "paper";
   }
   if (starting && isShivamT2sAlgo(algo) && algo.runMode === "live") {
     algo.liveAuthorized = true;
@@ -4575,7 +4578,7 @@ export function placeStrategyBrokerTestOrder(id, patch = {}) {
   const trade = resolveBrokerTestTrade(algo);
   const confirm = patch.confirm === true || patch.confirm === "true";
   const base = { ...status, contract: trade, lots: 1, skipMemberCopy: false, confirm };
-  if (isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo)) {
+  if (isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo) && (algo.runMode === "paper" || algo.runMode === "backtest")) {
     return { ...base, ok: false, error: "Algo Test paper cards cannot send a live broker test order." };
   }
   if (!confirm) {
@@ -5011,7 +5014,7 @@ function runLiveAlgos() {
   const feedLive = dhanOrdersLive();
   const now = Date.now();
   for (const algo of state.algos) {
-    if (!algo.enabled || algo.runMode !== "live" || (isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo))) continue;
+    if (!algo.enabled || algo.runMode !== "live") continue;
     if (isNiftyVwapHedgeAlgo(algo)) {
       tickNiftyVwapHedgeAlgo(algo, "live", feedLive);
       continue;
@@ -5303,7 +5306,7 @@ export function placeOrder(payload) {
   const algo = orderAlgo(payload);
   const testDesk = Boolean(payload.testDesk) || isTestDeskAlgo(algo);
   const shivamLive =
-    shivamLiveDesk(algo, payload) &&
+    testDeskLive(algo, payload) &&
     payload.paper !== true &&
     String(payload.brokerId || algo.brokerId || "").toLowerCase() !== "paper";
   const requested = testDesk && !shivamLive ? "paper" : String(payload.brokerId || brokers.activeBrokerId || "dhan");
@@ -5769,7 +5772,7 @@ export function assignAlgoBroker(id, brokerId) {
   if (wanted !== "paper" && !isKnownLiveBroker(wanted)) return { error: "Unknown live broker" };
   const algo = state.algos.find((item) => item.id === id);
   if (!algo) return { error: "Algo not found" };
-  if ((isTestDeskAlgo(algo) && !isShivamT2sAlgo(algo)) || algo.runMode === "paper" || algo.runMode === "backtest") {
+  if (algo.runMode === "paper" || algo.runMode === "backtest") {
     algo.brokerId = "paper";
     persistAlgos();
     return clone(algo);

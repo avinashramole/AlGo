@@ -390,14 +390,16 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         };
       }
       if (testDesk) {
+        const live = payload.runMode === "live";
         return {
           ...payload,
           testDesk: true,
-          runMode: payload.runMode === "backtest" ? "backtest" : "paper",
-          brokerId: "paper",
-          mappingScope: "master",
-          mappedClientIds: [],
-          clientVisible: false,
+          runMode: payload.runMode === "backtest" ? "backtest" : live ? "live" : "paper",
+          brokerId: live
+            ? payload.brokerId && payload.brokerId !== "paper"
+              ? payload.brokerId
+              : data.activeBrokerId || "dhan"
+            : "paper",
         };
       }
       return { ...payload, testDesk: Boolean(payload.testDesk) };
@@ -553,7 +555,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             <div className="text-sm font-bold sm:text-base">{title}</div>
             {editing ? null : (
               <div className="desk-help line-clamp-2 text-[11px] text-slate-400">
-                {testDesk ? "Paper-only test desk. Does not send live Dhan or member copies. " : ""}
+                {testDesk ? "Algo Test keeps its own book. Start paper or live, then map clients to copy their brokers. " : ""}
                 {preview}
               </div>
             )}
@@ -570,7 +572,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         ) : null}
 
         {editing ? null : testDesk ? (
-        <div className="grid grid-cols-1 gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
@@ -587,6 +589,61 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
                 lots: form.lots || 1,
                 capitalMode: form.capitalMode || "amount",
                 capitalValue: form.capitalValue ?? 50000,
+                enabled: false,
+              });
+            }}
+          />
+          <TypeCard
+            active={kind === "nifty-first-candle"}
+            title="NIFTY"
+            text="Algo Test copy of NIFTY 5m first candle. Paper or Live after Start. Map clients on the card to copy user brokers."
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-first-candle"),
+                name: NIFTY_FIRST_CANDLE_NAME,
+                runMode: form.runMode === "live" ? "live" : "paper",
+                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
+                testDesk: true,
+                lots: form.lots || 1,
+                lotSize,
+                qty: (form.lots || 1) * lotSize,
+                enabled: false,
+              })
+            }
+          />
+          <TypeCard
+            active={test1}
+            title="TEST1"
+            text="Algo Test copy of TEST1. Paper or Live after Start. Map clients on the card to copy user brokers."
+            onClick={() =>
+              set({
+                ...emptyStrategy("nifty-test1"),
+                name: "TEST1",
+                runMode: form.runMode === "live" ? "live" : "paper",
+                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
+                testDesk: true,
+                lots: form.lots || 1,
+                lotSize,
+                qty: (form.lots || 1) * lotSize,
+                enabled: false,
+              })
+            }
+          />
+          <TypeCard
+            active={mir}
+            title="MULTI-INDEX"
+            text="Algo Test copy of Multi-Index. Paper or Live after Start. Map clients on the card to copy user brokers."
+            onClick={() => {
+              const next = emptyStrategy("multi-index-reversal");
+              set({
+                ...next,
+                name: MULTI_INDEX_REVERSAL_NAME,
+                runMode: form.runMode === "live" ? "live" : "paper",
+                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
+                testDesk: true,
+                lots: form.lots || 1,
+                lotSize: next.lotSize,
+                qty: (form.lots || 1) * Number(next.lotSize || 65),
                 enabled: false,
               });
             }}
@@ -712,7 +769,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             text="Uses the live feed. Fills stay virtual — they never go to a broker."
             onClick={() => set(shivam ? { runMode: "paper", brokerId: "paper", liveAuthorized: false } : { runMode: "paper", brokerId: "paper" })}
           />
-          {testDesk && !shivam ? null : (
           <TypeCard
             active={form.runMode === "live"}
             title="Live"
@@ -725,11 +781,10 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
               )
             }
           />
-          )}
         </div>
         ) : (
-        <div className={`mt-1.5 grid gap-1.5 ${testDesk ? "grid-cols-2" : "grid-cols-3"}`} data-strategy-trade-mode="true">
-          {(testDesk ? RUN_MODES.filter((mode) => mode.id !== "live") : RUN_MODES).map((mode) => (
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5" data-strategy-trade-mode="true">
+          {RUN_MODES.map((mode) => (
             <TypeCard
               key={mode.id}
               active={(form.runMode || (testDesk ? "paper" : "live")) === mode.id}

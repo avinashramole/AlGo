@@ -489,17 +489,16 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
   };
 
   const startInMode = async (algo: AlgoStrategy, mode: "paper" | "live") => {
-    const nextMode = testDesk && !isShivamT2sKind(algo) ? "paper" : mode;
     setBusyId(algo.id);
     try {
-      if (algo.runMode !== nextMode) {
+      if (algo.runMode !== mode) {
         await saveAlgo({
           id: algo.id,
-          runMode: nextMode,
-          brokerId: nextMode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
+          runMode: mode,
+          brokerId: mode === "live" ? (algo.brokerId && algo.brokerId !== "paper" ? algo.brokerId : "dhan") : "paper",
           enabled: true,
           ...(testDesk ? { testDesk: true } : {}),
-          ...(isShivamT2sKind(algo) ? { liveAuthorized: nextMode === "live" } : {}),
+          ...(isShivamT2sKind(algo) ? { liveAuthorized: mode === "live" } : {}),
         });
         return;
       }
@@ -610,11 +609,11 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
         <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="desk-kicker">{testDesk ? "Isolated paper desk" : "Strategy blotter"}</div>
+              <div className="desk-kicker">{testDesk ? "Isolated test desk" : "Strategy blotter"}</div>
               <h1 className="text-xl font-bold">{testDesk ? "Algo Test" : "Algo Strategies"}</h1>
               <p className="text-sm text-slate-400">
                 {testDesk
-                  ? `${deskAlgos.filter((row) => row.enabled).length} paper · ${deskAlgos.length} test strategies · not live, not copy, not the main blotter`
+                  ? `${deskAlgos.filter((row) => row.enabled && row.runMode === "live").length} live · ${deskAlgos.length} test strategies · own book · map clients to copy`
                   : `${deskAlgos.filter((row) => row.enabled).length} live · ${deskAlgos.length} strategies`}
               </p>
             </div>
@@ -747,7 +746,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
               <div className="text-base font-bold">No strategies in this view</div>
               <p className="mt-1 text-sm text-slate-400">
                 {testDesk
-                  ? "Add SHIVAM T2S or another test strategy. Shivam can paper or live-trade Dhan from this page. Map clients on the Shivam card to copy those users."
+                  ? "Add SHIVAM T2S or another test strategy. Start paper or live on any card, then map clients to copy those users."
                   : "Add a NIFTY 5m or CRUDE OIL strategy to start the desk."}
               </p>
               <button type="button" onClick={openAdd} className="mt-4 h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white">
@@ -1177,7 +1176,6 @@ function AlgoCard({
                   Test
                 </span>
               ) : null}
-              {isolated && !shivam ? null : (
               <span
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
@@ -1187,7 +1185,6 @@ function AlgoCard({
               >
                 {algo.clientVisible === false ? "Hidden" : "Visible"}
               </span>
-              )}
             </div>
             {isNiftyTest2Kind(algo) ? <Test2ExpiryBar algo={algo} /> : null}
             {shivam ? null : <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{meta.category}</div>}
@@ -1484,19 +1481,11 @@ function AlgoCard({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
         <div className="flex flex-wrap items-center gap-2">
-          {isolated && !shivam ? (
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Paper test only · no live · no copy
-            </span>
-          ) : (
-            <>
           <button type="button" onClick={onMap} className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold" data-shivam-map="true">
             <Users size={15} />
             Map clients
           </button>
           <ClientVisibleToggle algo={algo} />
-            </>
-          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {shivam ? (
@@ -1525,16 +1514,6 @@ function AlgoCard({
               className="btn-halt h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60"
             >
               Stop strategy
-            </button>
-          ) : isolated && !shivam ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onStartPaper}
-              className="btn-go h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-60"
-              data-start-paper="true"
-            >
-              Start paper
             </button>
           ) : (
             <>

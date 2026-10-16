@@ -5,7 +5,7 @@ import { brokerAccountForLiveCopy, listDeskRecords, peekClientSecrets, recordMem
 import { sendMemberCopyOrder } from "./liveCopySend.js";
 import { sendQueuedLiveOrders } from "./liveOrderFlush.js";
 import { exchangeSegmentFor } from "./optionChain.js";
-import { isShivamT2sAlgo, isShivamT2sName } from "./shivamT2s/config.js";
+import { isShivamT2sName } from "./shivamT2s/config.js";
 
 let pendingCopySends = [];
 const sentMemberExits = new Map();
@@ -70,13 +70,14 @@ function sameStrategy(left, right) {
 
 export function findLiveCopyAlgo(algos = [], strategyName = "") {
   const name = String(strategyName || "").trim();
-  const rows = (Array.isArray(algos) ? algos : []).filter(
-    (row) => !row?.testDesk || isShivamT2sAlgo(row),
-  );
-  const exact = rows.find((row) => String(row.name || "") === name);
-  if (exact) return exact;
-  const family = rows.filter((row) => sameStrategy(row.name, name));
-  return family.find((row) => row.enabled) || family[0] || {};
+  const rows = Array.isArray(algos) ? algos : [];
+  const pick = (list) => {
+    const exact = list.find((row) => String(row.name || "") === name);
+    if (exact) return exact;
+    const family = list.filter((row) => sameStrategy(row.name, name));
+    return family.find((row) => row.enabled) || family[0];
+  };
+  return pick(rows.filter((row) => !row?.testDesk)) || pick(rows.filter((row) => row?.testDesk)) || {};
 }
 
 function subscriptionOpen(until) {
@@ -289,8 +290,8 @@ export function listCopyOnTargets({ masterQty, lotSize } = {}) {
 }
 
 export function memberCopyPayloads(payload = {}, algo = {}) {
-  const shivam = isShivamT2sAlgo(algo) || isShivamT2sName(payload.strategy);
-  if (algo?.testDesk && !shivam) return [];
+  const mode = String(algo.runMode || "").toLowerCase();
+  if (algo?.testDesk && (mode === "paper" || mode === "backtest")) return [];
   const scope = String(algo.mappingScope || "both");
   if (scope === "master") return [];
   const targets = listLiveCopyTargets({
