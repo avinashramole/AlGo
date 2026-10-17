@@ -145,9 +145,12 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.doesNotMatch(setup, /Save IP/);
   assert.doesNotMatch(setup, /saveMemberIp/);
   const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
-  assert.match(index, /\/settings\?upstox=connected/);
-  assert.match(index, /\/settings\?upstox=error/);
+  assert.match(index, /\/broker\?upstox=connected/);
+  assert.match(index, /\/broker\?upstox=error/);
+  assert.doesNotMatch(index, /\/settings\?upstox=/);
   assert.doesNotMatch(index, /\/plans\?upstox=/);
+  assert.match(setup, /deskQueryParams/);
+  assert.match(setup, /window\.location\.hash/);
   const profile = fs.readFileSync(path.join(root, "src/pages/Profile.tsx"), "utf8");
   const memberSettings = fs.readFileSync(path.join(root, "src/pages/MemberSettings.tsx"), "utf8");
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
@@ -169,6 +172,11 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.doesNotMatch(profile, /label="Add broker"/);
   assert.doesNotMatch(profile, /Connect Dhan, Upstox, or Kotak/);
   assert.match(profile, /to="\/settings"/);
+  assert.match(profile, /data-member-profile="menu"/);
+  assert.match(profile, /label="Settings"/);
+  assert.match(profile, /label="Support"/);
+  assert.match(profile, /label="Logout"/);
+  assert.doesNotMatch(profile, /label="Security"/);
   assert.match(memberSettings, /MemberAccountSetup/);
   assert.match(memberSettings, /showProfile=\{false\}/);
   assert.match(memberSettings, /data-member-settings="menu"/);

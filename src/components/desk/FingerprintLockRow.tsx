@@ -1,15 +1,16 @@
 import { Fingerprint } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import { isCapacitorNative } from "../../lib/hybrid";
 import {
   fingerprintAvailable,
   isFingerprintLockOn,
   setFingerprintLockOn,
-  verifyFingerprint,
 } from "../../lib/fingerprintLock";
 import { PhoneCard, SettingsRow } from "../phone/PhoneUi";
 
 export function FingerprintLockRow() {
+  const { enableThumb } = useAuth();
   const native = isCapacitorNative();
   const [ready, setReady] = useState(false);
   const [on, setOn] = useState(isFingerprintLockOn());
@@ -30,8 +31,7 @@ export function FingerprintLockRow() {
         onClick={() => {
           void (async () => {
             if (!on) {
-              await verifyFingerprint("Enable fingerprint lock");
-              setFingerprintLockOn(true);
+              await enableThumb();
               setOn(true);
               return;
             }

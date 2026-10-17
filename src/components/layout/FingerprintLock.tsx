@@ -57,9 +57,11 @@ export function FingerprintLock({ children }: { children: ReactNode }) {
       }
       if (Date.now() - backgroundedAt.current < 8_000) return;
       void lockDesk();
-    }).then((row) => {
-      handle = row;
-    });
+    })
+      .then((row) => {
+        handle = row;
+      })
+      .catch(() => undefined);
     return () => {
       void handle?.remove();
     };
