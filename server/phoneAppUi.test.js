@@ -126,6 +126,12 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(sidebar, /label: "Alerts"/);
   assert.match(header, /data-profile-shortcut="true"/);
   assert.match(header, /to="\/profile"/);
+  const webProfile = fs.readFileSync(path.join(root, "src/pages/Profile.tsx"), "utf8");
+  assert.match(webProfile, /data-member-profile="menu"/);
+  assert.match(webProfile, /label="Settings"[\s\S]*to="\/settings"/);
+  assert.match(webProfile, /label="Support"[\s\S]*to="\/support"/);
+  assert.match(webProfile, /label="Logout"/);
+  assert.match(webProfile, /onClick=\{requestLogout\}/);
   assert.match(header, /title="Notifications"/);
   assert.match(header, /data-theme-toggle="header"/);
   assert.match(header, /title="Notifications"[\s\S]*data-theme-toggle="header"/);

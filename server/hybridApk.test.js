@@ -159,6 +159,9 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const fpLock = fs.readFileSync(path.join(root, "src/components/layout/FingerprintLock.tsx"), "utf8");
   assert.match(fpLock, /data-fingerprint-lock="true"/);
   assert.match(fpLock, /verifyFingerprint/);
+  assert.match(fpLock, /\.catch\(\(\) => undefined\)/);
+  const fpRow = fs.readFileSync(path.join(root, "src/components/desk/FingerprintLockRow.tsx"), "utf8");
+  assert.match(fpRow, /enableThumb/);
   assert.match(shell, /FingerprintLock/);
   assert.match(styles, /postSplashScreenTheme/);
   assert.match(styles, /TinyConfirmDialog/);

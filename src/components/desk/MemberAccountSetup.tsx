@@ -35,6 +35,24 @@ export const MEMBER_BROKER_CHOICES = [
   { id: "paper", name: "PAPER" },
 ] as const;
 
+export function deskQueryParams(href = "", search = "", hash = "") {
+  const from = (value: string) => {
+    const raw = String(value || "");
+    const q = raw.indexOf("?");
+    if (q < 0) return new URLSearchParams();
+    return new URLSearchParams(raw.slice(q + 1).split("#")[0]);
+  };
+  try {
+    for (const value of [href, search, hash]) {
+      const params = from(value);
+      if (params.get("upstox")) return params;
+    }
+  } catch {
+    /* ignore malformed capacitor hash URLs */
+  }
+  return new URLSearchParams();
+}
+
 export function isGmailMember(user?: { email?: string; authProvider?: string; role?: "admin" | "user" } | null) {
   if (!user || isAdminUser(user)) return false;
   const email = String(user.email || "").trim().toLowerCase();
@@ -63,7 +81,7 @@ export function MemberAccountSetup({ showProfile = true }: { showProfile?: boole
   }, [user, dirty]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = deskQueryParams(window.location.href, window.location.search, window.location.hash);
     if (params.get("upstox") === "connected") {
       setNote("Upstox trading access token saved. Live copy will use this token.");
     }

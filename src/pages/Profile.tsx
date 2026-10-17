@@ -4,7 +4,6 @@ import {
   CreditCard,
   Headphones,
   LogOut,
-  Shield,
   SlidersHorizontal,
   UserRound,
 } from "lucide-react";
@@ -129,12 +128,17 @@ export function Profile() {
           <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/algo" />
           <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
           <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
-          <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
           <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
           <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Desk settings" />
           <SettingsRow icon={LogOut} label="Logout" danger onClick={requestLogout} />
         </PhoneCard>
-      ) : null}
+      ) : (
+        <PhoneCard data-member-profile="menu">
+          <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Fingerprint lock and desk help" />
+          <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
+          <SettingsRow icon={LogOut} label="Logout" danger onClick={requestLogout} />
+        </PhoneCard>
+      )}
     </div>
   );
 }
