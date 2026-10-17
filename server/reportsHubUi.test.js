@@ -157,7 +157,11 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.doesNotMatch(memberSettings, /Broker, IP/);
   assert.doesNotMatch(profile, /MemberAccountSetup/);
   assert.match(profile, /data-member-profile="identity"/);
-  assert.match(profile, /Name \{name \|\| "-"\} \| Email \{email \|\| "-"\} \| Mobile \{mobile \|\| "-"\}/);
+  assert.match(profile, /memberIdentityLine\(name, email, mobile\)/);
+  assert.doesNotMatch(profile, /Name \{name \|\| "-"\} \| Email/);
+  const formatSrc = fs.readFileSync(path.join(root, "src/lib/format.ts"), "utf8");
+  assert.match(formatSrc, /export function memberIdentityLine/);
+  assert.match(formatSrc, /\$\{part\(name\)\} \| \$\{part\(email\)\} \| \$\{part\(mobile\)\}/);
   assert.match(profile, /text-lg font-bold/);
   assert.match(profile, /setDirty\(true\)/);
   assert.match(profile, /data-member-profile="broker"/);

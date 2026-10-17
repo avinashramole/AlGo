@@ -57,7 +57,7 @@ export function ProfileScreen() {
         <Text style={styles.name}>Profile</Text>
       </View>
       <Text style={styles.identity}>
-        Name {name || "-"} | Email {email || "-"} | Mobile {mobile || "-"}
+        {[name, email, mobile].map((value) => String(value || "").trim() || "-").join(" | ")}
       </Text>
       <Text style={styles.edit}>Edit profile</Text>
       <TextInput style={styles.input} value={name} onChangeText={(value) => { setDirty(true); setName(value); }} placeholder="Name" />

@@ -39,6 +39,11 @@ export function quoteDayChange(item: { price?: number; change?: number; changePc
   return { change: Number.isFinite(apiChange) ? apiChange : 0, changePct: Number.isFinite(apiPct) ? apiPct : 0 };
 }
 
+export function memberIdentityLine(name?: string, email?: string, mobile?: string) {
+  const part = (value?: string) => String(value || "").trim() || "-";
+  return `${part(name)} | ${part(email)} | ${part(mobile)}`;
+}
+
 export function formatMobile(value?: string) {
   let digits = String(value || "").replace(/\D/g, "");
   if (digits.startsWith("91") && digits.length === 12) digits = digits.slice(2);
