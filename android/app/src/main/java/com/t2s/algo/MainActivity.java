@@ -12,6 +12,7 @@ import android.view.WindowManager;
 import android.webkit.JsResult;
 import android.webkit.WebView;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.view.ContextThemeWrapper;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -38,6 +39,17 @@ public class MainActivity extends BridgeActivity {
 
         TinyConfirmChromeClient(Bridge bridge) {
             super(bridge);
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+            if (view.getContext() instanceof android.app.Activity activity && activity.isFinishing()) {
+                result.confirm();
+                return true;
+            }
+            Toast.makeText(view.getContext(), String.valueOf(message), Toast.LENGTH_LONG).show();
+            result.confirm();
+            return true;
         }
 
         @Override

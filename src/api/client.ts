@@ -1,3 +1,4 @@
+import { showDeskToast } from "../lib/deskToast";
 import { apiBase, googleLoginNext, isCapacitorNative } from "../lib/hybrid";
 import { apiDownMessage, publicDeskError } from "../lib/liveSite";
 
@@ -1782,7 +1783,7 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   if (isCapacitorNative()) {
     try {
       await saveNativeFile(blob, filename);
-      window.alert(`Saved ${filename}`);
+      showDeskToast(`Saved ${filename}`);
       return;
     } catch (error) {
       console.log(`native report save skipped: ${(error as Error)?.message || error}`);

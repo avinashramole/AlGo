@@ -51,7 +51,7 @@ test("web, Android, and iOS desks auto-adjust for phone, tablet, and laptop widt
   assert.match(expoLogin, /maxWidth: 440/);
 
   assert.match(indexHtml, /width=device-width, initial-scale=1, viewport-fit=cover/);
-  assert.match(gradle, /versionName "1.4"/);
+  assert.match(gradle, /versionName "1.5"/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
-  assert.match(pbx, /MARKETING_VERSION = 1.4/);
+  assert.match(pbx, /MARKETING_VERSION = 1.5/);
 });

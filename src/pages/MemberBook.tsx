@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { downloadMemberReport, getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
+import { showDeskToast } from "../lib/deskToast";
 import { catchDeskError } from "../lib/liveSite";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
 import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../lib/exitReason";
@@ -36,7 +37,7 @@ export function MemberPositions() {
   }, []);
   const downloadPdf = () => {
     void downloadMemberReport("pdf").catch((error) => {
-      window.alert(catchDeskError(error, "Could not download your trade report"));
+      showDeskToast(catchDeskError(error, "Could not download your trade report"));
     });
   };
   return (

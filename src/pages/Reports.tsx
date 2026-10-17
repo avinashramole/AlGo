@@ -4,6 +4,7 @@ import { downloadDeskReport, getPositionsDesk, type PositionLedger } from "../ap
 import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
+import { showDeskToast } from "../lib/deskToast";
 import { catchDeskError } from "../lib/liveSite";
 import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
 import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName, whyColClass } from "../lib/format";
@@ -37,7 +38,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
 
   const download = (format: "pdf" | "xlsx") => {
     void downloadDeskReport(format).catch((error) => {
-      window.alert(catchDeskError(error, "Could not download the branded proposal report"));
+      showDeskToast(catchDeskError(error, "Could not download the branded proposal report"));
     });
   };
 

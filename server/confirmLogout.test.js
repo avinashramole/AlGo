@@ -58,6 +58,8 @@ test("native iOS and Android logout buttons ask for confirmation", () => {
   const styles = fs.readFileSync(path.join(root, "android/app/src/main/res/values/styles.xml"), "utf8");
   const logoutLayout = fs.readFileSync(path.join(root, "android/app/src/main/res/layout/logout_confirm.xml"), "utf8");
   assert.match(activity, /TinyConfirmChromeClient/);
+  assert.match(activity, /onJsAlert/);
+  assert.match(activity, /Toast\.makeText/);
   assert.match(activity, /onJsConfirm/);
   assert.match(activity, /R\.layout\.logout_confirm/);
   assert.match(activity, /TinyConfirmDialog/);
