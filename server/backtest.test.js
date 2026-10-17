@@ -186,6 +186,26 @@ test("nifty test sells when the current candle close is below its open", () => {
   assert.equal(signal.buy, false);
 });
 
+test("nifty test skips when the lower wick is greater than the body", () => {
+  const candles = [bar(0, 100, { open: 110, high: 112, low: 99 }), bar(1, 114, { open: 110, high: 115, low: 80 })];
+  assert.equal(evaluateNiftyPreviewBreak(candles, 1, niftyTest).buy, false);
+  assert.equal(evaluateSignals(candles, 1, niftyTest).buy, false);
+});
+
+test("close above skips a completed bar when the wick is greater than the body", () => {
+  const candles = [bar(0, 100), bar(1, 101), bar(2, 140, { open: 138, high: 160, low: 137, volume: 10 })];
+  const nowComplete = T0 + 3 * BAR;
+  const orig = Date.now;
+  Date.now = () => nowComplete;
+  try {
+    const signal = evaluateSignals(candles, 2, closeAlgo);
+    assert.equal(signal.buy, false);
+    assert.equal(signal.sell, false);
+  } finally {
+    Date.now = orig;
+  }
+});
+
 test("nifty test does not use the previous candle and does not trade a doji", () => {
   const previousGreen = [
     bar(0, 110, { open: 100, high: 112, low: 99 }),

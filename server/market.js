@@ -43,6 +43,7 @@ import {
 } from "./exitReason.js";
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
+import { candleAllowsEntry } from "./candleQuality.js";
 import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
 import { listPublicUsers } from "./auth.js";
 import { isTestDeskAlgo, loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
@@ -6215,6 +6216,13 @@ export function livePreviewCondition(bar, ce, pe, { confirmOpposite = false } = 
   const ceColor = VwapSignalEngine.firstBarColor(ce);
   const peColor = VwapSignalEngine.firstBarColor(pe);
   const dots = firstCandleConditionDots({ nifty, ceColor, peColor, confirmOpposite });
+  const blocked =
+    !candleAllowsEntry(bar) ||
+    (dots.buy === "CE" && (!candleAllowsEntry(ce) || (confirmOpposite && !candleAllowsEntry(pe)))) ||
+    (dots.buy === "PE" && (!candleAllowsEntry(pe) || (confirmOpposite && !candleAllowsEntry(ce))));
+  if (blocked) {
+    return { nifty, ceColor, peColor, dots: { ...dots, buy: "" }, condition: "" };
+  }
   if (dots.buy === "CE") return { nifty, ceColor, peColor, dots, condition: "BUY CE" };
   if (dots.buy === "PE") return { nifty, ceColor, peColor, dots, condition: "BUY PE" };
   if (nifty === "green") return { nifty, ceColor, peColor, dots, condition: ceColor ? "" : "WAIT CE" };

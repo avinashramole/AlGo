@@ -189,6 +189,23 @@ test("BUY CE needs index green and CE green; doji blocks both sides", () => {
   assert.equal(doji.indexColor, "doji");
 });
 
+test("upper or lower wick greater than body skips the Shivam entry candle", () => {
+  const hammer = evaluateShivamEntry({
+    indexBar: { time: T0, open: 25000, high: 25010, low: 24800, close: 25008 },
+    futureBar: bar(T0, 25000, 25040),
+    ceBar: bar(T0, 100, 110),
+    peBar: bar(T0, 100, 90),
+  });
+  assert.equal(hammer.buyCe, false);
+  const shooting = evaluateShivamEntry({
+    indexBar: bar(T0, 25000, 25040),
+    futureBar: bar(T0, 25010, 25040),
+    ceBar: { time: T0, open: 100, high: 140, low: 99, close: 108 },
+    peBar: bar(T0, 100, 90),
+  });
+  assert.equal(shooting.buyCe, false);
+});
+
 test("doji on index, future, or option candle is no trade", () => {
   const indexDoji = evaluateShivamEntry({
     indexBar: bar(T0, 25000, 25000),

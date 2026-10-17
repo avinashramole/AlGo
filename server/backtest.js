@@ -1,3 +1,5 @@
+import { candleAllowsEntry } from "./candleQuality.js";
+
 function sma(values, period) {
   if (values.length < period) return null;
   let sum = 0;
@@ -225,7 +227,7 @@ export function evaluateNiftyPreviewBreak(candles, i) {
   const open = Number(bar.open);
   const close = Number(bar.close);
   const price = Number.isFinite(close) ? close : 0;
-  if (!(open > 0) || !(close > 0)) return { buy: false, sell: false, price };
+  if (!(open > 0) || !(close > 0) || !candleAllowsEntry(bar)) return { buy: false, sell: false, price };
   return {
     buy: close > open,
     sell: close < open,
@@ -304,6 +306,7 @@ export function evaluateSignals(candles, i, algo, cache, at = Date.now()) {
   if (closeOps) idx = completedBarIndex(candles, i, algo.timeframe, at);
   if (idx < 2) return { buy: false, sell: false };
   const now = sourceAt(candles, idx, algo, cache);
+  if (closeOps && !candleAllowsEntry(candles[idx])) return { buy: false, sell: false, price: now.price };
   return {
     buy: evaluateGroup(candles, idx, algo, buyGroup, cache),
     sell: evaluateGroup(candles, idx, algo, sellGroup, cache),

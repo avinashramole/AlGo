@@ -1,4 +1,7 @@
 export type StrategyKind = "indicator" | "price-action" | "nifty-vwap" | "nifty-vwap-reversal" | "nifty-vwap-hedge" | "nifty-first-candle" | "crude-first-candle" | "nifty-test" | "nifty-test1" | "nifty-test2" | "multi-index-reversal" | "shivam-t2s";
+
+export const CANDLE_ENTRY_RULE =
+  "Entry uses the last completed candle. Skip doji. Skip if upper wick or lower wick is greater than the candle body.";
 export type ConditionOp = "close_above" | "close_below" | "crosses_above" | "crosses_below" | "above" | "below" | "gt" | "lt" | "gte" | "lte" | "eq";
 export type ConditionSource =
   | "price"

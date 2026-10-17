@@ -317,14 +317,14 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-vwap-hedge" as const,
       category: "SYSTEMATIC NIFTY HEDGE",
-      config: `15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · +40% / −20% hedge · +5% · max ${dailyTradeLimit(algo)} trades/day · daily LIVE 09:20 IST`,
+      config: `15m: O<VWAP C>VWAP → CE · O>VWAP C<VWAP → PE · weekly ATM · last completed candle · skip doji · skip wick > body · +40% / −20% hedge · +5% · max ${dailyTradeLimit(algo)} trades/day · daily LIVE 09:20 IST`,
     };
   }
   if (isNiftyVwapReversalKind(algo)) {
     return {
       kind: "nifty-vwap-reversal" as const,
       category: "SYSTEMATIC NIFTY 15M",
-      config: `Weekly ATM · 15m · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · max ${dailyTradeLimit(algo)} trades/day · daily LIVE 09:20 IST`,
+      config: `Weekly ATM · 15m · last completed candle · skip doji · skip wick > body · SL ${algo.initialSlPct || 15}% / TGT ${algo.targetPct || 30}% · max ${dailyTradeLimit(algo)} trades/day · daily LIVE 09:20 IST`,
     };
   }
   if (isNiftyTest2Kind(algo)) {
@@ -341,7 +341,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "shivam-t2s" as const,
       category: "SHIVAM T2S",
-      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`,
+      config: `${algo.symbol || "NIFTY"} · IDX ${algo.indexTimeframe || "5m"} CE ${algo.ceTimeframe || "5m"} PE ${algo.peTimeframe || "5m"} · ATM auto · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · map clients`,
     };
   }
   if (isMultiIndexReversalKind(algo)) {
@@ -350,7 +350,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "multi-index-reversal" as const,
       category: `MULTI-INDEX ${script.label} ${script.exchange} ${String(algo.timeframe || "15m").toUpperCase()}`,
-      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live" : "Paper"}`,
+      config: `${script.label} ${script.exchange} · ${algo.timeframe || "15m"} · ${offset ? `ATM${offset > 0 ? `+${offset}` : offset}` : "ATM"} · last completed candle · skip doji · skip wick > body · TGT ${algo.initialTargetPct || 40}% · reverse −${algo.reversalLossPct || 20}% ×${algo.reversalQtyMultiple || 2} · combined +${algo.combinedTargetPct || 20}% ${algo.combinedTargetBasis === "combined" ? "combined premium" : "original premium"} · max ${dailyTradeLimit(algo)} trades/day · ${algo.runMode === "live" ? "Live" : "Paper"}`,
     };
   }
   if (isNiftyTest1Kind(algo)) {
@@ -359,7 +359,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test1" as const,
       category: `TEST1 ${algo.symbol || "NIFTY"} ATM ${String(algo.timeframe || "5m").toUpperCase()}`,
-      config: `${algo.symbol || "NIFTY"} ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · max ${dailyTradeLimit(algo)} trades/day · one order per ${algo.timeframe || "5m"}`,
+      config: `${algo.symbol || "NIFTY"} ATM CE/PE only · after ${algo.startTimeIst || "09:30"} IST · green body ≥${body}% · wick ≤${wick}% · last completed candle · skip doji · skip wick > body · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL candle low · max ${dailyTradeLimit(algo)} trades/day · one order per ${algo.timeframe || "5m"}`,
     };
   }
   if (isNiftyTestKind(algo)) {
@@ -367,7 +367,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-test" as const,
       category: "NIFTY TEST",
-      config: `NIFTY FUT · ${algo.timeframe || "5m"} · live feed while started · above open BUY · below open SELL · max ${dailyTradeLimit(algo)} trades/day${liveSide ? ` · ${liveSide}` : " · no signal"}`,
+      config: `NIFTY FUT · ${algo.timeframe || "5m"} · live feed while started · above open BUY · below open SELL · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day${liveSide ? ` · ${liveSide}` : " · no signal"}`,
     };
   }
   if (isCrudeFirstCandleKind(algo)) {
@@ -375,7 +375,7 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "crude-first-candle" as const,
       category: `CRUDE OIL EVERY ${(algo.timeframe || "5m").toUpperCase()}`,
-      config: `CRUDE FUT · every ${algo.timeframe || "5m"} · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
+      config: `CRUDE FUT · every ${algo.timeframe || "5m"} · FUT+CE green and PE red → BUY CE · FUT+PE green and CE red → BUY PE · last completed candle · skip doji · skip wick > body · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${maxTrades} trades/day · MCX until ${algo.endTimeIst || "23:15"} IST`,
     };
   }
   if (isNiftyFirstCandleKind(algo)) {
@@ -385,27 +385,27 @@ function kindMeta(algo: AlgoStrategy) {
     return {
       kind: "nifty-first-candle" as const,
       category: `SYSTEMATIC NIFTY FIRST ${tf.toUpperCase()}`,
-      config: `NIFTY FUT · ${tf} · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
+      config: `NIFTY FUT · ${tf} · ${algo.expiryKind === "monthly" ? "Monthly" : "Weekly"} ${algo.strikeOffset ? `ATM${algo.strikeOffset > 0 ? "+" : ""}${algo.strikeOffset}` : "ATM"} · last completed candle · skip doji · skip wick > body · up to ${maxTrades} trades · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · trailing SL +${trail.activation}% to buy, then +${trail.shift}% every +${trail.every}% · LIVE ${algo.dailyLiveIst || "09:00"} IST`,
     };
   }
   if (isNiftyVwapKind(algo)) {
     return {
       kind: "nifty-vwap" as const,
       category: "SYSTEMATIC NIFTY VWAP",
-      config: `ATM options · 5m · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${dailyTradeLimit(algo)} trades/day`,
+      config: `ATM options · 5m · first futures close vs VWAP · ATM premium above option VWAP · SL ${algo.initialSlPct || 20}% / TGT ${algo.targetPct || 40}% · max ${dailyTradeLimit(algo)} trades/day`,
     };
   }
   if (algo.kind === "price-action") {
     return {
       kind: "price-action" as const,
       category: "SYSTEMATIC PRICE ACTION",
-      config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.pattern || "ORB"} · max ${dailyTradeLimit(algo)} trades/day`,
+      config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.pattern || "ORB"} · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day`,
     };
   }
   return {
     kind: "indicator" as const,
     category: "SYSTEMATIC INDICATOR",
-    config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.indicator || "EMA"} · max ${dailyTradeLimit(algo)} trades/day`,
+    config: `${algo.symbol || "NIFTY"} · ${algo.timeframe || "5m"} · ${algo.indicator || "EMA"} · last completed candle · skip doji · skip wick > body · max ${dailyTradeLimit(algo)} trades/day`,
   };
 }
 

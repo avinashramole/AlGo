@@ -1,3 +1,5 @@
+import { candleAllowsEntry, candleQuality } from "../candleQuality.js";
+
 const BAR_MS = 5 * 60 * 1000;
 const NSE_OPEN_MINUTES = 9 * 60 + 15;
 const NSE_CLOSE_MINUTES = 15 * 60 + 30;
@@ -209,8 +211,9 @@ export function lastBarVwapReversal(completedSessionBars = []) {
   const vwap = sessionVwap(completedSessionBars);
   const open = Number(last.open);
   const close = Number(last.close);
-  const buyCe = vwap > 0 && open < vwap && close > vwap;
-  const buyPe = vwap > 0 && open > vwap && close < vwap;
+  const qualityOk = candleAllowsEntry(last);
+  const buyCe = qualityOk && vwap > 0 && open < vwap && close > vwap;
+  const buyPe = qualityOk && vwap > 0 && open > vwap && close < vwap;
   return { buyCe, buyPe, open, close, vwap, bar: last, fullFill: buyCe || buyPe };
 }
 
@@ -254,12 +257,7 @@ export function istHmOnDayMs(now, hm, fallback = "09:05") {
 }
 
 export function firstBarColor(bar) {
-  const open = Number(bar?.open);
-  const close = Number(bar?.close);
-  if (!(open > 0) || !(close > 0)) return "";
-  if (close > open) return "green";
-  if (close < open) return "red";
-  return "doji";
+  return candleQuality(bar).color;
 }
 
 export function firstCandleEntryGraceMs(barMs) {
@@ -389,17 +387,26 @@ export const VwapSignalEngine = {
       if (!bar) {
         return { bar: null, niftyColor: "", ceColor: "", peColor: "", buyCe: false, buyPe: false };
       }
+      const ceBar = sameTime(ceAll, bar.time);
+      const peBar = sameTime(peAll, bar.time);
       const niftyColor = firstBarColor(bar);
-      const ceColor = firstBarColor(sameTime(ceAll, bar.time));
-      const peColor = firstBarColor(sameTime(peAll, bar.time));
+      const ceColor = firstBarColor(ceBar);
+      const peColor = firstBarColor(peBar);
+      const futOk = candleAllowsEntry(bar);
+      const ceOk = candleAllowsEntry(ceBar);
+      const peOk = candleAllowsEntry(peBar);
       const buyCe =
         !waitingEval &&
+        futOk &&
+        ceOk &&
         niftyColor === "green" &&
         ceColor === "green" &&
-        (!oppositeConfirm || peColor === "red");
+        (!oppositeConfirm || (peColor === "red" && peOk));
       const buyPe = !waitingEval &&
+        futOk &&
+        peOk &&
         (oppositeConfirm
-          ? niftyColor === "green" && peColor === "green" && ceColor === "red"
+          ? niftyColor === "green" && peColor === "green" && ceColor === "red" && ceOk
           : niftyColor === "red" && peColor === "green");
       return { bar, niftyColor, ceColor, peColor, buyCe, buyPe };
     };

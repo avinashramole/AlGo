@@ -1,11 +1,7 @@
+import { candleAllowsEntry, candleQuality } from "../candleQuality.js";
+
 export function candleColor(bar) {
-  if (!bar) return "";
-  const open = Number(bar.open);
-  const close = Number(bar.close);
-  if (!(open > 0) || !(close > 0)) return "";
-  if (close > open) return "green";
-  if (close < open) return "red";
-  return "doji";
+  return candleQuality(bar).color;
 }
 
 export function completedBars(bars = [], barMs, now = Date.now()) {
@@ -47,10 +43,10 @@ export function evaluateShivamEntry({ indexBar, futureBar, ceBar, peBar } = {}) 
   const futureColor = candleColor(futBar);
   const ceColor = candleColor(ceBar);
   const peColor = candleColor(peBar);
-  const indexReady = barIsValid(indexBar) && indexColor && !isDojiColor(indexColor);
-  const futureReady = barIsValid(futBar) && futureColor && !isDojiColor(futureColor);
-  const ceReady = barIsValid(ceBar) && ceColor === "green" && !isDojiColor(ceColor);
-  const peReady = barIsValid(peBar) && peColor === "green" && !isDojiColor(peColor);
+  const indexReady = barIsValid(indexBar) && indexColor && !isDojiColor(indexColor) && candleAllowsEntry(indexBar);
+  const futureReady = barIsValid(futBar) && futureColor && !isDojiColor(futureColor) && candleAllowsEntry(futBar);
+  const ceReady = barIsValid(ceBar) && ceColor === "green" && !isDojiColor(ceColor) && candleAllowsEntry(ceBar);
+  const peReady = barIsValid(peBar) && peColor === "green" && !isDojiColor(peColor) && candleAllowsEntry(peBar);
   return {
     indexColor,
     futureColor,

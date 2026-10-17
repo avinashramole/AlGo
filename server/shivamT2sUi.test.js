@@ -45,7 +45,11 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(builder, /label="PE timeframe"/);
   assert.match(builder, /data-shivam-atm="true"/);
   assert.match(builder, /ATM auto/);
-  assert.match(builder, /Do not trade a doji on the index, future, or option candle/);
+  assert.match(builder, /CANDLE_ENTRY_RULE/);
+  assert.match(lib, /CANDLE_ENTRY_RULE/);
+  assert.match(lib, /Entry uses the last completed candle/);
+  assert.match(lib, /Skip doji/);
+  assert.match(lib, /upper wick or lower wick/);
   assert.doesNotMatch(builder, /ITM offset/);
   assert.doesNotMatch(builder, /NumberField label="Strike offset"/);
   assert.match(page, /data-shivam-candles="idx-fut-opt"/);

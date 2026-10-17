@@ -1,11 +1,7 @@
+import { candleAllowsEntry, candleQuality } from "../candleQuality.js";
+
 export function candleColor(bar) {
-  if (!bar) return "";
-  const open = Number(bar.open);
-  const close = Number(bar.close);
-  if (!(open > 0) || !(close > 0)) return "";
-  if (close > open) return "green";
-  if (close < open) return "red";
-  return "doji";
+  return candleQuality(bar).color;
 }
 
 export function completedBars(bars = [], barMs, now = Date.now()) {
@@ -32,12 +28,13 @@ export function evaluateEntry({ indexBar, ceBar, peBar } = {}) {
   const indexColor = candleColor(indexBar);
   const ceColor = candleColor(ceBar);
   const peColor = candleColor(peBar);
+  const indexOk = candleAllowsEntry(indexBar);
   return {
     indexColor,
     ceColor,
     peColor,
-    buyCe: indexColor === "green" && ceColor === "green",
-    buyPe: indexColor === "red" && peColor === "green",
+    buyCe: indexOk && indexColor === "green" && ceColor === "green" && candleAllowsEntry(ceBar),
+    buyPe: indexOk && indexColor === "red" && peColor === "green" && candleAllowsEntry(peBar),
     barTime: Number(indexBar?.time) || 0,
     indexOpen: Number(indexBar?.open) || 0,
     indexClose: Number(indexBar?.close) || 0,

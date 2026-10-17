@@ -45,6 +45,7 @@ import {
   SHIVAM_T2S_SCRIPTS,
   DESK_TIMEFRAME_PRESETS,
   isNiftyOptionEngineKind,
+  CANDLE_ENTRY_RULE,
   type AlgoStrategy,
   type ConditionJoin,
   type ConditionOp,
@@ -575,7 +576,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text="Live trading strategy on Algo Test. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and mapped user brokers. Capital management uses Dhan funds and the live lot size. Map clients on the card to copy users. Card shows ● ● ● or NO Trade."
+            text={`Live trading strategy on Algo Test. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. ${CANDLE_ENTRY_RULE} ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and mapped user brokers. Capital management uses Dhan funds and the live lot size. Map clients on the card to copy users. Card shows ● ● ● or NO Trade.`}
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -635,7 +636,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={crudeFirst}
             title="CRUDE OIL"
-            text="Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. Checks every completed Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. Doji skips that candle. MCX. Paused until Start."
+            text={`Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. Checks every completed Crude future candle until a signal. Crude green + ATM CE green → BUY CE. Crude red + ATM PE green → BUY PE. ${CANDLE_ENTRY_RULE} MCX. Paused until Start.`}
             onClick={() => {
               const next = emptyStrategy("crude-first-candle");
               set({
@@ -706,7 +707,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={shivam}
             title="SHIVAM T2S"
-            text="Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. Doji skips. ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and mapped user brokers. Map clients on the card to copy users. Card shows ● ● ● or NO Trade."
+            text={`Algo Test only. NIFTY (or another index) future green + CE green buys CE. Future red + PE green buys PE. ${CANDLE_ENTRY_RULE} ATM auto from the instrument master. Paper or Live Dhan after Start. Live entries go to the admin broker and mapped user brokers. Map clients on the card to copy users. Card shows ● ● ● or NO Trade.`}
             onClick={() => {
               const next = emptyStrategy("shivam-t2s");
               set({
@@ -725,7 +726,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           <TypeCard
             active={kind === "nifty-first-candle"}
             title="NIFTY"
-            text="Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. Doji skips that candle. SL 20% / target 40%. LIVE at 09:00 IST."
+            text={`Pick 5m, 15m, 30m, 1hr, or custom 1–60 minutes. NIFTY FUT green + ATM CE green → BUY ATM CE. NIFTY FUT red + ATM PE green → BUY ATM PE. ${CANDLE_ENTRY_RULE} SL 20% / target 40%. LIVE at 09:00 IST.`}
             onClick={() =>
               set({
                 ...emptyStrategy("nifty-first-candle"),
@@ -982,7 +983,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         {mir ? (
           <div className="mt-2.5 space-y-1.5" data-mir-settings="true">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              Index maps its exchange automatically. Completed {form.timeframe || "15m"} candles only: index green + CE green buys CE. Index red + PE green buys PE. Initial target {form.initialTargetPct || 40}%. At −{form.reversalLossPct || 20}% plus the opposite index candle, buy {form.reversalQtyMultiple || 2}× the other side and keep both. Combined target {form.combinedTargetPct || 20}% on {form.combinedTargetBasis === "combined" ? "combined premium" : "original premium"}. Saving does not start trading.
+              Index maps its exchange automatically. Completed {form.timeframe || "15m"} candles only: index green + CE green buys CE. Index red + PE green buys PE. {CANDLE_ENTRY_RULE} Initial target {form.initialTargetPct || 40}%. At −{form.reversalLossPct || 20}% plus the opposite index candle, buy {form.reversalQtyMultiple || 2}× the other side and keep both. Combined target {form.combinedTargetPct || 20}% on {form.combinedTargetBasis === "combined" ? "combined premium" : "original premium"}. Saving does not start trading.
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               <label className="text-xs font-semibold text-slate-500">
@@ -1023,7 +1024,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         ) : shivam ? (
           <div className="mt-2.5 space-y-1.5" data-shivam-settings="true">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              Do not trade a doji on the index, future, or option candle. BUY CE: index green, future green, CE green. BUY PE: index red, future red, PE green. ATM strike is always auto-selected from the live future/index and changes with the market. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
+              {CANDLE_ENTRY_RULE} BUY CE: index green, future green, CE green. BUY PE: index red, future red, PE green. ATM strike is always auto-selected from the live future/index and changes with the market. Lot size comes from the live instrument master. Re-entries count as another daily trade. Rejected orders do not.
             </div>
             <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4" data-shivam-timeframes="true">
               <DeskTimeframeSelect
@@ -1104,7 +1105,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
         ) : test1 && !test2 ? (
           <div className="mt-2.5 space-y-1.5">
             <div className="desk-help rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-              Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed {form.timeframe || "5m"} green candle with body ≈90% and wicks ≈10% buys once. Target is 100% of that body from the actual fill. Stop is the signal candle low.
+              Choose the script from the dropdown. TEST1 buys only that script's current ATM CE or PE. After 09:30 IST, a completed {form.timeframe || "5m"} green candle with body ≈90% and wicks ≈10% buys once. {CANDLE_ENTRY_RULE} Target is 100% of that body from the actual fill. Stop is the signal candle low.
             </div>
             <label className="block text-xs font-semibold text-slate-500">
               Script · ATM option
@@ -1136,14 +1137,14 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
           </div>
         ) : niftyTest ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
-            Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. Saving does not start it.
+            Locked to the NIFTY future. While Nifty Test is started, the live feed is checked the whole session. Price above the current candle open buys. Price below that open sells. {CANDLE_ENTRY_RULE} Saving does not start it.
           </div>
         ) : crudeFirst || firstCandle || test2 || mir || shivam ? null : engine ? (
           <div className="desk-help mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[11px] font-semibold text-slate-500">
             {hedge
-              ? "Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
+              ? `Locked to NIFTY weekly ATM options on the 15-minute chart. Completed candle only: open below VWAP and close above → BUY 1 lot CE. Open above VWAP and close below → BUY 1 lot PE. ${CANDLE_ENTRY_RULE} Primary +40% books that option (no stop). −20% buys 2 lots of the opposite option once. Combined P&L of +5% of starting capital exits everything. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE.`
               : reversal
-              ? "Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE."
+              ? `Locked to NIFTY weekly ATM options (not monthly) on the 15-minute chart. After a 15m candle closes: open below VWAP and close above → BUY weekly ATM CE. Open above VWAP and close below → BUY weekly ATM PE. ${CANDLE_ENTRY_RULE} LIVE starts automatically at 09:20 IST on session days. Saving or restarting t2s does not start LIVE.`
               : "Locked to NIFTY ATM options on the 5-minute chart. Side is chosen by the first futures close versus VWAP (CE if above, PE if below). Saving does not start trading — use Start paper or Start live on the algo card."}
           </div>
         ) : (
@@ -1666,7 +1667,7 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             }
           />
           <p className="desk-help text-[11px] font-semibold text-slate-400">
-            Add extra rows for multiple conditions. AND means every row must be true. OR means any one row can fire. Close above / close below use the last completed candle only.
+            Add extra rows for multiple conditions. AND means every row must be true. OR means any one row can fire. Close above / close below use the last completed candle only. {CANDLE_ENTRY_RULE}
           </p>
         </div>
 

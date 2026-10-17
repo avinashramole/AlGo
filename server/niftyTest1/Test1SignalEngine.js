@@ -1,3 +1,4 @@
+import { candleAllowsEntry } from "../candleQuality.js";
 import { completedCandles, istWallTime, sessionBars } from "../niftyVwap/VwapSignalEngine.js";
 
 function hmToMinutes(hm, fallback = "09:30") {
@@ -39,6 +40,7 @@ export function candleMetrics(bar) {
 export function isStrongGreenBody(bar, { minBodyPct = 0.9, maxWickPct = 0.1 } = {}) {
   const metrics = candleMetrics(bar);
   const ok =
+    candleAllowsEntry(bar) &&
     metrics.green &&
     metrics.range > 0 &&
     metrics.bodyPct + 1e-9 >= Number(minBodyPct) &&

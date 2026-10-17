@@ -623,9 +623,9 @@ test("a blocked live BUY while a lot is open stays HOLD OPEN", () => {
     now: T0 + 6 * BAR,
     feedLive: true,
     minutesToClose: 120,
-    futuresBars: risingFutures(6),
-    ceBars: optionAboveVwap(6, "CE"),
-    peBars: optionAboveVwap(6, "PE"),
+    futuresBars: risingFutures(6).map((row) => ({ ...row, open: row.close - 20, high: row.close + 4, low: row.close - 22 })),
+    ceBars: optionAboveVwap(6, "CE").map((row) => ({ ...row, open: row.close - 8, high: row.close + 2, low: row.close - 9 })),
+    peBars: optionAboveVwap(6, "PE").map((row) => ({ ...row, open: row.close - 8, high: row.close + 2, low: row.close - 9 })),
     spot: 23000,
     step: 50,
     expiry: "2026-10-19",
@@ -1224,6 +1224,25 @@ test("first candle BUY PE when Nifty first 5m is red and ATM PE first 5m is gree
   assert.equal(signal.buyCe, false);
   assert.equal(signal.niftyColor, "red");
   assert.equal(signal.peColor, "green");
+});
+
+test("15m reversal skips when the last candle wick is greater than the body", () => {
+  const futuresBars = [bar15(0, 24500, 24500, { high: 24500, low: 24500 }), bar15(1, 24480, 24540, { high: 24680, low: 24470 })];
+  const reversal = lastBarVwapReversal(futuresBars);
+  assert.equal(reversal.buyCe, false);
+  assert.equal(reversal.buyPe, false);
+});
+
+test("first candle skips when upper or lower wick is greater than the body", () => {
+  const wick = VwapSignalEngine.evaluateFirstCandle({
+    futuresBars: [firstBar(24500, 24508, { high: 24600, low: 24499 })],
+    ceBars: [firstBar(100, 118)],
+    peBars: [firstBar(110, 96)],
+    now: T0_0900 + BAR,
+  });
+  assert.equal(wick.buyCe, false);
+  assert.equal(wick.buyPe, false);
+  assert.equal(wick.niftyColor, "green");
 });
 
 test("first candle doji or option not green is no trade", () => {

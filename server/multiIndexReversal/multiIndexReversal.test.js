@@ -150,6 +150,16 @@ test("strike offset is directional for CE and PE from -4 to +4", () => {
   assert.equal(reversalQty(30, 2, 30), 60);
 });
 
+test("wick greater than body skips the multi-index entry candle", () => {
+  const signal = evaluateEntry({
+    indexBar: { time: T0, open: 25000, high: 25008, low: 24800, close: 25006 },
+    ceBar: bar(T0, 100, 110),
+    peBar: bar(T0, 100, 110),
+  });
+  assert.equal(signal.buyCe, false);
+  assert.equal(signal.buyPe, false);
+});
+
 test("doji is not green or red", () => {
   assert.equal(candleColor(bar(T0, 100, 100)), "doji");
   const signal = evaluateEntry({

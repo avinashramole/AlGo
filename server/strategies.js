@@ -7,6 +7,7 @@ import { defaultNiftyVwapHedgeAlgo, isNiftyVwapHedgeAlgo, niftyVwapHedgeConfig, 
 import { defaultMultiIndexReversalAlgo, isMultiIndexReversalAlgo, multiIndexReversalConfig, MULTI_INDEX_REVERSAL_KIND } from "./multiIndexReversal/index.js";
 import { clampShivamDailyTradeLimit, defaultShivamT2sAlgo, isShivamT2sAlgo, shivamT2sConfig, SHIVAM_T2S_KIND, SHIVAM_T2S_SEED_ID, validateShivamT2s } from "./shivamT2s/index.js";
 import { DESK_TIMEFRAME_PRESETS, resolveDeskTimeframe } from "./deskTimeframe.js";
+import { CANDLE_ENTRY_RULE } from "./candleQuality.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALGOS_FILE = process.env.T2S_ALGOS_FILE || path.join(__dirname, "data", "algos.json");
@@ -293,23 +294,23 @@ export function summarizeAlgo(algo) {
   const size = `${lots} lot × ${lot} = ${lots * lot} qty`;
   const contract = contractLabel(algo);
   if (isNiftyVwapHedgeAlgo(algo)) {
-    return `NIFTY 15m VWAP hedge · weekly ATM · open below VWAP + close above → BUY 1 lot CE · open above VWAP + close below → BUY 1 lot PE · primary +40% · −20% buys 2 lots opposite once · +5% account P&L exits all · daily LIVE 09:20 IST · ${size}`;
+    return `NIFTY 15m VWAP hedge · weekly ATM · open below VWAP + close above → BUY 1 lot CE · open above VWAP + close below → BUY 1 lot PE · ${CANDLE_ENTRY_RULE} · primary +40% · −20% buys 2 lots opposite once · +5% account P&L exits all · daily LIVE 09:20 IST · ${size}`;
   }
   if (isNiftyVwapReversalAlgo(algo)) {
     const sl = algo.initialSlPct || 15;
     const tgt = algo.targetPct || 30;
-    return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · SL ${sl}% / TGT ${tgt}% · daily LIVE 09:20 IST · ${size}`;
+    return `NIFTY 15m VWAP reversal · weekly ATM options (not monthly) · open below VWAP + close above → BUY CE · open above VWAP + close below → BUY PE · after 15m close · ${CANDLE_ENTRY_RULE} · SL ${sl}% / TGT ${tgt}% · daily LIVE 09:20 IST · ${size}`;
   }
   if (isNiftyTestAlgo(algo)) {
     const sl = algo.slPct || 0.4;
     const tgt = algo.targetPct || 0.8;
-    return `Nifty Test · NIFTY FUT · live feed while started · current candle above open → BUY · current candle below open → SELL · ${tf} · SL ${sl}% / TGT ${tgt}% · ${size}`;
+    return `Nifty Test · NIFTY FUT · live feed while started · current candle above open → BUY · current candle below open → SELL · ${CANDLE_ENTRY_RULE} · ${tf} · SL ${sl}% / TGT ${tgt}% · ${size}`;
   }
   if (isNiftyTest1Algo(algo)) {
     const body = Math.round((Number(algo.minBodyPct) || 0.9) * 100);
     const wick = Math.round((Number(algo.maxWickPct) || 0.1) * 100);
     const start = algo.startTimeIst || "09:30";
-    return `TEST1 · ${algo.symbol || "NIFTY"} ${algo.timeframe || "5m"} ATM CE/PE only · after ${start} IST · green body ≥${body}% · wick ≤${wick}% · BUY once per candle · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL signal low · ${size}`;
+    return `TEST1 · ${algo.symbol || "NIFTY"} ${algo.timeframe || "5m"} ATM CE/PE only · after ${start} IST · green body ≥${body}% · wick ≤${wick}% · ${CANDLE_ENTRY_RULE} · BUY once per candle · TGT 100% of signal ${algo.targetSource === "range" ? "range" : "body"} from fill · SL signal low · ${size}`;
   }
   if (isNiftyTest2Algo(algo)) {
     const start = algo.startTimeIst || "09:35";
@@ -331,18 +332,18 @@ export function summarizeAlgo(algo) {
   }
   if (isShivamT2sAlgo(algo)) {
     const cfg = shivamT2sConfig(algo);
-    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ATM auto · no doji on index, future, or option · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · ${cfg.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · mapped clients · ${size}`;
+    return `Shivam T2S · ${cfg.symbol} ${cfg.futuresInstrument} · IDX ${cfg.indexTimeframe} CE ${cfg.ceTimeframe} PE ${cfg.peTimeframe} · ATM auto · ${CANDLE_ENTRY_RULE} · SL ${cfg.slValue}${cfg.slMode === "points" ? " pts" : "%"} / TGT ${cfg.targetValue}${cfg.targetMode === "points" ? " pts" : "%"} · max ${cfg.maxTradesPerDay} trades/day · ${cfg.runMode === "live" ? "Live Dhan · admin + mapped brokers" : "Paper"} · mapped clients · ${size}`;
   }
   if (isMultiIndexReversalAlgo(algo)) {
     const cfg = multiIndexReversalConfig(algo);
-    return `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · offset ${cfg.strikeOffset} · index+option candle · CE green/green · PE red+green · TGT ${cfg.initialTargetPct}% · reverse −${cfg.reversalLossPct}% ×${cfg.reversalQtyMultiple} · combined +${cfg.combinedTargetPct}% ${cfg.combinedTargetBasis} · ${algo.runMode === "live" ? "Live" : "Paper"} · ${size}`;
+    return `${cfg.indexLabel} ${cfg.exchange} · ${cfg.timeframe} · offset ${cfg.strikeOffset} · index+option candle · CE green/green · PE red+green · ${CANDLE_ENTRY_RULE} · TGT ${cfg.initialTargetPct}% · reverse −${cfg.reversalLossPct}% ×${cfg.reversalQtyMultiple} · combined +${cfg.combinedTargetPct}% ${cfg.combinedTargetBasis} · ${algo.runMode === "live" ? "Live" : "Paper"} · ${size}`;
   }
   if (isCrudeFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
     const tgt = algo.targetPct || 40;
     const endAt = algo.endTimeIst || "23:15";
     const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
-    return `CRUDE OIL FUT every ${tf} candle · monthly ATM · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT + CE green and PE red → BUY CE · CRUDE FUT + PE green and CE red → BUY PE · doji skips that candle · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
+    return `CRUDE OIL FUT every ${tf} candle · monthly ATM · check each completed ${tf} from ${algo.firstBarStartIst || "09:00"} IST until a signal · one signal places one order · max ${maxTrades} trades/day · CRUDE FUT + CE green and PE red → BUY CE · CRUDE FUT + PE green and CE red → BUY PE · ${CANDLE_ENTRY_RULE} · MCX until ${endAt} IST · SL ${sl}% / TGT ${tgt}% · paused until Start · ${size}`;
   }
   if (isNiftyFirstCandleAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -355,7 +356,7 @@ export function summarizeAlgo(algo) {
     const maxTrades = clampDailyTradeLimit(algo.maxTradesPerDay, 5);
     const atm = strikeOffsetLabel(algo.strikeOffset);
     const trail = niftyFirstCandleTrail(algo);
-    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · doji skips that candle · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
+    return `NIFTY FUT first candle · ${tf} · ${expiry} ${atm} · preview ${tf} open/close at the next candle open · up to ${maxTrades} trades · first check ${firstBar}–${evalAt} IST · end ${endAt} · preview NIFTY FUT green + preview ATM CE green → BUY CE · preview NIFTY FUT red + preview ATM PE green → BUY PE · current candle close is not used · ${CANDLE_ENTRY_RULE} · SL ${sl}% / TGT ${tgt}% · trailing SL +${trail.trailingActivationPct}% to buy, then +${trail.trailingShiftPct}% every +${trail.trailingEveryPct}% · max ${maxTrades} trades/day · daily LIVE ${start} IST · ${size}`;
   }
   if (isNiftyVwapAlgo(algo)) {
     const sl = algo.initialSlPct || 20;
@@ -372,7 +373,7 @@ export function summarizeAlgo(algo) {
       op: algo.buyOp,
       right: algo.buyRight,
       value: algo.buyValue,
-    })} · ${pattern} · ${tf} · ${size}`;
+    })} · ${pattern} · ${tf} · ${CANDLE_ENTRY_RULE} · ${size}`;
   }
   return `Indicator · ${contract} · Buy when ${formatConditionGroup(algo.buyConditions, {
     left: algo.buyLeft,
@@ -384,7 +385,7 @@ export function summarizeAlgo(algo) {
     op: algo.sellOp,
     right: algo.sellRight,
     value: algo.sellValue,
-  })} · ${tf} · ${size}`;
+  })} · ${tf} · ${CANDLE_ENTRY_RULE} · ${size}`;
 }
 
 function mappingIds(value) {
