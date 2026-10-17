@@ -11,6 +11,7 @@ import { getMemberDesk } from "../api/client";
 import { LoginPasswordCard } from "../components/desk/LoginPasswordCard";
 import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
+import { memberIdentityLine } from "../lib/format";
 import { isAdminUser } from "../lib/roles";
 
 const fieldClass = "mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal";
@@ -78,7 +79,7 @@ export function Profile() {
       <section className="card p-4" data-member-profile="identity">
         <div className="desk-kicker">Account</div>
         <div className="mb-4 mt-1 text-lg font-bold leading-snug">
-          Name {name || "-"} | Email {email || "-"} | Mobile {mobile || "-"}
+          {memberIdentityLine(name, email, mobile)}
         </div>
         <div className="mb-3 text-sm font-bold">Edit profile</div>
         <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">

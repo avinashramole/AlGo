@@ -86,7 +86,8 @@ export const PDF_MEMBER_IDENTITY_FONT = PDF_LINE_FONT + 4;
 
 function memberProfileLine(report) {
   const { name, email, mobile } = memberProfile(report);
-  return `Name ${name || "-"} | Email ${email || "-"} | Mobile ${mobile || "-"}`;
+  const part = (value) => String(value || "").trim() || "-";
+  return `${part(name)} | ${part(email)} | ${part(mobile)}`;
 }
 
 function optionSourceLine(report) {

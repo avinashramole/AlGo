@@ -346,15 +346,18 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.match(pdf, /Start date 2026-10-10/);
   assert.match(pdf, /End date 2026-10-10/);
   assert.match(pdf, /Range 2026-10-10 Generated/);
-  assert.match(pdf, /Name Avinash Ramole/);
-  assert.match(pdf, /Email avinash@t2s\.app/);
-  assert.match(pdf, /Mobile 9876543210/);
+  assert.match(pdf, /Avinash Ramole/);
+  assert.match(pdf, /avinash@t2s\.app/);
+  assert.match(pdf, /9876543210/);
+  assert.doesNotMatch(pdf, /Name Avinash Ramole/);
+  assert.doesNotMatch(pdf, /Email avinash@t2s\.app/);
+  assert.doesNotMatch(pdf, /Mobile 9876543210/);
   assert.equal(PDF_MEMBER_IDENTITY_FONT, 12);
   assert.match(
     pdf,
-    /\/F2 12 Tf[\s\S]{0,160}\(Name Avinash Ramole \| Email avinash@t2s\.app \| Mobile 9876543210\) Tj/,
+    /\/F2 12 Tf[\s\S]{0,160}\(Avinash Ramole \| avinash@t2s\.app \| 9876543210\) Tj/,
   );
-  const identityY = pdfTextY(pdf, "Name Avinash Ramole | Email avinash@t2s.app | Mobile 9876543210");
+  const identityY = pdfTextY(pdf, "Avinash Ramole | avinash@t2s.app | 9876543210");
   const brandY = pdfTextY(pdf, "TRADE");
   const productAt = pdf.indexOf("(Product T2S");
   const productTd = pdf.lastIndexOf(" Td", productAt);
