@@ -2,6 +2,7 @@ import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, orderBrokerForDe
 import { dhanTokenStatus } from "./dhanToken.js";
 import { isFreshTradeLogRow, lastBookClearAt, msUntilBookClear, tradeLogRowMs } from "./istClock.js";
 import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
+import { ADMIN_ARCHIVE_ID, archiveTrades } from "./tradeArchive.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, overlayLiveUnrealized, withAdminBrokerPnl } from "./memberBrokerPnl.js";
@@ -3751,6 +3752,7 @@ function rowIsMissingStrategy(row, ids, names) {
 export function clearAdminDailyTradeLog(now = Date.now()) {
   const resetAt = lastBookClearAt(now);
   if ((Number(state.bookClearedAt) || 0) >= resetAt) return false;
+  archiveTrades(ADMIN_ARCHIVE_ID, state.closedTrades);
   const keepFresh = (row) => tradeLogRowMs(row) >= resetAt;
   state.orders = (state.orders || []).filter(keepFresh);
   state.closedTrades = (state.closedTrades || []).filter(keepFresh);

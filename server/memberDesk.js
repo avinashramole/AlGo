@@ -16,6 +16,7 @@ import { markContractToMarket } from "./positionMark.js";
 import { parseOptionContract } from "./frontFutures.js";
 import { defaultOrderRole, exitReasonLabel, keepExitReason, orderWhyLabel } from "./exitReason.js";
 import { isShivamT2sName } from "./shivamT2s/config.js";
+import { archiveTrades } from "./tradeArchive.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESK_FILE = process.env.T2S_MEMBER_DESK_FILE || path.join(__dirname, "data", "member-desk.json");
@@ -1673,6 +1674,7 @@ export function clearMemberDailyBook(desk, now = Date.now()) {
   const resetAt = lastBookClearAt(now);
   if ((Number(desk.bookClearedAt) || 0) >= resetAt) return desk;
   splitMemberOrderBook(desk);
+  archiveTrades(desk.userId, desk.closedTrades);
   desk.orders = [];
   desk.positions = [];
   desk.alerts = [];
@@ -1684,8 +1686,9 @@ export function clearMemberDailyBook(desk, now = Date.now()) {
 
 export function sweepMemberDailyBooks(now = Date.now()) {
   let cleared = 0;
-  for (const desk of Object.values(store)) {
+  for (const [userId, desk] of Object.entries(store)) {
     if (!desk) continue;
+    if (!desk.userId) desk.userId = userId;
     desk.orders = Array.isArray(desk.orders) ? desk.orders : [];
     desk.orderHistory = Array.isArray(desk.orderHistory) ? desk.orderHistory : [];
     desk.closedTrades = Array.isArray(desk.closedTrades) ? desk.closedTrades : [];

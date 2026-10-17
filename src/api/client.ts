@@ -1789,11 +1789,17 @@ function clickDownloadLink(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallback: string, mode?: ReportSaveMode) {
+async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallback: string, mode?: ReportSaveMode, init?: RequestInit) {
   let response: Response;
   try {
     response = await fetch(`${apiBase()}${path}${path.includes("?") ? "&" : "?"}format=${format}`, {
-      headers: authHeaders(),
+      method: init?.method || "GET",
+      headers: {
+        ...authHeaders(),
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        ...(init?.headers || {}),
+      },
+      body: init?.body,
     });
   } catch {
     throw new Error(apiDownMessage());
@@ -1856,6 +1862,44 @@ export function downloadDeskReport(format: "pdf" | "xlsx", mode?: ReportSaveMode
 
 export function downloadMemberReport(format: "pdf" | "xlsx" = "pdf", mode?: ReportSaveMode) {
   return downloadBrandedFile("/member/report/download", format, "Could not download your trade report.", mode);
+}
+
+export const MASTER_MONTH_PRESETS = [1, 3, 6, 12] as const;
+
+export type MasterReportPerson = {
+  id: string;
+  name: string;
+  email?: string;
+  mobile?: string;
+  role: "admin" | "user";
+};
+
+export type MasterReportPeople = {
+  admin: MasterReportPerson;
+  users: MasterReportPerson[];
+};
+
+export type MasterReportPayload = {
+  includeAdmin: boolean;
+  userIds: string[];
+  range: "custom" | "months";
+  months?: number;
+  from?: string;
+  to?: string;
+};
+
+export function getMasterReportPeople() {
+  return request<MasterReportPeople>("/report/master");
+}
+
+export function downloadMasterReport(payload: MasterReportPayload, format: "pdf" | "xlsx" = "pdf", mode?: ReportSaveMode) {
+  return downloadBrandedFile(
+    "/report/master/download",
+    format,
+    "Could not download the master report.",
+    mode,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
 }
 
 export function selectOptionChain(symbol: string, expiry?: string) {
