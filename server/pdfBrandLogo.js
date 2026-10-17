@@ -113,8 +113,12 @@ export function loadFullBrandLogo(root = path.join(__dirname, "..")) {
   return decodePngToRgb(fs.readFileSync(file));
 }
 
-export function pdfWatermarkOps(pageW, pageH, image) {
-  const max = Math.min(pageW, pageH) * 0.72;
+export const PDF_WATERMARK_COVER = 0.72;
+export const PDF_MEMBER_WATERMARK_COVER = 0.4;
+
+export function pdfWatermarkOps(pageW, pageH, image, { cover = PDF_WATERMARK_COVER } = {}) {
+  const ratio = Number(cover) > 0 ? Number(cover) : PDF_WATERMARK_COVER;
+  const max = Math.min(pageW, pageH) * ratio;
   const scale = Math.min(max / image.width, max / image.height);
   const w = image.width * scale;
   const h = image.height * scale;

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test2HoldStyle } from "./niftyVwap/config.js";
-import { loadFullBrandLogo, pdfImageXObject, pdfWatermarkOps } from "./pdfBrandLogo.js";
+import { loadFullBrandLogo, pdfImageXObject, pdfWatermarkOps, PDF_MEMBER_WATERMARK_COVER, PDF_WATERMARK_COVER } from "./pdfBrandLogo.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_DIR = process.env.T2S_BACKTEST_REPORT_DIR || path.join(__dirname, "data", "backtests");
@@ -982,8 +982,12 @@ function pdfWatermarkAlpha(report) {
   return isMemberReport(report) ? 0.18 : 0.1;
 }
 
-function pageOpsWithWatermark(pageOps, logo) {
-  const watermark = pdfWatermarkOps(PAGE_W, PAGE_H, logo);
+function pdfWatermarkCover(report) {
+  return isMemberReport(report) ? PDF_MEMBER_WATERMARK_COVER : PDF_WATERMARK_COVER;
+}
+
+function pageOpsWithWatermark(pageOps, logo, report) {
+  const watermark = pdfWatermarkOps(PAGE_W, PAGE_H, logo, { cover: pdfWatermarkCover(report) });
   const pageFill = `0.00 0.00 ${PAGE_W.toFixed(2)} ${PAGE_H.toFixed(2)} re`;
   if (pageOps[1] === pageFill && pageOps[2] === "f") {
     return [...pageOps.slice(0, 3), ...watermark, ...pageOps.slice(3)];
@@ -1027,7 +1031,7 @@ export function renderBacktestPdf(report) {
         `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Rotate 0 /Contents ${contentId} 0 R ${resources} >>`,
       ),
     );
-    const ops = image ? pageOpsWithWatermark(pages[i], logo) : pages[i];
+    const ops = image ? pageOpsWithWatermark(pages[i], logo, report) : pages[i];
     const stream = Buffer.from(ops.join("\n"));
     objects.push(
       Buffer.concat([

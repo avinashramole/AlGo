@@ -9,7 +9,12 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-bt-"));
 process.env.T2S_BACKTEST_REPORT_DIR = dir;
 
 const { T2S_STANDARD_BRAND_REPORT, brandedReportFile, buildBacktestReport, clearBacktestReport, deskToProposalReport, loadBacktestReport, renderBacktestExcel, renderBacktestPdf, reportDownloadName, saveBacktestReport } = await import("./backtestReport.js");
-const { loadFullBrandLogo } = await import("./pdfBrandLogo.js");
+const { loadFullBrandLogo, PDF_MEMBER_WATERMARK_COVER, PDF_WATERMARK_COVER } = await import("./pdfBrandLogo.js");
+
+function watermarkBox(pdf) {
+  const match = pdf.match(/([0-9.]+) 0 0 ([0-9.]+) [0-9.]+ [0-9.]+ cm\n\/Im1 Do/);
+  return { w: Number(match?.[1] || 0), h: Number(match?.[2] || 0) };
+}
 
 test("full T2S logo is decoded for the PDF watermark", () => {
   const logo = loadFullBrandLogo();
@@ -95,6 +100,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /\/DeviceRGB/);
   assert.match(pdf.toString("latin1"), /\/Im1 Do/);
   assert.match(pdf.toString("latin1"), /\/ca 0\.10/);
+  const adminMark = watermarkBox(pdf.toString("latin1"));
+  assert.ok(adminMark.w > 350);
+  assert.ok(adminMark.w < 500);
   assert.match(pdf.toString("latin1"), /0\.992 0\.420 0\.004/);
   assert.match(pdf.toString("latin1"), /0\.000 0\.059 0\.161/);
   assert.match(pdf.toString("latin1"), /0\.000 0\.059 0\.161 rg\n0\.00 555\.00/);
@@ -336,6 +344,11 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.match(pdf, /\/Im1 Do/);
   assert.match(pdf, /\/Subtype \/Image/);
   assert.match(pdf, /\/ca 0\.18/);
+  const memberMark = watermarkBox(pdf);
+  assert.ok(memberMark.w > 180);
+  assert.ok(memberMark.w < 280);
+  assert.equal(PDF_MEMBER_WATERMARK_COVER, 0.4);
+  assert.equal(PDF_WATERMARK_COVER, 0.72);
   assert.equal(pdf.includes("0.000 0.059 0.161"), false);
   const pageFillAt = pdf.indexOf("0.00 0.00 842.00 595.00 re");
   const watermarkAt = pdf.indexOf("/Im1 Do");
