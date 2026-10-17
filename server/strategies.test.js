@@ -246,6 +246,26 @@ test("seed includes paused CRUDE OIL option strategies", () => {
   assert.equal(shivam.status, "PAUSED");
 });
 
+test("hydrate keeps one Shivam T2S and drops Algo Test NIFTY copies", () => {
+  const catalog = seedAlgos();
+  const extraShivam = normalizeAlgo(
+    { name: "Shivam T2S Strategy", kind: "shivam-t2s", testDesk: true },
+    { id: "shivam-copy" },
+  );
+  const testNifty = normalizeAlgo(
+    { name: "NIFTY Test Live", kind: "nifty-first-candle", testDesk: true },
+    { id: "nifty-test-copy" },
+  );
+  const next = hydrateAlgos({ algos: [...catalog, extraShivam, testNifty], removedIds: [] }, catalog);
+  const shivams = next.algos.filter((row) => row.kind === "shivam-t2s");
+  assert.equal(shivams.length, 1);
+  assert.equal(shivams[0].id, "a16");
+  assert.equal(next.algos.some((row) => row.id === "nifty-test-copy"), false);
+  assert.equal(next.algos.some((row) => row.id === "a10" && row.kind === "nifty-first-candle"), true);
+  assert.equal(next.removedIds.includes("shivam-copy"), true);
+  assert.equal(next.removedIds.includes("nifty-test-copy"), true);
+});
+
 test("hydrate always shows Shivam T2S on Algos even if it was deleted", () => {
   const catalog = seedAlgos();
   const next = hydrateAlgos({ algos: [], removedIds: ["a16"] }, catalog);

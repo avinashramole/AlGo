@@ -77,6 +77,9 @@ test("Algo Test page, admin menu, and live+copy builder are wired", () => {
   assert.doesNotMatch(builder, /Paper-only test desk/);
   assert.match(builder, /testDesk: true/);
   assert.match(builder, /title="SHIVAM T2S"/);
+  assert.doesNotMatch(builder, /Algo Test copy of NIFTY 5m first candle/);
+  assert.match(algo, /isNiftyFirstCandleKind\(row\) && \(testDesk \|\| row\.testDesk\)/);
+  assert.match(algo, /item\.id === "a16"/);
   assert.match(builder, /data-shivam-capital="true"/);
   assert.match(algo, /Capital management/);
   assert.doesNotMatch(algo, /1–100 filled BUY entries today/);

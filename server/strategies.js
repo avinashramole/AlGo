@@ -1259,6 +1259,28 @@ function readAlgoFile() {
   }
 }
 
+function dropAlgoTestNiftyCopies(algos, removed) {
+  return (algos || []).filter((row) => {
+    if (Boolean(row?.testDesk) && isNiftyFirstCandleAlgo(row) && row.id !== "a10") {
+      if (row.id) removed.add(row.id);
+      return false;
+    }
+    return true;
+  });
+}
+
+function keepOneShivamT2s(algos, removed) {
+  const rows = algos || [];
+  const shivams = rows.filter((row) => isShivamT2sAlgo(row));
+  if (shivams.length <= 1) return rows;
+  const keep = shivams.find((row) => row.id === SHIVAM_T2S_SEED_ID) || shivams[0];
+  return rows.filter((row) => {
+    if (!isShivamT2sAlgo(row) || row.id === keep.id) return true;
+    if (row.id) removed.add(row.id);
+    return false;
+  });
+}
+
 export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
   const pinned = new Set([...ALWAYS_ON_FIRST_CANDLE_IDS, SHIVAM_T2S_SEED_ID]);
   const removedIds = uniqueIds(stored.removedIds).filter((id) => !pinned.has(id));
@@ -1292,7 +1314,8 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
     algos.push(seed);
     seen.add(id);
   }
-  return { algos, removedIds: uniqueIds([...removed]) };
+  const cleaned = keepOneShivamT2s(dropAlgoTestNiftyCopies(algos, removed), removed);
+  return { algos: cleaned, removedIds: uniqueIds([...removed]) };
 }
 
 export function loadAlgoStore(catalog = seedAlgos()) {

@@ -593,24 +593,6 @@ export function StrategyBuilder({ open, algo, testDesk = false, onClose }: Props
             }}
           />
           <TypeCard
-            active={kind === "nifty-first-candle"}
-            title="NIFTY"
-            text="Algo Test copy of NIFTY 5m first candle. Paper or Live after Start. Map clients on the card to copy user brokers."
-            onClick={() =>
-              set({
-                ...emptyStrategy("nifty-first-candle"),
-                name: NIFTY_FIRST_CANDLE_NAME,
-                runMode: form.runMode === "live" ? "live" : "paper",
-                brokerId: form.runMode === "live" ? data.activeBrokerId || "dhan" : "paper",
-                testDesk: true,
-                lots: form.lots || 1,
-                lotSize,
-                qty: (form.lots || 1) * lotSize,
-                enabled: false,
-              })
-            }
-          />
-          <TypeCard
             active={test1}
             title="TEST1"
             text="Algo Test copy of TEST1. Paper or Live after Start. Map clients on the card to copy user brokers."

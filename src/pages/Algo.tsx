@@ -444,7 +444,13 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
 
   const deskAlgos = data.algos.filter((row) => {
     if (isRetiredDeskStrategy(row)) return false;
-    if (isShivamT2sKind(row)) return testDesk;
+    if (isNiftyFirstCandleKind(row) && (testDesk || row.testDesk)) return false;
+    if (isShivamT2sKind(row)) {
+      if (!testDesk) return false;
+      const shivams = data.algos.filter((item) => isShivamT2sKind(item));
+      const keep = shivams.find((item) => item.id === "a16") || shivams[0];
+      return keep?.id === row.id;
+    }
     return isTestDeskAlgo(row) === testDesk;
   });
   const rangeFor = deskAlgos.find((item) => item.id === rangeId) || null;
