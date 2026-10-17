@@ -11,7 +11,7 @@ import {
 } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { formatRupee } from "../../lib/format";
-import { DEFAULT_PLAN_PRICES, TERM_MONTHS, type PlanTerm } from "../../lib/planPrice";
+import { charmPrice, DEFAULT_PLAN_PRICES, TERM_MONTHS, type PlanTerm } from "../../lib/planPrice";
 
 export function MemberEnrollments() {
   const { user, applyUser } = useAuth();
@@ -34,8 +34,8 @@ export function MemberEnrollments() {
         setPayUpi(row.payments.upiId || "");
         const monthly = row.payments.terms?.monthly || row.payments.amount || DEFAULT_PLAN_PRICES.monthly;
         setPayMonthly(String(monthly));
-        setPayQuarterly(String(row.payments.terms?.quarterly || Math.round(monthly * (DEFAULT_PLAN_PRICES.quarterly / DEFAULT_PLAN_PRICES.monthly))));
-        setPayYearly(String(row.payments.terms?.yearly || Math.round(monthly * (DEFAULT_PLAN_PRICES.yearly / DEFAULT_PLAN_PRICES.monthly))));
+        setPayQuarterly(String(row.payments.terms?.quarterly || charmPrice(monthly * (DEFAULT_PLAN_PRICES.quarterly / DEFAULT_PLAN_PRICES.monthly))));
+        setPayYearly(String(row.payments.terms?.yearly || charmPrice(monthly * (DEFAULT_PLAN_PRICES.yearly / DEFAULT_PLAN_PRICES.monthly))));
         setPayName(row.payments.payeeName || "Trade2Smart");
       })
       .catch(() => undefined);
@@ -117,8 +117,8 @@ export function MemberEnrollments() {
               setPayMonthly(value);
               const monthly = Number(value);
               if (Number.isFinite(monthly) && monthly >= 1) {
-                setPayQuarterly(String(Math.round(monthly * (DEFAULT_PLAN_PRICES.quarterly / DEFAULT_PLAN_PRICES.monthly))));
-                setPayYearly(String(Math.round(monthly * (DEFAULT_PLAN_PRICES.yearly / DEFAULT_PLAN_PRICES.monthly))));
+                setPayQuarterly(String(charmPrice(monthly * (DEFAULT_PLAN_PRICES.quarterly / DEFAULT_PLAN_PRICES.monthly))));
+                setPayYearly(String(charmPrice(monthly * (DEFAULT_PLAN_PRICES.yearly / DEFAULT_PLAN_PRICES.monthly))));
               }
             }}
             placeholder="Monthly ₹"

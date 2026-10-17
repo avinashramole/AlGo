@@ -17,8 +17,10 @@ const {
   dropEnrollmentsWithoutStrategies,
   enrollmentActive,
   enrollStrategy,
+  charmPrice,
   feeForTerm,
   listCatalog,
+  scalePlanPrices,
   listEnrollments,
   markEnrollmentPaid,
   strategyVisibleToMember,
@@ -234,6 +236,26 @@ test("admin can delete a member subscription and a member cannot", () => {
   const removed = deleteEnrollment({ user: admin, enrollmentId: paid.id });
   assert.equal(removed.id, paid.id);
   assert.equal(listEnrollments({ userId: member.id }).some((row) => row.id === paid.id), false);
+});
+
+test("discounted strategy prices snap to the nearest x999", () => {
+  assert.equal(charmPrice(14000), 13999);
+  assert.equal(charmPrice(24002), 23999);
+  assert.equal(charmPrice(5999), 5999);
+  assert.equal(charmPrice(499), 499);
+  assert.equal(feeForTerm(5999, "quarterly"), 13999);
+  assert.equal(feeForTerm(5999, "yearly"), 23999);
+  assert.deepEqual(scalePlanPrices({ monthly: 2999, quarterly: 6999, yearly: 11999 }, 5999), {
+    monthly: 5999,
+    quarterly: 13999,
+    yearly: 23999,
+  });
+  const crude = catalogStrategy({ id: "a12", name: "CRUDE OIL", enrollFee: 5999 }, {
+    amount: 2999,
+    terms: { monthly: 2999, quarterly: 6999, yearly: 11999 },
+  });
+  assert.deepEqual(crude.terms, { monthly: 5999, quarterly: 13999, yearly: 23999 });
+  assert.equal(crude.enrollFee, 5999);
 });
 
 test("admin can set discounted monthly quarterly and yearly plan prices", () => {

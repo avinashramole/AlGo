@@ -30,15 +30,25 @@ export function termMonths(value) {
   return { monthly: 1, quarterly: 3, yearly: 12 }[normalizePlanTerm(value)];
 }
 
+/** Snap a rupee price to the nearest x999 (5999, 13999, …). Values under 999 stay as-is. */
+export function charmPrice(value) {
+  const v = Math.round(Number(value));
+  if (!Number.isFinite(v) || v < 1) return 0;
+  if (v < 999) return v;
+  const down = Math.max(999, Math.floor((v + 1) / 1000) * 1000 - 1);
+  const up = down + 1000;
+  return v - down <= up - v ? down : up;
+}
+
 export function feeForTerm(base, term, terms) {
   const wanted = normalizePlanTerm(term);
   const listed = Number(terms?.[wanted]);
-  if (Number.isFinite(listed) && listed >= 1) return Math.round(listed);
+  if (Number.isFinite(listed) && listed >= 1) return charmPrice(listed);
   const monthly = Number(base);
   if (!Number.isFinite(monthly) || monthly < 1) return 0;
-  if (wanted === "monthly") return Math.round(monthly);
+  if (wanted === "monthly") return charmPrice(monthly);
   const ratio = DEFAULT_PLAN_PRICES[wanted] / DEFAULT_PLAN_PRICES.monthly;
-  return Math.round(Math.round(monthly) * ratio);
+  return charmPrice(Math.round(monthly) * ratio);
 }
 
 export function fullTermPrice(monthly, term) {
@@ -51,33 +61,35 @@ export function normalizePlanPrices(row = {}) {
   const stored = row.terms && typeof row.terms === "object" ? row.terms : {};
   const amount = Number(row.amount);
   const legacyDefault = !Number.isFinite(Number(stored.monthly)) && amount === 999;
-  const monthly = Number(stored.monthly) >= 1
-    ? Math.round(Number(stored.monthly))
-    : Number.isFinite(amount) && amount >= 1 && !legacyDefault
-      ? Math.round(amount)
-      : DEFAULT_PLAN_PRICES.monthly;
+  const monthly = charmPrice(
+    Number(stored.monthly) >= 1
+      ? Number(stored.monthly)
+      : Number.isFinite(amount) && amount >= 1 && !legacyDefault
+        ? amount
+        : DEFAULT_PLAN_PRICES.monthly,
+  );
   return {
     monthly,
-    quarterly: Number(stored.quarterly) >= 1 ? Math.round(Number(stored.quarterly)) : feeForTerm(monthly, "quarterly"),
-    yearly: Number(stored.yearly) >= 1 ? Math.round(Number(stored.yearly)) : feeForTerm(monthly, "yearly"),
+    quarterly: Number(stored.quarterly) >= 1 ? charmPrice(stored.quarterly) : feeForTerm(monthly, "quarterly"),
+    yearly: Number(stored.yearly) >= 1 ? charmPrice(stored.yearly) : feeForTerm(monthly, "yearly"),
   };
 }
 
 export function scalePlanPrices(terms, monthly) {
-  const nextMonthly = Number(monthly);
+  const nextMonthly = charmPrice(monthly);
   const from = Number(terms?.monthly);
-  if (!Number.isFinite(nextMonthly) || nextMonthly < 1) return normalizePlanPrices({ terms });
+  if (!nextMonthly) return normalizePlanPrices({ terms });
   if (!Number.isFinite(from) || from < 1 || from === nextMonthly) {
-    return { ...normalizePlanPrices({ terms, amount: nextMonthly }), monthly: Math.round(nextMonthly) };
+    return { ...normalizePlanPrices({ terms, amount: nextMonthly }), monthly: nextMonthly };
   }
   const scale = nextMonthly / from;
   return {
-    monthly: Math.round(nextMonthly),
+    monthly: nextMonthly,
     quarterly: Number(terms.quarterly) >= 1
-      ? Math.max(1, Math.round(Number(terms.quarterly) * scale))
+      ? charmPrice(Number(terms.quarterly) * scale)
       : feeForTerm(nextMonthly, "quarterly"),
     yearly: Number(terms.yearly) >= 1
-      ? Math.max(1, Math.round(Number(terms.yearly) * scale))
+      ? charmPrice(Number(terms.yearly) * scale)
       : feeForTerm(nextMonthly, "yearly"),
   };
 }
