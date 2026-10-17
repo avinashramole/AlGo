@@ -7,6 +7,7 @@ import { colors } from "../theme";
 
 export function ProfileScreen() {
   const { user, updateProfile, logout } = useAuth();
+  const admin = user?.role === "admin";
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
@@ -22,7 +23,7 @@ export function ProfileScreen() {
   }, [user, dirty]);
 
   useEffect(() => {
-    if (user?.role === "admin") return;
+    if (admin) return;
     let alive = true;
     void getMemberDesk()
       .then((desk) => {
@@ -33,7 +34,7 @@ export function ProfileScreen() {
     return () => {
       alive = false;
     };
-  }, [user?.role]);
+  }, [admin]);
 
   const onSave = async () => {
     setBusy(true);
@@ -59,21 +60,24 @@ export function ProfileScreen() {
       <Text style={styles.identity}>
         {[name, email, mobile].map((value) => String(value || "").trim() || "-").join(" | ")}
       </Text>
-      <Text style={styles.edit}>Edit profile</Text>
-      <TextInput style={styles.input} value={name} onChangeText={(value) => { setDirty(true); setName(value); }} placeholder="Name" />
-      <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={(value) => { setDirty(true); setEmail(value); }} placeholder="Email" />
-      <TextInput style={styles.input} keyboardType="phone-pad" value={mobile} onChangeText={(value) => { setDirty(true); setMobile(value); }} placeholder="Mobile no" />
-      {user?.role !== "admin" ? (
+      {admin ? (
+        <>
+          <Text style={styles.edit}>Edit profile</Text>
+          <TextInput style={styles.input} value={name} onChangeText={(value) => { setDirty(true); setName(value); }} placeholder="Name" />
+          <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={(value) => { setDirty(true); setEmail(value); }} placeholder="Email" />
+          <TextInput style={styles.input} keyboardType="phone-pad" value={mobile} onChangeText={(value) => { setDirty(true); setMobile(value); }} placeholder="Mobile no" />
+          <View style={styles.saveRow}>
+            <Pressable style={styles.save} onPress={() => void onSave()} disabled={busy}>
+              <Text style={styles.saveText}>{busy ? "Saving..." : "Save profile"}</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : (
         <View style={styles.broker}>
           <Text style={styles.brokerLabel}>Broker name</Text>
           <Text style={styles.brokerValue}>{brokerName || "—"}</Text>
         </View>
-      ) : null}
-      <View style={styles.saveRow}>
-        <Pressable style={styles.save} onPress={() => void onSave()} disabled={busy}>
-          <Text style={styles.saveText}>{busy ? "Saving..." : "Save profile"}</Text>
-        </Pressable>
-      </View>
+      )}
       <Pressable style={styles.out} onPress={() => confirmLogout(logout)}>
         <Text style={styles.outText}>Log out</Text>
       </Pressable>

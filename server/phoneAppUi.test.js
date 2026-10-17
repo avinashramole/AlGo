@@ -18,7 +18,9 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(mobileProfile, /Name \{name \|\| "-"\} \| Email/);
   assert.match(mobileProfile, /Broker name/);
   assert.match(mobileProfile, /brokerLabel/);
+  assert.match(mobileProfile, /const admin = user\?\.role === "admin"/);
   assert.doesNotMatch(mobileProfile, /Add broker/);
+  assert.match(mobileProfile, /\{admin \? \(/);
   assert.doesNotMatch(mobileProfile, /label="Name"/);
   assert.doesNotMatch(mobileProfile, /label="Email"/);
   assert.doesNotMatch(mobileProfile, /label="Mobile no"/);

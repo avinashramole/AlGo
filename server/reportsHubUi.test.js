@@ -166,9 +166,10 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(profile, /setDirty\(true\)/);
   assert.match(profile, /data-member-profile="broker"/);
   assert.match(profile, /Broker name/);
+  assert.match(profile, /\{admin \? \(/);
   assert.match(profile, /Edit profile/);
   assert.match(profile, /desk-save-btn/);
-  assert.match(profile, /readOnly/);
+  assert.match(profile, /Your Trade2Smart account/);
   assert.doesNotMatch(profile, /IdentityRow/);
   assert.doesNotMatch(profile, /Not added/);
   assert.doesNotMatch(profile, /label="Theme"/);
