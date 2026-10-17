@@ -658,9 +658,81 @@ const PDF_INK = "0.000 0.059 0.161";
 const PDF_MUTED = "0.392 0.455 0.545";
 const PDF_GREEN = "0.059 0.616 0.345";
 const PDF_RED = "0.851 0.188 0.145";
+const PDF_MEMBER_PAGE = "0.973 0.980 0.988";
+const PDF_MEMBER_HEADER = "0.918 0.945 0.969";
+const PDF_MEMBER_INK = "0.122 0.290 0.451";
+const PDF_MEMBER_MUTED = "0.290 0.400 0.510";
+const PDF_MEMBER_BAND = "0.290 0.522 0.690";
+const PDF_MEMBER_SECTION = "0.886 0.929 0.961";
 const PAGE_W = 842;
 const PAGE_H = 595;
 const PAGE_MARGIN = 22;
+
+const HELVETICA_WIDTHS = {
+  " ": 278, "!": 278, '"': 355, "#": 556, $: 556, "%": 889, "&": 667, "'": 191,
+  "(": 333, ")": 333, "*": 389, "+": 584, ",": 278, "-": 333, ".": 278, "/": 278,
+  0: 556, 1: 556, 2: 556, 3: 556, 4: 556, 5: 556, 6: 556, 7: 556, 8: 556, 9: 556,
+  ":": 278, ";": 278, "<": 584, "=": 584, ">": 584, "?": 556, "@": 1015,
+  A: 667, B: 667, C: 722, D: 722, E: 667, F: 611, G: 778, H: 722, I: 278, J: 500, K: 667, L: 556, M: 833, N: 722, O: 778, P: 667, Q: 778, R: 722, S: 667, T: 611, U: 722, V: 667, W: 944, X: 667, Y: 667, Z: 611,
+  "[": 278, "\\": 278, "]": 278, "^": 469, _: 556, "`": 333,
+  a: 556, b: 556, c: 500, d: 556, e: 556, f: 278, g: 556, h: 556, i: 222, j: 222, k: 500, l: 222, m: 833, n: 556, o: 556, p: 556, q: 556, r: 333, s: 500, t: 278, u: 556, v: 500, w: 722, x: 500, y: 500, z: 500,
+  "{": 334, "|": 260, "}": 334, "~": 584,
+};
+const HELVETICA_BOLD_WIDTHS = {
+  " ": 278, "!": 333, '"': 474, "#": 556, $: 556, "%": 889, "&": 722, "'": 238,
+  "(": 333, ")": 333, "*": 389, "+": 584, ",": 278, "-": 333, ".": 278, "/": 278,
+  0: 556, 1: 556, 2: 556, 3: 556, 4: 556, 5: 556, 6: 556, 7: 556, 8: 556, 9: 556,
+  ":": 333, ";": 333, "<": 584, "=": 584, ">": 584, "?": 611, "@": 975,
+  A: 722, B: 667, C: 722, D: 722, E: 667, F: 611, G: 778, H: 778, I: 389, J: 500, K: 778, L: 667, M: 944, N: 722, O: 778, P: 667, Q: 778, R: 722, S: 667, T: 611, U: 722, V: 667, W: 1000, X: 722, Y: 722, Z: 667,
+  "[": 333, "\\": 278, "]": 333, "^": 584, _: 556, "`": 333,
+  a: 556, b: 611, c: 556, d: 611, e: 556, f: 333, g: 611, h: 611, i: 278, j: 278, k: 556, l: 278, m: 889, n: 611, o: 611, p: 611, q: 611, r: 389, s: 556, t: 333, u: 611, v: 556, w: 778, x: 556, y: 556, z: 500,
+  "{": 389, "|": 280, "}": 389, "~": 584,
+};
+
+function pdfTheme(report) {
+  if (isMemberReport(report)) {
+    return {
+      pageBg: PDF_MEMBER_PAGE,
+      headerBg: PDF_MEMBER_HEADER,
+      headerInk: PDF_MEMBER_INK,
+      headerMuted: PDF_MEMBER_MUTED,
+      kind: PDF_ORANGE,
+      accent: PDF_ORANGE,
+      footerBg: PDF_MEMBER_HEADER,
+      footerInk: PDF_MEMBER_INK,
+      sectionBg: PDF_MEMBER_SECTION,
+      sectionInk: PDF_MEMBER_INK,
+      tableHead: PDF_MEMBER_BAND,
+      tableHeadInk: PDF_WHITE,
+      line: PDF_LINE,
+      zebra: "0.941 0.961 0.980",
+      paper: PDF_WHITE,
+      ink: PDF_MEMBER_INK,
+      muted: PDF_MEMBER_MUTED,
+      headerH: 52,
+    };
+  }
+  return {
+    pageBg: "",
+    headerBg: PDF_NAVY,
+    headerInk: PDF_WHITE,
+    headerMuted: PDF_WHITE,
+    kind: PDF_ORANGE,
+    accent: PDF_ORANGE,
+    footerBg: PDF_NAVY,
+    footerInk: PDF_WHITE,
+    sectionBg: PDF_NAVY,
+    sectionInk: PDF_WHITE,
+    tableHead: PDF_NAVY,
+    tableHeadInk: PDF_WHITE,
+    line: PDF_LINE,
+    zebra: PDF_ZEBRA,
+    paper: PDF_WHITE,
+    ink: PDF_INK,
+    muted: PDF_MUTED,
+    headerH: 40,
+  };
+}
 
 const PDF_COLS = [
   { key: "n", title: "#", w: 22, align: "right" },
@@ -679,8 +751,11 @@ const PDF_COLS = [
   { key: "rom", title: "ROM %", w: 38, align: "right" },
 ];
 
-function pdfTextWidth(text, size) {
-  return String(text || "").length * size * 0.5;
+function pdfTextWidth(text, size, font = "F1") {
+  const table = font === "F2" ? HELVETICA_BOLD_WIDTHS : HELVETICA_WIDTHS;
+  let width = 0;
+  for (const ch of String(text || "")) width += table[ch] ?? 556;
+  return (width * size) / 1000;
 }
 
 function cellDisplay(row, col) {
@@ -695,13 +770,14 @@ function makePdfDoc(report) {
   let ops = [];
   let y = 0;
   let pageNo = 0;
+  const theme = pdfTheme(report);
 
   function flush() {
     if (ops.length) pages.push(ops);
     ops = [];
   }
 
-  function text(x, yPos, value, size, font = "F1", color = PDF_INK) {
+  function text(x, yPos, value, size, font = "F1", color = theme.ink) {
     ops.push("BT", `/${font} ${size} Tf`, `${color} rg`, `${x.toFixed(2)} ${yPos.toFixed(2)} Td`, `(${pdfEscape(pdfSafe(value))}) Tj`, "ET");
   }
 
@@ -713,29 +789,36 @@ function makePdfDoc(report) {
   }
 
   function footer() {
-    rect(PAGE_MARGIN, 12, PAGE_W - PAGE_MARGIN * 2, 14, PDF_NAVY);
-    rect(PAGE_MARGIN, 26, PAGE_W - PAGE_MARGIN * 2, 2, PDF_ORANGE);
-    text(PAGE_MARGIN + 8, 16, `trade2smart.com  Confidential desk report  A4 landscape  Page ${pageNo}`, 7, "F2", PDF_WHITE);
+    rect(PAGE_MARGIN, 12, PAGE_W - PAGE_MARGIN * 2, 14, theme.footerBg);
+    rect(PAGE_MARGIN, 26, PAGE_W - PAGE_MARGIN * 2, 2, theme.accent);
+    text(PAGE_MARGIN + 8, 16, `trade2smart.com  Confidential desk report  A4 landscape  Page ${pageNo}`, 7, "F2", theme.footerInk);
   }
 
   function brandTitle(x, yPos, size) {
-    text(x, yPos, "TRADE ", size, "F2", PDF_WHITE);
-    text(x + pdfTextWidth("TRADE ", size), yPos, "2", size, "F2", PDF_ORANGE);
-    text(x + pdfTextWidth("TRADE 2", size), yPos, " SMART", size, "F2", PDF_WHITE);
+    const trade = "TRADE";
+    const two = "2";
+    const smart = "SMART";
+    const gap = Math.max(6, size * 0.5);
+    const tradeW = pdfTextWidth(trade, size, "F2");
+    const twoW = pdfTextWidth(two, size, "F2");
+    text(x, yPos, trade, size, "F2", theme.headerInk);
+    text(x + tradeW + gap, yPos, two, size, "F2", PDF_ORANGE);
+    text(x + tradeW + gap + twoW + gap, yPos, smart, size, "F2", theme.headerInk);
   }
 
   function header({ continued = false } = {}) {
     pageNo += 1;
     y = PAGE_H - PAGE_MARGIN;
-    rect(0, PAGE_H - 40, PAGE_W, 40, PDF_NAVY);
-    rect(0, PAGE_H - 44, PAGE_W, 4, PDF_ORANGE);
-    brandTitle(PAGE_MARGIN, PAGE_H - 18, 13);
+    if (theme.pageBg) rect(0, 0, PAGE_W, PAGE_H, theme.pageBg);
+    rect(0, PAGE_H - theme.headerH, PAGE_W, theme.headerH, theme.headerBg);
+    rect(0, PAGE_H - theme.headerH - 4, PAGE_W, 4, theme.accent);
+    brandTitle(PAGE_MARGIN, PAGE_H - 20, 13);
     const kind = reportKindLabel(report);
     const right = continued ? `${kind} (continued)` : kind;
-    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11), PAGE_H - 18, right, 11, "F2", PDF_ORANGE);
+    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11, "F2"), PAGE_H - 20, right, 11, "F2", theme.kind);
     const subtitle = `${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "desk"}  -  Currency Indian Rupee (Rs.)`;
-    text(PAGE_MARGIN, PAGE_H - 32, subtitle, 8, "F1", PDF_WHITE);
-    y = PAGE_H - 56;
+    text(PAGE_MARGIN, PAGE_H - theme.headerH + 12, subtitle, 8, "F1", theme.headerMuted);
+    y = PAGE_H - theme.headerH - 16;
     footer();
   }
 
@@ -754,9 +837,9 @@ function makePdfDoc(report) {
 
   function section(title) {
     ensure(20);
-    rect(PAGE_MARGIN, y - 16, PAGE_W - PAGE_MARGIN * 2, 16, PDF_NAVY);
-    rect(PAGE_MARGIN, y - 16, 4, 16, PDF_ORANGE);
-    text(PAGE_MARGIN + 8, y - 11, title, 9, "F2", PDF_WHITE);
+    rect(PAGE_MARGIN, y - 16, PAGE_W - PAGE_MARGIN * 2, 16, theme.sectionBg);
+    rect(PAGE_MARGIN, y - 16, 4, 16, theme.accent);
+    text(PAGE_MARGIN + 8, y - 11, title, 9, "F2", theme.sectionInk);
     y -= 20;
   }
 
@@ -769,9 +852,9 @@ function makePdfDoc(report) {
       const col = i % cols;
       const x = PAGE_MARGIN + col * (boxW + gap);
       if (col === 0) y -= boxH + 6;
-      rect(x, y, boxW, boxH, PDF_ZEBRA, PDF_LINE);
-      text(x + 6, y + 17, item.label, 7, "F1", PDF_MUTED);
-      const tone = item.money && Number(item.raw) < 0 ? PDF_RED : item.money && Number(item.raw) > 0 ? PDF_GREEN : PDF_INK;
+      rect(x, y, boxW, boxH, theme.zebra, theme.line);
+      text(x + 6, y + 17, item.label, 7, "F1", theme.muted);
+      const tone = item.money && Number(item.raw) < 0 ? PDF_RED : item.money && Number(item.raw) > 0 ? PDF_GREEN : theme.ink;
       text(x + 6, y + 6, item.value, 9, "F2", tone);
     });
     y -= 4;
@@ -784,10 +867,10 @@ function makePdfDoc(report) {
       ensure(rowH + 2);
       let x = PAGE_MARGIN;
       for (const col of PDF_COLS) {
-        rect(x, y - rowH, col.w, rowH, PDF_NAVY, PDF_NAVY);
+        rect(x, y - rowH, col.w, rowH, theme.tableHead, theme.tableHead);
         const label = col.title;
-        const tx = col.align === "right" ? x + col.w - 3 - pdfTextWidth(label, 6.5) : x + 3;
-        text(tx, y - 9, label, 6.5, "F2", PDF_WHITE);
+        const tx = col.align === "right" ? x + col.w - 3 - pdfTextWidth(label, 6.5, "F2") : x + 3;
+        text(tx, y - 9, label, 6.5, "F2", theme.tableHeadInk);
         x += col.w;
       }
       y -= rowH;
@@ -795,7 +878,7 @@ function makePdfDoc(report) {
     drawHead();
     if (!rows.length) {
       ensure(rowH);
-      rect(PAGE_MARGIN, y - rowH, tableW, rowH, PDF_WHITE, PDF_LINE);
+      rect(PAGE_MARGIN, y - rowH, tableW, rowH, theme.paper, theme.line);
       text(PAGE_MARGIN + 4, y - 9, "No rows in this replay.", 7);
       y -= rowH + 6;
       return;
@@ -808,11 +891,11 @@ function makePdfDoc(report) {
       }
       let x = PAGE_MARGIN;
       for (const col of PDF_COLS) {
-        rect(x, y - rowH, col.w, rowH, i % 2 ? PDF_ZEBRA : PDF_WHITE, PDF_LINE);
+        rect(x, y - rowH, col.w, rowH, i % 2 ? theme.zebra : theme.paper, theme.line);
         const raw = String(cellDisplay(row, col));
         const label = raw.length > 18 && col.w < 50 ? raw.slice(0, 16) : raw;
-        const tx = col.align === "right" ? x + col.w - 3 - pdfTextWidth(label, 6.5) : x + 3;
-        const tone = col.key === "pnl" && Number(row.pnl) < 0 ? PDF_RED : col.key === "pnl" && Number(row.pnl) > 0 ? PDF_GREEN : PDF_INK;
+        const tx = col.align === "right" ? x + col.w - 3 - pdfTextWidth(label, 6.5, "F1") : x + 3;
+        const tone = col.key === "pnl" && Number(row.pnl) < 0 ? PDF_RED : col.key === "pnl" && Number(row.pnl) > 0 ? PDF_GREEN : theme.ink;
         text(tx, y - 9, label, 6.5, "F1", tone);
         x += col.w;
       }

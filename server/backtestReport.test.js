@@ -81,9 +81,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   const pdf = renderBacktestPdf(loaded);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.match(pdf.toString("latin1"), /TEST2/);
-  assert.match(pdf.toString("latin1"), /\(TRADE \)/);
+  assert.match(pdf.toString("latin1"), /\(TRADE\)/);
   assert.match(pdf.toString("latin1"), /\(2\)/);
-  assert.match(pdf.toString("latin1"), /\( SMART\)/);
+  assert.match(pdf.toString("latin1"), /\(SMART\)/);
   assert.match(pdf.toString("latin1"), /Backtest report/);
   assert.match(pdf.toString("latin1"), /Confidential desk report/);
   assert.match(pdf.toString("latin1"), /Currency Indian Rupee/);
@@ -256,9 +256,9 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.equal(report.strategy.kind, "desk");
   assert.equal(report.trades[0].symbol, "NIFTY 24800 CE");
   const pdf = renderBacktestPdf(report).toString("latin1");
-  assert.match(pdf, /\(TRADE \)/);
+  assert.match(pdf, /\(TRADE\)/);
   assert.match(pdf, /\(2\)/);
-  assert.match(pdf, /\( SMART\)/);
+  assert.match(pdf, /\(SMART\)/);
   assert.match(pdf, /Proposal report/);
   assert.match(pdf, /Confidential desk report/);
   assert.match(pdf, /NIFTY 24800 CE/);
@@ -328,6 +328,24 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.match(pdf, /Win rate/);
   assert.match(pdf, /TRADES/);
   assert.match(pdf, /NIFTY 24800 CE/);
+  assert.match(pdf, /\(TRADE\)/);
+  assert.match(pdf, /\(2\)/);
+  assert.match(pdf, /\(SMART\)/);
+  assert.match(pdf, /0\.918 0\.945 0\.969/);
+  assert.match(pdf, /0\.122 0\.290 0\.451/);
+  assert.equal(pdf.includes("0.000 0.059 0.161"), false);
+  const brandX = ["TRADE", "2", "SMART"].map((label) => {
+    const needle = `(${label}) Tj`;
+    const at = pdf.indexOf(needle);
+    const td = pdf.lastIndexOf(" Td", at);
+    const line = pdf.slice(pdf.lastIndexOf("\n", td) + 1, td);
+    return Number(line.split(" ")[0]);
+  });
+  assert.equal(brandX.length, 3);
+  assert.equal(brandX[0] < brandX[1], true);
+  assert.equal(brandX[1] < brandX[2], true);
+  assert.equal(brandX[1] - brandX[0] >= 48, true);
+  assert.equal(brandX[2] - brandX[1] >= 10, true);
   assert.equal(pdf.includes("Proposal report"), false);
   assert.equal(pdf.includes("Drawdown"), false);
   assert.equal(pdf.includes("Avg/trade"), false);
