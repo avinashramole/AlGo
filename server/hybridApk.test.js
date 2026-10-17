@@ -42,7 +42,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.doesNotMatch(context, /@vite-ignore/);
   assert.match(login, /if \(isNativeHybrid\(\)\) setLoading\(false\)/);
   const gradle = fs.readFileSync(path.join(root, "android/app/build.gradle"), "utf8");
-  assert.match(gradle, /versionName "1.5"/);
+  assert.match(gradle, /versionName "1.6"/);
   const mainActivity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(mainActivity, /onNewIntent/);
   assert.match(auth, /isEmbeddedWebView/);
@@ -67,6 +67,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(client, /application\/octet-stream/);
   assert.match(client, /showDeskToast\(`Saved \$\{filename\}`\)/);
   assert.doesNotMatch(client, /window\.alert\(`Saved \$\{filename\}`\)/);
+  assert.match(client, /Trade2Smart-\$\{storedUserName\(\) \|\| "user"\}/);
+  assert.doesNotMatch(client, /t2s-proposal/);
   assert.doesNotMatch(client, /Share\.share/);
   assert.doesNotMatch(client, /dialogTitle: "Save or share report"/);
   assert.match(main, /HashRouter/);
@@ -91,8 +93,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(infoPlist, /LSSupportsOpeningDocumentsInPlace/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
   assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
-  assert.match(pbx, /MARKETING_VERSION = 1.5/);
-  assert.match(pbx, /CURRENT_PROJECT_VERSION = 6/);
+  assert.match(pbx, /MARKETING_VERSION = 1.6/);
+  assert.match(pbx, /CURRENT_PROJECT_VERSION = 7/);
   assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);
   const appDelegate = fs.readFileSync(path.join(root, "ios/App/App/AppDelegate.swift"), "utf8");
   assert.match(appDelegate, /ApplicationDelegateProxy/);

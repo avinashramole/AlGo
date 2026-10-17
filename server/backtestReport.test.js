@@ -160,8 +160,9 @@ test("backtest report builds PDF and Excel from the trade book", () => {
   assert.match(pdf.toString("latin1"), /End date 2026-10-07/);
   assert.match(zip, /Start date/);
   assert.match(zip, /End date/);
-  assert.equal(reportDownloadName(loaded, "pdf"), "TEST2-btst-backtest-2026-10-07.pdf");
-  assert.equal(reportDownloadName(loaded, "xlsx"), "TEST2-btst-backtest-2026-10-07.xlsx");
+  assert.equal(reportDownloadName(loaded, "pdf", { name: "Avinash Ramole" }), "Trade2Smart-Avinash-Ramole.pdf");
+  assert.equal(reportDownloadName(loaded, "xlsx", { name: "Avinash Ramole" }), "Trade2Smart-Avinash-Ramole.xlsx");
+  assert.equal(reportDownloadName(loaded, "pdf"), "Trade2Smart-user.pdf");
   clearBacktestReport("a14");
   assert.equal(loadBacktestReport("a14", { lastBacktest: null }), null);
 });
@@ -283,8 +284,8 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(pdf, /Win rate/);
   assert.match(pdf, /Required margin/);
   assert.match(pdf, /rolling option tape/);
-  const file = brandedReportFile(report, "xlsx");
-  assert.match(file.name, /proposal/);
+  const file = brandedReportFile(report, "xlsx", { name: "Desk Admin" });
+  assert.equal(file.name, "Trade2Smart-Desk-Admin.xlsx");
   assert.match(file.body.toString("latin1"), /FFFD6B01/);
   assert.match(file.body.toString("latin1"), /FF000F29/);
   assert.match(file.body.toString("latin1"), /Proposal report/);
@@ -307,6 +308,10 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(index, /title: "My trade report"/);
   assert.match(index, /audience: "member"/);
   assert.match(index, /member: \{ name: user\.name, email: user\.email, mobile: user\.mobile \}/);
+  assert.match(client, /Trade2Smart-\$\{storedUserName\(\) \|\| "user"\}/);
+  assert.doesNotMatch(client, /t2s-proposal/);
+  assert.match(index, /exposedHeaders: \["Content-Disposition"\]/);
+  assert.match(index, /brandedReportFile\(report, req\.query\.format, user\)/);
 });
 
 test("member desk download keeps P&L cards, drops Drawdown, and prints identity", () => {
@@ -333,6 +338,8 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.equal(report.member.name, "Avinash Ramole");
   assert.equal(report.member.email, "avinash@t2s.app");
   assert.equal(report.member.mobile, "9876543210");
+  assert.equal(reportDownloadName(report, "pdf"), "Trade2Smart-Avinash-Ramole.pdf");
+  assert.equal(reportDownloadName(report, "xlsx"), "Trade2Smart-Avinash-Ramole.xlsx");
   const pdf = renderBacktestPdf(report).toString("latin1");
   assert.match(pdf, /Trade report/);
   assert.match(pdf, /Product T2S/);

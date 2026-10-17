@@ -10,7 +10,7 @@ attachProcessGuards();
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(cors({ origin: true }));
+app.use(cors({ origin: true, exposedHeaders: ["Content-Disposition"] }));
 app.use(express.json({ limit: "1mb" }));
 attachLoginRoutes(app, {
   healthService: "t2s-login",

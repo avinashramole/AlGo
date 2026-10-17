@@ -1101,11 +1101,14 @@ export function renderBacktestPdf(report) {
   return Buffer.concat(chunks);
 }
 
-export function reportDownloadName(report, format) {
-  const stamp = String(report.generatedAt || report.summary?.to || "").slice(0, 10) || "report";
-  const style = report.summary?.holdStyle ? `-${report.summary.holdStyle}` : "";
-  const kind = report.strategy?.kind === "desk" ? "proposal" : "backtest";
-  return `${safeName(report.strategy?.name)}${style}-${kind}-${stamp}.${format === "pdf" ? "pdf" : "xlsx"}`;
+export function trade2SmartFileName(userName, format) {
+  const who = safeName(userName || "user");
+  const ext = /^(xlsx|xls|excel)$/i.test(String(format || "")) ? "xlsx" : "pdf";
+  return `Trade2Smart-${who}.${ext}`;
+}
+
+export function reportDownloadName(report, format, user) {
+  return trade2SmartFileName(user?.name || report?.member?.name, format);
 }
 
 export function isExcelFormat(format) {
@@ -1113,18 +1116,18 @@ export function isExcelFormat(format) {
   return value === "xlsx" || value === "xls" || value === "excel";
 }
 
-export function brandedReportFile(report, format) {
+export function brandedReportFile(report, format, user) {
   if (isExcelFormat(format)) {
     return {
       body: renderBacktestExcel(report),
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      name: reportDownloadName(report, "xlsx"),
+      name: reportDownloadName(report, "xlsx", user),
     };
   }
   return {
     body: renderBacktestPdf(report),
     type: "application/pdf",
-    name: reportDownloadName(report, "pdf"),
+    name: reportDownloadName(report, "pdf", user),
   };
 }
 

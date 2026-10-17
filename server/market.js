@@ -44,7 +44,7 @@ import {
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { candleAllowsEntry } from "./candleQuality.js";
-import { clearBacktestReport, clearBacktestReportsByKind, saveBacktestReport } from "./backtestReport.js";
+import { clearBacktestReport, clearBacktestReportsByKind, saveBacktestReport, trade2SmartFileName } from "./backtestReport.js";
 import { TradeLogger } from "./niftyVwap/TradeLogger.js";
 import { listPublicUsers } from "./auth.js";
 import { isTestDeskAlgo, loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, RETIRED_KINDS, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
@@ -2662,11 +2662,11 @@ export function shivamT2sReportFile(algo, user, format) {
     closed: state.closedTrades || [],
   });
   if (format === "pdf") {
-    return { type: "application/pdf", name: "shivam-t2s-report.pdf", body: renderShivamPdf(report) };
+    return { type: "application/pdf", name: trade2SmartFileName(user?.name, "pdf"), body: renderShivamPdf(report) };
   }
   return {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    name: "shivam-t2s-report.xlsx",
+    name: trade2SmartFileName(user?.name, "xlsx"),
     body: renderShivamExcel(report),
   };
 }

@@ -1717,8 +1717,25 @@ function blobToBase64(blob: Blob) {
   });
 }
 
+function storedUserName() {
+  try {
+    const raw =
+      (typeof localStorage !== "undefined" && localStorage.getItem("t2s-user")) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("t2s-user")) ||
+      "";
+    const name = String(JSON.parse(raw || "{}")?.name || "")
+      .replace(/[^\w.-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    return name;
+  } catch {
+    return "";
+  }
+}
+
 function safeDownloadName(filename: string, format: "pdf" | "xlsx") {
-  const fallback = `t2s-proposal.${format === "pdf" ? "pdf" : "xlsx"}`;
+  const ext = format === "pdf" ? "pdf" : "xlsx";
+  const fallback = `Trade2Smart-${storedUserName() || "user"}.${ext}`;
   const cleaned = String(filename || fallback)
     .replace(/[^\w.-]+/g, "-")
     .replace(/^-+|-+$/g, "");

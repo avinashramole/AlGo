@@ -125,7 +125,7 @@ function isPreviewRequest(req) {
   return /cvm\.dev|cursor\.sh|ngrok|trycloudflare|githubpreview|github\.dev/i.test(origin);
 }
 
-app.use(cors({ origin: true }));
+app.use(cors({ origin: true, exposedHeaders: ["Content-Disposition"] }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
@@ -420,7 +420,7 @@ app.get("/api/member/report/download", async (req, res) => {
       audience: "member",
       member: { name: user.name, email: user.email, mobile: user.mobile },
     });
-    const file = brandedReportFile(report, req.query.format);
+    const file = brandedReportFile(report, req.query.format, user);
     res.setHeader("Content-Type", file.type);
     res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
     res.send(file.body);
@@ -1520,7 +1520,7 @@ app.get("/api/algos/:id/backtest/report", (req, res) => {
     res.status(404).json({ error: "Run a backtest first to create the PDF and Excel report." });
     return;
   }
-  const file = brandedReportFile(report, req.query.format);
+  const file = brandedReportFile(report, req.query.format, req.authUser);
   res.setHeader("Content-Type", file.type);
   res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
   res.send(file.body);
@@ -1686,8 +1686,10 @@ app.get("/api/report", (_req, res) => {
 });
 
 app.get("/api/report/download", (req, res) => {
-  const report = deskToProposalReport(snapshot().report || {});
-  const file = brandedReportFile(report, req.query.format);
+  const report = deskToProposalReport(snapshot().report || {}, {
+    member: { name: req.authUser?.name, email: req.authUser?.email, mobile: req.authUser?.mobile },
+  });
+  const file = brandedReportFile(report, req.query.format, req.authUser);
   res.setHeader("Content-Type", file.type);
   res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
   res.send(file.body);
