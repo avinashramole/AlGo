@@ -3,7 +3,6 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { getMemberDesk } from "../api";
 import { useAuth } from "../AuthContext";
 import { confirmLogout } from "../confirmLogout";
-import { Card } from "../components/Ui";
 import { colors } from "../theme";
 
 export function ProfileScreen() {
@@ -64,27 +63,21 @@ export function ProfileScreen() {
       <TextInput style={styles.input} value={name} onChangeText={(value) => { setDirty(true); setName(value); }} placeholder="Name" />
       <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={(value) => { setDirty(true); setEmail(value); }} placeholder="Email" />
       <TextInput style={styles.input} keyboardType="phone-pad" value={mobile} onChangeText={(value) => { setDirty(true); setMobile(value); }} placeholder="Mobile no" />
-      <Pressable style={styles.save} onPress={() => void onSave()} disabled={busy}>
-        <Text style={styles.saveText}>{busy ? "Saving..." : "Save profile"}</Text>
-      </Pressable>
       {user?.role !== "admin" ? (
-        <Card>
-          <Row label="Broker name" value={brokerName || "—"} />
-        </Card>
+        <View style={styles.broker}>
+          <Text style={styles.brokerLabel}>Broker name</Text>
+          <Text style={styles.brokerValue}>{brokerName || "—"}</Text>
+        </View>
       ) : null}
+      <View style={styles.saveRow}>
+        <Pressable style={styles.save} onPress={() => void onSave()} disabled={busy}>
+          <Text style={styles.saveText}>{busy ? "Saving..." : "Save profile"}</Text>
+        </Pressable>
+      </View>
       <Pressable style={styles.out} onPress={() => confirmLogout(logout)}>
         <Text style={styles.outText}>Log out</Text>
       </Pressable>
     </ScrollView>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
   );
 }
 
@@ -96,9 +89,6 @@ const styles = StyleSheet.create({
   avatarText: { color: "#fff", fontWeight: "800", fontSize: 22 },
   name: { fontSize: 22, fontWeight: "800" },
   identity: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  label: { color: colors.muted },
-  value: { fontWeight: "700", maxWidth: "62%", textAlign: "right" },
   edit: { fontWeight: "800", marginTop: 16, marginBottom: 8 },
   input: {
     backgroundColor: colors.card,
@@ -109,8 +99,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 10,
   },
-  save: { height: 48, borderRadius: 12, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", marginTop: 4 },
-  saveText: { color: "#fff", fontWeight: "700" },
+  broker: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  brokerLabel: { color: colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 4 },
+  brokerValue: { fontWeight: "700", fontSize: 16 },
+  saveRow: { alignItems: "flex-end" },
+  save: { height: 44, minWidth: 156, borderRadius: 8, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 20, alignSelf: "stretch" },
+  saveText: { color: "#fff", fontWeight: "600", fontSize: 14 },
   out: { height: 44, borderRadius: 12, backgroundColor: "#fef3f2", alignItems: "center", justifyContent: "center", marginTop: 12 },
   outText: { color: colors.down, fontWeight: "700" },
 });

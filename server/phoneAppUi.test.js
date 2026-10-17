@@ -15,7 +15,8 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   const book = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");
   const mobileProfile = fs.readFileSync(path.join(root, "mobile/src/screens/ProfileScreen.tsx"), "utf8");
   assert.match(mobileProfile, /Broker name/);
-  assert.match(mobileProfile, /label="Broker name"/);
+  assert.match(mobileProfile, /brokerLabel/);
+  assert.doesNotMatch(mobileProfile, /Add broker/);
   assert.doesNotMatch(mobileProfile, /label="Name"/);
   assert.doesNotMatch(mobileProfile, /label="Email"/);
   assert.doesNotMatch(mobileProfile, /label="Mobile no"/);

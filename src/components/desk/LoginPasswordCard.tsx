@@ -41,7 +41,7 @@ export function LoginPasswordCard() {
   return (
     <section className="card space-y-3 p-4" data-login-password="profile" id="login-password">
       <div>
-        <div className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Login</div>
+        <div className="desk-kicker">Login</div>
         <h2 className="text-base font-extrabold">Password</h2>
         <p className="desk-help mt-1 text-xs leading-5 text-slate-500">
           Sign in with Google or this password. The password stays hidden.
@@ -72,9 +72,11 @@ export function LoginPasswordCard() {
             autoComplete="new-password"
           />
         </label>
-        <button type="submit" disabled={busy} className="h-10 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-2">
-          {busy ? "Saving..." : "Save password"}
-        </button>
+        <div className="desk-save-row sm:col-span-2">
+          <button type="submit" disabled={busy} className="desk-save-btn">
+            {busy ? "Saving..." : "Save password"}
+          </button>
+        </div>
       </form>
     </section>
   );

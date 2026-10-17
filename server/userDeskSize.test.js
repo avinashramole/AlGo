@@ -33,9 +33,11 @@ test("User desk uses the same type and padding sizes as the admin desk", () => {
   assert.doesNotMatch(memberSettings, /desk-page/);
   const passwordCard = fs.readFileSync(path.join(root, "src/components/desk/LoginPasswordCard.tsx"), "utf8");
   assert.match(passwordCard, /h-10 w-full rounded-lg/);
+  assert.match(passwordCard, /desk-save-btn/);
 
   assert.match(profile, /h-10 w-full rounded-lg/);
   assert.match(profile, /text-sm font-normal/);
+  assert.match(profile, /desk-save-btn/);
   assert.match(setup, /h-10 w-full rounded-lg/);
   assert.match(setup, /text-sm font-normal/);
   assert.match(setup, /card space-y-3 p-4/);

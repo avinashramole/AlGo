@@ -356,6 +356,35 @@ main > .desk-page {
   color: var(--muted-2);
 }
 
+.desk-save-btn {
+  display: inline-flex;
+  height: 2.5rem;
+  min-width: 9.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background-color: #fd6b01;
+  padding: 0 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.desk-save-btn:disabled {
+  opacity: 0.6;
+}
+
+.desk-save-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 639px) {
+  .desk-save-btn {
+    width: 100%;
+  }
+}
+
 .desk-page > .card,
 .desk-page > section.card {
   padding: 0.75rem;

@@ -160,8 +160,12 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(profile, /data-member-profile="broker"/);
   assert.match(profile, /Broker name/);
   assert.match(profile, /Edit profile/);
+  assert.match(profile, /desk-save-btn/);
+  assert.match(profile, /readOnly/);
   assert.doesNotMatch(profile, /IdentityRow/);
   assert.doesNotMatch(profile, /Not added/);
+  assert.doesNotMatch(profile, /label="Add broker"/);
+  assert.doesNotMatch(profile, /Connect Dhan, Upstox, or Kotak/);
   assert.match(profile, /to="\/settings"/);
   assert.match(memberSettings, /MemberAccountSetup/);
   assert.match(memberSettings, /showProfile=\{false\}/);
@@ -175,6 +179,7 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(passwordCard, /Sign in with Google or this password/);
   assert.match(passwordCard, /type="password"/);
   assert.match(passwordCard, /Save password/);
+  assert.match(passwordCard, /desk-save-btn/);
   assert.doesNotMatch(passwordCard, /123456/);
   assert.doesNotMatch(memberSettings, /Risk Settings/);
   assert.doesNotMatch(memberSettings, /Subscription Plan/);

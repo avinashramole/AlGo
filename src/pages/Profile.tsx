@@ -17,6 +17,8 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { isAdminUser } from "../lib/roles";
 
+const fieldClass = "mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal";
+
 export function Profile() {
   const { user, updateProfile, requestLogout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -67,7 +69,7 @@ export function Profile() {
   };
 
   return (
-    <div className="desk-page mx-auto max-w-2xl space-y-2">
+    <div className="desk-page mx-auto max-w-2xl space-y-3">
       <PhoneCard className="p-4">
         <div className="flex items-center gap-3">
           <Avatar name={user?.name} size="lg" />
@@ -79,23 +81,24 @@ export function Profile() {
       </PhoneCard>
 
       <section className="card p-4" data-member-profile="identity">
-        <div className="mb-3 text-lg font-bold leading-snug">
+        <div className="desk-kicker">Account</div>
+        <div className="mb-4 mt-1 text-lg font-bold leading-snug">
           Name {name || "-"} | Email {email || "-"} | Mobile {mobile || "-"}
         </div>
-        <div className="mb-2 text-sm font-bold">Edit profile</div>
+        <div className="mb-3 text-sm font-bold">Edit profile</div>
         <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block text-sm font-semibold">
             Name
-            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={name} onChange={(event) => { setDirty(true); setName(event.target.value); }} />
+            <input className={fieldClass} value={name} onChange={(event) => { setDirty(true); setName(event.target.value); }} />
           </label>
           <label className="block text-sm font-semibold">
             Email
-            <input className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal" value={email} onChange={(event) => { setDirty(true); setEmail(event.target.value); }} placeholder="you@gmail.com" />
+            <input className={fieldClass} value={email} onChange={(event) => { setDirty(true); setEmail(event.target.value); }} placeholder="you@gmail.com" />
           </label>
           <label className="block text-sm font-semibold">
             Mobile no
             <input
-              className="mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal"
+              className={fieldClass}
               value={mobile}
               inputMode="numeric"
               maxLength={10}
@@ -106,22 +109,20 @@ export function Profile() {
               placeholder="98xxxxxxxx"
             />
           </label>
+          {!admin ? (
+            <label className="block text-sm font-semibold" data-member-profile="broker">
+              Broker name
+              <input className={`${fieldClass} cursor-default bg-slate-50 font-semibold dark:bg-[var(--card)]`} value={brokerName || "—"} readOnly tabIndex={-1} />
+            </label>
+          ) : null}
           {note ? <p className="text-sm font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
-          <button type="submit" disabled={busy} className="h-10 rounded-lg bg-brand-500 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-3">
-            {busy ? "Saving..." : "Save profile"}
-          </button>
+          <div className="desk-save-row sm:col-span-3">
+            <button type="submit" disabled={busy} className="desk-save-btn">
+              {busy ? "Saving..." : "Save profile"}
+            </button>
+          </div>
         </form>
       </section>
-
-      {!admin ? (
-        <PhoneCard data-member-profile="broker">
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <span className="text-sm text-slate-400">Broker name</span>
-            <span className="text-right text-sm font-semibold">{brokerName || "—"}</span>
-          </div>
-          <SettingsRow icon={Building2} label="Add broker" to="/broker" detail="Connect Dhan, Upstox, or Kotak for live copy" />
-        </PhoneCard>
-      ) : null}
 
       {!admin ? <LoginPasswordCard /> : null}
 
