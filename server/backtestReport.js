@@ -283,6 +283,41 @@ export function clearBacktestReport(id) {
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
+export function listBacktestReports() {
+  if (!fs.existsSync(REPORT_DIR)) return [];
+  const out = [];
+  for (const name of fs.readdirSync(REPORT_DIR)) {
+    if (!name.endsWith(".json")) continue;
+    const file = path.join(REPORT_DIR, name);
+    const fallbackId = path.basename(name, ".json");
+    try {
+      const row = JSON.parse(fs.readFileSync(file, "utf8"));
+      out.push({
+        id: String(row?.strategy?.id || fallbackId),
+        name: String(row?.strategy?.name || ""),
+        kind: String(row?.strategy?.kind || ""),
+        file,
+      });
+    } catch {
+      out.push({ id: fallbackId, name: "", kind: "", file });
+    }
+  }
+  return out;
+}
+
+export function clearBacktestReportsByKind(kinds = []) {
+  const allow = new Set((kinds || []).map((row) => String(row || "").trim()).filter(Boolean));
+  if (!allow.size) return [];
+  const removed = [];
+  for (const row of listBacktestReports()) {
+    if (!allow.has(row.kind)) continue;
+    clearBacktestReport(row.id);
+    if (row.file && fs.existsSync(row.file)) fs.unlinkSync(row.file);
+    removed.push(row);
+  }
+  return removed;
+}
+
 function xmlEscape(value) {
   return String(value)
     .replace(/&/g, "&amp;")

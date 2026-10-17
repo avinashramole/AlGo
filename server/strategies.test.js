@@ -157,6 +157,7 @@ test("hydrate drops retired strategies and records them as removed", () => {
   for (const id of ["a4", "a5", "a6", "a20", "a21", "a11"]) {
     assert.equal(next.algos.some((row) => row.id === id), false);
     assert.equal(next.removedIds.includes(id), true);
+    assert.equal(next.retired.some((row) => row.id === id), true);
   }
   assert.equal(next.algos.some((row) => row.id === "a10"), true);
   assert.equal(next.algos.some((row) => row.id === "a12"), true);

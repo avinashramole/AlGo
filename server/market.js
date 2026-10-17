@@ -44,10 +44,10 @@ import {
 import { buildReport } from "./desk.js";
 import { evaluateSignals, runBacktest } from "./backtest.js";
 import { candleAllowsEntry } from "./candleQuality.js";
-import { clearBacktestReport, saveBacktestReport } from "./backtestReport.js";
+import { clearBacktestReport, clearBacktestReportsByKind, saveBacktestReport } from "./backtestReport.js";
 import { TradeLogger } from "./niftyVwap/TradeLogger.js";
 import { listPublicUsers } from "./auth.js";
-import { isTestDeskAlgo, loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
+import { isTestDeskAlgo, loadAlgoStore, mappedClientIdsForMembers, normalizeAlgo, RETIRED_KINDS, saveAlgoStore, saveAlgoStoreAsync, strikeOffsetLabel } from "./strategies.js";
 import { canonicalStrategyName, realStrategyName, rememberOrderStrategy, resolveOrderStrategy, strategyForPlacedOrder } from "./orderStrategy.js";
 import { dhanFundsNeed, isDhanBrokerReject, isDhanFundsReject } from "./dhanPlaceError.js";
 import {
@@ -3811,8 +3811,12 @@ export function purgeStrategiesNotOnDesk() {
   });
   const desks = purgeMemberDesksExcept(algos);
   const plans = dropEnrollmentsWithoutStrategies(algos);
-  persistAlgos();
-  return { desks, plans, strategies: algos.map((row) => row.id) };
+  const reports = clearBacktestReportsByKind([...RETIRED_KINDS]);
+  for (const row of [...(algoStore.retired || []), ...reports]) {
+    if (row?.name) TradeLogger.purge(row.name);
+  }
+  persistAlgosNow();
+  return { desks, plans, reports: reports.length, strategies: algos.map((row) => row.id) };
 }
 
 export function clearSimulatedDesk() {

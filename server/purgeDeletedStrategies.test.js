@@ -10,6 +10,7 @@ process.env.T2S_MEMBER_DESK_FILE = path.join(dir, "member-desk.json");
 process.env.T2S_PAYMENTS_FILE = path.join(dir, "payments.json");
 process.env.T2S_ENROLL_FILE = path.join(dir, "enrollments.json");
 process.env.T2S_BROKER_SESSIONS_FILE = path.join(dir, "broker-sessions.json");
+process.env.T2S_BACKTEST_REPORT_DIR = path.join(dir, "backtests");
 
 fs.writeFileSync(
   process.env.T2S_ALGOS_FILE,
@@ -68,14 +69,42 @@ fs.writeFileSync(
 
 const { listAlgos, purgeStrategiesNotOnDesk } = await import("./market.js");
 const { listEnrollments } = await import("./subscriptions.js");
+const { loadBacktestReport, saveBacktestReport } = await import("./backtestReport.js");
+const { TradeLogger } = await import("./niftyVwap/TradeLogger.js");
 
 test("a deleted strategy is removed from the admin catalog and every user desk", () => {
   assert.equal(listAlgos().some((row) => row.name === "NIFTY VWAP ATM"), false);
   assert.equal(listAlgos().some((row) => row.id === "a10"), true);
 
+  const dummy = {
+    ranAt: new Date().toISOString(),
+    pnl: 1,
+    trades: 1,
+    wins: 1,
+    losses: 0,
+    winRate: 100,
+    maxDrawdown: 0,
+    tradesBook: [{ day: "2026-10-16", side: "BUY", symbol: "NIFTY", entry: 100, exit: 101, qty: 1, pnl: 1 }],
+  };
+  saveBacktestReport({ id: "a4", name: "NIFTY VWAP ATM", kind: "nifty-vwap", symbol: "NIFTY" }, dummy);
+  saveBacktestReport({ id: "gone-ind", name: "My RSI", kind: "indicator", symbol: "NIFTY" }, dummy);
+  saveBacktestReport({ id: "a10", name: "NIFTY 5m first candle", kind: "nifty-first-candle", symbol: "NIFTY" }, dummy);
+  TradeLogger.record("entry", { strategy: "NIFTY VWAP ATM", symbol: "NIFTY" });
+  TradeLogger.record("entry", { strategy: "My RSI", symbol: "NIFTY" });
+  TradeLogger.record("entry", { strategy: "NIFTY 5m first candle", symbol: "NIFTY" });
+  assert.ok(loadBacktestReport("a4"));
+  assert.ok(loadBacktestReport("gone-ind"));
+  assert.ok(loadBacktestReport("a10"));
+
   const result = purgeStrategiesNotOnDesk();
   assert.equal(result.strategies.includes("a10"), true);
   assert.equal(result.strategies.includes("a4"), false);
+  assert.equal(loadBacktestReport("a4"), null);
+  assert.equal(loadBacktestReport("gone-ind"), null);
+  assert.ok(loadBacktestReport("a10"));
+  assert.equal(TradeLogger.lines.some((row) => row.strategy === "NIFTY VWAP ATM"), false);
+  assert.equal(TradeLogger.lines.some((row) => row.strategy === "My RSI"), false);
+  assert.equal(TradeLogger.lines.some((row) => row.strategy === "NIFTY 5m first candle"), true);
 
   const plans = listEnrollments({ userId: "u1" });
   assert.equal(plans.some((row) => row.strategyName === "NIFTY VWAP ATM"), false);

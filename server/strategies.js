@@ -1174,7 +1174,7 @@ export function normalizeAlgo(input = {}, existing = {}) {
   return withMapping(next, input, existing);
 }
 
-const RETIRED_KINDS = new Set([
+export const RETIRED_KINDS = new Set([
   "indicator",
   "price-action",
   "nifty-vwap",
@@ -1183,7 +1183,7 @@ const RETIRED_KINDS = new Set([
   "nifty-test",
 ]);
 
-function isRetiredAlgo(algo) {
+export function isRetiredAlgo(algo) {
   return RETIRED_KINDS.has(String(algo?.kind || ""));
 }
 
@@ -1288,6 +1288,7 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
   const removed = new Set(removedIds);
   const hasSaved = Array.isArray(stored.algos);
   const algos = [];
+  const retired = [];
   const seen = new Set();
   const drop = (id) => {
     if (id) removed.add(id);
@@ -1299,6 +1300,7 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
       const next = restoreRunStatus(normalizeAlgo(row, { ...row, id }));
       next.id = id;
       if (isRetiredAlgo(next)) {
+        retired.push({ id, name: next.name, kind: next.kind });
         drop(id);
         continue;
       }
@@ -1316,7 +1318,7 @@ export function hydrateAlgos(stored = {}, catalog = seedAlgos()) {
     seen.add(id);
   }
   const cleaned = keepOneShivamT2s(dropAlgoTestNiftyCopies(algos, removed), removed);
-  return { algos: cleaned, removedIds: uniqueIds([...removed]) };
+  return { algos: cleaned, removedIds: uniqueIds([...removed]), retired };
 }
 
 export function loadAlgoStore(catalog = seedAlgos()) {
