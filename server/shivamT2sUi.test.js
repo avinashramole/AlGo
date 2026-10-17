@@ -14,6 +14,9 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   const lib = fs.readFileSync(path.join(root, "src/lib/strategies.ts"), "utf8");
   const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
   const strategies = fs.readFileSync(path.join(root, "server/strategies.js"), "utf8");
+  const deploy = fs.readFileSync(path.join(root, "deploy/update-website.sh"), "utf8");
+  const quality = fs.readFileSync(path.join(root, "server/candleQuality.js"), "utf8");
+  const signals = fs.readFileSync(path.join(root, "server/shivamT2s/signals.js"), "utf8");
   assert.match(lib, /"shivam-t2s"/);
   assert.match(lib, /SHIVAM_T2S_NAME = "Shivam T2S Strategy"/);
   assert.match(lib, /id: "CRUDEOIL", label: "CRUDE OIL", futures: "CRUDEOIL FUT"/);
@@ -50,6 +53,12 @@ test("Shivam T2S card, builder, APIs, and reports are wired", () => {
   assert.match(lib, /Entry uses the last completed candle/);
   assert.match(lib, /Skip doji/);
   assert.match(lib, /upper wick or lower wick/);
+  assert.match(quality, /Skip doji/);
+  assert.match(signals, /candleAllowsEntry\(indexBar\)/);
+  assert.match(signals, /isDojiColor/);
+  assert.match(deploy, /\{CANDLE_ENTRY_RULE\} BUY CE: index green, future green, CE green/);
+  assert.match(deploy, /candleAllowsEntry\(indexBar\)/);
+  assert.doesNotMatch(deploy, /Do not trade a doji on the index, future, or option candle/);
   assert.doesNotMatch(builder, /ITM offset/);
   assert.doesNotMatch(builder, /NumberField label="Strike offset"/);
   assert.match(page, /data-shivam-candles="idx-fut-opt"/);

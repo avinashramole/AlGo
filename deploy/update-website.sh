@@ -180,7 +180,10 @@ if ! grep -q 'export function AlgoTest' "$HOME_DIR/src/pages/Algo.tsx" || ! grep
   echo "FAIL: Algo Test page is missing the seeded Shivam T2S card."
   exit 1
 fi
-if ! grep -q 'Do not trade a doji on the index, future, or option candle' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx"; then
+if ! grep -q '{CANDLE_ENTRY_RULE} BUY CE: index green, future green, CE green' "$HOME_DIR/src/components/dashboard/StrategyBuilder.tsx" \
+  || ! grep -q 'Skip doji' "$HOME_DIR/server/candleQuality.js" \
+  || ! grep -q 'candleAllowsEntry(indexBar)' "$HOME_DIR/server/shivamT2s/signals.js" \
+  || ! grep -q 'isDojiColor' "$HOME_DIR/server/shivamT2s/signals.js"; then
   echo "FAIL: Shivam T2S must skip doji candles on index, future, and option."
   exit 1
 fi
