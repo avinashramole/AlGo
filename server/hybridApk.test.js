@@ -42,7 +42,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.doesNotMatch(context, /@vite-ignore/);
   assert.match(login, /if \(isNativeHybrid\(\)\) setLoading\(false\)/);
   const gradle = fs.readFileSync(path.join(root, "android/app/build.gradle"), "utf8");
-  assert.match(gradle, /versionName "1.10"/);
+  assert.match(gradle, /versionName "1.11"/);
   const mainActivity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(mainActivity, /onNewIntent/);
   assert.match(auth, /isEmbeddedWebView/);
@@ -99,8 +99,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(infoPlist, /LSSupportsOpeningDocumentsInPlace/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
   assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
-  assert.match(pbx, /MARKETING_VERSION = 1.10/);
-  assert.match(pbx, /CURRENT_PROJECT_VERSION = 11/);
+  assert.match(pbx, /MARKETING_VERSION = 1.11/);
+  assert.match(pbx, /CURRENT_PROJECT_VERSION = 12/);
   assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);
   const appDelegate = fs.readFileSync(path.join(root, "ios/App/App/AppDelegate.swift"), "utf8");
   assert.match(appDelegate, /ApplicationDelegateProxy/);
@@ -172,19 +172,18 @@ test("login page has a real Android APK download link", () => {
   const nginx = fs.readFileSync(path.join(root, "deploy/nginx-trade2smart.conf"), "utf8");
   const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
   const apk = path.join(root, "releases/Trade2Smart-web.apk");
-  assert.match(login, /function downloadAndroidApk/);
   assert.match(login, /data-android-apk="download"/);
-  assert.match(login, /onClick=\{downloadAndroidApk\}/);
-  assert.match(login, /href = "\/Trade2Smart-web\.apk"/);
+  assert.match(login, /href="\/Trade2Smart-web\.apk"/);
+  assert.match(login, /download="Trade2Smart-web\.apk"/);
+  assert.match(login, /<a[\s\S]*data-android-apk="download"/);
+  assert.doesNotMatch(login, /function downloadAndroidApk/);
   assert.match(login, /function installIosApp/);
   assert.doesNotMatch(login, /setHint\("iPhone: open this site in Safari/);
-  assert.match(
-    login,
-    /function downloadAndroidApk\(\) \{\n(?:  .+\n)+  link\.remove\(\);\n\}\n\nexport function Login\(\)/,
-  );
-  assert.doesNotMatch(login, /<a className="t2s-apk-download" href="\/Trade2Smart-web\.apk"/);
   assert.match(index, /sendAndroidApk/);
   assert.match(nginx, /Trade2Smart-web\.apk/);
+  const vite = fs.readFileSync(path.join(root, "vite.config.ts"), "utf8");
+  assert.match(vite, /"\/Trade2Smart-web\.apk"/);
+  assert.match(vite, /target: "http:\/\/127\.0\.0\.1:4000"/);
   assert.equal(fs.existsSync(apk), true);
   assert.ok(fs.statSync(apk).size > 1000);
   const appJson = fs.readFileSync(path.join(root, "mobile/app.json"), "utf8");

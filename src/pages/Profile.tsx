@@ -71,7 +71,9 @@ export function Profile() {
           <Avatar name={user?.name} size="lg" />
           <div className="min-w-0">
             <div className="truncate text-lg font-extrabold">Profile</div>
-            <div className="text-sm text-slate-400">Edit name, email, and mobile no here.</div>
+            <div className="text-sm text-slate-400">
+              {admin ? "Edit name, email, and mobile no here." : "Your Trade2Smart account."}
+            </div>
           </div>
         </div>
       </PhoneCard>
@@ -81,43 +83,45 @@ export function Profile() {
         <div className="mb-4 mt-1 text-lg font-bold leading-snug">
           {memberIdentityLine(name, email, mobile)}
         </div>
-        <div className="mb-3 text-sm font-bold">Edit profile</div>
-        <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="block text-sm font-semibold">
-            Name
-            <input className={fieldClass} value={name} onChange={(event) => { setDirty(true); setName(event.target.value); }} />
-          </label>
-          <label className="block text-sm font-semibold">
-            Email
-            <input className={fieldClass} value={email} onChange={(event) => { setDirty(true); setEmail(event.target.value); }} placeholder="you@gmail.com" />
-          </label>
-          <label className="block text-sm font-semibold">
-            Mobile no
-            <input
-              className={fieldClass}
-              value={mobile}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={(event) => {
-                setDirty(true);
-                setMobile(event.target.value.replace(/\D/g, "").slice(0, 10));
-              }}
-              placeholder="98xxxxxxxx"
-            />
-          </label>
-          {!admin ? (
-            <label className="block text-sm font-semibold" data-member-profile="broker">
-              Broker name
-              <input className={`${fieldClass} cursor-default bg-slate-50 font-semibold dark:bg-[var(--card)]`} value={brokerName || "—"} readOnly tabIndex={-1} />
-            </label>
-          ) : null}
-          {note ? <p className="text-sm font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
-          <div className="desk-save-row sm:col-span-3">
-            <button type="submit" disabled={busy} className="desk-save-btn">
-              {busy ? "Saving..." : "Save profile"}
-            </button>
-          </div>
-        </form>
+        {admin ? (
+          <>
+            <div className="mb-3 text-sm font-bold">Edit profile</div>
+            <form onSubmit={onSave} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="block text-sm font-semibold">
+                Name
+                <input className={fieldClass} value={name} onChange={(event) => { setDirty(true); setName(event.target.value); }} />
+              </label>
+              <label className="block text-sm font-semibold">
+                Email
+                <input className={fieldClass} value={email} onChange={(event) => { setDirty(true); setEmail(event.target.value); }} placeholder="you@gmail.com" />
+              </label>
+              <label className="block text-sm font-semibold">
+                Mobile no
+                <input
+                  className={fieldClass}
+                  value={mobile}
+                  inputMode="numeric"
+                  maxLength={10}
+                  onChange={(event) => {
+                    setDirty(true);
+                    setMobile(event.target.value.replace(/\D/g, "").slice(0, 10));
+                  }}
+                  placeholder="98xxxxxxxx"
+                />
+              </label>
+              {note ? <p className="text-sm font-semibold text-slate-500 sm:col-span-3">{note}</p> : null}
+              <div className="desk-save-row sm:col-span-3">
+                <button type="submit" disabled={busy} className="desk-save-btn">
+                  {busy ? "Saving..." : "Save profile"}
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <p className="text-sm font-semibold" data-member-profile="broker">
+            Broker name <span className="font-bold">{brokerName || "—"}</span>
+          </p>
+        )}
       </section>
 
       {!admin ? <LoginPasswordCard /> : null}
