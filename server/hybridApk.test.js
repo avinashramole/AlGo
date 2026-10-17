@@ -42,7 +42,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.doesNotMatch(context, /@vite-ignore/);
   assert.match(login, /if \(isNativeHybrid\(\)\) setLoading\(false\)/);
   const gradle = fs.readFileSync(path.join(root, "android/app/build.gradle"), "utf8");
-  assert.match(gradle, /versionName "1.7"/);
+  assert.match(gradle, /versionName "1.8"/);
   const mainActivity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(mainActivity, /onNewIntent/);
   assert.match(auth, /isEmbeddedWebView/);
@@ -80,6 +80,9 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(iosBuild, /xcodebuild/);
   assert.match(login, /data-android-apk="download"/);
   assert.match(login, /data-ios-app="install"/);
+  assert.match(login, /data-store-logo="android"/);
+  assert.match(login, /data-store-logo="apple"/);
+  assert.doesNotMatch(login, /Email me a login code/);
   assert.match(login, /function installIosApp/);
   assert.match(login, /t2s-ios-install/);
   assert.match(login, /Add to Home Screen/);
@@ -96,8 +99,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(infoPlist, /LSSupportsOpeningDocumentsInPlace/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
   assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
-  assert.match(pbx, /MARKETING_VERSION = 1.7/);
-  assert.match(pbx, /CURRENT_PROJECT_VERSION = 8/);
+  assert.match(pbx, /MARKETING_VERSION = 1.8/);
+  assert.match(pbx, /CURRENT_PROJECT_VERSION = 9/);
   assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);
   const appDelegate = fs.readFileSync(path.join(root, "ios/App/App/AppDelegate.swift"), "utf8");
   assert.match(appDelegate, /ApplicationDelegateProxy/);

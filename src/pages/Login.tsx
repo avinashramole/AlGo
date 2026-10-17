@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
-  Apple,
   ArrowRight,
   Award,
   Eye,
@@ -11,7 +10,6 @@ import {
   Phone,
   Share,
   Shield,
-  Smartphone,
   User,
   Users,
 } from "lucide-react";
@@ -315,7 +313,7 @@ export function Login() {
     }
 
     if (!password) {
-      setError("Enter your password, or tap Email me a login code.");
+      setError("Enter your password.");
       return;
     }
 
@@ -521,14 +519,10 @@ export function Login() {
                 <div className="t2s-or" role="separator">
                   <span>or continue with</span>
                 </div>
-                <div className="t2s-alt">
+                <div className="t2s-alt t2s-alt-one">
                   <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onGoogle()}>
                     <GoogleIcon />
                     Login with Google
-                  </button>
-                  <button type="button" className="t2s-alt-btn" disabled={loading} onClick={() => void onSendCode("login")}>
-                    <Mail size={18} />
-                    Email me a login code
                   </button>
                 </div>
               </>
@@ -551,11 +545,11 @@ export function Login() {
             <p className="t2s-download-label">Download our App</p>
             <div className="t2s-app-downloads">
               <button type="button" className="t2s-apk-download" data-android-apk="download" onClick={downloadAndroidApk}>
-                <Smartphone size={18} />
+                <AndroidLogo />
                 Download Android App
               </button>
               <button type="button" className="t2s-apk-download" data-ios-app="install" onClick={installIosApp}>
-                <Apple size={18} />
+                <AppleLogo />
                 Download iPhone App
               </button>
             </div>
@@ -686,7 +680,7 @@ function IosInstallSheet({ mode, onClose }: { mode: "guide" | "installed"; onClo
     <div className="t2s-ios-install" data-ios-install="sheet" role="dialog" aria-modal="true" aria-labelledby="t2s-ios-install-title">
       <button type="button" className="t2s-ios-install-backdrop" aria-label="Close" onClick={onClose} />
       <div className="t2s-ios-install-card">
-        <Apple size={28} />
+        <AppleLogo size={28} />
         <h3 id="t2s-ios-install-title">{mode === "installed" ? "T2S is already installed" : "Install the iPhone app"}</h3>
         {mode === "installed" ? (
           <p>Open the Trade 2 Smart icon on your Home Screen. Sign in with the same email as the website.</p>
@@ -709,6 +703,28 @@ function IosInstallSheet({ mode, onClose }: { mode: "guide" | "installed"; onClo
         </button>
       </div>
     </div>
+  );
+}
+
+function AndroidLogo({ size = 22 }: { size?: number }) {
+  return (
+    <svg className="t2s-store-logo" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" data-store-logo="android">
+      <path
+        fill="#3DDC84"
+        d="M17.52 9.32 19.5 5.86a.42.42 0 0 0-.15-.57.42.42 0 0 0-.57.15l-2.02 3.5A7.86 7.86 0 0 0 12 7.68c-1.85 0-3.59.56-5.14 1.57l-2.02-3.5a.42.42 0 0 0-.57-.15.42.42 0 0 0-.15.57l1.98 3.46C2.69 11.19.2 14.66.2 18.68h23.6c0-4.02-2.49-7.49-5.92-9.36ZM6.48 15.34a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm11.04 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"
+      />
+    </svg>
+  );
+}
+
+function AppleLogo({ size = 20 }: { size?: number }) {
+  return (
+    <svg className="t2s-store-logo" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" data-store-logo="apple">
+      <path
+        fill="#111111"
+        d="M16.37 12.64c.03 3.03 2.65 4.04 2.68 4.05-.03.07-.42 1.44-1.38 2.83-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79s-1.99.77-3.27.82c-1.31.05-2.3-1.32-3.14-2.53C3.25 17 1.94 12.45 3.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.19 3.82ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2c.13 1.17-.34 2.35-1.04 3.19C14.21 6.04 13.07 6.7 11.95 6.61 11.8 5.46 12.36 4.26 13 3.5Z"
+      />
+    </svg>
   );
 }
 

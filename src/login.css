@@ -380,6 +380,10 @@ html:has(.t2s-login) #root {
   gap: 10px;
 }
 
+.t2s-alt-one {
+  grid-template-columns: 1fr;
+}
+
 .t2s-alt-btn {
   display: flex;
   width: 100%;
@@ -452,6 +456,11 @@ html:has(.t2s-login) #root {
   text-decoration: none;
   cursor: pointer;
   font-family: inherit;
+}
+
+.t2s-store-logo {
+  display: block;
+  flex: 0 0 auto;
 }
 
 .t2s-apk-download:hover {

@@ -149,6 +149,9 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(login, /<b>Register<\/b>/);
   assert.match(login, /Already have an account\?/);
   assert.match(login, /Login with Google/);
+  assert.doesNotMatch(login, /Email me a login code/);
+  assert.match(login, /data-store-logo="android"/);
+  assert.match(login, /data-store-logo="apple"/);
   assert.match(login, /Welcome Back!/);
   assert.match(login, /Sign in to your Trade2Smart account/);
   assert.doesNotMatch(login, /New to Trade2Smart\?/);

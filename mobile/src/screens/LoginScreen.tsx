@@ -188,7 +188,7 @@ export function LoginScreen() {
     }
 
     if (!password) {
-      Alert.alert("Password", "Enter your password, or tap Email me a login code.");
+      Alert.alert("Password", "Enter your password.");
       return;
     }
 
@@ -344,14 +344,9 @@ export function LoginScreen() {
           )}
 
           {page === "signin" && !sentTo ? (
-            <>
-              <Pressable style={styles.ghost} onPress={() => void sendCode("login")} disabled={busy}>
-                <Text style={styles.ghostText}>Email me a login code</Text>
-              </Pressable>
-              <Pressable style={styles.ghost} onPress={() => void onForgot()} disabled={busy}>
-                <Text style={styles.ghostText}>Forgot Password?</Text>
-              </Pressable>
-            </>
+            <Pressable style={styles.ghost} onPress={() => void onForgot()} disabled={busy}>
+              <Text style={styles.ghostText}>Forgot Password?</Text>
+            </Pressable>
           ) : null}
 
           {page === "signin" && sentTo ? (
