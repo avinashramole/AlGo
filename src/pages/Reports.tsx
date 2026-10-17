@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useMarket } from "../context/MarketContext";
 import { brokerName } from "../lib/brokers";
 import { showDeskToast } from "../lib/deskToast";
+import { isNativeHybrid } from "../lib/hybrid";
 import { catchDeskError } from "../lib/liveSite";
 import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReason";
 import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName, whyColClass } from "../lib/format";
@@ -36,11 +37,12 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
     };
   }, []);
 
-  const download = (format: "pdf" | "xlsx") => {
-    void downloadDeskReport(format).catch((error) => {
+  const download = (format: "pdf" | "xlsx", mode?: "download" | "share") => {
+    void downloadDeskReport(format, mode).catch((error) => {
       showDeskToast(catchDeskError(error, "Could not download the branded proposal report"));
     });
   };
+  const nativePdf = isNativeHybrid();
 
   if (!report) {
     return (
@@ -63,14 +65,35 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
         </div>
         )}
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            data-report-download="pdf"
-            onClick={() => download("pdf")}
-            className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
-          >
-            Download PDF
-          </button>
+          {nativePdf ? (
+            <>
+              <button
+                type="button"
+                data-report-download="pdf"
+                onClick={() => download("pdf", "download")}
+                className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+              >
+                Download
+              </button>
+              <button
+                type="button"
+                data-report-share="pdf"
+                onClick={() => download("pdf", "share")}
+                className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500"
+              >
+                Share
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              data-report-download="pdf"
+              onClick={() => download("pdf")}
+              className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+            >
+              Download PDF
+            </button>
+          )}
           <button
             type="button"
             data-report-download="xlsx"

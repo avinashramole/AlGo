@@ -113,7 +113,9 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.match(nav, /to: "\/orders"/);
   assert.match(nav, /to: "\/broker"/);
   assert.match(book, /data-member-report-download="pdf"/);
+  assert.match(book, /data-member-report-share="pdf"/);
   assert.match(book, /downloadMemberReport/);
+  assert.match(book, /isNativeHybrid/);
   const header = fs.readFileSync(path.join(root, "src/components/layout/Header.tsx"), "utf8");
   assert.match(sidebar, /label: "Profile", icon: User, admin: true/);
   assert.match(sidebar, /to: "\/settings", label: "Settings", icon: Settings \}/);

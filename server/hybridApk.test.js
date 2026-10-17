@@ -42,7 +42,7 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.doesNotMatch(context, /@vite-ignore/);
   assert.match(login, /if \(isNativeHybrid\(\)\) setLoading\(false\)/);
   const gradle = fs.readFileSync(path.join(root, "android/app/build.gradle"), "utf8");
-  assert.match(gradle, /versionName "1.6"/);
+  assert.match(gradle, /versionName "1.7"/);
   const mainActivity = fs.readFileSync(path.join(root, "android/app/src/main/java/com/t2s/algo/MainActivity.java"), "utf8");
   assert.match(mainActivity, /onNewIntent/);
   assert.match(auth, /isEmbeddedWebView/);
@@ -69,7 +69,10 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.doesNotMatch(client, /window\.alert\(`Saved \$\{filename\}`\)/);
   assert.match(client, /Trade2Smart-\$\{storedUserName\(\) \|\| "user"\}/);
   assert.doesNotMatch(client, /t2s-proposal/);
-  assert.doesNotMatch(client, /Share\.share/);
+  assert.match(client, /shareNativeFile/);
+  assert.match(client, /Share\.share/);
+  assert.match(client, /askReportSaveAction/);
+  assert.match(client, /dialogTitle: "Share"/);
   assert.doesNotMatch(client, /dialogTitle: "Save or share report"/);
   assert.match(main, /HashRouter/);
   assert.match(build, /cap sync android/);
@@ -93,8 +96,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(infoPlist, /LSSupportsOpeningDocumentsInPlace/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
   assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
-  assert.match(pbx, /MARKETING_VERSION = 1.6/);
-  assert.match(pbx, /CURRENT_PROJECT_VERSION = 7/);
+  assert.match(pbx, /MARKETING_VERSION = 1.7/);
+  assert.match(pbx, /CURRENT_PROJECT_VERSION = 8/);
   assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);
   const appDelegate = fs.readFileSync(path.join(root, "ios/App/App/AppDelegate.swift"), "utf8");
   assert.match(appDelegate, /ApplicationDelegateProxy/);
@@ -113,6 +116,11 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(styles, /Theme.AppCompat.Light.NoActionBar/);
   assert.match(styles, /navigationBarColor/);
   assert.match(css, /\.t2s-desk-toast/);
+  assert.match(css, /\.t2s-report-save-scrim/);
+  const saveChoice = fs.readFileSync(path.join(root, "src/lib/reportSaveChoice.ts"), "utf8");
+  assert.match(saveChoice, /setAttribute\("data-report-save", "choice"\)/);
+  assert.match(saveChoice, /data-report-save-download/);
+  assert.match(saveChoice, /data-report-save-share/);
   const toast = fs.readFileSync(path.join(root, "src/lib/deskToast.ts"), "utf8");
   assert.match(toast, /data-desk-toast/);
   const memberBook = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");

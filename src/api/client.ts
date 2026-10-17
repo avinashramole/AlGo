@@ -1,6 +1,7 @@
 import { showDeskToast } from "../lib/deskToast";
 import { apiBase, googleLoginNext, isCapacitorNative } from "../lib/hybrid";
 import { apiDownMessage, publicDeskError } from "../lib/liveSite";
+import { askReportSaveAction, type ReportSaveMode } from "../lib/reportSaveChoice";
 
 function authHeaders(): HeadersInit {
   const token =
@@ -1761,6 +1762,19 @@ async function saveNativeFile(blob: Blob, filename: string) {
   throw lastError || new Error("Could not save the report");
 }
 
+async function shareNativeFile(blob: Blob, filename: string) {
+  const { Filesystem, Directory } = await import("@capacitor/filesystem");
+  const { Share } = await import("@capacitor/share");
+  const data = await blobToBase64(blob);
+  await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache });
+  const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+  try {
+    await Share.share({ title: filename, files: [uri], dialogTitle: "Share" });
+  } catch {
+    await Share.share({ title: filename, url: uri, dialogTitle: "Share" });
+  }
+}
+
 function clickDownloadLink(blob: Blob, filename: string) {
   const file = new Blob([blob], { type: "application/octet-stream" });
   const url = URL.createObjectURL(file);
@@ -1775,7 +1789,7 @@ function clickDownloadLink(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallback: string) {
+async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallback: string, mode?: ReportSaveMode) {
   let response: Response;
   try {
     response = await fetch(`${apiBase()}${path}${path.includes("?") ? "&" : "?"}format=${format}`, {
@@ -1797,6 +1811,15 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   const blob = await response.blob();
   const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
   const filename = safeDownloadName(match?.[1] || "", format);
+  let action: ReportSaveMode | "cancel" = mode || "download";
+  if (!mode && isCapacitorNative()) {
+    action = await askReportSaveAction(format === "xlsx" ? "Excel" : "PDF");
+  }
+  if (action === "cancel") return;
+  if (isCapacitorNative() && action === "share") {
+    await shareNativeFile(blob, filename);
+    return;
+  }
   if (isCapacitorNative()) {
     try {
       await saveNativeFile(blob, filename);
@@ -1809,28 +1832,30 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   clickDownloadLink(blob, filename);
 }
 
-export function downloadShivamT2sReport(id: string, format: "pdf" | "xlsx") {
+export function downloadShivamT2sReport(id: string, format: "pdf" | "xlsx", mode?: ReportSaveMode) {
   return downloadBrandedFile(
     `/strategies/shivam-t2s/reports/${format === "pdf" ? "pdf" : "excel"}?id=${encodeURIComponent(id)}`,
     format,
     "Could not download the Shivam T2S report.",
+    mode,
   );
 }
 
-export function downloadBacktestReport(id: string, format: "pdf" | "xlsx") {
+export function downloadBacktestReport(id: string, format: "pdf" | "xlsx", mode?: ReportSaveMode) {
   return downloadBrandedFile(
     `/algos/${id}/backtest/report`,
     format,
     "Run a backtest first to create the PDF and Excel report.",
+    mode,
   );
 }
 
-export function downloadDeskReport(format: "pdf" | "xlsx") {
-  return downloadBrandedFile("/report/download", format, "Could not download the branded proposal report.");
+export function downloadDeskReport(format: "pdf" | "xlsx", mode?: ReportSaveMode) {
+  return downloadBrandedFile("/report/download", format, "Could not download the branded proposal report.", mode);
 }
 
-export function downloadMemberReport(format: "pdf" | "xlsx" = "pdf") {
-  return downloadBrandedFile("/member/report/download", format, "Could not download your trade report.");
+export function downloadMemberReport(format: "pdf" | "xlsx" = "pdf", mode?: ReportSaveMode) {
+  return downloadBrandedFile("/member/report/download", format, "Could not download your trade report.", mode);
 }
 
 export function selectOptionChain(symbol: string, expiry?: string) {

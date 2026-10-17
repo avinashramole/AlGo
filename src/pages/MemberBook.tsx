@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Navigate, useSearchParams } from "react-router-dom";
 import { downloadMemberReport, getMemberDesk, type DeskOrder, type MemberDesk, type MemberPosition } from "../api/client";
 import { showDeskToast } from "../lib/deskToast";
+import { isNativeHybrid } from "../lib/hybrid";
 import { catchDeskError } from "../lib/liveSite";
 import { EmptyState, FilterChips, Money, PhoneCard, Segmented, StatusPill } from "../components/phone/PhoneUi";
 import { isEntryWhy, isExitHitReason, orderWhyForBook } from "../lib/exitReason";
@@ -35,11 +36,12 @@ export function MemberPositions() {
       brokerId: next.brokerId,
     })));
   }, []);
-  const downloadPdf = () => {
-    void downloadMemberReport("pdf").catch((error) => {
+  const downloadPdf = (mode?: "download" | "share") => {
+    void downloadMemberReport("pdf", mode).catch((error) => {
       showDeskToast(catchDeskError(error, "Could not download your trade report"));
     });
   };
+  const nativePdf = isNativeHybrid();
   return (
     <div className="space-y-2" data-member-positions-page="true">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -58,11 +60,30 @@ export function MemberPositions() {
               Paper
             </button>
           ) : null}
-          {paper ? null : (
+          {paper ? null : nativePdf ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                data-member-report-download="pdf"
+                onClick={() => downloadPdf("download")}
+                className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
+              >
+                Download
+              </button>
+              <button
+                type="button"
+                data-member-report-share="pdf"
+                onClick={() => downloadPdf("share")}
+                className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500"
+              >
+                Share
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               data-member-report-download="pdf"
-              onClick={downloadPdf}
+              onClick={() => downloadPdf()}
               className="h-10 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white"
             >
               Download PDF

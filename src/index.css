@@ -666,6 +666,66 @@ main > .desk-page {
   color: #e11d48;
 }
 
+.t2s-report-save-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.85rem;
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(15, 39, 68, 0.28);
+}
+
+.t2s-report-save-card {
+  width: min(18rem, calc(100vw - 1.5rem));
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 39, 68, 0.16);
+}
+
+.t2s-report-save-title {
+  padding: 0.15rem 0.25rem 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f2744;
+}
+
+.t2s-report-save-card button {
+  height: 2.4rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.t2s-report-save-card [data-report-save-download="true"] {
+  background: #fd6b01;
+  color: #ffffff;
+}
+
+.t2s-report-save-card [data-report-save-share="true"] {
+  border: 1px solid #fd6b01;
+  background: #fff4ea;
+  color: #fd6b01;
+}
+
+.t2s-report-save-card [data-report-save-cancel="true"] {
+  border: 1px solid rgba(15, 39, 68, 0.12);
+  background: transparent;
+  color: #475569;
+}
+
+@media (min-width: 768px) {
+  .t2s-report-save-scrim {
+    align-items: center;
+    padding-bottom: 0.85rem;
+  }
+}
+
 .t2s-desk-toast {
   position: fixed;
   left: 50%;
