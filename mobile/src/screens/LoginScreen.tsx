@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useAuth } from "../AuthContext";
 import { BrandMark } from "../components/BrandMark";
 import type { SocialProvider } from "../api";
@@ -226,6 +226,8 @@ export function LoginScreen() {
     }
   };
 
+  const { width } = useWindowDimensions();
+  const wide = width >= 768;
   const submitLabel =
     busy
       ? "Please wait..."
@@ -241,8 +243,14 @@ export function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          wide ? { paddingHorizontal: 40, paddingVertical: 32 } : null,
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.card, wide ? { width: "100%", maxWidth: 440, alignSelf: "center" } : null]}>
           <View style={styles.brand}>
             <BrandMark variant="stacked" />
           </View>
@@ -497,7 +505,7 @@ const styles = StyleSheet.create({
   ghost: { height: 40, alignItems: "center", justifyContent: "center" },
   ghostText: { color: colors.brand, fontWeight: "600" },
   or: { textAlign: "center", color: colors.muted, marginTop: 18, marginBottom: 10, fontSize: 13 },
-  social: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  social: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   socialBtn: {
     borderWidth: 1,
     borderColor: colors.border,

@@ -48,7 +48,7 @@ export function UserHomeBoard({
 
       <section className="space-y-2">
         <h2 className="text-sm font-extrabold">Portfolio Overview</h2>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric label="Total Portfolio Value" value={formatRupee(capital, 0)} />
           <Metric label="Available Margin" value={formatRupee(available, 0)} />
           <Metric label="Today's P&L" value={formatRupee(pnl)} signed={pnl} />
@@ -86,7 +86,7 @@ export function UserHomeBoard({
 
       <section className="space-y-2">
         <h2 className="text-sm font-extrabold">Trading Workspace</h2>
-        <div className="grid grid-cols-2 gap-2" data-home-workspace="algos-broker-tape">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-home-workspace="algos-broker-tape">
           <WorkspaceLink to={algosTo} icon={Cpu} title="Algorithmic Strategies" detail="Manage & monitor strategies" />
           <WorkspaceLink to="/broker" icon={Building2} title="Broker" detail="Connect your broker for live copy" />
           <WorkspaceLink to="/tape" icon={Activity} title="Market tape" detail="Live market activity" />

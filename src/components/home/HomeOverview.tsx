@@ -35,7 +35,7 @@ export function HomeOverview({
 
       {tape}
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
         <MetricTile label="Total capital" value={formatRupee(capital, 0)} />
         <MetricTile label="Available margin" value={formatRupee(available, 0)} />
         <MetricTile label="Today's P&L" value={formatRupee(pnl)} signed={pnl} />

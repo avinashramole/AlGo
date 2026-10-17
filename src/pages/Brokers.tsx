@@ -216,11 +216,11 @@ export function Brokers() {
             feed can stay on without being the default. Connecting a broker does not start LIVE algos.
           </p>
         </div>
-        <label className="flex min-w-[16rem] flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm sm:normal-case sm:tracking-normal">
+        <label className="flex w-full min-w-0 max-w-full flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:max-w-[16rem] sm:text-sm sm:normal-case sm:tracking-normal">
           Default broker
           <select
             data-broker-list="connections"
-            className="h-10 min-w-[16rem] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold text-[var(--text)] md:h-11"
+            className="h-10 w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-semibold text-[var(--text)] md:h-11"
             value={viewed?.id || defaultBroker?.id || ""}
             onChange={(event) => {
               if (event.target.value) pickBroker(event.target.value);

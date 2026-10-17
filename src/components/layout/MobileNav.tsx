@@ -57,7 +57,7 @@ export function MobileNav() {
   if (apkMember) {
     return (
       <nav
-        className="t2s-mobile-nav t2s-apk-member-nav fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,39,68,0.06)] dark:bg-[var(--card)]"
+        className="t2s-mobile-nav t2s-apk-member-nav fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,39,68,0.06)] dark:bg-[var(--card)] md:hidden"
         data-apk-nav="member"
       >
         <div className="grid grid-cols-5">
@@ -79,8 +79,7 @@ export function MobileNav() {
   return (
     <nav
       className={cn(
-        "t2s-mobile-nav fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,39,68,0.06)] dark:bg-[var(--card)]",
-        isNativeHybrid() ? "" : "md:hidden",
+        "t2s-mobile-nav fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,39,68,0.06)] dark:bg-[var(--card)] md:hidden",
       )}
     >
       <div

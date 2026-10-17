@@ -152,7 +152,7 @@ export function MemberPlans() {
         {payments?.ready ? null : (
           <p className="mt-2 text-xs font-semibold text-amber-700">Admin has not set a GPay / PhonePe mobile yet.</p>
         )}
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {strategies.map((row) => {
             const current = activeFor(row.id);
             const waiting = claimedFor(row.id);
@@ -232,7 +232,7 @@ export function MemberPlans() {
       </section>
 
       {desk.plans.length ? (
-        <section className="grid gap-3 md:grid-cols-2">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {desk.plans.map((row) => (
             <article key={row.strategyId} className="card p-4">
               <div className="text-[11px] font-extrabold uppercase text-slate-400">Enrolled plan</div>

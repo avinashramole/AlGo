@@ -623,13 +623,8 @@ html.t2s-hybrid .t2s-login {
     linear-gradient(180deg, #fff8f1 0%, #f4f6fb 100%);
 }
 
-html.t2s-hybrid .t2s-login-hero,
-html.t2s-hybrid .t2s-hero-stage,
-html.t2s-hybrid .t2s-benefits,
-html.t2s-hybrid .t2s-login-watermark,
 html.t2s-hybrid .t2s-app-downloads,
-html.t2s-hybrid .t2s-download-label,
-html.t2s-hybrid .t2s-legal {
+html.t2s-hybrid .t2s-download-label {
   display: none !important;
 }
 
@@ -639,15 +634,25 @@ html.t2s-hybrid .t2s-legal {
   }
 }
 
-html.t2s-hybrid .t2s-login-main,
-html.t2s-hybrid .t2s-legal {
-  width: calc(100% - 16px);
-  max-width: 28rem;
-  grid-template-columns: 1fr !important;
-}
+@media (max-width: 767px) {
+  html.t2s-hybrid .t2s-login-hero,
+  html.t2s-hybrid .t2s-hero-stage,
+  html.t2s-hybrid .t2s-benefits,
+  html.t2s-hybrid .t2s-login-watermark,
+  html.t2s-hybrid .t2s-legal {
+    display: none !important;
+  }
 
-html.t2s-hybrid .t2s-login-card {
-  padding: 20px 16px 16px;
+  html.t2s-hybrid .t2s-login-main,
+  html.t2s-hybrid .t2s-legal {
+    width: calc(100% - 16px);
+    max-width: 28rem;
+    grid-template-columns: 1fr !important;
+  }
+
+  html.t2s-hybrid .t2s-login-card {
+    padding: 20px 16px 16px;
+  }
 }
 
 @media (min-width: 768px) {

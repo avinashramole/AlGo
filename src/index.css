@@ -427,6 +427,26 @@ main > .desk-page {
   }
 }
 
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tape-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+    width: 100%;
+  }
+
+  .tape-cell {
+    min-width: 0;
+    padding: 0.55rem 0.7rem;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  [data-desk-tape] {
+    overflow-x: hidden;
+  }
+}
+
 .metric-well {
   display: grid;
   gap: 0.65rem;
@@ -669,7 +689,7 @@ main > .desk-page {
   }
 }
 
-/* Phone + Capacitor APK: keep the desk on one column even if WebView reports a wide width. */
+/* Hybrid APK / iOS: safe areas and no iOS zoom; chrome follows viewport width. */
 html.t2s-hybrid {
   --t2s-phone: 1;
 }
@@ -681,48 +701,9 @@ html.t2s-hybrid #root {
   background: #ffffff;
 }
 
-html.t2s-hybrid aside.desk-chrome {
-  display: none !important;
-}
-
-html.t2s-hybrid .t2s-shell-main {
-  padding-left: 0 !important;
-}
-
-html.t2s-hybrid .t2s-mobile-nav,
-html.t2s-hybrid .t2s-mobile-nav.hidden,
-html.t2s-hybrid .t2s-mobile-nav.md\:hidden {
-  display: block !important;
-}
-
-html.t2s-hybrid [data-user-home] [data-home-shortcuts] {
-  display: none !important;
-}
-
-html.t2s-hybrid .t2s-desktop-only {
-  display: none !important;
-}
-
-html.t2s-hybrid .logout-confirm-scrim {
-  background: transparent;
-  backdrop-filter: none;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 0.65rem;
-  padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
-}
-
-html.t2s-hybrid .logout-confirm-card {
-  width: min(15.25rem, calc(100vw - 1.4rem));
-}
-
 html.t2s-hybrid .desk-header {
   height: calc(3.25rem + env(safe-area-inset-top));
   padding-top: env(safe-area-inset-top);
-}
-
-html.t2s-hybrid main {
-  padding: 0.65rem 0.65rem calc(4.75rem + env(safe-area-inset-bottom)) !important;
 }
 
 html.t2s-hybrid main .card {
@@ -737,31 +718,75 @@ html.t2s-hybrid main button:not(.tape-cell) {
   font-size: 16px;
 }
 
-html.t2s-hybrid .tape-strip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
-  width: 100%;
+html.t2s-hybrid .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
 }
 
-html.t2s-hybrid .tape-cell {
-  min-width: 0;
-  padding: 0.5rem 0.55rem;
-  overflow-wrap: anywhere;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
+/* Phone-width hybrid (and web phones): bottom nav, no sidebar. */
+@media (max-width: 767px) {
+  html.t2s-hybrid aside.desk-chrome {
+    display: none !important;
+  }
 
-html.t2s-hybrid .tape-cell .text-lg {
-  font-size: 1rem;
-  line-height: 1.15;
-}
+  html.t2s-hybrid .t2s-shell-main {
+    padding-left: 0 !important;
+  }
 
-html.t2s-hybrid [data-desk-tape] {
-  overflow-x: hidden;
-}
+  html.t2s-hybrid .t2s-mobile-nav,
+  html.t2s-hybrid .t2s-mobile-nav.hidden,
+  html.t2s-hybrid .t2s-mobile-nav.md\:hidden {
+    display: block !important;
+  }
 
-@media (max-width: 767px), (pointer: coarse) {
+  html.t2s-hybrid [data-user-home] [data-home-shortcuts] {
+    display: none !important;
+  }
+
+  html.t2s-hybrid .t2s-desktop-only {
+    display: none !important;
+  }
+
+  html.t2s-hybrid .logout-confirm-scrim {
+    background: transparent;
+    backdrop-filter: none;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 0.65rem;
+    padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
+  }
+
+  html.t2s-hybrid .logout-confirm-card {
+    width: min(15.25rem, calc(100vw - 1.4rem));
+  }
+
+  html.t2s-hybrid main {
+    padding: 0.65rem 0.65rem calc(4.75rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  html.t2s-hybrid .tape-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    width: 100%;
+  }
+
+  html.t2s-hybrid .tape-cell {
+    min-width: 0;
+    padding: 0.5rem 0.55rem;
+    overflow-wrap: anywhere;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  html.t2s-hybrid .tape-cell .text-lg {
+    font-size: 1rem;
+    line-height: 1.15;
+  }
+
+  html.t2s-hybrid [data-desk-tape] {
+    overflow-x: hidden;
+  }
+
   html.t2s-hybrid main .grid.grid-cols-3,
   html.t2s-hybrid main .grid.lg\:grid-cols-3,
   html.t2s-hybrid main .grid.lg\:grid-cols-4,
@@ -771,8 +796,27 @@ html.t2s-hybrid [data-desk-tape] {
   }
 }
 
-html.t2s-hybrid .overflow-x-auto {
-  -webkit-overflow-scrolling: touch;
+/* Tablet and laptop hybrid: same chrome as the website. */
+@media (min-width: 768px) {
+  html.t2s-hybrid .desk-header {
+    height: calc(4rem + env(safe-area-inset-top));
+  }
+
+  html.t2s-hybrid aside.desk-chrome {
+    display: flex !important;
+  }
+
+  html.t2s-hybrid .t2s-shell-main {
+    padding-left: 14rem !important;
+  }
+
+  html.t2s-hybrid .t2s-mobile-nav {
+    display: none !important;
+  }
+
+  html.t2s-hybrid main {
+    padding: 1rem !important;
+  }
 }
 
 @media (max-width: 767px) {

@@ -21,6 +21,7 @@ test("Market tape shows Option Chain lots and hides the extra chip row", () => {
   assert.doesNotMatch(tape, /quote\?\.future \|\| quote\?\.price/);
   const css = fs.readFileSync(path.join(root, "src/index.css"), "utf8");
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*\.tape-strip \{[\s\S]*grid-template-columns: repeat\(2/);
+  assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1023px\) \{[\s\S]*\.tape-strip \{[\s\S]*grid-template-columns: repeat\(3/);
   assert.match(css, /html\.t2s-hybrid \.tape-strip \{[\s\S]*grid-template-columns: repeat\(2/);
   const deskTape = fs.readFileSync(path.join(root, "src/components/dashboard/DeskTape.tsx"), "utf8");
   assert.match(deskTape, /data-market-tape/);
