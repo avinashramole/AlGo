@@ -35,6 +35,7 @@ server/data/nifty-rolling-options/
 server/data/index-history/
 server/data/backtest.busy
 server/data/backtests/
+server/data/trade-archive.json
 *.zip
 android-hybrid/.gradle/
 android-hybrid/build/

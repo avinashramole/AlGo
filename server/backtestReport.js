@@ -100,7 +100,12 @@ function optionSourceLine(report) {
   return `No Dhan rolling option tape stored for ${symbol}. Connect Dhan LIVE and run Backtest again to fill option OHLC.`;
 }
 
+function isMasterReport(report) {
+  return String(report?.audience || "").toLowerCase() === "master";
+}
+
 function reportKindLabel(report) {
+  if (isMasterReport(report)) return "Master report";
   if (isMemberReport(report)) return "Trade report";
   return report.strategy?.kind === "desk" ? "Proposal report" : "Backtest report";
 }
@@ -948,8 +953,28 @@ function makePdfDoc(report) {
     y -= 8;
   }
 
+  function renderPerson(person, { continued = false } = {}) {
+    if (continued) {
+      flush();
+      header({ continued: false });
+    }
+    line(memberProfileLine(person), PDF_MEMBER_IDENTITY_FONT, "F2");
+    metricGrid(
+      [
+        { label: "P&L", value: pdfInr(person.summary?.pnl), money: true, raw: person.summary?.pnl },
+        { label: "Trades", value: String(person.summary?.trades || 0) },
+        { label: "Win rate", value: `${person.summary?.winRate || 0}%` },
+        { label: "ROM", value: `${person.summary?.rom || 0}%` },
+      ],
+      4,
+    );
+    section("TRADES");
+    table(person.trades || []);
+  }
+
   header();
   const member = isMemberReport(report);
+  const master = isMasterReport(report);
   const rules = report.strategy.rules || {};
   const enter = rules.enterIst ? `Enter ${rules.enterIst} IST` : "";
   const square = rules.squareOffIst
@@ -972,7 +997,21 @@ function makePdfDoc(report) {
       ? `last ${report.summary.months} month(s)`
       : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
   line(`Range ${range} Generated ${report.generatedAt || ""}`);
-  if (member) {
+  if (master) {
+    line(`${report.summary.accounts || (report.sections || []).length} account(s) in this PDF`);
+    metricGrid(
+      [
+        { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
+        { label: "Trades", value: String(report.summary.trades || 0) },
+        { label: "Win rate", value: `${report.summary.winRate || 0}%` },
+        { label: "Accounts", value: String(report.summary.accounts || (report.sections || []).length) },
+      ],
+      4,
+    );
+    (report.sections || []).forEach((row, index) => {
+      renderPerson(row, { continued: index > 0 });
+    });
+  } else if (member) {
     metricGrid(
       [
         { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
@@ -1109,6 +1148,7 @@ export function trade2SmartFileName(userName, format) {
 }
 
 export function reportDownloadName(report, format, user) {
+  if (isMasterReport(report)) return trade2SmartFileName("Master-report", format);
   return trade2SmartFileName(user?.name || report?.member?.name, format);
 }
 
@@ -1155,6 +1195,8 @@ export function deskToProposalReport(desk = {}, extras = {}) {
   }));
   const date = cell(desk.date) || new Date().toISOString().slice(0, 10);
   const member = extras.member || {};
+  const from = cell(extras.from) || date;
+  const to = cell(extras.to) || date;
   return {
     audience: extras.audience || "",
     member: {
@@ -1170,8 +1212,9 @@ export function deskToProposalReport(desk = {}, extras = {}) {
       summary: extras.audience === "member" ? "Trade 2 Smart member trade report" : "Trade 2 Smart standard branded proposal report",
     },
     summary: {
-      from: date,
-      to: date,
+      from,
+      to,
+      months: Number(extras.months || 0) || 0,
       holdStyle: "live",
       timeframe: "1d",
       pnl: Number(desk.netPnl || 0),
@@ -1189,7 +1232,7 @@ export function deskToProposalReport(desk = {}, extras = {}) {
       requiredMargin: 0,
       avgMargin: 0,
       rom: 0,
-      range: date,
+      range: cell(extras.range) || (from === to ? from : `${from} to ${to}`),
     },
     trades,
     legs: trades,

@@ -3,6 +3,7 @@ import { useMarket } from "../context/MarketContext";
 import { tabFromParams } from "../lib/bookTabs";
 import { hasPaperActivity } from "../lib/paperBook";
 import { cn } from "../lib/format";
+import { MasterReport } from "./MasterReport";
 import { Orders } from "./Orders";
 import { PaperTrading } from "./PaperTrading";
 import { PositionsDesk } from "./PositionsDesk";
@@ -55,12 +56,22 @@ export function ReportsHub() {
           >
             Reports
           </button>
+          <button
+            type="button"
+            data-master-tab="true"
+            onClick={() => setParams({ tab: "master" }, { replace: true })}
+            className={cn(tab === "master" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+          >
+            Master report
+          </button>
         </div>
       </div>
       {tab === "orders" ? (
         <Orders embedded book="live" />
       ) : tab === "reports" ? (
         <Reports embedded />
+      ) : tab === "master" ? (
+        <MasterReport />
       ) : tab === "paper" ? (
         <PaperTrading embedded />
       ) : (

@@ -15,6 +15,7 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(hub, /data-reports-tabs="position-order-reports"/);
   assert.match(tabsFile, /if \(value === "orders"\) return "orders";/);
   assert.match(tabsFile, /if \(value === "reports"\) return "reports";/);
+  assert.match(tabsFile, /if \(value === "master"\) return "master";/);
   assert.match(tabsFile, /if \(value === "paper" && allowPaper\) return "paper";/);
   assert.match(tabsFile, /return "positions";/);
   assert.match(app, /Navigate to="\/reports\?tab=orders"/);
@@ -25,8 +26,11 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   const tabs = hub.split("desk-tabs")[1] || "";
   const position = tabs.indexOf("Position");
   const orders = tabs.indexOf("Orders");
-  const reports = tabs.lastIndexOf("Reports");
+  const reports = tabs.indexOf("Reports");
+  const master = tabs.indexOf("Master report");
   assert.ok(position >= 0 && orders > position && reports > orders);
+  assert.ok(master > reports);
+  assert.match(hub, /data-master-tab="true"/);
   const reportsPage = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const ordersPage = fs.readFileSync(path.join(root, "src/pages/Orders.tsx"), "utf8");
   const book = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");

@@ -13,6 +13,7 @@ import { ensureReplayBars } from "./indexHistory.js";
 import { oneMinuteSyncStatus, startOneMinuteIndexSync } from "./indexHistorySync.js";
 import { clearBacktestBusy, extendRequestTimeout, isBacktestBusy, markBacktestBusy } from "./backtestJob.js";
 import { brandedReportFile, deskToProposalReport, loadBacktestReport } from "./backtestReport.js";
+import { buildMasterReport, listMasterReportPeople } from "./masterReport.js";
 import { adminUpdateUser, connectGmail, gmailStatus, googleOAuthConfigured, listPublicUsers, requestToken, resetMemberPasswordsToDefault, sessionUser } from "./auth.js";
 import { attachLoginRoutes } from "./loginApp.js";
 import { abandonEnrollment, catalogViewerForUser, claimEnrollmentPaid, deleteEnrollment, dropEnrollmentsWithoutStrategies, enrollStrategy, getPaymentSettings, listCatalog, listEnrollments, markEnrollmentPaid, savePaymentSettings } from "./subscriptions.js";
@@ -1698,6 +1699,34 @@ app.get("/api/report/download", (req, res) => {
   res.setHeader("Content-Type", file.type);
   res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
   res.send(file.body);
+});
+
+app.get("/api/report/master", (_req, res) => {
+  res.json(listMasterReportPeople());
+});
+
+app.post("/api/report/master/download", (req, res) => {
+  try {
+    const report = buildMasterReport({
+      includeAdmin: req.body?.includeAdmin !== false && req.body?.includeAdmin !== "0",
+      userIds: Array.isArray(req.body?.userIds)
+        ? req.body.userIds
+        : String(req.body?.userIds || req.query.userIds || "")
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean),
+      range: req.body?.range || req.query.range,
+      months: req.body?.months || req.query.months,
+      from: req.body?.from || req.query.from,
+      to: req.body?.to || req.query.to,
+    });
+    const file = brandedReportFile(report, req.query.format || req.body?.format, req.authUser);
+    res.setHeader("Content-Type", file.type);
+    res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+    res.send(file.body);
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message || "Could not download the master report" });
+  }
 });
 
 app.post("/api/chat", (req, res) => {
