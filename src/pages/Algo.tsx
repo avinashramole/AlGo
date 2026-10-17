@@ -479,7 +479,7 @@ export function Algo({ desk = "live" }: { desk?: AlgoDesk }) {
   };
 
   const remove = async (algo: AlgoStrategy) => {
-    if (!window.confirm(`Delete ${algo.name}? This removes its orders, positions, and member plans on the admin desk and on user accounts.`)) return;
+    if (!window.confirm(`Delete ${algo.name}? This removes its orders, positions, backtest history, and member plans on the admin desk and on user accounts.`)) return;
     await removeAlgo(algo.id);
   };
 

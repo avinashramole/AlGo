@@ -1280,7 +1280,7 @@ app.delete("/api/algos/:id", (req, res) => {
       res.status(404).json({ error: result.error });
       return;
     }
-    res.json({ ok: true, ...result, snapshot: null });
+    res.json({ ok: true, ...result, snapshot: snapshot() });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not delete strategy" });
   }
