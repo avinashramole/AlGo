@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Briefcase, Building2, Cpu, FileText, FlaskConical, Home, LogOut, User } from "lucide-react";
+import { Briefcase, Building2, ClipboardList, Cpu, FileText, FlaskConical, Home, LogOut, User } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { isNativeHybrid } from "../../lib/hybrid";
@@ -12,6 +12,7 @@ const tabs: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolean
   { to: "/algo-test", label: "Test", icon: FlaskConical, admin: true },
   { to: "/plans", label: "Algos", icon: Cpu, member: true },
   { to: "/reports", label: "Position & Orders", icon: FileText, admin: true },
+  { to: "/master-report", label: "Master", icon: ClipboardList, admin: true },
   { to: "/positions", label: "Position", icon: Briefcase, member: true },
   { to: "/orders", label: "Orders", icon: FileText, member: true },
   { to: "/broker", label: "Broker", icon: Building2, member: true },
@@ -84,7 +85,13 @@ export function MobileNav() {
     >
       <div
         className={
-          visible.length <= 3 ? "grid grid-cols-3" : visible.length === 4 ? "grid grid-cols-4" : "grid grid-cols-5"
+          visible.length <= 3
+            ? "grid grid-cols-3"
+            : visible.length === 4
+              ? "grid grid-cols-4"
+              : visible.length === 5
+                ? "grid grid-cols-5"
+                : "grid grid-cols-6"
         }
       >
         <NavItems items={visible} />

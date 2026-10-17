@@ -1,4 +1,6 @@
+import { ClipboardList } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { AISignal } from "../components/dashboard/AISignal";
 import { InstitutionalFlow } from "../components/dashboard/InstitutionalFlow";
 import { MarketDNA } from "../components/dashboard/MarketDNA";
@@ -32,6 +34,14 @@ export function Dashboard() {
         positionsTo="/reports?tab=positions"
         tape={<TickerStrip />}
       />
+      <Link
+        to="/master-report"
+        data-master-home="true"
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-brand-500 text-sm font-extrabold text-white"
+      >
+        <ClipboardList size={16} />
+        Master report
+      </Link>
       <PriceChart />
       <AISignal onReview={() => setReviewOpen(true)} />
       <MarketDNA />

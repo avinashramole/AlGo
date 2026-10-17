@@ -1,4 +1,4 @@
-import { Bell, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
+import { Bell, ClipboardList, LogOut, MessageSquare, Moon, Search, Sun, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
@@ -126,6 +126,16 @@ export function Header() {
         </div>
       ) : null}
       <div className="ml-auto flex min-w-0 items-center gap-1.5 md:gap-3">
+        {admin ? (
+          <Link
+            to="/master-report"
+            data-master-header="true"
+            className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-brand-500 px-3 text-[11px] font-extrabold text-white md:h-10 md:px-4 md:text-xs"
+          >
+            <ClipboardList size={14} className="shrink-0" />
+            Master report
+          </Link>
+        ) : null}
         {admin ? (
           <Link
             to="/brokers"

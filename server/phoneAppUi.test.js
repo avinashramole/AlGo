@@ -106,6 +106,7 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(userHome, /quote=/);
   assert.match(nav, /label: "Algos"/);
   assert.match(nav, /label: "Position & Orders", icon: FileText, admin: true/);
+  assert.match(nav, /to: "\/master-report", label: "Master"/);
   assert.match(sidebar, /to: "\/master-report", label: "Master report"/);
   assert.match(nav, /label: "Profile", icon: User, admin: true/);
   assert.match(nav, /data-apk-nav="member"/);

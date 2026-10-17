@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   Building2,
+  ClipboardList,
   CreditCard,
   Headphones,
   LogOut,
@@ -128,6 +129,7 @@ export function Profile() {
           <SettingsRow icon={UserRound} label="My Account" detail="Saved from Edit profile" />
           <SettingsRow icon={Building2} label="Broker Connections" to="/brokers" detail="Desk brokers" />
           <SettingsRow icon={SlidersHorizontal} label="Risk Settings" to="/algo" />
+          <SettingsRow icon={ClipboardList} label="Master report" to="/master-report" />
           <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
           <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
           <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
