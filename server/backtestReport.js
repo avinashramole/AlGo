@@ -68,7 +68,12 @@ function pdfInr(value) {
   return `Rs. ${indianNumber(value)}`;
 }
 
+function isMemberReport(report) {
+  return String(report?.audience || "").toLowerCase() === "member";
+}
+
 function optionSourceLine(report) {
+  if (isMemberReport(report)) return "";
   const symbol = report.strategy?.symbol || "NIFTY";
   if (report.summary?.optionSource === "stored") return "Premiums stored Dhan rolling option tape";
   if (report.summary?.optionSource === "mixed") {
@@ -78,6 +83,7 @@ function optionSourceLine(report) {
 }
 
 function reportKindLabel(report) {
+  if (isMemberReport(report)) return "Trade report";
   return report.strategy?.kind === "desk" ? "Proposal report" : "Backtest report";
 }
 
@@ -515,13 +521,25 @@ function excelBookRows(rows, title = "Backtest report") {
   ];
 }
 
-export function renderBacktestExcel(report) {
-  const pairs = [
+function excelSummaryPairs(report) {
+  const base = [
     ["Currency", "Indian Rupee (INR ₹)"],
     ["Strategy", report.strategy.name],
     ["Style", report.summary.holdStyle || "—"],
     ["Product", report.strategy.product || "—"],
     ["Symbol", report.strategy.symbol],
+  ];
+  if (isMemberReport(report)) {
+    return [
+      ...base,
+      ["Start date", report.summary.from],
+      ["End date", report.summary.to],
+      ["P&L", Number(report.summary.pnl) || 0],
+      ["Generated", report.generatedAt],
+    ];
+  }
+  return [
+    ...base,
     ...(report.strategy.rules
       ? [
           ["Enter IST", report.strategy.rules.enterIst],
@@ -579,6 +597,10 @@ export function renderBacktestExcel(report) {
     ["Generated", report.generatedAt],
     ["Summary", report.strategy.summary],
   ];
+}
+
+export function renderBacktestExcel(report) {
+  const pairs = excelSummaryPairs(report);
   const title = reportKindLabel(report);
   const summaryRows = [
     [{ v: "TRADE 2 SMART", s: XLSX_STYLE.brand }, { v: title, s: XLSX_STYLE.brandSub }],
@@ -589,6 +611,12 @@ export function renderBacktestExcel(report) {
   ];
   const fills = report.legs?.length ? report.legs : report.trades || [];
   const tableWidths = [6, 12, 8, 8, 10, 18, 16, 16, 12, 12, 8, 12, 14, 10, 12, 8];
+  if (isMemberReport(report)) {
+    return buildXlsx([
+      { name: "Summary", rows: summaryRows, widths: [36, 72], freeze: 4 },
+      { name: "Trades", rows: excelBookRows(report.trades || [], title), widths: tableWidths, freeze: 4 },
+    ]);
+  }
   return buildXlsx([
     { name: "Summary", rows: summaryRows, widths: [36, 72], freeze: 4 },
     { name: "Combos", rows: excelBookRows(report.trades || [], title), widths: tableWidths, freeze: 4 },
@@ -773,6 +801,7 @@ function makePdfDoc(report) {
   }
 
   header();
+  const member = isMemberReport(report);
   const rules = report.strategy.rules || {};
   const enter = rules.enterIst ? `Enter ${rules.enterIst} IST` : "";
   const square = rules.squareOffIst
@@ -783,48 +812,55 @@ function makePdfDoc(report) {
     report.strategy.symbol || "",
     enter,
     square,
-    report.summary.timeframe || "",
+    member ? "" : report.summary.timeframe || "",
     `Start date ${report.summary.from || "-"}`,
     `End date ${report.summary.to || "-"}`,
   ].filter(Boolean);
   line(productBits.join(" | "));
-  const range = report.summary.years
-    ? `last ${report.summary.years} year(s)`
-    : report.summary.months
-      ? `last ${report.summary.months} month(s)`
-      : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
-  line(`Range ${range} Generated ${report.generatedAt || ""}`);
-  metricGrid(
-    [
-      { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
-      { label: "Trades", value: String(report.summary.trades || 0) },
-      { label: "Win rate", value: `${report.summary.winRate || 0}%` },
-      { label: "Drawdown", value: pdfInr(report.summary.maxDrawdown), money: true, raw: report.summary.maxDrawdown },
-      { label: "ROM", value: `${report.summary.rom || 0}%` },
-    ],
-    5,
-  );
-  line(`P&L ${pdfInr(report.summary.pnl)} - Trades ${report.summary.trades || 0} - Win rate ${report.summary.winRate || 0}%`);
-  line(`Wins ${report.summary.wins || 0} - Losses ${report.summary.losses || 0} - Drawdown ${pdfInr(report.summary.maxDrawdown)}`);
-  if (report.summary.combos) line(`Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}`);
-  line(`Avg/trade ${pdfInr(report.summary.avgProfit)} - Avg win ${pdfInr(report.summary.avgWin)} - Avg loss ${pdfInr(report.summary.avgLoss)}`);
-  line(`Return/DD ${report.summary.returnDd || 0} - R:R ${report.summary.rewardRisk || 0} - Expectancy ${pdfInr(report.summary.expectancy)}`);
-  if (report.summary.maxWinStreak || report.summary.maxLoseStreak) {
-    line(`Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L - Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`);
+  line(`Generated ${report.generatedAt || ""}`);
+  if (!member) {
+    const range = report.summary.years
+      ? `last ${report.summary.years} year(s)`
+      : report.summary.months
+        ? `last ${report.summary.months} month(s)`
+        : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
+    line(`Range ${range}`);
+    metricGrid(
+      [
+        { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
+        { label: "Trades", value: String(report.summary.trades || 0) },
+        { label: "Win rate", value: `${report.summary.winRate || 0}%` },
+        { label: "Drawdown", value: pdfInr(report.summary.maxDrawdown), money: true, raw: report.summary.maxDrawdown },
+        { label: "ROM", value: `${report.summary.rom || 0}%` },
+      ],
+      5,
+    );
+    line(`P&L ${pdfInr(report.summary.pnl)} - Trades ${report.summary.trades || 0} - Win rate ${report.summary.winRate || 0}%`);
+    line(`Wins ${report.summary.wins || 0} - Losses ${report.summary.losses || 0} - Drawdown ${pdfInr(report.summary.maxDrawdown)}`);
+    if (report.summary.combos) line(`Combos ${report.summary.combos} - Combo win rate ${report.summary.comboWinRate}% - Legs ${report.summary.legs || ""}`);
+    line(`Avg/trade ${pdfInr(report.summary.avgProfit)} - Avg win ${pdfInr(report.summary.avgWin)} - Avg loss ${pdfInr(report.summary.avgLoss)}`);
+    line(`Return/DD ${report.summary.returnDd || 0} - R:R ${report.summary.rewardRisk || 0} - Expectancy ${pdfInr(report.summary.expectancy)}`);
+    if (report.summary.maxWinStreak || report.summary.maxLoseStreak) {
+      line(`Streaks ${report.summary.maxWinStreak}W / ${report.summary.maxLoseStreak}L - Max DD ${report.summary.maxDdFrom || "-"} to ${report.summary.maxDdTo || "-"}`);
+    }
+    line(`Required margin ${pdfInr(report.summary.requiredMargin)} max - avg ${pdfInr(report.summary.avgMargin)} - ROM ${report.summary.rom || 0}%`);
+    if (report.summary.overallTargetPct || report.summary.targetHits) {
+      line(`Overall profit ${report.summary.overallTargetPct || 5}% of margin - ${report.summary.targetHits || 0} target exits (all 4 legs)`);
+    }
+    for (const rule of report.strategy.rules?.lines || []) line(rule);
+    for (const leg of report.legStats || []) {
+      line(`${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`);
+    }
+    const source = optionSourceLine(report);
+    if (source) line(source);
+    section("LEGS");
+    table(report.legs?.length ? report.legs : []);
+    section("COMBOS");
+    table(report.trades || []);
+  } else {
+    section("TRADES");
+    table(report.trades || []);
   }
-  line(`Required margin ${pdfInr(report.summary.requiredMargin)} max - avg ${pdfInr(report.summary.avgMargin)} - ROM ${report.summary.rom || 0}%`);
-  if (report.summary.overallTargetPct || report.summary.targetHits) {
-    line(`Overall profit ${report.summary.overallTargetPct || 5}% of margin - ${report.summary.targetHits || 0} target exits (all 4 legs)`);
-  }
-  for (const rule of report.strategy.rules?.lines || []) line(rule);
-  for (const leg of report.legStats || []) {
-    line(`${leg.label || "Leg"} P&L ${pdfInr(leg.pnl)} - ${leg.trades || 0} fills - WR ${leg.winRate || 0}% - avg ${pdfInr(leg.avgProfit)}`);
-  }
-  line(optionSourceLine(report));
-  section("LEGS");
-  table(report.legs?.length ? report.legs : []);
-  section("COMBOS");
-  table(report.trades || []);
   flush();
   return pages;
 }
@@ -941,12 +977,13 @@ export function deskToProposalReport(desk = {}, extras = {}) {
   }));
   const date = cell(desk.date) || new Date().toISOString().slice(0, 10);
   return {
+    audience: extras.audience || "",
     strategy: {
       name: extras.title || "Desk P&L",
       product: "T2S",
       symbol: "ALL",
       kind: "desk",
-      summary: "Trade 2 Smart standard branded proposal report",
+      summary: extras.audience === "member" ? "Trade 2 Smart member trade report" : "Trade 2 Smart standard branded proposal report",
     },
     summary: {
       from: date,

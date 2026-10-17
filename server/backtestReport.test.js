@@ -262,6 +262,10 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(pdf, /Proposal report/);
   assert.match(pdf, /Confidential desk report/);
   assert.match(pdf, /NIFTY 24800 CE/);
+  assert.match(pdf, /Drawdown/);
+  assert.match(pdf, /Win rate/);
+  assert.match(pdf, /Required margin/);
+  assert.match(pdf, /rolling option tape/);
   const file = brandedReportFile(report, "xlsx");
   assert.match(file.name, /proposal/);
   assert.match(file.body.toString("latin1"), /FFFD6B01/);
@@ -284,4 +288,48 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(client, /\/member\/report\/download/);
   assert.match(index, /\/api\/member\/report\/download/);
   assert.match(index, /title: "My trade report"/);
+  assert.match(index, /audience: "member"/);
+});
+
+test("member desk download omits backtest stats and option-tape warning", () => {
+  const report = deskToProposalReport(
+    {
+      date: "2026-10-10",
+      netPnl: 0,
+      realizedPnl: 0,
+      trades: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+      tradeBook: [
+        { id: "t1", symbol: "NIFTY 24800 CE", side: "SELL", qty: 65, entry: 80, exit: 70, pnl: 650, closedAt: "2026-10-10T10:00:00.000Z" },
+      ],
+    },
+    { title: "My trade report", audience: "member" },
+  );
+  assert.equal(report.audience, "member");
+  const pdf = renderBacktestPdf(report).toString("latin1");
+  assert.match(pdf, /Trade report/);
+  assert.match(pdf, /TRADES/);
+  assert.match(pdf, /NIFTY 24800 CE/);
+  assert.equal(pdf.includes("Proposal report"), false);
+  assert.equal(pdf.includes("Drawdown"), false);
+  assert.equal(pdf.includes("Win rate"), false);
+  assert.equal(pdf.includes("Avg/trade"), false);
+  assert.equal(pdf.includes("Return/DD"), false);
+  assert.equal(pdf.includes("Required margin"), false);
+  assert.equal(pdf.includes("rolling option tape"), false);
+  assert.equal(pdf.includes("Connect Dhan LIVE"), false);
+  assert.equal(pdf.includes("LEGS"), false);
+  assert.equal(pdf.includes("COMBOS"), false);
+  const zip = renderBacktestExcel(report).toString("latin1");
+  assert.match(zip, /Trade report/);
+  assert.match(zip, /My trade report/);
+  assert.match(zip, /NIFTY 24800 CE/);
+  assert.equal(zip.includes("Drawdown"), false);
+  assert.equal(zip.includes("Win rate"), false);
+  assert.equal(zip.includes("Required margin"), false);
+  assert.equal(zip.includes("Option source"), false);
+  assert.equal(zip.includes("rolling option tape"), false);
+  assert.equal(zip.includes("Connect Dhan LIVE"), false);
 });
