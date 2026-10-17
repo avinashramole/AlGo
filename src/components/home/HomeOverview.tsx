@@ -1,4 +1,4 @@
-import { Cpu, Layers, Wallet } from "lucide-react";
+import { ClipboardList, Cpu, Layers, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatRupee } from "../../lib/format";
 import { MetricTile, QuickLink } from "../phone/PhoneUi";
@@ -11,6 +11,7 @@ export function HomeOverview({
   algosTo,
   ordersTo,
   positionsTo,
+  masterTo,
   tape,
   showShortcuts = true,
 }: {
@@ -21,6 +22,7 @@ export function HomeOverview({
   algosTo: string;
   ordersTo: string;
   positionsTo: string;
+  masterTo?: string;
   tape?: ReactNode;
   showShortcuts?: boolean;
 }) {
@@ -42,10 +44,14 @@ export function HomeOverview({
       </div>
 
       {showShortcuts ? (
-        <div className="grid grid-cols-3 gap-2" data-home-shortcuts="algos-positions-orders">
+        <div
+          className={masterTo ? "grid grid-cols-2 gap-2 min-[420px]:grid-cols-4" : "grid grid-cols-3 gap-2"}
+          data-home-shortcuts="algos-positions-orders"
+        >
           <QuickLink to={algosTo} label="Algos" icon={Cpu} />
           <QuickLink to={positionsTo} label="Position" icon={Wallet} />
           <QuickLink to={ordersTo} label="Orders" icon={Layers} />
+          {masterTo ? <QuickLink to={masterTo} label="Master report" icon={ClipboardList} /> : null}
         </div>
       ) : null}
     </div>

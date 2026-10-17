@@ -32,6 +32,7 @@ export function Dashboard() {
         algosTo="/algo"
         ordersTo="/reports?tab=orders"
         positionsTo="/reports?tab=positions"
+        masterTo="/master-report"
         tape={<TickerStrip />}
       />
       <Link

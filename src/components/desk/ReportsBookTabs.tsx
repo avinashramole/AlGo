@@ -59,7 +59,10 @@ export function ReportsBookTabs({ active }: { active: BookTab }) {
           type="button"
           data-master-tab="true"
           onClick={() => navigate("/master-report")}
-          className={cn(active === "master" ? "bg-white text-[#0f2744] shadow-sm" : "text-slate-400")}
+          className={cn(
+            "bg-brand-500 text-white",
+            active === "master" ? "shadow-sm" : "opacity-90",
+          )}
         >
           Master report
         </button>

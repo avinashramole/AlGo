@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { SideBadge } from "../components/desk/Badges";
 import { downloadDeskReport, getPositionsDesk, type PositionLedger } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -12,11 +11,11 @@ import { displayOrderReason, isEntryWhy, isExitHitReason } from "../lib/exitReas
 import { cn, formatInr, formatIst, formatMobile, formatNumber, hasDhanQuotes, liveBookCopy, deskStrategyName, whyColClass } from "../lib/format";
 import { liveDailyPnl } from "../lib/dailyPnl";
 import { isLiveBrokerTrade } from "../lib/paperBook";
+import { MasterReport } from "./MasterReport";
 
 export function Reports({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const { data } = useMarket();
-  const navigate = useNavigate();
   const report = data.report;
   const daily = liveDailyPnl(report?.daily, report?.tradeBook);
   const [ledgers, setLedgers] = useState<PositionLedger[]>([]);
@@ -46,17 +45,19 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
   };
   const nativePdf = isNativeHybrid();
 
-  if (!report) {
-    return (
-      <div className="card p-8 text-center">
-        <div className="text-base font-bold">Report is loading</div>
-        <p className="mt-1 text-sm text-slate-400">Connect the API to see P&L, trade book, and strategy contribution.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
+      <div data-master-report-menu="true">
+        <MasterReport />
+      </div>
+      {!report ? (
+        <div className="card p-8 text-center">
+          <div className="text-base font-bold">Report is loading</div>
+          <p className="mt-1 text-sm text-slate-400">Connect the API to see P&L, trade book, and strategy contribution.</p>
+        </div>
+      ) : null}
+      {report ? (
+      <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         {embedded ? null : (
         <div>
@@ -103,14 +104,6 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
             className="h-10 rounded-xl border border-brand-500 px-4 text-sm font-semibold text-brand-500"
           >
             Download Excel
-          </button>
-          <button
-            type="button"
-            data-master-report-menu="true"
-            onClick={() => navigate("/master-report")}
-            className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold"
-          >
-            Master report
           </button>
         </div>
       </div>
@@ -215,6 +208,8 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
           </tbody>
         </table>
       </section>
+      </>
+      ) : null}
     </div>
   );
 }
