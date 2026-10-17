@@ -349,8 +349,12 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   );
   const identityY = pdfTextY(pdf, "Name Avinash Ramole | Email avinash@t2s.app | Mobile 9876543210");
   const brandY = pdfTextY(pdf, "TRADE");
-  assert.ok(identityY > brandY);
-  assert.ok(identityY >= 575);
+  const productAt = pdf.indexOf("(Product T2S");
+  const productTd = pdf.lastIndexOf(" Td", productAt);
+  const productLine = pdf.slice(pdf.lastIndexOf("\n", productTd) + 1, productTd);
+  const productY = Number(productLine.split(" ")[1]);
+  assert.ok(identityY < brandY);
+  assert.ok(identityY > productY);
   assert.match(pdf, /Win rate/);
   assert.match(pdf, /TRADES/);
   assert.match(pdf, /NIFTY 24800 CE/);

@@ -751,7 +751,7 @@ function pdfTheme(report) {
       paper: PDF_WHITE,
       ink: PDF_MEMBER_INK,
       muted: PDF_MEMBER_MUTED,
-      headerH: 70,
+      headerH: 52,
     };
   }
   return {
@@ -854,16 +854,10 @@ function makePdfDoc(report) {
     if (theme.pageBg) rect(0, 0, PAGE_W, PAGE_H, theme.pageBg);
     rect(0, PAGE_H - theme.headerH, PAGE_W, theme.headerH, theme.headerBg);
     rect(0, PAGE_H - theme.headerH - 4, PAGE_W, 4, theme.accent);
-    const member = isMemberReport(report);
-    const identityY = PAGE_H - 16;
-    const brandY = member ? PAGE_H - 36 : PAGE_H - 20;
-    if (member) {
-      text(PAGE_MARGIN, identityY, memberProfileLine(report), PDF_MEMBER_IDENTITY_FONT, "F2", theme.headerInk);
-    }
-    brandTitle(PAGE_MARGIN, brandY, 13);
+    brandTitle(PAGE_MARGIN, PAGE_H - 20, 13);
     const kind = reportKindLabel(report);
     const right = continued ? `${kind} (continued)` : kind;
-    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11, "F2"), brandY, right, 11, "F2", theme.kind);
+    text(PAGE_W - PAGE_MARGIN - pdfTextWidth(right, 11, "F2"), PAGE_H - 20, right, 11, "F2", theme.kind);
     const subtitle = `${report.strategy.name}  -  ${report.summary.holdStyle || report.strategy.kind || "desk"}  -  Currency Indian Rupee (Rs.)`;
     text(PAGE_MARGIN, PAGE_H - theme.headerH + 12, subtitle, 8, "F1", theme.headerMuted);
     y = PAGE_H - theme.headerH - 16;
@@ -877,10 +871,11 @@ function makePdfDoc(report) {
     }
   }
 
-  function line(value, size = PDF_LINE_FONT) {
-    ensure(12);
-    text(PAGE_MARGIN, y - 9, value, size);
-    y -= 12;
+  function line(value, size = PDF_LINE_FONT, font = "F1") {
+    const row = Math.max(12, size + 4);
+    ensure(row);
+    text(PAGE_MARGIN, y - 9, value, size, font);
+    y -= row;
   }
 
   function section(title) {
@@ -968,6 +963,7 @@ function makePdfDoc(report) {
     `Start date ${report.summary.from || "-"}`,
     `End date ${report.summary.to || "-"}`,
   ].filter(Boolean);
+  if (member) line(memberProfileLine(report), PDF_MEMBER_IDENTITY_FONT, "F2");
   line(productBits.join(" | "));
   const range = report.summary.years
     ? `last ${report.summary.years} year(s)`
