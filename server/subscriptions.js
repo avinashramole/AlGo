@@ -443,8 +443,9 @@ export function abandonEnrollment({ user, enrollmentId } = {}) {
   const row = enrollments.find((item) => item.id === enrollmentId);
   if (!row) throw fail("Enrollment not found.", 404);
   if (row.userId !== user.id && user.role !== "admin") throw fail("Enrollment not found.", 404);
-  if (row.status === "paid") throw fail("Paid enrollments cannot be cancelled.");
-  if (row.status === "claimed" && user.role !== "admin") throw fail("Payment is waiting for admin. Ask the desk to verify or delete it.");
+  if (row.status === "paid" && user.role !== "admin") throw fail("Paid enrollments cannot be cancelled.");
+  if (row.status === "claimed" && user.role !== "admin") throw fail("Payment is waiting for admin. Ask the desk to verify or cancel it.");
+  if (row.status === "abandoned") return publicEnroll(row);
   row.status = "abandoned";
   row.abandonedAt = new Date().toISOString();
   persistEnrollments();

@@ -55,6 +55,7 @@ import {
   deleteAlgo,
   dropBrokerPositions,
   dropClientFromStrategies,
+  unmapEnrollmentStrategy,
   getCandles,
   getOptionMeta,
   getAlgo,
@@ -347,7 +348,9 @@ app.post("/api/subscriptions/:id/abandon", (req, res) => {
   try {
     const user = sessionUser(readToken(req));
     if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
-    res.json({ enrollment: abandonEnrollment({ user, enrollmentId: req.params.id }) });
+    const enrollment = abandonEnrollment({ user, enrollmentId: req.params.id });
+    if (user.role === "admin") unmapEnrollmentStrategy(enrollment);
+    res.json({ enrollment });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not cancel enrollment" });
   }
@@ -357,7 +360,9 @@ app.delete("/api/subscriptions/:id", (req, res) => {
   try {
     const user = sessionUser(readToken(req));
     if (!user) throw Object.assign(new Error("Sign in first."), { status: 401 });
-    res.json({ enrollment: deleteEnrollment({ user, enrollmentId: req.params.id }) });
+    const enrollment = deleteEnrollment({ user, enrollmentId: req.params.id });
+    unmapEnrollmentStrategy(enrollment);
+    res.json({ enrollment });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message || "Could not delete subscription" });
   }

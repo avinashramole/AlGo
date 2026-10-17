@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
+  abandonEnrollment,
   confirmEnrollmentPaid,
   getPaymentSettings,
   listEnrollments,
@@ -86,7 +87,8 @@ export function MemberEnrollments() {
       <div className="text-sm font-bold">Member enrollments</div>
       <p className="desk-help mt-1 text-xs text-slate-400">
         Edit monthly, quarterly, and yearly plan prices. Longer terms stay discounted so members see the saving versus
-        paying month by month. After a member taps I have paid, confirm the transfer here.
+        paying month by month. After a member taps I have paid, confirm the transfer here. Cancel a subscription to
+        remove that strategy from the member.
       </p>
       <form className="mt-3 grid gap-2 sm:grid-cols-2" onSubmit={onSave}>
         <input
@@ -156,7 +158,7 @@ export function MemberEnrollments() {
             .filter((row) => row.status !== "abandoned")
             .slice(0, 12)
             .map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
+              <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
                 <span className="font-semibold">{row.userName || row.userEmail}</span>
                 <span className="text-slate-500">
                   {row.strategyName}
@@ -165,24 +167,43 @@ export function MemberEnrollments() {
                   {row.startedAt ? ` · ${row.startedAt.slice(0, 10)} to ${(row.endsAt || "").slice(0, 10)}` : ""}
                 </span>
                 <span className="uppercase">{row.status}</span>
-                {row.status === "claimed" || row.status === "pending" ? (
+                <div className="flex flex-wrap gap-2">
+                  {row.status === "claimed" || row.status === "pending" ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(confirmBusy)}
+                      onClick={() => {
+                        setConfirmBusy(row.id);
+                        void confirmEnrollmentPaid(row.id)
+                          .then((next) => {
+                            setEnrolls((items) => items.map((item) => (item.id === next.enrollment.id ? next.enrollment : item)));
+                          })
+                          .catch(() => undefined)
+                          .finally(() => setConfirmBusy(""));
+                      }}
+                      className="h-8 rounded-md bg-brand-500 px-2 text-[11px] font-semibold text-white disabled:opacity-50"
+                    >
+                      {confirmBusy === row.id ? "Confirming..." : "Confirm payment"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={Boolean(confirmBusy)}
                     onClick={() => {
+                      if (!window.confirm(`Cancel ${row.strategyName} for ${row.userName || row.userEmail}? This removes that strategy from their account.`)) return;
                       setConfirmBusy(row.id);
-                      void confirmEnrollmentPaid(row.id)
+                      void abandonEnrollment(row.id)
                         .then((next) => {
                           setEnrolls((items) => items.map((item) => (item.id === next.enrollment.id ? next.enrollment : item)));
                         })
                         .catch(() => undefined)
                         .finally(() => setConfirmBusy(""));
                     }}
-                    className="h-8 rounded-md bg-brand-500 px-2 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="h-8 rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
                   >
-                    {confirmBusy === row.id ? "Confirming..." : "Confirm payment"}
+                    {confirmBusy === row.id ? "Cancelling..." : "Cancel"}
                   </button>
-                ) : null}
+                </div>
               </div>
             ))}
         </div>

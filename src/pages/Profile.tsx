@@ -71,9 +71,6 @@ export function Profile() {
           <Avatar name={user?.name} size="lg" />
           <div className="min-w-0">
             <div className="truncate text-lg font-extrabold">Profile</div>
-            <div className="text-sm text-slate-400">
-              {admin ? "Edit name, email, and mobile no here." : "Your Trade2Smart account."}
-            </div>
           </div>
         </div>
       </PhoneCard>

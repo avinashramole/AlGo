@@ -238,6 +238,22 @@ test("admin can delete a member subscription and a member cannot", () => {
   assert.equal(listEnrollments({ userId: member.id }).some((row) => row.id === paid.id), false);
 });
 
+test("admin can cancel a paid subscription; the member cannot", () => {
+  const member = { id: "u-cancel-paid", name: "Desk Member", email: "member.cancel@gmail.com", role: "user" };
+  const algo = { id: "a-cancel", name: "NIFTY VWAP ATM", mappedClientIds: [member.id], mappingScope: "both" };
+  const admin = { id: "admin", name: "Avinash", role: "admin" };
+  const pending = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
+  const paid = markEnrollmentPaid({ user: member, enrollmentId: pending.enrollment.id });
+  assert.equal(paid.status, "paid");
+  assert.throws(() => abandonEnrollment({ user: member, enrollmentId: paid.id }), /cannot be cancelled/);
+  const cancelled = abandonEnrollment({ user: admin, enrollmentId: paid.id });
+  assert.equal(cancelled.status, "abandoned");
+  assert.equal(enrollmentActive(cancelled), false);
+  const again = enrollStrategy({ user: member, algo, channel: "gpay", term: "monthly" });
+  assert.equal(again.already, false);
+  assert.equal(again.enrollment.status, "pending");
+});
+
 test("discounted strategy prices snap to the nearest x999", () => {
   assert.equal(charmPrice(14000), 13999);
   assert.equal(charmPrice(24002), 23999);

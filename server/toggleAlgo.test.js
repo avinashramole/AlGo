@@ -7,7 +7,7 @@ import test from "node:test";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t2s-toggle-"));
 process.env.T2S_ALGOS_FILE = path.join(dir, "algos.json");
 
-const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, dropClientFromStrategies, getAlgo, listAlgos, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
+const { applyLiveQuotes, backtestAlgo, createAlgo, deleteAlgo, drainPendingLiveAlgoOrders, dropClientFromStrategies, dropClientFromStrategy, getAlgo, listAlgos, queueLiveAlgoOrder, replaceDhanBook, setDhanFeed, snapshot, syncAlgoClientMaps, toggleAlgo, updateAlgo } = await import("./market.js");
 const { hydrateAlgos, seedAlgos } = await import("./strategies.js");
 
 function names(...rows) {
@@ -350,6 +350,28 @@ test("indicator Run backtest uses runBacktest instead of throwing not defined", 
     assert.equal(typeof result.backtest.pnl, "number");
   } finally {
     deleteAlgo(created.id);
+  }
+});
+
+test("cancelling one subscription unmaps only that strategy", () => {
+  const stamp = Date.now();
+  const keep = createAlgo({
+    name: `Keep Map ${stamp}`,
+    kind: "indicator",
+    mappedClientIds: ["u-keep", "u-gone"],
+  });
+  const drop = createAlgo({
+    name: `Drop Map ${stamp}`,
+    kind: "indicator",
+    mappedClientIds: ["u-keep", "u-gone"],
+  });
+  try {
+    assert.equal(dropClientFromStrategy("u-gone", { strategyId: drop.id, strategyName: drop.name }), true);
+    assert.deepEqual(listAlgos().find((row) => row.id === drop.id).mappedClientIds, ["u-keep"]);
+    assert.deepEqual(listAlgos().find((row) => row.id === keep.id).mappedClientIds, ["u-keep", "u-gone"]);
+  } finally {
+    deleteAlgo(keep.id);
+    deleteAlgo(drop.id);
   }
 });
 

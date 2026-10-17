@@ -42,6 +42,7 @@ const {
   sweepMemberDailyBooks,
 } = await import("./memberDesk.js");
 const { lastBookClearAt } = await import("./dhanToken.js");
+const { createAlgo, deleteAlgo, getAlgo, unmapEnrollmentStrategy } = await import("./market.js");
 
 savePaymentSettings({
   mobile: "9876543210",
@@ -1234,4 +1235,35 @@ test("member broker fills keep strategy why instead of TRADE CONFIRMED", () => {
     { ...local, reason: "ENTRY" },
   );
   assert.equal(rejected.reason, "Insufficient funds");
+});
+
+test("cancelling a subscription unmaps that strategy and clears the member desk map", () => {
+  const member = { id: "u-cancel-map", name: "Cancel Map", email: "cancelmap@t2s.app", role: "user" };
+  const keep = createAlgo({
+    name: `Keep Map ${Date.now()}`,
+    kind: "indicator",
+    mappingScope: "clients",
+    mappedClientIds: [member.id],
+  });
+  const drop = createAlgo({
+    name: `Drop Map ${Date.now()}`,
+    kind: "indicator",
+    mappingScope: "clients",
+    mappedClientIds: [member.id],
+  });
+  try {
+    saveClientSettings(member.id, { mappedStrategy: drop.name, brokerId: "paper" });
+    const changed = unmapEnrollmentStrategy({
+      userId: member.id,
+      strategyId: drop.id,
+      strategyName: drop.name,
+    });
+    assert.equal(changed, true);
+    assert.deepEqual(getAlgo(drop.id).mappedClientIds, []);
+    assert.deepEqual(getAlgo(keep.id).mappedClientIds, [member.id]);
+    assert.equal(peekClientSecrets(member.id).mappedStrategy, "");
+  } finally {
+    deleteAlgo(keep.id);
+    deleteAlgo(drop.id);
+  }
 });

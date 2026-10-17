@@ -86,6 +86,10 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(userDetail, />Why</);
   assert.match(userDetail, /whyColClass/);
   assert.match(userDetail, /displayOrderReason\(item\) \|\| "—"/);
+  assert.match(userDetail, /abandonEnrollment/);
+  assert.match(userDetail, /Cancelling\.\.\." : "Cancel"/);
+  assert.doesNotMatch(userDetail, /deleteEnrollment/);
+  assert.doesNotMatch(userDetail, /Trash2/);
   assert.match(liveBook, /8:00 AM IST/);
   assert.match(ordersPage, /8:00 AM IST/);
   assert.match(reportsPage, /8:00 AM IST/);
@@ -106,6 +110,8 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(enroll, /Save plan prices/);
   assert.match(enroll, /payQuarterly/);
   assert.match(enroll, /payYearly/);
+  assert.match(enroll, /abandonEnrollment/);
+  assert.match(enroll, /Cancelling\.\.\." : "Cancel"/);
   assert.doesNotMatch(enroll, /3× quarterly/);
   assert.match(plans, /No strategies assigned to this account yet/);
   assert.doesNotMatch(plans, /Broker selection/);
@@ -149,6 +155,7 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(index, /\/broker\?upstox=error/);
   assert.doesNotMatch(index, /\/settings\?upstox=/);
   assert.doesNotMatch(index, /\/plans\?upstox=/);
+  assert.match(index, /if \(user.role === "admin"\) unmapEnrollmentStrategy\(enrollment\)/);
   assert.match(setup, /deskQueryParams/);
   assert.match(setup, /window\.location\.hash/);
   const profile = fs.readFileSync(path.join(root, "src/pages/Profile.tsx"), "utf8");
@@ -169,7 +176,8 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(profile, /\{admin \? \(/);
   assert.match(profile, /Edit profile/);
   assert.match(profile, /desk-save-btn/);
-  assert.match(profile, /Your Trade2Smart account/);
+  assert.doesNotMatch(profile, /Edit name, email, and mobile no here/);
+  assert.doesNotMatch(profile, /Your Trade2Smart account/);
   assert.doesNotMatch(profile, /IdentityRow/);
   assert.doesNotMatch(profile, /Not added/);
   assert.doesNotMatch(profile, /label="Theme"/);

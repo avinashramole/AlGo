@@ -1,8 +1,8 @@
-import { Eye, Trash2, X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
+  abandonEnrollment,
   confirmEnrollmentPaid,
-  deleteEnrollment,
   getClientDetail,
   type ClientDetail,
   type ClientRow,
@@ -47,15 +47,15 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
     }
   };
 
-  const onDeleteSub = async (id: string, name: string) => {
-    if (!window.confirm(`Delete ${name} subscription for ${row.name}? They can enroll again. This does not start LIVE.`)) return;
+  const onCancelSub = async (id: string, name: string) => {
+    if (!window.confirm(`Cancel ${name} subscription for ${row.name}? This removes that strategy from their account. They can enroll again.`)) return;
     setBusyId(id);
     setError("");
     try {
-      await deleteEnrollment(id);
+      await abandonEnrollment(id);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete subscription");
+      setError(err instanceof Error ? err.message : "Could not cancel subscription");
     } finally {
       setBusyId("");
     }
@@ -144,11 +144,10 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                               <button
                                 type="button"
                                 disabled={Boolean(busyId)}
-                                onClick={() => void onDeleteSub(item.id, item.strategyName)}
-                                className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
+                                onClick={() => void onCancelSub(item.id, item.strategyName)}
+                                className="inline-flex h-8 items-center rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
                               >
-                                <Trash2 size={12} />
-                                {busyId === item.id ? "Deleting..." : "Delete"}
+                                {busyId === item.id ? "Cancelling..." : "Cancel"}
                               </button>
                             </div>
                           </td>

@@ -1,7 +1,7 @@
 import { getActiveBroker, isKnownLiveBroker, isLiveBrokerReady, orderBrokerForDesk, PAPER_STARTING_FUNDS, publicBrokers, setPaperLedger } from "./brokers.js";
 import { dhanTokenStatus } from "./dhanToken.js";
 import { isFreshTradeLogRow, lastBookClearAt, msUntilBookClear, tradeLogRowMs } from "./istClock.js";
-import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
+import { clearPreviousIntradayStrategyBook, clearStrategyOrdersOnMemberDesks, dropMappedStrategyForUser, dropStrategyFromMemberDesks, liveAutoTradeBrokers, purgeMemberDesksExcept } from "./memberDesk.js";
 import { deleteStrategyEnrollments, dropEnrollmentsWithoutStrategies } from "./subscriptions.js";
 import { dispatchMemberCopies, dispatchMemberExitCopies, findLiveCopyAlgo, memberCopyPayloads } from "./liveCopy.js";
 import { applyBrokerBookToReport, overlayLiveUnrealized, withAdminBrokerPnl } from "./memberBrokerPnl.js";
@@ -4354,6 +4354,41 @@ export function dropClientFromStrategies(userId) {
   }
   if (changed) persistAlgos();
   return changed;
+}
+
+export function dropClientFromStrategy(userId, { strategyId, strategyName } = {}) {
+  const id = String(userId || "").trim();
+  const algoId = String(strategyId || "").trim();
+  const algoName = String(strategyName || "").trim().toLowerCase();
+  if (!id || (!algoId && !algoName)) return false;
+  let changed = false;
+  for (const algo of state.algos || []) {
+    const matchesId = algoId && String(algo.id || "").trim() === algoId;
+    const matchesName = algoName && String(algo.name || "").trim().toLowerCase() === algoName;
+    if (!matchesId && !matchesName) continue;
+    const prev = Array.isArray(algo.mappedClientIds) ? algo.mappedClientIds : [];
+    const next = prev.filter((item) => String(item || "").trim() !== id);
+    if (next.length !== prev.length) {
+      algo.mappedClientIds = next;
+      changed = true;
+    }
+  }
+  if (changed) persistAlgos();
+  return changed;
+}
+
+/** Stop live copy of this enrollment's strategy for this member. Other strategies stay mapped. */
+export function unmapEnrollmentStrategy(enrollment) {
+  if (!enrollment?.userId) return false;
+  const dropped = dropClientFromStrategy(enrollment.userId, {
+    strategyId: enrollment.strategyId,
+    strategyName: enrollment.strategyName,
+  });
+  const cleared = dropMappedStrategyForUser(enrollment.userId, {
+    strategyId: enrollment.strategyId,
+    strategyName: enrollment.strategyName,
+  });
+  return dropped || cleared;
 }
 
 export function updateAlgo(id, payload) {

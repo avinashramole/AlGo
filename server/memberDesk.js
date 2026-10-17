@@ -1162,6 +1162,24 @@ export function purgeMemberDesksExcept(algos = []) {
   return removed;
 }
 
+/** Clear this user's mapped strategy when it matches a cancelled enrollment. */
+export function dropMappedStrategyForUser(userId, { strategyId, strategyName } = {}) {
+  const uid = String(userId || "").trim();
+  if (!uid || !store[uid]) return false;
+  const desk = store[uid];
+  const mapped = String(desk.mappedStrategy || "").trim();
+  if (!mapped) return false;
+  const id = String(strategyId || "").trim();
+  const name = String(strategyName || "").trim();
+  const mappedLower = mapped.toLowerCase();
+  const matchesName = name && mappedLower === name.toLowerCase();
+  const matchesId = id && (mapped === id || mappedLower === id.toLowerCase());
+  if (!matchesName && !matchesId) return false;
+  desk.mappedStrategy = "";
+  persist();
+  return true;
+}
+
 /** Remove one strategy's plans, orders, positions, and alerts from every user desk. Broker tokens stay. */
 export function dropStrategyFromMemberDesks({ strategyId, strategyName } = {}) {
   const id = String(strategyId || "").trim();
