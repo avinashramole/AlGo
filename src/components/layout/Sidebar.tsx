@@ -11,17 +11,14 @@ import {
   KeyRound,
   Layers,
   MessageSquare,
-  Moon,
   PieChart,
   Settings,
-  Sun,
   User,
   Users,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { BrandMark } from "../BrandMark";
 import { useAuth } from "../../context/AuthContext";
-import { useTheme } from "../../context/ThemeContext";
 import { isAdminUser } from "../../lib/roles";
 import { cn } from "../../lib/format";
 
@@ -46,7 +43,6 @@ const items: Array<{ to: string; label: string; icon: LucideIcon; admin?: boolea
 ];
 
 export function Sidebar() {
-  const { theme, toggleTheme } = useTheme();
   const { user } = useAuth();
   const admin = isAdminUser(user);
   const visible = items.filter((item) => (admin ? !item.member : !item.admin));
@@ -84,15 +80,6 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="mt-1 space-y-1 px-2">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-semibold text-white/55 hover:bg-white/5 hover:text-white"
-          title="Toggle theme"
-        >
-          {theme === "light" ? <Sun size={17} className="shrink-0" /> : <Moon size={17} className="shrink-0" />}
-          <span>Theme</span>
-        </button>
         <div className="flex h-9 items-center gap-3 rounded-xl px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">
           <Activity size={13} className="shrink-0" />
           <span>Live desk</span>

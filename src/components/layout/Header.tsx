@@ -162,14 +162,14 @@ export function Header() {
         <Link to="/notifications" className="icon-btn" title="Notifications">
           <Bell size={17} />
         </Link>
+        <button type="button" onClick={toggleTheme} className="icon-btn" title="Theme" data-theme-toggle="header">
+          {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
+        </button>
         {admin ? (
           <Link to="/chat" className="t2s-desktop-only icon-btn hidden md:flex" title="Messages">
             <MessageSquare size={17} />
           </Link>
         ) : null}
-        <button type="button" onClick={toggleTheme} className="t2s-desktop-only icon-btn hidden md:flex" title="Theme">
-          {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
-        </button>
         {admin ? (
           <div className="relative" ref={menuRef}>
             <button type="button" onClick={() => setOpen((value) => !value)} className="rounded-full" title="Profile" data-profile-shortcut="true">

@@ -4,24 +4,20 @@ import {
   CreditCard,
   Headphones,
   LogOut,
-  Moon,
   Shield,
   SlidersHorizontal,
-  Sun,
   UserRound,
 } from "lucide-react";
 import { getMemberDesk } from "../api/client";
 import { LoginPasswordCard } from "../components/desk/LoginPasswordCard";
 import { Avatar, PhoneCard, SettingsRow } from "../components/phone/PhoneUi";
 import { useAuth } from "../context/AuthContext";
-import { useTheme } from "../context/ThemeContext";
 import { isAdminUser } from "../lib/roles";
 
 const fieldClass = "mt-1 h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm font-normal";
 
 export function Profile() {
   const { user, updateProfile, requestLogout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const admin = isAdminUser(user);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -134,12 +130,6 @@ export function Profile() {
           <SettingsRow icon={CreditCard} label="Subscription Plan" to="/users?tab=enrollments" />
           <SettingsRow icon={Headphones} label="Support" to="/support" detail="support@trade2smart.com" />
           <SettingsRow icon={Shield} label="Security" detail="Password and login devices" />
-          <SettingsRow
-            icon={theme === "light" ? Moon : Sun}
-            label="Theme"
-            detail={theme === "light" ? "Light" : "Dark"}
-            onClick={toggleTheme}
-          />
           <SettingsRow icon={UserRound} label="Users & IP" to="/users" />
           <SettingsRow icon={SlidersHorizontal} label="Settings" to="/settings" detail="Desk settings" />
           <SettingsRow icon={LogOut} label="Logout" danger onClick={requestLogout} />

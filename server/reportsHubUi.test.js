@@ -164,6 +164,8 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(profile, /readOnly/);
   assert.doesNotMatch(profile, /IdentityRow/);
   assert.doesNotMatch(profile, /Not added/);
+  assert.doesNotMatch(profile, /label="Theme"/);
+  assert.doesNotMatch(profile, /toggleTheme/);
   assert.doesNotMatch(profile, /label="Add broker"/);
   assert.doesNotMatch(profile, /Connect Dhan, Upstox, or Kotak/);
   assert.match(profile, /to="\/settings"/);
@@ -187,9 +189,10 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(memberSettings, /Support/);
   assert.match(memberSettings, /to="\/support"/);
   assert.match(memberSettings, /support@trade2smart\.com/);
-  assert.match(memberSettings, /Theme/);
+  assert.doesNotMatch(memberSettings, /label="Theme"/);
+  assert.doesNotMatch(memberSettings, /toggleTheme/);
   assert.match(memberSettings, /Logout/);
-  assert.match(memberSettings, /Theme[\s\S]*Support[\s\S]*Logout/);
+  assert.match(memberSettings, /Support[\s\S]*Logout/);
   const support = fs.readFileSync(path.join(root, "src/pages/Support.tsx"), "utf8");
   assert.match(support, /data-support-page="true"/);
   assert.match(support, /support@trade2smart\.com/);
@@ -202,6 +205,10 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(side, /label: "Support", icon: Headphones, member: true/);
   assert.match(side, /label: "Password", icon: KeyRound, member: true/);
   assert.doesNotMatch(side, /label: "Alerts"/);
+  assert.doesNotMatch(side, /toggleTheme/);
+  const header = fs.readFileSync(path.join(root, "src/components/layout/Header.tsx"), "utf8");
+  assert.match(header, /data-theme-toggle="header"/);
+  assert.match(header, /title="Notifications"[\s\S]*data-theme-toggle="header"/);
   const alerts = fs.readFileSync(path.join(root, "src/pages/Notifications.tsx"), "utf8");
   assert.match(alerts, /function isTradeAlert/);
   assert.match(alerts, /filter\(\(row\) => !isTradeAlert\(row\)\)/);

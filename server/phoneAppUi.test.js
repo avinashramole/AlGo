@@ -126,6 +126,12 @@ test("Phone app uses Trade2Smart home, tabs, and member book", () => {
   assert.doesNotMatch(sidebar, /label: "Alerts"/);
   assert.match(header, /data-profile-shortcut="true"/);
   assert.match(header, /to="\/profile"/);
+  assert.match(header, /title="Notifications"/);
+  assert.match(header, /data-theme-toggle="header"/);
+  assert.match(header, /title="Notifications"[\s\S]*data-theme-toggle="header"/);
+  assert.match(header, /className="icon-btn" title="Theme" data-theme-toggle="header"/);
+  assert.doesNotMatch(sidebar, /toggleTheme/);
+  assert.doesNotMatch(sidebar, /<span>Theme<\/span>/);
   assert.doesNotMatch(header, /data-settings-shortcut/);
   assert.doesNotMatch(header, />Settings</);
   assert.match(header, />Profile</);
