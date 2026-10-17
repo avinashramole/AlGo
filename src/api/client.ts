@@ -1716,29 +1716,41 @@ function blobToBase64(blob: Blob) {
   });
 }
 
-async function shareNativeFile(blob: Blob, filename: string) {
-  const [{ Filesystem, Directory }, { Share }] = await Promise.all([
-    import("@capacitor/filesystem"),
-    import("@capacitor/share"),
-  ]);
-  const written = await Filesystem.writeFile({
-    path: filename,
-    data: await blobToBase64(blob),
-    directory: Directory.Cache,
-  });
-  await Share.share({
-    title: filename,
-    url: written.uri,
-    dialogTitle: "Save or share report",
-  });
+function safeDownloadName(filename: string, format: "pdf" | "xlsx") {
+  const fallback = `t2s-proposal.${format === "pdf" ? "pdf" : "xlsx"}`;
+  const cleaned = String(filename || fallback)
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || fallback;
+}
+
+async function saveNativeFile(blob: Blob, filename: string) {
+  const { Filesystem, Directory } = await import("@capacitor/filesystem");
+  const data = await blobToBase64(blob);
+  const tries = [
+    { path: filename, directory: Directory.Documents },
+    { path: `Download/${filename}`, directory: Directory.ExternalStorage, recursive: true as const },
+  ];
+  let lastError: unknown;
+  for (const options of tries) {
+    try {
+      await Filesystem.writeFile({ ...options, data });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Could not save the report");
 }
 
 function clickDownloadLink(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
+  const file = new Blob([blob], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(file);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   link.rel = "noopener";
+  link.target = "_self";
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1766,13 +1778,14 @@ async function downloadBrandedFile(path: string, format: "pdf" | "xlsx", fallbac
   }
   const blob = await response.blob();
   const match = /filename="?([^"]+)"?/i.exec(response.headers.get("content-disposition") || "");
-  const filename = match?.[1] || `t2s-proposal.${format === "pdf" ? "pdf" : "xlsx"}`;
+  const filename = safeDownloadName(match?.[1] || "", format);
   if (isCapacitorNative()) {
     try {
-      await shareNativeFile(blob, filename);
+      await saveNativeFile(blob, filename);
+      window.alert(`Saved ${filename}`);
       return;
     } catch (error) {
-      console.log(`native report share skipped: ${(error as Error)?.message || error}`);
+      console.log(`native report save skipped: ${(error as Error)?.message || error}`);
     }
   }
   clickDownloadLink(blob, filename);

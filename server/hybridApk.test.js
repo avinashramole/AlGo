@@ -24,6 +24,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(client, /native=1/);
   const manifest = fs.readFileSync(path.join(root, "android/app/src/main/AndroidManifest.xml"), "utf8");
   assert.match(manifest, /android:scheme="t2salgo"/);
+  assert.match(manifest, /android:requestLegacyExternalStorage="true"/);
+  assert.match(manifest, /WRITE_EXTERNAL_STORAGE/);
   assert.match(login, /BrandMark/);
   const brand = fs.readFileSync(path.join(root, "src/components/BrandMark.tsx"), "utf8");
   assert.match(brand, /t2s-logo\.png/);
@@ -47,10 +49,12 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   assert.match(hybrid, /isLocalDeskHost/);
   assert.match(hybrid, /\$\{LIVE_DESK_ORIGIN\}\/api/);
   assert.match(client, /apiBase\(\)/);
-  assert.match(client, /shareNativeFile/);
+  assert.match(client, /saveNativeFile/);
   assert.match(client, /@capacitor\/filesystem/);
-  assert.match(client, /@capacitor\/share/);
-  assert.match(client, /Directory.Cache/);
+  assert.match(client, /Directory.Documents/);
+  assert.match(client, /application\/octet-stream/);
+  assert.doesNotMatch(client, /Share\.share/);
+  assert.doesNotMatch(client, /dialogTitle: "Save or share report"/);
   assert.match(main, /HashRouter/);
   assert.match(build, /cap sync android/);
   assert.match(iosBuild, /cap sync ios/);
@@ -69,6 +73,8 @@ test("Capacitor APK ships the website UI and calls the live API", () => {
   const infoPlist = fs.readFileSync(path.join(root, "ios/App/App/Info.plist"), "utf8");
   assert.match(infoPlist, /<string>t2salgo<\/string>/);
   assert.match(infoPlist, /NSFaceIDUsageDescription/);
+  assert.match(infoPlist, /UIFileSharingEnabled/);
+  assert.match(infoPlist, /LSSupportsOpeningDocumentsInPlace/);
   const pbx = fs.readFileSync(path.join(root, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
   assert.match(pbx, /PRODUCT_BUNDLE_IDENTIFIER = com\.t2s\.algo/);
   assert.equal(fs.existsSync(path.join(root, "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png")), true);

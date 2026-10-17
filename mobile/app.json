@@ -2,7 +2,7 @@
   "expo": {
     "name": "Trade 2 Smart",
     "slug": "t2s-algo",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
