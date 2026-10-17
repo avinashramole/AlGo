@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("GitHub CI runs server checks on pull requests", () => {
+  const workflow = fs.readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+  assert.match(workflow, /npm --prefix server run ci/);
+  assert.match(workflow, /pull_request/);
+});
+
 test("Reports hub is Position & Orders with Position, Orders, then Reports tabs", () => {
   const hub = fs.readFileSync(path.join(root, "src/pages/ReportsHub.tsx"), "utf8");
   const tabsFile = fs.readFileSync(path.join(root, "src/lib/bookTabs.ts"), "utf8");

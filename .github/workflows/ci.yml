@@ -19,5 +19,5 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - name: Install server deps
         run: npm --prefix server ci
-      - name: Run server tests
-        run: npm --prefix server test
+      - name: Run ship checks
+        run: npm --prefix server run ci
