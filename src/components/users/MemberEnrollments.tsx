@@ -27,6 +27,7 @@ export function MemberEnrollments() {
   const [enrolls, setEnrolls] = useState<Enrollment[]>([]);
   const [topups, setTopups] = useState<WalletTopup[]>([]);
   const [confirmBusy, setConfirmBusy] = useState("");
+  const [enrollNote, setEnrollNote] = useState("");
 
   useEffect(() => {
     void getPaymentSettings()
@@ -151,12 +152,12 @@ export function MemberEnrollments() {
         </button>
       </form>
       {payNote ? <p className="mt-2 text-xs font-semibold text-slate-500">{payNote}</p> : null}
+      {enrollNote ? <p className="mt-2 text-xs font-semibold text-down">{enrollNote}</p> : null}
       {enrolls.filter((row) => row.status !== "abandoned").length ? (
         <div className="mt-4 overflow-x-auto">
           <div className="mb-2 text-xs font-bold uppercase text-slate-400">Member enrollments</div>
           {enrolls
             .filter((row) => row.status !== "abandoned")
-            .slice(0, 12)
             .map((row) => (
               <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] py-2 text-xs">
                 <span className="font-semibold">{row.userName || row.userEmail}</span>
@@ -174,11 +175,12 @@ export function MemberEnrollments() {
                       disabled={Boolean(confirmBusy)}
                       onClick={() => {
                         setConfirmBusy(row.id);
+                        setEnrollNote("");
                         void confirmEnrollmentPaid(row.id)
                           .then((next) => {
                             setEnrolls((items) => items.map((item) => (item.id === next.enrollment.id ? next.enrollment : item)));
                           })
-                          .catch(() => undefined)
+                          .catch((err) => setEnrollNote(err instanceof Error ? err.message : "Could not confirm payment"))
                           .finally(() => setConfirmBusy(""));
                       }}
                       className="h-8 rounded-md bg-brand-500 px-2 text-[11px] font-semibold text-white disabled:opacity-50"
@@ -188,18 +190,20 @@ export function MemberEnrollments() {
                   ) : null}
                   <button
                     type="button"
+                    data-cancel-subscription="true"
                     disabled={Boolean(confirmBusy)}
                     onClick={() => {
                       if (!window.confirm(`Cancel ${row.strategyName} for ${row.userName || row.userEmail}? This removes that strategy from their account.`)) return;
                       setConfirmBusy(row.id);
+                      setEnrollNote("");
                       void abandonEnrollment(row.id)
                         .then((next) => {
                           setEnrolls((items) => items.map((item) => (item.id === next.enrollment.id ? next.enrollment : item)));
                         })
-                        .catch(() => undefined)
+                        .catch((err) => setEnrollNote(err instanceof Error ? err.message : "Could not cancel subscription"))
                         .finally(() => setConfirmBusy(""));
                     }}
-                    className="h-8 rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
+                    className="h-8 rounded-md bg-rose-600 px-3 text-[11px] font-semibold text-white disabled:opacity-50"
                   >
                     {confirmBusy === row.id ? "Cancelling..." : "Cancel"}
                   </button>

@@ -3,8 +3,10 @@ import { UserDetailModal, ViewUserButton } from "../components/users/UserDetailM
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
+  abandonEnrollment,
   createClient,
   deleteClient,
+  listEnrollments,
   listUsers,
   saveClient,
   saveUserContact,
@@ -12,6 +14,7 @@ import {
   type BrokerInstallField,
   type ClientBroker,
   type ClientRow,
+  type Enrollment,
 } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { forgetCachedClient, loadClientList, peekClientList, upsertCachedClient } from "../lib/clientsCache";
@@ -42,12 +45,18 @@ export function Users({ embedded = false }: { embedded?: boolean }) {
   const [admins, setAdmins] = useState<AuthUser[]>([]);
   const [adminBalance, setAdminBalance] = useState(0);
   const [adminBrokerName, setAdminBrokerName] = useState("Admin");
+  const [enrolls, setEnrolls] = useState<Enrollment[]>([]);
+  const [cancelId, setCancelId] = useState("");
 
   const load = useCallback(async () => {
     const hadRows = Boolean(peekClientList()?.clients.length);
     if (!hadRows) setBusy(true);
     try {
-      const [result, users] = await Promise.all([loadClientList(true), listUsers().catch(() => ({ users: [] }))]);
+      const [result, users, subs] = await Promise.all([
+        loadClientList(true),
+        listUsers().catch(() => ({ users: [] })),
+        listEnrollments().catch(() => ({ enrollments: [] as Enrollment[] })),
+      ]);
       setClients(result.clients || []);
       setGroups(result.groups?.length ? result.groups : ["ALL"]);
       setBrokers(result.brokers || []);
@@ -57,6 +66,7 @@ export function Users({ embedded = false }: { embedded?: boolean }) {
       setAdmins((users.users || []).filter((row) => row.role === "admin"));
       setAdminBalance(Number(result.adminBalance) || 0);
       setAdminBrokerName(result.adminBrokerName || "Admin");
+      setEnrolls(subs.enrollments || []);
       if (result.defaultUntil) setDefaultUntil(result.defaultUntil);
       setError("");
     } catch (err) {
@@ -92,6 +102,29 @@ export function Users({ embedded = false }: { embedded?: boolean }) {
       await load();
     } finally {
       setSavingId("");
+    }
+  };
+
+  const liveEnrollsFor = (userId: string) =>
+    enrolls.filter((row) => row.userId === userId && row.status !== "abandoned");
+
+  const onCancelSub = async (row: ClientRow, enrollment: Enrollment) => {
+    if (
+      !window.confirm(
+        `Cancel ${enrollment.strategyName} for ${row.name}? This removes that strategy from their account.`,
+      )
+    ) {
+      return;
+    }
+    setCancelId(enrollment.id);
+    setError("");
+    try {
+      await abandonEnrollment(enrollment.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not cancel subscription");
+    } finally {
+      setCancelId("");
     }
   };
 
@@ -218,11 +251,15 @@ export function Users({ embedded = false }: { embedded?: boolean }) {
           <tbody>
             {filtered.map((row) => {
               const locked = savingId === row.id;
+              const plans = liveEnrollsFor(row.id);
               return (
                 <tr key={row.id} className="border-b border-[var(--border)] last:border-0">
                   <td className="px-4 py-3 align-middle">
                     <div className="font-semibold">{row.name}</div>
                     <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{row.group || "ALL"}</div>
+                    <div className="text-[10px] text-slate-500" data-user-map="true">
+                      Map {row.mappedStrategy || "—"}
+                    </div>
                     {row.subscriptionUntil ? (
                       <div className="text-[10px] text-slate-500">Valid {row.subscriptionUntil}</div>
                     ) : null}
@@ -298,6 +335,18 @@ export function Users({ embedded = false }: { embedded?: boolean }) {
                   <td className="px-4 py-3 align-middle">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <ViewUserButton onClick={() => setView(row)} />
+                      {plans.map((plan) => (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          disabled={locked || Boolean(cancelId)}
+                          data-cancel-subscription="true"
+                          className="inline-flex h-8 items-center rounded-md bg-rose-600 px-2 text-[11px] font-semibold text-white disabled:opacity-50"
+                          onClick={() => void onCancelSub(row, plan)}
+                        >
+                          {cancelId === plan.id ? "Cancelling..." : `Cancel ${plan.strategyName}`}
+                        </button>
+                      ))}
                       <ActionBtn onClick={() => setGroupFor(row)}>Groups</ActionBtn>
                       <ActionBtn onClick={() => setEdit(row)}>
                         <Pencil size={12} />

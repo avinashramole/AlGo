@@ -101,6 +101,7 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                 <Info label="MTM" value={formatInr(detail.wallet.mtm)} />
                 <Info label="P&L" value={formatInr(detail.report?.realizedPnl || 0)} />
                 <Info label="Live copy" value={detail.copyReady ? "Ready · own token" : "Waiting · pay + token"} />
+                <Info label="Mapped strategy" value={client.mappedStrategy || "—"} dataName="user-map" />
               </section>
 
               <section>
@@ -143,9 +144,10 @@ export function UserDetailModal({ row, onClose }: { row: ClientRow; onClose: () 
                               ) : null}
                               <button
                                 type="button"
+                                data-cancel-subscription="true"
                                 disabled={Boolean(busyId)}
                                 onClick={() => void onCancelSub(item.id, item.strategyName)}
-                                className="inline-flex h-8 items-center rounded-md border border-rose-800 px-2 text-[11px] font-semibold text-rose-400 disabled:opacity-50"
+                                className="inline-flex h-8 items-center rounded-md bg-rose-600 px-3 text-[11px] font-semibold text-white disabled:opacity-50"
                               >
                                 {busyId === item.id ? "Cancelling..." : "Cancel"}
                               </button>
@@ -316,9 +318,9 @@ export function ViewUserButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({ label, value, dataName }: { label: string; value: string; dataName?: string }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2" data-user-map={dataName ? "true" : undefined}>
       <div className="text-[10px] font-bold uppercase text-slate-400">{label}</div>
       <div className="mt-0.5 text-sm font-semibold">{value}</div>
     </div>

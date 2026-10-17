@@ -88,8 +88,15 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(userDetail, /displayOrderReason\(item\) \|\| "—"/);
   assert.match(userDetail, /abandonEnrollment/);
   assert.match(userDetail, /Cancelling\.\.\." : "Cancel"/);
+  assert.match(userDetail, /data-cancel-subscription="true"/);
+  assert.match(userDetail, /Mapped strategy/);
   assert.doesNotMatch(userDetail, /deleteEnrollment/);
   assert.doesNotMatch(userDetail, /Trash2/);
+  const usersPage = fs.readFileSync(path.join(root, "src/pages/Users.tsx"), "utf8");
+  assert.match(usersPage, /abandonEnrollment/);
+  assert.match(usersPage, /data-cancel-subscription="true"/);
+  assert.match(usersPage, /data-user-map="true"/);
+  assert.match(usersPage, /Cancel \$\{plan\.strategyName\}/);
   assert.match(liveBook, /8:00 AM IST/);
   assert.match(ordersPage, /8:00 AM IST/);
   assert.match(reportsPage, /8:00 AM IST/);
@@ -112,6 +119,8 @@ test("User Algos page keeps enroll, not broker, Daily P&L, or broker books", () 
   assert.match(enroll, /payYearly/);
   assert.match(enroll, /abandonEnrollment/);
   assert.match(enroll, /Cancelling\.\.\." : "Cancel"/);
+  assert.match(enroll, /data-cancel-subscription="true"/);
+  assert.match(enroll, /bg-rose-600/);
   assert.doesNotMatch(enroll, /3× quarterly/);
   assert.match(plans, /No strategies assigned to this account yet/);
   assert.doesNotMatch(plans, /Broker selection/);
