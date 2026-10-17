@@ -289,9 +289,10 @@ test("desk download uses the same branded proposal PDF and Excel", () => {
   assert.match(index, /\/api\/member\/report\/download/);
   assert.match(index, /title: "My trade report"/);
   assert.match(index, /audience: "member"/);
+  assert.match(index, /member: \{ name: user\.name, email: user\.email, mobile: user\.mobile \}/);
 });
 
-test("member desk download omits backtest stats and option-tape warning", () => {
+test("member desk download keeps P&L cards, drops Drawdown, and prints identity", () => {
   const report = deskToProposalReport(
     {
       date: "2026-10-10",
@@ -305,16 +306,30 @@ test("member desk download omits backtest stats and option-tape warning", () => 
         { id: "t1", symbol: "NIFTY 24800 CE", side: "SELL", qty: 65, entry: 80, exit: 70, pnl: 650, closedAt: "2026-10-10T10:00:00.000Z" },
       ],
     },
-    { title: "My trade report", audience: "member" },
+    {
+      title: "My trade report",
+      audience: "member",
+      member: { name: "Avinash Ramole", email: "avinash@t2s.app", mobile: "9876543210" },
+    },
   );
   assert.equal(report.audience, "member");
+  assert.equal(report.member.name, "Avinash Ramole");
+  assert.equal(report.member.email, "avinash@t2s.app");
+  assert.equal(report.member.mobile, "9876543210");
   const pdf = renderBacktestPdf(report).toString("latin1");
   assert.match(pdf, /Trade report/);
+  assert.match(pdf, /Product T2S/);
+  assert.match(pdf, /Start date 2026-10-10/);
+  assert.match(pdf, /End date 2026-10-10/);
+  assert.match(pdf, /Range 2026-10-10 Generated/);
+  assert.match(pdf, /Name Avinash Ramole/);
+  assert.match(pdf, /Email avinash@t2s\.app/);
+  assert.match(pdf, /Mobile 9876543210/);
+  assert.match(pdf, /Win rate/);
   assert.match(pdf, /TRADES/);
   assert.match(pdf, /NIFTY 24800 CE/);
   assert.equal(pdf.includes("Proposal report"), false);
   assert.equal(pdf.includes("Drawdown"), false);
-  assert.equal(pdf.includes("Win rate"), false);
   assert.equal(pdf.includes("Avg/trade"), false);
   assert.equal(pdf.includes("Return/DD"), false);
   assert.equal(pdf.includes("Required margin"), false);
@@ -325,9 +340,12 @@ test("member desk download omits backtest stats and option-tape warning", () => 
   const zip = renderBacktestExcel(report).toString("latin1");
   assert.match(zip, /Trade report/);
   assert.match(zip, /My trade report/);
+  assert.match(zip, /Avinash Ramole/);
+  assert.match(zip, /avinash@t2s\.app/);
+  assert.match(zip, /9876543210/);
+  assert.match(zip, /Win rate/);
   assert.match(zip, /NIFTY 24800 CE/);
   assert.equal(zip.includes("Drawdown"), false);
-  assert.equal(zip.includes("Win rate"), false);
   assert.equal(zip.includes("Required margin"), false);
   assert.equal(zip.includes("Option source"), false);
   assert.equal(zip.includes("rolling option tape"), false);

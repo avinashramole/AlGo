@@ -72,6 +72,20 @@ function isMemberReport(report) {
   return String(report?.audience || "").toLowerCase() === "member";
 }
 
+function memberProfile(report) {
+  const row = report?.member || {};
+  return {
+    name: cell(row.name),
+    email: cell(row.email),
+    mobile: cell(row.mobile),
+  };
+}
+
+function memberProfileLine(report) {
+  const { name, email, mobile } = memberProfile(report);
+  return `Name ${name || "-"} | Email ${email || "-"} | Mobile ${mobile || "-"}`;
+}
+
 function optionSourceLine(report) {
   if (isMemberReport(report)) return "";
   const symbol = report.strategy?.symbol || "NIFTY";
@@ -530,11 +544,18 @@ function excelSummaryPairs(report) {
     ["Symbol", report.strategy.symbol],
   ];
   if (isMemberReport(report)) {
+    const member = memberProfile(report);
     return [
       ...base,
+      ["Name", member.name || "-"],
+      ["Email", member.email || "-"],
+      ["Mobile", member.mobile || "-"],
       ["Start date", report.summary.from],
       ["End date", report.summary.to],
       ["P&L", Number(report.summary.pnl) || 0],
+      ["Trades", Number(report.summary.trades) || 0],
+      ["Win rate %", Number(report.summary.winRate) || 0],
+      ["ROM %", Number(report.summary.rom) || 0],
       ["Generated", report.generatedAt],
     ];
   }
@@ -812,19 +833,31 @@ function makePdfDoc(report) {
     report.strategy.symbol || "",
     enter,
     square,
-    member ? "" : report.summary.timeframe || "",
+    report.summary.timeframe || "",
     `Start date ${report.summary.from || "-"}`,
     `End date ${report.summary.to || "-"}`,
   ].filter(Boolean);
   line(productBits.join(" | "));
-  line(`Generated ${report.generatedAt || ""}`);
-  if (!member) {
-    const range = report.summary.years
-      ? `last ${report.summary.years} year(s)`
-      : report.summary.months
-        ? `last ${report.summary.months} month(s)`
-        : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
-    line(`Range ${range}`);
+  const range = report.summary.years
+    ? `last ${report.summary.years} year(s)`
+    : report.summary.months
+      ? `last ${report.summary.months} month(s)`
+      : report.summary.range || `${report.summary.from} to ${report.summary.to}`;
+  line(`Range ${range} Generated ${report.generatedAt || ""}`);
+  if (member) {
+    line(memberProfileLine(report));
+    metricGrid(
+      [
+        { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
+        { label: "Trades", value: String(report.summary.trades || 0) },
+        { label: "Win rate", value: `${report.summary.winRate || 0}%` },
+        { label: "ROM", value: `${report.summary.rom || 0}%` },
+      ],
+      4,
+    );
+    section("TRADES");
+    table(report.trades || []);
+  } else {
     metricGrid(
       [
         { label: "P&L", value: pdfInr(report.summary.pnl), money: true, raw: report.summary.pnl },
@@ -856,9 +889,6 @@ function makePdfDoc(report) {
     section("LEGS");
     table(report.legs?.length ? report.legs : []);
     section("COMBOS");
-    table(report.trades || []);
-  } else {
-    section("TRADES");
     table(report.trades || []);
   }
   flush();
@@ -976,8 +1006,14 @@ export function deskToProposalReport(desk = {}, extras = {}) {
     key: cell(row.id || row.key),
   }));
   const date = cell(desk.date) || new Date().toISOString().slice(0, 10);
+  const member = extras.member || {};
   return {
     audience: extras.audience || "",
+    member: {
+      name: cell(member.name || extras.name),
+      email: cell(member.email || extras.email),
+      mobile: cell(member.mobile || extras.mobile),
+    },
     strategy: {
       name: extras.title || "Desk P&L",
       product: "T2S",

@@ -415,7 +415,11 @@ app.get("/api/member/report/download", async (req, res) => {
   try {
     const user = memberAuth(req);
     const desk = await memberDeskPayload(user);
-    const report = deskToProposalReport(desk.report || {}, { title: "My trade report", audience: "member" });
+    const report = deskToProposalReport(desk.report || {}, {
+      title: "My trade report",
+      audience: "member",
+      member: { name: user.name, email: user.email, mobile: user.mobile },
+    });
     const file = brandedReportFile(report, req.query.format);
     res.setHeader("Content-Type", file.type);
     res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
