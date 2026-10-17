@@ -181,6 +181,11 @@ export function googleAppIntentUrl(query: URLSearchParams | string) {
   return `intent://auth?${q}#Intent;scheme=${APP_LOGIN_SCHEME};package=com.t2s.algo;end`;
 }
 
+export function googleCapacitorHashUrl(query: URLSearchParams | string) {
+  const q = typeof query === "string" ? String(query).replace(/^\?/, "") : query.toString();
+  return `https://localhost/#/?${q}`;
+}
+
 export function shouldHandoffGoogleToApp(params: URLSearchParams) {
   return Boolean(params.get("google_token")) && isAndroidBrowser();
 }

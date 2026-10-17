@@ -28,6 +28,12 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+    }
+
     static final class TinyConfirmChromeClient extends BridgeWebChromeClient {
 
         TinyConfirmChromeClient(Bridge bridge) {

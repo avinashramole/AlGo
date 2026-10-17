@@ -10,6 +10,8 @@ import {
   googleOAuthConfigured,
   googleRedirectUri,
   shouldReturnToApp,
+  isEmbeddedWebView,
+  googleCapacitorHashReturn,
   loginWithGoogleCode,
   loginWithPassword,
   loginWithThumb,
@@ -127,6 +129,10 @@ export function attachLoginRoutes(app, { healthService = "t2s-api", healthExtra 
     const next = safeFrontendOrigin(payload.next || decodeOAuthState(state) || process.env.PUBLIC_URL);
     const finish = (query) => {
       if (shouldReturnToApp(payload, next)) {
+        if (isEmbeddedWebView(req)) {
+          res.redirect(googleCapacitorHashReturn(query));
+          return;
+        }
         res.status(200).type("html").send(googleAppReturnHtml(query));
         return;
       }

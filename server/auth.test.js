@@ -16,7 +16,9 @@ const {
   decodeOAuthState,
   encodeOAuthState,
   googleAuthorizeUrl,
+  googleCapacitorHashReturn,
   googleLoginSearch,
+  isEmbeddedWebView,
   googleOAuthConfigured,
   googleRedirectUri,
   completeSignup,
@@ -168,7 +170,11 @@ test("OAuth state round-trips and blocks open redirects", () => {
   assert.equal(html.includes("https://trade2smart.com/login?"), false);
   assert.equal(html.includes("https://trade2smart.com/#/?"), false);
   assert.match(html, /t2s-logo\.png/);
-  assert.match(html, /Opening the Trade 2 Smart app/);
+  assert.match(html, /Signing you in/);
+  assert.match(html, /location\.href = app/);
+  assert.equal(isEmbeddedWebView({ headers: { "user-agent": "Mozilla/5.0 (Linux; Android 14; wv) Chrome/120.0.0.0 Mobile Safari/537.36" } }), true);
+  assert.equal(isEmbeddedWebView({ headers: { "user-agent": "Mozilla/5.0 (Linux; Android 14) Chrome/120.0.0.0 Mobile Safari/537.36" } }), false);
+  assert.equal(googleCapacitorHashReturn("google_token=abc"), "https://localhost/#/?google_token=abc");
   assert.equal(
     googleAppIntentUrl("google_token=abc"),
     "intent://auth?google_token=abc#Intent;scheme=t2salgo;package=com.t2s.algo;end",

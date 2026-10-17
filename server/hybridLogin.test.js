@@ -4,6 +4,7 @@ import {
   APP_LOGIN_ORIGIN,
   deskHomeUrl,
   googleAppIntentUrl,
+  googleCapacitorHashUrl,
   googleDeskHashUrl,
   googleLoginNextFrom,
   googleQueryFromHref,
@@ -37,6 +38,9 @@ test("Google callback query is read from website, hash, and app scheme URLs", ()
   const app = googleQueryFromHref("t2salgo://auth?google_token=app-token&google_name=Asha");
   assert.equal(app.get("google_token"), "app-token");
   assert.equal(app.get("google_name"), "Asha");
+  const cap = googleQueryFromHref("https://localhost/#/?google_token=cap-token");
+  assert.equal(cap.get("google_token"), "cap-token");
+  assert.equal(googleCapacitorHashUrl("google_token=abc"), "https://localhost/#/?google_token=abc");
 });
 
 test("iPhone home-screen app is detected without treating Safari as native Capacitor", () => {

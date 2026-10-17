@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { App } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
 import { LogoutConfirmDialog } from "../components/layout/LogoutConfirm";
 import { shouldAskLogoutConfirm } from "../lib/confirmLogout";
 import {
@@ -255,41 +257,36 @@ function bootFromWindow() {
   return userFromGoogleParams(params) || readUser();
 }
 
-type CapacitorAppPlugin = {
-  App: {
-    addListener: (event: "appUrlOpen", cb: (event: { url: string }) => void) => Promise<{ remove: () => Promise<void> }>;
-    getLaunchUrl: () => Promise<{ url?: string } | undefined>;
-  };
-};
-
-type CapacitorBrowserPlugin = {
-  Browser: {
-    open: (options: { url: string }) => Promise<void>;
-    close: () => Promise<void>;
-  };
-};
-
-async function importCapacitorPlugin<T>(specifier: string): Promise<T | null> {
+async function closeGoogleBrowser() {
   try {
-    return (await import(/* @vite-ignore */ specifier)) as T;
+    await Browser.close();
   } catch {
-    return null;
+    /* Custom Tab already gone */
   }
 }
 
 async function listenAppGoogleReturn(apply: (href: string) => void) {
-  const mod = await importCapacitorPlugin<CapacitorAppPlugin>("@capacitor/app");
-  if (!mod) return () => {};
+  const handles: Array<{ remove: () => Promise<void> }> = [];
   try {
-    const opened = await mod.App.addListener("appUrlOpen", (event) => apply(event.url));
-    const launch = await mod.App.getLaunchUrl();
+    handles.push(await App.addListener("appUrlOpen", (event) => apply(event.url)));
+    handles.push(
+      await App.addListener("appStateChange", (state) => {
+        if (!state.isActive) return;
+        void App.getLaunchUrl()
+          .then((launch) => {
+            if (launch?.url) apply(launch.url);
+          })
+          .catch(() => undefined);
+      }),
+    );
+    const launch = await App.getLaunchUrl();
     if (launch?.url) apply(launch.url);
-    return () => {
-      void opened.remove();
-    };
   } catch {
-    return () => {};
+    /* web build has no native app events */
   }
+  return () => {
+    for (const handle of handles) void handle.remove();
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -384,9 +381,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(next);
       stripGoogleQuery();
-      void importCapacitorPlugin<CapacitorBrowserPlugin>("@capacitor/browser").then((mod) => {
-        void mod?.Browser.close();
-      });
+      void closeGoogleBrowser();
+      void getMe(googleToken)
+        .then((row) => {
+          const merged = preferAccount(next, row.user);
+          persistUser(merged);
+          setUser(merged);
+        })
+        .catch(() => undefined);
       if (isCapacitorNative()) {
         window.location.replace(deskHomeUrl());
       }
@@ -472,11 +474,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const url = googleAuthStartUrl();
         if (isCapacitorNative()) {
           try {
-            const cap = await importCapacitorPlugin<CapacitorBrowserPlugin>("@capacitor/browser");
-            if (cap) {
-              await cap.Browser.open({ url });
-              return;
-            }
+            await Browser.open({ url });
+            return;
           } catch {
             /* Custom Tabs unavailable — stay in the WebView. */
           }

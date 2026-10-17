@@ -188,11 +188,26 @@ export function Login() {
     setError("");
     try {
       await startGoogleLogin();
+      if (isNativeHybrid()) setLoading(false);
     } catch (err) {
-        setError(catchDeskError(err, "Google login failed"));
+      setError(catchDeskError(err, "Google login failed"));
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!loading) return;
+    const stopWait = () => setLoading(false);
+    const onVis = () => {
+      if (document.visibilityState === "visible") stopWait();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", stopWait);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", stopWait);
+    };
+  }, [loading]);
 
   const onForgot = async () => {
     const ok = await onSendCode("reset");

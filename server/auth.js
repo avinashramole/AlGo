@@ -1245,6 +1245,18 @@ export function shouldReturnToApp(payload = {}, next = "") {
   return native || isAppLoginOrigin(next) || isAppLoginOrigin(payload?.next);
 }
 
+export function isEmbeddedWebView(req) {
+  const ua = String(req?.headers?.["user-agent"] || "");
+  if (/; wv\)/i.test(ua)) return true;
+  if (/Capacitor/i.test(ua)) return true;
+  return false;
+}
+
+export function googleCapacitorHashReturn(query) {
+  const q = String(query || "").replace(/^\?/, "");
+  return `https://localhost/#/?${q}`;
+}
+
 export function safeFrontendOrigin(next, env = process.env) {
   const publicUrl = String(env.PUBLIC_URL || "").replace(/\/$/, "");
   const fallback = publicUrl || "http://localhost:5173";
@@ -1298,7 +1310,8 @@ export function googleAppReturnHtml(query) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Opening Trade 2 Smart</title>
+  <meta http-equiv="refresh" content="0;url=${escapeHtml(app)}" />
+  <title>Signing in to Trade 2 Smart</title>
   <style>
     html,body{margin:0;min-height:100vh;background:#071833;color:#fff;font-family:Inter,system-ui,sans-serif}
     body{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 20px;box-sizing:border-box}
@@ -1310,20 +1323,22 @@ export function googleAppReturnHtml(query) {
 </head>
 <body>
   <img src="/t2s-logo.png" alt="Trade 2 Smart" />
-  <h1>Opening the Trade 2 Smart app</h1>
-  <p>Finish Google login inside the app. This browser page cannot sign the app in.</p>
+  <h1>Signing you in</h1>
+  <p>Return to the Trade 2 Smart app to finish Google login.</p>
   <p><a href="${escapeHtml(intent)}">Open the app</a></p>
   <script>
     var app = ${JSON.stringify(app)};
     var intent = ${JSON.stringify(intent)};
     function goApp() {
       try { location.replace(intent); } catch (e) {}
+      try { location.href = app; } catch (e2) {}
     }
     goApp();
+    setTimeout(goApp, 200);
     setTimeout(function () {
       if (document.visibilityState !== "visible") return;
       try { location.replace(app); } catch (e) {}
-    }, 350);
+    }, 500);
   </script>
 </body>
 </html>`;
