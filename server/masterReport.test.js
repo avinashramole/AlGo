@@ -81,13 +81,20 @@ test("master PDF puts admin and user identity in one file", () => {
 
 test("Reports hub exposes the Master report menu and download", () => {
   const hub = fs.readFileSync(path.join(root, "src/pages/ReportsHub.tsx"), "utf8");
+  const tabBar = fs.readFileSync(path.join(root, "src/components/desk/ReportsBookTabs.tsx"), "utf8");
   const page = fs.readFileSync(path.join(root, "src/pages/MasterReport.tsx"), "utf8");
   const reports = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const tabs = fs.readFileSync(path.join(root, "src/lib/bookTabs.ts"), "utf8");
+  const side = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
+  const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
   const index = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
-  assert.match(hub, /data-master-tab="true"/);
-  assert.match(hub, /Master report/);
+  assert.match(hub, /ReportsBookTabs/);
+  assert.match(tabBar, /data-master-tab="true"/);
+  assert.match(tabBar, /Master report/);
+  assert.match(tabBar, /\/master-report/);
   assert.match(tabs, /if \(value === "master"\) return "master"/);
+  assert.match(page, /MasterReportPage/);
+  assert.match(page, /data-master-report-page="true"/);
   assert.match(page, /data-master-report="true"/);
   assert.match(page, /Custom date/);
   assert.match(page, /MASTER_MONTH_PRESETS/);
@@ -95,6 +102,9 @@ test("Reports hub exposes the Master report menu and download", () => {
   assert.match(page, /Select all users/);
   assert.match(page, /Download \$\{selected\}/);
   assert.match(reports, /data-master-report-menu="true"/);
+  assert.match(reports, /navigate\("\/master-report"\)/);
+  assert.match(side, /to: "\/master-report", label: "Master report"/);
+  assert.match(app, /path="master-report"/);
   assert.match(index, /\/api\/report\/master\/download/);
   assert.match(index, /buildMasterReport/);
 });

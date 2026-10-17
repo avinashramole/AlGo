@@ -5,10 +5,20 @@ import {
   MASTER_MONTH_PRESETS,
   type MasterReportPerson,
 } from "../api/client";
+import { ReportsBookTabs } from "../components/desk/ReportsBookTabs";
 import { showDeskToast } from "../lib/deskToast";
 import { formatMobile } from "../lib/format";
 import { isNativeHybrid } from "../lib/hybrid";
 import { catchDeskError } from "../lib/liveSite";
+
+export function MasterReportPage() {
+  return (
+    <div className="space-y-2" data-master-report-page="true">
+      <ReportsBookTabs active="master" />
+      <MasterReport />
+    </div>
+  );
+}
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");

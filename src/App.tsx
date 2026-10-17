@@ -22,6 +22,7 @@ const Options = lazyPage(() => import("./pages/Options"), "Options");
 const Algo = lazyPage(() => import("./pages/Algo"), "Algo");
 const AlgoTest = lazyPage(() => import("./pages/Algo"), "AlgoTest");
 const ReportsHub = lazyPage(() => import("./pages/ReportsHub"), "ReportsHub");
+const MasterReportPage = lazyPage(() => import("./pages/MasterReport"), "MasterReportPage");
 const Brokers = lazyPage(() => import("./pages/Brokers"), "Brokers");
 const Analytics = lazyPage(() => import("./pages/Analytics"), "Analytics");
 const UserIpManager = lazyPage(() => import("./pages/UserIpManager"), "UserIpManager");
@@ -107,6 +108,7 @@ export default function App() {
           <Route path="orders" element={<RoleOrders />} />
           <Route path="positions" element={<RolePositions />} />
           <Route path="reports" element={<RoleReports />} />
+          <Route path="master-report" element={<AdminOnly><MasterReportPage /></AdminOnly>} />
           <Route path="portfolio" element={<Navigate to="/positions" replace />} />
           <Route path="brokers" element={<AdminOnly><Brokers /></AdminOnly>} />
           <Route path="analytics" element={<AdminOnly><Analytics /></AdminOnly>} />

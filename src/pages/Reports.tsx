@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { SideBadge } from "../components/desk/Badges";
 import { downloadDeskReport, getPositionsDesk, type PositionLedger } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -16,7 +16,7 @@ import { isLiveBrokerTrade } from "../lib/paperBook";
 export function Reports({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const { data } = useMarket();
-  const [, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const report = data.report;
   const daily = liveDailyPnl(report?.daily, report?.tradeBook);
   const [ledgers, setLedgers] = useState<PositionLedger[]>([]);
@@ -107,7 +107,7 @@ export function Reports({ embedded = false }: { embedded?: boolean }) {
           <button
             type="button"
             data-master-report-menu="true"
-            onClick={() => setParams({ tab: "master" }, { replace: true })}
+            onClick={() => navigate("/master-report")}
             className="h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold"
           >
             Master report

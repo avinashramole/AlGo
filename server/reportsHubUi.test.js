@@ -14,11 +14,13 @@ test("GitHub CI runs server checks on pull requests", () => {
 
 test("Reports hub is Position & Orders with Position, Orders, then Reports tabs", () => {
   const hub = fs.readFileSync(path.join(root, "src/pages/ReportsHub.tsx"), "utf8");
+  const tabBar = fs.readFileSync(path.join(root, "src/components/desk/ReportsBookTabs.tsx"), "utf8");
   const tabsFile = fs.readFileSync(path.join(root, "src/lib/bookTabs.ts"), "utf8");
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
   const side = fs.readFileSync(path.join(root, "src/components/layout/Sidebar.tsx"), "utf8");
-  assert.match(hub, /Position & Orders/);
-  assert.match(hub, /data-reports-tabs="position-order-reports"/);
+  assert.match(hub, /ReportsBookTabs/);
+  assert.match(tabBar, /Position & Orders/);
+  assert.match(tabBar, /data-reports-tabs="position-order-reports"/);
   assert.match(tabsFile, /if \(value === "orders"\) return "orders";/);
   assert.match(tabsFile, /if \(value === "reports"\) return "reports";/);
   assert.match(tabsFile, /if \(value === "master"\) return "master";/);
@@ -26,17 +28,21 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.match(tabsFile, /return "positions";/);
   assert.match(app, /Navigate to="\/reports\?tab=orders"/);
   assert.match(app, /Navigate to="\/reports\?tab=positions"/);
+  assert.match(app, /path="master-report"/);
+  assert.match(app, /MasterReportPage/);
   assert.match(side, /label: "Position & Orders", icon: FileText, admin: true/);
+  assert.match(side, /to: "\/master-report", label: "Master report"/);
   assert.match(side, /to: "\/positions", label: "Position"/);
   assert.match(side, /to: "\/orders", label: "Orders"/);
-  const tabs = hub.split("desk-tabs")[1] || "";
+  const tabs = tabBar.split("desk-tabs")[1] || "";
   const position = tabs.indexOf("Position");
   const orders = tabs.indexOf("Orders");
   const reports = tabs.indexOf("Reports");
   const master = tabs.indexOf("Master report");
   assert.ok(position >= 0 && orders > position && reports > orders);
   assert.ok(master > reports);
-  assert.match(hub, /data-master-tab="true"/);
+  assert.match(tabBar, /data-master-tab="true"/);
+  assert.match(tabBar, /\/master-report/);
   const reportsPage = fs.readFileSync(path.join(root, "src/pages/Reports.tsx"), "utf8");
   const ordersPage = fs.readFileSync(path.join(root, "src/pages/Orders.tsx"), "utf8");
   const book = fs.readFileSync(path.join(root, "src/pages/MemberBook.tsx"), "utf8");
@@ -79,7 +85,7 @@ test("Reports hub is Position & Orders with Position, Orders, then Reports tabs"
   assert.doesNotMatch(book, /data-profit-owner/);
   assert.match(book, /data-paper-tab="true"/);
   assert.match(book, /data-member-book="paper"/);
-  assert.match(hub, /data-paper-tab="true"/);
+  assert.match(tabBar, /data-paper-tab="true"/);
   assert.match(hub, /book="live"/);
   assert.match(hub, /PaperTrading/);
   const paperPage = fs.readFileSync(path.join(root, "src/pages/PaperTrading.tsx"), "utf8");
