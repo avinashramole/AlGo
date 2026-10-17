@@ -345,9 +345,9 @@ test("member desk download keeps P&L cards, drops Drawdown, and prints identity"
   assert.match(pdf, /\/Subtype \/Image/);
   assert.match(pdf, /\/ca 0\.18/);
   const memberMark = watermarkBox(pdf);
-  assert.ok(memberMark.w > 180);
-  assert.ok(memberMark.w < 280);
-  assert.equal(PDF_MEMBER_WATERMARK_COVER, 0.4);
+  assert.ok(memberMark.w > 140);
+  assert.ok(memberMark.w < 200);
+  assert.equal(PDF_MEMBER_WATERMARK_COVER, 0.28);
   assert.equal(PDF_WATERMARK_COVER, 0.72);
   assert.equal(pdf.includes("0.000 0.059 0.161"), false);
   const pageFillAt = pdf.indexOf("0.00 0.00 842.00 595.00 re");
